@@ -757,6 +757,70 @@ func TestQualifierDistance_IgnoresFeatureCredits(t *testing.T) {
 	}
 }
 
+func TestQualifierDistance_HandlesFullwidthBrackets(t *testing.T) {
+	cases := []struct {
+		name  string
+		track string
+	}{
+		{"ascii brackets", "Song (Live)"},
+		{"fullwidth brackets", "Song （Live）"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := qualifierDistance("Song", c.track); got == 0 {
+				t.Errorf("qualifierDistance(%q, %q) = 0, want an unrequested marker cost", "Song", c.track)
+			}
+		})
+	}
+}
+
+func joinQualifiers(labels []string) string {
+	return strings.Join(labels, "|")
+}
+
+func assertQualifiers(t *testing.T, name string, got, want []string) {
+	t.Helper()
+	if joinQualifiers(got) != joinQualifiers(want) {
+		t.Errorf("%s = %v, want %v", name, got, want)
+	}
+}
+
+func TestUnrequestedQualifiers_InstrumentalAndAccuracyClaimAreVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
+	assertQualifiers(t, "veto", veto, []string{"instrumental", "100% accurate"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_ReactionVideoIsVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
+	assertQualifiers(t, "veto", veto, []string{"reacts"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_RadioEditIsFallbackNotEdit(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Song", "Someone", "Song (Radio Edit)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, []string{"radio edit"})
+}
+
+func TestUnrequestedQualifiers_RequestedWordInTrackTitleIsNotAQualifier(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Live Forever", "Oasis", "Live Forever (Remastered)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_RequestedWordAtEndOfTrackTitleIsNotAQualifier(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Forever Live", "Oasis", "Forever Live (Remastered)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestQualifierDistance_CountsEachUnrequestedBracketSegment(t *testing.T) {
+	if got := qualifierDistance("Song", "Song (Acoustic) (Live)"); got != 2*unrequestedQualifierCost {
+		t.Errorf("qualifierDistance with two unrequested bracket segments = %d, want %d", got, 2*unrequestedQualifierCost)
+	}
+}
+
 func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing.T) {
 	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 232}
 	candidates := []ports.AudioCandidate{
@@ -840,4 +904,66 @@ func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing
 	if ranked[0].Channel != "TheWeekndVEVO" {
 		t.Fatalf("selected %q — off Topic, label provenance outranks a shorter qualifier list", ranked[0].Channel)
 	}
+}
+
+func TestUnrequestedQualifiers_FindsVersionMarkersAsWordsAnywhereInTheTitle(t *testing.T) {
+	cases := []struct {
+		name         string
+		trackTitle   string
+		trackArtist  string
+		candidate    string
+		wantVeto     []string
+		wantFallback []string
+	}{
+		{"fullwidth brackets fold like ascii", "Song", "Someone", "Song （Live）", []string{"live"}, nil},
+		{"fullwidth letters fold like ascii", "Song", "Someone", "Song (ＬＩＶＥ)", []string{"live"}, nil},
+		{"instrumental outside any bracket", "SPEED DEMON", "Lucy Bedroque", "Lucy Bedroque - SPEED DEMON Instrumental", []string{"instrumental"}, nil},
+		{"accuracy claim without the percent sign", "Song", "Someone", "Song (100 Accurate)", []string{"100% accurate"}, nil},
+		{"slowed and reverb joined by a plus", "Song", "Someone", "Song (Slowed + Reverb)", []string{"slowed", "reverb"}, nil},
+		{"hyphenated sped up is the phrase", "Song", "Someone", "Song (Sped-Up)", []string{"sped up"}, nil},
+		{"uppercase reaction", "Beetleborgs", "BabyTron", "\"BabyTron & Cordae - Beetleborgs\" DA CR3W REACTION!", []string{"reaction"}, nil},
+		{"booth phrase", "Song", "Someone", "Someone - Song In The Booth", []string{"in the booth"}, nil},
+		{"type beat phrase", "Song", "Someone", "Someone Type Beat - Song", []string{"type beat"}, nil},
+		{"nightcore and 8d", "Song", "Someone", "Nightcore - Song (8D Audio)", []string{"nightcore", "8d"}, nil},
+		{"cover and karaoke", "Song", "Someone", "Song Karaoke Cover", []string{"karaoke", "cover"}, nil},
+		{"remix is not also a mix", "Song", "Someone", "Song (Remix)", []string{"remix"}, nil},
+		{"standalone mix", "Song", "Someone", "Song (Club Mix)", []string{"mix"}, nil},
+		{"extended mix splits across families", "Song", "Someone", "Song (Extended Mix)", []string{"mix"}, []string{"extended"}},
+		{"version is a fallback", "Song", "Someone", "Song (Acoustic Version)", nil, []string{"version"}},
+		{"plain edit is a fallback", "Song", "Someone", "Song [Edit]", nil, []string{"edit"}},
+		{"radio edit and instrumental in title order", "Song", "Someone", "Song (Radio Edit) (Instrumental)", []string{"instrumental"}, []string{"radio edit"}},
+		{"veto entries keep title order", "Song", "Someone", "Song (Remix) [Live]", []string{"remix", "live"}, nil},
+		{"a repeated marker is reported once", "Song", "Someone", "Song (Live) [LIVE] live", []string{"live"}, nil},
+		{"feature credit is never a qualifier", "Song", "Someone", "Song (feat. Live Mix Crew)", nil, nil},
+		{"remastered is not a qualifier", "Song", "Someone", "Song (Remastered 2011)", nil, nil},
+		{"words that merely contain a marker do not match", "Olive Coverage", "Someone", "Olive Coverage Mixtape Editorial Deliver", nil, nil},
+		{"artist named Live is requested", "Lightning Crashes", "Live", "Live - Lightning Crashes", nil, nil},
+		{"track titled Slowed Down is requested", "Slowed Down", "Someone", "Someone - Slowed Down", nil, nil},
+		{"requested word leaves the others unrequested", "Cover Me", "Bruce Springsteen", "Bruce Springsteen - Cover Me (Live)", []string{"live"}, nil},
+		{"artist substring does not request a marker", "Song", "Oliver Tree", "Oliver Tree - Song (Live)", []string{"live"}, nil},
+		{"requested radio edit is satisfied", "Song (Radio Edit)", "Someone", "Song (Radio Edit)", nil, nil},
+		{"empty candidate", "Song", "Someone", "", nil, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			veto, fallback := UnrequestedQualifiers(c.trackTitle, c.trackArtist, c.candidate)
+			assertQualifiers(t, "veto", veto, c.wantVeto)
+			assertQualifiers(t, "fallback", fallback, c.wantFallback)
+		})
+	}
+}
+
+func FuzzUnrequestedQualifiers_CandidateEqualToTheTrackHasNoQualifiers(f *testing.F) {
+	f.Add("Live Forever", "Oasis")
+	f.Add("Song (Radio Edit)", "Someone")
+	f.Add("Song （Live）", "Someone")
+	f.Add("Rollacoasta (Instrumental) [100% Accurate]", "prettifun")
+	f.Add("Sped-Up Slowed + Reverb", "")
+	f.Add("", "")
+	f.Fuzz(func(t *testing.T, title, artist string) {
+		veto, fallback := UnrequestedQualifiers(title, artist, title)
+		if len(veto) != 0 || len(fallback) != 0 {
+			t.Errorf("UnrequestedQualifiers(%q, %q, %q) = %v, %v; every word is requested", title, artist, title, veto, fallback)
+		}
+	})
 }
