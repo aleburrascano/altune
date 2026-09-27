@@ -490,6 +490,25 @@ func TestMergeInto_TitleTierCarriesAtThreePercentDurationBoundary(t *testing.T) 
 	}
 }
 
+func TestMergeInto_TitleTierCarriesAtFiveSecondFloorBoundary(t *testing.T) {
+	a := withISRC(track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-AT-FLOOR")
+	a.Duration = 100
+	b := withMBID(track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-AT-FLOOR")
+	b.Duration = 105
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	r := entities[0].Result
+	if r.ISRC != "ISRC-AT-FLOOR" {
+		t.Errorf("ISRC = %v, want ISRC-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.ISRC)
+	}
+	if r.MBID != "MBID-AT-FLOOR" {
+		t.Errorf("MBID = %v, want MBID-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.MBID)
+	}
+}
+
 func TestMergeInto_TitleTierDoesNotCarryBeyondThreePercentDurationTolerance(t *testing.T) {
 	a := withISRC(track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-OVER-TOLERANCE")
 	a.Duration = 200
