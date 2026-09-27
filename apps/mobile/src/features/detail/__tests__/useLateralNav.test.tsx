@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useLateralNav } from '../hooks/useLateralNav';
+import { openDetail } from '../navigation';
 
 const mockResolveEntityQuery = jest.fn();
 jest.mock('../resolve-entity-query', () => ({
@@ -93,5 +94,40 @@ describe('logging a failed lateral navigation', () => {
       expect(warnSpy).not.toHaveBeenCalled();
       expect(result.current.error).toContain('not found');
     });
+  });
+});
+
+describe('useLateralNav navigateTo on a hit', () => {
+  function createWrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    };
+  }
+
+  function freshClient() {
+    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('calls openDetail with the discover detail route and the first result', async () => {
+    const firstResult = { id: 'artist-1' };
+    const secondResult = { id: 'artist-2' };
+    mockResolveEntityQuery.mockReturnValue({
+      queryKey: ['resolve-entity', 'artist', 'Boom', 1],
+      queryFn: () => Promise.resolve([firstResult, secondResult]),
+    });
+
+    const { result } = renderHook(() => useLateralNav(), {
+      wrapper: createWrapper(freshClient()),
+    });
+
+    await act(async () => {
+      await result.current.navigateTo('Boom', 'artist');
+    });
+
+    expect(openDetail).toHaveBeenCalledWith(expect.anything(), '/discover/detail', firstResult);
   });
 });

@@ -85,3 +85,58 @@ describe('DetailScreen reads the handoff named by its route param', () => {
     expect(screen.getByText('redirect:/discover')).toBeTruthy();
   });
 });
+
+describe('DetailScreen back button', () => {
+  function renderCapturingBack(canGoBack: boolean) {
+    const back = jest.fn();
+    const replace = jest.fn();
+    let capturedOnBack: (() => void) | undefined;
+
+    let FreshDetailScreen!: typeof DetailScreen;
+    let freshDetailHref!: typeof detailHref;
+    jest.resetModules();
+    jest.isolateModules(() => {
+      jest.doMock('../ui/TrackDetailBody', () => ({
+        TrackDetailBody: (props: { chrome: { onBack: () => void } }) => {
+          capturedOnBack = props.chrome.onBack;
+          return null;
+        },
+      }));
+      jest.doMock('expo-router', () => {
+        const { Text: RNText } = jest.requireActual('react-native');
+        return {
+          useLocalSearchParams: () => mockParams,
+          useRouter: () => ({ push: jest.fn(), replace, back, canGoBack: () => canGoBack }),
+          useSegments: () => ['(tabs)', 'discover', 'detail'],
+          Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
+        };
+      });
+      freshDetailHref = require('@shared/lib/detail-handoff').detailHref;
+      FreshDetailScreen = require('../ui/DetailScreen').DetailScreen;
+    });
+
+    const first = freshDetailHref('/discover/detail', track('First'));
+    mockParams = { handoff: first.params.handoff };
+    render(<FreshDetailScreen />);
+
+    return { onBack: () => capturedOnBack!(), back, replace };
+  }
+
+  it('calls router.back() when canGoBack is true', () => {
+    const { onBack, back, replace } = renderCapturingBack(true);
+
+    onBack();
+
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("calls router.replace('/discover') when canGoBack is false", () => {
+    const { onBack, back, replace } = renderCapturingBack(false);
+
+    onBack();
+
+    expect(replace).toHaveBeenCalledWith('/discover');
+    expect(back).not.toHaveBeenCalled();
+  });
+});
