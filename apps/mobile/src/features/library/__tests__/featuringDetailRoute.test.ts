@@ -13,3 +13,9 @@ describe('featuringDetailRoute', () => {
     expect(featuringDetailRoute(['(tabs)', 'search', 'featuring'])).toBe('/library/detail');
   });
 });
+
+describe('featuringDetailRoute before the router has resolved a route', () => {
+  it('keeps the library default when there are no segments yet', () => {
+    expect(featuringDetailRoute([])).toBe('/library/detail');
+  });
+});

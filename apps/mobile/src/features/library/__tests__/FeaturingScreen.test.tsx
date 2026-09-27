@@ -232,3 +232,90 @@ describe('the detail route under the library tab', () => {
     detailHrefSpy.mockRestore();
   });
 });
+
+describe('the featuring screen opened from the discover tab', () => {
+  const router = jest.requireMock('expo-router') as {
+    useRouter: () => { push: jest.Mock };
+    useSegments: () => string[];
+    useLocalSearchParams: () => { name: string };
+  };
+  const original = { ...router };
+  let push: jest.Mock;
+
+  const oddTrack = {
+    id: asTrackId('t2'),
+    title: 'Around the World / Harder, Better? #1 & "more"',
+    artist: 'Daft Punk',
+    album: 'Homework',
+    duration_seconds: 429,
+    added_at: '2026-01-01T00:00:00Z',
+    artwork_url: null,
+    year: 1997,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
+    acquisition_status: 'pending',
+    failure_reason: null,
+  };
+
+  beforeEach(() => {
+    push = jest.fn();
+    router.useRouter = () => ({ push });
+    router.useSegments = () => ['(tabs)', 'discover', 'featuring'];
+  });
+
+  afterEach(() => {
+    Object.assign(router, original);
+  });
+
+  it('opens a tapped track on the discover detail screen', async () => {
+    mockListTracksFeaturing.mockResolvedValue({ items: [oddTrack] });
+    render(<FeaturingScreen />, { wrapper });
+
+    fireEvent.press(await screen.findByTestId(`library-row-${oddTrack.id}`));
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0][0]).toMatchObject({ pathname: '/discover/detail' });
+  });
+
+  it('hands the detail screen a track whose title has slashes, query and hash characters intact', async () => {
+    mockListTracksFeaturing.mockResolvedValue({ items: [oddTrack] });
+    render(<FeaturingScreen />, { wrapper });
+
+    fireEvent.press(await screen.findByTestId(`library-row-${oddTrack.id}`));
+
+    const href = push.mock.calls[0][0] as { params: { handoff: string } };
+    expect(detailHandoff.readDetailHandoff(href.params.handoff)?.result).toMatchObject({
+      title: 'Around the World / Harder, Better? #1 & "more"',
+    });
+  });
+
+  it('sends the explore search result to the discover detail screen', async () => {
+    mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: 'Guest Star' }] });
+    render(<FeaturingScreen />, { wrapper });
+
+    await tapExplore();
+
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(push.mock.calls[0][0]).toMatchObject({ pathname: '/discover/detail' });
+  });
+
+  it('searches for an artist name with special characters and opens it on the discover detail screen', async () => {
+    const name = 'AC/DC & Friends? #1';
+    router.useLocalSearchParams = () => ({ name });
+    mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: name }] });
+    render(<FeaturingScreen />, { wrapper });
+
+    await tapExplore();
+
+    await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const href = push.mock.calls[0][0] as { pathname: string; params: { handoff: string } };
+    expect(href.pathname).toBe('/discover/detail');
+    expect(detailHandoff.readDetailHandoff(href.params.handoff)?.result).toMatchObject({
+      kind: 'artist',
+      title: 'AC/DC & Friends? #1',
+    });
+  });
+});
