@@ -14,21 +14,16 @@ root=$(git rev-parse --show-toplevel) || exit 3
 cd "$root" || exit 3
 base=$(git merge-base "${1:-origin/main}" HEAD) || { echo "precheck: no merge base with ${1:-origin/main}"; exit 3; }
 
-nvm_node22=$(ls -d "$HOME"/.nvm/versions/node/v22.*/bin 2>/dev/null | sort -V | tail -1)
-[ -n "$nvm_node22" ] && PATH="$nvm_node22:$PATH"
 PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 
 changed=$( { git diff --name-only --diff-filter=ACMR "$base"; git ls-files --others --exclude-standard; } | sort -u)
 touches() { grep -qE "$1" <<<"$changed"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
-link_deps() { # <dir>: a fresh worktree has no node_modules; borrow the main checkout's
-  [ -d "$1/node_modules" ] && return 0
-  [ -d "$main_tree/$1/node_modules" ] || return 1
-  ln -s "$main_tree/$1/node_modules" "$1/node_modules"
-  local exclude
-  exclude="$(git rev-parse --git-common-dir)/info/exclude"
-  grep -qx 'node_modules' "$exclude" 2>/dev/null || echo 'node_modules' >>"$exclude"
+link_deps() {
+  local out
+  out=$(bash scripts/worktree-deps.sh "$1") || return 1
+  eval "$out"
 }
 
 failed=0
