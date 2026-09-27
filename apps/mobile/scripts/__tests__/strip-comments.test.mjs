@@ -53,7 +53,13 @@ function tokenSignature(sourceFile, token) {
 }
 
 function parse(text, fileName) {
-  return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, scriptKindForFileName(fileName));
+  return ts.createSourceFile(
+    fileName,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKindForFileName(fileName),
+  );
 }
 
 function tokenSignatures(text, fileName, options) {
@@ -61,8 +67,30 @@ function tokenSignatures(text, fileName, options) {
   return leafTokens(sourceFile, options).map((token) => tokenSignature(sourceFile, token));
 }
 
+function nodeKinds(sourceFile, { dropEmptyJsxContainers = false } = {}) {
+  const kinds = [];
+  const visit = (node) => {
+    if (dropEmptyJsxContainers && isEmptyJsxExpressionContainer(node)) return;
+    if (node.kind === ts.SyntaxKind.JSDoc) return;
+    kinds.push(node.kind);
+    node.forEachChild(visit);
+  };
+  sourceFile.forEachChild(visit);
+  return kinds;
+}
+
+function nodeKindSignatures(text, fileName, options) {
+  return nodeKinds(parse(text, fileName), options);
+}
+
 function parseDiagnosticCount(text, fileName) {
-  const sourceFile = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, scriptKindForFileName(fileName));
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    text,
+    ts.ScriptTarget.Latest,
+    false,
+    scriptKindForFileName(fileName),
+  );
   return (sourceFile.parseDiagnostics ?? []).length;
 }
 
@@ -180,13 +208,26 @@ test('every tracked source file under apps/mobile and services/overseer/web stri
 
     const stripped = stripComments(original, fullPath);
 
-    assert.equal(parseDiagnosticCount(stripped, fullPath), 0, `${relativePath} no longer reparses cleanly`);
+    assert.equal(
+      parseDiagnosticCount(stripped, fullPath),
+      0,
+      `${relativePath} no longer reparses cleanly`,
+    );
     assert.deepStrictEqual(
       tokenSignatures(stripped, fullPath),
       tokenSignatures(original, fullPath, { dropEmptyJsxContainers: true }),
       `${relativePath} syntax tree changed`,
     );
-    assert.deepStrictEqual(remainingComments(stripped, fullPath), [], `${relativePath} still has a comment`);
+    assert.deepStrictEqual(
+      nodeKindSignatures(stripped, fullPath),
+      nodeKindSignatures(original, fullPath, { dropEmptyJsxContainers: true }),
+      `${relativePath} syntax tree node kinds changed`,
+    );
+    assert.deepStrictEqual(
+      remainingComments(stripped, fullPath),
+      [],
+      `${relativePath} still has a comment`,
+    );
   }
 });
 
@@ -210,9 +251,13 @@ test('CLI rewrites a mobile fixture, runs prettier with the mobile config, and p
     );
     writeFileSync(
       join(fixtureDir, 'widget.ts'),
-      ['// leading comment', 'export function add(a: number, b: number) {', '  return a + b; /* sum */', '}', ''].join(
-        '\n',
-      ),
+      [
+        '// leading comment',
+        'export function add(a: number, b: number) {',
+        '  return a + b; /* sum */',
+        '}',
+        '',
+      ].join('\n'),
     );
 
     const output = execFileSync('node', [cliPath, join(fixtureDir, 'widget.ts')], {
@@ -226,7 +271,7 @@ test('CLI rewrites a mobile fixture, runs prettier with the mobile config, and p
     assert.ok(!rewritten.includes('leading comment'));
     assert.ok(!rewritten.includes('/* sum */'));
     assert.ok(rewritten.endsWith('\n'));
-    assert.ok(rewritten.includes("return a + b;"));
+    assert.ok(rewritten.includes('return a + b;'));
   } finally {
     rmSync(fixtureDir, { recursive: true, force: true });
   }
@@ -237,9 +282,13 @@ test('CLI rewrites an overseer-web fixture without prettier', () => {
   try {
     writeFileSync(
       join(fixtureDir, 'widget.ts'),
-      ['// leading comment', 'export function add(a:number,b:number){', '  return a+b; /* sum */', '}', ''].join(
-        '\n',
-      ),
+      [
+        '// leading comment',
+        'export function add(a:number,b:number){',
+        '  return a+b; /* sum */',
+        '}',
+        '',
+      ].join('\n'),
     );
 
     const output = execFileSync('node', [cliPath, join(fixtureDir, 'widget.ts')], {
@@ -265,7 +314,9 @@ test('CLI leaves a file untouched and exits 1 when it would not reparse cleanly'
     writeFileSync(brokenFile, 'const s = "// not a comment"; /* gone */ f(;\n');
     const originalText = readFileSync(brokenFile, 'utf8');
 
-    assert.throws(() => execFileSync('node', [cliPath, brokenFile], { cwd: mobileRoot, encoding: 'utf8' }));
+    assert.throws(() =>
+      execFileSync('node', [cliPath, brokenFile], { cwd: mobileRoot, encoding: 'utf8' }),
+    );
 
     assert.equal(readFileSync(brokenFile, 'utf8'), originalText);
   } finally {
@@ -334,6 +385,42 @@ test('a line comment after return keeps the line break, so return still returns 
   assert.equal(returnStatement.expression, undefined);
 });
 
+test('a multi-line block comment after return keeps the line break, so return still returns nothing', () => {
+  const source = 'function f() {\n  return /* a\n  b */ value;\n}\n';
+  const stripped = stripComments(source, 'x.ts');
+  const returnStatement = parse(stripped, 'x.ts').statements[0].body.statements[0];
+  assert.equal(returnStatement.expression?.getText(), undefined);
+});
+
+test('a multi-line block comment after yield keeps the line break, so yield still yields nothing', () => {
+  const source = 'function* g() {\n  yield /*\n  */ 1;\n}\n';
+  const stripped = stripComments(source, 'x.ts');
+  const yieldExpression = parse(stripped, 'x.ts').statements[0].body.statements[0].expression;
+  assert.equal(yieldExpression.expression, undefined);
+});
+
+test('removing a comment between two minus or two plus signs never fuses them into a decrement or increment', () => {
+  assert.deepStrictEqual(
+    tokenSignatures(stripComments('const a = b -/**/-c;\n', 'x.ts'), 'x.ts'),
+    tokenSignatures('const a = b - -c;\n', 'x.ts'),
+  );
+  assert.deepStrictEqual(
+    tokenSignatures(stripComments('const a = b +/**/+c;\n', 'x.ts'), 'x.ts'),
+    tokenSignatures('const a = b + +c;\n', 'x.ts'),
+  );
+});
+
+test('a multi-line block comment before a prefix increment keeps the line break', () => {
+  const stripped = stripComments('let a = 1\nlet b = a /*\n*/ ++c\n', 'x.js');
+  assert.equal(parseDiagnosticCount(stripped, 'x.js'), 0);
+  assert.equal(parse(stripped, 'x.js').statements.length, 3);
+});
+
+test('keeps a block-form @ts-expect-error by default', () => {
+  const source = "/* @ts-expect-error */\nconst v: number = '';\n";
+  assert.equal(stripComments(source, 'x.ts'), source);
+});
+
 test('a line comment ending a line before an opening paren or bracket keeps the line break', () => {
   const source = 'const a = b // c\n(d)\nconst e = f // g\n[0]\n';
 
@@ -355,6 +442,12 @@ test('strips trailing comments in a CRLF file and keeps its CRLF line endings an
   const source = "const a = 1; // t\r\nconst c = '//';\r\n";
 
   assert.equal(stripComments(source, 'x.ts'), "const a = 1;\r\nconst c = '//';\r\n");
+});
+
+test('a comment alone on its own CRLF line is removed entirely, carriage return included', () => {
+  const source = '// head\r\nconst a = 1;\r\n/* b */\r\nconst c = 2;\r\n';
+
+  assert.equal(stripComments(source, 'x.ts'), 'const a = 1;\r\nconst c = 2;\r\n');
 });
 
 test('keeps a shebang line with and without all', () => {
@@ -394,6 +487,18 @@ test('keeps reference, ts-ignore, ts-nocheck and eslint-disable directives by de
     ].join('\n'),
   );
   assert.equal(stripComments(source, 'x.ts', { all: true }), 'const a = 1;\nconst b = 2;\n');
+});
+
+test('keeps eslint-enable paired with eslint-disable by default and strips both with all', () => {
+  const source = [
+    '/* eslint-disable no-console */',
+    'const a = 1;',
+    '/* eslint-enable no-console */',
+    '',
+  ].join('\n');
+
+  assert.equal(stripComments(source, 'x.ts'), source);
+  assert.equal(stripComments(source, 'x.ts', { all: true }), 'const a = 1;\n');
 });
 
 function runCli(args) {
@@ -486,4 +591,25 @@ test('CLI exits with status 2 and prints usage when given no path', () => {
 
   assert.equal(result.status, 2);
   assert.match(`${result.stdout}${result.stderr}`, /usage/i);
+});
+
+test('CLI exits with status 2 and prints usage for an unknown flag, no stack trace', () => {
+  const result = runCli(['--bogus', 'x.ts']);
+
+  assert.equal(result.status, 2);
+  assert.match(`${result.stdout}${result.stderr}`, /usage/i);
+  assert.ok(!`${result.stdout}${result.stderr}`.includes('at Object'));
+});
+
+test('CLI exits with status 2 and prints usage for a missing path, no stack trace', () => {
+  const fixtureDir = makeFixtureDir();
+  try {
+    const result = runCli([join(fixtureDir, 'does-not-exist.ts')]);
+
+    assert.equal(result.status, 2);
+    assert.match(`${result.stdout}${result.stderr}`, /usage/i);
+    assert.ok(!`${result.stdout}${result.stderr}`.includes('at Object'));
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
 });

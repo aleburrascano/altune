@@ -7,11 +7,11 @@ import * as prettier from 'prettier';
 const WALKED_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 const SKIPPED_DIRECTORY_NAMES = new Set(['node_modules', 'dist', 'build', '.expo', 'ios', 'android']);
 
-const DIRECTIVE_PATTERNS = [
-  /^\/\/\/\s*<reference\b/,
-  /^\/\/\s*@ts-(?:expect-error|ignore|nocheck)\b/,
-  /^\/\/\s*eslint-disable/,
-  /^\/\*\s*eslint-disable/,
+const REFERENCE_DIRECTIVE_PATTERN = /^\/\/\/\s*<reference\b/;
+const DIRECTIVE_BODY_PATTERNS = [
+  /^@ts-(?:expect-error|ignore|nocheck)\b/,
+  /^eslint-disable/,
+  /^eslint-enable/,
 ];
 
 function scriptKindForFileName(fileName) {
@@ -20,12 +20,29 @@ function scriptKindForFileName(fileName) {
   return ts.ScriptKind.JS;
 }
 
+function directiveBody(commentText) {
+  if (commentText.startsWith('///')) return null;
+  if (commentText.startsWith('//')) return commentText.slice(2).replace(/^\s+/, '');
+  if (commentText.startsWith('/*')) return commentText.slice(2, -2).replace(/^\s+/, '');
+  return null;
+}
+
 function isDirectiveComment(commentText) {
-  return DIRECTIVE_PATTERNS.some((pattern) => pattern.test(commentText));
+  if (REFERENCE_DIRECTIVE_PATTERN.test(commentText)) return true;
+  const body = directiveBody(commentText);
+  return body !== null && DIRECTIVE_BODY_PATTERNS.some((pattern) => pattern.test(body));
 }
 
 function isWordCharacter(character) {
   return character !== undefined && /[\w$]/.test(character);
+}
+
+function tokensWouldFuse(charBefore, charAfter) {
+  if (charBefore === undefined || charAfter === undefined) return false;
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false);
+  scanner.setText(charBefore + charAfter);
+  scanner.scan();
+  return scanner.getTextPos() === 2;
 }
 
 function spanForRemovableComment(text, range) {
@@ -34,7 +51,7 @@ function spanForRemovableComment(text, range) {
   const lineEnd = nextNewline === -1 ? text.length : nextNewline;
   const beforeOnLine = text.slice(lineStart, range.pos);
   const afterOnLine = text.slice(range.end, lineEnd);
-  const isAloneOnLine = /^[ \t]*$/.test(beforeOnLine) && /^[ \t]*$/.test(afterOnLine);
+  const isAloneOnLine = /^[ \t\r]*$/.test(beforeOnLine) && /^[ \t\r]*$/.test(afterOnLine);
 
   if (isAloneOnLine) {
     const end = nextNewline === -1 ? text.length : nextNewline + 1;
@@ -44,9 +61,17 @@ function spanForRemovableComment(text, range) {
   let start = range.pos;
   while (start > lineStart && (text[start - 1] === ' ' || text[start - 1] === '\t')) start -= 1;
 
+  const commentText = text.slice(range.pos, range.end);
+  if (commentText.includes('\n')) {
+    return { start, end: range.end, replacement: '\n' };
+  }
+
   const charBefore = text[start - 1];
   const charAfter = text[range.end];
-  const replacement = isWordCharacter(charBefore) && isWordCharacter(charAfter) ? ' ' : '';
+  const replacement =
+    (isWordCharacter(charBefore) && isWordCharacter(charAfter)) || tokensWouldFuse(charBefore, charAfter)
+      ? ' '
+      : '';
   return { start, end: range.end, replacement };
 }
 
@@ -155,11 +180,21 @@ async function formatWithPrettierIfConfigured(filePath, text) {
 }
 
 async function runCli(argv) {
+  const unknownFlag = argv.find((argument) => argument.startsWith('--') && argument !== '--all');
   const all = argv.includes('--all');
   const paths = argv.filter((argument) => argument !== '--all');
-  if (paths.length === 0) {
+  if (unknownFlag || paths.length === 0) {
     console.error('usage: strip-comments.mjs [--all] <path>...');
     return 2;
+  }
+
+  for (const path of paths) {
+    try {
+      statSync(path);
+    } catch {
+      console.error('usage: strip-comments.mjs [--all] <path>...');
+      return 2;
+    }
   }
 
   const files = paths.flatMap((path) => collectFiles(path));
