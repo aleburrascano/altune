@@ -537,3 +537,34 @@ describe('durability', () => {
     });
   });
 });
+
+describe('loadPersistedOutbox — the user_action and failure_shown types (#2860)', () => {
+  it('replays a queued user_action and failure_shown after a restart instead of dropping them', () => {
+    const entries = [
+      entry({
+        event_id: 'ua-1',
+        type: 'user_action',
+        payload: { action: 'library.retry', outcome: 'failed', status: 500 },
+      }),
+      entry({
+        event_id: 'fs-1',
+        type: 'failure_shown',
+        payload: { surface: 'alert.delete_track', message: 'could not delete' },
+      }),
+    ];
+
+    persistOutbox(entries);
+
+    expect(loadPersistedOutbox()).toEqual(entries);
+  });
+
+  it('drops near-miss spellings of the new types rather than replaying them to the server', () => {
+    seed(
+      ['User_Action', 'user-action', 'userAction', 'user_action ', 'failure_show', 'failure_shown_'].map(
+        (type, i) => ({ type, event_id: `e${i}`, client_occurred_at: '2026-07-31T00:00:00.000Z' }),
+      ),
+    );
+
+    expect(loadPersistedOutbox()).toEqual([]);
+  });
+});
