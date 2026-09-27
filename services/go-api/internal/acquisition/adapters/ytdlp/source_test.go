@@ -35,10 +35,13 @@ func candidatesPerSpec(spec string, n int) []ports.AudioCandidate {
 	return out
 }
 
-func TestSource_Find_StopsSearchingOnceEnoughCandidatesAreFound(t *testing.T) {
+func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.T) {
+	var mu sync.Mutex
 	var specs []string
 	src := NewSource(withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		mu.Lock()
 		specs = append(specs, spec)
+		mu.Unlock()
 		return candidatesPerSpec(spec, 5), nil
 	}))
 
@@ -47,12 +50,13 @@ func TestSource_Find_StopsSearchingOnceEnoughCandidatesAreFound(t *testing.T) {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	if len(specs) > len(searchEngines) {
-		t.Fatalf("searches = %d %v, want no more than the first query's %d once %d candidates are in",
-			len(specs), specs, len(searchEngines), ports.EnoughCandidates)
+	wantSearches := len(ports.SearchQueries(findRequest())) * len(searchEngines)
+	if len(specs) != wantSearches {
+		t.Fatalf("searches = %d %v, want all %d even though the first query's engines already return %d candidates",
+			len(specs), specs, wantSearches, ports.EnoughCandidates)
 	}
-	if len(got) < ports.EnoughCandidates {
-		t.Fatalf("merged candidates = %d, want at least %d", len(got), ports.EnoughCandidates)
+	if len(got) != wantSearches*5 {
+		t.Fatalf("merged candidates = %d, want %d", len(got), wantSearches*5)
 	}
 }
 
@@ -81,9 +85,12 @@ func TestSource_Find_QueryFailureLogRedactsTheCookiePath(t *testing.T) {
 }
 
 func TestSource_Find_RunsEveryQueryWhileCandidatesStayScarce(t *testing.T) {
+	var mu sync.Mutex
 	var specs []string
 	src := NewSource(withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		mu.Lock()
 		specs = append(specs, spec)
+		mu.Unlock()
 		return candidatesPerSpec(spec, 1), nil
 	}))
 
