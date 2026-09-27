@@ -135,6 +135,37 @@ func TestShellCommentsRepoWideTrackedScripts(t *testing.T) {
 	}
 }
 
+func TestShellCommentsFailsLoudlyWhenTheWalkMissesAComment(t *testing.T) {
+	// mvdan's parser drops the comment attached to a bare `time` clause from
+	// its tree entirely, so syntax.Walk never sees it; shellComments must
+	// refuse the file instead of silently reporting zero comments.
+	_, err := shellComments([]byte("time # c1\n:\n"))
+	if err == nil {
+		t.Fatal("shellComments: want error for a comment the syntax walk misses, got nil")
+	}
+
+	stdout := &strings.Builder{}
+	code := run([]string{"check", writeTempShellFile(t, "time # c1\n:\n")}, stdout)
+	if code != 2 {
+		t.Fatalf("check exit = %d, want 2", code)
+	}
+
+	out := strings.Builder{}
+	stripCode := run([]string{"strip", writeTempShellFile(t, "time # c1\n:\n")}, &out)
+	if stripCode != 1 {
+		t.Fatalf("strip exit = %d, want 1", stripCode)
+	}
+}
+
+func writeTempShellFile(t *testing.T, contents string) string {
+	t.Helper()
+	path := t.TempDir() + "/script.sh"
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatalf("write temp shell file: %v", err)
+	}
+	return path
+}
+
 func shellFileHead(t *testing.T, path string) []byte {
 	t.Helper()
 	f, err := os.Open(path)

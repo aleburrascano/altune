@@ -40,6 +40,14 @@ func shellComments(src []byte) ([]span, error) {
 	if err != nil {
 		return nil, err
 	}
+	spans := collectCommentSpans(src, file)
+	if err := ensureNoResidualComment(src, spans); err != nil {
+		return nil, err
+	}
+	return spans, nil
+}
+
+func collectCommentSpans(src []byte, file *syntax.File) []span {
 	var spans []span
 	syntax.Walk(file, func(n syntax.Node) bool {
 		c, ok := n.(*syntax.Comment)
@@ -52,7 +60,292 @@ func shellComments(src []byte) ([]span, error) {
 		spans = append(spans, commentSpan(src, c))
 		return true
 	})
-	return spans, nil
+	return spans
+}
+
+func ensureNoResidualComment(src []byte, spans []span) error {
+	out := deleteSpans(src, spans)
+	if line, found := residualCommentLine(out); found {
+		return fmt.Errorf("unrecognized comment marker at line %d survives the comment walk", line)
+	}
+	return nil
+}
+
+type shellScanState struct {
+	src       []byte
+	i, line   int
+	wordStart bool
+	pending   []heredocSpec
+}
+
+func residualCommentLine(src []byte) (int, bool) {
+	st := &shellScanState{src: src, line: 1, wordStart: true}
+	skipShebangLine(st)
+	for st.i < len(st.src) {
+		if line, found, abort := shellScanStep(st); abort {
+			return line, found
+		}
+	}
+	return 0, false
+}
+
+func skipShebangLine(st *shellScanState) {
+	if !bytes.HasPrefix(st.src, []byte("#!")) {
+		return
+	}
+	st.i = lineEndOffset(st.src, 0)
+	if st.i < len(st.src) {
+		st.i++
+	}
+	st.line = 2
+}
+
+func shellScanStep(st *shellScanState) (line int, found, abort bool) {
+	c := st.src[st.i]
+	switch {
+	case c == '\n':
+		return shellScanNewline(st)
+	case shellScanQuoteOrEscape(st, c):
+	case isBraceExpansionStart(st.src, st.i):
+		st.i, st.line = skipBraceExpansion(st.src, st.i+2, st.line)
+		st.wordStart = false
+	case isHeredocOpStart(st.src, st.i):
+		shellScanHeredocOp(st)
+	case c == '#' && st.wordStart:
+		return st.line, true, true
+	default:
+		shellScanAdvancePlain(st, c)
+	}
+	return 0, false, false
+}
+
+func shellScanQuoteOrEscape(st *shellScanState, c byte) bool {
+	switch c {
+	case '\'':
+		st.i, st.line = skipSingleQuote(st.src, st.i+1, st.line)
+	case '"':
+		st.i, st.line = skipDoubleQuote(st.src, st.i+1, st.line)
+	case '\\':
+		st.i += 2
+	default:
+		return false
+	}
+	st.wordStart = false
+	return true
+}
+
+func shellScanAdvancePlain(st *shellScanState, c byte) {
+	st.i++
+	st.wordStart = c == ' ' || c == '\t' || isShellWordBoundary(c)
+}
+
+func shellScanNewline(st *shellScanState) (line int, found, abort bool) {
+	st.i++
+	st.line++
+	st.wordStart = true
+	if len(st.pending) == 0 {
+		return 0, false, false
+	}
+	next, nextLine, ok := consumeHeredocs(st.src, st.i, st.line, st.pending)
+	if !ok {
+		return 0, false, true
+	}
+	st.i, st.line = next, nextLine
+	st.pending = nil
+	return 0, false, false
+}
+
+func shellScanHeredocOp(st *shellScanState) {
+	spec, next, ok := parseHeredocOp(st.src, st.i)
+	if !ok {
+		st.i++
+		st.wordStart = true
+		return
+	}
+	st.pending = append(st.pending, spec)
+	st.i = next
+	st.wordStart = false
+}
+
+func isBraceExpansionStart(src []byte, i int) bool {
+	return src[i] == '$' && i+1 < len(src) && src[i+1] == '{'
+}
+
+func isHeredocOpStart(src []byte, i int) bool {
+	return src[i] == '<' && i+1 < len(src) && src[i+1] == '<'
+}
+
+func isShellWordBoundary(c byte) bool {
+	switch c {
+	case ';', '|', '&', '(', ')', '{', '}':
+		return true
+	}
+	return false
+}
+
+type heredocSpec struct {
+	delim     string
+	stripTabs bool
+}
+
+func parseHeredocOp(src []byte, i int) (heredocSpec, int, bool) {
+	n := len(src)
+	i += 2
+	strip := false
+	if i < n && src[i] == '-' {
+		strip = true
+		i++
+	}
+	i = skipHorizontalSpace(src, i)
+	if i >= n {
+		return heredocSpec{}, i, false
+	}
+	if src[i] == '\'' || src[i] == '"' {
+		return parseQuotedHeredocDelim(src, i, strip)
+	}
+	return parseBareHeredocDelim(src, i, strip)
+}
+
+func skipHorizontalSpace(src []byte, i int) int {
+	for i < len(src) && (src[i] == ' ' || src[i] == '\t') {
+		i++
+	}
+	return i
+}
+
+func parseQuotedHeredocDelim(src []byte, i int, strip bool) (heredocSpec, int, bool) {
+	n := len(src)
+	quote := src[i]
+	i++
+	start := i
+	for i < n && src[i] != quote {
+		i++
+	}
+	if i >= n {
+		return heredocSpec{}, i, false
+	}
+	return heredocSpec{delim: string(src[start:i]), stripTabs: strip}, i + 1, true
+}
+
+func parseBareHeredocDelim(src []byte, i int, strip bool) (heredocSpec, int, bool) {
+	n := len(src)
+	start := i
+	for i < n && !isHeredocDelimBoundary(src[i]) {
+		if src[i] == '\\' {
+			i += 2
+			continue
+		}
+		i++
+	}
+	if i == start {
+		return heredocSpec{}, i, false
+	}
+	return heredocSpec{delim: strings.ReplaceAll(string(src[start:i]), `\`, ""), stripTabs: strip}, i, true
+}
+
+func isHeredocDelimBoundary(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '<', '>', ';', '&', '|':
+		return true
+	}
+	return false
+}
+
+func consumeHeredocs(src []byte, i, line int, specs []heredocSpec) (int, int, bool) {
+	for _, spec := range specs {
+		next, nextLine, ok := consumeOneHeredoc(src, i, line, spec)
+		if !ok {
+			return 0, 0, false
+		}
+		i, line = next, nextLine
+	}
+	return i, line, true
+}
+
+func consumeOneHeredoc(src []byte, i, line int, spec heredocSpec) (int, int, bool) {
+	n := len(src)
+	for i < n {
+		body := i
+		if spec.stripTabs {
+			for body < n && src[body] == '\t' {
+				body++
+			}
+		}
+		end := lineEndOffset(src, i)
+		candidate := strings.TrimSuffix(string(src[body:end]), "\r")
+		i = end
+		if i < n {
+			i++
+		}
+		line++
+		if candidate == spec.delim {
+			return i, line, true
+		}
+	}
+	return 0, 0, false
+}
+
+func skipSingleQuote(src []byte, i, line int) (int, int) {
+	n := len(src)
+	for i < n && src[i] != '\'' {
+		if src[i] == '\n' {
+			line++
+		}
+		i++
+	}
+	if i < n {
+		i++
+	}
+	return i, line
+}
+
+func skipDoubleQuote(src []byte, i, line int) (int, int) {
+	n := len(src)
+	for i < n && src[i] != '"' {
+		switch src[i] {
+		case '\\':
+			i++
+			if i < n && src[i] == '\n' {
+				line++
+			}
+		case '\n':
+			line++
+		}
+		i++
+	}
+	if i < n {
+		i++
+	}
+	return i, line
+}
+
+func skipBraceExpansion(src []byte, i, line int) (int, int) {
+	depth := 1
+	for i < len(src) && depth > 0 {
+		i, line, depth = braceExpansionStep(src, i, line, depth)
+	}
+	return i, line
+}
+
+func braceExpansionStep(src []byte, i, line, depth int) (int, int, int) {
+	switch src[i] {
+	case '{':
+		return i + 1, line, depth + 1
+	case '}':
+		return i + 1, line, depth - 1
+	case '\'':
+		ni, nl := skipSingleQuote(src, i+1, line)
+		return ni, nl, depth
+	case '"':
+		ni, nl := skipDoubleQuote(src, i+1, line)
+		return ni, nl, depth
+	case '\\':
+		return i + 2, line, depth
+	case '\n':
+		return i + 1, line + 1, depth
+	default:
+		return i + 1, line, depth
+	}
 }
 
 func isShebangComment(c *syntax.Comment) bool {
