@@ -757,6 +757,70 @@ func TestQualifierDistance_IgnoresFeatureCredits(t *testing.T) {
 	}
 }
 
+func TestQualifierDistance_HandlesFullwidthBrackets(t *testing.T) {
+	cases := []struct {
+		name  string
+		track string
+	}{
+		{"ascii brackets", "Song (Live)"},
+		{"fullwidth brackets", "Song （Live）"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := qualifierDistance("Song", c.track); got == 0 {
+				t.Errorf("qualifierDistance(%q, %q) = 0, want an unrequested marker cost", "Song", c.track)
+			}
+		})
+	}
+}
+
+func joinQualifiers(labels []string) string {
+	return strings.Join(labels, "|")
+}
+
+func assertQualifiers(t *testing.T, name string, got, want []string) {
+	t.Helper()
+	if joinQualifiers(got) != joinQualifiers(want) {
+		t.Errorf("%s = %v, want %v", name, got, want)
+	}
+}
+
+func TestUnrequestedQualifiers_InstrumentalAndAccuracyClaimAreVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
+	assertQualifiers(t, "veto", veto, []string{"instrumental", "100% accurate"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_ReactionVideoIsVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
+	assertQualifiers(t, "veto", veto, []string{"reacts"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_RadioEditIsFallbackNotEdit(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Song", "Someone", "Song (Radio Edit)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, []string{"radio edit"})
+}
+
+func TestUnrequestedQualifiers_RequestedWordInTrackTitleIsNotAQualifier(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Live Forever", "Oasis", "Live Forever (Remastered)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_RequestedWordAtEndOfTrackTitleIsNotAQualifier(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Forever Live", "Oasis", "Forever Live (Remastered)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestQualifierDistance_CountsEachUnrequestedBracketSegment(t *testing.T) {
+	if got := qualifierDistance("Song", "Song (Acoustic) (Live)"); got != 2*unrequestedQualifierCost {
+		t.Errorf("qualifierDistance with two unrequested bracket segments = %d, want %d", got, 2*unrequestedQualifierCost)
+	}
+}
+
 func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing.T) {
 	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 232}
 	candidates := []ports.AudioCandidate{

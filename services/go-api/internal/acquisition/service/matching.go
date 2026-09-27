@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
@@ -49,7 +51,7 @@ var qualifierRe = regexp.MustCompile(`[\(\[\{]([^\)\]\}]*)[\)\]\}]`)
 
 func qualifierTokens(title string) map[string]bool {
 	tokens := make(map[string]bool)
-	for _, segment := range qualifierRe.FindAllStringSubmatch(title, -1) {
+	for _, segment := range qualifierRe.FindAllStringSubmatch(norm.NFKC.String(title), -1) {
 		if featuredRe.MatchString(segment[1]) {
 			continue
 		}
@@ -76,6 +78,124 @@ func qualifierDistance(trackTitle, candidateTitle string) int {
 		}
 	}
 	return distance
+}
+
+type qualifierEntry struct {
+	label  string
+	veto   bool
+	tokens []string
+}
+
+const maxQualifierPatternLen = 3
+
+var qualifierLexicon = []qualifierEntry{
+	{"instrumental", true, []string{"instrumental"}},
+	{"karaoke", true, []string{"karaoke"}},
+	{"a cappella", true, []string{"acapella"}},
+	{"a cappella", true, []string{"a", "cappella"}},
+	{"remix", true, []string{"remix"}},
+	{"remix", true, []string{"remixed"}},
+	{"mix", true, []string{"mix"}},
+	{"live", true, []string{"live"}},
+	{"cover", true, []string{"cover"}},
+	{"slowed", true, []string{"slowed"}},
+	{"reverb", true, []string{"reverb"}},
+	{"sped up", true, []string{"sped", "up"}},
+	{"nightcore", true, []string{"nightcore"}},
+	{"8d", true, []string{"8d"}},
+	{"reaction", true, []string{"reaction"}},
+	{"reacts", true, []string{"reacts"}},
+	{"leak", true, []string{"leak"}},
+	{"leak", true, []string{"leaked"}},
+	{"snippet", true, []string{"snippet"}},
+	{"in the booth", true, []string{"in", "the", "booth"}},
+	{"type beat", true, []string{"type", "beat"}},
+	{"100% accurate", true, []string{"100", "accurate"}},
+	{"edit", false, []string{"edit"}},
+	{"radio edit", false, []string{"radio", "edit"}},
+	{"extended", false, []string{"extended"}},
+	{"version", false, []string{"version"}},
+}
+
+func normalizeToTokens(s string) []string {
+	return strings.Fields(textnorm.NormalizeForIdentity(s))
+}
+
+func tokensEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsSubsequence(tokens, phrase []string) bool {
+	for i := 0; i+len(phrase) <= len(tokens); i++ {
+		if tokensEqual(tokens[i:i+len(phrase)], phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func findQualifierEntry(phrase []string) (qualifierEntry, bool) {
+	for _, entry := range qualifierLexicon {
+		if tokensEqual(entry.tokens, phrase) {
+			return entry, true
+		}
+	}
+	return qualifierEntry{}, false
+}
+
+func matchQualifierAt(tokens []string, pos int) (qualifierEntry, int, bool) {
+	for length := maxQualifierPatternLen; length >= 1; length-- {
+		if pos+length > len(tokens) {
+			continue
+		}
+		if entry, ok := findQualifierEntry(tokens[pos : pos+length]); ok {
+			return entry, length, true
+		}
+	}
+	return qualifierEntry{}, 0, false
+}
+
+func isRequestedPhrase(phrase, titleTokens, artistTokens []string) bool {
+	return containsSubsequence(titleTokens, phrase) || containsSubsequence(artistTokens, phrase)
+}
+
+func appendQualifier(list []string, label string) []string {
+	for _, existing := range list {
+		if existing == label {
+			return list
+		}
+	}
+	return append(list, label)
+}
+
+func advanceQualifierScan(candidateTokens []string, i int, titleTokens, artistTokens, veto, fallback []string) (int, []string, []string) {
+	entry, length, ok := matchQualifierAt(candidateTokens, i)
+	if !ok || isRequestedPhrase(entry.tokens, titleTokens, artistTokens) {
+		return i + 1, veto, fallback
+	}
+	if entry.veto {
+		return i + length, appendQualifier(veto, entry.label), fallback
+	}
+	return i + length, veto, appendQualifier(fallback, entry.label)
+}
+
+func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto, fallback []string) {
+	titleTokens := normalizeToTokens(trackTitle)
+	artistTokens := normalizeToTokens(trackArtist)
+	candidateTokens := normalizeToTokens(featuredRe.ReplaceAllString(candidateTitle, ""))
+
+	for i := 0; i < len(candidateTokens); {
+		i, veto, fallback = advanceQualifierScan(candidateTokens, i, titleTokens, artistTokens, veto, fallback)
+	}
+	return veto, fallback
 }
 
 const (
