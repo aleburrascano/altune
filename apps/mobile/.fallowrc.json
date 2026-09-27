@@ -3,7 +3,8 @@
   "entry": [
     "src/app/**/*.{ts,tsx}",
     "doctor.config.ts",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "eslint-rules/**/*.js"
   ],
   "ignorePatterns": [
     "**/*.test.{ts,tsx}",
