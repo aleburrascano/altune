@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -429,6 +430,177 @@ func TestRunKeepsABuildConstraintGluedToAPackageDocAndTheFileStaysExcluded(t *te
 
 	runGo(t, dir, "build", "./...")
 	runGo(t, dir, "vet", "./...")
+}
+
+func TestStripKeepsABareReturnWhenAMultiLineCommentFollowsIt(t *testing.T) {
+	src := "package main\n\nfunc g() int { return 7 }\n\nfunc f() (n int) {\n\tn = 1\n\tif n > 0 {\n\t\treturn /*\n\t\t*/ g()\n\t}\n\treturn\n}\n"
+	out, n, err := strip([]byte(src), "ret.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("removed = %d, want 1", n)
+	}
+	assertSameNodeSequence(t, "ret.go", []byte(src), out)
+}
+
+func TestStripKeepsTheEmptyStatementAMultiLineCommentCreates(t *testing.T) {
+	src := "package p\n\nfunc f() (int, int) {\n\ta := 1 /* multi\nline */ ; b := 2\n\treturn a, b\n}\n"
+	out, _, err := strip([]byte(src), "semi.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	assertSameNodeSequenceAsGofmtOfTheOriginal(t, "semi.go", []byte(src), out)
+}
+
+func assertSameNodeSequenceAsGofmtOfTheOriginal(t *testing.T, file string, src, out []byte) {
+	t.Helper()
+	gofmted, err := format.Source(src)
+	if err != nil {
+		t.Fatalf("gofmt original %s: %v", file, err)
+	}
+	assertSameNodeSequence(t, file, gofmted, out)
+}
+
+func TestStripKeepsARunTimeReturnValueWhenAMultiLineCommentFollowsReturn(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module retcheck\n\ngo 1.26.6\n")
+	writeFile(t, dir, "main.go", "package main\n\nimport \"fmt\"\n\nfunc g() int { return 7 }\n\nfunc f() (n int) {\n\tn = 1\n\tif n > 0 {\n\t\treturn /*\n\t\t*/ g()\n\t}\n\treturn\n}\n\nfunc main() {\n\tfmt.Println(f())\n}\n")
+
+	before := runAndCaptureStdout(t, dir)
+
+	var stdout bytes.Buffer
+	if code := run([]string{filepath.Join(dir, "main.go")}, &stdout); code != 0 {
+		t.Fatalf("run exit = %d, output: %s", code, stdout.String())
+	}
+
+	after := runAndCaptureStdout(t, dir)
+	if before != after {
+		t.Fatalf("program output changed after stripping: before %q, after %q", before, after)
+	}
+}
+
+func runAndCaptureStdout(t *testing.T, dir string) string {
+	t.Helper()
+	cmd := exec.Command("go", "run", ".")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go run .: %v\n%s", err, out)
+	}
+	return string(out)
+}
+
+func TestRunKeepsCgoExportLineAndPreambleDirectives(t *testing.T) {
+	src := "package p\n\nimport \"unsafe\"\n\n/*\n#include <stdio.h>\n*/\nimport \"C\"\n\n//export Add\nfunc Add(a, b int) int {\n\t// unrelated\n\treturn a + b\n}\n\n//line generated.go:1\nfunc h() {\n\t_ = unsafe.Pointer(nil)\n}\n"
+	out, n, err := strip([]byte(src), "cgo.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("removed = %d, want 1\n%s", n, out)
+	}
+	result := string(out)
+	for _, want := range []string{
+		"#include <stdio.h>",
+		"//export Add",
+		"//line generated.go:1",
+	} {
+		if !strings.Contains(result, want) {
+			t.Errorf("result missing %q\n%s", want, result)
+		}
+	}
+	if strings.Contains(result, "unrelated") {
+		t.Errorf("result still has the unrelated comment\n%s", result)
+	}
+}
+
+func TestRunRefusesALegacyBuildConstraintWithoutGoBuild(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module sample\n\ngo 1.26.6\n")
+	legacy := "// +build ignore\n\npackage main\n\n// drop me\nfunc main() {}\n"
+	writeFile(t, dir, "legacy.go", legacy)
+
+	var stdout bytes.Buffer
+	if code := run([]string{dir}, &stdout); code != 1 {
+		t.Fatalf("run exit = %d, want 1, output: %s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "legacy.go") {
+		t.Fatalf("output does not name the refused file: %s", stdout.String())
+	}
+
+	got, err := os.ReadFile(filepath.Join(dir, "legacy.go"))
+	if err != nil {
+		t.Fatalf("read legacy.go: %v", err)
+	}
+	if string(got) != legacy {
+		t.Fatalf("legacy.go was rewritten despite being refused:\n%s", got)
+	}
+}
+
+func TestRunStripsALegacyBuildConstraintWhenGoBuildIsAlsoPresent(t *testing.T) {
+	src := "//go:build ignore\n// +build ignore\n\npackage main\n\nfunc main() {}\n"
+	out, n, err := strip([]byte(src), "both.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("removed = %d, want 1\n%s", n, out)
+	}
+	result := string(out)
+	if !strings.Contains(result, "//go:build ignore") {
+		t.Errorf("result lost //go:build\n%s", result)
+	}
+	if strings.Contains(result, "+build") {
+		t.Errorf("result still has the legacy +build line\n%s", result)
+	}
+}
+
+func TestRunRefusesAnExampleOutputComment(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module sample\n\ngo 1.26.6\n")
+	example := "package sample\n\nimport \"fmt\"\n\nfunc ExampleGreet() {\n\tfmt.Println(\"hi\")\n\t// Output: hi\n}\n"
+	writeFile(t, dir, "example_test.go", example)
+
+	var stdout bytes.Buffer
+	if code := run([]string{dir}, &stdout); code != 1 {
+		t.Fatalf("run exit = %d, want 1, output: %s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "example_test.go") {
+		t.Fatalf("output does not name the refused file: %s", stdout.String())
+	}
+
+	got, err := os.ReadFile(filepath.Join(dir, "example_test.go"))
+	if err != nil {
+		t.Fatalf("read example_test.go: %v", err)
+	}
+	if string(got) != example {
+		t.Fatalf("example_test.go was rewritten despite being refused:\n%s", got)
+	}
+}
+
+func TestRunRefusesAnUnorderedExampleOutputComment(t *testing.T) {
+	src := "package sample\n\nimport \"fmt\"\n\nfunc ExampleGreet() {\n\tfmt.Println(\"hi\")\n\t// Unordered output: hi\n}\n"
+	if _, _, err := strip([]byte(src), "unordered.go"); err == nil {
+		t.Fatalf("strip: want an error for an Unordered output comment")
+	}
+}
+
+func TestStripPreservesCRLFLineEndings(t *testing.T) {
+	src := "package p\r\n\r\n// drop me\r\nfunc f() int {\r\n\treturn 1\r\n}\r\n"
+	out, n, err := strip([]byte(src), "crlf.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("removed = %d, want 1", n)
+	}
+	if bytes.Contains(out, []byte("\n")) && !bytes.Contains(out, []byte("\r\n")) {
+		t.Fatalf("result lost its CRLF line endings:\n%q", out)
+	}
+	if bytes.Count(out, []byte("\r\n")) != bytes.Count(out, []byte("\n")) {
+		t.Fatalf("result has a mix of LF and CRLF:\n%q", out)
+	}
 }
 
 func TestRunStripsTestFilesSkipsVendorTestdataNodeModulesAndLeavesCommentFreeFilesByteForByte(t *testing.T) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -16,7 +17,8 @@ import (
 )
 
 type deletion struct {
-	start, end int
+	start, end  int
+	replacement string
 }
 
 func main() {
@@ -152,24 +154,116 @@ func strip(src []byte, filename string) ([]byte, int, error) {
 		return nil, 0, err
 	}
 
+	if err := refuseIfLossy(file); err != nil {
+		return nil, 0, err
+	}
+
 	deletions := dropRanges(fset, src, file)
 
 	formatted, err := format.Source(applyDeletions(src, deletions))
 	if err != nil {
 		return nil, 0, err
 	}
+	if isCRLF(src) {
+		formatted = bytes.ReplaceAll(formatted, []byte("\n"), []byte("\r\n"))
+	}
 	return formatted, len(deletions), nil
 }
 
+func refuseIfLossy(file *ast.File) error {
+	if hasLegacyBuildConstraint(file) && !hasGoBuildDirective(file) {
+		return errStrippingChangesBuildSet
+	}
+	if hasExampleOutputComment(file) {
+		return errStrippingDisablesExampleOutput
+	}
+	return nil
+}
+
+var (
+	errStrippingChangesBuildSet       = errors.New("has a // +build constraint with no //go:build; stripping would change the build set")
+	errStrippingDisablesExampleOutput = errors.New("has an Example Output comment; stripping would silently disable the test")
+)
+
+func hasGoBuildDirective(file *ast.File) bool {
+	for _, group := range file.Comments {
+		for _, comment := range group.List {
+			if strings.HasPrefix(comment.Text, "//go:build") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasLegacyBuildConstraint(file *ast.File) bool {
+	for _, group := range file.Comments {
+		for _, comment := range group.List {
+			if strings.HasPrefix(comment.Text, "// +build") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasExampleOutputComment(file *ast.File) bool {
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil || !strings.HasPrefix(fn.Name.Name, "Example") {
+			continue
+		}
+		for _, group := range file.Comments {
+			for _, comment := range group.List {
+				if comment.Pos() < fn.Body.Lbrace || comment.Pos() > fn.Body.Rbrace {
+					continue
+				}
+				if isExampleOutputComment(comment.Text) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isExampleOutputComment(text string) bool {
+	body := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(text, "//"), "/*"))
+	return strings.HasPrefix(body, "Output:") || strings.HasPrefix(body, "Unordered output:")
+}
+
+func cgoPreambleGroup(file *ast.File) *ast.CommentGroup {
+	for _, decl := range file.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.IMPORT || gd.Doc == nil {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			imp, ok := spec.(*ast.ImportSpec)
+			if ok && imp.Path.Value == `"C"` {
+				return gd.Doc
+			}
+		}
+	}
+	return nil
+}
+
+func isCRLF(src []byte) bool {
+	return bytes.Contains(src, []byte("\r\n"))
+}
+
 func dropRanges(fset *token.FileSet, src []byte, file *ast.File) []deletion {
+	preamble := cgoPreambleGroup(file)
 	var deletions []deletion
 	for _, group := range file.Comments {
+		if group == preamble {
+			continue
+		}
 		for _, comment := range group.List {
 			if isKept(comment.Text) {
 				continue
 			}
-			start, end := commentRange(fset, src, comment)
-			deletions = append(deletions, deletion{start, end})
+			deletions = append(deletions, commentRange(fset, src, comment))
 		}
 	}
 	sort.Slice(deletions, func(i, j int) bool { return deletions[i].start < deletions[j].start })
@@ -184,6 +278,7 @@ func applyDeletions(src []byte, deletions []deletion) []byte {
 			continue
 		}
 		out.Write(src[cursor:d.start])
+		out.WriteString(d.replacement)
 		cursor = d.end
 	}
 	out.Write(src[cursor:])
@@ -194,27 +289,39 @@ func isKept(text string) bool {
 	if strings.HasPrefix(text, "//go:") {
 		return true
 	}
+	if strings.HasPrefix(text, "//export ") {
+		return true
+	}
+	if strings.HasPrefix(text, "//line ") {
+		return true
+	}
 	return strings.Contains(text, "//nolint")
 }
 
-func commentRange(fset *token.FileSet, src []byte, comment *ast.Comment) (int, int) {
+func commentRange(fset *token.FileSet, src []byte, comment *ast.Comment) deletion {
 	start := fset.Position(comment.Pos()).Offset
 	end := fset.Position(comment.End()).Offset
-
 	lineStart := lineStartOffset(src, start)
 	lineEnd := lineEndOffset(src, end)
 
-	alone := isBlank(src[lineStart:start])
-	aloneEnd := isBlank(src[end:lineEnd])
-
-	if alone && aloneEnd {
-		if lineEnd < len(src) {
-			return lineStart, lineEnd + 1
-		}
-		return lineStart, lineEnd
+	if isBlank(src[lineStart:start]) && isBlank(src[end:lineEnd]) {
+		return wholeLineDeletion(src, lineStart, lineEnd)
 	}
+	return midLineDeletion(src, comment, lineStart, start, end)
+}
 
-	return trimTrailingSpace(src, lineStart, start), end
+func wholeLineDeletion(src []byte, lineStart, lineEnd int) deletion {
+	if lineEnd < len(src) {
+		return deletion{lineStart, lineEnd + 1, ""}
+	}
+	return deletion{lineStart, lineEnd, ""}
+}
+
+func midLineDeletion(src []byte, comment *ast.Comment, lineStart, start, end int) deletion {
+	if strings.Contains(comment.Text, "\n") {
+		return deletion{start, end, "\n"}
+	}
+	return deletion{trimTrailingSpace(src, lineStart, start), end, ""}
 }
 
 func lineStartOffset(src []byte, offset int) int {
