@@ -152,8 +152,12 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 	}
 	if searchSvc != nil {
+		var resolverOpts []func(*acqDiscoveryBridge.RecordingResolver)
+		if a.musicBrainz != nil {
+			resolverOpts = append(resolverOpts, acqDiscoveryBridge.WithISRCAuthority(a.musicBrainz))
+		}
 		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
-			acqDiscoveryBridge.NewRecordingResolver(searchSvc)))
+			acqDiscoveryBridge.NewRecordingResolver(searchSvc, resolverOpts...)))
 	}
 	if a.cfg.AcoustIDAPIKey != "" {
 		identifier := chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)

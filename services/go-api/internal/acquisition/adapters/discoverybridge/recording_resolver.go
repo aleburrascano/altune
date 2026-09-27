@@ -3,10 +3,13 @@ package discoverybridge
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"math"
 	"strings"
 
 	acqports "altune/go-api/internal/acquisition/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
+	discoveryports "altune/go-api/internal/discovery/ports"
 	discoveryservice "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
@@ -20,41 +23,133 @@ type recordingSearcher interface {
 	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*discoveryservice.SearchOutput, error)
 }
 
-type RecordingResolver struct {
-	search recordingSearcher
+type isrcAuthority interface {
+	RecordingsByISRC(ctx context.Context, isrc string) ([]discoveryports.ISRCRecording, error)
 }
 
-func NewRecordingResolver(search recordingSearcher) *RecordingResolver {
-	return &RecordingResolver{search: search}
+type RecordingResolver struct {
+	search recordingSearcher
+	isrc   isrcAuthority
+}
+
+func NewRecordingResolver(search recordingSearcher, opts ...func(*RecordingResolver)) *RecordingResolver {
+	r := &RecordingResolver{search: search}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+func WithISRCAuthority(a isrcAuthority) func(*RecordingResolver) {
+	return func(r *RecordingResolver) { r.isrc = a }
 }
 
 func (r *RecordingResolver) Resolve(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
+	identity, err := r.resolveFromSearch(ctx, q)
+	anchored := r.anchorToISRC(ctx, q, identity)
+	if err != nil && anchored.MBID == "" {
+		return acqports.RecordingIdentity{}, err
+	}
+	return anchored, nil
+}
+
+func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity) acqports.RecordingIdentity {
+	recordings := r.isrcRecordings(ctx, q.ISRC)
+	if len(recordings) == 0 {
+		return identity
+	}
+	for _, rec := range recordings {
+		if rec.MBID == identity.MBID {
+			return identity
+		}
+	}
+
+	chosen, ok := closestRecording(recordings, identity.Duration)
+	if !ok {
+		slog.InfoContext(ctx, "acquisition.isrc_anchor_ambiguous",
+			"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_recordings", len(recordings))
+		return identity
+	}
+	slog.InfoContext(ctx, "acquisition.identity_anchored_to_isrc",
+		"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_mbid", chosen.MBID)
+	return adoptRecording(identity, q.ISRC, chosen)
+}
+
+func (r *RecordingResolver) isrcRecordings(ctx context.Context, isrc string) []discoveryports.ISRCRecording {
+	if r.isrc == nil || isrc == "" {
+		return nil
+	}
+	recordings, err := r.isrc.RecordingsByISRC(ctx, isrc)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.isrc_lookup_failed", "isrc", isrc, "error", err)
+		return nil
+	}
+	return recordings
+}
+
+func adoptRecording(identity acqports.RecordingIdentity, isrc string, chosen discoveryports.ISRCRecording) acqports.RecordingIdentity {
+	identity.MBID = chosen.MBID
+	if identity.ISRC == "" {
+		identity.ISRC = isrc
+	}
+	if chosen.Duration > 0 {
+		identity.Duration = float64(chosen.Duration)
+	}
+	return identity
+}
+
+func closestRecording(recordings []discoveryports.ISRCRecording, want float64) (discoveryports.ISRCRecording, bool) {
+	if len(recordings) == 1 {
+		return recordings[0], true
+	}
+	if want <= 0 {
+		return discoveryports.ISRCRecording{}, false
+	}
+	var best discoveryports.ISRCRecording
+	bestGap := math.Inf(1)
+	for _, rec := range recordings {
+		if rec.Duration <= 0 {
+			continue
+		}
+		if gap := math.Abs(float64(rec.Duration) - want); gap < bestGap {
+			best, bestGap = rec, gap
+		}
+	}
+	return best, best.MBID != ""
+}
+
+func (r *RecordingResolver) resolveFromSearch(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
 	if r.search == nil || q.Title == "" || q.Artist == "" {
 		return acqports.RecordingIdentity{}, nil
 	}
+	results, err := r.searchTracks(ctx, q)
+	if err != nil || len(results) == 0 {
+		return acqports.RecordingIdentity{}, err
+	}
+	best, ok := pickRecording(results, q)
+	if !ok {
+		return acqports.RecordingIdentity{}, nil
+	}
+	return toIdentity(best), nil
+}
 
+func (r *RecordingResolver) searchTracks(ctx context.Context, q acqports.RecordingQuery) ([]discoverydomain.SearchResult, error) {
 	query, err := discoverydomain.NewSearchQuery(
 		q.Artist+" "+q.Title,
 		map[discoverydomain.ResultKind]bool{discoverydomain.ResultKindTrack: true},
 		resolveLimit,
 	)
 	if err != nil {
-		return acqports.RecordingIdentity{}, fmt.Errorf("build resolve query: %w", err)
+		return nil, fmt.Errorf("build resolve query: %w", err)
 	}
-
 	out, err := r.search.Execute(ctx, shared.UserId{}, query, false)
 	if err != nil {
-		return acqports.RecordingIdentity{}, fmt.Errorf("resolve recording: %w", err)
+		return nil, fmt.Errorf("resolve recording: %w", err)
 	}
-	if out == nil || len(out.Results) == 0 {
-		return acqports.RecordingIdentity{}, nil
+	if out == nil {
+		return nil, nil
 	}
-
-	best, ok := pickRecording(out.Results, q)
-	if !ok {
-		return acqports.RecordingIdentity{}, nil
-	}
-	return toIdentity(best), nil
+	return out.Results, nil
 }
 
 func pickRecording(results []discoverydomain.SearchResult, q acqports.RecordingQuery) (discoverydomain.SearchResult, bool) {

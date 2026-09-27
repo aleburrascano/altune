@@ -48,3 +48,8 @@ type LyricsProvider interface {
 }
 
 type LyricsCache = NameKeyedCache[domain.DeezerLyrics]
+
+type ISRCRecording struct {
+	MBID     string
+	Duration int
+}

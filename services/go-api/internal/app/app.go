@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared"
@@ -52,6 +53,7 @@ type App struct {
 	scheduler       *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh    *discoveryService.VocabularyRefreshService
 	searchSvc       *discoveryService.Service
+	musicBrainz     *providers.MusicBrainzAdapter
 	eventBus        *events.InProcessBus
 	eventTap        *eventtap.Tap
 	alertMonitor    *observeAlert.Monitor
