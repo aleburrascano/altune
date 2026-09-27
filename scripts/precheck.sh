@@ -62,8 +62,8 @@ if touches '^services/go-api/'; then
   go_pin $m
   if need go "go-api" && need golangci-lint "go-api lint"; then
     check "go-api vet" $m go vet ./...
-    check "go-api import direction" $m golangci-lint run
-    check "go-api strict linters (new code)" $m golangci-lint run --config .golangci.strict.yml --new-from-rev="$base"
+    check "go-api import direction" $m golangci-lint run --allow-serial-runners
+    check "go-api strict linters (new code)" $m golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
     check "go-api no new comments" $m go run scripts/lint-changed-comments.go "$base"
     check "go-api no new vague names" $m go run scripts/lint-changed-names.go "$base"
     mapfile -t pkgs < <(go_pkgs $m)
@@ -77,7 +77,7 @@ if touches '^services/overseer/'; then
   if need go "overseer" && need golangci-lint "overseer lint"; then
     check "overseer build" $m go build ./...
     check "overseer vet" $m go vet ./...
-    check "overseer strict linters" $m golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive
+    check "overseer strict linters" $m golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
     check "overseer no new comments" services/go-api go run scripts/lint-changed-comments.go "$base" ../overseer
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && check "overseer tests (changed packages)" $m go test -count=1 "${pkgs[@]}"
