@@ -39,7 +39,7 @@ for file in "$MIGRATIONS_DIR"/[0-9][0-9][0-9]_*.sql; do
     [ -e "$file" ] || continue
     base=$(basename "$file")
     version=${base%%_*}
-    [ $((10#$version)) -ge 25 ] || continue
+    [ $((10#$version)) -ge 26 ] || continue
     is_contract_file "$file" && continue
 
     stripped=$(sed -E 's/--.*//' "$file")
