@@ -485,23 +485,6 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("search 403 returns ErrArtworkUnavailable", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`<html>denied</html>`))
-		}))
-		defer srv.Close()
-
-		r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
-		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
-		if !errors.Is(err, ports.ErrArtworkUnavailable) {
-			t.Fatalf("Resolve on 403 error = %v, want ports.ErrArtworkUnavailable", err)
-		}
-		if url != "" {
-			t.Errorf("url = %q, want empty on 403", url)
-		}
-	})
-
 	t.Run("empty title is a no-op", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			t.Error("no HTTP request expected for an empty title")

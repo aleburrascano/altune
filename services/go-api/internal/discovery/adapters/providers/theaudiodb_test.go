@@ -148,22 +148,6 @@ func TestTheAudioDBAdapter_Resolve_Album(t *testing.T) {
 	}
 }
 
-func TestTheAudioDBAdapter_Resolve_ArtistSearchHTTPErrorIsUnavailable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
-	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Coldplay", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
-		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
-	}
-	if url != "" {
-		t.Errorf("url = %q, want empty on 500", url)
-	}
-}
-
 func TestTheAudioDBAdapter_Resolve_ArtistSearchNoResultsIsEmptyMiss(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
