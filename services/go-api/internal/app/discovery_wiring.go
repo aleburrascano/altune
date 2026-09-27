@@ -248,6 +248,7 @@ func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.
 
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
 	sharedMB := buildMusicBrainzAdapter(cf, a.cfg)
+	a.musicBrainz = sharedMB
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 

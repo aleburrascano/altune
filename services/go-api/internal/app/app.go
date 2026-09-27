@@ -28,6 +28,7 @@ import (
 	catalogService "altune/go-api/internal/catalog/service"
 
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
+	"altune/go-api/internal/discovery/adapters/providers"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -52,13 +53,17 @@ type App struct {
 	scheduler       *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh    *discoveryService.VocabularyRefreshService
 	searchSvc       *discoveryService.Service
-	eventBus        *events.InProcessBus
-	eventTap        *eventtap.Tap
-	alertMonitor    *observeAlert.Monitor
-	logRing         *logging.RingBuffer
-	eventFeed       *eventtap.Feed
-	evalMeter       *evalmeter.Meter
-	lifecycleDone   <-chan struct{}
+	// musicBrainz is discovery's shared MusicBrainz adapter, kept so the
+	// acquisition recording resolver reuses its rate limiter; nil when
+	// MusicBrainz is not configured.
+	musicBrainz   *providers.MusicBrainzAdapter
+	eventBus      *events.InProcessBus
+	eventTap      *eventtap.Tap
+	alertMonitor  *observeAlert.Monitor
+	logRing       *logging.RingBuffer
+	eventFeed     *eventtap.Feed
+	evalMeter     *evalmeter.Meter
+	lifecycleDone <-chan struct{}
 
 	election         electionController
 	backgroundStarts []backgroundJob

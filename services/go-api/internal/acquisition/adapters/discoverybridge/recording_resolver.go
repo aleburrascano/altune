@@ -3,10 +3,13 @@ package discoverybridge
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"math"
 	"strings"
 
 	acqports "altune/go-api/internal/acquisition/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
+	discoveryports "altune/go-api/internal/discovery/ports"
 	discoveryservice "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
@@ -20,15 +23,98 @@ type recordingSearcher interface {
 	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*discoveryservice.SearchOutput, error)
 }
 
-type RecordingResolver struct {
-	search recordingSearcher
+// isrcAuthority answers which recordings an ISRC is registered against. It is
+// the MusicBrainz ISRC lookup in production.
+type isrcAuthority interface {
+	RecordingsByISRC(ctx context.Context, isrc string) ([]discoveryports.ISRCRecording, error)
 }
 
-func NewRecordingResolver(search recordingSearcher) *RecordingResolver {
-	return &RecordingResolver{search: search}
+type RecordingResolver struct {
+	search recordingSearcher
+	isrc   isrcAuthority
+}
+
+func NewRecordingResolver(search recordingSearcher, opts ...func(*RecordingResolver)) *RecordingResolver {
+	r := &RecordingResolver{search: search}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// WithISRCAuthority makes the ISRC's own recordings outrank the MBID a search
+// result carries. A merged search result can pair a track's ISRC with the MBID
+// of a same-titled remix, and the fingerprint check then rejects every correct
+// upload against the remix's AcoustID cluster.
+func WithISRCAuthority(a isrcAuthority) func(*RecordingResolver) {
+	return func(r *RecordingResolver) { r.isrc = a }
 }
 
 func (r *RecordingResolver) Resolve(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
+	identity, err := r.resolveFromSearch(ctx, q)
+	anchored := r.anchorToISRC(ctx, q, identity)
+	if err != nil && anchored.MBID == "" {
+		return acqports.RecordingIdentity{}, err
+	}
+	return anchored, nil
+}
+
+// anchorToISRC swaps the identity's MBID for one of the ISRC's recordings when
+// the search picked an MBID the ISRC is not registered against. The duration
+// follows the MBID, because a mismatched MBID means the merged result's length
+// may belong to the wrong recording too. Without an ISRC, an authority, or an
+// answer from it, the identity passes through untouched.
+func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity) acqports.RecordingIdentity {
+	if r.isrc == nil || q.ISRC == "" {
+		return identity
+	}
+	recordings, err := r.isrc.RecordingsByISRC(ctx, q.ISRC)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.isrc_lookup_failed", "isrc", q.ISRC, "error", err)
+		return identity
+	}
+	if len(recordings) == 0 {
+		return identity
+	}
+	for _, rec := range recordings {
+		if rec.MBID == identity.MBID {
+			return identity
+		}
+	}
+
+	chosen := closestRecording(recordings, identity.Duration)
+	slog.InfoContext(ctx, "acquisition.identity_anchored_to_isrc",
+		"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_mbid", chosen.MBID)
+	identity.MBID = chosen.MBID
+	if identity.ISRC == "" {
+		identity.ISRC = q.ISRC
+	}
+	if chosen.Duration > 0 {
+		identity.Duration = float64(chosen.Duration)
+	}
+	return identity
+}
+
+// closestRecording picks the ISRC recording nearest the search's length, or the
+// first one when there is no length to compare against.
+func closestRecording(recordings []discoveryports.ISRCRecording, want float64) discoveryports.ISRCRecording {
+	best := recordings[0]
+	if want <= 0 {
+		return best
+	}
+	bestGap := math.Inf(1)
+	for _, rec := range recordings {
+		if rec.Duration <= 0 {
+			continue
+		}
+		if gap := math.Abs(float64(rec.Duration) - want); gap < bestGap {
+			best, bestGap = rec, gap
+		}
+	}
+	return best
+}
+
+func (r *RecordingResolver) resolveFromSearch(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
 	if r.search == nil || q.Title == "" || q.Artist == "" {
 		return acqports.RecordingIdentity{}, nil
 	}
