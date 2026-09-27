@@ -13,6 +13,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { ArtistDetailBody } from '../ui/ArtistDetailBody';
 import { within } from '@testing-library/react-native';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+import { readDetailHandoff } from '@shared/lib/detail-handoff';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -551,5 +552,50 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
     expect(within(right).getByTestId('detail-explore-discography')).toBeTruthy();
     expect(within(right).getByTestId('detail-lastfm-unavailable')).toBeTruthy();
     expect(within(left).queryByTestId('detail-explore-discography')).toBeNull();
+  });
+});
+
+describe('ArtistDetailBody: top track and album taps pin the exact router push', () => {
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    __http.reset();
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    replyLibraryTracks(1);
+    __http.reply('GET /v1/library/albums', {
+      status: 200,
+      json: { items: [libraryAlbumGroup(0)], total: 1 },
+    });
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('pushes the exact top track tapped', async () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
+    renderLibraryArtistBody();
+
+    fireEvent.press(await screen.findByTestId('detail-top-track-0'));
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const [href] = push.mock.calls[0]!;
+    expect(href.pathname).toBe('/library/detail');
+    expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Song 0');
+  });
+
+  it('pushes the exact album tapped', async () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
+    renderLibraryArtistBody();
+
+    fireEvent.press(await screen.findByTestId('detail-album-0'));
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const [href] = push.mock.calls[0]!;
+    expect(href.pathname).toBe('/library/detail');
+    expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Album 0');
   });
 });

@@ -14,8 +14,15 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 import type { LateralNavHandle } from '../../hooks/useTrackDetailActions';
 import { TrackDetailBody } from '../TrackDetailBody';
+import { readDetailHandoff } from '@shared/lib/detail-handoff';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
+
+jest.setTimeout(20000);
+
+function resultCarriedBy(handoffId: string | string[] | undefined): string | null {
+  return readDetailHandoff(handoffId)?.result.title ?? null;
+}
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -39,6 +46,7 @@ jest.mock('../DetailScaffold', () => {
   };
 });
 
+// zzz-test
 const TITLE = 'Midnight City';
 const ARTIST = 'M83';
 
@@ -295,5 +303,87 @@ describe('TrackDetailBody retry after a failed save', () => {
     await waitFor(() => expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy());
     expect(saveIsInteractive()).toBe(true);
     expect(banner().getByText(/Tap Retry\./)).toBeTruthy();
+  });
+});
+
+describe('TrackDetailBody pins its router calls', () => {
+  it('pushes the featuring route naming the tapped featured artist', async () => {
+    // marker
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <TrackDetailBody
+          chrome={{ title: TITLE, artworkUrl: null, onBack: () => {} }}
+          result={{
+            ...trackResult(),
+            extras: { featured_artists: [{ name: 'Guest Artist', mbid: 'mb-guest' }] },
+          }}
+          lateralNav={lateralNav}
+          detailRoute="/discover/detail"
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.press(screen.getByLabelText('Tracks featuring Guest Artist'));
+
+    expect(push).toHaveBeenCalledWith({
+      pathname: '/discover/featuring',
+      params: { name: 'Guest Artist', mbid: 'mb-guest' },
+    });
+  });
+
+  it('pushes the exact related track that was tapped', async () => {
+    jest.setTimeout(20000);
+    const { RelatedTracksSection: RealRelatedTracksSection } = jest.requireActual(
+      '../RelatedTracksSection',
+    );
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+
+    __http.reply('GET /v1/discovery/tracks/soundcloud/sc-1/related', {
+      status: 200,
+      json: {
+        items: [
+          {
+            kind: 'track',
+            title: 'Related One',
+            subtitle: 'Someone Else',
+            image_url: null,
+            confidence: 'high',
+            sources: [],
+            extras: {},
+          },
+        ],
+        provider_name: 'soundcloud',
+        status: 'ok',
+      },
+    });
+
+    const result: DiscoveryResult = {
+      ...trackResult(),
+      sources: [{ provider: 'soundcloud', external_id: 'sc-1', url: 'https://sc/sc-1' }],
+    };
+
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <RealRelatedTracksSection result={result} detailRoute="/discover/detail" />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => screen.debug());
+    fireEvent.press(await screen.findByTestId('detail-related-0'));
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const [href] = push.mock.calls[0]!;
+    expect(href.pathname).toBe('/discover/detail');
+    const { readDetailHandoff } = jest.requireActual('@shared/lib/detail-handoff');
+    expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Related One');
+    expect(resultCarriedBy(href.params.handoff)).toBe('Related One');
   });
 });

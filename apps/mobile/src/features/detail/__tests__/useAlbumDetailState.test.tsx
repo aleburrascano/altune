@@ -4,6 +4,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 import { SAVE_ALL_CONCURRENCY } from '../save-all';
+import { readDetailHandoff } from '@shared/lib/detail-handoff';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -377,5 +378,30 @@ describe('saving all with a partial library lookup', () => {
       act(() => hook.result.current.onSaveAll());
       expect(mockSave.mutateAsync).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('useAlbumDetailState — onTrackPress', () => {
+  it('pushes the given detail route carrying the tapped track', () => {
+    mockUseSaveTrack.mockReturnValue({ mutate: jest.fn(), mutateAsync: jest.fn(), isPending: false });
+    mockUseAlbumTracks.mockReturnValue({
+      tracks: [],
+      isLoading: false,
+      isError: false,
+      failure: null,
+      refetch: jest.fn(),
+    });
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push, replace: jest.fn() });
+
+    const track = unownedTrack(0);
+    const { result } = renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'));
+
+    result.current.onTrackPress(track);
+
+    expect(push).toHaveBeenCalledTimes(1);
+    const [href] = push.mock.calls[0]!;
+    expect(href.pathname).toBe('/discover/detail');
+    expect(readDetailHandoff(href.params.handoff)?.result.title).toBe(track.title);
   });
 });
