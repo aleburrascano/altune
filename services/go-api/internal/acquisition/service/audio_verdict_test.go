@@ -200,6 +200,12 @@ func TestClassifyAudio_SoftAgreementDetails(t *testing.T) {
 			want:    VerdictDifferentSong,
 		},
 		{
+			name: "a reference shorter than the five-second floor cannot agree with audio of unknown length",
+			ref:  AudioReference{Title: "Intro", Artist: "Queen", Duration: 3}, audioDuration: 0,
+			results: singleLink(linked("s", "Intro", 3, "Queen")),
+			want:    VerdictDifferentSong,
+		},
+		{
 			name: "an empty reference title never agrees with an empty recording title",
 			ref:  AudioReference{Artist: "Queen"}, audioDuration: 200,
 			results: singleLink(linked("s", "", 200, "Queen")),
