@@ -385,3 +385,83 @@ func TestEmbeddedPendingCasesNameTheirOwningTicket(t *testing.T) {
 		}
 	}
 }
+
+func TestRunAll_ScoresDrinkingInLAInTheRealWorldClass(t *testing.T) {
+	cases, err := LoadEmbedded()
+	if err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+
+	report := Summarize(RunAll(context.Background(), cases))
+
+	var rw *ClassResult
+	for i := range report.Classes {
+		if report.Classes[i].Class == "RW" {
+			rw = &report.Classes[i]
+		}
+	}
+	if rw == nil {
+		t.Fatalf("no RW class in the scored report: %+v", report.Classes)
+	}
+	if rw.Total < 1 || rw.Passed != rw.Total {
+		t.Errorf("RW scored %d/%d, want every real-world case to pass", rw.Passed, rw.Total)
+	}
+	for _, p := range report.Pending {
+		if p.Case.ID == "rw-drinking-in-la-remix-mbid-anchored-to-isrc" {
+			t.Error("the Drinking in L.A. case is pending, want it scored")
+		}
+	}
+}
+
+func TestRun_RemixMBIDAnchorsToTheISRCRecordingNearestTheTrackLength(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "RW",
+		Track: Track{
+			Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 236, ISRC: "CAA509814003",
+			Resolution: &Resolution{
+				Search: &SearchedRecording{MBID: "remix", ISRC: "CAA509814003", Duration: 236},
+				ISRCRecordings: []ISRCRecording{
+					{MBID: "edit", Duration: 220},
+					{MBID: "album", Duration: 236},
+				},
+			},
+		},
+		Candidates: []Candidate{
+			{Title: "Drinking in L.A. (edit)", URL: "edit", Channel: "Bran Van 3000 - Topic", Duration: 236, AcoustID: "edit-ac", RecordingMBIDs: []string{"edit"}},
+			{Title: "Drinking in L.A.", URL: "album", Channel: "Bran Van 3000 - Topic", Duration: 237, AcoustID: "album-ac", RecordingMBIDs: []string{"album"}, Correct: true},
+		},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if out.Stored != "album" {
+		t.Fatalf("stored %q (reason %q), want the album recording whose 236s length matches the track", out.Stored, out.Reason)
+	}
+}
+
+func TestRegressions_IgnoresAFailingPendingCase(t *testing.T) {
+	report := Summarize([]Outcome{
+		{Case: Case{ID: "a", Class: "RW"}, Pass: true},
+		{Case: Case{ID: "b", Class: "RW", Pending: "selection vetoes unrequested versions"}, Pending: true, Stored: "instrumental", Reason: "stored the wrong recording"},
+		{Case: Case{ID: "c", Class: "F1", Pending: "compute acquisition confidence from evidence"}, Pending: true, Failed: true, Reason: "nothing stored"},
+	})
+	base := Baseline{Accuracy: 1.0, Classes: map[string]float64{"RW": 1.0}}
+
+	if got := report.Regressions(base); len(got) != 0 {
+		t.Fatalf("failing pending cases moved the baseline gate: %v", got)
+	}
+}
+
+func TestRun_EmptyResolutionStillAcquiresTheTrack(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track:      Track{Title: "Circles", Artist: "Post Malone", Duration: 215, Resolution: &Resolution{}},
+		Candidates: []Candidate{{Title: "Circles", URL: "u", Channel: "Post Malone - Topic", Duration: 215, Correct: true}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if out.Stored != "u" {
+		t.Fatalf("stored %q (reason %q, err %q), want the only clean upload", out.Stored, out.Reason, out.Err)
+	}
+}
