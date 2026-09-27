@@ -1,0 +1,5 @@
+{
+  "ui": [
+    "src/features/settings/ui/SettingsModal.tsx"
+  ]
+}
