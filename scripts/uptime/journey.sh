@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
-# The find-music half of uptime-check.yml (#2929). /health proves the box is up;
-# this signs the dedicated probe account in with the Supabase password grant and
-# runs one real search, so a broken search journey fails the scheduled run.
-# It cannot prove prod's download egress (it runs on GitHub's network); the
-# on-box source canary and the deploy smoke journey cover that half.
+# The find-music half of the off-box uptime probe, check.sh (#2929). /health
+# proves the box is up; this signs the dedicated probe account in with the
+# Supabase password grant and runs one real search, so a broken search journey
+# fails the probe. It cannot prove prod's download egress (it runs off the prod
+# box); the on-box source canary and the deploy smoke journey cover that half.
 #
-# Env (the `uptime` environment secrets): UPTIME_HEALTH_URL (the API base is it
+# Env (from check.sh's env file): UPTIME_HEALTH_URL (the API base is it
 # minus /health), UPTIME_SUPABASE_URL, UPTIME_SUPABASE_ANON_KEY,
 # UPTIME_PROBE_EMAIL, UPTIME_PROBE_PASSWORD. The password and the access token
 # go to curl on stdin, never argv, and are never printed.
 #
 # Exit: 0 the search answered 200 with results; 1 otherwise, with an ::error::
-# naming the stage that failed. Self-test: bash .github/workflows/uptime-journey_test.sh
+# naming the stage that failed. Self-test: bash scripts/uptime/journey_test.sh
 
 set -uo pipefail
 

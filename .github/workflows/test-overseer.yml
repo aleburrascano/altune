@@ -1,11 +1,12 @@
 # Overseer test gate. The Overseer service (services/overseer/) is its own Go
 # module and the spine of the fleet; "the spine runs on every leaf" only holds if
-# CI actually exercises it. Reachable two ways, exactly like test-backend.yml:
-# called by the PR gate (pr-gate.yml) on PRs/merge-queue that touch Overseer, and
-# directly on pushes to main (health tracking). It has NO `pull_request` trigger
-# of its own — that would run a second, unprefixed copy that shares this
-# workflow's concurrency group with the gate-called copy and cancel it, stalling
-# the required check (the same trap test-backend.yml documents).
+# CI actually exercises it. Reachable only as a reusable workflow, exactly like
+# test-backend.yml: called by the PR gate (pr-gate.yml) on PRs/merge-queue that
+# touch Overseer, and by deploy-backend.yml on pushes to main, which ships
+# Overseer. It has no `push` trigger of its own, and NO `pull_request` trigger —
+# that would run a second, unprefixed copy that shares this workflow's
+# concurrency group with the gate-called copy and cancel it, stalling the
+# required check (the same trap test-backend.yml documents).
 #
 # Two parallel jobs: `static` (build + vet + strict linters + govulncheck +
 # nilaway, fast, fails in seconds) and `test` (the race detector). They run at
@@ -26,12 +27,6 @@
 name: Test overseer
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'services/overseer/**'
-      - '.github/workflows/test-overseer.yml'
-      - '.github/workflows/nilaway-ceiling.sh'
   # Callable, so the PR gate can make this a prerequisite rather than a parallel
   # race. A reusable workflow runs against the caller's ref.
   workflow_call:

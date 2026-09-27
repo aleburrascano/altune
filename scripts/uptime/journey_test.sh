@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 
-# Self-test for uptime-journey.sh and the uptime-check.yml probe job, in the same
-# shape as deploy-backend_test.sh. A stubbed `curl` on PATH drives the Supabase
+# Self-test for journey.sh, the find-music half of the off-box uptime probe
+# (check.sh), in the same shape as deploy-backend_test.sh. A stubbed `curl` on PATH drives the Supabase
 # sign-in and the search responses and records every request (argv and stdin),
 # so a case asserts the probe goes red on each failure stage, green only on a
 # 200 with results, and never prints the password or the access token. It also
-# covers uptime-health.sh, and the workflow checks read uptime-check.yml itself,
-# so what is asserted is what Actions runs.
+# covers health.sh's unset-URL guard.
 #
-#   bash .github/workflows/uptime-journey_test.sh
+#   bash scripts/uptime/journey_test.sh
 
 set -uo pipefail
 
@@ -63,7 +62,7 @@ run_probe() {
         STUB_SIGNIN_BODY="${STUB_SIGNIN_BODY-$SIGNIN_BODY}" \
         STUB_SEARCH_CODE="${STUB_SEARCH_CODE:-200}" \
         STUB_SEARCH_BODY="${STUB_SEARCH_BODY-$RESULTS_BODY}" \
-        bash "$HERE/uptime-journey.sh" >"$WORK/out.log" 2>&1
+        bash "$HERE/journey.sh" >"$WORK/out.log" 2>&1
     RC=$?
     unset STUB_CURL_EXIT UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
         UPTIME_PROBE_EMAIL UPTIME_PROBE_PASSWORD \
@@ -158,35 +157,11 @@ for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
     [ -s "$WORK/requests.log" ] && fail "made a request with ${secret} unset"
 done
 
-WORKFLOW="$HERE/uptime-check.yml"
-
-HEALTH_STEP="$HERE/uptime-health.sh"
-
-CASE="the /health step runs uptime-health.sh with UPTIME_HEALTH_URL"
-grep -qF 'run: bash .github/workflows/uptime-health.sh' "$WORKFLOW" ||
-    fail "uptime-check.yml's /health step does not run uptime-health.sh"
-grep -qF " HEALTH_URL: \${{ secrets.UPTIME_HEALTH_URL }}" "$WORKFLOW" ||
-    fail "the /health step is not passed UPTIME_HEALTH_URL"
-
-CASE="the /health step fails with ::error:: when UPTIME_HEALTH_URL is unset"
-HEALTH_URL='' PATH="$WORK/bin:$PATH" bash "$HEALTH_STEP" >"$WORK/out.log" 2>&1
+CASE="health.sh fails with ::error:: when HEALTH_URL is unset"
+HEALTH_URL='' PATH="$WORK/bin:$PATH" bash "$HERE/health.sh" >"$WORK/out.log" 2>&1
 RC=$?
 expect_rc 1
 expect_out "::error::UPTIME_HEALTH_URL"
-
-CASE="the probe job runs uptime-journey.sh after the /health step with all five secrets"
-health_line=$(grep -n 'name: Probe readiness and fail on failure' "$WORKFLOW" | cut -d: -f1)
-journey_line=$(grep -n 'run: bash .github/workflows/uptime-journey.sh' "$WORKFLOW" | cut -d: -f1)
-if [ -z "$health_line" ] || [ -z "$journey_line" ]; then
-    fail "uptime-check.yml does not run both the /health step and uptime-journey.sh"
-elif [ "$journey_line" -le "$health_line" ]; then
-    fail "uptime-journey.sh runs before the /health step"
-fi
-for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
-    UPTIME_PROBE_EMAIL UPTIME_PROBE_PASSWORD; do
-    grep -qF "${secret}: \${{ secrets.${secret} }}" "$WORKFLOW" ||
-        fail "the journey step is not passed ${secret}"
-done
 
 # --- probe (#2929): behaviours a caller relies on that the cases above leave open ---
 
@@ -206,7 +181,7 @@ for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
         STUB_SIGNIN_CODE=200 STUB_SIGNIN_BODY="$SIGNIN_BODY" \
         STUB_SEARCH_CODE=200 STUB_SEARCH_BODY="$RESULTS_BODY" \
         "${other_secrets[@]}" \
-        bash "$HERE/uptime-journey.sh" >"$WORK/out.log" 2>&1
+        bash "$HERE/journey.sh" >"$WORK/out.log" 2>&1
     RC=$?
     expect_rc 1
     expect_out "::error::find-music journey probe: secret ${secret} is not set"

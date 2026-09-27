@@ -1,6 +1,8 @@
-# Mobile test gate. Reachable two ways: called by the PR gate (pr-gate.yml) on
-# PRs/merge-queue that touch the Expo app, and directly on pushes to main (health
-# tracking). It deliberately has NO `pull_request` trigger of its own — that ran
+# Mobile test gate. Reachable only as a reusable workflow: called by the PR gate
+# (pr-gate.yml) on PRs/merge-queue that touch the Expo app, by deploy-web.yml on
+# pushes to main, and by release-ios.yml on tags. A `push` trigger of its own ran
+# the suite a second time on every mobile merge, so it has none. It deliberately
+# has NO `pull_request` trigger of its own either — that ran
 # a second, unprefixed copy on every PR that shared this workflow's concurrency
 # group with the gate-called copy and cancelled it, stalling the required check.
 #
@@ -16,14 +18,7 @@
 name: Test mobile
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/test-mobile*'
-      - '.github/actions/mobile-setup/**'
-  # Callable, so the PR gate (and release-ios.yml) can gate on it. Tag pushes
-  # match neither trigger above, so without this a release ships unverified.
+  # Callable, so the PR gate, deploy-web.yml and release-ios.yml can gate on it.
   workflow_call:
 
 concurrency:

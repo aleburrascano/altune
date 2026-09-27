@@ -1,6 +1,8 @@
-# Backend test gate. Reachable two ways: called by the PR gate (pr-gate.yml) on
-# PRs/merge-queue that touch the Go API, and directly on pushes to main (health
-# tracking). It deliberately has NO `pull_request` trigger of its own — that ran
+# Backend test gate. Reachable only as a reusable workflow: called by the PR gate
+# (pr-gate.yml) on PRs/merge-queue that touch the Go API, and by deploy-backend.yml
+# on pushes to main, which tests the exact commit it ships. A `push` trigger of
+# its own ran the suite a second time on every backend merge, so it has none. It
+# deliberately has NO `pull_request` trigger of its own either — that ran
 # a second, unprefixed copy on every PR that shared this workflow's concurrency
 # group with the gate-called copy and cancelled it, stalling the required check.
 #
@@ -14,20 +16,8 @@
 name: Test backend
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'services/go-api/**'
-      - '.github/workflows/test-backend*'
-      - '.github/workflows/nilaway-ceiling.sh'
-      # The `smoke` job self-tests deploy-backend.yml, so a change to it (or to
-      # its self-test) must reach this suite to be checked at all.
-      - '.github/workflows/deploy-backend*'
-      - '.github/workflows/uptime-*'
-  # Callable, so the PR gate (and deploy-backend.yml) can make this a prerequisite
-  # rather than a parallel race. A reusable workflow runs against the caller's
-  # ref, so the deploy gate tests exactly the commit it is about to ship. That the
-  # record of a green main stays independent of the deploy workflow is deliberate.
+  # A reusable workflow runs against the caller's ref, so the deploy gate tests
+  # exactly the commit it is about to ship.
   workflow_call:
 
 jobs:
@@ -186,12 +176,14 @@ jobs:
       - name: deploy workflow self-test
         working-directory: .
         run: bash .github/workflows/deploy-backend_test.sh
-      # uptime-check.yml's find-music probe (#2929): red on each failed stage
-      # (sign-in, non-200 search, zero results, unset secret), never printing
-      # the probe password or access token.
-      - name: uptime journey self-test
+      # The off-box uptime probe (#2929): red on each failed stage (sign-in,
+      # non-200 search, zero results, unset secret), never printing the probe
+      # password or access token, and paging only when the state flips.
+      - name: uptime probe self-test
         working-directory: .
-        run: bash .github/workflows/uptime-journey_test.sh
+        run: |
+          bash scripts/uptime/journey_test.sh
+          bash scripts/uptime/check_test.sh
 
   test:
     runs-on: ubuntu-latest
