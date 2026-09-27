@@ -1,5 +1,5 @@
 import { NetworkError } from '@shared/api-client';
-import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
+import { backfillActionLabel, backfillActionTone, backfillDetail } from '../backfillStatus';
 
 describe('backfill status copy', () => {
   const base = { error: null, data: undefined };
