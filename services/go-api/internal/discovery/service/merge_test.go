@@ -453,6 +453,62 @@ func TestMergeInto_TitleTierCarriesMBIDAndISRCWhenTitlesAgreeUnderIdentity(t *te
 	}
 }
 
+func TestMergeInto_TitleTierCarriesWhenOneSideHasNoKnownDuration(t *testing.T) {
+	a := withISRC(track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-UNKNOWN-DUR")
+	b := withMBID(track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-UNKNOWN-DUR")
+	b.Duration = 200
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	r := entities[0].Result
+	if r.ISRC != "ISRC-UNKNOWN-DUR" {
+		t.Errorf("ISRC = %v, want ISRC-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.ISRC)
+	}
+	if r.MBID != "MBID-UNKNOWN-DUR" {
+		t.Errorf("MBID = %v, want MBID-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.MBID)
+	}
+}
+
+func TestMergeInto_TitleTierCarriesAtThreePercentDurationBoundary(t *testing.T) {
+	a := withISRC(track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-AT-BOUNDARY")
+	a.Duration = 200
+	b := withMBID(track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-AT-BOUNDARY")
+	b.Duration = 206
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	r := entities[0].Result
+	if r.ISRC != "ISRC-AT-BOUNDARY" {
+		t.Errorf("ISRC = %v, want ISRC-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.ISRC)
+	}
+	if r.MBID != "MBID-AT-BOUNDARY" {
+		t.Errorf("MBID = %v, want MBID-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.MBID)
+	}
+}
+
+func TestMergeInto_TitleTierDoesNotCarryBeyondThreePercentDurationTolerance(t *testing.T) {
+	a := withISRC(track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-OVER-TOLERANCE")
+	a.Duration = 200
+	b := withMBID(track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-OVER-TOLERANCE")
+	b.Duration = 208
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
+	}
+	r := entities[0].Result
+	if r.MBID == "MBID-OVER-TOLERANCE" {
+		t.Errorf("MBID = %v, want it not carried (8s on 200s exceeds the 3%% tolerance)", r.MBID)
+	}
+	if r.ISRC != "ISRC-OVER-TOLERANCE" {
+		t.Errorf("ISRC = %v, want ISRC-OVER-TOLERANCE preserved from the canonical side", r.ISRC)
+	}
+}
+
 func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T) {
 	// The Don Toliver bug: a same-name look-alike (no identity) carries a wrong
 	// cover, while the real, identity-pinned track has none bound yet. A name-only
