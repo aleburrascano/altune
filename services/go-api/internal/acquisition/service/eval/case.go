@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -24,6 +25,24 @@ type Track struct {
 	AuthoritativeDuration float64  `json:"authoritative_duration,omitempty"`
 	MBID                  string   `json:"mbid,omitempty"`
 	AcoustIDs             []string `json:"acoustids,omitempty"`
+
+	Resolution *Resolution `json:"resolution,omitempty"`
+}
+
+type Resolution struct {
+	Search         *SearchedRecording `json:"search,omitempty"`
+	ISRCRecordings []ISRCRecording    `json:"isrc_recordings,omitempty"`
+}
+
+type SearchedRecording struct {
+	MBID     string `json:"mbid,omitempty"`
+	ISRC     string `json:"isrc,omitempty"`
+	Duration int    `json:"duration,omitempty"`
+}
+
+type ISRCRecording struct {
+	MBID     string `json:"mbid"`
+	Duration int    `json:"duration,omitempty"`
 }
 
 type Candidate struct {
@@ -42,6 +61,10 @@ type Candidate struct {
 	Correct        bool     `json:"correct,omitempty"`
 }
 
+func (c Candidate) linksRecording(mbid string) bool {
+	return mbid != "" && slices.Contains(c.RecordingMBIDs, mbid)
+}
+
 func (c Candidate) probedDuration() float64 {
 	if c.ActualDuration > 0 {
 		return c.ActualDuration
@@ -57,7 +80,10 @@ type Case struct {
 	ExcludeURLs   []string    `json:"exclude_urls,omitempty"`
 	SkipTopRanked bool        `json:"skip_top_ranked,omitempty"`
 	Candidates    []Candidate `json:"candidates"`
+	Pending       string      `json:"pending,omitempty"`
 }
+
+func (c Case) isPending() bool { return c.Pending != "" }
 
 func (c Case) hasCorrectCandidate() bool {
 	for _, cand := range c.Candidates {
@@ -166,7 +192,35 @@ func validateCases(cases []Case) error {
 			}
 			urls[cand.URL] = true
 		}
+		if err := validateCaseExtensions(c); err != nil {
+			return err
+		}
 		seen[c.ID] = true
+	}
+	return nil
+}
+
+func validateCaseExtensions(c Case) error {
+	if c.isPending() && strings.TrimSpace(c.Pending) == "" {
+		return fmt.Errorf("case %q is pending without naming its owning ticket", c.ID)
+	}
+	return validateResolution(c)
+}
+
+func validateResolution(c Case) error {
+	r := c.Track.Resolution
+	switch {
+	case r == nil:
+		return nil
+	case c.Track.MBID != "" || len(c.Track.AcoustIDs) > 0 || c.Track.AuthoritativeDuration > 0:
+		return fmt.Errorf("case %q sets a resolution and a copied identity; keep one", c.ID)
+	case len(r.ISRCRecordings) > 0 && c.Track.ISRC == "":
+		return fmt.Errorf("case %q lists isrc recordings for a track with no isrc", c.ID)
+	}
+	for _, rec := range r.ISRCRecordings {
+		if rec.MBID == "" {
+			return fmt.Errorf("case %q has an isrc recording with no mbid", c.ID)
+		}
 	}
 	return nil
 }

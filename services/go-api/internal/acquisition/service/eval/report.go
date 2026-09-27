@@ -26,6 +26,7 @@ type Report struct {
 	Passed   int           `json:"passed"`
 	Classes  []ClassResult `json:"classes"`
 	Failures []Outcome     `json:"-"`
+	Pending  []Outcome     `json:"-"`
 }
 
 func (r Report) Accuracy() float64 {
@@ -37,9 +38,14 @@ func (r Report) Accuracy() float64 {
 
 func Summarize(outcomes []Outcome) Report {
 	byClass := make(map[string]*ClassResult)
-	report := Report{Total: len(outcomes)}
+	var report Report
 
 	for _, o := range outcomes {
+		if o.Pending {
+			report.Pending = append(report.Pending, o)
+			continue
+		}
+		report.Total++
 		cr, ok := byClass[o.Case.Class]
 		if !ok {
 			cr = &ClassResult{Class: o.Case.Class}
@@ -84,8 +90,27 @@ func (r Report) Render() string {
 			}
 		}
 	}
+	renderPending(&b, r.Pending)
 	b.WriteString("\n")
 	return b.String()
+}
+
+func renderPending(b *strings.Builder, pending []Outcome) {
+	if len(pending) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n  Pending (not scored, owned by a later ticket):\n")
+	for _, p := range pending {
+		fmt.Fprintf(b, "    [%s] %s %s\n        owner: %s\n        %s\n",
+			p.Case.Class, pendingVerdict(p), p.Case.ID, p.Case.Pending, p.Reason)
+	}
+}
+
+func pendingVerdict(p Outcome) string {
+	if p.Pass {
+		return "PASS"
+	}
+	return "FAIL"
 }
 
 type Baseline struct {

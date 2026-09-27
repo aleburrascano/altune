@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"altune/go-api/internal/acquisition/ports"
 )
@@ -90,10 +91,13 @@ func (p *casePorts) Identify(_ context.Context, filePath string) (ports.Recordin
 }
 
 func (p *casePorts) AcoustIDsFor(_ context.Context, mbid string) ([]string, error) {
-	if mbid == "" || mbid != p.kase.Track.MBID {
-		return nil, nil
+	var linked []string
+	for _, c := range p.kase.Candidates {
+		if c.AcoustID != "" && c.linksRecording(mbid) && !slices.Contains(linked, c.AcoustID) {
+			linked = append(linked, c.AcoustID)
+		}
 	}
-	return p.kase.Track.AcoustIDs, nil
+	return linked, nil
 }
 
 func (p *casePorts) Exists(_ context.Context, _ string) (bool, error) { return false, nil }

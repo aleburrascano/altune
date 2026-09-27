@@ -255,6 +255,27 @@
       "candidates": [
         { "title": "Ive Been In Love Before Cover Tribute Full Length Karaoke Instrumental Take", "url": "yt:someoneelse", "channel": "Some Other Band - Topic", "categories": ["Music"], "duration": 253, "actual_duration": 253, "view_count": 5000 }
       ]
+    },
+    {
+      "id": "mh11-radio-edit-loses-to-clean-topic-upload",
+      "class": "F4",
+      "pending": "compute acquisition confidence from evidence",
+      "note": "must-hold 11: an edit is only a fallback; the clean Topic upload within 1s is stored",
+      "track": { "title": "Harbour Lights", "artist": "The Marram", "duration": 236 },
+      "candidates": [
+        { "title": "Harbour Lights (Radio Edit)", "url": "yt:radio-edit", "channel": "The Marram - Topic", "categories": ["Music"], "duration": 205 },
+        { "title": "Harbour Lights", "url": "yt:clean-topic", "channel": "The Marram - Topic", "categories": ["Music"], "duration": 237, "correct": true }
+      ]
+    },
+    {
+      "id": "mh11-radio-edit-only-with-wrong-length-fails",
+      "class": "F4",
+      "pending": "compute acquisition confidence from evidence",
+      "note": "must-hold 11: with only a 205s radio edit for a 236s track the length disagrees, so it fails as no_confident_match",
+      "track": { "title": "Harbour Lights", "artist": "The Marram", "duration": 236 },
+      "candidates": [
+        { "title": "Harbour Lights (Radio Edit)", "url": "yt:radio-edit", "channel": "The Marram - Topic", "categories": ["Music"], "duration": 205 }
+      ]
     }
   ]
 }
