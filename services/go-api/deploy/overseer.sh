@@ -23,8 +23,6 @@ OVERSEER_DATA_DIR=/var/lib/overseer
 # token rotation it triggers) to land in the logs. Overridable so the self-test can
 # skip the wait.
 SMOKE_WINDOW="${OVERSEER_SMOKE_WINDOW:-22}"
-# TOKEN_FAILURE_SIGNATURES is defined once in deploy/lib.sh (sourced above) and
-# shared with smoke.sh.
 
 require_overseer_env() {
     if [ ! -f "$ENV_FILE" ]; then
@@ -60,8 +58,7 @@ overseer_health() {
 }
 
 recent_token_failures() {
-    docker logs --since "${SMOKE_WINDOW}s" "$OVERSEER_CONTAINER" 2>&1 \
-        | grep -E "$TOKEN_FAILURE_SIGNATURES" || true
+    docker logs --since "${SMOKE_WINDOW}s" "$OVERSEER_CONTAINER" 2>&1 | token_failures
 }
 
 # Post-deploy self-verification: after the first collect cycle the overseer must be

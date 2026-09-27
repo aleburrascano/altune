@@ -33,7 +33,6 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.." || exit
-# TOKEN_FAILURE_SIGNATURES lives in lib.sh, shared with overseer.sh (#1471).
 . deploy/lib.sh
 
 BASE_URL=${1:?usage: smoke.sh <base-url> <overseer-container> [expected-commit]}
@@ -61,7 +60,7 @@ expect_status() {
 }
 
 overseer_token_failures() {
-    printf '%s\n' "$1" | grep -E "$TOKEN_FAILURE_SIGNATURES" || true
+    printf '%s\n' "$1" | token_failures
 }
 
 # overseer_health prints the /health JSON body to stdout and exits non-zero unless
