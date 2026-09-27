@@ -763,3 +763,17 @@ func TestMerge_ISRCTierStillCarriesMBIDAcrossDifferentTitlesAndDurations(t *test
 		t.Errorf("MBID = %q, want mbid-shared carried (stronger tiers are unchanged)", r.MBID)
 	}
 }
+
+func TestMerge_ArtistNameTierCarriesMBIDAcrossAParenthetical(t *testing.T) {
+	poison := res(domain.ResultKindArtist, "Poison", "", domain.ProviderDeezer, nil)
+	poisonBand := withMBID(res(domain.ResultKindArtist, "Poison (Band)", "", domain.ProviderMusicBrainz, nil), "mbid-poison")
+
+	entities := Merge([][]domain.SearchResult{{poison}, {poisonBand}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1 (artist name tier still merges)", len(entities))
+	}
+	r := entities[0].Result
+	if r.MBID != "mbid-poison" {
+		t.Errorf("MBID = %q, want mbid-poison (the identity-agreement gate must not apply to the artist branch)", r.MBID)
+	}
+}

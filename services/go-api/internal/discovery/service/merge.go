@@ -97,7 +97,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	if completenessOf(other) > completenessOf(canonical) {
 		canonical, other = other, canonical
 	}
-	titleTierMerge := tier == domain.EntityResolutionNone
+	titleTierMerge := tier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
 	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
 
 	sources := unionSources(canonical.Sources, other.Sources)
