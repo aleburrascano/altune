@@ -92,7 +92,6 @@ export function LibraryScreen(): ReactElement {
 
   const { active, tracks, playlists } = useActiveLibraryView(chip, sortByChip, search.query, {
     pl,
-    router,
     navigation,
     selection: trackSelection.selection,
     queue,

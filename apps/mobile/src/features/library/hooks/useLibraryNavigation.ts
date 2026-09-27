@@ -3,7 +3,7 @@ import type { useRouter } from 'expo-router';
 
 import { detailHref } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 
 import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import { albumToDiscoveryResult, artistToDiscoveryResult } from '../library-to-discovery';
@@ -30,5 +30,12 @@ export function useLibraryNavigation(router: ReturnType<typeof useRouter>) {
     [router],
   );
 
-  return { navigateToTrack, navigateToAlbum, navigateToArtist };
+  const navigateToPlaylist = useCallback(
+    (playlist: PlaylistResponse): void => {
+      router.push(`/library/playlist/${playlist.id}`);
+    },
+    [router],
+  );
+
+  return { navigateToTrack, navigateToAlbum, navigateToArtist, navigateToPlaylist };
 }

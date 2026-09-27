@@ -31,6 +31,7 @@ import { ArtistsGrid } from '../ui/ArtistsGrid';
 import type { LibraryChip } from '../ui/LibraryChips';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 import { TracksList } from '../ui/TracksList';
+import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
 // Each describe below stubs the three collection hooks its own way; jest.mock is
 // file-wide, so the mocks read these and each describe's beforeEach fills them in.
@@ -353,5 +354,31 @@ describe('useActiveLibraryView — shuffleWholeLibrary', () => {
     // The last track, absent from the loaded pages, is present in the queue.
     const seededIds = (playable as { source: { trackId: string } }[]).map((t) => t.source.trackId);
     expect(seededIds).toContain(mockFullLibrary[249]!.id);
+  });
+});
+
+describe('useActiveLibraryView — playlist press', () => {
+  beforeEach(() => {
+    stubEmptyCollections();
+  });
+
+  it('pushes /library/playlist/<id> when a playlist is pressed', () => {
+    const fakeRouter = { push: jest.fn() } as unknown as Parameters<typeof useLibraryNavigation>[0];
+    const { result: navigationResult } = renderHook(() => useLibraryNavigation(fakeRouter));
+    const deps = {
+      ...makeDeps(),
+      router: fakeRouter,
+      navigation: navigationResult.current,
+    } as unknown as Parameters<typeof useActiveLibraryView>[3];
+
+    const { result } = renderHook(() => useActiveLibraryView('playlists', SORTS, '', deps));
+    const props = result.current.active.content.props as {
+      onPlaylistPress: (playlist: PlaylistResponse) => void;
+    };
+    const pressedPlaylist = (deps as unknown as { pl: { playlists: PlaylistResponse[] } }).pl
+      .playlists[0]!;
+    props.onPlaylistPress(pressedPlaylist);
+
+    expect(fakeRouter.push).toHaveBeenCalledWith(`/library/playlist/${pressedPlaylist.id}`);
   });
 });

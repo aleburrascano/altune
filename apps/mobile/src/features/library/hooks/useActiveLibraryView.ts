@@ -1,5 +1,3 @@
-import type { useRouter } from 'expo-router';
-
 import type { TrackResponse, PlaylistResponse } from '@shared/api-client/types';
 import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
@@ -19,7 +17,6 @@ import type { LibraryChip } from '../ui/LibraryChips';
 
 export type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;
-  router: ReturnType<typeof useRouter>;
   navigation: ReturnType<typeof useLibraryNavigation>;
   selection: Selection;
   queue: ReturnType<typeof useQueuePlayback>;
@@ -41,7 +38,7 @@ export function useActiveLibraryView(
   query: string,
   deps: ActiveLibraryViewDeps,
 ): ActiveLibraryView {
-  const { pl, router, navigation, selection, queue, playback, retryMutation, onTrackMore } = deps;
+  const { pl, navigation, selection, queue, playback, retryMutation, onTrackMore } = deps;
 
   const tracksView = useTracksView({
     query,
@@ -72,7 +69,7 @@ export function useActiveLibraryView(
   const playlistsView = usePlaylistsView({
     pl,
     sort: sortByChip.playlists,
-    onPlaylistPress: (playlist) => router.push(`/library/playlist/${playlist.id}`),
+    onPlaylistPress: navigation.navigateToPlaylist,
   });
 
   const viewByChip: Record<LibraryChip, ActiveView> = {
