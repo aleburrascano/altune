@@ -28,6 +28,8 @@ The only survivors are the 4 `//go:embed` lines, which Go has no other syntax fo
 **Removal tools**, each proven to change nothing but comments:
 - **TS/JS**: a script built on the TypeScript scanner that strips every comment, then runs the repo's prettier. Test: every file's AST, with comments dropped, is identical before and after.
 - **Go**: a script built on `go/parser` + `go/format` that drops every comment group except directives (`//go:`, `//nolint`) until their own tickets remove them. Test: identical AST, plus `go build ./... && go vet ./...` pass.
+- **Shell**: `services/go-api/scripts/nocomments`, a `kind` registry (`main.go`, `kind.go`) with shell as its first kind (`shell.go`, on `mvdan.cc/sh/v3/syntax`), `strip`/`check`/`diff` modes. Only the line-1 `#!` shebang survives; everything else the parser calls a comment goes, including `# shellcheck disable=...` lines. Test: comment-free prints of the original and the stripped source are byte-identical, over a fixture and over every tracked shell script.
+- **Every other kind** (YAML, Dockerfile, Caddyfile, line-config and TOML, SQL, CSS, root JS, Markdown and HTML comments) plugs into the same `nocomments` `kind` registry, one file kind per ticket, proven the same way: parse, delete comment spans, reprint comment-free, require the before and after to match.
 
 **Deletion, one `mechanical` ticket per module** (comment lines on main in brackets):
 - **Mobile (5 tickets):**
@@ -60,14 +62,25 @@ The only survivors are the 4 `//go:embed` lines, which Go has no other syntax fo
 - **3 `//go:build unix` / `!unix`** (`execcmd/procgroup_*`, `filesystem_stall_unix_test.go`). Fix: filename constraints (`_linux.go`, `_darwin.go`, `_windows.go`), which need no comment.
 - **2 `//go:build ignore`** (the `scripts/lint-changed-*.go` scripts). Fix: each moves into its own `scripts/<name>/main.go` directory; `precheck.sh` and `test-backend.yml` call the new paths.
 
+**Deletion, shell and every other kind, one ticket per area** (comment lines on main in brackets):
+- **Shell** [~420]: `.github/workflows/*.sh`, `scripts/*.sh`, `apps/mobile/e2e/agent-browser/*.sh`, `services/go-api/deploy/*.sh` + `duckdns`, `services/go-api/scripts/guardrails.sh`.
+- **YAML** (29 files): `.github/workflows/*.yml` and every other tracked `.yaml`/`.yml`.
+- **Dockerfile** (2 files): `services/go-api/deploy/Dockerfile`, `services/overseer/Dockerfile`; the mandatory `# syntax=` line-1 directive is the only survivor, same rule as the shell shebang.
+- **Caddyfile** (1 file): `services/go-api/deploy/Caddyfile`.
+- **Line-config and TOML** (4 files): `services/go-api/.air.toml`, `services/go-api/.env.example`, `services/go-api/deploy/.env.staging.example`, `services/go-api/deploy/caddy/staging-upstream.conf`.
+- **SQL** (25 files): every tracked `.sql` migration.
+- **CSS** (1 file): `services/overseer/web`'s stylesheet.
+- **Root JS** (2 files): `commitlint.config.js`, `dangerfile.js`, folded into the existing TS/JS tool and ESLint rule below, since they are ordinary `.js` files outside `apps/mobile` and `services/overseer/web`'s current scope.
+- **Markdown and HTML comments** (2 files): the `<!-- -->` syntax in `.github/PULL_REQUEST_TEMPLATE.md` and `services/overseer/web/index.html`. Prose text itself stays out of scope (see Out); only the HTML comment syntax goes.
+
 **Close-out: whole-file bans.**
-- **TS/JS**: a local ESLint rule (`eslint-rules/no-comments.js`, reporting every `sourceCode.getAllComments()`) at `error` on every file in `apps/mobile` and `services/overseer/web`, tests included. The comment check leaves `lint-changed-lines.mjs`.
+- **TS/JS**: a local ESLint rule (`eslint-rules/no-comments.js`, reporting every `sourceCode.getAllComments()`) at `error` on every file in `apps/mobile` and `services/overseer/web`, tests included, and now also the two root JS config files above. The comment check leaves `lint-changed-lines.mjs`.
 - **Go**: the comments script becomes a whole-tree check over go-api and overseer, tests included, allowing only `//go:embed`. It is wired as a required CI step in both backend workflows and in `precheck.sh`.
+- **Shell and every other kind above**: `nocomments check` (and each new kind's own check, once its ticket lands) becomes a whole-tree gate over every tracked file of its kind, allowing only the one kept directive named above (the shebang, `# syntax=`, or none). Wired into `precheck.sh` and the relevant CI workflow the same way as the Go check.
 
 ### Out, only different jobs, each with a one-line reason
 
-- `#` comments in shell, YAML, Dockerfile and Caddyfile: the operator scoped this to double-slash and slash-star.
-- Markdown docs and READMEs: prose documents, not code.
+- Markdown docs and READMEs: prose documents, not code; their embedded `<!-- -->` comment syntax is in Scope, the prose itself is not.
 - `node_modules` and generated build output: not ours to edit.
 - The workflow's own doctrine that asks for comments (`~/.claude/workflow/build/test-conventions.md` "the issue goes in a comment", `ARCHITECTURE.md` "with the issue in a comment"): fixed outside the repo in this chat; the issue link lives in the PR's `Closes #N`, which `git blame` reaches.
 
@@ -94,7 +107,7 @@ The only survivors are the 4 `//go:embed` lines, which Go has no other syntax fo
 
 ## Build, where it lives, `extends <module>` or the decisions made with rejected alternatives; a mermaid diagram when the shape isn't obvious. When the feature has UI on more than one platform, its first line is `Platforms: <list>`; builder, review and qa key their platform checks on it
 
-Extends the existing gates: `apps/mobile/scripts/lint-changed-lines.mjs`, `services/go-api/scripts/lint-changed-comments.go`, `scripts/precheck.sh`, `.github/workflows/test-mobile.yml` and `test-backend.yml`, and overseer's CI workflow. No new dependency: the TS tool uses the `typescript` and `prettier` packages the app already has, and the Go tool uses the standard library.
+Extends the existing gates: `apps/mobile/scripts/lint-changed-lines.mjs`, `services/go-api/scripts/lint-changed-comments.go`, `scripts/precheck.sh`, `.github/workflows/test-mobile.yml` and `test-backend.yml`, and overseer's CI workflow. The TS tool uses the `typescript` and `prettier` packages the app already has, and the Go tool uses the standard library; the one new dependency is `mvdan.cc/sh/v3`, linked only into the `nocomments` script's binary, for the shell kind's parser.
 
 Order: the tracer and the tools, then deletions and suppression fixes in parallel per module, then the whole-file bans last, once the tree is clean.
 
@@ -129,7 +142,7 @@ The operator opens a PR that adds `// note` to a mobile test file and to an over
 
 ## Decisions, what the user answered or accepted as a default in step 3
 
-- Scope is TS/JS and Go only, `//` and `/* */`, tests included; `#` config comments stay (operator: yes).
+- Scope is every tracked kind: TS/JS and Go (`//` and `/* */`), and shell, YAML, Dockerfile, Caddyfile, line-config, TOML, SQL, CSS, root JS, Markdown and HTML (`#`, `--`, and `<!-- -->` alike), tests included (operator: yes, 2026-09-26, "literally ban // and #").
 - Doc comments go too, Go doc comments and JSDoc included (operator: yes).
 - Every suppression is looked into and fixed at the cause, not deleted (operator: yes).
 - Default: the 4 `//go:embed` lines stay as the ban's only exception. Go has no other syntax for embedding, and the alternative (reading files at runtime) would mean shipping `clip.mp3`, the eval goldens and overseer's web bundle beside the binaries in every image. The operator can overrule this.
