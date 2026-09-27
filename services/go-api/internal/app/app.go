@@ -53,14 +53,14 @@ type App struct {
 	scheduler       *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh    *discoveryService.VocabularyRefreshService
 	searchSvc       *discoveryService.Service
-	musicBrainz   *providers.MusicBrainzAdapter
-	eventBus      *events.InProcessBus
-	eventTap      *eventtap.Tap
-	alertMonitor  *observeAlert.Monitor
-	logRing       *logging.RingBuffer
-	eventFeed     *eventtap.Feed
-	evalMeter     *evalmeter.Meter
-	lifecycleDone <-chan struct{}
+	musicBrainz     *providers.MusicBrainzAdapter
+	eventBus        *events.InProcessBus
+	eventTap        *eventtap.Tap
+	alertMonitor    *observeAlert.Monitor
+	logRing         *logging.RingBuffer
+	eventFeed       *eventtap.Feed
+	evalMeter       *evalmeter.Meter
+	lifecycleDone   <-chan struct{}
 
 	election         electionController
 	backgroundStarts []backgroundJob
