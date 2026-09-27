@@ -1,12 +1,3 @@
-// Enforce the mechanical style rules (eslint.config.js, gated behind
-// ESLINT_DIFF_SCOPED) on ONLY the lines a change added or modified, so a 10-line
-// function cap and a banned-name list can hold at the house's real thresholds
-// without retroactively failing the 500+ pre-existing long functions and vague
-// identifiers that live in files a PR merely touches. A violation blocks only
-// when eslint reports it on an added line; pre-existing code stays untouched.
-//
-// Usage: node scripts/lint-changed-lines.mjs <base-ref>
-// Run from apps/mobile. Exits 1 if any new-code violation remains.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { ESLint } from 'eslint';
@@ -15,48 +6,54 @@ import { parse } from '@typescript-eslint/parser';
 const SUPPRESSION_DIRECTIVE =
   /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
 
-const base = process.argv[2];
-if (!base) {
+const DIFF_DETECT_FLAGS = ['-M', '-C', '--find-copies-harder'];
+
+const rawBase = process.argv[2];
+if (!rawBase || rawBase.startsWith('-')) {
   console.error('usage: lint-changed-lines.mjs <base-ref>');
   process.exit(2);
 }
 
-const git = (args) => execFileSync('git', args, { encoding: 'utf8' });
+const git = (args) => execFileSync('git', ['-c', 'core.quotePath=false', ...args], { encoding: 'utf8' });
 
-const changedSrcFiles = () =>
-  git(['diff', '--name-only', '--relative', '--diff-filter=ACMR', base, '--', 'src'])
-    .split('\n')
-    .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'));
+let base;
+try {
+  base = git(['rev-parse', '--verify', '--end-of-options', `${rawBase}^{commit}`]).trim();
+} catch {
+  console.error(`lint-changed-lines.mjs: cannot resolve base ref ${rawBase}`);
+  process.exit(2);
+}
 
-const changedCommentFiles = () =>
-  git(['diff', '--name-only', '--relative', '--diff-filter=ACMR', base, '--', '.'])
-    .split('\n')
-    .filter((f) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f));
+const changedFiles = (pathspec) =>
+  git(['diff', '--text', '--name-only', '-z', '--diff-filter=ACMR', ...DIFF_DETECT_FLAGS, '--relative', base, '--', pathspec])
+    .split('\0')
+    .filter(Boolean);
 
 const addedLinesByFile = (pathspec) => {
-  const byFile = new Map();
-  const target = /^\+\+\+ b\/(.+)$/;
+  const files = changedFiles(pathspec);
+  if (files.length === 0) return new Map();
   const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-  let added = null;
-  for (const line of git(['diff', '-M', '-U0', '--relative', base, '--', pathspec]).split('\n')) {
-    const t = target.exec(line);
-    if (t) {
-      added = new Set();
-      byFile.set(t[1], added);
-      continue;
+  const hunksOf = (block) => {
+    const added = new Set();
+    for (const line of block.split('\n')) {
+      const m = hunk.exec(line);
+      if (!m) continue;
+      const start = Number(m[1]);
+      const count = m[2] === undefined ? 1 : Number(m[2]);
+      for (let n = start; n < start + count; n += 1) added.add(n);
     }
-    const m = hunk.exec(line);
-    if (!m || !added) continue;
-    const start = Number(m[1]);
-    const count = m[2] === undefined ? 1 : Number(m[2]);
-    for (let n = start; n < start + count; n += 1) added.add(n);
-  }
+    return added;
+  };
+  const patch = git(['diff', '--text', '--diff-filter=ACMR', ...DIFF_DETECT_FLAGS, '-U0', '--relative', base, '--', pathspec]);
+  const blocks = patch.split(/^diff --git .*$/m).slice(1);
+  const byFile = new Map();
+  files.forEach((file, i) => byFile.set(file, hunksOf(blocks[i] ?? '')));
   return byFile;
 };
 
-const files = changedSrcFiles();
+const files = changedFiles('src').filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'));
 const addedByFile = addedLinesByFile('src');
-const commentFiles = changedCommentFiles();
+const commentFiles = changedFiles('.').filter((f) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f));
 const addedCommentLinesByFile = addedLinesByFile('.');
 
 let total = 0;
