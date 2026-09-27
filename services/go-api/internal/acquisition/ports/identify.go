@@ -43,6 +43,6 @@ func (m RecordingMatch) InCluster(cluster []string) bool {
 }
 
 type AudioIdentifier interface {
-	Identify(ctx context.Context, filePath string) (RecordingMatch, error)
+	Identify(ctx context.Context, filePath string, durationHint float64) (RecordingMatch, error)
 	AcoustIDsFor(ctx context.Context, mbid string) ([]string, error)
 }

@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +19,8 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
+
+	"golang.org/x/time/rate"
 )
 
 // ErrMissingAPIKey signals that the AcoustID API key is absent or blank. A
@@ -30,6 +35,8 @@ const (
 	minScore           = 0.85
 	defaultEndpoint    = "https://api.acoustid.org/v2/lookup"
 	clusterEndpoint    = "https://api.acoustid.org/v2/track/list_by_mbid"
+	requestsPerSecond  = 3
+	lookupBodyCap      = 2 << 20
 )
 
 var _ ports.AudioIdentifier = (*Identifier)(nil)
@@ -40,6 +47,7 @@ type Identifier struct {
 	endpoint        string
 	clusterEndpoint string
 	client          *http.Client
+	limiter         *rate.Limiter
 }
 
 func NewIdentifier(binDir, apiKey string) *Identifier {
@@ -54,11 +62,17 @@ func NewIdentifier(binDir, apiKey string) *Identifier {
 		endpoint:        defaultEndpoint,
 		clusterEndpoint: clusterEndpoint,
 		client:          &http.Client{Timeout: lookupTimeout},
+		limiter:         rate.NewLimiter(rate.Limit(requestsPerSecond), requestsPerSecond),
 	}
 }
 
 func (i *Identifier) WithClusterEndpoint(endpoint string) *Identifier {
 	i.clusterEndpoint = endpoint
+	return i
+}
+
+func (i *Identifier) WithEndpoint(endpoint string) *Identifier {
+	i.endpoint = endpoint
 	return i
 }
 
@@ -74,13 +88,16 @@ type fingerprint struct {
 	Fingerprint string  `json:"fingerprint"`
 }
 
-func (i *Identifier) Identify(ctx context.Context, filePath string) (ports.RecordingMatch, error) {
+func (i *Identifier) Identify(ctx context.Context, filePath string, durationHint float64) (ports.RecordingMatch, error) {
 	fp, err := i.fingerprintFile(ctx, filePath)
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
 	if fp.Fingerprint == "" || fp.Duration <= 0 {
 		return ports.RecordingMatch{}, nil
+	}
+	if durationHint > 0 {
+		fp.Duration = math.Round(durationHint)
 	}
 	return i.lookup(ctx, fp)
 }
@@ -116,10 +133,13 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	if i.apiKey == "" {
 		return ports.RecordingMatch{}, ErrMissingAPIKey
 	}
+	if err := i.limiter.Wait(ctx); err != nil {
+		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
+	}
 
 	form := url.Values{}
 	form.Set("client", i.apiKey)
-	form.Set("meta", "recordingids")
+	form.Set("meta", "recordings releasegroups")
 	form.Set("duration", strconv.Itoa(int(fp.Duration)))
 	form.Set("fingerprint", fp.Fingerprint)
 
@@ -139,15 +159,27 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, lookupBodyCap))
+	if err != nil {
+		return ports.RecordingMatch{}, fmt.Errorf("read acoustid response: %w", err)
+	}
+
 	var parsed lookupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+	if err := json.Unmarshal(body, &parsed); err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("parse acoustid response: %w", err)
 	}
 	if parsed.Status != "ok" {
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %s", parsed.Error.Message)
 	}
 
-	return bestMatch(parsed), nil
+	var full fullLookupResponse
+	if err := json.Unmarshal(body, &full); err != nil {
+		return ports.RecordingMatch{}, fmt.Errorf("parse acoustid response: %w", err)
+	}
+
+	match := bestMatch(parsed)
+	match.Results = acoustIDResults(full)
+	return match, nil
 }
 
 type clusterResponse struct {
@@ -166,6 +198,9 @@ func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, e
 	}
 	if mbid == "" {
 		return nil, nil
+	}
+	if err := i.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("acoustid cluster lookup: %w", err)
 	}
 
 	form := url.Values{}
@@ -224,4 +259,63 @@ func bestMatch(parsed lookupResponse) ports.RecordingMatch {
 		best = ports.RecordingMatch{AcoustID: result.ID, MBIDs: mbids, Score: result.Score}
 	}
 	return best
+}
+
+type fullLookupRecording struct {
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Duration float64 `json:"duration"`
+	Artists  []struct {
+		Name string `json:"name"`
+	} `json:"artists"`
+}
+
+type fullLookupResponse struct {
+	Results []struct {
+		ID         string                `json:"id"`
+		Score      float64               `json:"score"`
+		Recordings []fullLookupRecording `json:"recordings"`
+	} `json:"results"`
+}
+
+func acoustIDResults(full fullLookupResponse) []ports.AcoustIDResult {
+	results := make([]ports.AcoustIDResult, 0, len(full.Results))
+	for _, result := range full.Results {
+		if result.Score < minScore {
+			continue
+		}
+		results = append(results, ports.AcoustIDResult{
+			ID:         result.ID,
+			Score:      result.Score,
+			Recordings: linkedRecordings(result.Recordings),
+		})
+	}
+	sort.SliceStable(results, func(a, b int) bool { return results[a].Score > results[b].Score })
+	return results
+}
+
+func linkedRecordings(recordings []fullLookupRecording) []ports.LinkedRecording {
+	linked := make([]ports.LinkedRecording, 0, len(recordings))
+	for _, recording := range recordings {
+		linked = append(linked, ports.LinkedRecording{
+			MBID:     recording.ID,
+			Title:    recording.Title,
+			Artists:  artistNames(recording.Artists),
+			Duration: recording.Duration,
+		})
+	}
+	return linked
+}
+
+func artistNames(artists []struct {
+	Name string `json:"name"`
+},
+) []string {
+	names := make([]string, 0, len(artists))
+	for _, artist := range artists {
+		if artist.Name != "" {
+			names = append(names, artist.Name)
+		}
+	}
+	return names
 }

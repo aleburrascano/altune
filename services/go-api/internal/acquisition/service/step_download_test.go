@@ -801,7 +801,7 @@ type stubIdentifier struct {
 	calls   int
 }
 
-func (s *stubIdentifier) Identify(context.Context, string) (ports.RecordingMatch, error) {
+func (s *stubIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
 	s.calls++
 	return s.match, s.err
 }
@@ -928,7 +928,7 @@ type rejectFirstIdentifier struct {
 	calls   int
 }
 
-func (r *rejectFirstIdentifier) Identify(context.Context, string) (ports.RecordingMatch, error) {
+func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
 	r.calls++
 	if r.calls == 1 {
 		return ports.RecordingMatch{AcoustID: "ac-wrong", MBIDs: []string{"mb-wrong"}}, nil

@@ -82,7 +82,7 @@ func (p *casePorts) ValidateDecodable(_ context.Context, filePath string) error 
 	return nil
 }
 
-func (p *casePorts) Identify(_ context.Context, filePath string) (ports.RecordingMatch, error) {
+func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (ports.RecordingMatch, error) {
 	cand, ok := p.byPath[filePath]
 	if !ok || (len(cand.RecordingMBIDs) == 0 && cand.AcoustID == "") {
 		return ports.RecordingMatch{}, nil

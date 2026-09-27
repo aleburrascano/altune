@@ -245,7 +245,7 @@ func (s *DownloadStep) identify(
 		return false
 	}
 
-	match, err := s.identifier.Identify(ctx, filePath)
+	match, err := s.identifier.Identify(ctx, filePath, 0)
 	switch {
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.identify_failed",

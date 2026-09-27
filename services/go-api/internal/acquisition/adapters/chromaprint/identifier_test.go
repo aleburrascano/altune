@@ -3,12 +3,19 @@ package chromaprint
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"altune/go-api/internal/acquisition/ports"
 )
@@ -256,5 +263,258 @@ func TestAcoustIDsFor_ValidKeyNoResultsIsNilError(t *testing.T) {
 	}
 	if len(ids) != 0 {
 		t.Errorf("ids = %v, want empty", ids)
+	}
+}
+
+func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
+	oversized := `{"status":"ok","results":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(oversized))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+
+	_, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+
+	if err == nil {
+		t.Fatal("lookup against an oversized response body must error, got nil")
+	}
+}
+
+func fakeFpcalcDir(t *testing.T, duration float64) string {
+	t.Helper()
+	dir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nprintf '{\"duration\": %g, \"fingerprint\": \"AQAAdkmVJUqSpNce\"}'\n", duration)
+	path := filepath.Join(dir, "fpcalc")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake fpcalc: %v", err)
+	}
+	return dir
+}
+
+func TestIdentify_SendsCandidateDurationNotFpcalcsMeasuredLength(t *testing.T) {
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+
+	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 236); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if got := gotForm.Get("duration"); got != "236" {
+		t.Errorf("duration = %q, want 236 (the candidate's full length)", got)
+	}
+	if got := gotForm.Get("meta"); got != "recordings releasegroups" {
+		t.Errorf("meta = %q, want %q", got, "recordings releasegroups")
+	}
+}
+
+func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[
+			{"id":"ac-weak","score":0.5,"recordings":[{"id":"mb-weak","title":"Below Floor","duration":300}]},
+			{"id":"ac-top","score":0.98,"recordings":[{"id":"mb-top","title":"Song One","duration":236,"artists":[{"name":"Artist A"}]}]},
+			{"id":"ac-second","score":0.9,"recordings":[{"id":"mb-second","title":"Song Two","duration":220,"artists":[{"name":"Artist B"}]}]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if match.AcoustID != "ac-top" || match.Score != 0.98 || !match.Matches("mb-top") {
+		t.Fatalf("top match = %+v, want the ac-top result as before", match)
+	}
+	if len(match.Results) != 2 {
+		t.Fatalf("Results = %+v, want 2 results at or above the score floor", match.Results)
+	}
+	if match.Results[0].ID != "ac-top" || match.Results[1].ID != "ac-second" {
+		t.Errorf("Results order = [%s %s], want [ac-top ac-second]", match.Results[0].ID, match.Results[1].ID)
+	}
+	got := match.Results[0].Recordings[0]
+	want := ports.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("linked recording = %+v, want %+v", got, want)
+	}
+}
+
+func TestIdentifier_DefaultsToThreeRequestsPerSecond(t *testing.T) {
+	id := NewIdentifier("", "key")
+	if id.limiter.Limit() != rate.Limit(3) {
+		t.Errorf("limiter limit = %v, want %v", id.limiter.Limit(), rate.Limit(3))
+	}
+}
+
+func TestLookup_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
+	}))
+	defer srv.Close()
+
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
+	limiter.Allow()
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	id.limiter = limiter
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
+
+	if err == nil {
+		t.Fatal("lookup blocked on an exhausted limiter must fail, got nil error")
+	}
+	if hits != 0 {
+		t.Errorf("hits = %d, want 0: the rate limit wait must abort before any request reaches the network", hits)
+	}
+}
+
+func TestAcoustIDsFor_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","tracks":[]}`))
+	}))
+	defer srv.Close()
+
+	limiter := rate.NewLimiter(rate.Every(time.Hour), 1)
+	limiter.Allow()
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+	id.limiter = limiter
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := id.AcoustIDsFor(ctx, "mbid-1")
+
+	if err == nil {
+		t.Fatal("AcoustIDsFor blocked on an exhausted limiter must fail, got nil error")
+	}
+	if hits != 0 {
+		t.Errorf("hits = %d, want 0: the rate limit wait must abort before any request reaches the network", hits)
+	}
+}
+
+func TestIdentifier_SharesOneLimiterAcrossLookupAndAcoustIDsFor(t *testing.T) {
+	var lookupHits, clusterHits int
+	lookupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		lookupHits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
+	}))
+	defer lookupSrv.Close()
+	clusterSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		clusterHits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","tracks":[]}`))
+	}))
+	defer clusterSrv.Close()
+
+	limiter := rate.NewLimiter(rate.Every(50*time.Millisecond), 1)
+	id := NewIdentifier(fakeFpcalcDir(t, 100), "real-key").
+		WithEndpoint(lookupSrv.URL).
+		WithClusterEndpoint(clusterSrv.URL)
+	id.limiter = limiter
+
+	start := time.Now()
+	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if _, err := id.AcoustIDsFor(context.Background(), "mbid-1"); err != nil {
+		t.Fatalf("AcoustIDsFor: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if lookupHits != 1 || clusterHits != 1 {
+		t.Fatalf("lookupHits = %d, clusterHits = %d, want 1 and 1", lookupHits, clusterHits)
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Errorf("elapsed = %v, want at least ~50ms: a shared limiter with a single burst token must make the second call wait", elapsed)
+	}
+}
+
+func TestIdentify_ZeroDurationHintKeepsFpcalcsMeasuredDuration(t *testing.T) {
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+
+	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if got := gotForm.Get("duration"); got != "130" {
+		t.Errorf("duration = %q, want 130 (fpcalc's own measured duration, since no hint was given)", got)
+	}
+}
+
+func TestIdentify_KeepsResultAtExactlyTheScoreFloor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[
+			{"id":"ac-floor","score":0.85,"recordings":[{"id":"mb-floor","title":"At Floor","duration":200}]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/floor.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if len(match.Results) != 1 || match.Results[0].ID != "ac-floor" {
+		t.Fatalf("Results = %+v, want the result scored exactly at the floor kept", match.Results)
+	}
+}
+
+func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[
+			{"id":"ac-first","score":0.9,"recordings":[{"id":"mb-first","title":"First","duration":200}]},
+			{"id":"ac-second","score":0.9,"recordings":[{"id":"mb-second","title":"Second","duration":210}]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/tied.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if len(match.Results) != 2 || match.Results[0].ID != "ac-first" || match.Results[1].ID != "ac-second" {
+		t.Fatalf("Results = %+v, want tied scores to keep the committed input order [ac-first ac-second]", match.Results)
 	}
 }
