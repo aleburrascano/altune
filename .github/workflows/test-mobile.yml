@@ -82,8 +82,27 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_BASE: ${{ github.event.merge_group.base_sha }}
           BEFORE: ${{ github.event.before }}
-        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-diff-style.sh"
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ -n "$PR_BASE" ]; then
+            BASE="$PR_BASE"
+          elif [ "$EVENT" = "merge_group" ] && [ -n "$MERGE_BASE" ]; then
+            BASE="$MERGE_BASE"
+          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
+            && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BASE="$BEFORE"
+          else
+            echo "::error::no usable diff base ($EVENT)"
+            exit 1
+          fi
+          echo "Diff base: $BASE"
+          node scripts/lint-changed-lines.mjs "$BASE"
+      - name: script and rule tests
+        run: |
+          files=$(git ls-files 'scripts/__tests__/*.test.mjs' 'eslint-rules/__tests__/*.test.js')
+          [ -z "$files" ] || node --test $files
 
   architecture:
     runs-on: ubuntu-latest
