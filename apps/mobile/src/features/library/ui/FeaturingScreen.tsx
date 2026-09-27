@@ -16,6 +16,7 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 
+import { featuringDetailRoute } from '../featuringDetailRoute';
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useExploreArtist } from '../hooks/useExploreArtist';
@@ -28,7 +29,7 @@ export function FeaturingScreen(): ReactElement {
   const params = useLocalSearchParams<{ name?: string; mbid?: string; deezer_id?: string }>();
   const router = useRouter();
   const segments = useSegments();
-  const tabRoot = (segments as readonly string[])[1] === 'discover' ? 'discover' : 'library';
+  const detailPath = featuringDetailRoute(segments);
 
   const fa: FeaturedArtist = useMemo(
     () => ({
@@ -56,9 +57,7 @@ export function FeaturingScreen(): ReactElement {
   };
 
   const openTrackDetail = (track: TrackResponse): void => {
-    router.push(
-      detailHref(`/${tabRoot}/detail` as '/discover/detail', trackToDiscoveryResult(track)),
-    );
+    router.push(detailHref(detailPath, trackToDiscoveryResult(track)));
   };
 
   const menu = useTrackMenu({
@@ -113,7 +112,7 @@ export function FeaturingScreen(): ReactElement {
               label={exploring ? 'Searching…' : `Search for ${fa.name}`}
               variant="ghost"
               loading={exploring}
-              onPress={() => void explore(fa.name, `/${tabRoot}/detail` as '/discover/detail')}
+              onPress={() => void explore(fa.name, detailPath)}
             />
           </View>
         )}
