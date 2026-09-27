@@ -40,6 +40,24 @@ func insertPendingTrack(t *testing.T, pool *pgxpool.Pool, availableAt time.Time)
 	return insertPendingTrackForUser(t, pool, shared.NewUserId(uuid.New()), availableAt)
 }
 
+func expireLease(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE tracks SET acquisition_lease_until = now() - interval '1 second' WHERE id = $1`, trackID.UUID()); err != nil {
+		t.Fatalf("expire lease: %v", err)
+	}
+}
+
+func leaseUntil(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) time.Time {
+	t.Helper()
+	var until time.Time
+	if err := pool.QueryRow(context.Background(),
+		`SELECT acquisition_lease_until FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&until); err != nil {
+		t.Fatalf("select lease: %v", err)
+	}
+	return until
+}
+
 func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
@@ -120,7 +138,7 @@ func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 
-	first, err := queue.Claim(ctx, 50*time.Millisecond)
+	first, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
 		t.Fatalf("first Claim = %v, want a job", err)
 	}
@@ -132,7 +150,7 @@ func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 		t.Errorf("Claim while leased = %v, want ErrNoJobAvailable", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	expireLease(t, pool, track.ID)
 
 	second, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
@@ -153,15 +171,17 @@ func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
-	job, err := queue.Claim(ctx, 100*time.Millisecond)
+	job, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Heartbeat(ctx, track.ID, job.Attempts, time.Minute); err != nil {
+	if err := queue.Heartbeat(ctx, track.ID, job.Attempts, time.Hour); err != nil {
 		t.Fatalf("Heartbeat = %v, want nil", err)
 	}
-	time.Sleep(150 * time.Millisecond)
+	if until := leaseUntil(t, pool, track.ID); time.Until(until) < 30*time.Minute {
+		t.Errorf("lease after an hour-long heartbeat ends in %s, want about an hour", time.Until(until))
+	}
 	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
 		t.Errorf("Claim after heartbeat extended the lease = %v, want ErrNoJobAvailable", err)
 	}
@@ -266,11 +286,11 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 
-	zombie, err := queue.Claim(ctx, 50*time.Millisecond)
+	zombie, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
 		t.Fatalf("first Claim (A) = %v, want a job", err)
 	}
-	time.Sleep(100 * time.Millisecond)
+	expireLease(t, pool, track.ID)
 
 	newOwner, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
@@ -309,11 +329,11 @@ func TestPgxJobQueue_SettleNeverLeavesAPendingRowWithNilAvailableAt(t *testing.T
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 
-	zombie, err := queue.Claim(ctx, 50*time.Millisecond)
+	zombie, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
 		t.Fatalf("first Claim (A) = %v, want a job", err)
 	}
-	time.Sleep(100 * time.Millisecond)
+	expireLease(t, pool, track.ID)
 
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
 		t.Fatalf("reclaim (B) = %v, want a job", err)
