@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+import (
+	"altune/go-api/internal/discovery/ports"
+	"errors"
+)
+
+import "strings"
+
 func TestFanartTvArtworkResolver_Resolve_ArtistThumb(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -123,6 +130,19 @@ func TestFanartTvArtworkResolver_Resolve_404(t *testing.T) {
 	}
 }
 
+func TestFanartTvArtworkResolver_Resolve_500IsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	resolver := NewFanartTvArtworkResolver(newTestClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Unknown", "", "some-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
 func TestFanartTvArtworkResolver_EscapesMBIDInRequestURL(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -153,5 +173,114 @@ func TestFanartTvArtworkResolver_EscapesMBIDInRequestURL(t *testing.T) {
 					got.URL.RawQuery, got.URL.Fragment)
 			}
 		})
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_BadRequestIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "not-a-uuid")
+	if url != "" || err != nil {
+		t.Errorf("Resolve on HTTP 400 = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_AlbumNotFoundIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
+	if url != "" || err != nil {
+		t.Errorf("album Resolve on HTTP 404 = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_AlbumServerErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindAlbum, "Higher Power", "Coldplay", "rg-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("album Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_NoImagesIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"name":"Radiohead"}`))
+	}))
+	defer server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || err != nil {
+		t.Errorf("Resolve with no images = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`<html>maintenance</html>`))
+	}))
+	defer server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on a non-JSON body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(serverURL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_CancelledContextIsUnavailableAndKeepsTheCause(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	url, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(ctx, domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", url, err)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_FailureNamesFanart(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	_, err := NewFanartTvArtworkResolver(newTestClient(server.URL), "k").Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "some-mbid")
+	if err == nil || !strings.Contains(err.Error(), "fanart") {
+		t.Errorf("err = %v, want a failure that names fanart", err)
 	}
 }
