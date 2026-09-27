@@ -11,11 +11,11 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
 fi
 
 is_contract_file() {
-    grep -qiE '^[[:space:]]*--[[:space:]]*contract[[:space:]]*$' "$1"
+    printf '%s' "$1" | grep -qE '^[0-9]{3,}_contract_'
 }
 
 report() {
-    printf 'migration-safety: %s: %s needs expand-contract (mark the file -- contract once no running code needs the old shape)\n' "$1" "$2"
+    printf 'migration-safety: %s: %s needs expand-contract (rename the file to NNN_contract_<name>.sql once no running code needs the old shape)\n' "$1" "$2"
     STATUS=1
 }
 
@@ -79,7 +79,7 @@ for file in "$MIGRATIONS_DIR"/*.sql; do
     version=$(printf '%s' "$base" | grep -oE '^[0-9]+' || true)
     [ ${#version} -ge 3 ] || continue
     [ $((10#$version)) -ge 26 ] || continue
-    is_contract_file "$file" && continue
+    is_contract_file "$base" && continue
 
     while IFS= read -r label; do
         [ -n "$label" ] || continue

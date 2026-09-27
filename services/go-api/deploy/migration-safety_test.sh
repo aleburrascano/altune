@@ -78,11 +78,18 @@ write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD COLUMN weight INT NOT NU
 run_case "$DIR"
 expect_rc 0
 
-CASE="a -- contract marker exempts an otherwise unsafe file"
+CASE="a NNN_contract_<name>.sql filename exempts an otherwise unsafe file"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_contract_x.sql 'DROP TABLE IF EXISTS widgets;'
+run_case "$DIR"
+expect_rc 0
+
+CASE="a -- contract comment line no longer exempts the file"
 DIR=$(mktemp -d -p "$WORK")
 printf '%s\n%s\n' 'DROP TABLE IF EXISTS widgets;' '-- contract' >"$DIR/026_x.sql"
 run_case "$DIR"
-expect_rc 0
+expect_rc 1
+expect_out "DROP TABLE needs expand-contract"
 
 CASE="versions below 026 are ignored even with unsafe patterns"
 DIR=$(mktemp -d -p "$WORK")
@@ -165,19 +172,26 @@ run_case "$DIR"
 expect_rc 1
 expect_out "DROP TABLE needs expand-contract"
 
-CASE="a comment line that merely starts with contract does not exempt the file"
+CASE="026_contracts_x.sql is still checked"
 DIR=$(mktemp -d -p "$WORK")
-printf '%s\n%s\n' 'DROP TABLE widgets;' '-- contractor table is gone' >"$DIR/026_x.sql"
+write_fixture "$DIR" 026_contracts_x.sql 'DROP TABLE widgets;'
 run_case "$DIR"
 expect_rc 1
-expect_out "DROP TABLE needs expand-contract"
+expect_out "026_contracts_x.sql: DROP TABLE needs expand-contract"
 
-CASE="the contract marker is honoured with no space after -- and with trailing spaces"
+CASE="026_x_contract.sql is still checked"
 DIR=$(mktemp -d -p "$WORK")
-printf '%s\n%s\n' 'DROP TABLE widgets;' '--contract' >"$DIR/026_x.sql"
-printf '%s\n%s\n' 'DROP TABLE gadgets;' '-- contract   ' >"$DIR/027_y.sql"
+write_fixture "$DIR" 026_x_contract.sql 'DROP TABLE widgets;'
 run_case "$DIR"
-expect_rc 0
+expect_rc 1
+expect_out "026_x_contract.sql: DROP TABLE needs expand-contract"
+
+CASE="the _contract_ segment is matched case-sensitively"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_CONTRACT_x.sql 'DROP TABLE widgets;'
+run_case "$DIR"
+expect_rc 1
+expect_out "026_CONTRACT_x.sql: DROP TABLE needs expand-contract"
 
 CASE="an unsafe statement followed by a -- comment on the same line still fails"
 DIR=$(mktemp -d -p "$WORK")
@@ -200,11 +214,12 @@ run_case "$DIR"
 expect_rc 1
 expect_out "DROP TABLE needs expand-contract"
 
-CASE="a CRLF -- contract line exempts the file"
+CASE="a CRLF -- contract line no longer exempts the file"
 DIR=$(mktemp -d -p "$WORK")
 printf 'DROP TABLE widgets;\r\n-- contract\r\n' >"$DIR/026_x.sql"
 run_case "$DIR"
-expect_rc 0
+expect_rc 1
+expect_out "DROP TABLE needs expand-contract"
 
 CASE="a pattern inside a CRLF -- comment line is ignored"
 DIR=$(mktemp -d -p "$WORK")
@@ -239,12 +254,12 @@ DIR=$(mktemp -d -p "$WORK")
 printf '%s\n%s\n' 'DROP TABLE a;' 'ALTER TABLE b DROP COLUMN c;' >"$DIR/026_x.sql"
 run_case "$DIR"
 expect_rc 1
-expect_out "migration-safety: $DIR/026_x.sql: DROP TABLE needs expand-contract (mark the file -- contract once no running code needs the old shape)"
-expect_out "migration-safety: $DIR/026_x.sql: DROP COLUMN needs expand-contract (mark the file -- contract once no running code needs the old shape)"
+expect_out "migration-safety: $DIR/026_x.sql: DROP TABLE needs expand-contract (rename the file to NNN_contract_<name>.sql once no running code needs the old shape)"
+expect_out "migration-safety: $DIR/026_x.sql: DROP COLUMN needs expand-contract (rename the file to NNN_contract_<name>.sql once no running code needs the old shape)"
 
-CASE="a contract marker in one file does not exempt an unmarked sibling"
+CASE="a contract file does not exempt an unmarked sibling"
 DIR=$(mktemp -d -p "$WORK")
-printf '%s\n%s\n' 'DROP TABLE widgets;' '-- contract' >"$DIR/026_x.sql"
+write_fixture "$DIR" 026_contract_x.sql 'DROP TABLE widgets;'
 write_fixture "$DIR" 027_y.sql 'ALTER TABLE gadgets RENAME TO things;'
 run_case "$DIR"
 expect_rc 1
@@ -407,25 +422,6 @@ DIR=$(mktemp -d -p "$WORK")
 write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD CONSTRAINT chk CHECK (age IS NOT NULL);'
 run_case "$DIR"
 expect_rc 0
-
-CASE="the marker is honoured case-insensitively"
-DIR=$(mktemp -d -p "$WORK")
-printf '%s\n%s\n' 'DROP TABLE widgets;' '-- CONTRACT' >"$DIR/026_x.sql"
-run_case "$DIR"
-expect_rc 0
-
-CASE="the marker is honoured with leading indentation"
-DIR=$(mktemp -d -p "$WORK")
-printf '%s\n%s\n' 'DROP TABLE widgets;' '  -- contract' >"$DIR/026_x.sql"
-run_case "$DIR"
-expect_rc 0
-
-CASE="an indented comment that merely starts with contract does not exempt the file"
-DIR=$(mktemp -d -p "$WORK")
-printf '%s\n%s\n' 'DROP TABLE widgets;' '  -- contractor table' >"$DIR/026_x.sql"
-run_case "$DIR"
-expect_rc 1
-expect_out "DROP TABLE needs expand-contract"
 
 CASE="a four-digit version such as 1000 is checked"
 DIR=$(mktemp -d -p "$WORK")
