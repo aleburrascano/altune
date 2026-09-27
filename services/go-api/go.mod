@@ -17,6 +17,7 @@ require (
 	golang.org/x/sync v0.23.0
 	golang.org/x/text v0.42.0
 	golang.org/x/time v0.16.0
+	mvdan.cc/sh/v3 v3.14.1
 )
 
 require (
