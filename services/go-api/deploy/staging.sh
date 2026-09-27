@@ -24,11 +24,7 @@
 cd "$(dirname "$0")/.." || exit
 . deploy/lib.sh
 
-# Redirect lib.sh's compose() and verify_public() at the staging tier. compose()
-# reads $COMPOSE_FILE at call time, so this points every `compose` call here at the
-# staging project; nothing in this script calls the prod-only upstream/flip helpers.
-# shellcheck disable=SC2034  # consumed by lib.sh's compose() after this source
-COMPOSE_FILE=deploy/compose.staging.yml
+use_compose_file deploy/compose.staging.yml
 
 ENV_FILE="${STAGING_ENV_FILE:-.env.staging}"
 REQUIRED_VARS="DATABASE_URL OVERSEER_SUPABASE_URL OVERSEER_SUPABASE_ANON_KEY OVERSEER_OWNER_USER_ID"
