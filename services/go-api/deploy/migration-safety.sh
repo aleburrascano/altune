@@ -46,7 +46,26 @@ unsafe_labels() {
 
             next unless $stmt =~ /\bALTER\s+TABLE\b/i;
 
-            for my $clause (split /,/, $stmt) {
+            my @clauses;
+            my $depth = 0;
+            my $cur = "";
+            for my $ch (split //, $stmt) {
+                if ($ch eq "(") {
+                    $depth++;
+                    $cur .= $ch;
+                } elsif ($ch eq ")") {
+                    $depth--;
+                    $cur .= $ch;
+                } elsif ($ch eq "," && $depth == 0) {
+                    push @clauses, $cur;
+                    $cur = "";
+                } else {
+                    $cur .= $ch;
+                }
+            }
+            push @clauses, $cur;
+
+            for my $clause (@clauses) {
                 if ($clause =~ /\bDROP\s+([A-Za-z_][A-Za-z0-9_]*)/i) {
                     my $word = uc($1);
                     $hit{"DROP COLUMN"} = 1

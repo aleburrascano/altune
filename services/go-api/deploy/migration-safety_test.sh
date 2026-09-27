@@ -78,6 +78,33 @@ write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD COLUMN weight INT NOT NU
 run_case "$DIR"
 expect_rc 0
 
+CASE="ADD COLUMN NUMERIC(10,2) NOT NULL without DEFAULT fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD COLUMN price NUMERIC(10,2) NOT NULL;'
+run_case "$DIR"
+expect_rc 1
+expect_out "ADD COLUMN ... NOT NULL without DEFAULT needs expand-contract"
+
+CASE="ADD COLUMN NUMERIC(10,2) NOT NULL with a DEFAULT in the same clause passes"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD COLUMN price NUMERIC(10,2) NOT NULL DEFAULT 0;'
+run_case "$DIR"
+expect_rc 0
+
+CASE="a safe ADD COLUMN clause followed by an unsafe NUMERIC(10,2) clause fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD COLUMN a INT, ADD COLUMN price NUMERIC(10,2) NOT NULL;'
+run_case "$DIR"
+expect_rc 1
+expect_out "ADD COLUMN ... NOT NULL without DEFAULT needs expand-contract"
+
+CASE="a CHECK clause containing a comma does not hide a later unsafe clause"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql "ALTER TABLE widgets ADD COLUMN price NUMERIC(10,2) CHECK (price IN (1,2)) NOT NULL;"
+run_case "$DIR"
+expect_rc 1
+expect_out "ADD COLUMN ... NOT NULL without DEFAULT needs expand-contract"
+
 CASE="a NNN_contract_<name>.sql filename exempts an otherwise unsafe file"
 DIR=$(mktemp -d -p "$WORK")
 write_fixture "$DIR" 026_contract_x.sql 'DROP TABLE IF EXISTS widgets;'
