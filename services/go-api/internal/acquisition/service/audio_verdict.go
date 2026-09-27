@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"regexp"
 	"slices"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 type VerdictKind string
@@ -79,7 +81,7 @@ func newAudioMatcher(ref AudioReference, audioDuration float64) audioMatcher {
 	return audioMatcher{
 		mbids:        ref.MBIDs,
 		core:         coreTitle(ref.Title),
-		qualifiers:   qualifierTokens(ref.Title),
+		qualifiers:   titleQualifiers(ref.Title),
 		artists:      artistNames(ref.Artist),
 		lengthAgrees: referenceLengthAgrees(ref.Duration, audioDuration),
 	}
@@ -122,7 +124,7 @@ func (m audioMatcher) isSameSong(recording ports.LinkedRecording) bool {
 }
 
 func (m audioMatcher) hasUnrequestedQualifier(recording ports.LinkedRecording) bool {
-	for token := range qualifierTokens(recording.Title) {
+	for token := range titleQualifiers(recording.Title) {
 		if !m.qualifiers[token] {
 			return true
 		}
@@ -153,6 +155,10 @@ func (m audioMatcher) mostTitlesDiffer(surviving []ports.LinkedRecording) bool {
 		differing--
 	}
 	return differing*2 > len(titles)
+}
+
+func titleQualifiers(title string) map[string]bool {
+	return qualifierTokens(norm.NFKC.String(title))
 }
 
 func coreTitle(title string) string {

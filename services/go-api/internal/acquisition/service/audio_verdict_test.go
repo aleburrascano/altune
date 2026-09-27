@@ -200,6 +200,12 @@ func TestClassifyAudio_SoftAgreementDetails(t *testing.T) {
 			want:    VerdictDifferentSong,
 		},
 		{
+			name: "a qualifier in fullwidth brackets is still an unrequested qualifier",
+			ref:  dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "Don't Stop Me Now（Live）", 210, "Queen")),
+			want:    VerdictOtherVersion,
+		},
+		{
 			name: "a reference shorter than the five-second floor cannot agree with audio of unknown length",
 			ref:  AudioReference{Title: "Intro", Artist: "Queen", Duration: 3}, audioDuration: 0,
 			results: singleLink(linked("s", "Intro", 3, "Queen")),
