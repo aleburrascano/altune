@@ -382,3 +382,37 @@ describe('useActiveLibraryView — playlist press', () => {
     expect(fakeRouter.push).toHaveBeenCalledWith(`/library/playlist/${pressedPlaylist.id}`);
   });
 });
+
+describe('useActiveLibraryView — playlist press without a router in deps', () => {
+  beforeEach(() => {
+    stubEmptyCollections();
+  });
+
+  it('opens the pressed playlist through navigation when deps carry no router', () => {
+    const fakeRouter = { push: jest.fn() } as unknown as Parameters<typeof useLibraryNavigation>[0];
+    const { result: navigationResult } = renderHook(() => useLibraryNavigation(fakeRouter));
+    const second: PlaylistResponse = {
+      id: asPlaylistId('p2'),
+      name: 'Second Playlist',
+      track_count: 3,
+      preview_artwork_urls: [],
+      created_at: '2025-06-01T00:00:00Z',
+      updated_at: '2025-06-01T00:00:00Z',
+    };
+    const withoutRouter = { ...makeDeps() } as unknown as Record<string, unknown>;
+    delete withoutRouter.router;
+    const deps = {
+      ...withoutRouter,
+      navigation: navigationResult.current,
+    } as unknown as Parameters<typeof useActiveLibraryView>[3];
+
+    const { result } = renderHook(() => useActiveLibraryView('playlists', SORTS, '', deps));
+    const props = result.current.active.content.props as {
+      onPlaylistPress: (playlist: PlaylistResponse) => void;
+    };
+    props.onPlaylistPress(second);
+
+    expect(fakeRouter.push).toHaveBeenCalledTimes(1);
+    expect(fakeRouter.push).toHaveBeenCalledWith('/library/playlist/p2');
+  });
+});
