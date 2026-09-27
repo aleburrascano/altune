@@ -11,6 +11,8 @@ import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
  */
 export const DETAIL_LIST_CAP = 100;
 
+export const DETAIL_CONTENT_STALE_MS = 30 * 60 * 1000;
+
 /**
  * The one reading of a content fetch's health for detail lists. A thrown query
  * is an error, and so is any non-'ok' provider status (timeout, rate_limited,

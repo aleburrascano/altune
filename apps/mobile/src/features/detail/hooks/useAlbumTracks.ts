@@ -4,7 +4,12 @@ import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 import { detailKeys } from '@shared/lib/query-keys';
 
-import { contentFailure, DETAIL_LIST_CAP, type ContentFailure } from '../content-status';
+import {
+  contentFailure,
+  DETAIL_CONTENT_STALE_MS,
+  DETAIL_LIST_CAP,
+  type ContentFailure,
+} from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
@@ -53,7 +58,7 @@ export function useAlbumTracks({
         }),
       ),
     enabled: enabled && isFetchEnabled,
-    staleTime: 1000 * 60 * 30,
+    staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
 
