@@ -23,8 +23,6 @@ type recordingSearcher interface {
 	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*discoveryservice.SearchOutput, error)
 }
 
-// isrcAuthority answers which recordings an ISRC is registered against. It is
-// the MusicBrainz ISRC lookup in production.
 type isrcAuthority interface {
 	RecordingsByISRC(ctx context.Context, isrc string) ([]discoveryports.ISRCRecording, error)
 }
@@ -42,10 +40,6 @@ func NewRecordingResolver(search recordingSearcher, opts ...func(*RecordingResol
 	return r
 }
 
-// WithISRCAuthority makes the ISRC's own recordings outrank the MBID a search
-// result carries. A merged search result can pair a track's ISRC with the MBID
-// of a same-titled remix, and the fingerprint check then rejects every correct
-// upload against the remix's AcoustID cluster.
 func WithISRCAuthority(a isrcAuthority) func(*RecordingResolver) {
 	return func(r *RecordingResolver) { r.isrc = a }
 }
@@ -59,11 +53,6 @@ func (r *RecordingResolver) Resolve(ctx context.Context, q acqports.RecordingQue
 	return anchored, nil
 }
 
-// anchorToISRC swaps the identity's MBID for one of the ISRC's recordings when
-// the search picked an MBID the ISRC is not registered against. The duration
-// follows the MBID, because a mismatched MBID means the merged result's length
-// may belong to the wrong recording too. Without an ISRC, an authority, or an
-// answer from it, the identity passes through untouched.
 func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity) acqports.RecordingIdentity {
 	recordings := r.isrcRecordings(ctx, q.ISRC)
 	if len(recordings) == 0 {
@@ -81,8 +70,6 @@ func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.Recordi
 	return adoptRecording(identity, q.ISRC, chosen)
 }
 
-// isrcRecordings asks the authority for the ISRC's recordings. No authority, no
-// ISRC, or a failed lookup all answer nothing, so the caller keeps its identity.
 func (r *RecordingResolver) isrcRecordings(ctx context.Context, isrc string) []discoveryports.ISRCRecording {
 	if r.isrc == nil || isrc == "" {
 		return nil
@@ -106,8 +93,6 @@ func adoptRecording(identity acqports.RecordingIdentity, isrc string, chosen dis
 	return identity
 }
 
-// closestRecording picks the ISRC recording nearest the search's length, or the
-// first one when there is no length to compare against.
 func closestRecording(recordings []discoveryports.ISRCRecording, want float64) discoveryports.ISRCRecording {
 	best := recordings[0]
 	if want <= 0 {

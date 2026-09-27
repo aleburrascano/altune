@@ -53,9 +53,6 @@ type App struct {
 	scheduler       *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh    *discoveryService.VocabularyRefreshService
 	searchSvc       *discoveryService.Service
-	// musicBrainz is discovery's shared MusicBrainz adapter, kept so the
-	// acquisition recording resolver reuses its rate limiter; nil when
-	// MusicBrainz is not configured.
 	musicBrainz   *providers.MusicBrainzAdapter
 	eventBus      *events.InProcessBus
 	eventTap      *eventtap.Tap

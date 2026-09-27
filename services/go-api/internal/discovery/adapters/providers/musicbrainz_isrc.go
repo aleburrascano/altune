@@ -10,9 +10,6 @@ import (
 	"strings"
 )
 
-// RecordingsByISRC returns the recordings MusicBrainz registers the ISRC
-// against. An ISRC MusicBrainz has never seen answers 404, which is an empty
-// result rather than an error: the caller falls back to its own matching.
 func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) ([]ports.ISRCRecording, error) {
 	isrc = strings.ToUpper(strings.TrimSpace(isrc))
 	if isrc == "" {

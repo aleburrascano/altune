@@ -49,8 +49,6 @@ type LyricsProvider interface {
 
 type LyricsCache = NameKeyedCache[domain.DeezerLyrics]
 
-// ISRCRecording is one MusicBrainz recording an ISRC is registered against.
-// Duration is in seconds, zero when MusicBrainz has no length for it.
 type ISRCRecording struct {
 	MBID     string
 	Duration int
