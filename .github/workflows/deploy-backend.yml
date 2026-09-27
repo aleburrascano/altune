@@ -5,7 +5,7 @@
 #   deploy-staging        -> SSH to the VM, fast-forward main, run deploy/staging.sh
 #                            (builds/recreates the altune-staging-* stack + applies
 #                            staging migrations). Prod is NOT touched here.
-#   smoke-staging         -> deploy/smoke.sh against altune-staging.duckdns.org;
+#   smoke-staging         -> deploy/smoke.sh against vars.STAGING_API_URL;
 #                            a red gate blocks promotion.
 #   approve-prod          -> the `production` environment's manual-approval gate.
 #                            Waits for a required reviewer and touches nothing.
@@ -16,11 +16,10 @@
 # Migration lockstep (#1525): prod-migrate.sh applies genuinely-new migrations to
 # the prod Supabase project through lib.sh's SAME runner staging.sh uses, before the
 # swap. A failed migration aborts the deploy with the old colour still serving. Prod
-# does NOT blind-adopt (a dry-run found it not in lockstep); until an operator seeds
-# the true baseline (RUNBOOK: 'Prod migrations'), it fails closed rather than skip.
+# does NOT blind-adopt: on an untracked schema it fails closed rather than skip.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
-#   DEPLOY_HOST     e.g. altune.duckdns.org (staging shares this VM)
+#   DEPLOY_HOST     the prod VM's public hostname (staging shares this VM)
 #   DEPLOY_USER     e.g. ubuntu
 #   DEPLOY_SSH_KEY  the PRIVATE key matching an authorized key on the VM
 #   DEPLOY_PORT     (optional) SSH port, defaults to 22
@@ -49,7 +48,7 @@ on:
 # Approval is unbounded (it waits on a human), so it is its own job.
 
 jobs:
-  # Docs-only backend merges (RUNBOOK.md and every other *.md) match the push
+  # Docs-only backend merges (every *.md) match the push
   # `paths` above but are no-ops for prod code, so they used to burn a prod-gate
   # approval for nothing (#1522). Diff the push and set deploy=true only when a
   # genuinely deployable, non-doc file changed. Fails safe (deploy=true) whenever
@@ -83,33 +82,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT" != "push" ] \
-            || [ -z "$BEFORE" ] \
-            || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
-            || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-            echo "No usable diff base ($EVENT / $BEFORE); deploying to be safe."
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Changed files ${BEFORE}..${AFTER}:"
-          git diff --name-only "$BEFORE" "$AFTER" | sed 's/^/  /'
-          deploy=false
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            case "$f" in
-              services/go-api/*|services/overseer/*) ;;
-              *) continue ;;
-            esac
-            case "$f" in
-              *.md) continue ;;
-            esac
-            deploy=true
-            break
-          done < <(git diff --name-only "$BEFORE" "$AFTER")
-          echo "Deployable code changed: $deploy"
-          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+        run: bash .github/workflows/deploy-backend-changes.sh
 
   # The deploy gate. A reusable workflow runs against the caller's ref, so what
   # gets tested is exactly the commit that gets shipped.
@@ -131,16 +104,15 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows
       - name: Verify deploy secrets are present
-        run: |
-          missing=""
-          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
-          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
-          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
-          if [ -n "$missing" ]; then
-            echo "::error title=Missing secrets::Set these repo secrets:$missing"
-            exit 1
-          fi
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: bash .github/workflows/require-secrets.sh DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY
 
       - name: Deploy staging over SSH
         uses: appleboy/ssh-action@v1.2.5
@@ -153,20 +125,9 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            # Held until this script exits: staging-sync.yml takes the same lock,
-            # so the checkout reset below never lands under a running staging sync.
-            exec 9>/home/ubuntu/.altune-staging.lock
-            flock -w 600 9
-            cd /home/ubuntu/altune
-            git fetch --prune origin
-            git checkout main
-            git reset --hard ${{ github.sha }}
-            cd services/go-api
-            # Builds/recreates ONLY the altune-staging-* stack and applies staging
-            # migrations. Fails fast on a missing staging env var or unhealthy
-            # go-api. Prod containers are never touched here.
-            bash deploy/staging.sh
-            docker image prune -f
+            git -C ~/altune fetch --prune origin
+            git -C ~/altune show ${{ github.sha }}:services/go-api/deploy/release.sh >~/.altune-release-staging
+            bash ~/.altune-release-staging staging ${{ github.sha }}
 
   smoke-staging:
     needs: [deploy-staging]
@@ -175,16 +136,15 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows
       - name: Verify deploy secrets are present
-        run: |
-          missing=""
-          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
-          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
-          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
-          if [ -n "$missing" ]; then
-            echo "::error title=Missing secrets::Set these repo secrets:$missing"
-            exit 1
-          fi
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: bash .github/workflows/require-secrets.sh DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY
 
       - name: Smoke-test staging over SSH
         uses: appleboy/ssh-action@v1.2.5
@@ -197,13 +157,8 @@ jobs:
           command_timeout: 5m
           script: |
             set -e
-            cd /home/ubuntu/altune/services/go-api
-            # /health 200, /overseer/ reachable, no token/persist failure in the
-            # staging overseer logs, and /health's version matches the commit
-            # this run deployed (#2927) — a stale container or failed rebuild
-            # would otherwise still pass every other check. Non-zero here
-            # blocks the prod promotion.
-            bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer ${{ github.sha }}
+            cd ~/altune/services/go-api
+            bash deploy/smoke.sh ${{ vars.STAGING_API_URL }} altune-staging-overseer ${{ github.sha }}
 
   # The manual-approval gate (design Decision 4): a required reviewer on the
   # `production` environment must approve after a green staging smoke before prod
@@ -229,7 +184,9 @@ jobs:
     environment: production
     steps:
       - name: Record the approved commit
-        run: echo "Prod promotion approved for ${{ github.sha }}."
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "Prod promotion approved for $SHA."
 
   deploy-prod:
     needs: [approve-prod]
@@ -250,16 +207,15 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows
       - name: Verify deploy secrets are present
-        run: |
-          missing=""
-          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
-          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
-          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
-          if [ -n "$missing" ]; then
-            echo "::error title=Missing secrets::Set these repo secrets:$missing"
-            exit 1
-          fi
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: bash .github/workflows/require-secrets.sh DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY
 
       - name: Deploy prod over SSH
         uses: appleboy/ssh-action@v1.2.5
@@ -272,43 +228,13 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            # Held until this script exits: staging-sync.yml takes the same lock,
-            # so the checkout reset below never lands under a running staging sync.
-            exec 9>/home/ubuntu/.altune-staging.lock
-            flock -w 600 9
-            cd /home/ubuntu/altune
-            git fetch --prune origin
-            git checkout main
-            git reset --hard ${{ github.sha }}
-            cd services/go-api
-            # Apply genuinely-new migrations to the PROD Supabase DB via lib.sh's
-            # shared runner (the same one staging.sh proved), tracked in
-            # schema_migrations so an applied migration is never re-run. Fails fast
-            # BEFORE the swap, leaving the live colour serving if a migration errors
-            # (or if prod's migration baseline is not yet seeded; see the RUNBOOK).
-            bash deploy/prod-migrate.sh
-            # Builds the idle colour, health-gates it, then flips Caddy onto it.
-            # A build or health failure leaves the live colour serving and exits
-            # non-zero; a post-flip failure rolls the upstream back.
-            PUBLIC_HEALTH_URL="https://${{ secrets.DEPLOY_HOST }}/health" \
-              bash deploy/blue-green.sh
-            # Overseer ships alongside go-api: rebuild the image and recreate the
-            # one container (a brief /overseer blip; go-api traffic untouched).
-            # Fails fast if a required OVERSEER_* var is absent from .env.production.
-            bash deploy/overseer.sh
-            # Prod's own smoke gate after the flip (#2927): a bad flip or a stale
-            # image serving on prod is otherwise only caught by the next smoke
-            # run against staging, or a human noticing. smoke.sh's default
-            # GOAPI_CONTAINER is staging's, so without pointing it at the
-            # colour the flip just made live, the journey checks below still
-            # exercised staging, not prod (#2992).
-            SMOKE_GOAPI_CONTAINER="altune-go-api-$(. deploy/lib.sh && active_color)" \
-              bash deploy/smoke.sh "https://${{ secrets.DEPLOY_HOST }}" altune-overseer ${{ github.sha }}
-            docker image prune -f
+            git -C ~/altune fetch --prune origin
+            git -C ~/altune show ${{ github.sha }}:services/go-api/deploy/release.sh >~/.altune-release-prod
+            bash ~/.altune-release-prod prod ${{ github.sha }} ${{ vars.PROD_API_URL }}
 
       - name: Report rollback command on failure
         if: failure()
         run: |
           echo "::error title=Deploy failed::The previous version is still serving."
           echo "To force a manual rollback, SSH to the VM and run:"
-          echo "  cd /home/ubuntu/altune/services/go-api && bash deploy/rollback.sh"
+          echo "  cd ~/altune/services/go-api && bash deploy/rollback.sh"

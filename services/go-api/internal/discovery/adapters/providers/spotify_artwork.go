@@ -43,7 +43,7 @@ func (a *SpotifyArtworkResolver) ResolveByIdentity(ctx context.Context, kind dom
 		ThumbnailURL string `json:"thumbnail_url"`
 	}
 	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(domain.ProviderKeySpotify, err)
 	}
 	return upgradeSpotifyImageSize(body.ThumbnailURL), nil
 }

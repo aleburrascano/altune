@@ -3,7 +3,7 @@ set -euo pipefail
 COMPOSE_FILE=deploy/compose.prod.yml
 UPSTREAM_FILE=deploy/caddy/upstream.conf
 LEGACY_UPSTREAM_FILE=caddy/upstream.conf
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://altune.duckdns.org/health}"
+PUBLIC_HEALTH_URL=""
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 DRAIN_SECONDS="${DRAIN_SECONDS:-20}"
 
@@ -73,6 +73,23 @@ wait_healthy() {
         sleep 3
     done
     return 1
+}
+
+resolve_public_health_url() {
+    local ENV_FILE=$1
+    if [ ! -r "$ENV_FILE" ]; then
+        log "FAILED: cannot read $ENV_FILE for PUBLIC_HEALTH_URL"
+        exit 1
+    fi
+    PUBLIC_HEALTH_URL=$(read_env_var PUBLIC_HEALTH_URL || true)
+    if [ -z "$PUBLIC_HEALTH_URL" ]; then
+        log "FAILED: PUBLIC_HEALTH_URL is unset in $ENV_FILE"
+        exit 1
+    fi
+    if ! [[ $PUBLIC_HEALTH_URL =~ ^https?://[^[:space:]]+$ ]]; then
+        log "FAILED: PUBLIC_HEALTH_URL in $ENV_FILE is not an http(s) URL: '$PUBLIC_HEALTH_URL'"
+        exit 1
+    fi
 }
 
 verify_public() {

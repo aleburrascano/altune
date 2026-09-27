@@ -67,8 +67,11 @@ EOF
 echo "docker \$*" >> "$WORK/actions.log"
 exit 0
 EOF
-    printf '#!/usr/bin/env bash\nexit %s\n' "$([ "$stub_healthy" = yes ] && echo 0 || echo 1)" \
-        >"$WORK/bin/curl"
+    cat >"$WORK/bin/curl" <<EOF
+#!/usr/bin/env bash
+echo "curl \${*: -1}" >> "$WORK/actions.log"
+exit $([ "$stub_healthy" = yes ] && echo 0 || echo 1)
+EOF
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/bin/sleep"
     chmod +x "$WORK/bin"/*
     : >"$WORK/actions.log"
@@ -107,6 +110,8 @@ expect_apply() {
 }
 
 FULL_ENV=$'DATABASE_URL=postgres://u:p@h:5432/db\nOVERSEER_SUPABASE_URL=https://x.supabase.co\nOVERSEER_SUPABASE_ANON_KEY=sb_publishable_abc\nOVERSEER_OWNER_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524'
+NO_URL_ENV=$FULL_ENV
+FULL_ENV="$FULL_ENV"$'\nPUBLIC_HEALTH_URL=https://staging.example.test/health'
 
 CASE="a missing env file fails before touching migrations or containers"
 setup_case "" no
@@ -132,6 +137,23 @@ expect_out "adopting existing staging schema"
 grep -qE "applying staging migration [0-9]" "$WORK/out.log" && fail "re-ran a migration on an already-migrated DB"
 expect_action "compose -f deploy/compose.staging.yml up -d --build go-api-blue overseer redis"
 expect_out "deployed staging"
+expect_action "curl https://staging.example.test/health"
+
+CASE="no staging health URL fails before migrations or any build"
+STUB_TRACKS=f setup_case "$NO_URL_ENV"
+expect_rc 1
+expect_out "PUBLIC_HEALTH_URL is unset"
+grep -q . "$WORK/applies.log" && fail "applied a migration without a health URL"
+expect_no_action "up"
+
+CASE="a blank or malformed staging health URL fails before migrations or any build"
+for bad in "   " "staging.example.test/health" "https://staging.example.test/health "; do
+    STUB_TRACKS=f setup_case "$NO_URL_ENV"$'\n'"PUBLIC_HEALTH_URL=$bad"
+    expect_rc 1
+    expect_out "PUBLIC_HEALTH_URL in"
+    grep -q . "$WORK/applies.log" && fail "applied a migration with health URL '$bad'"
+    expect_no_action "up"
+done
 
 CASE="a fresh DB applies every migration in order"
 STUB_TRACKS=f setup_case "$FULL_ENV"

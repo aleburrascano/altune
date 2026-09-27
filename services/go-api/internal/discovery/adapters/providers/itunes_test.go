@@ -9,6 +9,11 @@ import (
 	"testing"
 )
 
+import (
+	"altune/go-api/internal/discovery/ports"
+	"errors"
+)
+
 func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/search") {
@@ -260,5 +265,130 @@ func TestStripITunesTypeSuffix(t *testing.T) {
 				t.Errorf("stripITunesTypeSuffix(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestITunesAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_ContextCancelledBeforeLimiterAdmitsIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("should not reach the network once the limiter rejects a cancelled context")
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	art, err := adapter.Resolve(ctx, domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	art, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_ForbiddenIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	art, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 403 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_BadRequestIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	art, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || err != nil {
+		t.Errorf("Resolve on HTTP 400 = (%q, %v), want (\"\", nil)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_NoResultsIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"resultCount":0,"results":[]}`))
+	}))
+	defer server.Close()
+
+	art, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Nothing", "Nobody", "")
+	if art != "" || err != nil {
+		t.Errorf("Resolve with no results = (%q, %v), want (\"\", nil)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"results":[{"artworkUrl100":`))
+	}))
+	defer server.Close()
+
+	art, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
+	art, err := NewITunesAdapter(newTestClient(serverURL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_CancelledContextKeepsTheCause(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(ctx, domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled kept in the chain", err)
+	}
+}
+
+func TestITunesAdapter_Resolve_FailureNamesITunes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	_, err := NewITunesAdapter(newTestClient(server.URL)).Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if err == nil || !strings.Contains(err.Error(), "itunes") {
+		t.Errorf("err = %v, want a failure that names itunes", err)
 	}
 }

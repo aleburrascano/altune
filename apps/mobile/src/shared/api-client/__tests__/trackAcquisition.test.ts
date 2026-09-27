@@ -1,3 +1,4 @@
+import { expectType, type IsExactlyAssignable, type Not } from '../../../../jest/typeAssertions';
 import {
   acquisitionOf,
   toFailed,
@@ -64,9 +65,9 @@ describe('the per-track status the store keeps (#1758)', () => {
   // any status pairs with any failure text, which is what let a store entry keep
   // stale failure text after the track went ready.
   it('refuses failure text on a status that cannot carry one', () => {
-    // @ts-expect-error a ready track has no failure message to keep
-    const settled: TrackStatus = { acquisitionStatus: 'ready', failureMessage: 'No source found' };
+    const settled = { acquisitionStatus: 'ready', failureMessage: 'No source found' };
 
+    expectType<Not<IsExactlyAssignable<{ acquisitionStatus: 'ready'; failureMessage: string }, TrackStatus>>>();
     expect(toTrackStatus(toReady())).not.toEqual(settled);
   });
 });

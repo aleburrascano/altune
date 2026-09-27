@@ -18,7 +18,8 @@ on:
     branches: [main]
     paths:
       - 'services/go-api/**'
-      - '.github/workflows/test-backend.yml'
+      - '.github/workflows/test-backend*'
+      - '.github/workflows/nilaway-ceiling.sh'
       # The `smoke` job self-tests deploy-backend.yml, so a change to it (or to
       # its self-test) must reach this suite to be checked at all.
       - '.github/workflows/deploy-backend*'
@@ -81,14 +82,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          if [ -z "$PR_BASE" ]; then
-            echo "No PR base sha; skipping changed-comments check."
-            exit 0
-          fi
-          echo "Diff base: $PR_BASE"
-          go run scripts/lint-changed-comments.go "$PR_BASE"
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-diff-lint.sh" comments
       # Vague-name rule (id-denylist parity with mobile #2291): a NEW variable,
       # parameter, local, or function name from the banned set (data, util,
       # helper, manager, temp, arr, val, foo, doWork) on a changed line fails.
@@ -98,14 +92,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          if [ -z "$PR_BASE" ]; then
-            echo "No PR base sha; skipping changed-names check."
-            exit 0
-          fi
-          echo "Diff base: $PR_BASE"
-          go run scripts/lint-changed-names.go "$PR_BASE"
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-diff-lint.sh" names
       # Known-CVE scan against the Go vuln DB. Reports only vulnerabilities the
       # code actually reaches (call-graph analysis), so false positives are rare.
       # Blocking: a reachable CVE should stop the merge. If a new advisory lands
@@ -122,15 +109,7 @@ jobs:
       # The baseline is the Linux/amd64 count — nilaway analyses build-tagged files
       # per GOOS, so this runner is the source of truth (local Windows counts less).
       - name: nilaway ceiling
-        run: |
-          go install go.uber.org/nilaway/cmd/nilaway@571480214735
-          BASE=$(tr -dc '0-9' < nilaway-baseline.txt)
-          COUNT=$(nilaway ./... 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'Potential nil panic detected' || true)
-          echo "nilaway findings: ${COUNT} (ceiling ${BASE})"
-          if [ "$COUNT" -gt "$BASE" ]; then
-            echo "::error::nilaway findings rose from ${BASE} to ${COUNT} — a new nil-dereference risk was introduced"
-            exit 1
-          fi
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/nilaway-ceiling.sh" nilaway-baseline.txt
 
   # Deploy-gate self-test. smoke.sh gates prod promotion (deploy-backend.yml);
   # its self-test (deploy/smoke_test.sh) drives it with a stubbed curl/docker to
@@ -155,16 +134,21 @@ jobs:
       # is where SC1091/SC2034 otherwise misfire; SC2148 is excluded because it
       # only flags lib.sh, a sourced library with no shebang by design.
       - name: shellcheck deploy scripts
-        run: |
-          if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck -x --exclude=SC2148 deploy/*.sh deploy/duckdns
-          else
-            echo "shellcheck not on runner; skipping deploy-script lint"
-          fi
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-shellcheck.sh"
       - name: deploy smoke self-test
         run: bash deploy/smoke_test.sh
       - name: web release self-test
         run: bash deploy/web-release_test.sh
+      - name: release self-test
+        run: bash deploy/release_test.sh
+      - name: blue-green self-test
+        run: bash deploy/blue-green_test.sh
+      - name: staging deploy self-test
+        run: bash deploy/staging_test.sh
+      - name: prod migrate self-test
+        run: bash deploy/prod-migrate_test.sh
+      - name: overseer deploy self-test
+        run: bash deploy/overseer_test.sh
       - name: caddy routing test (real caddy image)
         run: bash deploy/caddy-routing_test.sh
       - name: staging sync test (real postgres image)
@@ -234,11 +218,7 @@ jobs:
       # order, ON_ERROR_STOP so a bad migration fails the gate rather than silently
       # leaving the schema half-built.
       - name: apply migrations
-        run: |
-          for f in migrations/*.sql; do
-            echo "applying $f"
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
-          done
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-migrate.sh"
 
       # INTEGRATION=1 is load-bearing: without it sharedtest.RequireIntegration
       # skips the Postgres-backed persistence tests, DATABASE_URL or not, so
@@ -280,10 +260,6 @@ jobs:
       # their place by running against real Postgres, not by coverage), so 65
       # leaves a safe margin without chasing the measured ceiling.
       - name: coverage ratchet
-        run: |
-          MIN=65
-          go tool cover -func=coverage.out | tail -1
-          PCT=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
-          echo "total coverage: ${PCT}% (floor ${MIN}%)"
-          awk -v p="$PCT" -v m="$MIN" 'BEGIN { exit (p >= m) ? 0 : 1 }' \
-            || { echo "::error::coverage ${PCT}% fell below the ${MIN}% floor"; exit 1; }
+        env:
+          MIN: 65
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-coverage.sh"

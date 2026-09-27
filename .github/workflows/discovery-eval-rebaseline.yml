@@ -85,12 +85,9 @@ jobs:
       - name: re-baseline ${{ inputs.mode }}
         env:
           REDIS_URL: ${{ inputs.mode == 'correction' && 'redis://localhost:6379' || '' }}
-        run: |
-          ./tmp/discoveryeval \
-            -mode ${{ inputs.mode }} \
-            -corpus-file "$CORPUS" \
-            -update-baselines \
-            -noise-runs ${{ inputs.noise-runs }}
+          MODE: ${{ inputs.mode }}
+          NOISE_RUNS: ${{ inputs.noise-runs }}
+        run: ./tmp/discoveryeval -mode "$MODE" -corpus-file "$CORPUS" -update-baselines -noise-runs "$NOISE_RUNS"
 
       - uses: peter-evans/create-pull-request@v8
         with:

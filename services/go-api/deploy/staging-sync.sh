@@ -3,7 +3,7 @@
 # Refresh the STAGING Supabase DB with prod's data so staging runs against the real
 # library instead of an empty one. One-way, prod -> staging. Run nightly and on
 # demand by .github/workflows/staging-sync.yml, or by hand on the VM:
-#   cd /home/ubuntu/altune/services/go-api && bash deploy/staging-sync.sh
+#   cd <checkout>/services/go-api && bash deploy/staging-sync.sh
 #
 # The database replace below still only ever reads prod: every prod query runs
 # inside BEGIN READ ONLY, so the server itself rejects a write even if this
@@ -26,8 +26,8 @@
 # migration adds a NOT NULL column with no default, which fails the run loudly.
 #
 # Audio objects are not copied by the database replace: staging reads prod's
-# bucket with a key scoped to the `staging/` prefix (RUNBOOK.md, "Staging data
-# from prod"), so copied tracks play and a staging delete cannot reach prod
+# bucket with a key scoped to the `staging/` prefix (.claude/skills/deploy/
+# staging.md, "Data from prod"), so copied tracks play and a staging delete cannot reach prod
 # audio. orphaned_audio (a queue of storage deletes) and schema_migrations are
 # never copied. After a successful replace, `sweep-staging-audio` (#3092) runs
 # in the staging container to delete `staging/` objects no staging track

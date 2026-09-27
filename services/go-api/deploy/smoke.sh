@@ -2,8 +2,8 @@
 
 # Smoke gate for a deployed tier (epic #1488, task #1492). Tier-agnostic so prod
 # can reuse it after promotion:
-#   bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer
-#   bash deploy/smoke.sh https://altune.duckdns.org         altune-overseer
+#   bash deploy/smoke.sh https://<staging-host> altune-staging-overseer
+#   bash deploy/smoke.sh https://<prod-host>    altune-overseer
 #
 # Exits non-zero if the tier is unhealthy, so the pipeline blocks promotion. Runs
 # on the VM (needs `docker logs` for the overseer container). Checks:

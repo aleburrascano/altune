@@ -29,7 +29,6 @@ cd "$(dirname "$0")/.." || exit
 # staging project; nothing in this script calls the prod-only upstream/flip helpers.
 # shellcheck disable=SC2034  # consumed by lib.sh's compose() after this source
 COMPOSE_FILE=deploy/compose.staging.yml
-PUBLIC_HEALTH_URL="${STAGING_HEALTH_URL:-https://altune-staging.duckdns.org/health}"
 
 ENV_FILE="${STAGING_ENV_FILE:-.env.staging}"
 REQUIRED_VARS="DATABASE_URL OVERSEER_SUPABASE_URL OVERSEER_SUPABASE_ANON_KEY OVERSEER_OWNER_USER_ID"
@@ -66,6 +65,7 @@ wait_staging_healthy() {
 }
 
 require_staging_env
+resolve_public_health_url "$ENV_FILE"
 
 log "applying staging migrations"
 MIGRATE_DATABASE_URL=$(read_env_var DATABASE_URL)

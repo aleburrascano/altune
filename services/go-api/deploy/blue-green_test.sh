@@ -7,10 +7,17 @@ FAILURES=0
 
 setup_case() {
     local seed=$1 health_ok=$2 public_ok=$3 legacy=$4 seed_at=${5:-deploy/caddy}
+    # PROD_ENV is the literal .env.production ("" == no file). The default proves
+    # the public health URL comes from the VM's env file, not the repo.
+    local prod_env=${PROD_ENV-PUBLIC_HEALTH_URL=https://prod.example.test/health}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"
     cp "$HERE/lib.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
     cp "$HERE/compose.prod.yml" "$WORK/api/deploy/"
+
+    if [ -n "$prod_env" ]; then
+        printf '%s\n' "$prod_env" >"$WORK/api/.env.production"
+    fi
 
     if [ -n "$seed" ]; then
         printf 'reverse_proxy altune-go-api-%s:8000\n' "$seed" >"$WORK/api/$seed_at/upstream.conf"
@@ -27,6 +34,7 @@ exit 0
 EOF
     cat >"$WORK/bin/curl" <<EOF
 #!/usr/bin/env bash
+echo "curl \${*: -1}" >> "$WORK/actions.log"
 exit $([ "$public_ok" = yes ] && echo 0 || echo 1)
 EOF
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/bin/sleep"
@@ -36,7 +44,8 @@ EOF
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" HEALTH_TIMEOUT=4 \
         bash deploy/blue-green.sh >"$WORK/out.log" 2>&1)
     RC=$?
-    UPSTREAM=$(cat "$WORK/api/deploy/caddy/upstream.conf")
+    UPSTREAM=$(cat "$WORK/api/deploy/caddy/upstream.conf" 2>/dev/null)
+    unset PROD_ENV
 }
 
 fail() {
@@ -66,6 +75,16 @@ expect_rc 0
 expect_upstream "reverse_proxy altune-go-api-green:8000"
 expect_action "build go-api-green"
 expect_action "stop go-api-blue"
+
+CASE="the public check hits PUBLIC_HEALTH_URL from .env.production"
+expect_action "curl https://prod.example.test/health"
+
+CASE="an unset PUBLIC_HEALTH_URL fails before building or flipping"
+PROD_ENV="CORS_ORIGINS=https://prod.example.test" setup_case blue yes yes no
+expect_rc 1
+grep -qF "PUBLIC_HEALTH_URL is unset" "$WORK/out.log" || fail "expected a clear missing-URL error"
+expect_no_action "build"
+expect_upstream "reverse_proxy altune-go-api-blue:8000"
 
 CASE="happy path swaps green back to blue"
 setup_case green yes yes no

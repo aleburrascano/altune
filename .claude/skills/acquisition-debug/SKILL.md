@@ -5,7 +5,7 @@ description: Debug audio acquisition (a track that won't download, stays pending
 
 # Acquisition debug
 
-Evidence first, code second. An acquisition complaint is almost always one of three things: a **source stopped working** from the prod IP (stale YouTube cookies, a yt-dlp that YouTube outgrew, SoundCloud handing back 30s previews), the **matcher rejected** every candidate, or the **job never settled**. The live data tells you which one in a minute, and reading the pipeline first skips that step. `scripts/acq-debug.sh` runs everything over SSH on the OCI VM. It is read-only: the DB session is forced read-only, and yt-dlp runs `--simulate` on a scratch copy of the cookie jar.
+Evidence first, code second. An acquisition complaint is almost always one of three things: a **source stopped working** from the prod IP (stale YouTube cookies, a yt-dlp that YouTube outgrew, SoundCloud handing back 30s previews), the **matcher rejected** every candidate, or the **job never settled**. The live data tells you which one in a minute, and reading the pipeline first skips that step. `scripts/acq-debug.sh` runs everything over SSH on the OCI VM named by `ALTUNE_HOST` (user@host or an ssh config alias). It is read-only: the DB session is forced read-only, and yt-dlp runs `--simulate` on a scratch copy of the cookie jar.
 
 ## 1. Is every source alive right now?
 
@@ -13,7 +13,7 @@ Evidence first, code second. An acquisition complaint is almost always one of th
 bash scripts/acq-debug.sh tools
 ```
 
-Each canary shows `OK`, `PREVIEW ONLY` or `FAIL <yt-dlp error>`. A YouTube `FAIL` saying "Sign in to confirm you're not a bot" or "The page needs to be reloaded" means the cookie jar (`/home/ubuntu/altune/cookies.txt` on the VM) has gone stale, or the pinned yt-dlp (`services/go-api/deploy/Dockerfile`) is too old. Both need the user: cookies come from their browser, and a bump ships through the deploy pipeline. `streamrip services: none` means the streamrip source is off.
+Each canary shows `OK`, `PREVIEW ONLY` or `FAIL <yt-dlp error>`. A YouTube `FAIL` saying "Sign in to confirm you're not a bot" or "The page needs to be reloaded" means the cookie jar (`cookies.txt` at the root of the VM's repo checkout) has gone stale, or the pinned yt-dlp (`services/go-api/deploy/Dockerfile`) is too old. Both need the user: cookies come from their browser, and a bump ships through the deploy pipeline. `streamrip services: none` means the streamrip source is off.
 
 Done when: you know which sources can deliver today.
 

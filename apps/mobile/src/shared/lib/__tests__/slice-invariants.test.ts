@@ -23,7 +23,7 @@ function readSliceFile(moduleName: string): string {
 function walkSourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === '__tests__' || entry.name === 'node_modules' || entry.name === '_template') {
+    if (entry.name === '__tests__' || entry.name === 'node_modules') {
       continue;
     }
     const fullPath = path.join(dir, entry.name);

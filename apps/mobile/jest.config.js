@@ -36,7 +36,6 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/__tests__/**',
-    '!src/features/_template/**',
     '!src/**/*.d.ts',
   ],
   coverageThreshold: RATCHET_RAISE_ONLY,

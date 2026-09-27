@@ -290,3 +290,50 @@ func TestLiveTransport_LimiterPerHost(t *testing.T) {
 		t.Error("limiter not memoized for a listed host")
 	}
 }
+
+func TestLiveTransport_RetriesNoBodyGet(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://unlisted.example.com/x", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	if f.calls != 2 {
+		t.Errorf("calls = %d, want 2 (one retry)", f.calls)
+	}
+	if req.Body != http.NoBody {
+		t.Errorf("retried body = %v, want http.NoBody", req.Body)
+	}
+}
+
+func TestLiveTransport_RetryRefusesUnreplayableBody(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://unlisted.example.com/x", io.NopCloser(strings.NewReader("payload")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(req)
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("expected an error for a body that cannot be replayed")
+	}
+	if f.calls != 1 {
+		t.Errorf("calls = %d, want 1 (no retry)", f.calls)
+	}
+}
+
+func TestLiveTransport_MusicBrainzAllowsNoBurst(t *testing.T) {
+	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
+	if got := lt.limiter("musicbrainz.org").Burst(); got != 1 {
+		t.Errorf("musicbrainz burst = %d, want 1", got)
+	}
+	if got := lt.limiter("api.deezer.com").Burst(); got != defaultProviderBurst {
+		t.Errorf("deezer burst = %d, want %d", got, defaultProviderBurst)
+	}
+}

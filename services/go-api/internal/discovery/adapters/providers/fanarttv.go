@@ -29,7 +29,7 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
 	var data map[string]any
 	if err := getJSON(ctx, r.client, u, &data); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(domain.ProviderKeyFanart, err)
 	}
 
 	if kind == domain.ResultKindArtist {
