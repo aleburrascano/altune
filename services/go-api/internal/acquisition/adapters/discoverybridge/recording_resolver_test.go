@@ -12,6 +12,21 @@ import (
 	discoveryservice "altune/go-api/internal/discovery/service"
 )
 
+import (
+	"bytes"
+	"log/slog"
+	"strings"
+)
+
+func captureDefaultLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
 type stubSearcher struct {
 	out *discoveryservice.SearchOutput
 }
@@ -234,5 +249,158 @@ func TestResolve_ISRCAnchorsIdentityWhenSearchFindsNothing(t *testing.T) {
 	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
 	if err != nil || identity.MBID != "album-version" || identity.ISRC != "CAA509814003" {
 		t.Errorf("identity = %+v, err = %v; want one built from the lone ISRC recording", identity, err)
+	}
+}
+
+func TestResolve_SoleISRCRecordingMismatchDoubtsTheReference(t *testing.T) {
+	logs := captureDefaultLog(t)
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.MBID != "5d6efd30" {
+		t.Errorf("MBID = %q, want the sole ISRC recording", identity.MBID)
+	}
+	if got, want := identity.MBIDs, []string{"5d6efd30"}; len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("MBIDs = %v, want %v", got, want)
+	}
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: the search MBID was not registered to the ISRC")
+	}
+	if !strings.Contains(logs.String(), "acquisition.reference_doubted") {
+		t.Errorf("expected acquisition.reference_doubted log, got:\n%s", logs.String())
+	}
+}
+
+func TestResolve_ISRCReferenceSetKeepsAllRegisteredRecordingsWhenSearchMBIDAgrees(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "other", Duration: 236},
+		{MBID: "remix-mbid", Duration: 236},
+		{MBID: "third", Duration: 236},
+	}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := []string{"remix-mbid", "other", "third"}
+	if len(identity.MBIDs) != len(want) {
+		t.Fatalf("MBIDs = %v, want %v", identity.MBIDs, want)
+	}
+	for i, mbid := range want {
+		if identity.MBIDs[i] != mbid {
+			t.Errorf("MBIDs[%d] = %q, want %q", i, identity.MBIDs[i], mbid)
+		}
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: the search MBID is registered to the ISRC")
+	}
+}
+
+func TestResolve_FailedISRCLookupYieldsSearchMBIDAsTheOnlyReference(t *testing.T) {
+	authority := &stubISRCAuthority{err: errors.New("503")}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got, want := identity.MBIDs, []string{"remix-mbid"}; len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("MBIDs = %v, want %v", got, want)
+	}
+}
+
+func TestResolve_NoISRCRecordingsYieldsEmptyMBIDsWhenSearchFindsNothing(t *testing.T) {
+	empty := stubSearcher{out: &discoveryservice.SearchOutput{}}
+	resolver := NewRecordingResolver(empty, WithISRCAuthority(&stubISRCAuthority{}))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(identity.MBIDs) != 0 {
+		t.Errorf("MBIDs = %v, want empty when there is no MBID to reference", identity.MBIDs)
+	}
+}
+
+func TestResolve_ISRCReferenceSetCapsAtFive(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "remix-mbid", Duration: 236},
+		{MBID: "b", Duration: 236},
+		{MBID: "c", Duration: 236},
+		{MBID: "d", Duration: 236},
+		{MBID: "e", Duration: 236},
+		{MBID: "f", Duration: 236},
+	}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(identity.MBIDs) != 5 {
+		t.Errorf("MBIDs = %v, want exactly 5 (the cap)", identity.MBIDs)
+	}
+}
+
+func TestResolve_SearchDurationDisagreementDoubtsTheReferenceWithNoISRC(t *testing.T) {
+	search := drinkingInLA()
+	q := drinkingQuery
+	q.ISRC = ""
+	q.Duration = 300
+
+	resolver := NewRecordingResolver(search, WithISRCAuthority(&stubISRCAuthority{}))
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.MBID != "remix-mbid" {
+		t.Errorf("MBID = %q, want the search MBID kept as-is", identity.MBID)
+	}
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: 236s search result vs a 300s track disagrees by more than max(5s, 3%)")
+	}
+}
+
+func TestResolve_SearchDurationWithinToleranceIsNotDoubted(t *testing.T) {
+	search := drinkingInLA()
+	q := drinkingQuery
+	q.ISRC = ""
+	q.Duration = 238
+
+	resolver := NewRecordingResolver(search, WithISRCAuthority(&stubISRCAuthority{}))
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: 236s is within tolerance of a 238s track")
+	}
+}
+
+func TestDurationDisagrees_BoundariesAndUnknownLengths(t *testing.T) {
+	cases := []struct {
+		name string
+		want float64
+		got  float64
+		out  bool
+	}{
+		{"zero want means unknown, never disagrees", 0, 236, false},
+		{"zero got means unknown, never disagrees", 236, 0, false},
+		{"exactly at the floor tolerance is not a disagreement", 100, 105, false},
+		{"one second past the floor tolerance disagrees", 100, 106.01, true},
+		{"exactly at the percentage tolerance is not a disagreement", 1000, 970, false},
+		{"one second past the percentage tolerance disagrees", 1000, 969, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := durationDisagrees(tc.want, tc.got); got != tc.out {
+				t.Errorf("durationDisagrees(%v, %v) = %v, want %v", tc.want, tc.got, got, tc.out)
+			}
+		})
 	}
 }

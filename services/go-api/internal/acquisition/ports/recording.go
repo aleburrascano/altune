@@ -26,9 +26,11 @@ type RecordingIdentity struct {
 	// no catalog gave one. Being authoritative rather than advisory, a non-zero
 	// value tightens the tolerance a downloaded file is held to, which is why
 	// zero must mean "unknown" here and never a length.
-	Duration  float64
-	Sources   []RecordingSource
-	AcoustIDs []string
+	Duration         float64
+	Sources          []RecordingSource
+	AcoustIDs        []string
+	MBIDs            []string
+	ReferenceDoubted bool
 }
 
 // IsZero reports whether a resolver found nothing worth carrying. AcoustIDs are
@@ -49,10 +51,11 @@ func (r RecordingIdentity) SourceFor(provider string) (RecordingSource, bool) {
 }
 
 type RecordingQuery struct {
-	Title  string
-	Artist string
-	Album  string
-	ISRC   string
+	Title    string
+	Artist   string
+	Album    string
+	ISRC     string
+	Duration float64
 }
 
 type RecordingResolver interface {
