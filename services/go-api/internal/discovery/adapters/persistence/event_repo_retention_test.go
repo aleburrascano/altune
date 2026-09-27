@@ -102,3 +102,58 @@ func TestPgxEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
 		t.Fatalf("discography_observed rows after PruneEvents = %d, want 1 (untouched)", got)
 	}
 }
+
+func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	now := time.Now().UTC()
+	types := []domain.EventType{
+		domain.EventTypePlaybackHealth, domain.EventTypeUserAction, domain.EventTypeFailureShown,
+	}
+	clean := func() {
+		for _, et := range types {
+			deleteEventsOfType(t, store, et)
+		}
+	}
+	t.Cleanup(clean)
+
+	day := 24 * time.Hour
+	ages := []time.Duration{
+		time.Hour, 3 * day, 6 * day, 8 * day, 13 * day, 15 * day, 29 * day, 31 * day,
+		45 * day, 61 * day, 89 * day, 91 * day, 181 * day, 366 * day, 800 * day,
+	}
+	for _, age := range ages {
+		t.Run(age.String(), func(t *testing.T) {
+			clean()
+			for _, et := range types {
+				seedEvent(t, store, now.Add(-age), et)
+			}
+
+			if _, err := store.PruneEvents(context.Background(), now); err != nil {
+				t.Fatalf("PruneEvents: %v", err)
+			}
+			health := countEventsOfType(t, store, domain.EventTypePlaybackHealth)
+			for _, et := range types[1:] {
+				if got := countEventsOfType(t, store, et); got != health {
+					t.Errorf("%s rows aged %s after prune = %d, want %d (same as playback_health)",
+						et, age, got, health)
+				}
+			}
+		})
+	}
+
+	t.Run("very old rows are evicted", func(t *testing.T) {
+		clean()
+		for _, et := range types[1:] {
+			seedEvent(t, store, now.Add(-800*day), et)
+		}
+		if _, err := store.PruneEvents(context.Background(), now); err != nil {
+			t.Fatalf("PruneEvents: %v", err)
+		}
+		for _, et := range types[1:] {
+			if got := countEventsOfType(t, store, et); got != 0 {
+				t.Errorf("%s rows aged 800d after prune = %d, want 0", et, got)
+			}
+		}
+	})
+}

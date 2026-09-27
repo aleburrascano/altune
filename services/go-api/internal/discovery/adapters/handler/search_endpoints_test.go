@@ -1586,3 +1586,101 @@ func TestHandleSearch_SearchIdKeepsTheNextPageInTheSameRanking(t *testing.T) {
 		t.Errorf("total = %d on page two, %d on page one", second.Total, first.Total)
 	}
 }
+
+func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    map[string]any
+		want    discdomain.EventType
+		payload map[string]any
+	}{
+		{
+			name: "user_action tapped, minimal",
+			body: map[string]any{"type": "user_action", "payload": map[string]any{
+				"action": "library.retry", "outcome": "tapped", "session_id": "s-1",
+			}},
+			want:    discdomain.EventTypeUserAction,
+			payload: map[string]any{"action": "library.retry", "outcome": "tapped"},
+		},
+		{
+			name: "user_action failed, every optional field",
+			body: map[string]any{"type": "user_action", "payload": map[string]any{
+				"action": "detail.save", "outcome": "failed", "track_id": "t-1",
+				"status": 503, "correlation_id": "corr-1",
+				"error": strings.Repeat("x", 300), "session_id": "s-1",
+			}},
+			want: discdomain.EventTypeUserAction,
+			payload: map[string]any{
+				"action": "detail.save", "outcome": "failed", "track_id": "t-1",
+				"correlation_id": "corr-1", "error": strings.Repeat("x", 300),
+			},
+		},
+		{
+			name: "failure_shown with track",
+			body: map[string]any{"type": "failure_shown", "payload": map[string]any{
+				"surface": "alert.delete_track", "message": "could not delete",
+				"track_id": "t-2", "session_id": "s-1",
+			}},
+			want:    discdomain.EventTypeFailureShown,
+			payload: map[string]any{"surface": "alert.delete_track", "message": "could not delete", "track_id": "t-2"},
+		},
+		{
+			name: "failure_shown via the outbox envelope",
+			body: map[string]any{
+				"type": "failure_shown", "event_id": mobileOutboxEventID,
+				"client_occurred_at": "2026-09-15T10:00:00.000Z",
+				"payload": map[string]any{
+					"surface": "banner.track_status", "message": "ünicode 山 🎵", "session_id": "s-1",
+				},
+			},
+			want:    discdomain.EventTypeFailureShown,
+			payload: map[string]any{"surface": "banner.track_status", "message": "ünicode 山 🎵"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &recordingEventStore{}
+			router := buildEventRouter(store)
+
+			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, tc.body))
+
+			discAssertStatus(t, rec, http.StatusNoContent)
+			if len(store.events) != 1 {
+				t.Fatalf("stored %d events, want 1", len(store.events))
+			}
+			got := store.events[0]
+			if got.Type != tc.want {
+				t.Errorf("stored type = %v, want %v", got.Type, tc.want)
+			}
+			for k, v := range tc.payload {
+				if got.Payload[k] != v {
+					t.Errorf("payload[%q] = %#v, want %#v", k, got.Payload[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestHandleRecordEvent_NearMissUserTelemetryTypesAreRejected(t *testing.T) {
+	for _, typ := range []string{
+		"User_Action", "USER_ACTION", "user-action", "userAction", "useraction",
+		" user_action", "user_action ", "user_action\n", "user_actions",
+		"failure-shown", "Failure_Shown", "failureShown", "failure_show", "failure_shown_",
+		"user_action\x00", "failure_shown,user_action",
+	} {
+		t.Run(typ, func(t *testing.T) {
+			store := &recordingEventStore{}
+			router := buildEventRouter(store)
+
+			rec := discServe(t, router, http.MethodPost, "/discovery/events",
+				discJsonBody(t, map[string]any{"type": typ, "payload": map[string]any{"session_id": "s-1"}}))
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("type %q: status = %d, want 400", typ, rec.Code)
+			}
+			if len(store.events) != 0 {
+				t.Errorf("type %q: stored %d events, want 0", typ, len(store.events))
+			}
+		})
+	}
+}
