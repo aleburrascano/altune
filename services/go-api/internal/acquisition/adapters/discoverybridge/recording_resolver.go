@@ -64,7 +64,12 @@ func (r *RecordingResolver) anchorToISRC(ctx context.Context, q acqports.Recordi
 		}
 	}
 
-	chosen := closestRecording(recordings, identity.Duration)
+	chosen, ok := closestRecording(recordings, identity.Duration)
+	if !ok {
+		slog.InfoContext(ctx, "acquisition.isrc_anchor_ambiguous",
+			"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_recordings", len(recordings))
+		return identity
+	}
 	slog.InfoContext(ctx, "acquisition.identity_anchored_to_isrc",
 		"isrc", q.ISRC, "search_mbid", identity.MBID, "isrc_mbid", chosen.MBID)
 	return adoptRecording(identity, q.ISRC, chosen)
@@ -93,11 +98,14 @@ func adoptRecording(identity acqports.RecordingIdentity, isrc string, chosen dis
 	return identity
 }
 
-func closestRecording(recordings []discoveryports.ISRCRecording, want float64) discoveryports.ISRCRecording {
-	best := recordings[0]
-	if want <= 0 {
-		return best
+func closestRecording(recordings []discoveryports.ISRCRecording, want float64) (discoveryports.ISRCRecording, bool) {
+	if len(recordings) == 1 {
+		return recordings[0], true
 	}
+	if want <= 0 {
+		return discoveryports.ISRCRecording{}, false
+	}
+	var best discoveryports.ISRCRecording
 	bestGap := math.Inf(1)
 	for _, rec := range recordings {
 		if rec.Duration <= 0 {
@@ -107,7 +115,7 @@ func closestRecording(recordings []discoveryports.ISRCRecording, want float64) d
 			best, bestGap = rec, gap
 		}
 	}
-	return best
+	return best, best.MBID != ""
 }
 
 func (r *RecordingResolver) resolveFromSearch(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {

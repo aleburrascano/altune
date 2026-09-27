@@ -166,3 +166,73 @@ func TestResolve_SearchErrorSurfacesWithoutISRCAnswer(t *testing.T) {
 		t.Error("a search error with no ISRC recording to fall back on must surface")
 	}
 }
+
+func TestResolve_ISRCAnchor_DurationEdges(t *testing.T) {
+	cases := []struct {
+		name         string
+		searchLength int
+		recordings   []discoveryports.ISRCRecording
+		wantMBID     string
+		wantDuration float64
+	}{
+		{
+			name:       "no search length and several recordings keeps the search identity",
+			recordings: []discoveryports.ISRCRecording{{MBID: "a", Duration: 236}, {MBID: "b", Duration: 237}},
+			wantMBID:   "remix-mbid",
+		},
+		{
+			name:         "no search length and one recording adopts it",
+			recordings:   []discoveryports.ISRCRecording{{MBID: "only", Duration: 237}},
+			wantMBID:     "only",
+			wantDuration: 237,
+		},
+		{
+			name:         "an exact tie keeps the first recording MusicBrainz lists",
+			searchLength: 236,
+			recordings:   []discoveryports.ISRCRecording{{MBID: "first", Duration: 235}, {MBID: "second", Duration: 237}},
+			wantMBID:     "first",
+			wantDuration: 235,
+		},
+		{
+			name:         "recordings without a length are never the nearest",
+			searchLength: 236,
+			recordings:   []discoveryports.ISRCRecording{{MBID: "unknown"}, {MBID: "far", Duration: 300}},
+			wantMBID:     "far",
+			wantDuration: 300,
+		},
+		{
+			name:         "several recordings none with a length keeps the search identity",
+			searchLength: 236,
+			recordings:   []discoveryports.ISRCRecording{{MBID: "x"}, {MBID: "y"}},
+			wantMBID:     "remix-mbid",
+			wantDuration: 236,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			search := drinkingInLA()
+			search.out.Results[0].Duration = tc.searchLength
+			resolver := NewRecordingResolver(search, WithISRCAuthority(&stubISRCAuthority{recordings: tc.recordings}))
+
+			identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if identity.MBID != tc.wantMBID || identity.Duration != tc.wantDuration {
+				t.Errorf("identity = {MBID:%q Duration:%v}, want {MBID:%q Duration:%v}",
+					identity.MBID, identity.Duration, tc.wantMBID, tc.wantDuration)
+			}
+		})
+	}
+}
+
+func TestResolve_ISRCAnchorsIdentityWhenSearchFindsNothing(t *testing.T) {
+	empty := stubSearcher{out: &discoveryservice.SearchOutput{}}
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "album-version", Duration: 237}}}
+	resolver := NewRecordingResolver(empty, WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil || identity.MBID != "album-version" || identity.ISRC != "CAA509814003" {
+		t.Errorf("identity = %+v, err = %v; want one built from the lone ISRC recording", identity, err)
+	}
+}
