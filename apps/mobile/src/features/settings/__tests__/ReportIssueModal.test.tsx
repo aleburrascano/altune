@@ -6,6 +6,7 @@ import { ApiError } from '@shared/api-client';
 import { submitReport } from '@shared/api-client/feedback';
 import { supabase } from '@shared/auth/supabaseClient';
 import { ReportIssueModal } from '../ui/ReportIssueModal';
+import { reportDiagnostics } from '../reportDiagnostics';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -94,6 +95,17 @@ describe('ReportIssueModal(): submit flow', () => {
 
     await waitFor(() => expect(screen.getByTestId('report-issue-message').props.value).toBe(''));
     expect(sendDisabled()).toBe(true);
+  });
+
+  it('sends all four diagnostics fields with the values reportDiagnostics(screen) returns', async () => {
+    mockSubmitReport.mockResolvedValue({ issue_number: 42 });
+    renderModal();
+    fireEvent.press(screen.getByTestId('report-issue-kind-confusing'));
+    fireEvent.changeText(screen.getByTestId('report-issue-message'), 'the queue jumped');
+    fireEvent.press(screen.getByTestId('report-issue-send'));
+
+    await screen.findByText('Sent — thank you');
+    expect(mockSubmitReport.mock.calls[0][0]).toMatchObject(reportDiagnostics('settings'));
   });
 
   it('"Done" on the sent screen closes the modal', async () => {
