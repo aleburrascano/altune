@@ -5,14 +5,14 @@ description: Operate altune's backend and web deploys on the shared VM - approve
 
 # Deploy
 
-Prod and staging share one VM, reached as `DEPLOY_USER@DEPLOY_HOST` (GitHub secrets). The checkout is `~/altune`; every command below runs from `~/altune/services/go-api` unless it says otherwise. Env files live only on the VM: `.env.production` and `.env.staging`, templated by `../.env.example` and `deploy/.env.staging.example`.
+Prod and staging share one VM, reached as `DEPLOY_USER@DEPLOY_HOST` (they were GitHub Actions secrets; on Gitea they would be the repo's Actions secrets, none set yet). The checkout is `~/altune`; every command below runs from `~/altune/services/go-api` unless it says otherwise. Env files live only on the VM: `.env.production` and `.env.staging`, templated by `../.env.example` and `deploy/.env.staging.example`.
 
 | Tier | URL | Containers |
 |---|---|---|
 | prod | `https://altune.duckdns.org` | `altune-go-api-{blue,green}`, `altune-overseer`, `altune-redis`, `altune-caddy` |
 | staging | `https://altune-staging.duckdns.org` | `altune-staging-go-api-{blue,green}`, `altune-staging-overseer`, `altune-staging-redis` |
 
-Any prod act (approving `production`, a prod `release.sh`, `rollback.sh`) waits for the operator's yes.
+Prod acts (a prod `release.sh`, `rollback.sh`) run without a human yes (operator decision, 2026-09-27): release to prod only after the same sha is green on staging, and roll back on a failed prod smoke.
 
 Read the sibling for its branch:
 - [staging.md](staging.md) when creating or changing the staging tier, its env, or its data sync.
@@ -21,21 +21,23 @@ Read the sibling for its branch:
 
 ## 1. Read where the release stands
 
-`deploy-backend.yml` runs on a push to `main` touching backend code: tests, `deploy-staging`, `smoke-staging`, `approve-prod`, `deploy-prod`. Each deploy job runs `deploy/release.sh <tier> <sha>` from that commit.
+The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds only `precheck.yml`. So **no CI deploy runs on a push to `main`**: `.github/workflows/deploy-backend.yml` (tests, `deploy-staging`, `smoke-staging`, `approve-prod`, `deploy-prod`) is the GitHub-era pipeline, kept for reference. Gitea has no environment protection rules either, so its `production` approval step has no Gitea equivalent. Every release is the by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM.
+
+Where `main` stands, and what the VM runs:
 
 ```bash
-gh run list --workflow deploy-backend.yml -L 5
-gh run view <run-id>
+git fetch gitea main && git log -1 --format='%h %s' gitea/main
+forge run list --branch main -L 5          # the precheck runs; no deploy workflow on Gitea yet
+ssh "$DEPLOY_USER@$DEPLOY_HOST" 'cd ~/altune && git log -1 --format=%h'
 ```
 
-Done when: you can name the failing or waiting job and the sha it carries.
+Done when: you can name the sha on `main` and the sha each tier runs.
 
 ## 2. Move it forward
 
-- **Waiting on approval**: the operator approves the pending run's `production` deployment (Review deployments, Approve and deploy). Rejecting leaves prod as it is.
-- **`deploy-prod` pending after approval** with no other `deploy-prod` run `in_progress` or `queued`: GitHub's concurrency bookkeeping is wedged. Cancel the stuck run, bump `concurrency.group` of `deploy-prod` in `deploy-backend.yml` (`deploy-prod-v2` to `deploy-prod-v3`) and merge it. A workflow-only change triggers no deploy, so start one with `gh workflow run deploy-backend.yml --ref main` and approve that run.
+- **The staging proof** replaces GitHub's `production` approval: run the prod line below only once staging passed its smoke for the same sha.
 - **Red staging smoke**: prod is untouched; fix forward.
-- **CI down, or a re-check**, on the VM:
+- **Every release (no CI deploy on Gitea), or a re-check**, on the VM:
 
   ```bash
   bash deploy/release.sh staging <sha>
