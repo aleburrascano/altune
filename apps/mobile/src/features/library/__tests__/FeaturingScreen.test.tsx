@@ -8,9 +8,11 @@ import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+import { asTrackId } from '@shared/api-client/ids';
 import { ApiError, NetworkError } from '@shared/errors';
 
 import { FeaturingScreen } from '../ui/FeaturingScreen';
+import * as detailHandoff from '@shared/lib/detail-handoff';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
@@ -184,5 +186,49 @@ describe('a failed featuring load', () => {
 
     await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('the detail route under the library tab', () => {
+  const pendingTrack = {
+    id: asTrackId('t1'),
+    title: 'Aerodynamic',
+    artist: 'Daft Punk',
+    album: 'Discovery',
+    duration_seconds: 212,
+    added_at: '2026-01-01T00:00:00Z',
+    artwork_url: null,
+    year: 2001,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
+    acquisition_status: 'pending',
+    failure_reason: null,
+  };
+
+  it('opens a track at the library detail path, not the discover one', async () => {
+    const detailHrefSpy = jest.spyOn(detailHandoff, 'detailHref');
+    mockListTracksFeaturing.mockResolvedValue({ items: [pendingTrack] });
+    render(<FeaturingScreen />, { wrapper });
+
+    const row = await screen.findByTestId(`library-row-${pendingTrack.id}`);
+    fireEvent.press(row);
+
+    expect(detailHrefSpy).toHaveBeenCalledWith('/library/detail', expect.anything());
+    detailHrefSpy.mockRestore();
+  });
+
+  it('sends the explore search to the library detail path, not the discover one', async () => {
+    const detailHrefSpy = jest.spyOn(detailHandoff, 'detailHref');
+    mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: 'Guest Star' }] });
+    render(<FeaturingScreen />, { wrapper });
+
+    await tapExplore();
+
+    await waitFor(() => expect(detailHrefSpy).toHaveBeenCalled());
+    expect(detailHrefSpy).toHaveBeenCalledWith('/library/detail', expect.anything());
+    detailHrefSpy.mockRestore();
   });
 });
