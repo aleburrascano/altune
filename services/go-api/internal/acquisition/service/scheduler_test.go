@@ -2068,8 +2068,6 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 	})
 }
 
-// ctxAtRecordRecorder captures each outcome together with whether the context
-// it was handed was already done at the moment Record was called.
 type ctxAtRecordRecorder struct {
 	calls   chan acqports.AcquisitionOutcome
 	ctxErrs chan error
