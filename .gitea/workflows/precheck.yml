@@ -1,0 +1,27 @@
+name: precheck
+
+on:
+  pull_request:
+
+concurrency:
+  group: precheck-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  precheck:
+    runs-on: host
+    timeout-minutes: 45
+    steps:
+      - name: precheck
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          repo=/home/ubuntu/projects/altune
+          git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"
+          wt=$(mktemp -d /tmp/ci-precheck.XXXXXX)
+          trap 'git -C "$repo" worktree remove --force "$wt"' EXIT
+          git -C "$repo" worktree add -q --detach "$wt" "gitea/pr/$PR"
+          cd "$wt"
+          bash scripts/precheck.sh "gitea/$BASE"
