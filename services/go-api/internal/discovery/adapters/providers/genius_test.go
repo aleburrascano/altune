@@ -2,11 +2,14 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 )
 
 func TestGeniusArtworkResolver_Resolve_Song(t *testing.T) {
@@ -142,7 +145,7 @@ func TestGeniusArtworkResolver_Resolve_NoSubtitle(t *testing.T) {
 	}
 }
 
-func TestGeniusArtworkResolver_Resolve_HTTPError(t *testing.T) {
+func TestGeniusArtworkResolver_Resolve_HTTPErrorIsUnavailable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -150,10 +153,78 @@ func TestGeniusArtworkResolver_Resolve_HTTPError(t *testing.T) {
 
 	resolver := NewGeniusArtworkResolver(newTestClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "")
-	if err != nil {
-		t.Fatalf("expected nil error on HTTP 500, got: %v", err)
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
 		t.Errorf("expected empty URL on HTTP 500, got %q", url)
+	}
+}
+
+func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	resolver := NewGeniusArtworkResolver(newTestClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL on HTTP 500, got %q", url)
+	}
+}
+
+func TestGeniusArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
+	for name, handler := range artworkProviderFailureHandlers() {
+		for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindArtist} {
+			t.Run(name+" "+kind.String(), func(t *testing.T) {
+				srv := httptest.NewServer(handler)
+				defer srv.Close()
+
+				resolver := NewGeniusArtworkResolver(newTestClient(srv.URL), "token")
+				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
+				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
+				}
+				if !strings.Contains(err.Error(), "genius") {
+					t.Errorf("err = %q, want it to name the genius source", err)
+				}
+			})
+		}
+	}
+}
+
+func TestGeniusArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
+	handlers := artworkProviderVerifiedMissHandlers()
+	handlers["200 with no hits"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"response":{"hits":[]}}`))
+	}
+	for name, handler := range handlers {
+		for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindArtist} {
+			t.Run(name+" "+kind.String(), func(t *testing.T) {
+				srv := httptest.NewServer(handler)
+				defer srv.Close()
+
+				resolver := NewGeniusArtworkResolver(newTestClient(srv.URL), "token")
+				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
+				if url != "" || err != nil {
+					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
+				}
+			})
+		}
+	}
+}
+
+func TestGeniusArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
+	srv, ctx := cancelMidRequestServer(t)
+
+	resolver := NewGeniusArtworkResolver(newTestClient(srv.URL), "token")
+	url, err := resolver.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }

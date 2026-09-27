@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+var errYTMUnexpectedShape = errors.New("ytmusic: response is not a JSON object")
 
 const (
 	ytmEndpoint        = "https://music.youtube.com/youtubei/v1/search"
@@ -122,6 +125,9 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 	var page any
 	if err := json.Unmarshal(raw, &page); err != nil {
 		return nil, fmt.Errorf("ytmusic decode: %w", err)
+	}
+	if _, ok := page.(map[string]any); !ok {
+		return nil, errYTMUnexpectedShape
 	}
 
 	return parseYTMSearch(page), nil

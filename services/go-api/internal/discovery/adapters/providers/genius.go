@@ -38,7 +38,7 @@ func (r *GeniusArtworkResolver) resolveSongImage(ctx context.Context, title, art
 	q := fmt.Sprintf("%s %s", artist, title)
 	hits, err := r.searchGenius(ctx, q)
 	if err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(r.ArtworkSource(), err)
 	}
 
 	for _, hit := range hits {
@@ -70,7 +70,7 @@ func (r *GeniusArtworkResolver) resolveArtistImage(ctx context.Context, artistNa
 	for _, q := range queries {
 		hits, err := r.searchGenius(ctx, q)
 		if err != nil {
-			return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+			return artworkFailure(r.ArtworkSource(), err)
 		}
 		img := findArtistImageInHits(hits, artistName)
 		if img != "" {
@@ -88,7 +88,7 @@ func (r *GeniusArtworkResolver) searchGenius(ctx context.Context, query string) 
 		} `json:"response"`
 	}
 	if err := getJSON(ctx, r.client, u, &body, withHeader("Authorization", "Bearer "+r.accessToken)); err != nil {
-		return nil, nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return nil, err
 	}
 
 	return body.Response.Hits, nil

@@ -97,6 +97,9 @@ func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 
 func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	result, err := ytmSearchRetry(ctx, a.client, query, ytmNoFilter)
+	if errors.Is(err, errYTMUnexpectedShape) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic search: %w", err)
 	}
@@ -127,6 +130,9 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 
 func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
 	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmAlbumFilter)
+	if errors.Is(err, errYTMUnexpectedShape) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic album search: %w", err)
 	}
@@ -247,7 +253,7 @@ func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.R
 	}
 	result, err := ytmSearchRetry(ctx, a.client, title, ytmArtistFilter)
 	if err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(a.ArtworkSource(), err)
 	}
 	url := pickArtistArtwork(result.Artists, title, ytArtworkHeroSize)
 	if url != "" {

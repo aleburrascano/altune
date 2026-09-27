@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"io"
@@ -276,6 +277,23 @@ func TestYouTubeMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	}
 }
 
+func TestYouTubeMusicAdapter_Search_wrongShapeBodyIsEmptyNotError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`["not","an","object"]`))
+	}))
+	defer srv.Close()
+
+	adapter := NewYouTubeMusicAdapter(&redirectTransport{targetURL: srv.URL})
+	results, err := adapter.Search(context.Background(), "q", allKinds())
+	if err != nil {
+		t.Fatalf("Search = (%v, %v), want (nil, nil): a well-formed body of the wrong shape must not fail provider search", results, err)
+	}
+	if results != nil {
+		t.Errorf("results = %+v, want nil", results)
+	}
+}
+
 func TestYouTubeMusicAdapter_Search_retriesOn403HTML(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -403,6 +421,23 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_filtersToExactArtistName(t *testing
 	}
 }
 
+func TestYouTubeMusicAdapter_GetArtistAlbums_wrongShapeBodyIsEmptyNotError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`["not","an","object"]`))
+	}))
+	defer srv.Close()
+
+	adapter := NewYouTubeMusicAdapter(&redirectTransport{targetURL: srv.URL})
+	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderYouTube, "sombr")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums = (%v, %v), want (nil, nil)", albums, err)
+	}
+	if albums != nil {
+		t.Errorf("albums = %+v, want nil", albums)
+	}
+}
+
 func TestFallbackByline(t *testing.T) {
 	runs := []any{
 		map[string]any{"text": "Song"},
@@ -467,7 +502,7 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("search error degrades to empty", func(t *testing.T) {
+	t.Run("search error is unavailable not empty", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`<html>denied</html>`))
@@ -476,8 +511,11 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 
 		r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
 		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
-		if err != nil || url != "" {
-			t.Errorf("Resolve = (%q, %v), want (\"\", nil) — the chain degrades", url, err)
+		if !errors.Is(err, ports.ErrArtworkUnavailable) {
+			t.Fatalf("Resolve = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
+		}
+		if url != "" {
+			t.Errorf("url = %q, want empty on 403", url)
 		}
 	})
 
@@ -494,4 +532,52 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
 		}
 	})
+}
+
+func TestYouTubeMusicArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
+	for name, handler := range artworkProviderFailureHandlers() {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+
+			r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+			url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
+			}
+			if !strings.Contains(err.Error(), "ytmusic") {
+				t.Errorf("err = %q, want it to name the ytmusic source", err)
+			}
+		})
+	}
+}
+
+func TestYouTubeMusicArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
+	handlers := artworkProviderVerifiedMissHandlers()
+	handlers["200 with no results"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"contents":{}}`))
+	}
+	for name, handler := range handlers {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+
+			r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+			url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			if url != "" || err != nil {
+				t.Errorf("Resolve on %s = (%q, %v), want (\"\", nil)", name, url, err)
+			}
+		})
+	}
+}
+
+func TestYouTubeMusicArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
+	srv, ctx := cancelMidRequestServer(t)
+
+	r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+	url, err := r.Resolve(ctx, domain.ResultKindArtist, "sombr", "", "")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
+	}
 }
