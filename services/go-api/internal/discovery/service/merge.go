@@ -97,6 +97,8 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	if completenessOf(other) > completenessOf(canonical) {
 		canonical, other = other, canonical
 	}
+	titleTierMerge := tier == domain.EntityResolutionNone
+	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
 
 	sources := unionSources(canonical.Sources, other.Sources)
 
@@ -142,9 +144,9 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	}
 	merged.RecordType = firstNonEmpty(canonical.RecordType, other.RecordType)
 	merged.ResolutionTier = domain.StampResolutionTier(tier)
-	merged.ISRC = firstNonEmpty(canonical.ISRC, other.ISRC)
+	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
 	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
-	merged.MBID = firstNonEmpty(canonical.MBID, other.MBID)
+	merged.MBID = identityCarriedField(canonical.MBID, other.MBID, identityAgrees)
 	merged.Xref = canonical.Xref
 	if len(merged.Xref) == 0 {
 		merged.Xref = other.Xref
@@ -172,6 +174,25 @@ func firstNonZero[T int | int64](a, b T) T {
 		return a
 	}
 	return b
+}
+
+func identityCarriedField(canonicalVal, otherVal string, identityAgrees bool) string {
+	if !identityAgrees {
+		return canonicalVal
+	}
+	return firstNonEmpty(canonicalVal, otherVal)
+}
+
+func sameVersionIdentity(a, b domain.SearchResult) bool {
+	title := textnorm.NormalizeForIdentity(a.Title)
+	if title == "" || title != textnorm.NormalizeForIdentity(b.Title) {
+		return false
+	}
+	if a.Duration == 0 || b.Duration == 0 {
+		return true
+	}
+	tolerance := math.Max(5, 0.03*math.Max(float64(a.Duration), float64(b.Duration)))
+	return math.Abs(float64(a.Duration-b.Duration)) <= tolerance
 }
 
 func bridgeMatch(e, c domain.SearchResult) bool {

@@ -415,6 +415,44 @@ func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
 	}
 }
 
+func TestMergeInto_TitleTierNeverImportsARemixMBIDOntoTheOriginal(t *testing.T) {
+	original := withISRC(track("Drinking in L.A.", "Bran Van 3000", domain.ProviderDeezer, nil), "CAA509814003")
+	original.Duration = 236
+	remix := withMBID(track("Drinking in L.A. (Who Mix?)", "Bran Van 3000", domain.ProviderMusicBrainz, nil), "d3dc2825")
+	remix.Duration = 307
+
+	entities := Merge([][]domain.SearchResult{{original}, {remix}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
+	}
+	r := entities[0].Result
+	if r.MBID == "d3dc2825" {
+		t.Errorf("MBID = %v, want anything but the remix's MBID", r.MBID)
+	}
+	if r.ISRC != "CAA509814003" {
+		t.Errorf("ISRC = %v, want the original's CAA509814003 preserved", r.ISRC)
+	}
+}
+
+func TestMergeInto_TitleTierCarriesMBIDAndISRCWhenTitlesAgreeUnderIdentity(t *testing.T) {
+	a := withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
+	a.Duration = 177
+	b := withMBID(track("Humble", "Kendrick Lamar", domain.ProviderMusicBrainz, nil), "mbid-humble")
+	b.Duration = 177
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	r := entities[0].Result
+	if r.ISRC != "USUM71703089" {
+		t.Errorf("ISRC = %v, want USUM71703089 carried across", r.ISRC)
+	}
+	if r.MBID != "mbid-humble" {
+		t.Errorf("MBID = %v, want mbid-humble carried across", r.MBID)
+	}
+}
+
 func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T) {
 	// The Don Toliver bug: a same-name look-alike (no identity) carries a wrong
 	// cover, while the real, identity-pinned track has none bound yet. A name-only
