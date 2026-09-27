@@ -205,6 +205,10 @@ CASE="every multi-line SSH script stops at its first failed line"
 UNGUARDED=$(awk '/^          script: \|$/ { getline; if ($0 !~ /^            set -e$/) print NR ": " $0 }' "$HERE/deploy-backend.yml")
 [ -z "$UNGUARDED" ] || fail "script blocks not opening with set -e: $UNGUARDED"
 
+CASE="no step passes the script_stop input appleboy/ssh-action@v1.2.5 rejects"
+grep -q 'script_stop' "$HERE/deploy-backend.yml" &&
+    fail "deploy-backend.yml still passes script_stop, which v1.2.5 no longer accepts"
+
 CASE="the staging smoke carries the exact commit and the staging container default"
 STAGING_SMOKE=$(grep 'bash deploy/smoke\.sh' "$HERE/deploy-backend.yml")
 [ "$(printf '%s\n' "$STAGING_SMOKE" | grep -c .)" = 1 ] ||
