@@ -28,7 +28,7 @@ import {
 } from '../sort';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
-import type { LibraryChip } from '../ui/LibraryChips';
+import type { LibraryChip } from '../activeView';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 import { TracksList } from '../ui/TracksList';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';

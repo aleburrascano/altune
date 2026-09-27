@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 import { Chip, spacing } from '@shared/ui';
 
-export type LibraryChip = 'playlists' | 'tracks' | 'albums' | 'artists';
+import type { LibraryChip } from '../activeView';
 
 const CHIPS: { key: LibraryChip; label: string }[] = [
   { key: 'playlists', label: 'Playlists' },

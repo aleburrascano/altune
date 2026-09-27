@@ -3,10 +3,11 @@ import { useEffect } from 'react';
 import type { LibrarySort } from '@shared/api-client/library';
 
 import { failureLogFields } from '../failureLogFields';
+import type { LibraryChip } from '../activeView';
 import type { SortKey } from '../sort';
 
 /** The library chips whose contents come from a query that can fail. */
-export type LibraryQueryChip = 'tracks' | 'albums' | 'artists' | 'playlists';
+export type LibraryQueryChip = LibraryChip;
 
 /** What a failed library query was asking for, minus the search term itself. */
 export type LibraryQueryContext = {

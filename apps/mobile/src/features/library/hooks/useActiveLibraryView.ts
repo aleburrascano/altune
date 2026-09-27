@@ -11,9 +11,8 @@ import { usePlaylistsView } from './usePlaylistsView';
 import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
 import { useTracksView } from './useTracksView';
-import type { ActiveView } from '../activeView';
+import type { ActiveView, LibraryChip } from '../activeView';
 import type { SortKey } from '../sort';
-import type { LibraryChip } from '../ui/LibraryChips';
 
 export type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;

@@ -25,11 +25,12 @@ import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTrackSelection } from '../hooks/useTrackSelection';
 import { _viewForState } from '../state';
-import { LibraryChips, type LibraryChip } from './LibraryChips';
+import { LibraryChips } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
 import { SortControl } from './SortControl';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
+import type { LibraryChip } from '../activeView';
 import { type SortKey } from '../sort';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
