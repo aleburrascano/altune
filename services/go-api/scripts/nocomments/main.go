@@ -224,17 +224,17 @@ func diffTargets(root, base string) ([]target, error) {
 		return nil, err
 	}
 	var targets []target
-	for _, path := range changed {
-		full := filepath.Join(root, path)
+	for _, c := range changed {
+		full := filepath.Join(root, c.path)
 		k, ok := matchKind(full)
 		if !ok {
 			continue
 		}
-		added, err := addedLines(root, base, path)
+		added, err := addedLines(root, base, c)
 		if err != nil {
 			return nil, err
 		}
-		targets = append(targets, target{display: path, read: full, kind: k, added: added})
+		targets = append(targets, target{display: c.path, read: full, kind: k, added: added})
 	}
 	return targets, nil
 }
@@ -247,41 +247,75 @@ func repoRoot() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func changedFiles(root, base string) ([]string, error) {
-	out, err := gitIn(root, "diff", "--name-only", "--diff-filter=ACMR", base)
+type change struct {
+	path string
+	from string
+}
+
+func changedFiles(root, base string) ([]change, error) {
+	out, err := gitIn(root, "diff", "-M", "-C", "--name-status", "--diff-filter=ACMRC", base)
 	if err != nil {
 		return nil, err
 	}
-	var files []string
+	var changes []change
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if line != "" {
-			files = append(files, line)
+		if line == "" {
+			continue
 		}
+		c, err := parseNameStatusLine(line)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, c)
 	}
-	return files, nil
+	return changes, nil
 }
 
-func addedLines(root, base, path string) (map[int]bool, error) {
-	out, err := gitIn(root, "diff", "-U0", base, "--", path)
+func parseNameStatusLine(line string) (change, error) {
+	fields := strings.Split(line, "\t")
+	status := fields[0]
+	if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
+		if len(fields) != 3 {
+			return change{}, fmt.Errorf("unexpected name-status line: %q", line)
+		}
+		return change{path: fields[2], from: fields[1]}, nil
+	}
+	if len(fields) != 2 {
+		return change{}, fmt.Errorf("unexpected name-status line: %q", line)
+	}
+	return change{path: fields[1]}, nil
+}
+
+func addedLines(root, base string, c change) (map[int]bool, error) {
+	pathArgs := []string{c.path}
+	if c.from != "" && c.from != c.path {
+		pathArgs = []string{c.from, c.path}
+	}
+	args := append([]string{"diff", "-M", "-C", "-U0", base, "--"}, pathArgs...)
+	out, err := gitIn(root, args...)
 	if err != nil {
 		return nil, err
 	}
 	added := map[int]bool{}
 	for _, line := range strings.Split(out, "\n") {
-		match := hunkHeader.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-		start, _ := strconv.Atoi(match[1])
-		count := 1
-		if match[2] != "" {
-			count, _ = strconv.Atoi(match[2])
-		}
-		for n := start; n < start+count; n++ {
-			added[n] = true
-		}
+		addHunkLines(added, line)
 	}
 	return added, nil
+}
+
+func addHunkLines(added map[int]bool, line string) {
+	match := hunkHeader.FindStringSubmatch(line)
+	if match == nil {
+		return
+	}
+	start, _ := strconv.Atoi(match[1])
+	count := 1
+	if match[2] != "" {
+		count, _ = strconv.Atoi(match[2])
+	}
+	for n := start; n < start+count; n++ {
+		added[n] = true
+	}
 }
 
 func gitIn(dir string, args ...string) (string, error) {

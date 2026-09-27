@@ -113,6 +113,7 @@ func TestStripPreservesWhatTheScriptPrints(t *testing.T) {
 	}{
 		{"comment line after a line continuation", "echo a \\\n# x\necho c\n", "a\nc\n"},
 		{"indented comment line after a line continuation", "echo a \\\n  # x\necho c\n", "a\nc\n"},
+		{"comment line after a CRLF line continuation", "echo a \\\r\n# x\r\necho c\r\n", "a \r\nc\r\n"},
 		{"trailing comment on a continued command", "printf '%s\\n' a \\\n  b # x\necho c\n", "a\nb\nc\n"},
 		{"comment after a continuation at eof without newline", "echo a \\\n  # x", "a\n"},
 		{"comments between case patterns", "set -- a\ncase $1 in\n  # c\n  a) echo A ;; # t\n  # d\n  *) echo B ;;\nesac\n", "A\n"},
@@ -421,4 +422,68 @@ func bashStdout(t *testing.T, src string) string {
 		t.Fatalf("bash %q: %v", src, err)
 	}
 	return string(out)
+}
+
+func TestCheckFlagsACommentOnLineOneThatIsNotAShebang(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.sh", "# hi\necho hi\n")
+	var stdout strings.Builder
+	code := run([]string{"check", dir}, &stdout)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
+	}
+	if want := filepath.Join(dir, "a.sh") + ":1"; !strings.Contains(stdout.String(), want) {
+		t.Fatalf("output missing %q:\n%s", want, stdout.String())
+	}
+}
+
+func TestStripTakesTheWholeLineOfAStandaloneComment(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.sh", "#!/bin/sh\necho a\n# c\n  # d\necho b\n")
+	var stdout strings.Builder
+	if code := run([]string{"strip", dir}, &stdout); code != 0 {
+		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "a.sh"))
+	if want := "#!/bin/sh\necho a\necho b\n"; string(got) != want {
+		t.Fatalf("stripped = %q, want %q", got, want)
+	}
+}
+
+func TestStripRemovesTrailingCommentEndingInBackslash(t *testing.T) {
+	src := "echo a # x\\\necho b\n"
+	dir := t.TempDir()
+	writeFile(t, dir, "s.sh", src)
+	var stdout strings.Builder
+	if code := run([]string{"strip", dir}, &stdout); code != 0 {
+		t.Fatalf("strip(%q) exit = %d, want 0; output:\n%s", src, code, stdout.String())
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "s.sh"))
+	if string(got) != "echo a\necho b\n" {
+		t.Fatalf("strip(%q) = %q, want %q", src, got, "echo a\necho b\n")
+	}
+}
+
+func TestRunDiffDoesNotFlagCommentsCarriedAcrossARename(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	gitCmd(t, dir, "config", "user.email", "test@example.com")
+	gitCmd(t, dir, "config", "user.name", "test")
+	writeFile(t, dir, "old.sh", "#!/bin/sh\n# base comment\necho one\necho two\necho three\necho four\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "base")
+	base := strings.TrimSpace(gitOutput(t, dir, "rev-parse", "HEAD"))
+	gitCmd(t, dir, "mv", "old.sh", "new.sh")
+	writeFile(t, dir, "new.sh", "#!/bin/sh\n# base comment\necho one\necho two\necho three\necho four\n# x\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "rename")
+	chdirFor(t, dir)
+	var stdout strings.Builder
+	code := run([]string{"diff", base}, &stdout)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "new.sh:2") {
+		t.Fatalf("output flagged the base comment carried by the rename, new.sh:2:\n%s", stdout.String())
+	}
 }

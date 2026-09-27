@@ -56,7 +56,7 @@ func shellComments(src []byte) ([]span, error) {
 }
 
 func isShebangComment(c *syntax.Comment) bool {
-	return c.Hash.Line() == 1 && c.Hash.Col() == 1
+	return c.Hash.Line() == 1 && c.Hash.Col() == 1 && strings.HasPrefix(c.Text, "!")
 }
 
 func commentSpan(src []byte, c *syntax.Comment) span {
@@ -65,12 +65,31 @@ func commentSpan(src []byte, c *syntax.Comment) span {
 	line := int(c.Pos().Line())
 
 	lineStart := lineStartOffset(src, start)
-	lineEnd := lineEndOffset(src, end)
+	lineEndOfCommentLine := lineEndOffset(src, start)
+	if end > lineEndOfCommentLine {
+		end = lineEndOfCommentLine
+	}
 
-	if isBlank(src[lineStart:start]) && isBlank(src[end:lineEnd]) {
-		return span{lineStart, lineEnd, line}
+	if isBlank(src[lineStart:start]) && isBlank(src[end:lineEndOfCommentLine]) {
+		consumed := lineEndOfCommentLine
+		if consumed < len(src) && !lineIsContinuedFromPrevious(src, lineStart) {
+			consumed++
+		}
+		return span{lineStart, consumed, line}
 	}
 	return span{trimTrailingSpace(src, lineStart, start), end, line}
+}
+
+func lineIsContinuedFromPrevious(src []byte, lineStart int) bool {
+	pos := lineStart - 1
+	if pos < 0 || src[pos] != '\n' {
+		return false
+	}
+	pos--
+	if pos >= 0 && src[pos] == '\r' {
+		pos--
+	}
+	return pos >= 0 && src[pos] == '\\'
 }
 
 func lineStartOffset(src []byte, offset int) int {
@@ -105,7 +124,11 @@ func parseShell(src []byte, opts ...syntax.ParserOption) (*syntax.File, error) {
 }
 
 func shellCommentFreePrintsEqual(before, after []byte) error {
-	beforePrint, err := printShellCommentFree(before)
+	spans, err := shellComments(before)
+	if err != nil {
+		return fmt.Errorf("parse original: %w", err)
+	}
+	beforePrint, err := printShellCommentFree(blankCommentSpans(before, spans))
 	if err != nil {
 		return fmt.Errorf("parse original: %w", err)
 	}
@@ -119,13 +142,25 @@ func shellCommentFreePrintsEqual(before, after []byte) error {
 	return nil
 }
 
+func blankCommentSpans(src []byte, spans []span) []byte {
+	out := append([]byte(nil), src...)
+	for _, s := range spans {
+		for i := s.start; i < s.end; i++ {
+			if out[i] != '\n' && out[i] != '\r' {
+				out[i] = ' '
+			}
+		}
+	}
+	return out
+}
+
 func printShellCommentFree(src []byte) (string, error) {
 	file, err := parseShell(src)
 	if err != nil {
 		return "", err
 	}
 	var buf bytes.Buffer
-	printer := syntax.NewPrinter()
+	printer := syntax.NewPrinter(syntax.Minify(true))
 	if err := printer.Print(&buf, file); err != nil {
 		return "", err
 	}
