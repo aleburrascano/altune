@@ -163,8 +163,9 @@ export function violations(added, repo) {
 }
 
 function main() {
-  const ref = process.argv[2] || "origin/main";
   const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 << 20 });
+  const hasRef = (r) => { try { git(["rev-parse", "-q", "--verify", r]); return true; } catch { return false; } };
+  const ref = process.argv[2] || (hasRef("gitea/main") ? "gitea/main" : "origin/main");
   let base, added, removed, repo;
   try {
     base = git(["merge-base", ref, "HEAD"]).trim();
