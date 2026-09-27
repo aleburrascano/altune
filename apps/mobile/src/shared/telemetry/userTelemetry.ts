@@ -3,7 +3,11 @@ import { recordEvent } from './recordEvent';
 const MAX_TRIMMED_LENGTH = 300;
 
 function trimmed(value: string): string {
-  return value.length > MAX_TRIMMED_LENGTH ? value.slice(0, MAX_TRIMMED_LENGTH) : value;
+  if (value.length <= MAX_TRIMMED_LENGTH) return value;
+  const cut = value.slice(0, MAX_TRIMMED_LENGTH);
+  const lastUnit = cut.charCodeAt(MAX_TRIMMED_LENGTH - 1);
+  const isHighSurrogate = lastUnit >= 0xd800 && lastUnit <= 0xdbff;
+  return isHighSurrogate ? cut.slice(0, MAX_TRIMMED_LENGTH - 1) : cut;
 }
 
 export type UserActionOutcome = 'tapped' | 'succeeded' | 'failed';

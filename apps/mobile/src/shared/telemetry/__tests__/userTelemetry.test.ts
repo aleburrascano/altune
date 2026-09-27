@@ -188,6 +188,38 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
 
     expect(sentBody().payload.message).toBe(accented);
   });
+
+  it('keeps an emoji wholly inside the limit intact', async () => {
+    __http.reply('POST /v1/discovery/events', { status: 202 });
+    const message = `${'a'.repeat(290)}😀`;
+
+    recordFailureShown({ surface: 'banner.track_status', message });
+    await settle();
+
+    expect(sentBody().payload.message).toBe(message);
+  });
+
+  it('never cuts an emoji in half when a long message is trimmed', async () => {
+    __http.reply('POST /v1/discovery/events', { status: 202 });
+
+    recordFailureShown({ surface: 'banner.track_status', message: 'a'.repeat(299) + '😀😀😀' });
+    await settle();
+
+    const sent = sentBody().payload.message as string;
+    expect(sent.startsWith('a'.repeat(299))).toBe(true);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent)).toBe(false);
+  });
+
+  it('never cuts an emoji in half when a long error is trimmed', async () => {
+    __http.reply('POST /v1/discovery/events', { status: 202 });
+
+    recordUserAction({ action: 'detail.save', outcome: 'failed', error: 'a'.repeat(299) + '🎵🎵🎵' });
+    await settle();
+
+    const sent = sentBody().payload.error as string;
+    expect(sent.startsWith('a'.repeat(299))).toBe(true);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent)).toBe(false);
+  });
 });
 
 describe('user telemetry: envelope and privacy (small flat payloads, session_id added by recordEvent)', () => {
