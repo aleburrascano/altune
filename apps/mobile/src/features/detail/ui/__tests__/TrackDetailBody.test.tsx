@@ -46,7 +46,6 @@ jest.mock('../DetailScaffold', () => {
   };
 });
 
-// zzz-test
 const TITLE = 'Midnight City';
 const ARTIST = 'M83';
 
@@ -308,7 +307,6 @@ describe('TrackDetailBody retry after a failed save', () => {
 
 describe('TrackDetailBody pins its router calls', () => {
   it('pushes the featuring route naming the tapped featured artist', async () => {
-    // marker
     const push = jest.fn();
     jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
 
@@ -337,7 +335,6 @@ describe('TrackDetailBody pins its router calls', () => {
   });
 
   it('pushes the exact related track that was tapped', async () => {
-    jest.setTimeout(20000);
     const { RelatedTracksSection: RealRelatedTracksSection } = jest.requireActual(
       '../RelatedTracksSection',
     );
@@ -376,7 +373,6 @@ describe('TrackDetailBody pins its router calls', () => {
       </QueryClientProvider>,
     );
 
-    await waitFor(() => screen.debug());
     fireEvent.press(await screen.findByTestId('detail-related-0'));
 
     expect(push).toHaveBeenCalledTimes(1);

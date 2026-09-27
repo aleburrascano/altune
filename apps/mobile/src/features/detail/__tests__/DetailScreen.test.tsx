@@ -111,9 +111,7 @@ describe('DetailScreen back button', () => {
           Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
         };
       });
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       freshDetailHref = require('@shared/lib/detail-handoff').detailHref;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       FreshDetailScreen = require('../ui/DetailScreen').DetailScreen;
     });
 
