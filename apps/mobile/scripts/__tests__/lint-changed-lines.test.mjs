@@ -138,4 +138,52 @@ describe('lint-changed-lines comment gate', { concurrency: true }, () => {
     const r = await lint(root);
     assert.equal(r.status, 2, r.stdout + r.stderr);
   });
+
+  test('flags a comment added to a path with a space', async (t) => {
+    const { root, base } = repo(t, {}, {
+      '__tests__/sp ace/b.test.ts': 'export const a = 1;\n// note\n',
+    });
+    const r = await lint(root, base);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.ok(r.stdout.includes('__tests__/sp ace/b.test.ts:2 '), r.stdout);
+  });
+
+  test('exits 2 when the base looks like a git option', async (t) => {
+    const { root } = repo(t, {}, { '__tests__/a.test.ts': 'export const a = 1;\n' });
+    for (const bad of ['--', '--stat', '--output=/tmp/lint-changed-lines-opt']) {
+      const r = await lint(root, bad);
+      assert.equal(r.status, 2, `${bad}: ${r.stdout}${r.stderr}`);
+    }
+  });
+
+  test('exits 2 when the base ref cannot be resolved', async (t) => {
+    const { root } = repo(t, {}, { '__tests__/a.test.ts': 'export const a = 1;\n' });
+    for (const bad of ['no-such-ref', '0000000000000000000000000000000000000000']) {
+      const r = await lint(root, bad);
+      assert.equal(r.status, 2, `${bad}: ${r.stdout}${r.stderr}`);
+    }
+  });
+
+  test('does not flag a comment moved into a new file', async (t) => {
+    const { root, base } = repo(
+      t,
+      { '__tests__/before.test.ts': '// kept\nexport const a = 1;\n' },
+      {},
+    );
+    rmSync(join(root, '__tests__/before.test.ts'));
+    write(root, { '__tests__/moved-into/after.test.ts': '// kept\nexport const a = 1;\n' });
+    git(root, 'add', '-A');
+    git(root, 'commit', '-qm', 'move');
+    const r = await lint(root, base);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('flags a new comment in a brand-new file', async (t) => {
+    const { root, base } = repo(t, {}, {
+      '__tests__/brand-new.test.ts': '// brand new\nexport const a = 1;\n',
+    });
+    const r = await lint(root, base);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.ok(r.stdout.includes('__tests__/brand-new.test.ts:1 '), r.stdout);
+  });
 });

@@ -5,25 +5,36 @@ import { parser } from "typescript-eslint";
 
 const SUPPRESSION_DIRECTIVE = /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
 
-const base = process.argv[2];
-if (!base) {
+const DIFF_DETECT_FLAGS = ["-M", "-C", "--find-copies-harder"];
+
+const rawBase = process.argv[2];
+if (!rawBase || rawBase.startsWith("-")) {
   process.stderr.write("usage: lint-changed-comments.mjs <base-ref>\n");
   process.exit(2);
 }
 
 const git = (args) => execFileSync("git", args, { encoding: "utf8" });
 
+let base;
+try {
+  base = git(["rev-parse", "--verify", "--end-of-options", `${rawBase}^{commit}`]).trim();
+} catch {
+  process.stderr.write(`lint-changed-comments.mjs: cannot resolve base ref ${rawBase}\n`);
+  process.exit(2);
+}
+
 const changedFiles = () =>
-  git(["diff", "--name-only", "--relative", "--diff-filter=ACMR", base, "--", "."])
-    .split("\n")
+  git(["diff", "--name-only", "-z", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "--relative", base, "--", "."])
+    .split("\0")
+    .filter(Boolean)
     .filter((f) => /\.(ts|tsx|js|mjs|cjs)$/.test(f));
 
 const addedLinesByFile = () => {
   const byFile = new Map();
-  const target = /^\+\+\+ b\/(.+)$/;
+  const target = /^\+\+\+ b\/(.+?)\t?$/;
   const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
   let added = null;
-  for (const line of git(["diff", "-M", "-U0", "--relative", base, "--", "."]).split("\n")) {
+  for (const line of git(["diff", ...DIFF_DETECT_FLAGS, "-U0", "--relative", base, "--", "."]).split("\n")) {
     const t = target.exec(line);
     if (t) {
       added = new Set();

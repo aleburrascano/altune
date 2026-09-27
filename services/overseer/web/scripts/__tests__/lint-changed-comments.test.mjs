@@ -129,4 +129,44 @@ describe.concurrent("lint-changed-comments", { timeout: 60000 }, () => {
     const r = await lint(root);
     expect(r.status, r.stdout + r.stderr).toBe(2);
   });
+
+  test("flags a comment added to a path with a space", async () => {
+    const { root, base } = repo({}, { "src/sp ace/b.ts": "export const a = 1;\n// note\n" });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/sp ace/b.ts:2 ");
+  });
+
+  test("exits 2 when the base looks like a git option", async () => {
+    const { root } = repo({}, { "src/a.ts": "export const a = 1;\n" });
+    for (const bad of ["--", "--stat", "--output=/tmp/lint-changed-comments-opt"]) {
+      const r = await lint(root, bad);
+      expect(r.status, `${bad}: ${r.stdout}${r.stderr}`).toBe(2);
+    }
+  });
+
+  test("exits 2 when the base ref cannot be resolved", async () => {
+    const { root } = repo({}, { "src/a.ts": "export const a = 1;\n" });
+    for (const bad of ["no-such-ref", "0000000000000000000000000000000000000000"]) {
+      const r = await lint(root, bad);
+      expect(r.status, `${bad}: ${r.stdout}${r.stderr}`).toBe(2);
+    }
+  });
+
+  test("does not flag a comment moved into a new file", async () => {
+    const { root, base } = repo({ "src/before.ts": "// kept\nexport const a = 1;\n" }, {});
+    rmSync(join(root, "src/before.ts"));
+    write(root, { "src/moved-into/after.ts": "// kept\nexport const a = 1;\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "move");
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+  });
+
+  test("flags a new comment in a brand-new file", async () => {
+    const { root, base } = repo({}, { "src/brand-new.ts": "// brand new\nexport const a = 1;\n" });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/brand-new.ts:1 ");
+  });
 });

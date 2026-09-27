@@ -22,17 +22,18 @@ var (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
 		fmt.Fprintln(os.Stderr, "usage: go run scripts/lint-changed-comments.go <base-ref> [module-dir]")
 		os.Exit(2)
 	}
-	base := os.Args[1]
+	rawBase := os.Args[1]
 	if len(os.Args) >= 3 {
 		if err := os.Chdir(os.Args[2]); err != nil {
 			fmt.Fprintf(os.Stderr, "chdir %s: %v\n", os.Args[2], err)
 			os.Exit(2)
 		}
 	}
+	base := resolveBase(rawBase)
 	addedByFile := changedAddedLines(base)
 	files := goFiles(addedByFile)
 	if len(files) == 0 {
@@ -53,12 +54,16 @@ func main() {
 	}
 }
 
+func resolveBase(rawBase string) string {
+	return strings.TrimSpace(git("rev-parse", "--verify", "--end-of-options", rawBase+"^{commit}"))
+}
+
 func changedAddedLines(base string) map[string]map[int]bool {
 	byFile := map[string]map[int]bool{}
 	var added map[int]bool
-	for _, line := range strings.Split(git("diff", "-C", "--find-copies-harder", "-U0", "--relative", base), "\n") {
+	for _, line := range strings.Split(git("diff", "-M", "-C", "--find-copies-harder", "-U0", "--relative", base), "\n") {
 		if target := diffTarget.FindStringSubmatch(line); target != nil {
-			path := target[1]
+			path := strings.TrimSuffix(target[1], "\t")
 			if strings.HasPrefix(path, "../") {
 				added = nil
 				continue
