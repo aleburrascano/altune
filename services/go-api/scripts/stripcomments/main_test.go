@@ -318,3 +318,168 @@ func TestStripIsIdempotent(t *testing.T) {
 		t.Fatalf("second strip changed already-stripped source")
 	}
 }
+
+func TestStripKeepsTheSyntaxTreeWhenCommentsSitInsideExpressions(t *testing.T) {
+	cases := []struct {
+		name    string
+		src     string
+		removed int
+	}{
+		{
+			name:    "block comments around a binary operator",
+			src:     "package p\n\nvar a, b = 1, 2\nvar c = a /* x */ + b\nvar d = a/* x */-b\nvar e = a /* x */ - /* y */ -b\n",
+			removed: 4,
+		},
+		{
+			name:    "comments inside a case list",
+			src:     "package p\n\nfunc f(x int) int {\n\tswitch x {\n\tcase 1, // one\n\t\t2: // two\n\t\treturn 1\n\t// dangling\n\tcase 3 /* three */, 4:\n\t\treturn 2\n\t}\n\treturn 0\n}\n",
+			removed: 4,
+		},
+		{
+			name:    "comments after trailing commas in a composite literal",
+			src:     "package p\n\nvar r = []string{\n\t\"a\", /* x\n\t*/\n\t\"b\", // y\n}\n\nvar m = map[string]int{\"k\": 1 /* z */}\n",
+			removed: 3,
+		},
+		{
+			name:    "comments between call arguments",
+			src:     "package p\n\nfunc g(a, b int) {}\n\nfunc f() {\n\tg(1, // first\n\t\t2) // second\n}\n",
+			removed: 2,
+		},
+		{
+			name:    "comments around struct tags",
+			src:     "package p\n\ntype T struct {\n\tA int `json:\"a\"` // trailing\n\tB int /* before */ `json:\"b\"`\n\t// above\n\tC int `json:\"c // not\"`\n}\n",
+			removed: 3,
+		},
+		{
+			name:    "comments after return and a continued condition",
+			src:     "package p\n\nfunc f(a int) bool {\n\tif a == 0 {\n\t\treturn /* x */ true // y\n\t}\n\treturn a == 1 || // z\n\t\ta == 2\n}\n",
+			removed: 3,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, n, err := strip([]byte(tc.src), "expr.go")
+			if err != nil {
+				t.Fatalf("strip: %v", err)
+			}
+			if n != tc.removed {
+				t.Fatalf("removed = %d, want %d\n%s", n, tc.removed, out)
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), "expr.go", out, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("stripped output does not parse: %v\n%s", err, out)
+			}
+			if len(parsed.Comments) != 0 {
+				t.Fatalf("stripped output still has %d comment groups:\n%s", len(parsed.Comments), out)
+			}
+			assertSameNodeSequence(t, "expr.go", []byte(tc.src), out)
+		})
+	}
+}
+
+func TestStripRemovesAPackageDocComment(t *testing.T) {
+	out, n, err := strip([]byte("// Package p does things.\npackage p\n"), "doc.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("removed = %d, want 1", n)
+	}
+	if string(out) != "package p\n" {
+		t.Fatalf("got %q, want %q", out, "package p\n")
+	}
+}
+
+func TestStripKeepsEveryGoColonDirectiveButNotASpacedLookalike(t *testing.T) {
+	src := "package p\n\n//go:generate stringer -type=Kind\n// go:generate not a directive\n//go:noinline\nfunc f() {}\n"
+	out, n, err := strip([]byte(src), "gen.go")
+	if err != nil {
+		t.Fatalf("strip: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("removed = %d, want 1\n%s", n, out)
+	}
+	want := "package p\n\n//go:generate stringer -type=Kind\n//go:noinline\nfunc f() {}\n"
+	if string(out) != want {
+		t.Fatalf("got %q, want %q", out, want)
+	}
+}
+
+func TestRunKeepsABuildConstraintGluedToAPackageDocAndTheFileStaysExcluded(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module sample\n\ngo 1.26.6\n")
+	writeFile(t, dir, "main.go", "package main\n\n// main runs.\nfunc main() {}\n")
+	writeFile(t, dir, "tool.go", "//go:build ignore\n// Tool is a standalone generator.\npackage main\n\nfunc main() {}\n")
+
+	var stdout bytes.Buffer
+	if code := run([]string{dir}, &stdout); code != 0 {
+		t.Fatalf("run exit = %d, output: %s", code, stdout.String())
+	}
+
+	tool, err := os.ReadFile(filepath.Join(dir, "tool.go"))
+	if err != nil {
+		t.Fatalf("read tool.go: %v", err)
+	}
+	if !strings.HasPrefix(string(tool), "//go:build ignore\n") {
+		t.Fatalf("tool.go lost its build constraint:\n%s", tool)
+	}
+	if strings.Contains(string(tool), "standalone generator") {
+		t.Fatalf("tool.go kept its package doc:\n%s", tool)
+	}
+
+	runGo(t, dir, "build", "./...")
+	runGo(t, dir, "vet", "./...")
+}
+
+func TestRunStripsTestFilesSkipsVendorTestdataNodeModulesAndLeavesCommentFreeFilesByteForByte(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"vendor/v", "testdata", "node_modules/n", "sub"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", sub, err)
+		}
+	}
+	skipped := "package x\n\n// keep me\nfunc X() {}\n"
+	for _, sub := range []string{"vendor/v", "testdata", "node_modules/n"} {
+		writeFile(t, dir, filepath.Join(sub, "x.go"), skipped)
+	}
+	writeFile(t, dir, "sub/a.go", "package sub\n\n// a\nfunc A() {}\n")
+	writeFile(t, dir, "sub/a_test.go", "package sub\n\nimport \"testing\"\n\n// t\nfunc TestA(t *testing.T) {}\n")
+	crlf := "package sub\r\n\r\nfunc C() int {\r\n\treturn 1\r\n}\r\n"
+	writeFile(t, dir, "sub/crlf.go", crlf)
+	unformatted := "package sub\nfunc U()  int {\n  return 1\n}\n"
+	writeFile(t, dir, "sub/unformatted.go", unformatted)
+
+	var stdout bytes.Buffer
+	if code := run([]string{dir}, &stdout); code != 0 {
+		t.Fatalf("run exit = %d, output: %s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "stripped 2 comments in 2 files") {
+		t.Fatalf("summary = %q, want it to report 2 comments in 2 files", stdout.String())
+	}
+
+	for _, sub := range []string{"vendor/v", "testdata", "node_modules/n"} {
+		got, err := os.ReadFile(filepath.Join(dir, sub, "x.go"))
+		if err != nil {
+			t.Fatalf("read %s: %v", sub, err)
+		}
+		if string(got) != skipped {
+			t.Fatalf("%s/x.go was rewritten:\n%s", sub, got)
+		}
+	}
+	testFile, err := os.ReadFile(filepath.Join(dir, "sub/a_test.go"))
+	if err != nil {
+		t.Fatalf("read a_test.go: %v", err)
+	}
+	if strings.Contains(string(testFile), "// t") {
+		t.Fatalf("a_test.go was not stripped:\n%s", testFile)
+	}
+	for name, want := range map[string]string{"sub/crlf.go": crlf, "sub/unformatted.go": unformatted} {
+		got, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if string(got) != want {
+			t.Fatalf("%s has no comments but was rewritten: %q", name, got)
+		}
+	}
+}
