@@ -289,7 +289,11 @@ func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error
 }
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
-	identity, err := s.recordings.Resolve(ctx, ports.RecordingQuery{
+	ResolveIdentity(ctx, s.recordings, s.identifier, ac)
+}
+
+func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, identifier ports.AudioIdentifier, ac *AcquisitionContext) {
+	identity, err := recordings.Resolve(ctx, ports.RecordingQuery{
 		Title:  ac.Track.Title,
 		Artist: ac.Track.Artist,
 		Album:  ac.Track.Album,
@@ -303,7 +307,11 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 	if identity.IsZero() {
 		return
 	}
+	adoptIdentity(ctx, ac, identity)
+	resolveExpectedCluster(ctx, identifier, ac)
+}
 
+func adoptIdentity(ctx context.Context, ac *AcquisitionContext, identity ports.RecordingIdentity) {
 	ac.Identity = identity
 	if ac.Track.Duration <= 0 && identity.Duration > 0 {
 		ac.Track.Duration = identity.Duration
@@ -313,15 +321,14 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 	if ac.Track.ISRC == "" && identity.ISRC != "" {
 		ac.Track.ISRC = identity.ISRC
 	}
-	s.resolveExpectedCluster(ctx, ac)
 }
 
-func (s *AcquireTrackAudioService) resolveExpectedCluster(ctx context.Context, ac *AcquisitionContext) {
-	if s.identifier == nil || ac.Identity.MBID == "" {
+func resolveExpectedCluster(ctx context.Context, identifier ports.AudioIdentifier, ac *AcquisitionContext) {
+	if identifier == nil || ac.Identity.MBID == "" {
 		return
 	}
 
-	cluster, err := s.identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
+	cluster, err := identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.expected_cluster_failed",
 			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", logSafeError(err))

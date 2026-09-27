@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 
+	"altune/go-api/internal/acquisition/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 )
@@ -17,6 +18,7 @@ type Outcome struct {
 	Err       string
 	Pass      bool
 	Reason    string
+	Pending   bool
 }
 
 func Run(ctx context.Context, kase Case) Outcome {
@@ -27,14 +29,48 @@ func Run(ctx context.Context, kase Case) Outcome {
 			ExcludeKeys:   service.SourceKeys(kase.ExcludeURLs),
 			SkipTopRanked: kase.SkipTopRanked,
 		},
-		Identity: identityFor(kase),
 	}
+	resolveIdentity(ctx, kase, p, ac)
 
 	steps := service.CoreSteps(service.NewSourceRegistry(p), nil, p, p, p)
 	runErr := service.RunPipeline(ctx, steps, ac)
 	service.CleanupTemp(ctx, ac)
+	return outcomeOf(kase, ac, runErr)
+}
 
-	out := Outcome{Case: kase, Failed: runErr != nil}
+func resolveIdentity(ctx context.Context, kase Case, p *casePorts, ac *service.AcquisitionContext) {
+	if kase.Track.Resolution == nil {
+		ac.Identity = identityFor(kase)
+		return
+	}
+	service.ResolveIdentity(ctx, resolverFor(kase), p, ac)
+}
+
+func resolverFor(kase Case) *discoverybridge.RecordingResolver {
+	res := kase.Track.Resolution
+	isrcRecordings := make([]discoverybridge.RecordedISRCRecording, 0, len(res.ISRCRecordings))
+	for _, rec := range res.ISRCRecordings {
+		isrcRecordings = append(isrcRecordings, discoverybridge.RecordedISRCRecording{MBID: rec.MBID, Duration: rec.Duration})
+	}
+	return discoverybridge.NewRecordedResolver(searchHitFor(kase), isrcRecordings)
+}
+
+func searchHitFor(kase Case) *discoverybridge.RecordedSearchHit {
+	search := kase.Track.Resolution.Search
+	if search == nil {
+		return nil
+	}
+	return &discoverybridge.RecordedSearchHit{
+		Title:    kase.Track.Title,
+		Artist:   kase.Track.Artist,
+		ISRC:     search.ISRC,
+		MBID:     search.MBID,
+		Duration: search.Duration,
+	}
+}
+
+func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error) Outcome {
+	out := Outcome{Case: kase, Failed: runErr != nil, Pending: kase.isPending()}
 	if runErr != nil {
 		out.Err = runErr.Error()
 	}
@@ -44,7 +80,6 @@ func Run(ctx context.Context, kase Case) Outcome {
 	if runErr == nil && ac.Selected != nil {
 		out.Stored = ac.Selected.URL
 	}
-
 	out.Pass, out.Reason = judge(kase, out)
 	return out
 }

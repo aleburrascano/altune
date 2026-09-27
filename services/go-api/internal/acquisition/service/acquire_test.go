@@ -419,6 +419,36 @@ func TestResolveIdentity_PassesTrackMetadataToResolver(t *testing.T) {
 	}
 }
 
+func TestResolveIdentity_WithResolvedMBIDAsksIdentifierForItsCluster(t *testing.T) {
+	identifier := &stubIdentifier{cluster: []string{"acoustid-1"}}
+	svc := NewAcquireTrackAudioService(
+		newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
+		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mbid-1"}}),
+		WithAudioIdentifier(identifier),
+	)
+	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A"}}
+
+	svc.resolveIdentity(context.Background(), ac)
+
+	if len(ac.Identity.AcoustIDs) != 1 || ac.Identity.AcoustIDs[0] != "acoustid-1" {
+		t.Errorf("identity.AcoustIDs = %v, want the identifier's cluster recorded", ac.Identity.AcoustIDs)
+	}
+}
+
+func TestResolveIdentity_WithoutAnIdentifierNeverAsksForACluster(t *testing.T) {
+	svc := NewAcquireTrackAudioService(
+		newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
+		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mbid-1"}}),
+	)
+	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A"}}
+
+	svc.resolveIdentity(context.Background(), ac)
+
+	if len(ac.Identity.AcoustIDs) != 0 {
+		t.Errorf("identity.AcoustIDs = %v, want none without a configured identifier", ac.Identity.AcoustIDs)
+	}
+}
+
 func TestExecute_WithoutResolverStillRuns(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()

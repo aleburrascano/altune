@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "id": "rw-drinking-in-la-remix-mbid-anchored-to-isrc",
+      "class": "RW",
+      "note": "staging track 3b0fe67b (#3129): discovery's merged result paired the album ISRC with the 307s '(Who Mix?)' remix MBID d3dc2825, whose AcoustID cluster holds only the remix. MusicBrainz lists only the album recording 5d6efd30 for the ISRC, and every correct upload fingerprints to AcoustID 5d5d307d, which links it. Without the ISRC anchor every correct candidate is rejected as fingerprint",
+      "track": {
+        "title": "Drinking in L.A.", "artist": "Bran Van 3000", "duration": 236, "isrc": "CAA509814003",
+        "resolution": {
+          "search": { "mbid": "d3dc2825-20c0-4a4f-a963-baa589049146", "isrc": "CAA509814003", "duration": 236 },
+          "isrc_recordings": [ { "mbid": "5d6efd30-23c6-4a9b-85af-706ea2df9022", "duration": 236 } ]
+        }
+      },
+      "candidates": [
+        { "title": "Drinking in L.A.", "url": "https://www.youtube.com/watch?v=-_5yNLsZ5Pk", "channel": "Bran Van 3000 - Topic", "categories": ["Music"], "duration": 237, "acoustid": "5d5d307d-c06e-42c6-928c-b3f7156755f8", "recording_mbids": ["5d6efd30-23c6-4a9b-85af-706ea2df9022", "rw-drinking-edit-220s", "rw-thinking-in-la-342s"], "correct": true },
+        { "title": "Bran Van 3000 - Drinking in L.A. (Official Video)", "url": "yt:drinking-official-video", "channel": "Bran Van 3000", "categories": ["Music"], "duration": 238, "acoustid": "5d5d307d-c06e-42c6-928c-b3f7156755f8", "recording_mbids": ["5d6efd30-23c6-4a9b-85af-706ea2df9022", "rw-drinking-edit-220s", "rw-thinking-in-la-342s"], "correct": true },
+        { "title": "Drinking in L.A. (Who Mix?)", "url": "yt:drinking-who-mix", "channel": "Bran Van 3000 - Topic", "categories": ["Music"], "duration": 307, "acoustid": "6d7a6c98", "recording_mbids": ["d3dc2825-20c0-4a4f-a963-baa589049146"] },
+        { "title": "Drinking in L.A.", "url": "https://soundcloud.com/bran-van-3000/drinking-in-l-a-3", "channel": "Bran Van 3000", "duration": 236, "download_fails": true }
+      ]
+    },
+    {
+      "id": "rw-rollacoasta-instrumental-top-ranked",
+      "class": "RW",
+      "pending": "selection vetoes unrequested versions",
+      "note": "staging: stored as verified from the instrumental, which fingerprints to the vocal recording b29ac684 at 0.908. Only the title's unrequested (Instrumental) qualifier separates it from the clean upload",
+      "track": {
+        "title": "Rollacoasta", "artist": "prettifun", "duration": 158.67, "isrc": "USC4R2668964",
+        "resolution": {
+          "search": { "mbid": "b29ac684", "isrc": "USC4R2668964", "duration": 159 },
+          "isrc_recordings": [ { "mbid": "b29ac684", "duration": 159 } ]
+        }
+      },
+      "candidates": [
+        { "title": "prettifun - Rollacoasta (Instrumental) [100% Accurate]", "url": "https://www.youtube.com/watch?v=C5xk0CyIDyo", "channel": "ProdADN", "categories": ["Music"], "duration": 159, "acoustid": "rw-rollacoasta-vocal", "recording_mbids": ["b29ac684"] },
+        { "title": "Rollacoasta", "url": "yt:rollacoasta-clean", "channel": "prettifun", "categories": ["Music"], "duration": 159, "acoustid": "rw-rollacoasta-vocal", "recording_mbids": ["b29ac684"], "correct": true }
+      ]
+    },
+    {
+      "id": "rw-speed-demon-instrumental-only",
+      "class": "RW",
+      "pending": "selection vetoes unrequested versions",
+      "note": "staging: stored as corroborated from an instrumental with an unknown fingerprint and a matching length. The only candidate is an unrequested version, so nothing may be stored",
+      "track": { "title": "SPEED DEMON", "artist": "Lucy Bedroque", "duration": 146 },
+      "candidates": [
+        { "title": "Lucy Bedroque - SPEED DEMON (Instrumental)", "url": "https://soundcloud.com/maisonnnn/lucy-bedroque-speed-demon", "channel": "maisonnnn", "duration": 146 }
+      ]
+    }
+  ]
+}
