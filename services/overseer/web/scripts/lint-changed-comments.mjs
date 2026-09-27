@@ -13,7 +13,7 @@ if (!rawBase || rawBase.startsWith("-")) {
   process.exit(2);
 }
 
-const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+const git = (args) => execFileSync("git", ["-c", "core.quotePath=false", ...args], { encoding: "utf8" });
 
 let base;
 try {
@@ -23,30 +23,32 @@ try {
   process.exit(2);
 }
 
-const changedFiles = () =>
-  git(["diff", "--name-only", "-z", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "--relative", base, "--", "."])
+const changedFilePaths = () =>
+  git(["diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "--relative", base, "--", "."])
     .split("\0")
-    .filter(Boolean)
-    .filter((f) => /\.(ts|tsx|js|mjs|cjs)$/.test(f));
+    .filter(Boolean);
+
+const changedFiles = () => changedFilePaths().filter((f) => /\.(ts|tsx|js|mjs|cjs)$/.test(f));
 
 const addedLinesByFile = () => {
-  const byFile = new Map();
-  const target = /^\+\+\+ b\/(.+?)\t?$/;
+  const allFiles = changedFilePaths();
+  if (allFiles.length === 0) return new Map();
   const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-  let added = null;
-  for (const line of git(["diff", ...DIFF_DETECT_FLAGS, "-U0", "--relative", base, "--", "."]).split("\n")) {
-    const t = target.exec(line);
-    if (t) {
-      added = new Set();
-      byFile.set(t[1], added);
-      continue;
+  const hunksOf = (block) => {
+    const added = new Set();
+    for (const line of block.split("\n")) {
+      const m = hunk.exec(line);
+      if (!m) continue;
+      const start = Number(m[1]);
+      const count = m[2] === undefined ? 1 : Number(m[2]);
+      for (let n = start; n < start + count; n += 1) added.add(n);
     }
-    const m = hunk.exec(line);
-    if (!m || !added) continue;
-    const start = Number(m[1]);
-    const count = m[2] === undefined ? 1 : Number(m[2]);
-    for (let n = start; n < start + count; n += 1) added.add(n);
-  }
+    return added;
+  };
+  const patch = git(["diff", "--text", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "-U0", "--relative", base, "--", "."]);
+  const blocks = patch.split(/^diff --git .*$/m).slice(1);
+  const byFile = new Map();
+  allFiles.forEach((file, i) => byFile.set(file, hunksOf(blocks[i] ?? "")));
   return byFile;
 };
 

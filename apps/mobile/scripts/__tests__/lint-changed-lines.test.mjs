@@ -292,4 +292,36 @@ describe('lint-changed-lines comment gate on hostile paths and bases', { concurr
     assert.equal(r.status, 1, r.stdout + r.stderr);
     assert.ok(r.stdout.includes('__tests__/a.test.ts:2 '), r.stdout);
   });
+
+  for (const name of ['ünï cödé', 'ta\tb', 'q"uo', 'back\\slash', 'new\nline']) {
+    test(`flags a comment added to a file named ${JSON.stringify(name)}`, async (t) => {
+      const { root, base } = repo(t, {}, { [`__tests__/${name}.test.ts`]: 'export const a = 1;\n// note\n' });
+      const r = await lint(root, base);
+      assert.equal(r.status, 1, r.stdout + r.stderr);
+    });
+  }
+
+  test('names a non-ASCII path as it is on disk', async (t) => {
+    const { root, base } = repo(t, {}, { '__tests__/ünï cödé.test.ts': 'export const a = 1;\n// note\n' });
+    const r = await lint(root, base);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.ok(r.stdout.includes('__tests__/ünï cödé.test.ts:2 '), r.stdout);
+  });
+
+  test('flags a comment added to a file that .gitattributes marks binary', async (t) => {
+    const { root, base } = repo(t, { '__tests__/a.test.ts': 'export const a = 1;\n' }, {
+      '.gitattributes': '*.ts binary\n',
+      '__tests__/a.test.ts': 'export const a = 1;\n// note\n',
+    });
+    const r = await lint(root, base);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+  });
+
+  test('flags a comment added to a file with a NUL byte', async (t) => {
+    const { root, base } = repo(t, {}, {
+      '__tests__/nul.test.ts': 'export const a = "\0";\n// note\n',
+    });
+    const r = await lint(root, base);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+  });
 });

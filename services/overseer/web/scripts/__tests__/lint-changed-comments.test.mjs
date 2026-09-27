@@ -274,4 +274,34 @@ describe.concurrent("lint-changed-comments on hostile paths and bases", { timeou
     expect(r.status, r.stdout + r.stderr).toBe(1);
     expect(r.stdout).toContain("src/a.ts:2 ");
   });
+
+  for (const name of ["ünï cödé", "ta\tb", 'q"uo', "back\\slash", "new\nline"]) {
+    test(`flags a comment added to a file named ${JSON.stringify(name)}`, async () => {
+      const { root, base } = repo({}, { [`src/${name}.ts`]: "export const a = 1;\n// note\n" });
+      const r = await lint(root, base);
+      expect(r.status, r.stdout + r.stderr).toBe(1);
+    });
+  }
+
+  test("names a non-ASCII path as it is on disk", async () => {
+    const { root, base } = repo({}, { "src/ünï cödé.ts": "export const a = 1;\n// note\n" });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/ünï cödé.ts:2 ");
+  });
+
+  test("flags a comment added to a file that .gitattributes marks binary", async () => {
+    const { root, base } = repo({ "src/a.ts": "export const a = 1;\n" }, {
+      ".gitattributes": "*.ts binary\n",
+      "src/a.ts": "export const a = 1;\n// note\n",
+    });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+  });
+
+  test("flags a comment added to a file with a NUL byte", async () => {
+    const { root, base } = repo({}, { "src/nul.ts": 'export const a = "\0";\n// note\n' });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+  });
 });
