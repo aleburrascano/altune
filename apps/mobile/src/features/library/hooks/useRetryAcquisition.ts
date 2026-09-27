@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
@@ -22,7 +21,8 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
-import { classifyLibraryError, failureTail } from '../state';
+import { alertLibraryFailure } from '../libraryFailureAlert';
+import { classifyLibraryError } from '../state';
 
 type PriorAcquisition = { prior: AcquisitionTransition | undefined };
 type RetryContext = PriorAcquisition & { epoch: number };
@@ -57,7 +57,7 @@ function recoverFailedRetry(queryClient: QueryClient, entryPoint: RetryEntryPoin
     if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
     logTrackMutationFailure('retry acquisition', retryEndpoint, trackId, error);
     restorePrior(queryClient, trackId, context);
-    Alert.alert('Retry failed', `Could not restart acquisition. ${failureTail(failure)}`);
+    alertLibraryFailure('Retry failed', 'Could not restart acquisition.', failure);
   };
 }
 

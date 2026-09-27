@@ -194,6 +194,20 @@ describe('track mutation hooks — respond to the failure class, not one generic
     expect(useTrackStatusStore.getState().statuses['t1']).toBeUndefined();
     expect(alertSpy).toHaveBeenCalledWith(...vanished);
   });
+
+  it('a retry refused for auth asks to sign in instead of a plain retry', async () => {
+    const { wrapper } = setup();
+    mockRetryAcquisition.mockRejectedValue(new ApiError(401, 'unauthorized'));
+
+    const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Retry failed',
+      'Could not restart acquisition. Sign in again, then retry.',
+    );
+  });
 });
 
 describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {

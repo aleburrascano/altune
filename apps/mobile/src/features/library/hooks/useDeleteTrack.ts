@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
@@ -19,7 +18,8 @@ import {
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
-import { classifyLibraryError, failureTail } from '../state';
+import { alertLibraryFailure } from '../libraryFailureAlert';
+import { classifyLibraryError } from '../state';
 
 type RemovedTrack = { placements: TrackCachePlacement[]; status: TrackStatus | undefined };
 
@@ -56,7 +56,7 @@ function undoFailedRemoval(queryClient: QueryClient) {
     if (failure === 'not-found') return unpin(trackId);
     logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
-    Alert.alert('Delete failed', `Could not remove the track. ${failureTail(failure)}`);
+    alertLibraryFailure('Delete failed', 'Could not remove the track.', failure);
   };
 }
 
