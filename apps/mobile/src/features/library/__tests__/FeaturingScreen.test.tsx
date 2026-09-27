@@ -116,6 +116,20 @@ describe('a failed "Explore artist" search', () => {
     expect(loggedText()).not.toContain(SECRET);
   });
 
+  it('asks the user to sign in again when the search is refused for auth', async () => {
+    mockSearchDiscovery.mockRejectedValue(new ApiError(403, 'forbidden'));
+    render(<FeaturingScreen />, { wrapper });
+
+    await tapExplore();
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Search failed',
+        'Could not search for Guest Star. Sign in again, then retry.',
+      ),
+    );
+  });
+
   it('offers the search again once the failed one has settled', async () => {
     mockSearchDiscovery.mockRejectedValue(new NetworkError('transport', 'offline'));
     render(<FeaturingScreen />, { wrapper });

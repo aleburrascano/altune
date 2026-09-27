@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { searchDiscovery, type DiscoveryResult } from '@shared/api-client/discovery';
 import { detailHref } from '@shared/lib/detail-handoff';
 
 import { failureLogFields } from '../failureLogFields';
-import { classifyLibraryError, failureTail } from '../state';
+import { alertLibraryFailure } from '../libraryFailureAlert';
+import { classifyLibraryError } from '../state';
 
 type DetailPath = '/discover/detail';
 
@@ -23,8 +23,7 @@ function reportExploreFailure(artist: string, error: unknown): void {
   console.warn('[library] featuring explore search failed', {
     ...failureLogFields(error),
   });
-  const tail = failureTail(classifyLibraryError(error));
-  Alert.alert('Search failed', `Could not search for ${artist}. ${tail}`);
+  alertLibraryFailure('Search failed', `Could not search for ${artist}.`, classifyLibraryError(error));
 }
 
 async function searchTopMatch(artist: string): Promise<DiscoveryResult | undefined> {

@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
@@ -10,7 +9,8 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
-import { classifyLibraryError, failureTail } from '../state';
+import { alertLibraryFailure } from '../libraryFailureAlert';
+import { classifyLibraryError } from '../state';
 
 const reacquireEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/reacquire`;
 
@@ -27,7 +27,7 @@ function reportFailedReacquire(queryClient: QueryClient) {
     const failure = classifyLibraryError(error);
     if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
     logTrackMutationFailure('re-acquire track', reacquireEndpoint, trackId, error);
-    Alert.alert('Re-acquire failed', `${REACQUIRE_FAILED} ${failureTail(failure)}`);
+    alertLibraryFailure('Re-acquire failed', REACQUIRE_FAILED, failure);
   };
 }
 
