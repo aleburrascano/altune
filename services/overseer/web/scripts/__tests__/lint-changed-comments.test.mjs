@@ -170,3 +170,108 @@ describe.concurrent("lint-changed-comments", { timeout: 60000 }, () => {
     expect(r.stdout).toContain("src/brand-new.ts:1 ");
   });
 });
+
+describe.concurrent("lint-changed-comments on hostile paths and bases", { timeout: 60000 }, () => {
+  test("never lets an option-shaped base write a file", async () => {
+    const { existsSync } = await import("node:fs");
+    const { root } = repo({}, { "src/a.ts": "export const a = 1;\n" });
+    const out = join(root, "written-by-git");
+    const r = await lint(root, `--output=${out}`);
+    expect(r.status, r.stdout + r.stderr).toBe(2);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  test("exits 2 when the base is a single-dash option", async () => {
+    const { root } = repo({}, { "src/a.ts": "export const a = 1;\n// note\n" });
+    for (const bad of ["-", "-R", "-p", "-Snote"]) {
+      const r = await lint(root, bad);
+      expect(r.status, `${bad}: ${r.stdout}${r.stderr}`).toBe(2);
+    }
+  });
+
+  test("exits 2 when the base is a range, a tree or a blob rather than one commit", async () => {
+    const { root, base } = repo({}, { "src/a.ts": "export const a = 1;\n// note\n" });
+    for (const bad of [`${base}..HEAD`, "HEAD...HEAD", "HEAD..HEAD", "HEAD^{tree}", "HEAD:src/a.ts"]) {
+      const r = await lint(root, bad);
+      expect(r.status, `${bad}: ${r.stdout}${r.stderr}`).toBe(2);
+    }
+  });
+
+  test("flags a comment added to a file renamed in the same change", async () => {
+    const body = "export const a = 1;\nexport const b = 2;\nexport const c = 3;\nexport const d = 4;\nexport const e = 5;\n";
+    const { root, base } = repo({ "src/old name.ts": body }, {});
+    rmSync(join(root, "src/old name.ts"));
+    write(root, { "src/new name.ts": `${body}// note\n` });
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "rename with edit");
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/new name.ts:6 ");
+  });
+
+  test("flags a comment added to a copy of an unchanged file", async () => {
+    const body = "// kept\nexport const a = 1;\nexport const b = 2;\nexport const c = 3;\nexport const d = 4;\n";
+    const { root, base } = repo({ "src/source.ts": body }, { "src/copy.ts": `${body}// added\n` });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/copy.ts:6 ");
+    expect(r.stdout).not.toContain("src/copy.ts:1 ");
+  });
+
+  test("does not flag the comments of an unchanged file copied as is", async () => {
+    const body = "// kept\nexport const a = 1;\nexport const b = 2;\nexport const c = 3;\nexport const d = 4;\n";
+    const { root, base } = repo({ "src/source.ts": body }, { "src/copy.ts": body });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+  });
+
+  test("flags a new file whose comment repeats the text of an unrelated base comment", async () => {
+    const { root, base } = repo(
+      { "src/old.ts": "// note\nexport const a = 1;\n" },
+      { "src/other.ts": "export const z = 99;\n// note\nexport const y = 98;\n" },
+    );
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/other.ts:2 ");
+  });
+
+  test("passes a change that only deletes a file, even one with a space in its path", async () => {
+    const { root, base } = repo({ "src/go ne.ts": "// old\nexport const a = 1;\n" }, {});
+    git(root, "rm", "-q", "src/go ne.ts");
+    git(root, "commit", "-qm", "delete");
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+  });
+
+  test("passes an empty diff", async () => {
+    const { root } = repo({ "src/a.ts": "// old\nexport const a = 1;\n" }, {});
+    const r = await lint(root, "HEAD");
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+  });
+
+  test("flags a comment against a base with no common ancestor", async () => {
+    const { root } = repo({}, {});
+    const branch = git(root, "rev-parse", "--abbrev-ref", "HEAD");
+    git(root, "checkout", "-q", "--orphan", "unrelated");
+    git(root, "rm", "-rqf", ".");
+    write(root, { "src/keep.ts": "export const keep = 0;\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "unrelated base");
+    const orphan = git(root, "rev-parse", "HEAD");
+    git(root, "checkout", "-q", branch);
+    write(root, { "src/a.ts": "export const a = 1;\n// note\n" });
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "change");
+    const r = await lint(root, orphan);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/a.ts:2 ");
+  });
+
+  test("flags a comment added to a tracked file but not yet committed", async () => {
+    const { root, base } = repo({ "src/a.ts": "export const a = 1;\n" }, {});
+    write(root, { "src/a.ts": "export const a = 1;\n// note\n" });
+    const r = await lint(root, base);
+    expect(r.status, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain("src/a.ts:2 ");
+  });
+});
