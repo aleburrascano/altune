@@ -692,3 +692,79 @@ func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 		t.Fatalf("no subscriber slot came back within %s: a stalled client still holds it", 20*idle)
 	}
 }
+
+func stoppableEventsDeps(t *testing.T) (Deps, *eventtap.Tap, func()) {
+	t.Helper()
+	tap := eventtap.New(events.NewInProcessBus())
+	feed := eventtap.NewFeed()
+	ctx, cancel := context.WithCancel(context.Background())
+	feed.Start(ctx, tap)
+	stop := func() {
+		cancel()
+		feed.Shutdown(context.Background())
+	}
+	t.Cleanup(stop)
+	return Deps{Events: feed}, tap, stop
+}
+
+func TestStreamEvents_EndsWhenTheFeedStopsWhileIdle(t *testing.T) {
+	deps, _, stopFeed := stoppableEventsDeps(t)
+	returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+	assertStillOpen(t, returned, "events stream ended before the feed stopped")
+
+	stopFeed()
+
+	assertEndsWithin(t, returned, 2*time.Second, "events stream outlived its feed")
+}
+
+func TestStreamEvents_EndsWhenTheFeedStopsMidSend(t *testing.T) {
+	deps, tap, stopFeed := stoppableEventsDeps(t)
+	returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+	assertStillOpen(t, returned, "events stream ended before the feed stopped")
+	publishing := make(chan struct{})
+	quit := make(chan struct{})
+	go func() {
+		defer close(publishing)
+		user := shared.NewUserId(uuid.New())
+		for {
+			select {
+			case <-quit:
+				return
+			default:
+				tap.Publish(context.Background(), user, "mid-send", nil)
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		close(quit)
+		<-publishing
+	})
+
+	stopFeed()
+
+	assertEndsWithin(t, returned, 2*time.Second, "events stream kept running while events were still being published after its feed stopped")
+}
+
+func TestStreamEvents_OpenedAfterTheFeedStoppedDoesNotHang(t *testing.T) {
+	deps, _, stopFeed := stoppableEventsDeps(t)
+	stopFeed()
+
+	returned := serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+
+	assertEndsWithin(t, returned, 2*time.Second, "events stream opened on a stopped feed stayed open")
+}
+
+func TestStreamEvents_EveryOpenStreamEndsWhenTheFeedStops(t *testing.T) {
+	deps, _, stopFeed := stoppableEventsDeps(t)
+	streams := make([]<-chan struct{}, 0, eventtap.MaxSubscribers)
+	for i := 0; i < eventtap.MaxSubscribers; i++ {
+		streams = append(streams, serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil)))
+	}
+	assertStillOpen(t, streams[0], "events stream ended before the feed stopped")
+
+	stopFeed()
+
+	for _, returned := range streams {
+		assertEndsWithin(t, returned, 2*time.Second, "one of the open events streams outlived its feed")
+	}
+}
