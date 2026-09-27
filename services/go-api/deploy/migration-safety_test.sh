@@ -265,6 +265,175 @@ DIR=$(mktemp -d -p "$WORK")
 run_case "$DIR"
 expect_rc 0
 
+CASE="ADD COLUMN NOT NULL split across lines fails"
+DIR=$(mktemp -d -p "$WORK")
+printf '%s\n%s\n' 'ALTER TABLE widgets ADD COLUMN weight INT' '    NOT NULL;' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 1
+expect_out "ADD COLUMN ... NOT NULL without DEFAULT needs expand-contract"
+
+CASE="ADD COLUMN NOT NULL with its DEFAULT on the next line passes"
+DIR=$(mktemp -d -p "$WORK")
+printf '%s\n%s\n' 'ALTER TABLE widgets ADD COLUMN weight INT NOT NULL' '    DEFAULT 0;' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 0
+
+CASE="ADD COLUMN NOT NULL with its DEFAULT on the next CRLF line passes"
+DIR=$(mktemp -d -p "$WORK")
+printf 'ALTER TABLE widgets ADD COLUMN weight INT NOT NULL\r\n    DEFAULT 0;\r\n' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 0
+
+CASE="DROP and TABLE on separate lines fails"
+DIR=$(mktemp -d -p "$WORK")
+printf '%s\n%s\n' 'DROP' 'TABLE widgets;' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 1
+expect_out "DROP TABLE needs expand-contract"
+
+CASE="a column named renamed_at passes even though it contains rename"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD COLUMN renamed_at TIMESTAMP NOT NULL DEFAULT now();'
+run_case "$DIR"
+expect_rc 0
+
+CASE="a table named rename_log passes even though it contains rename"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'CREATE TABLE rename_log (id BIGSERIAL PRIMARY KEY);'
+run_case "$DIR"
+expect_rc 0
+
+CASE="ALTER TYPE RENAME VALUE still fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql "ALTER TYPE mood RENAME VALUE 'sad' TO 'blue';"
+run_case "$DIR"
+expect_rc 1
+expect_out "RENAME needs expand-contract"
+
+CASE="a DROP-sounding phrase inside a string literal is ignored"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql "INSERT INTO logs (msg) VALUES ('we will drop table later');"
+run_case "$DIR"
+expect_rc 0
+
+CASE="a -- inside a string literal does not swallow the statement that follows"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql "INSERT INTO logs (msg) VALUES ('a--b'); DROP TABLE w;"
+run_case "$DIR"
+expect_rc 1
+expect_out "DROP TABLE needs expand-contract"
+
+CASE="a pattern inside a block comment is ignored"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql '/* DROP TABLE w */ SELECT 1;'
+run_case "$DIR"
+expect_rc 0
+
+CASE="a block comment containing -- does not hide the statement that follows"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql '/* -- */ DROP TABLE w;'
+run_case "$DIR"
+expect_rc 1
+expect_out "DROP TABLE needs expand-contract"
+
+CASE="TRUNCATE fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'TRUNCATE widgets;'
+run_case "$DIR"
+expect_rc 1
+expect_out "TRUNCATE needs expand-contract"
+
+CASE="ALTER COLUMN ... TYPE fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ALTER COLUMN name TYPE varchar(50);'
+run_case "$DIR"
+expect_rc 1
+expect_out "ALTER COLUMN ... TYPE needs expand-contract"
+
+CASE="ALTER COLUMN ... SET DATA TYPE fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ALTER COLUMN name SET DATA TYPE varchar(50);'
+run_case "$DIR"
+expect_rc 1
+expect_out "ALTER COLUMN ... TYPE needs expand-contract"
+
+CASE="DROP TYPE, DROP VIEW, DROP MATERIALIZED VIEW and DROP SCHEMA fail"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'DROP TYPE mood;'
+write_fixture "$DIR" 027_x.sql 'DROP VIEW v;'
+write_fixture "$DIR" 028_x.sql 'DROP MATERIALIZED VIEW mv;'
+write_fixture "$DIR" 029_x.sql 'DROP SCHEMA s;'
+run_case "$DIR"
+expect_rc 1
+expect_out "026_x.sql: DROP TYPE needs expand-contract"
+expect_out "027_x.sql: DROP VIEW needs expand-contract"
+expect_out "028_x.sql: DROP MATERIALIZED VIEW needs expand-contract"
+expect_out "029_x.sql: DROP SCHEMA needs expand-contract"
+
+CASE="ALTER TABLE ... DROP without the word COLUMN fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets DROP legacy;'
+run_case "$DIR"
+expect_rc 1
+expect_out "DROP COLUMN needs expand-contract"
+
+CASE="ALTER TABLE ... ADD ... NOT NULL without the word COLUMN and without DEFAULT fails"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD weight INT NOT NULL;'
+run_case "$DIR"
+expect_rc 1
+expect_out "ADD COLUMN ... NOT NULL without DEFAULT needs expand-contract"
+
+CASE="DROP INDEX passes"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'DROP INDEX idx;'
+run_case "$DIR"
+expect_rc 0
+
+CASE="ALTER TABLE ... DROP CONSTRAINT passes"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets DROP CONSTRAINT c;'
+run_case "$DIR"
+expect_rc 0
+
+CASE="ALTER TABLE ... ALTER COLUMN ... DROP DEFAULT passes"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ALTER COLUMN name DROP DEFAULT;'
+run_case "$DIR"
+expect_rc 0
+
+CASE="a CHECK constraint passes"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 026_x.sql 'ALTER TABLE widgets ADD CONSTRAINT chk CHECK (age IS NOT NULL);'
+run_case "$DIR"
+expect_rc 0
+
+CASE="the marker is honoured case-insensitively"
+DIR=$(mktemp -d -p "$WORK")
+printf '%s\n%s\n' 'DROP TABLE widgets;' '-- CONTRACT' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 0
+
+CASE="the marker is honoured with leading indentation"
+DIR=$(mktemp -d -p "$WORK")
+printf '%s\n%s\n' 'DROP TABLE widgets;' '  -- contract' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 0
+
+CASE="an indented comment that merely starts with contract does not exempt the file"
+DIR=$(mktemp -d -p "$WORK")
+printf '%s\n%s\n' 'DROP TABLE widgets;' '  -- contractor table' >"$DIR/026_x.sql"
+run_case "$DIR"
+expect_rc 1
+expect_out "DROP TABLE needs expand-contract"
+
+CASE="a four-digit version such as 1000 is checked"
+DIR=$(mktemp -d -p "$WORK")
+write_fixture "$DIR" 1000_x.sql 'DROP TABLE widgets;'
+run_case "$DIR"
+expect_rc 1
+expect_out "1000_x.sql: DROP TABLE needs expand-contract"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
