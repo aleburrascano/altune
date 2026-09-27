@@ -186,9 +186,9 @@ func TestAdminHealthMalformedBodyIsDecodeError(t *testing.T) {
 // rather than being swallowed whole.
 func TestAdminHealthOversizedBodyIsBounded(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"db":"`))                  //nolint:errcheck // test stub
-		w.Write([]byte(strings.Repeat("a", 2<<20))) //nolint:errcheck // 2 MiB > cap
-		w.Write([]byte(`"}`))                       //nolint:errcheck // test stub
+		_, _ = w.Write([]byte(`{"db":"`))
+		_, _ = w.Write([]byte(strings.Repeat("a", 2<<20)))
+		_, _ = w.Write([]byte(`"}`))
 	}))
 	defer srv.Close()
 
