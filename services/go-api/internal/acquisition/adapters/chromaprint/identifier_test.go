@@ -283,6 +283,26 @@ func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
 	}
 }
 
+func TestAcoustIDsFor_OversizedResponseBodyIsRejected(t *testing.T) {
+	oversized := `{"status":"ok","tracks":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(oversized))
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+
+	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
+
+	if err == nil {
+		t.Fatal("AcoustIDsFor against an oversized response body must error, got nil")
+	}
+	if len(ids) != 0 {
+		t.Errorf("ids = %v, want none on error", ids)
+	}
+}
+
 func fakeFpcalcDir(t *testing.T, duration float64) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -516,5 +536,119 @@ func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
 
 	if len(match.Results) != 2 || match.Results[0].ID != "ac-first" || match.Results[1].ID != "ac-second" {
 		t.Fatalf("Results = %+v, want tied scores to keep the committed input order [ac-first ac-second]", match.Results)
+	}
+}
+
+func clusterBodyOfSize(t *testing.T, size int) string {
+	t.Helper()
+	valid := `{"status":"ok","tracks":[{"id":"track-1"}]}`
+	if size < len(valid) {
+		t.Fatalf("size %d too small for a valid body", size)
+	}
+	return valid + strings.Repeat(" ", size-len(valid))
+}
+
+func clusterServerServing(body string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+}
+
+func TestAcoustIDsFor_BodyJustUnderTheCapStillReturnsItsIDs(t *testing.T) {
+	srv := clusterServerServing(clusterBodyOfSize(t, lookupBodyCap-1))
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+
+	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
+	if err != nil {
+		t.Fatalf("a body under the cap must parse, got %v", err)
+	}
+	if !reflect.DeepEqual(ids, []string{"track-1"}) {
+		t.Errorf("ids = %v, want [track-1]", ids)
+	}
+}
+
+func TestAcoustIDsFor_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
+	srv := clusterServerServing(clusterBodyOfSize(t, lookupBodyCap+1024))
+	defer srv.Close()
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
+	if err == nil {
+		t.Fatalf("oversized body must error, not parse the truncated prefix; got ids %v", ids)
+	}
+	if len(ids) != 0 {
+		t.Errorf("ids = %v, want none on error", ids)
+	}
+}
+
+func TestAcoustIDsFor_BodyExactlyAtTheCapIsRejected(t *testing.T) {
+	srv := clusterServerServing(clusterBodyOfSize(t, lookupBodyCap))
+	defer srv.Close()
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+	ids, err := id.AcoustIDsFor(context.Background(), "mbid-1")
+	if err == nil {
+		t.Fatalf("a body at the cap must error; got ids %v", ids)
+	}
+	if len(ids) != 0 {
+		t.Errorf("ids = %v, want none on error", ids)
+	}
+}
+
+func TestAcoustIDsFor_OversizedBodyErrorNamesTheClusterResponse(t *testing.T) {
+	oversized := `{"status":"ok","tracks":[{"id":"` + strings.Repeat("x", lookupBodyCap+1024) + `"}]}`
+	srv := clusterServerServing(oversized)
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+
+	_, err := id.AcoustIDsFor(context.Background(), "mbid-1")
+
+	if err == nil {
+		t.Fatal("oversized body must error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "parse acoustid cluster response: ") && !strings.Contains(msg, "read acoustid cluster response: ") {
+		t.Errorf("err = %q, want it wrapped as parse/read acoustid cluster response", msg)
+	}
+}
+
+func TestAcoustIDsFor_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","tracks":[{"id":"`))
+		chunk := []byte(strings.Repeat("x", 64<<10))
+		for {
+			if r.Context().Err() != nil {
+				return
+			}
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := id.AcoustIDsFor(ctx, "mbid-1")
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("an endless body must error, got nil")
+		}
+		if ctx.Err() != nil {
+			t.Fatalf("returned only because the context expired (%v); the cap must stop the read", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("AcoustIDsFor kept reading an endless body")
 	}
 }

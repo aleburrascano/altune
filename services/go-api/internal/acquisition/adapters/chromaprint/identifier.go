@@ -224,8 +224,16 @@ func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, e
 		return nil, fmt.Errorf("acoustid cluster lookup: status %d", resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, lookupBodyCap+1))
+	if err != nil {
+		return nil, fmt.Errorf("read acoustid cluster response: %w", err)
+	}
+	if len(body) >= lookupBodyCap {
+		return nil, fmt.Errorf("read acoustid cluster response: exceeds %d byte cap", lookupBodyCap)
+	}
+
 	var parsed clusterResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+	if err := json.Unmarshal(body, &parsed); err != nil {
 		return nil, fmt.Errorf("parse acoustid cluster response: %w", err)
 	}
 	if parsed.Status != "ok" {
