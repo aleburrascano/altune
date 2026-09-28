@@ -1,5 +1,4 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
@@ -8,7 +7,7 @@ import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import { type OwnedSplit } from '../owned-playback';
 import { type ContentFailure } from '../content-status';
 
-import { openDetail, type DetailRoute } from '../navigation';
+import { useOpenDetail, type DetailRoute } from '../navigation';
 import { useAlbumDiscovery } from './useAlbumDiscovery';
 import { useAlbumTracks } from './useAlbumTracks';
 import { useLibraryTracksForAlbum } from './useLibraryTracks';
@@ -100,7 +99,7 @@ export function useAlbumDetailState(
   result: DiscoveryResult,
   detailRoute: DetailRoute,
 ): AlbumDetailState {
-  const router = useRouter();
+  const openDetail = useOpenDetail(detailRoute);
   const save = useSaveTrack();
 
   const effectiveSource = result.sources.find((s) => s.provider === 'deezer') ?? result.sources[0];
@@ -147,7 +146,7 @@ export function useAlbumDetailState(
       };
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    openDetail(router, detailRoute, _enrichAlbumTrack(track, result));
+    openDetail(_enrichAlbumTrack(track, result));
   };
 
   const recordSaveAllOutcome = (outcome: BatchOutcome<DiscoveryResult>): void => {

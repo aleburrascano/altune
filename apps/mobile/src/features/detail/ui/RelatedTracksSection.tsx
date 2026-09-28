@@ -1,8 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { useRouter } from 'expo-router';
-
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
@@ -10,26 +8,26 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
-import { openDetail, type DetailRoute } from '../navigation';
+import { useOpenDetail, type DetailRoute } from '../navigation';
 import { RELATED_CARD_WIDTH } from './layout';
 import { sharedStyles } from './styles';
 
 export function RelatedTracksSection({
-  result,
+  result: parent,
   detailRoute,
 }: {
   result: DiscoveryResult;
   detailRoute: DetailRoute;
 }): ReactElement | null {
-  const router = useRouter();
-  const { relatedTracks } = useRelatedTracks({ sources: result.sources });
+  const openDetail = useOpenDetail(detailRoute);
+  const { relatedTracks } = useRelatedTracks({ sources: parent.sources });
 
   if (relatedTracks.length === 0) {
     return null;
   }
 
   const onRelatedPress = (track: DiscoveryResult): void => {
-    openDetail(router, detailRoute, { ...track, image_url: track.image_url ?? result.image_url });
+    openDetail({ ...track, image_url: track.image_url ?? parent.image_url });
   };
 
   return (

@@ -1,11 +1,10 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { type ContentFailure } from '../content-status';
-import { openDetail, type DetailRoute } from '../navigation';
+import { useOpenDetail, type DetailRoute } from '../navigation';
 import { type OwnedTrack } from './useOwnedTrack';
 import { type OwnedSplit } from '../owned-playback';
 import { useArtistContent } from './useArtistContent';
@@ -43,28 +42,28 @@ export type ArtistDetailState = {
 };
 
 export function useArtistDetailState(
-  result: DiscoveryResult,
+  artist: DiscoveryResult,
   detailRoute: DetailRoute,
 ): ArtistDetailState {
-  const router = useRouter();
+  const openDetail = useOpenDetail(detailRoute);
   const save = useSaveTrack();
-  const hasSources = result.sources.length > 0;
+  const hasSources = artist.sources.length > 0;
 
-  const localTracks = useLibraryTracksForArtist(result.title);
+  const localTracks = useLibraryTracksForArtist(artist.title);
   const hasLibraryTracks = localTracks.length > 0;
 
   const [exploreExpanded, setExploreExpanded] = useState(hasSources);
 
   const discoverySearch = useArtistDiscovery({
-    artistName: result.title,
+    artistName: artist.title,
     enabled: !hasSources && (exploreExpanded || hasLibraryTracks),
   });
 
   const effectiveSources = hasSources
-    ? result.sources
+    ? artist.sources
     : discoverySearch.sources.length > 0
       ? discoverySearch.sources
-      : result.sources;
+      : artist.sources;
   const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
 
   const {
@@ -77,12 +76,12 @@ export function useArtistDetailState(
     refetch: refetchContent,
   } = useArtistContent({
     sources: effectiveSources,
-    artistName: result.title,
+    artistName: artist.title,
     enabled: shouldFetchContent,
   });
 
   const libraryTracksAsDiscovery = localTracks.map(trackToDiscoveryResult);
-  const libraryAlbums = useLibraryAlbumsForArtist(result.title, !hasSources);
+  const libraryAlbums = useLibraryAlbumsForArtist(artist.title, !hasSources);
 
   const { topTracks, isLoadingTracks, tracksFailure } = hasSources
     ? {
@@ -97,25 +96,25 @@ export function useArtistDetailState(
       };
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    openDetail(router, detailRoute, {
+    openDetail({
       ...track,
-      image_url: track.image_url ?? result.image_url,
+      image_url: track.image_url ?? artist.image_url,
     });
   };
 
   const onAlbumPress = (album: DiscoveryResult): void => {
-    openDetail(router, detailRoute, { ...album, subtitle: album.subtitle ?? result.title });
+    openDetail({ ...album, subtitle: album.subtitle ?? artist.title });
   };
 
   const { owned, playButton, onPlayOwned, ownedFor, onQuickSave } = useOwnedPlayback(
     topTracks,
     {
-      title: result.title,
-      image: result.image_url,
+      title: artist.title,
+      image: artist.image_url,
       enrich: (track) => ({
         ...track,
-        subtitle: track.subtitle ?? result.title,
-        image_url: track.image_url ?? result.image_url,
+        subtitle: track.subtitle ?? artist.title,
+        image_url: track.image_url ?? artist.image_url,
       }),
       retryEntryPoint: 'artist_row',
     },

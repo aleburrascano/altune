@@ -1,4 +1,4 @@
-import type { ImperativeRouter } from 'expo-router';
+import { useRouter, type ImperativeRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { detailHref } from '@shared/lib/detail-handoff';
@@ -25,4 +25,9 @@ export function openDetail(
   result: DiscoveryResult,
 ): void {
   router.push(detailHref(detailRoute, result));
+}
+
+export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {
+  const router = useRouter();
+  return (picked) => openDetail(router, detailRoute, picked);
 }
