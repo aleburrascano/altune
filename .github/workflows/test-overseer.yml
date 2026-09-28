@@ -70,7 +70,7 @@ jobs:
             exit 1
           fi
           echo "Diff base: $BASE"
-          go run scripts/lint-changed-comments.go "$BASE" ../overseer
+          go run ./scripts/lintcomments "$BASE" ../overseer
       # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
       # bodyclose, complexity, dupl, gofumpt). Shared with the Go API. Blocking on
       # all code: Overseer starts green, so it stays green.

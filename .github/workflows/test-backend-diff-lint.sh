@@ -8,4 +8,4 @@ if [ -z "${PR_BASE:-}" ]; then
   exit 0
 fi
 echo "Diff base: $PR_BASE"
-go run "scripts/lint-changed-${kind}.go" "$PR_BASE"
+go run "./scripts/lint${kind}" "$PR_BASE"

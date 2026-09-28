@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -32,7 +30,7 @@ var banned = map[string]bool{
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: go run scripts/lint-changed-names.go <base-ref>")
+		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintnames <base-ref>")
 		os.Exit(2)
 	}
 	base := os.Args[1]

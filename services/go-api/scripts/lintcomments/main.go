@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -23,7 +21,7 @@ var (
 
 func main() {
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Fprintln(os.Stderr, "usage: go run scripts/lint-changed-comments.go <base-ref> [module-dir]")
+		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintcomments <base-ref> [module-dir]")
 		os.Exit(2)
 	}
 	rawBase := os.Args[1]
