@@ -5,9 +5,6 @@ import { Text } from '@shared/ui/primitives/Text';
 
 import { AuthFullScreenNotice } from './AuthFullScreenNotice';
 
-// Shown when the reset-password route is reached without a verified recovery
-// exchange — a bare `altune://reset-password` deep link, or an expired unlock
-// window. It never renders the password form, so it cannot change a password.
 export function InvalidRecoveryLinkNotice() {
   const router = useRouter();
 

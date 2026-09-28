@@ -8,12 +8,8 @@ import { OAUTH_BROWSER_TIMEOUT_MS, useOAuth } from '../hooks/useOAuth';
 
 import { createSupabaseAuthMock } from './testUtils/authTestUtils';
 
-/** Every value the hook passed to its `useState` setter, newest last. */
 const mockStateUpdates: unknown[] = [];
 
-// React drops an update to an unmounted hook silently, so the setter is the only
-// place the unmount guard is observable. The wrapper has to sit on the module
-// itself: the hook's `import { useState }` binding is read once, at import.
 jest.mock('react', () => {
   const actual = jest.requireActual('react');
   return {
@@ -120,7 +116,6 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
   });
 });
 
-/** Settles the promise chain the flow is parked on without advancing any timer. */
 async function flushPendingWork(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
@@ -190,7 +185,6 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
     });
     await flushPendingWork();
 
-    // Signing in at the provider routinely outlasts the SDK budget.
     act(() => {
       jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
     });
@@ -220,8 +214,6 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       browserSession.resolve({ type: 'success', url: REDIRECT_URL });
       await call;
     });
-    // The redirect is still exchanged — the session is worth having — but the
-    // `ok` it produces has nowhere to go.
     expect(mockComplete).toHaveBeenCalledTimes(1);
     expect(mockStateUpdates).toEqual([{ kind: 'pending', provider: 'google' }]);
   });
@@ -261,8 +253,6 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       await call;
     });
 
-    // The browser only fails once the user comes back to a dead session, long
-    // after the deadline stopped waiting for it.
     rejectBrowser(new Error('no browser is open'));
     jest.useRealTimers();
     await new Promise((resolve) => setImmediate(resolve));

@@ -100,9 +100,6 @@ describe('recoveryUnlock marker', () => {
   });
 });
 
-// Issue #1638: the window used to be a bare deadline with no owner, so an
-// abandoned recovery unlocked the reset form for whatever account was active
-// next on the same process.
 describe('recoveryUnlock is bound to the identity the recovery was verified for', () => {
   it('stays locked for another account well inside the window', () => {
     const now = 1_000_000;
@@ -143,9 +140,6 @@ describe('recoveryUnlock is bound to the identity the recovery was verified for'
   });
 });
 
-// Issue #1639: the cutoff is what keeps an abandoned marker from being spent
-// minutes later, so it has to hold against a device clock its owner can set, and
-// it has to land on a screen already mounted rather than on the next render.
 describe('recoveryUnlock is bounded by elapsed time no device clock can fake', () => {
   const MARKED_AT = 1_000_000;
   const MARKED_TICK = 5_000;
@@ -183,8 +177,6 @@ describe('recoveryUnlock is bounded by elapsed time no device clock can fake', (
     ).toBe(true);
   });
 
-  // setSystemTime moves Date.now() and leaves performance.now() where it is,
-  // which is precisely what setting the device clock back does to the defaults.
   it('stays locked after a rollback against the clocks it reads by default', () => {
     jest.useFakeTimers();
     jest.setSystemTime(MARKED_AT + A_MONTH_MS);
@@ -229,8 +221,6 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
     expect(result.current).toBe(false);
   });
 
-  // The real ordering: completeAuthIntent opens the window, and AuthGate mounts
-  // onto the reset-password route afterwards.
   it('demotes a subscriber that mounted onto a window already open', () => {
     act(() => markRecoveryUnlocked(VERIFIED_USER));
     act(() => {
@@ -281,13 +271,6 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
 });
 
 describe('closing the window on sign-out', () => {
-  // Issue #1638: a recovery window must not outlive the session it was verified
-  // for. `forgetPreviousUsersLocalData` — the shared cleanup both `useSession`
-  // (on an identity change) and `useSignOut` (on an explicit sign-out) run — ends
-  // in `runSignOutCleanups()`, and recoveryUnlock registers `clearRecoveryUnlock`
-  // there, so both paths close the window. These tests drive the real hooks rather
-  // than the registry, because the registration is the thing that can go missing.
-
   const RECOVERING_USER = 'user-a';
 
   type Listener = (event: AuthChangeEvent, session: Session | null) => void;
@@ -391,10 +374,6 @@ describe('closing the window on sign-out', () => {
     });
   });
 
-  // The SDK notifies its auth-state subscribers from inside `verifyOtp`, before
-  // that call resolves, so the identity change the exchange causes always lands
-  // BEFORE completeAuthIntent marks the window. These pin that the cleanup cannot
-  // wipe the window the same exchange is about to open.
   describe('the recovery exchange that opens the window does not close it', () => {
     it('leaves the window open on a cold start, where the exchange signs the recovering user in from signed-out', () => {
       const auth = renderSession();

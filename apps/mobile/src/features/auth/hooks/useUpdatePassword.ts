@@ -22,7 +22,10 @@ export type UpdatePasswordResult =
   | { kind: 'ok' }
   | {
       kind: 'error';
-      reason: Extract<AuthErrorReason, 'weak_password' | 'network' | 'unknown' | 'too_many_attempts'>;
+      reason: Extract<
+        AuthErrorReason,
+        'weak_password' | 'network' | 'unknown' | 'too_many_attempts'
+      >;
     };
 
 const REVOKE_OTHERS_TIMEOUT_MS = 5_000;

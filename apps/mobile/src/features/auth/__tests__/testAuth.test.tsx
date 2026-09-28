@@ -13,13 +13,6 @@ import {
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 
-// The real @supabase/supabase-js client cannot be constructed under Node 20 in
-// jest (its realtime client needs a global WebSocket), so — as
-// supabaseClient.test.ts does — createClient is faked. jest hoists this mock
-// above the imports above. The double keeps the REAL storage adapter the app
-// configures (native SecureStore double here) and reads it back exactly as
-// GoTrue does, so injectTestSession is exercised against the real store and
-// getSession/onAuthStateChange behave like the SDK.
 jest.mock('@supabase/supabase-js', () => require('../../../../jest/doubles/supabase-js.js'));
 
 const { __http } = require('../../../../jest/doubles/fetch.js') as {
@@ -146,16 +139,12 @@ describe('buildTestSession — the Supabase Session for the test user', () => {
   });
 
   it('mints a NON-EXPIRING session regardless of the go-api token lifetime', () => {
-    // #1395: the injected session must not track the token's short 1h life, or
-    // the client auto-expires it / attempts the unredeemable refresh mid-run.
     const nowSeconds = Math.floor(Date.now() / 1000);
     const oneYearSeconds = 365 * 24 * 3600;
 
     const fromFresh = buildTestSession(loginResponse({ expires_at: nowSeconds + 3600 }));
     const fromExpired = buildTestSession(loginResponse({ expires_at: nowSeconds - 3600 }));
 
-    // Both are pinned far past any realistic run — even an already-expired
-    // go-api token yields a live, long-lived session (no negative expires_in).
     expect(fromFresh.expires_at).toBe(fromExpired.expires_at);
     expect(fromFresh.expires_at).toBeGreaterThan(nowSeconds + oneYearSeconds);
     expect(fromExpired.expires_in).toBeGreaterThan(oneYearSeconds);
@@ -174,7 +163,6 @@ describe('injectTestSession — driving the real Supabase store', () => {
   });
 
   it('keeps the session live long past the 1h go-api token lifetime', async () => {
-    // #1395: a harness driving screens for >1h must not see the session vanish.
     await injectTestSession(buildTestSession(loginResponse()));
 
     const realNow = Date.now();

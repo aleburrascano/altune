@@ -8,11 +8,7 @@ export function isValidEmail(email: string): boolean {
 }
 
 export type PasswordIssue =
-  | 'too_short'
-  | 'no_lowercase'
-  | 'no_uppercase'
-  | 'no_number'
-  | 'no_symbol';
+  'too_short' | 'no_lowercase' | 'no_uppercase' | 'no_number' | 'no_symbol';
 
 export function validatePassword(password: string): PasswordIssue[] {
   const issues: PasswordIssue[] = [];

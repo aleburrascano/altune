@@ -45,14 +45,17 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
   it('maps a genuine 400 invalid_credentials to invalid_credentials', async () => {
     signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
-      error: { name: 'AuthApiError', status: 400, code: 'invalid_credentials', message: 'Invalid login credentials' },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'invalid_credentials',
+        message: 'Invalid login credentials',
+      },
     });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'invalid_credentials' });
   });
 
-  // The password was right; only the address is unconfirmed. Saying "incorrect"
-  // sends this user off to reset a password that was never the problem (#1646).
   it('maps an unconfirmed email to its own reason, not invalid_credentials', async () => {
     signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
@@ -67,9 +70,6 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
     expect(await signIn()).toEqual({ kind: 'error', reason: 'email_not_confirmed' });
   });
 
-  // Every GoTrue code we have not taught it — today's rate-limit-below-429,
-  // tomorrow's new one — is a rejection of the request, not a verdict on the
-  // password, so it must not be reported as one.
   it('maps an over_request_rate_limit rejection to too_many_attempts, not invalid_credentials', async () => {
     signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
@@ -100,8 +100,6 @@ describe('useSignIn: refusing a run of failures against one account (#1640)', ()
     expect(signInWithPassword).toHaveBeenCalledTimes(LOCKOUT_AFTER_FAILURES);
   });
 
-  // A lockout that outlived one account would hand an attacker a way to lock
-  // every other user out of their own app, so it is keyed on the address.
   it('leaves a second account free while the first is locked out', async () => {
     signInWithPassword.mockResolvedValue(WRONG_PASSWORD);
     for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await signIn();
@@ -127,7 +125,12 @@ describe('useSignIn: a GoTrue code this app has not been taught', () => {
   it('maps an unrecognised 400 code to unknown, not invalid_credentials', async () => {
     signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
-      error: { name: 'AuthApiError', status: 400, code: 'some_future_code', message: 'New rejection' },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'some_future_code',
+        message: 'New rejection',
+      },
     });
 
     expect(await runAsyncAuthHook(useSignIn, (hook) => hook.signIn('a@b.co', 'pw'))).toEqual({
@@ -140,7 +143,12 @@ describe('useSignIn: a GoTrue code this app has not been taught', () => {
 describe('a server rate limit', () => {
   const RATE_LIMITED = {
     data: null,
-    error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'limit' },
+    error: {
+      name: 'AuthApiError',
+      status: 429,
+      code: 'over_email_send_rate_limit',
+      message: 'limit',
+    },
   };
 
   const RATE_LIMITED_BY_CODE = {

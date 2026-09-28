@@ -1,7 +1,3 @@
-// Regression for issue #656: a bare `altune://reset-password` deep link used to
-// reach the "choose a new password" form for a signed-in user with no recovery
-// token ever verified, letting them change the real account password. AuthGate
-// must render that route only after a recovery exchange has been unlocked.
 import { render, screen, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
@@ -37,9 +33,6 @@ jest.mock('@shared/auth/sessionExpired', () => ({
   useSessionExpired: () => false,
 }));
 
-// AuthGate transitively imports the real Supabase client (via
-// SessionExpiredNotice -> useSignOut), which cannot initialize its realtime
-// socket under Node. Stub it; the recovery guard never touches Supabase.
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn().mockResolvedValue({ error: null }) } },
 }));
@@ -88,8 +81,6 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
   it('shows the invalid-link notice again once the unlock window has expired', () => {
     const start = 1_000_000;
     act(() => markRecoveryUnlocked('user-a', start));
-    // Advance past the window: the marker was set relative to `start`, and the
-    // component reads Date.now(), so freeze it beyond the deadline.
     jest.spyOn(Date, 'now').mockReturnValue(start + RECOVERY_UNLOCK_WINDOW_MS + 1);
 
     render(
@@ -105,10 +96,6 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
   });
 });
 
-// Regression for issue #1638: the window used to be a bare deadline with no
-// owner, so a recovery started for one account and abandoned handed the "choose
-// a new password" form to whatever account was active next on the same process —
-// with no recovery token ever verified for that identity.
 describe('AuthGate: the unlock belongs to the account it was verified for (#1638)', () => {
   it('shows the invalid-link notice when the active session is a different account from the one the recovery unlocked', () => {
     act(() => markRecoveryUnlocked('user-a'));
@@ -153,10 +140,6 @@ describe('AuthGate: the unlock belongs to the account it was verified for (#1638
   });
 });
 
-// Regression for issue #2924: the web auth-completion route needs to run for a
-// signed-out visitor — that is the whole point of a confirm/recovery/OAuth
-// link — so `/auth/*` must be exempt from the same-origin redirect to
-// `/sign-in` the same way the `(auth)` group already is.
 describe('AuthGate: /auth/* renders for a signed-out visitor (#2924)', () => {
   it('does not redirect a signed-out visitor on /auth/callback to /sign-in', () => {
     mockSegments = ['auth', 'callback'];

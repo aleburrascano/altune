@@ -29,16 +29,13 @@ describe('useAsyncAuthAction: the deadline bounding a stalled SDK call', () => {
       runCall = result.current.run();
     });
 
-    // The button is pinned at pending until the deadline decides otherwise.
     expect(result.current.state).toEqual({ kind: 'pending' });
 
-    // One tick before the budget it is still pending — nothing has abandoned it.
     act(() => {
       jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS - 1);
     });
     expect(result.current.state).toEqual({ kind: 'pending' });
 
-    // At the budget the call is abandoned and mapped to a terminal error.
     await act(async () => {
       jest.advanceTimersByTime(1);
       await runCall;
@@ -56,7 +53,6 @@ describe('useAsyncAuthAction: the deadline bounding a stalled SDK call', () => {
 
     expect(result.current.state).toEqual({ kind: 'ok' });
 
-    // The timer is released, so advancing past the budget can't overwrite the result.
     act(() => {
       jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
     });
@@ -64,7 +60,6 @@ describe('useAsyncAuthAction: the deadline bounding a stalled SDK call', () => {
   });
 });
 
-/** An SDK call the test decides the settle time of, counting each invocation. */
 function deferredAttempt(): {
   attempt: jest.Mock<Promise<Outcome>, []>;
   settleWith: (outcome: Outcome) => void;
@@ -77,8 +72,6 @@ function deferredAttempt(): {
 }
 
 describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)', () => {
-  // An unrecognized failure is logged now (#1647), and the thrown fixture below
-  // is deliberate: silenced rather than printed through the suite's output.
   beforeEach(() => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -93,8 +86,6 @@ describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)',
 
     let presses!: Promise<unknown>;
     act(() => {
-      // Both land in the same tick, so neither has seen the `pending` render
-      // that the caller's `disabled` button relies on.
       presses = Promise.all([result.current.run(), result.current.run()]);
     });
 
@@ -142,7 +133,6 @@ describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)',
 
 const UNRECOGNIZED_FAILURE_LOG = '[auth] an auth action failed for an unrecognized reason';
 
-/** The terminal state of a hook whose one SDK call rejected with `thrown`. */
 async function stateAfterRejectionWith(thrown: unknown): Promise<Result> {
   const attempt = jest.fn<Promise<Outcome>, []>().mockRejectedValue(thrown);
   const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
@@ -186,8 +176,6 @@ describe('useAsyncAuthAction: what an unknown failure leaves behind (#1647)', ()
   });
 
   it('names the type of a thrown non-Error rather than spelling the value out', async () => {
-    // Whatever a rejected SDK call threw is beyond this hook's knowledge, and
-    // stringifying it could spell out the request that carried the credential.
     const state = await stateAfterRejectionWith('token_hash=super-secret-hash');
 
     expect(state).toEqual({ kind: 'error', reason: 'unknown' });

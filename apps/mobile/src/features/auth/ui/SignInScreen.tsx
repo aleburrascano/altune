@@ -10,8 +10,6 @@ import { useSignIn } from '../hooks/useSignIn';
 import { AuthForm } from './AuthForm';
 import { EmailPasswordFields } from './EmailPasswordFields';
 
-// The fallback for a failure the hook could not name, so it must not name one
-// either: `invalid_credentials` carries its own words in `errorReason` (#1646).
 const GENERIC_SIGN_IN_ERROR = "Couldn't sign you in. Please try again.";
 
 export function SignInScreen(): ReactElement {

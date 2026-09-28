@@ -14,20 +14,14 @@ describe('authErrorText: the reasons that need their own words', () => {
     expect(authErrorText('network', GENERIC)).toBe(NETWORK_ERROR_COPY);
   });
 
-  // The generic copy would tell a locked-out user their password is wrong, which
-  // it is not — they would keep retyping a password that was right all along.
   it('explains the local lockout rather than blaming the credentials', () => {
     expect(authErrorText('too_many_attempts', GENERIC)).toBe(TOO_MANY_ATTEMPTS_COPY);
   });
 
-  // Only a rejection GoTrue named may accuse the password, so the accusation
-  // lives here rather than in a screen's fallback copy (#1646).
   it('accuses the credentials only where that is what failed', () => {
     expect(authErrorText('invalid_credentials', GENERIC)).toBe(INVALID_SIGN_IN_COPY);
   });
 
-  // The password was right; sending this user to reset it wastes the one thing
-  // they actually need to be told.
   it('asks an unconfirmed user for the inbox rather than the password', () => {
     expect(authErrorText('email_not_confirmed', GENERIC)).toBe(EMAIL_NOT_CONFIRMED_COPY);
   });

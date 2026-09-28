@@ -25,7 +25,12 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
   it('maps an AuthWeakPasswordError to weak_password', async () => {
     updateUser.mockResolvedValue({
       data: { user: null },
-      error: { name: 'AuthWeakPasswordError', status: 422, code: 'weak_password', message: 'Password is too weak' },
+      error: {
+        name: 'AuthWeakPasswordError',
+        status: 422,
+        code: 'weak_password',
+        message: 'Password is too weak',
+      },
     });
 
     expect(await updatePassword()).toEqual({ kind: 'error', reason: 'weak_password' });
@@ -34,7 +39,12 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
   it('falls back to unknown for an unrecognised error', async () => {
     updateUser.mockResolvedValue({
       data: { user: null },
-      error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'validation_failed',
+        message: 'Bad request',
+      },
     });
 
     expect(await updatePassword()).toEqual({ kind: 'error', reason: 'unknown' });
@@ -59,7 +69,12 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
   it('never signs out on an update error', async () => {
     updateUser.mockResolvedValue({
       data: { user: null },
-      error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'validation_failed',
+        message: 'Bad request',
+      },
     });
 
     await updatePassword();
@@ -154,7 +169,12 @@ describe('useUpdatePassword: the other-session revoke after a committed change',
 describe('a server rate limit', () => {
   const RATE_LIMITED = {
     data: null,
-    error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'limit' },
+    error: {
+      name: 'AuthApiError',
+      status: 429,
+      code: 'over_email_send_rate_limit',
+      message: 'limit',
+    },
   };
 
   const RATE_LIMITED_BY_CODE = {

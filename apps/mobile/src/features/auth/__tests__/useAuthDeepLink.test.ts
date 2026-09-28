@@ -59,7 +59,6 @@ describe('useAuthDeepLink: a rejected completeAuthIntent (#657)', () => {
 
 const RECOVERY_LINK = 'altune://auth/recovery?token_hash=super-secret-hash&type=recovery';
 
-/** Mounts the listener on the initial URL and settles the exchange it starts. */
 async function deliverInitialLink(url: string): Promise<void> {
   getInitialURL.mockResolvedValue(url);
   renderHook(() => useAuthDeepLink());
@@ -128,10 +127,6 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
   });
 });
 
-// Regression for issue #2924: the web callback route (AuthCallbackScreen) owns
-// completing the page URL. If this listener also read it via Linking's web
-// shim (which mirrors window.location.href), the single-use code would be
-// spent twice for one delivery.
 describe('useAuthDeepLink: does not also complete the page URL on web (#2924)', () => {
   afterEach(() => {
     Platform.OS = 'ios';

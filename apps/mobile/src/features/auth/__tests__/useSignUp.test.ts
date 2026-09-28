@@ -23,7 +23,12 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
   it('maps an AuthWeakPasswordError to weak_password', async () => {
     supabaseSignUp.mockResolvedValue({
       data: { user: null, session: null },
-      error: { name: 'AuthWeakPasswordError', status: 422, code: 'weak_password', message: 'Password is too weak' },
+      error: {
+        name: 'AuthWeakPasswordError',
+        status: 422,
+        code: 'weak_password',
+        message: 'Password is too weak',
+      },
     });
 
     expect(await signUp()).toEqual({ kind: 'error', reason: 'weak_password' });
@@ -32,7 +37,12 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
   it('maps an explicit user_already_exists error to already_registered', async () => {
     supabaseSignUp.mockResolvedValue({
       data: { user: null, session: null },
-      error: { name: 'AuthApiError', status: 422, code: 'user_already_exists', message: 'User already registered' },
+      error: {
+        name: 'AuthApiError',
+        status: 422,
+        code: 'user_already_exists',
+        message: 'User already registered',
+      },
     });
 
     expect(await signUp()).toEqual({ kind: 'error', reason: 'already_registered' });
@@ -101,7 +111,12 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
   it('falls back to unknown for an unrecognised error code', async () => {
     supabaseSignUp.mockResolvedValue({
       data: { user: null, session: null },
-      error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'validation_failed',
+        message: 'Bad request',
+      },
     });
 
     expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
@@ -111,7 +126,12 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
 describe('a server rate limit', () => {
   const RATE_LIMITED = {
     data: null,
-    error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'limit' },
+    error: {
+      name: 'AuthApiError',
+      status: 429,
+      code: 'over_email_send_rate_limit',
+      message: 'limit',
+    },
   };
 
   const RATE_LIMITED_BY_CODE = {
@@ -130,7 +150,11 @@ describe('a server rate limit', () => {
   };
 
   describe.each([
-    ['sign-up', supabaseSignUp, () => runAsyncAuthHook(useSignUp, (hook) => hook.signUp('a@b.co', 'pw'))],
+    [
+      'sign-up',
+      supabaseSignUp,
+      () => runAsyncAuthHook(useSignUp, (hook) => hook.signUp('a@b.co', 'pw')),
+    ],
   ] as const)('%s: a server rate limit is not a network error', (_name, mock, run) => {
     it('maps a resolved 429 to too_many_attempts', async () => {
       mock.mockResolvedValue(RATE_LIMITED);

@@ -26,8 +26,6 @@ export function SetNewPasswordScreen(): ReactElement {
 
   useEffect(() => {
     if (state.kind === 'ok') {
-      // Close the unlock window so the screen can't be re-entered without a
-      // fresh recovery link once the password has been changed.
       clearRecoveryUnlock();
       router.replace('/library');
     }

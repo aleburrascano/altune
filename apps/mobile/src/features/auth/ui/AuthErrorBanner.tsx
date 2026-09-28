@@ -8,12 +8,6 @@ type AuthErrorBannerState =
   | { kind: 'error'; reason: AuthErrorReason }
   | { kind: 'idle' | 'pending' | 'sent' | 'ok' | 'cancelled' };
 
-/**
- * Renders the shared error banner for an async auth action, or nothing when the
- * action is not in its error state. Wraps `authErrorText` so every caller
- * renders identical markup and tone. `testID` is only overridden where two
- * actions can show a banner in one screen at once (the form and OAuth).
- */
 export function AuthErrorBanner({
   state,
   generic,

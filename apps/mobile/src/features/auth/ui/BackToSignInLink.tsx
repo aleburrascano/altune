@@ -5,10 +5,6 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-/**
- * Renders the shared centered "Back to sign in" link that returns to the
- * sign-in screen. Callers pass `testID` to preserve their existing selector.
- */
 export function BackToSignInLink({
   testID = 'back-to-sign-in',
 }: {

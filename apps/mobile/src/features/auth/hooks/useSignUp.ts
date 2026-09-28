@@ -26,15 +26,8 @@ export type SignUpResult =
 
 type SettledSignUp = Exclude<SignUpResult, { kind: 'idle' | 'pending' }>;
 
-// `identities` is read as `unknown` rather than as the SDK's array, because what
-// it holds at runtime is the very thing in question below.
 type SignUpResponseData = { user?: { identities?: unknown } | null; session?: unknown } | null;
 
-// The only "already registered" signal GoTrue gives while email confirmation is
-// hiding account enumeration: it resolves without an error and returns a user
-// whose `identities` is empty. No version of `AuthResponse` promises that, so it
-// is recognised positively — a response that stops carrying it is `unknown`, not
-// a coin flip between "already registered" and "check your inbox" (#1650).
 function signUpOutcome(data: SignUpResponseData): SettledSignUp {
   if (data?.session) return { kind: 'ok' };
   const identities = data?.user?.identities;

@@ -10,9 +10,6 @@ type NewPasswordFieldProps = {
   error: boolean;
 };
 
-// The four fixed props are what tells iOS/Android to offer a generated password
-// and to keep it out of the autofill entry for the existing one. They only work
-// when every new-password field agrees, so they live here rather than at each site.
 export function NewPasswordField({
   testID,
   placeholder,

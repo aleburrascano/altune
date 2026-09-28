@@ -1,7 +1,3 @@
-// Guards the layout the three auth notice screens share (issue #1618). They
-// used to carry three copies of the same inline style object; the computed
-// style asserted here is what those copies produced, so a change to the shared
-// component that alters any screen's appearance fails.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
@@ -26,8 +22,6 @@ jest.mock('@shared/auth/sessionExpired', () => ({
   useSessionExpired: () => false,
 }));
 
-// The notices reach the real Supabase client through useSignOut, which cannot
-// initialize its realtime socket under Node.
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn().mockResolvedValue({ error: null }) } },
 }));

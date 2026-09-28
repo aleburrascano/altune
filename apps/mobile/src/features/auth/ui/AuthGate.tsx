@@ -26,11 +26,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <AuthSplash />;
   }
 
-  // The reset-password screen is reachable via the `altune` scheme, so the route
-  // segment alone proves nothing. Only render it once a recovery exchange has
-  // actually been verified (see #656); otherwise the link is bare or expired.
-  // Verified for THIS session's user, at that — a window opened for one account
-  // and abandoned must not hand the form to the next one signed in (#1638).
   if (onRecoveryRoute) {
     return recoveryUnlocked ? <>{children}</> : <InvalidRecoveryLinkNotice />;
   }

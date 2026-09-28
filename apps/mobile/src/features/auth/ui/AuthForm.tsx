@@ -17,8 +17,6 @@ type AuthFormProps = {
   onSubmit: () => void;
   pending: boolean;
   canSubmit: boolean;
-  // Taken from the banner rather than restated: it owns the state shape, and a
-  // form that only passes it through must not be able to disagree with it.
   state: ComponentProps<typeof AuthErrorBanner>['state'];
   generic: string;
   linkHref: '/sign-in' | '/sign-up';

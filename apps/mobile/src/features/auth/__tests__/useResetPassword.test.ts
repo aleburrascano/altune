@@ -37,12 +37,14 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
   });
 
   it('reports too_many_attempts for a rate-limited { error } instead of a false sent', async () => {
-    // #657: resetPasswordForEmail resolving with any { error } means the email
-    // was never sent, so reporting `sent` is a false success. Supabase succeeds
-    // for unknown addresses, so surfacing this error leaks no enumeration signal.
     resetPasswordForEmail.mockResolvedValue({
       data: null,
-      error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'rate limited' },
+      error: {
+        name: 'AuthApiError',
+        status: 429,
+        code: 'over_email_send_rate_limit',
+        message: 'rate limited',
+      },
     });
 
     expect(await requestReset()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
@@ -51,7 +53,12 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
   it('maps a genuine non-transport { error } to an unknown error state', async () => {
     resetPasswordForEmail.mockResolvedValue({
       data: null,
-      error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'validation_failed',
+        message: 'Bad request',
+      },
     });
 
     expect(await requestReset()).toEqual({ kind: 'error', reason: 'unknown' });
@@ -73,8 +80,6 @@ describe('useResetPassword: refusing a run of failures against one address (#164
     expect(resetPasswordForEmail).toHaveBeenCalledTimes(LOCKOUT_AFTER_FAILURES);
   });
 
-  // The screen types the address raw — the hook is what trims it — so a lockout
-  // keyed on the untouched text would be shed by adding a space or a capital.
   it('counts the same address in another case as one run', async () => {
     resetPasswordForEmail.mockResolvedValue(REJECTED);
     for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await requestReset();
@@ -99,7 +104,12 @@ describe('useResetPassword: refusing a run of failures against one address (#164
 describe('a server rate limit', () => {
   const RATE_LIMITED = {
     data: null,
-    error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'limit' },
+    error: {
+      name: 'AuthApiError',
+      status: 429,
+      code: 'over_email_send_rate_limit',
+      message: 'limit',
+    },
   };
 
   const RATE_LIMITED_BY_CODE = {

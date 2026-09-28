@@ -6,15 +6,6 @@ import { _resetLockoutsForTest } from '../../attemptLockout';
 
 type SupabaseAuthClient = typeof supabase.auth;
 
-/**
- * Jest hoists every `jest.mock` factory above this module, so a suite declares
- * the empty shell itself — `jest.mock('@shared/auth/supabaseClient', () => ({
- * supabase: { auth: {} } }))` — and calls this to fill in the methods it drives.
- * Each mock is reset before every test, so no test inherits a queued resolution
- * from the one before it — and so is the module-scoped failure lockout, which
- * outlives a `renderHook` by design and would otherwise carry one test's failed
- * attempts into the next.
- */
 export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
   ...methods: M[]
 ): Record<M, jest.Mock> {
@@ -28,10 +19,6 @@ export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
   return mockedByMethod;
 }
 
-/**
- * The `act` wrapper is what makes the returned state the terminal one the action
- * settled on rather than the `pending` React had rendered when it was read.
- */
 export async function runAsyncAuthHook<H extends { state: unknown }>(
   useHook: () => H,
   invoke: (hook: H) => Promise<void>,

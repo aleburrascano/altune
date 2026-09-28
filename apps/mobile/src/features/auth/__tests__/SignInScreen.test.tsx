@@ -1,9 +1,3 @@
-// Pins what each credential screen renders now that AuthForm's showConfirm /
-// enforcePasswordPolicy / showForgotPassword flags are gone (issue #1631). The
-// difference between the two screens is composition, so a screen that composes
-// the wrong pieces — or a shared piece that stops honouring one of them — fails
-// here rather than in a store review.
-
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
@@ -111,8 +105,6 @@ describe('the sign-in screen', () => {
     expect(screen.getByTestId('auth-error')).toHaveTextContent('Email or password is incorrect.');
   });
 
-  // A failure the hook could not name is not evidence about the password, and
-  // the banner is where that mislabelling used to reach the user (#1646).
   it('blames nothing in particular when the failure has no known reason', () => {
     renderSignIn({ kind: 'error', reason: 'unknown' });
 

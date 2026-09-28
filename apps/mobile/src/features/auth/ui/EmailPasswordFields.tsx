@@ -12,8 +12,6 @@ type EmailPasswordFieldsProps = {
   showEmailError: boolean;
   password: string;
   onChangePassword: (text: string) => void;
-  // Which password the OS should offer: the one it has saved, or a generated new
-  // one. The two autofill contracts are mutually exclusive on iOS and Android.
   passwordKind: 'existing' | 'new';
   showPasswordError: boolean;
 };

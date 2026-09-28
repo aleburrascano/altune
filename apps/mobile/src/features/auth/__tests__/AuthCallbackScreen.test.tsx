@@ -119,9 +119,7 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
     expect(mockRouter.replace).not.toHaveBeenCalled();
     expect(screen.getByTestId('auth-callback-error')).toHaveTextContent(/didn.t work/);
-    expect(screen.getByTestId('auth-callback-error')).toHaveTextContent(
-      /already been used/,
-    );
+    expect(screen.getByTestId('auth-callback-error')).toHaveTextContent(/already been used/);
     expect(screen.getByTestId('auth-callback-signin')).toBeTruthy();
   });
 
@@ -170,9 +168,7 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
   it('shows the pending state, not the error notice, while the exchange is still in flight', async () => {
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
     let resolveComplete: (outcome: AuthIntentResult) => void = () => {};
-    mockComplete.mockImplementation(
-      () => new Promise((resolve) => (resolveComplete = resolve)),
-    );
+    mockComplete.mockImplementation(() => new Promise((resolve) => (resolveComplete = resolve)));
 
     render(<AuthCallbackScreen />);
 
@@ -186,9 +182,7 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
   it('drops a resolution that arrives after unmount instead of updating unmounted state', async () => {
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
     let resolveComplete: (outcome: AuthIntentResult) => void = () => {};
-    mockComplete.mockImplementation(
-      () => new Promise((resolve) => (resolveComplete = resolve)),
-    );
+    mockComplete.mockImplementation(() => new Promise((resolve) => (resolveComplete = resolve)));
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { unmount } = render(<AuthCallbackScreen />);

@@ -1,8 +1,3 @@
-// Guards the autofill contract the new-password fields share (issue #1621; the
-// sign-up password field joined them in #1631). They used to carry a copy each
-// of the same four props; the props asserted here are what those copies
-// produced, so a change to the shared component that stops a site offering a
-// generated password fails.
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
@@ -14,8 +9,6 @@ jest.mock('expo-router', () => ({
   Link: ({ children }: { children: ReactNode }) => children,
 }));
 
-// Both screens reach the real Supabase client through their auth hooks, which
-// cannot initialize its realtime socket under Node.
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { updateUser: jest.fn(), signUp: jest.fn(), signInWithOAuth: jest.fn() } },
 }));

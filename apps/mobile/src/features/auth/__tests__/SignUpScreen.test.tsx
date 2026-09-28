@@ -1,9 +1,3 @@
-// Pins what each credential screen renders now that AuthForm's showConfirm /
-// enforcePasswordPolicy / showForgotPassword flags are gone (issue #1631). The
-// difference between the two screens is composition, so a screen that composes
-// the wrong pieces — or a shared piece that stops honouring one of them — fails
-// here rather than in a store review.
-
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 

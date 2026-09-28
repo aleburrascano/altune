@@ -82,8 +82,6 @@ describe('the outcome it reports', () => {
     });
 
     it('reports the winner’s failure to the delivery that lost the race, never deduped (#1641)', async () => {
-      // The two listeners are both in flight before the exchange settles, so the
-      // loser can only learn the outcome by awaiting what the winner started.
       let settleExchange = (_result: { data: object; error: object | null }): void => undefined;
       auth.exchangeCodeForSession.mockReturnValue(
         new Promise((resolve) => {
@@ -106,9 +104,6 @@ describe('the outcome it reports', () => {
     });
 
     it('refuses an intent kind it has no branch for instead of exchanging it as OAuth (#1644)', async () => {
-      // The compiler now rejects an unhandled kind outright; this is the runtime
-      // half of the same guard — a kind it has no plan for must not inherit the
-      // PKCE exchange, which is what the old implicit else handed it.
       const unplannedKind = { kind: 'magiclink', params: { code: 'not-an-oauth-code' } };
 
       const result = await completeAuthIntent(
@@ -179,9 +174,6 @@ describe('the outcome it reports', () => {
     );
 
     it('keeps only the four named error fields, so nothing else on the SDK error rides along', async () => {
-      // `requestBody` is not a field today's SDK sets. The point is that a field
-      // added to the error later cannot reach a log just by being on the object,
-      // and the credential is exactly what such a field would carry.
       auth.verifyOtp.mockResolvedValue({
         data: {},
         error: { name: 'AuthApiError', status: 401, requestBody: 'token_hash=super-secret-hash' },
@@ -201,8 +193,6 @@ describe('the outcome it reports', () => {
 });
 
 describe('PKCE-only credential exchange', () => {
-  // The account the server attributes a verified token to; the unlock is bound to
-  // it (#1638).
   const VERIFIED_USER = 'user-a';
 
   const VERIFIED = { data: { user: { id: VERIFIED_USER }, session: {} }, error: null };
@@ -240,9 +230,6 @@ describe('PKCE-only credential exchange', () => {
     });
 
     it('rejects a captured implicit-grant callback without calling setSession on its bare tokens', async () => {
-      // The old implicit-flow shape an interceptor could replay: live token pair
-      // embedded in the redirect fragment. Under PKCE the callback carries only a
-      // `code`, so this must be refused rather than trusted.
       const url =
         'altune://auth/callback#access_token=stolen-access&refresh_token=stolen-refresh&token_type=bearer';
 
@@ -254,10 +241,8 @@ describe('PKCE-only credential exchange', () => {
     });
   });
 
-  // What GoTrue's `/verify` redirect emits when an email template is left on the
-  // implicit flow: a live token pair delivered over the unverified `altune`
-  // scheme, replayable indefinitely by whatever intercepts it.
-  const IMPLICIT_TOKEN_PAIR = 'access_token=live-access&refresh_token=live-refresh&token_type=bearer';
+  const IMPLICIT_TOKEN_PAIR =
+    'access_token=live-access&refresh_token=live-refresh&token_type=bearer';
 
   const RECOVERY_IMPLICIT_LINK = `altune://auth/recovery#${IMPLICIT_TOKEN_PAIR}&type=recovery`;
 
@@ -281,9 +266,6 @@ describe('PKCE-only credential exchange', () => {
     );
 
     it('refuses a redelivered bare-token recovery link again, never laundering it as deduped', async () => {
-      // `deduped` means "another delivery is establishing this session", which
-      // useOAuth reads as success. A refusal must not become one by being seen
-      // twice, so a refused link claims no credential.
       await completeAuthIntent(parseAuthLink(RECOVERY_IMPLICIT_LINK), router, auth);
 
       const result = await completeAuthIntent(parseAuthLink(RECOVERY_IMPLICIT_LINK), router, auth);
@@ -305,14 +287,6 @@ describe('PKCE-only credential exchange', () => {
 });
 
 describe('binding the OTP type to the link path', () => {
-  // Issue #1636: the deep-link path decides `intent.kind` and the query string
-  // decides the OTP `type` — both attacker-written. A link may only spend a
-  // credential whose type its own path is allowed to carry, so a signup or
-  // email-change token verified under an `auth/recovery` path can never unlock
-  // the reset-password screen.
-
-  // What the server answers a verification with: the account it attributed the
-  // token to. The unlock is bound to that id (#1638).
   const VERIFIED_USER = 'user-a';
 
   const VERIFIED = { data: { user: { id: VERIFIED_USER }, session: {} }, error: null };
@@ -409,11 +383,6 @@ describe('binding the OTP type to the link path', () => {
 });
 
 describe('unlocking the reset-password screen', () => {
-  // Issue #656: the reset-password screen must unlock ONLY after a recovery
-  // verifyOtp actually succeeds — never for a failed link, a
-  // non-recovery intent, or a bare route hit that never reaches this code.
-  // Issue #1638: and only for the account the server named on that verification.
-
   const VERIFIED_USER = 'user-a';
 
   const OTHER_USER = 'user-b';
@@ -536,9 +505,6 @@ describe('spending a one-time credential once', () => {
     it('exchanges the one-time code exactly once when both listeners fire concurrently', async () => {
       const url = 'altune://auth/callback?code=one-time-abc';
 
-      // useOAuth (browser session result) and the global Linking listener both
-      // hand the identical callback URL to completeAuthIntent, racing to consume
-      // the single-use code.
       await Promise.all([
         completeAuthIntent(parseAuthLink(url), router, auth),
         completeAuthIntent(parseAuthLink(url), router, auth),
@@ -558,7 +524,11 @@ describe('spending a one-time credential once', () => {
     });
 
     it('still exchanges a genuinely different code from a later sign-in', async () => {
-      await completeAuthIntent(parseAuthLink('altune://auth/callback?code=first-code'), router, auth);
+      await completeAuthIntent(
+        parseAuthLink('altune://auth/callback?code=first-code'),
+        router,
+        auth,
+      );
       await completeAuthIntent(
         parseAuthLink('altune://auth/callback?code=second-code'),
         router,

@@ -26,18 +26,14 @@ export type OAuthResult =
   | { kind: 'pending'; provider: OAuthProvider }
   | { kind: 'ok' }
   | { kind: 'cancelled' }
-  | { kind: 'error'; reason: Extract<AuthErrorReason, 'network' | 'unknown' | 'too_many_attempts'> };
+  | {
+      kind: 'error';
+      reason: Extract<AuthErrorReason, 'network' | 'unknown' | 'too_many_attempts'>;
+    };
 
 type OAuthOutcome = Exclude<OAuthResult, { kind: 'idle' } | { kind: 'pending' }>;
 type OAuthFailure = Extract<OAuthOutcome, { kind: 'error' }>;
 
-/**
- * The browser leg is paced by a human typing at the provider, so the 20 s SDK
- * budget would abandon sign-ins that are going fine. Past this one, the session
- * is gone (the app was backgrounded and never came back) and the button must
- * not stay pinned at `pending`; a redirect arriving later is still claimed by
- * the global deep-link listener.
- */
 export const OAUTH_BROWSER_TIMEOUT_MS = 5 * 60_000;
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
@@ -47,7 +43,6 @@ function failureReason(error: SupabaseAuthErrorLike): OAuthFailure['reason'] {
   return isTransportAuthError(error) ? 'network' : 'unknown';
 }
 
-/** The provider's hosted sign-in URL, or the failure that stands in for it. */
 async function requestAuthorizationUrl(provider: OAuthProvider): Promise<AuthorizationRequest> {
   const { data, error } = await withAuthDeadline(
     supabase.auth.signInWithOAuth({
@@ -67,7 +62,10 @@ function thrownFailure(err: unknown): OAuthFailure {
 async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
   try {
     const { error } = await withAuthDeadline(
-      supabase.auth.signInWithOAuth({ provider, options: { redirectTo: authRedirectUrl('callback') } }),
+      supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: authRedirectUrl('callback') },
+      }),
     );
     return error ? { kind: 'error', reason: failureReason(error) } : null;
   } catch (err) {
@@ -75,7 +73,6 @@ async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure |
   }
 }
 
-/** The callback URL the in-app browser came back with, or null if it was dismissed. */
 async function redirectFromBrowser(authorizationUrl: string): Promise<string | null> {
   let session: WebBrowser.WebBrowserAuthSessionResult;
   try {
@@ -90,24 +87,17 @@ async function redirectFromBrowser(authorizationUrl: string): Promise<string | n
   return session.type === 'success' && session.url ? session.url : null;
 }
 
-/**
- * `ok` only if the code exchange actually succeeded. `deduped` is the global
- * deep-link listener's *confirmed* success on this same callback, so it is one
- * too; when that listener's exchange failed, this delivery is told the failure
- * rather than `deduped` (#1641). Anything else — a rejected exchange or an
- * unrecognized callback — is a real error.
- */
 async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promise<OAuthOutcome> {
   const outcome = await withAuthDeadline(
     completeAuthIntent(parseAuthLink(redirectUrl), router, supabase.auth),
   );
   const exchanged = outcome.kind === 'success' || outcome.kind === 'deduped';
   if (exchanged) return { kind: 'ok' };
-  const reason = outcome.kind === 'failure' && outcome.error ? failureReason(outcome.error) : 'unknown';
+  const reason =
+    outcome.kind === 'failure' && outcome.error ? failureReason(outcome.error) : 'unknown';
   return { kind: 'error', reason };
 }
 
-/** Every leg of the flow, reported as one terminal state and never thrown. */
 async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promise<OAuthOutcome> {
   try {
     const authorization = await requestAuthorizationUrl(provider);
@@ -133,9 +123,6 @@ export function useOAuth() {
     };
   }, []);
 
-  // A ref, not `state`: two presses in the same tick both read a `state` React
-  // has not re-rendered yet, so only a synchronous flag keeps the second one
-  // from opening a second browser session over the first.
   async function signInWith(provider: OAuthProvider): Promise<void> {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -147,8 +134,6 @@ export function useOAuth() {
         return;
       }
       const outcome = await signInOutcome(provider, router);
-      // The browser session routinely outlives the screen that opened it: a user
-      // who navigated away has no banner left to show this to.
       if (!mounted.current) return;
       setState(outcome);
     } finally {
