@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-# Self-test for check.sh. A stubbed `curl` on PATH answers /health and the
-# journey, so a case asserts the exit code, the log line and the journey gating.
-#
-#   bash scripts/uptime/check_test.sh
 
 set -uo pipefail
 

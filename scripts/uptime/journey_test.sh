@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 
-# Self-test for journey.sh, the find-music half of the off-box uptime probe
-# (check.sh), in the same shape as deploy-backend_test.sh. A stubbed `curl` on PATH drives the Supabase
-# sign-in and the search responses and records every request (argv and stdin),
-# so a case asserts the probe goes red on each failure stage, green only on a
-# 200 with results, and never prints the password or the access token. It also
-# covers health.sh's unset-URL guard.
-#
-#   bash scripts/uptime/journey_test.sh
 
 set -uo pipefail
 
@@ -163,7 +155,6 @@ RC=$?
 expect_rc 1
 expect_out "::error::UPTIME_HEALTH_URL"
 
-# --- probe (#2929): behaviours a caller relies on that the cases above leave open ---
 
 for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
     UPTIME_PROBE_EMAIL UPTIME_PROBE_PASSWORD; do
