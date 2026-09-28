@@ -8,4 +8,12 @@ if [ -n "$SENSITIVE" ]; then
   exit 1
 fi
 
+rc=0
+[ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE bash scripts/precheck.sh --lint || rc=$?; }
+case $rc in
+  0) ;;
+  3) echo "⚠️  pre-commit: some linters could not run here (see SKIP lines), CI will run them." ;;
+  *) echo "❌ pre-commit: linters failed. Fix the FAIL lines above and commit again."; exit 1 ;;
+esac
+
 exit 0

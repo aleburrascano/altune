@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+lint_only=0
+[ "${1:-}" = --lint ] && { lint_only=1; shift; }
+
 root=$(git rev-parse --show-toplevel) || exit 3
 cd "$root" || exit 3
 default_base_ref() { git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
@@ -9,7 +12,8 @@ base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with 
 
 PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 
-changed=$( { git diff --name-only --diff-filter=ACMR "$base"; git ls-files --others --exclude-standard; } | sort -u)
+untracked() { [ $lint_only = 1 ] || git ls-files --others --exclude-standard; }
+changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
 touches() { grep -qE "$1" <<<"$changed"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
@@ -46,6 +50,10 @@ check() {
   fi
 }
 
+test_check() {
+  [ $lint_only = 1 ] || check "$@"
+}
+
 need() { command -v "$1" >/dev/null 2>&1 || { echo "SKIP  $2: $1 not installed"; missing=1; return 1; }; }
 
 go_pin() {
@@ -71,13 +79,13 @@ if touches '^services/go-api/'; then
     check "go-api no new comments" $m go run ./scripts/lintcomments "$base"
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && check "go-api tests (changed packages)" $m "${heavy[@]}" go test -count=1 "${pkgs[@]}"
+    [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -count=1 "${pkgs[@]}"
   fi
 fi
 
 if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes"; then
   go_pin services/go-api
-  check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
+  test_check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
 fi
 
 if touches '^services/overseer/'; then
@@ -89,14 +97,14 @@ if touches '^services/overseer/'; then
     check "overseer strict linters" $m "${heavy[@]}" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
     check "overseer no new comments" services/go-api go run ./scripts/lintcomments "$base" ../overseer
     mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && check "overseer tests (changed packages)" $m "${heavy[@]}" go test -count=1 "${pkgs[@]}"
+    [ ${#pkgs[@]} -gt 0 ] && test_check "overseer tests (changed packages)" $m "${heavy[@]}" go test -count=1 "${pkgs[@]}"
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
       check "overseer web typecheck" $m/web "${heavy[@]}" npm run --silent typecheck
       check "overseer web lint" $m/web "${heavy[@]}" npm run --silent lint
       check "overseer web no new comments" $m/web node scripts/lint-changed-comments.mjs "$base"
-      check "overseer web test" $m/web "${heavy[@]}" npm run --silent test
+      test_check "overseer web test" $m/web "${heavy[@]}" npm run --silent test
     else
       echo "SKIP  overseer web: no node_modules here or in $main_tree"; missing=1
     fi
@@ -107,7 +115,7 @@ if touches '^(services/go-api|services/overseer)/.*\.go$'; then
   m=services/go-api
   go_pin $m
   if need go "stripcomments"; then
-    check "stripcomments self-tests" $m "${heavy[@]}" go test -count=1 ./scripts/stripcomments/...
+    test_check "stripcomments self-tests" $m "${heavy[@]}" go test -count=1 ./scripts/stripcomments/...
     strip_dir=$(mktemp -d)
     strip_bin="$strip_dir/stripcomments"
     if (cd $m && go build -o "$strip_bin" ./scripts/stripcomments) >"$log" 2>&1; then
@@ -147,7 +155,7 @@ fi
 
 if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile event contracts"; then
   if link_deps apps/mobile; then
-    check "mobile event contracts (go-api events changed)" apps/mobile "${heavy[@]}" npx jest --ci --forceExit --watchman=false src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
+    test_check "mobile event contracts (go-api events changed)" apps/mobile "${heavy[@]}" npx jest --ci --forceExit --watchman=false src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
   else
     echo "SKIP  mobile event contracts: no node_modules here or in $main_tree"; missing=1
   fi
@@ -161,8 +169,8 @@ if touches '^apps/mobile/'; then
     [ -n "$src" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $src
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
-    check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
-    [ -n "$src" ] && check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --findRelatedTests $src
+    test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
+    [ -n "$src" ] && test_check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --findRelatedTests $src
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
@@ -177,7 +185,7 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
     *) echo "FAIL  test files live with their unit"; tail -n 40 "$log" | sed 's/^/      /'; failed=1 ;;
   esac
   if touches '^scripts/test-home'; then
-    check "test-home regression suite" . bash scripts/test-home.test.sh
+    test_check "test-home regression suite" . bash scripts/test-home.test.sh
   fi
   if [ -f "$HOME/.claude/bin/vendor-test-home.sh" ]; then
     check "test-home in step with ~/.claude/bin" . bash "$HOME/.claude/bin/vendor-test-home.sh" "$root" --check
@@ -208,4 +216,5 @@ fi
 
 [ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"; exit 1; }
 [ $missing = 1 ] && { echo "precheck: incomplete, see SKIP lines"; exit 3; }
+[ $lint_only = 1 ] && { echo "precheck: lint green, tests left to CI"; exit 0; }
 echo "precheck: green"

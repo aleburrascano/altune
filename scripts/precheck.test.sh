@@ -334,6 +334,33 @@ run_script
 expect_rc 1
 expect_out "FAIL  stripcomments self-tests"
 
+CASE="--lint skips the stripcomments self-tests but still fails an added shell comment"
+new_repo
+add_stripcomments_fixture
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    printf 'package stripcomments\n\nimport "testing"\n\nfunc TestAlwaysFails(t *testing.T) {\n\tt.Fatal("boom")\n}\n' >services/go-api/scripts/stripcomments/always_fails_test.go
+    git add -A
+    git commit -qm "break the stripcomments self-tests"
+)
+add_commented_shell_file
+run_script --lint
+expect_rc 1
+expect_out "FAIL  workflows and shell no new comments"
+grep -q "stripcomments self-tests" "$WORK/out.log" && fail "expected --lint to skip the stripcomments self-tests"
+
+CASE="--lint ignores untracked files, since they are not part of the commit"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    printf '%s\n%s\n' '#!/usr/bin/env bash' '# comment' >untracked.sh
+)
+run_script --lint
+expect_rc 0
+expect_out "precheck: lint green, tests left to CI"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
