@@ -40,8 +40,6 @@ func (c *fakeClock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// countingRepo counts upserts so a test can prove a throttled request never
-// reached Postgres.
 type countingRepo struct {
 	recordingRepo
 	mu      sync.Mutex
@@ -55,8 +53,6 @@ func (r *countingRepo) Upsert(ctx context.Context, state *domain.QueueState) err
 	return r.recordingRepo.Upsert(ctx, state)
 }
 
-// countingRateLimitMetrics is a ports.RateLimitMetrics double that counts the
-// refusals the middleware reports.
 type countingRateLimitMetrics struct {
 	mu       sync.Mutex
 	refusals int
@@ -88,9 +84,6 @@ func serve(h *QueueHandler, req *http.Request) *httptest.ResponseRecorder {
 }
 
 func TestQueueStateRateLimit_RapidPutsFromOnePrincipalAreThrottled(t *testing.T) {
-	// Reproduces #1123: N rapid PUT /queue-state calls from one authenticated
-	// principal all used to succeed, each one an upsert on the shared pool.
-	// Once the burst is spent the next call must be a 429 that never writes.
 	clock := newFakeClock()
 	repo := &countingRepo{}
 	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 5}
@@ -127,9 +120,6 @@ func TestQueueStateRateLimit_RapidPutsFromOnePrincipalAreThrottled(t *testing.T)
 }
 
 func TestQueueStateRateLimit_CountsEveryRefusal(t *testing.T) {
-	// Reproduces #1566: a 429 left nothing behind but the status on the wire —
-	// no log line, no counter — so a client stuck in a retry loop, or an abuse
-	// case, was invisible to operators.
 	clock := newFakeClock()
 	metrics := &countingRateLimitMetrics{}
 	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 3}
@@ -172,9 +162,6 @@ func TestQueueStateRateLimit_IsPerPrincipal(t *testing.T) {
 }
 
 func TestQueueStateRateLimit_DefaultAdmitsAutosaveCadence(t *testing.T) {
-	// The mobile client saves every 15s and again on each background/inactive
-	// transition. Three signed-in devices doing that for an hour, each also
-	// flapping to the background every 30s, must never see a 429.
 	clock := newFakeClock()
 	h := NewQueueHandler(service.NewQueueService(&recordingRepo{}, nilNowPlaying{}), withClock(clock.now))
 	user := shared.NewUserId(uuid.New())
@@ -222,11 +209,6 @@ func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 	}
 }
 
-// worstAllowLatencyReclaiming fires concurrent callers at a limiter holding
-// idleBuckets fully refilled buckets and a clock already past the idle TTL, so
-// one of those calls is the one that reclaims them, and reports the worst
-// single call any caller saw. That number is the reclaim's blast radius on
-// every other /queue-state request on the instance.
 func worstAllowLatencyReclaiming(idleBuckets int) time.Duration {
 	clock := newFakeClock()
 	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
@@ -259,11 +241,6 @@ func worstAllowLatencyReclaiming(idleBuckets int) time.Duration {
 }
 
 func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallOtherCallers(t *testing.T) {
-	// Reproduces #1568: reclaiming used to be an O(len(buckets)) scan under the
-	// same mutex every allow() needs, so one unlucky request paid a pause
-	// proportional to the whole active-user count while every other user's
-	// PUT/GET /queue-state on that instance waited behind it. The pause must
-	// not grow with the user count.
 	const growthBudget = 20 * time.Millisecond
 
 	fewUsers := worstAllowLatencyReclaiming(1_000)
@@ -294,9 +271,6 @@ func TestUserRateLimiter_EvictsRefilledBuckets(t *testing.T) {
 }
 
 func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
-	// Reclaiming is what bounds memory, but a bucket may only go once its
-	// tokens have refilled: one that outlives a reclaim still owes its wait,
-	// so it has to survive with the tokens it had spent, not as a fresh one.
 	clock := newFakeClock()
 	limit := QueueStateRateLimit{Every: time.Minute, Burst: 1}
 	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())

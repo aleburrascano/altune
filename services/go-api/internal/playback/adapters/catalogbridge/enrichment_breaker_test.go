@@ -7,13 +7,8 @@ import (
 	"time"
 )
 
-// gaugeRaceAttempts is the repeat bound these interleavings need: the losing
-// order is a timing race, so a single attempt proves nothing either way.
 const gaugeRaceAttempts = 5000
 
-// breakerGauge is a ports.EnrichmentMetrics double that keeps only the last
-// degraded-state edge written to it — all an operator reads off the gauge is
-// whichever edge landed last.
 type breakerGauge struct {
 	mu       sync.Mutex
 	degraded bool
@@ -37,9 +32,6 @@ func (g *breakerGauge) readsDegraded() bool {
 	return g.degraded
 }
 
-// failEnoughToTrip records exactly the run of dependency failures that trips a
-// closed breaker, and not one more: a further failure after a concurrent
-// success cleared the run would re-trip and paper over an out-of-order edge.
 func failEnoughToTrip(b *enrichmentBreaker) {
 	for i := 0; i < enrichmentFailureThreshold; i++ {
 		b.recordFailure()
@@ -52,8 +44,6 @@ func breakerIsDegraded(b *enrichmentBreaker) bool {
 	return b.state != breakerClosed
 }
 
-// awaitDegraded blocks until the breaker has tripped, so the success that
-// follows is ordered after the trip and only the gauge edges are left racing.
 func awaitDegraded(t *testing.T, b *enrichmentBreaker) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
@@ -66,10 +56,6 @@ func awaitDegraded(t *testing.T, b *enrichmentBreaker) {
 	}
 }
 
-// assertGaugeMatchesState fails unless the last edge the breaker wrote is the
-// state it actually ended in. The gauge is read as "is enrichment fast-failing
-// right now", so a trailing edge from a lost race is not a blip: nothing
-// rewrites it until the next transition.
 func assertGaugeMatchesState(t *testing.T, attempt int, gauge *breakerGauge, b *enrichmentBreaker) {
 	t.Helper()
 	if gauge.readsDegraded() != breakerIsDegraded(b) {
@@ -78,12 +64,6 @@ func assertGaugeMatchesState(t *testing.T, attempt int, gauge *breakerGauge, b *
 	}
 }
 
-// TestBreaker_GaugeMatchesStateWhenASuccessRacesTheTrippingFailure reproduces
-// the reported defect: a lookup that succeeds and one that trips the breaker
-// wrote their gauge edges after releasing the state lock, so the healthy edge
-// could land last while the breaker stayed open. That latches the gauge to
-// healthy for the rest of the outage — an already-open breaker never announces
-// itself again — which is the exact window the gauge exists to make visible.
 func TestBreaker_GaugeMatchesStateWhenASuccessRacesTheTrippingFailure(t *testing.T) {
 	captureLogs(t)
 
@@ -108,11 +88,6 @@ func TestBreaker_GaugeMatchesStateWhenASuccessRacesTheTrippingFailure(t *testing
 	}
 }
 
-// TestBreaker_GaugeMatchesStateWhenARecoverySuccessFollowsTheTrip pins the
-// other direction, where the transitions are ordered and only the edges race: a
-// lookup still in flight succeeds just after the breaker tripped, so the
-// breaker closes, and the trip's degraded edge must not arrive after the
-// recovery's healthy one and leave the gauge crying outage over a live catalog.
 func TestBreaker_GaugeMatchesStateWhenARecoverySuccessFollowsTheTrip(t *testing.T) {
 	captureLogs(t)
 

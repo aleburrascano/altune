@@ -5,7 +5,6 @@ import (
 	"expvar"
 )
 
-// Published expvar variable names for playback's degradation counters.
 const (
 	EnrichmentFailuresVar       = "playback_now_playing_enrichment_failures_total"
 	CorruptStoredStateVar       = "playback_corrupt_stored_state_total"
@@ -16,13 +15,9 @@ const (
 	QueueStateErasedVar         = "playback_queue_state_erased_total"
 
 	EnrichmentBreakerRejectionsVar = "playback_now_playing_enrichment_breaker_rejections_total"
-	// EnrichmentBreakerOpenVar is a 0/1 gauge, not a counter: the one value an
-	// operator can read to answer "is enrichment fast-failing right now".
-	EnrichmentBreakerOpenVar = "playback_now_playing_enrichment_breaker_open"
+	EnrichmentBreakerOpenVar       = "playback_now_playing_enrichment_breaker_open"
 )
 
-// Declared at package scope because expvar.NewInt panics on a duplicate name;
-// registering once keeps the adapter safe to construct any number of times.
 var (
 	enrichmentFailures       = expvar.NewInt(EnrichmentFailuresVar)
 	corruptStoredState       = expvar.NewInt(CorruptStoredStateVar)
@@ -36,15 +31,11 @@ var (
 	enrichmentBreakerOpen       = expvar.NewInt(EnrichmentBreakerOpenVar)
 )
 
-// The gauge's two edges. A process wires one now-playing reader, so its breaker
-// is the gauge's only writer.
 const (
 	breakerDegraded = 1
 	breakerHealthy  = 0
 )
 
-// ExpvarPlaybackMetrics implements playback's per-consumer metrics ports by
-// incrementing process-global expvar counters.
 type ExpvarPlaybackMetrics struct{}
 
 var (
@@ -55,7 +46,6 @@ var (
 	_ ports.ErasureSweepMetrics = ExpvarPlaybackMetrics{}
 )
 
-// NewExpvarPlaybackMetrics returns an ExpvarPlaybackMetrics.
 func NewExpvarPlaybackMetrics() ExpvarPlaybackMetrics { return ExpvarPlaybackMetrics{} }
 
 func (ExpvarPlaybackMetrics) EnrichmentFailed()         { enrichmentFailures.Add(1) }
@@ -84,10 +74,6 @@ type Snapshot struct {
 	EnrichmentBreakerOpen       bool  `json:"now_playing_enrichment_breaker_open"`
 }
 
-// ReadSnapshot returns the current values of the published playback counters.
-// It reads the package-scope expvar vars directly so callers can expose these
-// counters without reaching the raw expvar registry (which also publishes
-// process globals like cmdline and memstats).
 func ReadSnapshot() Snapshot {
 	return Snapshot{
 		EnrichmentFailures:       enrichmentFailures.Value(),

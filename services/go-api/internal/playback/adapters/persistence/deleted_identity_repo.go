@@ -13,10 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Postgres SQLSTATEs that mean the identity store is not readable from here,
-// rather than that an owner's account was deleted. Both are measured against
-// Postgres 16: a SELECT through a missing schema reports the relation undefined
-// (42P01, not 3F000), and a role without the grant reports 42501.
 const (
 	undefinedTableCode   = "42P01"
 	insufficientPrivCode = "42501"
@@ -28,10 +24,6 @@ type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// PgxDeletedIdentityRepository reads stored queue state against Supabase's
-// auth.users, which lives in this same database (DATABASE_URL is the Supabase
-// pooler) but is owned by Supabase Auth: it is the only in-database record of
-// which accounts still exist.
 type PgxDeletedIdentityRepository struct {
 	pool rowsQuerier
 }
@@ -40,23 +32,6 @@ func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool) *PgxDeletedIdentityRepo
 	return &PgxDeletedIdentityRepository{pool: pool}
 }
 
-// ownersWithoutIdentitySQL anti-joins stored queue state against the identity
-// store. Gone means the row is gone: an account Supabase soft-deletes keeps its
-// auth.users row, and its queue state is left for the self-service erasure
-// rather than read off a column of Supabase's own schema.
-//
-// An already-erased row is skipped: it holds no PII, and re-erasing it would
-// re-stamp the marker every run, so a row that exists only to fence the writes
-// in flight at one instant (#1594) would never age out and would spend a slot
-// of every batch forever.
-//
-// `EXISTS (SELECT 1 FROM auth.users)` is the blast bound on an erasure
-// that cannot be undone: a role that reaches the table but sees none of its rows
-// (row-level security, a restore still in flight) would otherwise report every
-// owner as deleted and erase every stored queue. It costs one index probe.
-//
-// Cost: one pass over playback_queue_state per run — one row per user with a
-// stored queue — each row probing auth.users' primary key.
 const ownersWithoutIdentitySQL = `
 	SELECT q.user_id
 	FROM playback_queue_state q
@@ -93,9 +68,6 @@ func scanOwners(rows pgx.Rows) ([]shared.UserId, error) {
 	return owners, nil
 }
 
-// identityStoreErr classifies a failed read of the identity store: an absent or
-// forbidden auth.users is the unavailable sentinel its caller idles on, and
-// anything else is a plain failure the caller retries next run.
 func identityStoreErr(err error) error {
 	const op = "list owners without identity"
 	var pgErr *pgconn.PgError

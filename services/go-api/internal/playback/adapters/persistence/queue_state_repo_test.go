@@ -101,8 +101,6 @@ func assertServerFault(t *testing.T, err error) {
 	}
 }
 
-// recordingMetrics is a ports.QueueStateMetrics double that counts each
-// degradation signal, so a test can assert a counter fired on a failure path.
 type recordingMetrics struct {
 	corruptStoredState   int
 	queueStateOpTimedOut int
@@ -111,9 +109,6 @@ type recordingMetrics struct {
 func (m *recordingMetrics) CorruptStoredState()   { m.corruptStoredState++ }
 func (m *recordingMetrics) QueueStateOpTimedOut() { m.queueStateOpTimedOut++ }
 
-// TestGetForUser_CorruptRow_IncrementsMetric reproduces the missing health
-// signal: a corrupt stored row degrades to a server fault but, before this
-// change, incremented no counter — only a log line.
 func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
 	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: m}
@@ -126,8 +121,6 @@ func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 	}
 }
 
-// TestGetForUser_HealthyRow_RecordsNoCorruption guards against counting a
-// clean read as corruption.
 func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 	m := &recordingMetrics{}
 	repo := &PgxQueueStateRepository{pool: newFakeStore(), metrics: m}
@@ -144,8 +137,6 @@ func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 	}
 }
 
-// TestGetForUser_Timeout_IncrementsMetric reproduces the missing health signal
-// for a DB op that blows its per-op deadline.
 func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 	withShortTimeout(t)
 	m := &recordingMetrics{}
@@ -163,14 +154,12 @@ func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 	}
 }
 
-// TestDeleteForUser_ClientCancel_RecordsNoTimeout proves a caller-side cancel
-// is not misattributed to the database being slow.
 func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 	m := &recordingMetrics{}
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // client is already gone
+	cancel()
 
 	if err := repo.DeleteForUser(ctx, testUser()); err == nil {
 		t.Fatal("precondition: a canceled context must surface an error")
@@ -208,9 +197,6 @@ func TestUpsert_RejectsInvariantViolatingLiteral(t *testing.T) {
 	q := &capturingQuerier{}
 	repo := &PgxQueueStateRepository{pool: q}
 
-	// A bare struct literal bypasses NewQueueState entirely: CurrentIdx points
-	// past the only track, an out-of-bounds index the constructor rejects. The
-	// persistence boundary must re-validate so this cannot reach a stored row.
 	invalid := &domain.QueueState{
 		UserId:       testUser(),
 		TrackIds:     []string{"only-track"},
@@ -244,7 +230,6 @@ func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
 	}
 }
 
-// argsQuerier records the SQL and bound arguments of the last Exec.
 type argsQuerier struct {
 	sql  string
 	args []any
@@ -259,10 +244,6 @@ func (*argsQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 	return errRow{err: nil}
 }
 
-// TestUpsert_OrdersSavesOnDatabaseClock pins the #1121 fix: the ordering value
-// the stale guard compares is derived from the database clock inside the
-// statement, never bound from the API process's own wall-clock reading, which
-// clock steps and instance skew make untrustworthy.
 func TestUpsert_OrdersSavesOnDatabaseClock(t *testing.T) {
 	q := &argsQuerier{}
 	repo := &PgxQueueStateRepository{pool: q}
@@ -307,9 +288,6 @@ func TestHandlingAge_FutureStampClampsToZero(t *testing.T) {
 	}
 }
 
-// tagQuerier returns a fixed command tag from Exec, standing in for Postgres'
-// reply to the upsert: "INSERT 0 1" when the row was written, "INSERT 0 0" when
-// the ON CONFLICT ... WHERE guard rejected the update.
 type tagQuerier struct {
 	tag string
 }
@@ -344,13 +322,6 @@ func TestUpsert_AppliedWriteReportsSuccess(t *testing.T) {
 	}
 }
 
-// fakeStore is a stateful querier that emulates the playback_queue_state table
-// against an in-memory map, honoring the save and erasure INSERT..ON CONFLICT
-// shapes and the SELECT the adapter issues. It lets the erasure round-trip be
-// exercised without a live database, dropping the row where Postgres blanks it
-// and stamps erased_at, which is the same thing to every reader. What the
-// stamp decides — which of two concurrent writers wins — only Postgres can
-// answer, so that is held by the integration tests.
 type storedRow struct {
 	trackIds     []string
 	currentIdx   int
@@ -428,7 +399,7 @@ func TestDeleteForUser_ErasesStoredState(t *testing.T) {
 		TrackIds:   []string{"a", "b"},
 		CurrentIdx: 1,
 		RepeatMode: domain.RepeatOff,
-		SourceId:   "search:mac demarco", // free-text PII lives in source_id
+		SourceId:   "search:mac demarco",
 	})
 	if err != nil {
 		t.Fatalf("build state: %v", err)
@@ -521,8 +492,6 @@ func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	}
 }
 
-// positionQuerier stands in for Postgres' reply to UpdatePosition's statement:
-// (applied, matched). It records the SQL and bound arguments.
 type positionQuerier struct {
 	applied, matched bool
 	sql              string
@@ -562,10 +531,6 @@ func testPosition(t *testing.T) *domain.QueuePosition {
 	return p
 }
 
-// TestUpdatePosition_BindsNoTrackList pins the #1126 fix: the position-only
-// save sends no track list to the database, so neither array is encoded,
-// transferred or written, and it is still ordered on the database clock by the
-// same stale guard as a full save.
 func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
 	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopQueueStateMetrics()}
@@ -674,8 +639,6 @@ func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	}
 }
 
-// captureLogs redirects the default slog logger to a buffer for the duration of
-// the test, so a test can assert which fields a structured log line carries.
 func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -685,8 +648,6 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// faultRecord decodes the single captured log line carrying msg, so a test
-// asserts on fields rather than on substrings of a log blob.
 func faultRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
 	t.Helper()
 	var found map[string]any
@@ -706,8 +667,6 @@ func faultRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
 	return found
 }
 
-// faultingQuerier fails every op with one error, standing in for a database that
-// refuses the connection, exhausts its pool or rejects the statement.
 type faultingQuerier struct {
 	cause error
 }
@@ -731,8 +690,6 @@ func userPosition(t *testing.T, userId shared.UserId) *domain.QueuePosition {
 	return p
 }
 
-// queueStateOps is every persistence op reachable from a request, each named as
-// the fault line names it.
 var queueStateOps = []struct {
 	op   string
 	call func(*testing.T, *PgxQueueStateRepository, shared.UserId) error
@@ -752,9 +709,6 @@ var queueStateOps = []struct {
 	}},
 }
 
-// TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser pins #1595: a
-// database fault surfaces as a bare 500 whose only log line carries method and
-// path, so without this one an operator cannot tell whose write was lost.
 func TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser(t *testing.T) {
 	for _, tt := range queueStateOps {
 		t.Run(tt.op, func(t *testing.T) {
@@ -781,9 +735,6 @@ func TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser(t *testing.T) {
 	}
 }
 
-// TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine keeps the fault line to
-// the failures nothing else reports: a blown deadline is already counted, a
-// cancel is the client leaving, and no stored row is how an empty queue reads.
 func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 	tests := []struct {
 		outcome string
@@ -828,9 +779,6 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 	}
 }
 
-// TestUpsert_FailureLogNamesTheUserNotTheQueue holds the module's log hygiene:
-// the stored queue is the PII an erasure exists to remove (#1097), so a fault
-// line names its owner and never its contents.
 func TestUpsert_FailureLogNamesTheUserNotTheQueue(t *testing.T) {
 	logs := captureLogs(t)
 	repo := &PgxQueueStateRepository{pool: faultingQuerier{cause: errors.New("connection refused")}, metrics: ports.NoopQueueStateMetrics()}

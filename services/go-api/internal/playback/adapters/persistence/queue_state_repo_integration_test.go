@@ -30,9 +30,6 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// singleConnPool is a pool of exactly one connection, so a save started while
-// that connection is held waits in the pool instead of reaching Postgres: the
-// delay a stale write needs to be reproduced deterministically.
 func singleConnPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	cfg, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
@@ -48,8 +45,6 @@ func singleConnPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// dropQueueStateOnCleanup removes every trace of a test user: the stored queue,
-// or the blanked row an erasure leaves in its place.
 func dropQueueStateOnCleanup(t *testing.T, pool *pgxpool.Pool, userId shared.UserId) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -169,11 +164,6 @@ func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
 	}
 }
 
-// TestUpsert_FastInstanceClockDoesNotRejectLaterSave reproduces the
-// wall-clock ordering defect (#1121): save A is handled first by an instance
-// whose clock runs 10s fast, save B is handled after it by an accurate one. B
-// is the logically newer snapshot, but ordering by each process's own
-// time.Now() made A look newer, so B was rejected and the older A won.
 func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -201,9 +191,6 @@ func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
 	}
 }
 
-// TestUpsert_SaveDelayedInPoolIsStillStale pins the 409 contract for a truly
-// stale write: save A is stamped first but waits for a pooled connection while
-// the later save B commits. A must be rejected, not land last and clobber B.
 func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	wide := testPool(t)
@@ -241,11 +228,6 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 	}
 }
 
-// TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt reproduces #1594: an
-// autosave stamped before the user erased their queue, but still waiting for a
-// pooled connection when the erasure committed, found no row to conflict with
-// and so landed as a plain INSERT — silently recreating the track list, natural
-// order and free-text source_id the user had asked to be forgotten.
 func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	wide := testPool(t)
@@ -286,12 +268,6 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 	}
 }
 
-// TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt is the same defect
-// under true concurrency, where the delay is the erasure's own row lock: the
-// save is already executing when the erasure commits, so its snapshot predates
-// the erasure and nothing it reads separately could reveal it. Only the row the
-// erasure writes, which the save must re-check its guard against before it can
-// write over it, decides this one.
 func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -333,10 +309,6 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 	}
 }
 
-// TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow pins the bound on the
-// rows an erasure leaves behind: once no save older than one can still be in
-// flight it decides nothing, and keeping it would leave the identifier of an
-// account that may itself be deleted lying in the table for good.
 func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -368,9 +340,6 @@ func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 	}
 }
 
-// TestUpsert_SaveHandledAfterAnErasureStillApplies holds the other half of the
-// fence: erasure rejects the writes already in flight, it does not lock the
-// user out of saving again.
 func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -400,10 +369,6 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	}
 }
 
-// TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow pins the other
-// write path against the same race. It updates and never inserts, so it cannot
-// resurrect a queue; what it must not do is report success for a row that is
-// no longer there.
 func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	wide := testPool(t)
@@ -499,16 +464,8 @@ func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 	}
 }
 
-// maxUnchangedListWALBytes bounds the WAL a save may generate when neither
-// stored track list changes. Rewriting a max-length queue's two TEXT[] columns
-// costs ~880 KiB of WAL; a row header plus the scalar columns is a few hundred
-// bytes, so 16 KiB separates the two by two orders of magnitude while leaving
-// room for a full-page image on the first touch after a checkpoint.
 const maxUnchangedListWALBytes = 16 << 10
 
-// walInsertLSN reads the current WAL insert position. The difference between
-// two readings around a statement is the WAL that statement generated (plus
-// any concurrent activity, which a dedicated test database does not have).
 func walInsertLSN(t *testing.T, ctx context.Context, q querier) string {
 	t.Helper()
 	var lsn string
@@ -561,10 +518,6 @@ func cleanupUser(t *testing.T, q querier, userId shared.UserId) {
 	})
 }
 
-// TestUpsert_UnchangedTrackListsAreNotRewritten measures the write a periodic
-// autosave pays on a max-length queue when only the position moved (#1126).
-// Every shipped client sends the full queue on each save, so the full-state
-// path itself must not rewrite the two large arrays when they are unchanged.
 func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -598,8 +551,6 @@ func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 	}
 }
 
-// TestUpsert_ChangedTrackListIsStillWritten keeps the full-state contract: a
-// save that does carry a new track list replaces the stored one.
 func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -637,9 +588,6 @@ func positionAt(t *testing.T, userId shared.UserId, idx int, trackId string, pos
 	return p
 }
 
-// TestUpdatePosition_WritesOnlyThePosition measures the lighter path on a
-// max-length queue: a few hundred bytes of WAL, lists intact, and the stored
-// row still rehydrates with the moved index and position.
 func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -676,9 +624,6 @@ func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 	}
 }
 
-// TestUpdatePosition_NeverOverwritesANewerFullQueue pins the stale-write
-// contract (#664) for the position path: a position handled before a newer
-// full save is rejected, and the newer queue and its position survive.
 func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -691,7 +636,6 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 65000)); err != nil {
 		t.Fatalf("Upsert(newer full save): %v", err)
 	}
-	// Same queue, same track at the index: only the handling order says no.
 	err := repo.UpdatePosition(ctx, positionAt(t, userId, 1, "b", 1, 5*time.Second))
 	if !errors.Is(err, domain.ErrStaleQueueWrite) {
 		t.Fatalf("UpdatePosition(handled before the stored save) = %v, want ErrStaleQueueWrite", err)
@@ -706,8 +650,6 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 	}
 }
 
-// TestUpdatePosition_OrdersAgainstFullSavesBothWays: a full save handled
-// before a position save that already landed is itself the stale one.
 func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -738,9 +680,6 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	}
 }
 
-// TestUpdatePosition_DoesNotLandOnADifferentQueue: once another save replaced
-// the queue, a position measured against the old one does not apply, and
-// nothing is created for a user with no stored queue.
 func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -774,9 +713,6 @@ func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	}
 }
 
-// uncommittedFullSave writes a full save from its own transaction and leaves it
-// open, so the row stays locked and the next writer to it must wait. Calling
-// the returned commit ends the wait with the save committed.
 func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, state *domain.QueueState) (commit func()) {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -794,10 +730,6 @@ func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 }
 
-// awaitBlockedQueueWriter blocks until another backend is waiting on a lock
-// over playback_queue_state. Without it a test only proves the two saves ran in
-// some order, not that one resolved its write against a row the other changed
-// under it, which is the whole contended window.
 func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q querier) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -820,12 +752,6 @@ func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q querier) {
 	t.Fatal("no writer ever waited on the queue row; the contended write was not reproduced")
 }
 
-// TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync pins
-// the 409 subtype under a real race (#1570): the position save waits on the row
-// lock a concurrent full save holds, and that save moves the track the position
-// was measured against. Both subtypes are 409 and neither writes, but the
-// client acts on the difference — ErrStaleQueueWrite says retry, and retrying a
-// position measured against a queue that no longer exists can only fail again.
 func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -854,9 +780,6 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 	}
 }
 
-// TestUpdatePosition_AppliesOverAFullSaveItWaitedOut is the other arm of the
-// same race: the full save committed during the wait keeps the track at the
-// index and was handled first, so the position belongs on it and must land.
 func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -886,19 +809,8 @@ func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 	}
 }
 
-// TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale is the
-// lost-update arm of the same race (#1578): same contention, only the handling
-// order reversed, so the position must be rejected and the full save's data
-// survive. A save's own instant is read from the database clock inside the
-// statement, and the FOR UPDATE lock #1570 added put that read after the wait
-// on a concurrent writer — so waiting long enough aged an older save past the
-// newer full save it was waiting for, the ordering guard passed, and the full
-// save's position was overwritten by data measured before it.
 func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	// The gap decides which save is newer; the hold is how far a clock read
-	// taken after the wait would drift. The hold exceeds the gap by enough that
-	// a scheduling stall cannot swap the two.
 	const (
 		handledBeforeTheFullSave = 250 * time.Millisecond
 		lockHeldWhileItWaits     = time.Second

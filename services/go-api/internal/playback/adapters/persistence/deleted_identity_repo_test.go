@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// failingQuerier is an identity-store read that never reaches a row, so a test
-// can pin how one Postgres failure is classified.
 type failingQuerier struct {
 	err error
 }
@@ -20,10 +18,6 @@ func (q failingQuerier) Query(context.Context, string, ...any) (pgx.Rows, error)
 	return nil, q.err
 }
 
-// TestListOwnersWithoutIdentity_UnreadableIdentityStoreIsNotDeletedAccounts
-// pins the classification the sweep's blast bound rests on: a database that
-// cannot show this role the identity store must not be reported as a database
-// in which every account was deleted.
 func TestListOwnersWithoutIdentity_UnreadableIdentityStoreIsNotDeletedAccounts(t *testing.T) {
 	unreadable := map[string]string{
 		"no identity store here (a plain Postgres, no auth schema)": undefinedTableCode,
@@ -45,9 +39,6 @@ func TestListOwnersWithoutIdentity_UnreadableIdentityStoreIsNotDeletedAccounts(t
 	}
 }
 
-// TestListOwnersWithoutIdentity_QueryFailureStaysAFailure keeps the idle path
-// narrow: a database that is merely down must surface, or the sweep would
-// report a clean run while erasing nothing, forever.
 func TestListOwnersWithoutIdentity_QueryFailureStaysAFailure(t *testing.T) {
 	connectionRefused := errors.New("connection refused")
 	repo := &PgxDeletedIdentityRepository{pool: failingQuerier{err: connectionRefused}}

@@ -70,9 +70,6 @@ func deleteReq() *http.Request {
 }
 
 func TestHandleForget_DeleteRouteErasesPersistedState(t *testing.T) {
-	// Reproduces #619: QueueService.Forget (the GDPR erasure entrypoint) had no
-	// route wired, so an erasure request could not reach it in production. An
-	// authenticated DELETE /queue-state must reach Forget and erase the state.
 	repo := &recordingRepo{saved: &domain.QueueState{}}
 	h := newHandler(repo)
 	rec := httptest.NewRecorder()
@@ -143,10 +140,6 @@ func TestHandleSave_RejectedStaleWriteIsConflictNot204(t *testing.T) {
 }
 
 func TestHandleSave_GarbageLegacySourceIdRejectedNotPersisted(t *testing.T) {
-	// Reproduces #620: with only a garbage source_id and no structured source,
-	// the save used to succeed (204) and persist the garbage, which then read
-	// back as source: null while echoing the garbage in source_id. It must now
-	// be rejected the same way an unknown structured kind is.
 	repo := &recordingRepo{}
 	h := newHandler(repo)
 	rec := httptest.NewRecorder()
@@ -176,9 +169,6 @@ func TestHandleSave_LegacySourceIdPassesThrough(t *testing.T) {
 	}
 }
 
-// clientPlaylistIdFormat is the mobile client's id shape
-// (apps/mobile/src/shared/api-client/ids.ts): a stored playlist id outside it
-// becomes NO_PLAYLIST_ID in the resumed queue, and is sent back that way.
 var clientPlaylistIdFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 func clientPlaylistId(storedId string) string {
@@ -188,10 +178,6 @@ func clientPlaylistId(storedId string) string {
 	return ""
 }
 
-// resavedSource is the source the mobile client sends on its first autosave
-// after resuming from a GET body: fromWireSource keeps a playlist source whose
-// id fails the client's shape check but empties the id, and toWireSource sends
-// that same source straight back (apps/mobile/src/features/playback).
 func resavedSource(t *testing.T, resumed json.RawMessage) string {
 	t.Helper()
 	var source *queueSourceDTO
@@ -220,11 +206,6 @@ func resumedSource(t *testing.T, h *QueueHandler) json.RawMessage {
 	return body["source"]
 }
 
-// Reproduces #1577: a stored playlist source the client cannot keep an id for
-// comes back on every autosave with an empty playlist_id, and rejecting that
-// save (#1569) then failed every queue save for the rest of the session,
-// silently, costing the user their resume state. The id-less source is dropped
-// instead, and the resave must leave a state that resumes into another save.
 func TestQueueState_ResumedPlaylistWithoutAClientIdKeepsSaving(t *testing.T) {
 	for name, storedSourceId := range map[string]string{
 		"legacy id-less token":      "playlist::",
@@ -253,9 +234,6 @@ func TestQueueState_ResumedPlaylistWithoutAClientIdKeepsSaving(t *testing.T) {
 }
 
 func TestHandleGet_IdlessPlaylistRowResumesWithNoSource(t *testing.T) {
-	// Rows written before #1569 hold "playlist::". Echoing one as a playlist
-	// source hands the client a label with nothing behind it, which the client
-	// then sends back on every save (#1577), so the read path drops it too.
 	h := newHandler(&recordingRepo{saved: &domain.QueueState{SourceId: "playlist::"}})
 
 	got := string(resumedSource(t, h))
@@ -281,8 +259,6 @@ func TestHandleSave_IdlessPlaylistSourceIsStoredAsNoSource(t *testing.T) {
 }
 
 func TestHandleSave_IdlessPlaylistLegacySourceIdIsStoredAsNoSource(t *testing.T) {
-	// The write path's two doors must agree: the raw source_id field cannot
-	// still store the "playlist::" token the structured source drops (#1577).
 	repo := &recordingRepo{}
 	h := newHandler(repo)
 	rec := httptest.NewRecorder()
@@ -303,8 +279,6 @@ func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*
 	return nil, errors.New("lookup now-playing track: context deadline exceeded")
 }
 
-// getResume serves GET /queue-state for a saved queue whose current index
-// points at a track, so the handler always attempts now-playing enrichment.
 func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.QueueServiceOption) (int, map[string]json.RawMessage) {
 	t.Helper()
 	repo := &recordingRepo{saved: &domain.QueueState{
@@ -326,9 +300,6 @@ func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.
 	return rec.Code, body
 }
 
-// Reproduces #1122: a now-playing lookup that failed on a dependency fault
-// produced a body identical to "the current track is absent", so a client
-// could not tell a transient enrichment outage from nothing playing.
 func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *testing.T) {
 	failedCode, failed := getResume(t, failingNowPlaying{})
 	absentCode, absent := getResume(t, nilNowPlaying{})
@@ -350,7 +321,6 @@ func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *tes
 	}
 }
 
-// panickingNowPlaying fails the test if the kill switch lets a lookup through.
 type panickingNowPlaying struct{ t *testing.T }
 
 func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
@@ -358,10 +328,6 @@ func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string
 	return nil, errors.New("lookup must not run while disabled")
 }
 
-// Reproduces #1125: with the enrichment kill switch off, GET /queue-state never
-// touches the now-playing reader, still returns 200 with the queue, and does
-// not flag current_track_unavailable (that flag means a dependency fault, and
-// signalling one here would invite clients to retry into the load being shed).
 func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *testing.T) {
 	code, body := getResume(t, panickingNowPlaying{t: t}, service.WithNowPlayingEnrichment(false))
 
@@ -387,10 +353,6 @@ func positionPut(body string) *http.Request {
 	return req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 }
 
-// Reproduces #1126: before this route existed a position-only autosave had to
-// go through PUT /queue-state, re-sending, re-validating and re-writing the
-// whole track list. The position route hands the repository only the position
-// and never reaches the full-state Upsert.
 func TestHandleSavePosition_WritesPositionWithoutTheQueue(t *testing.T) {
 	repo := &recordingRepo{}
 	rec := httptest.NewRecorder()
@@ -450,8 +412,6 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 	}
 }
 
-// The position route shares the per-user /queue-state bucket, so it cannot be
-// used to multiply a user's write budget.
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 	h := NewQueueHandler(service.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
 		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Hour, Burst: 1}))

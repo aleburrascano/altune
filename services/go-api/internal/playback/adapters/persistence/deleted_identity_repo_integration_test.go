@@ -10,11 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// identityStoreTx stands an identity store up inside a transaction that is
-// always rolled back, so the anti-join runs against a real Postgres without the
-// test owning a schema Supabase owns in production. A database that already has
-// auth.users is that production identity store: the test skips rather than
-// writing to it.
 func identityStoreTx(t *testing.T) pgx.Tx {
 	t.Helper()
 	ctx := context.Background()
@@ -63,10 +58,6 @@ func contains(owners []shared.UserId, owner shared.UserId) bool {
 	return false
 }
 
-// TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone runs the
-// anti-join against a real Postgres: the erasure sweep it feeds is irreversible,
-// so "which accounts no longer exist" has to be answered by the database rather
-// than by a fake that agrees with the Go code.
 func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
@@ -90,10 +81,6 @@ func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.
 	}
 }
 
-// TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne pins the blast
-// bound in the SQL: an identity store this role reaches but sees no rows in
-// (row-level security, a restore still in flight) would otherwise make every
-// stored queue look like a deleted account's and erase the whole table.
 func TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)

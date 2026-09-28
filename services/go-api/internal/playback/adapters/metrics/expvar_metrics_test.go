@@ -46,8 +46,6 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 	}
 }
 
-// The counter an operator alerts on is the one GET /observe/metrics/live reads,
-// so the snapshot must carry the rate-limit rejections, not just expvar.
 func TestReadSnapshot_ReportsRateLimitRejections(t *testing.T) {
 	before := ReadSnapshot()
 
@@ -58,8 +56,6 @@ func TestReadSnapshot_ReportsRateLimitRejections(t *testing.T) {
 	}
 }
 
-// The breaker's state is a gauge, not a counter: the snapshot must answer "is
-// enrichment fast-failing right now", so it has to fall back as well as rise.
 func TestReadSnapshot_TracksBreakerOpenAndClosed(t *testing.T) {
 	m := NewExpvarPlaybackMetrics()
 

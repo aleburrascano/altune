@@ -175,7 +175,7 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 }
 
 func TestNewQueueState_BoundsStringLength(t *testing.T) {
-	huge := strings.Repeat("a", 500*1024) // 500 KiB, far beyond any legit value
+	huge := strings.Repeat("a", 500*1024)
 	tests := []struct {
 		name  string
 		input QueueStateInput
@@ -265,9 +265,6 @@ func stateFromInput(in QueueStateInput) *QueueState {
 	}
 }
 
-// Both save paths hand the same field set to one invariant check, and a pair
-// mapped to the wrong field there still rejects the same inputs — only the
-// field the message names tells them apart.
 func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -332,9 +329,6 @@ func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
 }
 
 func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
-	// #1569: a full save used to store "" at the current slot, after which the
-	// client could never use the position-only save for it — NewQueuePosition
-	// requires a non-empty currentTrackId — with nothing saying why.
 	_, err := NewQueueState(QueueStateInput{
 		UserId:     testUser(),
 		TrackIds:   []string{"a", ""},
@@ -372,9 +366,6 @@ func TestNewQueueState_AcceptsRealCurrentTrackId(t *testing.T) {
 }
 
 func TestRehydrateQueueState_KeepsStoredRowWithEmptyCurrentTrackId(t *testing.T) {
-	// Rows written before #1569 hold "" at the current slot. Rejecting them on
-	// read would classify them corrupt, which resumes the user into an empty
-	// queue instead of the real one they saved.
 	state, err := RehydrateQueueState(QueueStateInput{
 		UserId:     testUser(),
 		TrackIds:   []string{"a", ""},
@@ -388,8 +379,6 @@ func TestRehydrateQueueState_KeepsStoredRowWithEmptyCurrentTrackId(t *testing.T)
 	}
 }
 
-// codedValidationError is what a rejected save must present to a client: the
-// status to react to and the cause to branch on.
 type codedValidationError interface {
 	error
 	HTTPStatus() int
@@ -411,9 +400,6 @@ func validationCode(t *testing.T, err error) string {
 	return coded.ErrorCode()
 }
 
-// Every 400 this module raised used to carry the one code
-// "playback.validation_error", so a client could tell an over-long queue from
-// an unknown repeat mode only by parsing the detail text (#1596).
 func TestQueueStateValidation_EachCauseHasItsOwnCode(t *testing.T) {
 	oversized := strings.Repeat("a", MaxQueueStringBytes+1)
 	tests := []struct {
@@ -491,8 +477,6 @@ func rejectedState(in QueueStateInput) func() error {
 	}
 }
 
-// A coded 400 must stay a *ValidationError: that is what the service and
-// persistence layers ask errors.As for when classifying a rejected save.
 func TestQueueStateValidation_CodedErrorIsStillAValidationError(t *testing.T) {
 	_, err := NewQueueState(QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1})
 

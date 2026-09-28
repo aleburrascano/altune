@@ -82,10 +82,6 @@ func TestFormatQueueSource_UnknownKindIsValidationError(t *testing.T) {
 }
 
 func TestFormatQueueSource_IdlessPlaylistStoresNoSourceInsteadOfFailing(t *testing.T) {
-	// #1569: {"kind":"playlist","playlist_id":""} formatted to "playlist::", a
-	// non-empty token stored as if it named a playlist. #1577: rejecting it
-	// instead 400s every save a client sends after resuming such a source, so
-	// the meaningless label is dropped and the queue still saves.
 	for name, source := range map[string]QueueSource{
 		"no id":       {Kind: SourceKindPlaylist},
 		"no id, name": {Kind: SourceKindPlaylist, Name: "Road trip"},
@@ -103,9 +99,6 @@ func TestFormatQueueSource_IdlessPlaylistStoresNoSourceInsteadOfFailing(t *testi
 }
 
 func TestFormatQueueSource_IdlessPlaylistFallbackStoresNoSource(t *testing.T) {
-	// The raw source_id field is the second door to the same token, and it must
-	// answer it the way the structured source does rather than the opposite way
-	// (#1577): not stored, not rejected.
 	for _, fallback := range []string{"playlist:", "playlist::", "playlist::Road+trip"} {
 		got, err := FormatQueueSource(QueueSource{}, fallback)
 		if err != nil {
@@ -119,8 +112,6 @@ func TestFormatQueueSource_IdlessPlaylistFallbackStoresNoSource(t *testing.T) {
 }
 
 func TestParseQueueSource_IdlessPlaylistTokenIsZero(t *testing.T) {
-	// A stored token naming no playlist must not rehydrate into a source a
-	// reader can echo back to a client as if a playlist were playing (#1577).
 	for _, token := range []string{"playlist:", "playlist::", "playlist::Road+trip"} {
 		if got := ParseQueueSource(token); !got.IsZero() {
 			t.Errorf("ParseQueueSource(%q) = %+v, want zero", token, got)
@@ -169,9 +160,6 @@ func TestFormatQueueSource_EmptyFallbackStaysEmpty(t *testing.T) {
 }
 
 func TestFormatQueueSource_GarbageFallbackIsValidationError(t *testing.T) {
-	// Reproduces #620: a legacy source_id that cannot decode to a known-kind
-	// source must be rejected, not silently persisted only to read back as
-	// source: null on the next GET.
 	_, err := FormatQueueSource(QueueSource{}, "mixtape:7")
 	if err == nil {
 		t.Fatal("expected garbage legacy source_id to be rejected, got nil error")
@@ -182,9 +170,6 @@ func TestFormatQueueSource_GarbageFallbackIsValidationError(t *testing.T) {
 	}
 }
 
-// The two ways a source fails a save are a client error and a stored-token
-// error, and a client fixes them differently, so they cannot share one code
-// (#1596).
 func TestFormatQueueSource_EachRejectionHasItsOwnCode(t *testing.T) {
 	tests := []struct {
 		name     string

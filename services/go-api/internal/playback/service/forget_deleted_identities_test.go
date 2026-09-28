@@ -12,10 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// identityStore is the out-of-band Supabase identity table as this service can
-// see it: which owners of stored queue state still have an account. Dropping an
-// owner from it is an account deleted in Supabase, which tells this service
-// nothing and leaves its queue-state row behind.
 type identityStore struct {
 	queue *inMemoryQueueRepo
 	live  map[uuid.UUID]bool
@@ -49,8 +45,6 @@ func (s *identityStore) ListOwnersWithoutIdentity(_ context.Context, limit int) 
 	return owners, nil
 }
 
-// saveQueueOf stores one user's queue state and registers their account as
-// live, so a test starts from a user who exists and has something to erase.
 func saveQueueOf(t *testing.T, svc *QueueService, identities *identityStore, sourceId string) shared.UserId {
 	t.Helper()
 	user := testUser()
@@ -70,11 +64,6 @@ func newSweep(repo *inMemoryQueueRepo, identities *identityStore) *ForgetDeleted
 	return NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}))
 }
 
-// TestForgetDeletedIdentities_ErasesTheQueueStateOfADeletedAccount reproduces
-// #1593: an identity deleted out-of-band in Supabase left its queue state (full
-// track list, natural order and free-text search source_id, all PII) stored
-// indefinitely, because nothing but the self-service DELETE route — which the
-// deleted identity can no longer authenticate for — ever reached Forget.
 func TestForgetDeletedIdentities_ErasesTheQueueStateOfADeletedAccount(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
@@ -99,10 +88,6 @@ func TestForgetDeletedIdentities_ErasesTheQueueStateOfADeletedAccount(t *testing
 	}
 }
 
-// TestForgetDeletedIdentities_LeavesTheSelfServiceAuditRecord pins that the
-// erasure #1567 audits is audited identically however it was triggered: the
-// record says the PII is gone, so a sweep that erased without one would leave
-// the deletion unprovable.
 func TestForgetDeletedIdentities_LeavesTheSelfServiceAuditRecord(t *testing.T) {
 	logs := captureLogs(t)
 	repo := newInMemoryQueueRepo()
@@ -130,10 +115,6 @@ func TestForgetDeletedIdentities_LeavesTheSelfServiceAuditRecord(t *testing.T) {
 	}
 }
 
-// TestForgetDeletedIdentities_UnreadableIdentityStoreErasesNothing pins the
-// blast bound: where the identity store cannot be read (a plain Postgres with
-// no Supabase auth schema, a role denied the table) every owner would look
-// deleted, so the sweep must idle rather than erase the whole table.
 func TestForgetDeletedIdentities_UnreadableIdentityStoreErasesNothing(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
@@ -153,9 +134,6 @@ func TestForgetDeletedIdentities_UnreadableIdentityStoreErasesNothing(t *testing
 	}
 }
 
-// TestForgetDeletedIdentities_ListingFailureIsReported keeps a broken identity
-// read from passing as a clean run: the job health is the only place an erasure
-// that never happens can surface.
 func TestForgetDeletedIdentities_ListingFailureIsReported(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
@@ -172,9 +150,6 @@ func TestForgetDeletedIdentities_ListingFailureIsReported(t *testing.T) {
 	}
 }
 
-// TestForgetDeletedIdentities_FailedErasureStopsTheRun pins that a refused
-// delete is retried rather than counted: the run reports the failure and the
-// account stays in the next run's batch.
 func TestForgetDeletedIdentities_FailedErasureStopsTheRun(t *testing.T) {
 	logs := captureLogs(t)
 	repo := newInMemoryQueueRepo()
@@ -198,10 +173,6 @@ func TestForgetDeletedIdentities_FailedErasureStopsTheRun(t *testing.T) {
 	}
 }
 
-// TestForgetDeletedIdentities_ErasesABoundedBatchPerRun pins that a backlog of
-// deleted accounts drains a batch at a time: one run must not hold the identity
-// store open for an unbounded scan, and the accounts it left must be erased by
-// the run after it.
 func TestForgetDeletedIdentities_ErasesABoundedBatchPerRun(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)

@@ -17,8 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// captureLogs redirects the default slog logger to a buffer for the duration of
-// the test, so a test can assert which fields a structured log line carries.
 func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -41,8 +39,6 @@ func (r *inMemoryQueueRepo) Upsert(_ context.Context, state *domain.QueueState) 
 	return nil
 }
 
-// UpdatePosition mirrors the adapter's contract: it applies only when the
-// stored queue holds the named track at the index, and never creates a row.
 func (r *inMemoryQueueRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
 	stored := r.states[position.UserId.UUID()]
 	if stored == nil || position.CurrentIdx >= len(stored.TrackIds) || stored.TrackIds[position.CurrentIdx] != position.CurrentTrackId {
@@ -171,10 +167,6 @@ func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T
 	}
 }
 
-// TestQueueService_ResumeView_EnrichmentFailureLogsUserId pins that the
-// degraded-enrichment log line carries the owning user, so a failure can be
-// attributed to a specific account, and never the raw now-playing track id,
-// which is part of the stored queue treated as PII.
 func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 	logs := captureLogs(t)
 	repo := newInMemoryQueueRepo()
@@ -244,10 +236,6 @@ func TestQueueService_ResumeView_UnsavedEmptyQueueOmitsCurrentTrack(t *testing.T
 	}
 }
 
-// TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack pins that a
-// state which bypassed the constructors (struct literal or later mutation)
-// with CurrentIdx outside TrackIds resumes with no current track and no
-// lookup, instead of panicking on the index.
 func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
@@ -373,7 +361,6 @@ func TestQueueService_SavePosition_UnmatchedQueueIsConflict(t *testing.T) {
 	}
 }
 
-// panickingRepo fails the test if an invalid position reaches the repository.
 type panickingRepo struct{ inMemoryQueueRepo }
 
 func (*panickingRepo) UpdatePosition(context.Context, *domain.QueuePosition) error {
@@ -404,7 +391,7 @@ func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
 		TrackIds:   []string{"a", "b"},
 		CurrentIdx: 1,
 		RepeatMode: "off",
-		SourceId:   "search:mac demarco", // free-text PII in source_id
+		SourceId:   "search:mac demarco",
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -432,8 +419,6 @@ func TestQueueService_Forget_IsIdempotentForUnknownUser(t *testing.T) {
 	}
 }
 
-// auditRecord decodes the single captured log line carrying msg, so the audit
-// tests assert on fields rather than on substrings of a log blob.
 func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
 	t.Helper()
 	var found map[string]any
@@ -453,9 +438,6 @@ func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
 	return found
 }
 
-// TestQueueService_Forget_LeavesAnAuditRecord pins #1567: the GDPR erasure
-// records who erased what and when, the deleted row having been the only
-// evidence the queue state ever existed — and records none of the erased PII.
 func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
 	logs := captureLogs(t)
 	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
@@ -498,8 +480,6 @@ func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
 	}
 }
 
-// undeletableQueueRepo is the store refusing the erasure, so a test can tell an
-// audited erasure from an attempted one.
 type undeletableQueueRepo struct {
 	inMemoryQueueRepo
 	err error
@@ -509,8 +489,6 @@ func (r *undeletableQueueRepo) DeleteForUser(_ context.Context, _ shared.UserId)
 	return r.err
 }
 
-// TestQueueService_Forget_FailedErasureIsNotAudited pins #1567: the record
-// asserts the PII is gone, so a failed erasure must not leave one behind.
 func TestQueueService_Forget_FailedErasureIsNotAudited(t *testing.T) {
 	logs := captureLogs(t)
 	dbDown := errors.New("connection refused")
@@ -594,8 +572,6 @@ func TestQueueService_Resume_InfrastructureErrorStillFails(t *testing.T) {
 	}
 }
 
-// countingNowPlaying records every Lookup so a test can prove the kill switch
-// skips the catalog round trip entirely rather than just discarding its result.
 type countingNowPlaying struct {
 	calls int
 }
@@ -605,9 +581,6 @@ func (c *countingNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId 
 	return &ports.NowPlayingTrack{Id: trackId, Title: "Track " + trackId}, nil
 }
 
-// Reproduces #1125: PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false must shed the
-// now-playing lookup on every resume, while enabled (the default) behaves as
-// before.
 func TestQueueService_ResumeView_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 	tests := []struct {
 		name      string
