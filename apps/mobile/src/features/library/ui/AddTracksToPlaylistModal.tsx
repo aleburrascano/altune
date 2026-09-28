@@ -1,19 +1,19 @@
-import { useMemo, type ReactElement } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { type ComponentProps, type ReactElement } from 'react';
+import { ActivityIndicator, FlatList, Modal, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import { countLabel } from '@shared/lib/format';
-import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
-import { IconButton } from '@shared/ui/primitives/IconButton';
+import { Text, spacing, useTheme, type Theme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
-import { useLibrarySearch } from '../hooks/useLibrarySearch';
-import { useLibraryTracks } from '../hooks/useLibraryTracks';
-import { useSelection } from '../hooks/useSelection';
+import type { Selection } from '../hooks/useSelection';
+import { AddTracksHeader } from './AddTracksHeader';
+import { AlreadyAddedRow } from './AlreadyAddedRow';
+import { ConfirmButton } from './ConfirmButton';
 import { LibraryRow } from './LibraryRow';
+import { SelectAllButton } from './SelectAllButton';
+import { useAddableTracks, type AddableTracksState, type SearchApi } from './useAddableTracks';
 
 type AddTracksToPlaylistModalProps = {
   visible: boolean;
@@ -24,200 +24,179 @@ type AddTracksToPlaylistModalProps = {
   onClose: () => void;
 };
 
-export function AddTracksToPlaylistModal({
-  visible,
-  playlistName,
-  existingTrackIds,
-  adding,
-  onAdd,
-  onClose,
-}: AddTracksToPlaylistModalProps): ReactElement {
+type SectionProps = { props: AddTracksToPlaylistModalProps; state: AddableTracksState };
+
+const SEARCH_BAR_CONFIG = {
+  testID: 'add-tracks-search',
+  placeholder: 'Search your library',
+} as const;
+const TRACK_LIST_CONFIG = {
+  keyExtractor: (t: TrackResponse) => t.id,
+  onEndReachedThreshold: 0.5,
+  keyboardShouldPersistTaps: 'handled' as const,
+};
+const MODAL_CONFIG = { testID: 'add-tracks-modal', animationType: 'slide' as const };
+
+type ModalUIProps = ComponentProps<typeof Modal>;
+
+function modalProps(props: AddTracksToPlaylistModalProps, close: () => void): ModalUIProps {
+  return { ...MODAL_CONFIG, visible: props.visible, onRequestClose: close };
+}
+
+function useScreenStyle() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const search = useLibrarySearch();
-  const selection = useSelection();
-  const { tracks, isLoading, isFetchingNextPage, onEndReached } = useLibraryTracks(
-    search.query,
-    'recent',
-    visible,
-  );
+  return [styles.screen, { backgroundColor: theme.color.canvas, paddingTop: insets.top }];
+}
 
-  const existing = useMemo(() => new Set(existingTrackIds), [existingTrackIds]);
-  const addable = tracks.filter((t) => !existing.has(t.id));
-  const allSelected = addable.length > 0 && selection.count === addable.length;
+function useFooterStyle() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  return [
+    styles.footer,
+    { borderTopColor: theme.color.border, paddingBottom: insets.bottom + spacing.md },
+  ];
+}
 
-  const isEmpty = selection.count === 0;
-  const canConfirm = !isEmpty && !adding;
-
-  const close = (): void => {
-    selection.clear();
-    search.onClear();
-    onClose();
+function searchBarProps(search: SearchApi, theme: Theme): ComponentProps<typeof SearchBar> {
+  return {
+    ...SEARCH_BAR_CONFIG,
+    value: search.inputValue,
+    onChangeText: search.onChangeText,
+    onSubmitEditing: search.onSubmit,
+    onClear: search.onClear,
+    theme,
   };
+}
 
-  const confirm = (): void => {
-    if (isEmpty) return;
-    onAdd(selection.ids);
-  };
-
-  const renderItem = ({ item }: { item: TrackResponse }): ReactElement => {
-    if (existing.has(item.id)) {
-      return (
-        <View style={styles.alreadyRow}>
-          <Text variant="body" numberOfLines={1} tone="tertiary" style={styles.alreadyTitle}>
-            {item.title}
-          </Text>
-          <Text variant="caption" tone="tertiary">
-            Added
-          </Text>
-        </View>
-      );
-    }
-    return (
-      <LibraryRow
-        track={item}
-        onPress={() => selection.toggle(item.id)}
-        onMore={() => selection.toggle(item.id)}
-        selectable={{ selected: selection.has(item.id), onToggle: () => selection.toggle(item.id) }}
-      />
-    );
-  };
-
+function AddTracksTopBar({ props, state }: SectionProps): ReactElement {
   return (
-    <Modal testID="add-tracks-modal" visible={visible} animationType="slide" onRequestClose={close}>
-      <View
-        style={[styles.screen, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
-      >
-        <View style={styles.header}>
-          <IconButton icon={ChevronLeft} size={24} onPress={close} accessibilityLabel="Back" />
-          <Text variant="title" numberOfLines={1} style={styles.headerTitle}>
-            Add to {playlistName}
-          </Text>
-        </View>
-
-        <View style={styles.search}>
-          <SearchBar
-            testID="add-tracks-search"
-            value={search.inputValue}
-            onChangeText={search.onChangeText}
-            onSubmitEditing={search.onSubmit}
-            onClear={search.onClear}
-            placeholder="Search your library"
-            theme={theme}
-          />
-        </View>
-
-        {isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator testID="add-tracks-loading" />
-          </View>
-        ) : (
-          <FlatList
-            data={tracks}
-            keyExtractor={(t) => t.id}
-            renderItem={renderItem}
-            onEndReached={onEndReached}
-            onEndReachedThreshold={0.5}
-            keyboardShouldPersistTaps="handled"
-            ListFooterComponent={
-              isFetchingNextPage ? <ActivityIndicator style={styles.footerSpinner} /> : null
-            }
-            ListEmptyComponent={
-              <View style={styles.center}>
-                <Text variant="label" tone="secondary">
-                  {search.hasQuery
-                    ? 'No tracks match that search'
-                    : 'No tracks in your library yet'}
-                </Text>
-              </View>
-            }
-          />
-        )}
-
-        <View
-          style={[
-            styles.footer,
-            { borderTopColor: theme.color.border, paddingBottom: insets.bottom + spacing.md },
-          ]}
-        >
-          <Pressable
-            testID="add-tracks-select-all"
-            onPress={() =>
-              allSelected ? selection.clear() : selection.selectAll(addable.map((t) => t.id))
-            }
-            disabled={addable.length === 0}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={allSelected ? 'Deselect all tracks' : 'Select all tracks'}
-          >
-            <Text
-              variant="label"
-              style={{
-                color: addable.length === 0 ? theme.color.textTertiary : theme.color.accent,
-              }}
-            >
-              {allSelected ? 'Deselect all' : 'Select all'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            testID="add-tracks-confirm"
-            onPress={confirm}
-            disabled={!canConfirm}
-            accessibilityRole="button"
-            accessibilityLabel={`Add ${selection.count} tracks to ${playlistName}`}
-            accessibilityState={{ disabled: !canConfirm }}
-            style={({ pressed }) => [
-              styles.confirm,
-              {
-                backgroundColor: canConfirm ? theme.color.accent : theme.color.surface2,
-              },
-              pressed && canConfirm ? styles.pressed : null,
-            ]}
-          >
-            {adding ? (
-              <ActivityIndicator size="small" color={theme.color.onAccent} />
-            ) : (
-              <Text
-                variant="label"
-                style={{
-                  color: isEmpty ? theme.color.textTertiary : theme.color.onAccent,
-                }}
-              >
-                {isEmpty
-                  ? 'Select tracks'
-                  : `Add ${selection.count} ${countLabel(selection.count, 'track')}`}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+    <>
+      <AddTracksHeader playlistName={props.playlistName} onBack={state.close} />
+      <View style={styles.search}>
+        <SearchBar {...searchBarProps(state.search, useTheme())} />
       </View>
+    </>
+  );
+}
+
+function LoadingSpinner(): ReactElement {
+  return (
+    <View style={styles.center}>
+      <ActivityIndicator testID="add-tracks-loading" />
+    </View>
+  );
+}
+
+function EmptyResults({ hasQuery }: { hasQuery: boolean }): ReactElement {
+  return (
+    <View style={styles.center}>
+      <Text variant="label" tone="secondary">
+        {hasQuery ? 'No tracks match that search' : 'No tracks in your library yet'}
+      </Text>
+    </View>
+  );
+}
+
+function listFooter(isFetchingNextPage: boolean): ReactElement | null {
+  return isFetchingNextPage ? <ActivityIndicator style={styles.footerSpinner} /> : null;
+}
+
+type LibraryRowProps = ComponentProps<typeof LibraryRow>;
+
+function libraryRowProps(item: TrackResponse, selection: Selection): LibraryRowProps {
+  return {
+    track: item,
+    onPress: () => selection.toggle(item.id),
+    onMore: () => selection.toggle(item.id),
+    selectable: { selected: selection.has(item.id), onToggle: () => selection.toggle(item.id) },
+  };
+}
+
+function renderTrackRow(existing: Set<TrackId>, selection: Selection) {
+  const renderItem = ({ item }: { item: TrackResponse }): ReactElement => {
+    if (existing.has(item.id)) return <AlreadyAddedRow title={item.title} />;
+    return <LibraryRow {...libraryRowProps(item, selection)} />;
+  };
+  return renderItem;
+}
+
+function trackListProps(state: AddableTracksState) {
+  return {
+    ...TRACK_LIST_CONFIG,
+    renderItem: renderTrackRow(state.existing, state.selection),
+    onEndReached: state.query.onEndReached,
+    ListFooterComponent: listFooter(state.query.isFetchingNextPage),
+    ListEmptyComponent: <EmptyResults hasQuery={state.search.hasQuery} />,
+  };
+}
+
+function TracksSection({ state }: { state: AddableTracksState }): ReactElement {
+  if (state.query.isLoading) return <LoadingSpinner />;
+  return <FlatList data={state.query.tracks} {...trackListProps(state)} />;
+}
+
+function selectAllHandler(state: AddableTracksState): () => void {
+  return () => {
+    if (state.allSelected) return state.selection.clear();
+    return state.selection.selectAll(state.addable.map((t) => t.id));
+  };
+}
+
+function selectAllProps(state: AddableTracksState): ComponentProps<typeof SelectAllButton> {
+  return {
+    allSelected: state.allSelected,
+    disabled: state.addable.length === 0,
+    onPress: selectAllHandler(state),
+  };
+}
+
+type ConfirmUIProps = ComponentProps<typeof ConfirmButton>;
+
+function confirmProps({ props, state }: SectionProps): ConfirmUIProps {
+  return {
+    playlistName: props.playlistName,
+    count: state.selection.count,
+    canConfirm: state.canConfirm,
+    isEmpty: state.isEmpty,
+    adding: props.adding,
+    onPress: state.confirm,
+  };
+}
+
+function ModalFooter({ props, state }: SectionProps): ReactElement {
+  return (
+    <View style={useFooterStyle()}>
+      <SelectAllButton {...selectAllProps(state)} />
+      <ConfirmButton {...confirmProps({ props, state })} />
+    </View>
+  );
+}
+
+function ModalContent({ props, state }: SectionProps): ReactElement {
+  return (
+    <View style={useScreenStyle()}>
+      <AddTracksTopBar props={props} state={state} />
+      <TracksSection state={state} />
+      <ModalFooter props={props} state={state} />
+    </View>
+  );
+}
+
+export function AddTracksToPlaylistModal(props: AddTracksToPlaylistModalProps): ReactElement {
+  const state = useAddableTracks(props);
+  return (
+    <Modal {...modalProps(props, state.close)}>
+      <ModalContent props={props} state={state} />
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  headerTitle: { flex: 1 },
   search: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   center: { paddingTop: spacing['3xl'], alignItems: 'center' },
   footerSpinner: { paddingVertical: spacing.lg },
-  alreadyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    minHeight: minInteractiveHeight,
-    paddingHorizontal: spacing.lg,
-  },
-  alreadyTitle: { flex: 1 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -227,11 +206,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  confirm: {
-    minHeight: minInteractiveHeight,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    borderRadius: radius.full,
-  },
-  pressed: { opacity: 0.7 },
 });
