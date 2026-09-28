@@ -11,8 +11,6 @@ function snap<D>(id: string, title: string, state: State, data: D): Snapshot<D> 
   return { id, title, state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
-// A representative spread: a live bucket with a countable headline, a stale one, a
-// down one, and a bucket with no obvious headline (state must still read cleanly).
 const snapshots: Snapshot[] = [
   snap("liveactivity", "Live Activity", "live", {
     events: [{ at: "", kind: "track.played", text: "<img src=x onerror=alert(1)>" }],
@@ -26,8 +24,6 @@ const snapshots: Snapshot[] = [
 
 const byId = Object.fromEntries(snapshots.map((s) => [s.id, s]));
 
-// harness mirrors the Dashboard's routed content: overview at "/", drill-down at
-// "/bucket/:id", so the test exercises real navigation, not a stub.
 function harness(initial = "/") {
   return render(
     <MemoryRouter initialEntries={[initial]}>
@@ -46,7 +42,6 @@ describe("Overview — the landing grid", () => {
     for (const s of snapshots) {
       expect(screen.getByText(s.title)).toBeInTheDocument();
     }
-    // States are visible at the overview level, not only inside panels.
     expect(screen.getAllByText("LIVE").length).toBeGreaterThan(0);
     expect(screen.getByText("STALE")).toBeInTheDocument();
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
@@ -56,7 +51,6 @@ describe("Overview — the landing grid", () => {
     harness();
     expect(screen.getByText("1 events")).toBeInTheDocument();
     expect(screen.getByText("2 incidents")).toBeInTheDocument();
-    // The mystery bucket has no headline: its summary is the "—" placeholder.
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
@@ -86,7 +80,6 @@ describe("drill-down navigation", () => {
   it("clicking a bucket drills into its full panel", () => {
     harness();
     fireEvent.click(screen.getByLabelText("Open Live Activity"));
-    // The bespoke panel is now shown (its in-flight metric label), with a way back.
     expect(screen.getByText("in flight")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Overview/ })).toBeInTheDocument();
   });
@@ -94,7 +87,6 @@ describe("drill-down navigation", () => {
   it("drills into the generic fallback for a bucket with no bespoke panel", () => {
     harness();
     fireEvent.click(screen.getByLabelText("Open Cost"));
-    // Generic fallback renders the raw payload; the state badge is still shown.
     const back = screen.getByRole("link", { name: /Overview/ });
     expect(back).toBeInTheDocument();
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
@@ -106,7 +98,6 @@ describe("drill-down navigation", () => {
     expect(screen.queryByLabelText("Open Cost")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: /Overview/ }));
-    // Back on the overview: every card is present again.
     expect(screen.getByLabelText("Open Cost")).toBeInTheDocument();
     expect(screen.getByLabelText("Open Reliability")).toBeInTheDocument();
   });

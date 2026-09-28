@@ -41,11 +41,9 @@ describe("fetchBuckets — token expiry never blanks the API", () => {
     expect(got).toHaveLength(1);
     expect(got[0].id).toBe("a");
 
-    // The retry carried the refreshed token as a bearer header.
     const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
     const headers = new Headers(secondInit.headers);
     expect(headers.get("Authorization")).toBe("Bearer tok-2");
-    // Never sends cookies.
     expect(secondInit.credentials).toBe("omit");
   });
 });
@@ -77,7 +75,6 @@ describe("openStream — SSE fetch reader", () => {
     const got: Snapshot[] = [];
     const controller = new AbortController();
     const done = openStream(tp, { onSnapshot: (s) => got.push(s) }, controller.signal);
-    // The single mocked connection closes; abort so the reconnect loop exits.
     await new Promise((r) => setTimeout(r, 20));
     controller.abort();
     await done;
@@ -109,9 +106,6 @@ describe("openStream — SSE fetch reader", () => {
   });
 
   it("bounds reconnects when a refreshed token keeps getting 401", async () => {
-    // Server rejects every token, including freshly refreshed ones. Without a
-    // backoff on the refresh-retry path this is a tight loop hammering the server;
-    // with it, the first retry is immediate and further ones back off.
     const tp = tokenProvider();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 401 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -122,8 +116,6 @@ describe("openStream — SSE fetch reader", () => {
     controller.abort();
     await done;
 
-    // A tight loop would issue hundreds of fetches in 60ms; the backoff keeps it to
-    // the initial connect plus one immediate retry before it starts sleeping.
     expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(3);
     expect(tp.refreshes).toBeGreaterThan(0);
   });

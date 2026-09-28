@@ -1,9 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Login is the Supabase email/password sign-in. On success supabase-js holds the
-// session; App reacts to the auth-state change and swaps to the dashboard. No
-// cookie is ever set by Overseer — the bearer token lives in supabase-js.
 export function Login({ supabase }: { supabase: SupabaseClient }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

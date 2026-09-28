@@ -18,9 +18,6 @@ vi.mock("uplot", () => ({
   },
 }));
 
-// These describes were separate files (each its own jsdom window) before they
-// were gathered here, so reset the shared window/module state before every test
-// to keep each describe independent of run order.
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
   plots.length = 0;
@@ -35,8 +32,6 @@ function snap(state: State, data: Data): Snapshot<Data> {
   return { id: "usage", title: "Usage", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
-// A search query is watched-app data; the payload carries a hostile string to
-// prove it renders as escaped text, never as injected markup.
 const data: Data = {
   searches: [
     { label: "<img src=x onerror=alert(1)>", count: 12 },
@@ -58,10 +53,8 @@ describe("UsagePanel", () => {
     const { container } = render(<UsagePanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
-    // Rollups render in every state (never blank): headline totals + a search row.
     expect(screen.getByText("Top searches")).toBeInTheDocument();
     expect(container.textContent).toContain("miles davis");
-    // Watched-app label is escaped: shown as text, no injected element.
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
   });

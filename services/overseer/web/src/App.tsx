@@ -10,9 +10,6 @@ type Boot =
   | { phase: "error"; message: string }
   | { phase: "ready"; supabase: SupabaseClient };
 
-// App boots the runtime config, builds the Supabase client, then tracks the auth
-// session: no session shows the login screen, a session shows the dashboard. The
-// binary serves this SPA regardless of go-api, so the shell always loads.
 export function App() {
   const [boot, setBoot] = useState<Boot>({ phase: "loading" });
   const [session, setSession] = useState<Session | null>(null);

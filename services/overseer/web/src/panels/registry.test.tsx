@@ -17,9 +17,7 @@ describe("panel registry (additive on the frontend)", () => {
   });
 
   it("core registry imports no concrete bucket panel by name (auto-discovery)", () => {
-    // Panels are resolved by glob, not a hand-maintained import list.
     expect(registrySource).toContain("import.meta.glob");
-    // No static import of a bespoke *.panel file, and no bucket panel named directly.
     expect(registrySource).not.toMatch(/^import\s+.*\.panel/m);
     expect(registrySource).not.toMatch(/LiveActivity/);
   });
@@ -40,7 +38,6 @@ describe("GenericPanel renders all three states and escapes data", () => {
     const { container } = render(
       <GenericPanel snapshot={snap("x", "live", { note: "<script>alert(1)</script>" })} />,
     );
-    // React escapes on render: no live <script> element is injected.
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("<script>alert(1)</script>");
   });
@@ -57,10 +54,8 @@ describe("LiveActivityPanel", () => {
 
   it.each<State>(["live", "stale", "source_down"])("renders the %s state", (state) => {
     const { container } = render(<LiveActivityPanel snapshot={snap("liveactivity", state, data)} range="1h" />);
-    // Watched-app event text is escaped (no injected element), shown as text.
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
-    // The in-flight signal shows the explicit "no source yet" marker.
     expect(container.textContent).toContain("—");
   });
 

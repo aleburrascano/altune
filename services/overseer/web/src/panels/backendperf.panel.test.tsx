@@ -27,8 +27,6 @@ function snap(state: State, data: Data): Snapshot<Data> {
   };
 }
 
-// A route template carrying a would-be XSS payload as its name: it must render as
-// escaped text (no injected element), proving the frontend-escaping invariant.
 const data: Data = {
   routes: [
     {
@@ -64,12 +62,9 @@ describe("BackendPerfPanel", () => {
       const { container } = render(<BackendPerfPanel snapshot={snap(state, data)} range="1h" />);
       const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
       expect(screen.getByText(label)).toBeInTheDocument();
-      // Route templates are watched-app data: escaped, never injected as markup.
       expect(container.querySelector("img")).toBeNull();
       expect(container.textContent).toContain("onerror=alert(1)");
-      // Latency is shown for every state (last-known preserved, never blank).
       expect(container.textContent).toContain("/health");
-      // The overflow p99 estimate is marked as a lower bound.
       expect(container.textContent).toContain("≥");
     },
   );
@@ -82,10 +77,8 @@ describe("BackendPerfPanel", () => {
 
   it("surfaces the per-route 5xx error rate as a tile and a column", () => {
     const { container } = render(<BackendPerfPanel snapshot={snap("live", data)} range="1h" />);
-    // The at-a-glance tile leads with the worst route's error rate.
     expect(screen.getByText("worst 5xx rate (window)")).toBeInTheDocument();
     expect(container.textContent).toContain("50.0%");
-    // The failing route reads non-zero while the healthy /health route reads 0.0%.
     expect(container.textContent).toContain("0.0%");
   });
 
@@ -128,7 +121,6 @@ describe("BackendPerfPanel", () => {
     const { container } = render(<BackendPerfPanel snapshot={snap("live", data)} range="1h" />);
     expect(screen.getByText("latency and traffic reflect the recent window")).toBeInTheDocument();
     expect(screen.getByText("requests / window")).toBeInTheDocument();
-    // The throughput trend reads as a per-second rate over the window.
     expect(container.textContent).toContain("req/s");
     expect(container.textContent).toContain("150 in window");
   });

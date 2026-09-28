@@ -49,7 +49,6 @@ describe("summarize — the bucket's own headline wins over shape inference", ()
   }
 
   it("renders snapshot.headline verbatim when present, ignoring the payload shape", () => {
-    // The payload would infer "3 events"; the bucket's own headline must win.
     expect(summarize(withHeadline("all clear"))).toBe("all clear");
   });
 

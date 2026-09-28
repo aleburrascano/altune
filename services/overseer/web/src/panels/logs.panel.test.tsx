@@ -24,9 +24,6 @@ vi.mock("../api", async (importOriginal) => {
   return { ...actual, fetchSeries: vi.fn() };
 });
 
-// These describes were separate files (each its own jsdom window) before they
-// were gathered here, so reset the shared window/module state before every test
-// to keep each describe independent of run order.
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
   plots.length = 0;
@@ -42,8 +39,6 @@ function snap(state: State, data: Data): Snapshot<Data> {
   return { id: "logs", title: "Logs", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
-// Log message + attribute values are watched-app data; the payload carries a
-// hostile string to prove it renders as escaped text, never as injected markup.
 const data: Data = {
   minLevel: "DEBUG",
   records: [
@@ -67,10 +62,8 @@ describe("LogsPanel", () => {
     const { container } = render(<LogsPanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
-    // The tail renders in every state (never blank): a known line is present.
     expect(container.textContent).toContain("server started");
     expect(container.textContent).toContain("slow query");
-    // Watched-app text is escaped: shown as text, no injected element.
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
