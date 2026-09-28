@@ -19,8 +19,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
-// The JWKS fetch is the trust root for Verify: a plaintext JWKS URL lets a
-// network-positioned attacker substitute the key set (#1030).
 func TestNewSupabaseJWTVerifier_RejectsPlaintextJWKSURL(t *testing.T) {
 	for _, raw := range []string{
 		"http://test-project.supabase.co/auth/v1/.well-known/jwks.json",
@@ -55,8 +53,6 @@ func TestRequireSecureJWKSURL_AllowsHTTPSAndLoopbackHTTP(t *testing.T) {
 	}
 }
 
-// An https JWKS endpoint (or anything in front of it) must not be able to
-// downgrade the fetch to plaintext with a redirect.
 func TestCheckJWKSRedirect_RefusesPlaintextDowngrade(t *testing.T) {
 	mustReq := func(raw string) *http.Request {
 		u, err := url.Parse(raw)
@@ -111,10 +107,6 @@ func TestCappedJWKSBody_ReadsUpToTheCapAndFailsPastIt(t *testing.T) {
 	}
 }
 
-// A compressed response is the cheap way to blow past the cap: a few KB on the
-// wire expand to gigabytes. The transport wraps the body the HTTP client hands
-// back, which is already the decompressing reader, so the cap counts the bytes
-// that reach memory rather than the bytes on the wire.
 func TestCappedJWKSBodyTransport_CapsDecompressedBytes(t *testing.T) {
 	var compressed bytes.Buffer
 	zw := gzip.NewWriter(&compressed)
@@ -144,7 +136,6 @@ func TestCappedJWKSBodyTransport_CapsDecompressedBytes(t *testing.T) {
 	}
 }
 
-// marshalKeySet renders the JWKS JSON an endpoint publishes for one public key.
 func marshalKeySet(t *testing.T, pub *rsa.PublicKey, kid string) []byte {
 	t.Helper()
 	set := jwk.NewSet()
@@ -156,14 +147,8 @@ func marshalKeySet(t *testing.T, pub *rsa.PublicKey, kid string) []byte {
 	return body
 }
 
-// A JWKS endpoint, or anything in front of it, must not be able to make the
-// verifier buffer an unbounded response: the fetch reads the body with
-// io.ReadAll, and an unauthenticated caller can force one with unknown-kid
-// tokens (#2181).
 func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
 	keyA, keyB := generateRSAKey(t), generateRSAKey(t)
-	// Padding whitespace JSON ignores: only a client that finishes reading the
-	// body sees a valid key set, so the cap is what this test isolates.
 	oversized := append(marshalKeySet(t, &keyB.PublicKey, "key-b"), bytes.Repeat([]byte{' '}, maxJWKSBodyBytes)...)
 	withinCap := marshalKeySet(t, &keyA.PublicKey, "key-a")
 
@@ -186,13 +171,11 @@ func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
 		t.Fatalf("create verifier: %v", err)
 	}
 
-	// A normal key set still loads: the startup fetch primed key A.
 	f.privateKey, f.keyID = keyA, "key-a"
 	if _, err := verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
 		t.Fatalf("Verify with the key set fetched at startup: %v", err)
 	}
 
-	// The endpoint turns oversized, and an unknown kid forces a refresh onto it.
 	serveOversized.Store(true)
 	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
 	_, err = verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience)))
@@ -201,8 +184,6 @@ func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
 		t.Errorf("JWKSFetchFailed after an oversized JWKS body: got %d, want 1", got)
 	}
 
-	// Uncapped, that body would have parsed and replaced the cached set, so
-	// every token signed under key A would start failing.
 	f.privateKey, f.keyID = keyA, "key-a"
 	if _, err := verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
 		t.Fatalf("an oversized JWKS body evicted the cached key set: %v", err)

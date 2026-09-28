@@ -30,8 +30,6 @@ func TestExpvarFeedbackMetrics_PublishesAndIncrements(t *testing.T) {
 	}
 }
 
-// TestExpvarFeedbackMetrics_SplitsFailuresByCause pins that a dead token and an
-// outage land in separate per-cause counters while both still move the total.
 func TestExpvarFeedbackMetrics_SplitsFailuresByCause(t *testing.T) {
 	if expvar.Get(TrackerCreateFailuresByCauseVar) == nil {
 		t.Fatalf("expvar %q was never published", TrackerCreateFailuresByCauseVar)

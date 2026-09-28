@@ -17,8 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// capturingHandler records the attributes of each slog record so tests can
-// assert on what the failure path logs.
 type capturingHandler struct {
 	records []map[string]string
 }
@@ -38,8 +36,6 @@ func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
 func (h *capturingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *capturingHandler) WithGroup(string) slog.Handler      { return h }
 
-// captureLogs swaps the default slog logger for a capturing one for the
-// duration of the test and returns the handler holding the records.
 func captureLogs(t *testing.T) *capturingHandler {
 	t.Helper()
 	h := &capturingHandler{}
@@ -62,9 +58,6 @@ func (t *recordingTracker) Create(_ context.Context, report *domain.Report) (por
 	return ports.IssueRef{Number: 42, URL: "https://github.com/o/r/issues/42"}, nil
 }
 
-// gatedTracker blocks each Create on release, so a test can hold the one caller
-// that reaches the tracker while its concurrent duplicates queue behind the
-// idempotency store, then count how many creates actually ran.
 type gatedTracker struct {
 	release chan struct{}
 	mu      sync.Mutex
@@ -99,7 +92,6 @@ func (m *recordingMetrics) TrackerCreateFailed(cause string) {
 	m.causes = append(m.causes, cause)
 }
 
-// codedErr is a tracker failure carrying a wire code, like the GitHub adapter's.
 type codedErr struct{ code string }
 
 func (e codedErr) Error() string     { return "github issues: " + e.code }
@@ -329,9 +321,6 @@ func TestSubmitReport_LogsReportContextOnTrackerFailure(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_CountsTrackerFailureUnderItsCause pins that a coded tracker
-// failure is counted and logged under its code, and an uncoded one under the
-// fixed unclassified cause, so the metric can be split by cause.
 func TestSubmitReport_CountsTrackerFailureUnderItsCause(t *testing.T) {
 	cases := []struct {
 		name string
@@ -365,9 +354,6 @@ func TestSubmitReport_CountsTrackerFailureUnderItsCause(t *testing.T) {
 
 func keyPtr(s string) *string { return &s }
 
-// TestSubmitReport_KeylessCallsEachCreateAnIssue pins the pre-existing (and
-// still-correct) behaviour: with no idempotency key, a retry or double-tap
-// creates a second issue. This is the defect scenario absent a key.
 func TestSubmitReport_KeylessCallsEachCreateAnIssue(t *testing.T) {
 	tracker := &recordingTracker{}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
@@ -383,9 +369,6 @@ func TestSubmitReport_KeylessCallsEachCreateAnIssue(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_DuplicateKeyReplaysFirstIssue is the regression guard: a
-// retried submission carrying the same idempotency key must not create a second
-// issue and must return the first result.
 func TestSubmitReport_DuplicateKeyReplaysFirstIssue(t *testing.T) {
 	tracker := &recordingTracker{}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
@@ -411,8 +394,6 @@ func TestSubmitReport_DuplicateKeyReplaysFirstIssue(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_KeyIsScopedPerUser ensures one user's key cannot mask
-// another user's distinct submission.
 func TestSubmitReport_KeyIsScopedPerUser(t *testing.T) {
 	tracker := &recordingTracker{}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
@@ -431,8 +412,6 @@ func TestSubmitReport_KeyIsScopedPerUser(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_DifferentKeysCreateSeparateIssues confirms distinct keys are
-// not collapsed.
 func TestSubmitReport_DifferentKeysCreateSeparateIssues(t *testing.T) {
 	tracker := &recordingTracker{}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
@@ -450,8 +429,6 @@ func TestSubmitReport_DifferentKeysCreateSeparateIssues(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_FailedSubmissionUnderKeyStaysRetryable proves a failed first
-// attempt does not poison the key: a later call under it can still succeed.
 func TestSubmitReport_FailedSubmissionUnderKeyStaysRetryable(t *testing.T) {
 	tracker := &recordingTracker{err: errors.New("github is down")}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
@@ -472,9 +449,6 @@ func TestSubmitReport_FailedSubmissionUnderKeyStaysRetryable(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_ConcurrentDuplicatesCreateOneIssue is the double-tap case:
-// several requests sharing a key that arrive together must collapse onto a
-// single created issue.
 func TestSubmitReport_ConcurrentDuplicatesCreateOneIssue(t *testing.T) {
 	tracker := &gatedTracker{release: make(chan struct{})}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
@@ -497,8 +471,6 @@ func TestSubmitReport_ConcurrentDuplicatesCreateOneIssue(t *testing.T) {
 			refs[i] = ref
 		}(i)
 	}
-	// The lone caller that reaches the tracker is parked on release; every other
-	// caller is waiting on it. Releasing now lets exactly one create proceed.
 	close(tracker.release)
 	wg.Wait()
 
@@ -547,8 +519,6 @@ func TestSubmitReport_DoesNotCountSuccessOrRejectedInput(t *testing.T) {
 	}
 }
 
-// rejectionLog runs one rejected submission with logs captured and returns the
-// feedback.rejected record, failing the test if none was emitted.
 func rejectionLog(t *testing.T, user shared.UserId, input SubmitReportInput) map[string]string {
 	t.Helper()
 	logs := captureLogs(t)
@@ -565,9 +535,6 @@ func rejectionLog(t *testing.T, user shared.UserId, input SubmitReportInput) map
 	return nil
 }
 
-// assertRejectionAttrs checks the wanted attributes and that no attribute
-// echoes the submitted text: a report can hold pasted secrets and redaction
-// only runs on an accepted report, so a rejection log must never carry input.
 func assertRejectionAttrs(t *testing.T, rec map[string]string, want map[string]string, content ...string) {
 	t.Helper()
 	for k, v := range want {
@@ -635,16 +602,12 @@ func TestSubmitReport_LogsInvalidIdempotencyKeyRejection(t *testing.T) {
 	}, input.Message)
 }
 
-// uncreatedErr is a tracker failure that vouches no issue was created, like the
-// GitHub adapter's classified outage, refusal and transport errors.
 type uncreatedErr struct{ code string }
 
 func (e uncreatedErr) Error() string     { return "github issues: " + e.code }
 func (e uncreatedErr) ErrorCode() string { return e.code }
 func (e uncreatedErr) Uncreated() bool   { return true }
 
-// uncreatedThrottleErr is a rate-limited create: nothing was created, but
-// GitHub counted the request against the token.
 type uncreatedThrottleErr struct{ uncreatedErr }
 
 func (uncreatedThrottleErr) Throttled() (time.Duration, bool) { return 0, true }
@@ -659,11 +622,6 @@ func (c *countingTracker) Create(context.Context, *domain.Report) (ports.IssueRe
 	return ports.IssueRef{}, c.err
 }
 
-// TestSubmitReport_FailedCreateReleasesTheQuotaSlot reproduces #1115: a failed
-// tracker create used to spend its user and global slots for good, so an outage
-// ate the budget of issues that never existed. Now the slots are handed back:
-// the user still gets the full per-user cap, and everyone the full global cap,
-// once the tracker recovers.
 func TestSubmitReport_FailedCreateReleasesTheQuotaSlot(t *testing.T) {
 	tracker := &recordingTracker{err: uncreatedErr{code: "tracker_unavailable"}}
 	svc, _ := throttledService(tracker)
@@ -692,10 +650,6 @@ func TestSubmitReport_FailedCreateReleasesTheQuotaSlot(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_RepeatedFailuresCannotHammerTheTracker is the abuse case: a
-// caller (or an outage) that keeps making creates fail must not turn refunds
-// into unlimited tracker calls. Refunds stop at half of each cap, after which
-// failures spend quota as before.
 func TestSubmitReport_RepeatedFailuresCannotHammerTheTracker(t *testing.T) {
 	calls := &countingTracker{err: uncreatedErr{code: "tracker_unavailable"}}
 	svc, _ := throttledService(calls)
@@ -719,10 +673,6 @@ func TestSubmitReport_RepeatedFailuresCannotHammerTheTracker(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_OnlyUncreatedNonThrottleFailuresRefund pins what never hands
-// a slot back: a failure the tracker does not vouch for (an issue may exist,
-// e.g. a 201 whose body was lost) and a throttle, which GitHub counted and whose
-// pause must still hold.
 func TestSubmitReport_OnlyUncreatedNonThrottleFailuresRefund(t *testing.T) {
 	cases := []struct {
 		name     string

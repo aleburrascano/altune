@@ -11,27 +11,18 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// FailureLimits bounds how many token verifications one client may fail. A
-// client gets Burst failed attempts up front and earns one more every Refill;
-// successful verifications cost nothing. MaxClients caps the tracked-client map
-// so a caller rotating addresses cannot grow memory without bound.
 type FailureLimits struct {
 	Burst      int
 	Refill     time.Duration
 	MaxClients int
 }
 
-// DefaultFailureLimits leaves a real client ample room for an expired-token
-// retry loop while holding a single address to a few verifications per minute.
 var DefaultFailureLimits = FailureLimits{
 	Burst:      20,
 	Refill:     3 * time.Second,
 	MaxClients: 10_000,
 }
 
-// failureThrottle is a token bucket per client key. Each verification attempt
-// reserves a token before any verification work runs, so concurrent attempts
-// cannot overshoot the bucket; a successful verification returns its token.
 type failureThrottle struct {
 	mu      sync.Mutex
 	limits  FailureLimits
@@ -43,16 +34,12 @@ func newFailureThrottle(limits FailureLimits, now func() time.Time) *failureThro
 	return &failureThrottle{limits: limits, now: now, clients: make(map[string]*rate.Limiter)}
 }
 
-// attempt is one admitted verification. Succeeded refunds its token; an
-// attempt that is never marked succeeded stays charged as a failure.
 type attempt struct {
 	throttle    *failureThrottle
 	reservation *rate.Reservation
 	reservedAt  time.Time
 }
 
-// admit reserves a failure token for key. When the bucket is empty it returns
-// ok=false and how long until the next token, charging nothing.
 func (t *failureThrottle) admit(key string) (attempt, time.Duration, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -65,11 +52,6 @@ func (t *failureThrottle) admit(key string) (attempt, time.Duration, bool) {
 	return attempt{throttle: t, reservation: res, reservedAt: now}, 0, true
 }
 
-// succeeded refunds the token by cancelling at the instant the reservation was
-// made. Cancelling at a later clock reading is a no-op — rate.CancelAt drops
-// any reservation whose time-to-act has already passed — so re-reading the
-// clock here would silently charge every successful verification and throttle a
-// legitimate caller after Burst rapid requests.
 func (a attempt) succeeded() {
 	a.throttle.mu.Lock()
 	defer a.throttle.mu.Unlock()
@@ -86,10 +68,6 @@ func (t *failureThrottle) limiterFor(key string, now time.Time) *rate.Limiter {
 	return lim
 }
 
-// makeRoom drops clients whose bucket has fully refilled (they carry no
-// state worth keeping), then evicts arbitrary penalised ones until the map is
-// down to lowWater. Draining below MaxClients, not just to it, keeps the full
-// scan amortised: a flood of new addresses cannot force one per request.
 func (t *failureThrottle) makeRoom(now time.Time) {
 	if len(t.clients) < t.limits.MaxClients {
 		return
@@ -108,11 +86,6 @@ func (t *failureThrottle) makeRoom(now time.Time) {
 	}
 }
 
-// clientKey identifies the caller for throttling. X-Forwarded-For is trusted
-// only when the direct peer is a private or loopback address (the Caddy
-// reverse proxy on the Docker network); a public peer is keyed by its own
-// address so it cannot rotate a spoofed header to dodge the limit. IPv6
-// callers are keyed by /64, the smallest block one subscriber usually holds.
 func clientKey(r *http.Request) string {
 	peer := parseIP(hostOnly(r.RemoteAddr))
 	if forwarded, ok := forwardedClient(r, peer); ok {

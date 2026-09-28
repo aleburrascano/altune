@@ -66,7 +66,6 @@ func TestNewReport_RejectsTooShortMessage(t *testing.T) {
 	}
 }
 
-// Invisible runes spelled by code point so the source stays plain ASCII.
 var (
 	zeroWidthSpace  = string(rune(0x200B))
 	zeroWidthJoiner = string(rune(0x200D))
@@ -94,10 +93,6 @@ func TestNewReport_RejectsMessageWithoutVisibleContent(t *testing.T) {
 	}
 }
 
-// TestNewReport_RejectsMessageOfBlankNonFormatRunes reproduces #1108: runes
-// that render as nothing but sit outside category Cf (Hangul fillers are Lo,
-// variation selectors are Mn) were counted as visible, so a message built only
-// from them passed validation.
 func TestNewReport_RejectsMessageOfBlankNonFormatRunes(t *testing.T) {
 	cases := map[string]rune{
 		"hangul jungseong filler":    0x1160,
@@ -178,8 +173,6 @@ func TestNewReport_TrimsMessage(t *testing.T) {
 	}
 }
 
-// Secret fixtures are assembled at runtime so no literal credential shape sits
-// in the source for a secret scanner to flag.
 func TestNewReport_RedactsPastedSecrets(t *testing.T) {
 	cases := map[string]struct{ secret, keep string }{
 		"aws access key":    {"AKIA" + strings.Repeat("Q", 16), ""},
@@ -244,10 +237,6 @@ func TestNewReport_FlattensDiagnosticsToOneLine(t *testing.T) {
 	}
 }
 
-// TestDiagnostics_SanitizesEveryField dirties every string field via reflection
-// and asserts the enumeration in diagnosticsFields cleaned each one. A field
-// added to the struct but omitted from that list fails here rather than
-// silently skipping sanitization.
 func TestDiagnostics_SanitizesEveryField(t *testing.T) {
 	var dirty Diagnostics
 	dv := reflect.ValueOf(&dirty).Elem()
@@ -264,9 +253,6 @@ func TestDiagnostics_SanitizesEveryField(t *testing.T) {
 	}
 }
 
-// TestNewDiagnostics_PopulatesEveryField guards the DTO→domain construction
-// site: every field must be assigned, so a field added to the struct but missed
-// in NewDiagnostics fails loudly here instead of being dropped silently.
 func TestNewDiagnostics_PopulatesEveryField(t *testing.T) {
 	diag := reflect.ValueOf(NewDiagnostics("app", "platform", "os", "screen"))
 	for i := range diag.NumField() {
@@ -300,9 +286,6 @@ func TestReportTitle_UsesFirstLineOnly(t *testing.T) {
 	}
 }
 
-// TestReportTitle_DropsInvisibleRunes reproduces #1107: a directional override
-// or zero-width rune in the first line survived into the title, so the rendered
-// title could be visually spoofed.
 func TestReportTitle_DropsInvisibleRunes(t *testing.T) {
 	message := "\u202Etxt.exe\u200B  play\u2066back\u00AD stops\u200F\nmore detail"
 	report, err := NewReport(reporter(), KindBug, message, Diagnostics{})
@@ -320,8 +303,6 @@ func TestReportTitle_DropsInvisibleRunes(t *testing.T) {
 	}
 }
 
-// TestReportTitle_DropsInvisibleRunesWithoutANewline covers a single-line
-// message, whose first line skips the newline-cut branch.
 func TestReportTitle_DropsInvisibleRunesWithoutANewline(t *testing.T) {
 	report, err := NewReport(reporter(), KindIdea, "\u202Esort albums by year\u200B", Diagnostics{})
 	if err != nil {
@@ -332,9 +313,6 @@ func TestReportTitle_DropsInvisibleRunesWithoutANewline(t *testing.T) {
 	}
 }
 
-// TestReportTitle_SkipsInvisibleOnlyLeadingLines reproduces #1108: a message
-// valid overall but whose first line holds only invisible runes produced the
-// blank title "[bug] ".
 func TestReportTitle_SkipsInvisibleOnlyLeadingLines(t *testing.T) {
 	cases := map[string]string{
 		"zero-width first line":     zeroWidthSpace + "  \nDetails that explain the bug in enough length",
@@ -355,9 +333,6 @@ func TestReportTitle_SkipsInvisibleOnlyLeadingLines(t *testing.T) {
 	}
 }
 
-// TestTruncate_NeverSplitsAGraphemeCluster reproduces #1109: truncate cut by
-// rune count, so a ZWJ emoji sequence, flag, skin-tone emoji, or combining-mark
-// sequence straddling the cut left a dangling fragment before the ellipsis.
 func TestTruncate_NeverSplitsAGraphemeCluster(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -401,8 +376,6 @@ func TestTruncate_NeverSplitsAGraphemeCluster(t *testing.T) {
 	}
 }
 
-// TestTruncate_NonPositiveLimitReturnsEmpty reproduces #1109: a limit <= 0
-// sliced with a negative bound and panicked.
 func TestTruncate_NonPositiveLimitReturnsEmpty(t *testing.T) {
 	for _, limit := range []int{0, -1, math.MinInt} {
 		for _, s := range []string{"", "a", "some longer text"} {

@@ -135,7 +135,6 @@ func containsAll(text string, fragments []string) bool {
 	return true
 }
 
-// causeRecordingMetrics records the cause of every counted tracker failure.
 type causeRecordingMetrics struct{ causes []string }
 
 func (m *causeRecordingMetrics) SubmissionRejected(string) {}
@@ -145,12 +144,6 @@ func (m *causeRecordingMetrics) TrackerCreateFailed(cause string) {
 	m.causes = append(m.causes, cause)
 }
 
-// TestSubmitReport_SplitsTrackerFailureMetricByCause reproduces #1111 end to end
-// against a fake GitHub: a transient failure (5xx, unreachable host) and a
-// permanent one (dead token, wrong repo) used to bump one undifferentiated
-// counter, and a 404 wrong-repo classified identically to a 5xx outage. Each now
-// lands under its own cause, and the permanent causes never collide with the
-// transient ones.
 func TestSubmitReport_SplitsTrackerFailureMetricByCause(t *testing.T) {
 	unreachable := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	unreachableURL := unreachable.URL
@@ -347,7 +340,6 @@ func TestTransportError_VouchesUncreatedOnlyForProvableNonDelivery(t *testing.T)
 	}
 }
 
-// scriptedReply is one canned fake-GitHub answer.
 type scriptedReply struct {
 	status  int
 	headers map[string]string
@@ -359,9 +351,6 @@ var (
 	created = scriptedReply{status: http.StatusCreated, body: `{"number":7,"html_url":"https://github.com/o/r/issues/7"}`}
 )
 
-// scriptedGitHub is a fake GitHub API that answers the n-th create with
-// script[n], and with fallback once the script runs out. It counts every
-// request that reaches it.
 func scriptedGitHub(t *testing.T, fallback scriptedReply, script ...scriptedReply) (*GitHubIssueTracker, *atomic.Int32) {
 	t.Helper()
 	var hits atomic.Int32
@@ -381,8 +370,6 @@ func scriptedGitHub(t *testing.T, fallback scriptedReply, script ...scriptedRepl
 	return newTestTracker(server.URL), &hits
 }
 
-// refundLimits leaves the per-user cap out of the way so only the global cap,
-// with a window longer than the throttle floor, decides what is admitted.
 var refundLimits = service.SubmissionLimits{
 	PerUser:       1000,
 	PerUserWindow: time.Hour,
@@ -395,8 +382,6 @@ func refundService(tracker *GitHubIssueTracker) (*service.SubmitReportService, *
 	return service.NewSubmitReportServiceWithLimits(tracker, noopMetrics{}, refundLimits, clock.now), clock
 }
 
-// admittedUntilRefused submits fresh users until one is refused locally and
-// returns how many were admitted (succeeded or failed at GitHub).
 func admittedUntilRefused(t *testing.T, svc *service.SubmitReportService) int {
 	t.Helper()
 	for i := 0; i < 100; i++ {
@@ -413,10 +398,6 @@ func isLocalRefusal(err error) bool {
 	return errors.As(err, &status) && status.HTTPStatus() == http.StatusTooManyRequests
 }
 
-// TestSubmitReport_GitHubOutageReleasesQuota reproduces #1115 against a fake
-// GitHub: creates that failed with a 5xx used to keep their global slots, so
-// once GitHub recovered the budget was already gone for issues never created.
-// Now those slots are handed back and the full cap is available on recovery.
 func TestSubmitReport_GitHubOutageReleasesQuota(t *testing.T) {
 	tracker, hits := scriptedGitHub(t, created, outage, outage)
 	svc, _ := refundService(tracker)
@@ -434,8 +415,6 @@ func TestSubmitReport_GitHubOutageReleasesQuota(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_UnreachableGitHubReleasesQuota covers a transport failure:
-// the request never got an answer, so no issue exists and the slot comes back.
 func TestSubmitReport_UnreachableGitHubReleasesQuota(t *testing.T) {
 	tracker, _ := scriptedGitHub(t, created)
 	liveURL := tracker.baseURL
@@ -453,10 +432,6 @@ func TestSubmitReport_UnreachableGitHubReleasesQuota(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_SustainedOutageStillBoundsGitHubCalls is the abuse case: a
-// GitHub that fails every create must not let refunds turn admission into an
-// open tap. Only half the cap is refundable per window, so a flood reaches
-// GitHub at most 1.5x the cap and is then refused locally.
 func TestSubmitReport_SustainedOutageStillBoundsGitHubCalls(t *testing.T) {
 	tracker, hits := scriptedGitHub(t, outage)
 	svc, _ := refundService(tracker)
@@ -473,10 +448,6 @@ func TestSubmitReport_SustainedOutageStillBoundsGitHubCalls(t *testing.T) {
 	}
 }
 
-// TestSubmitReport_FailuresThatMayHaveCreatedOrWereCountedKeepQuota pins the
-// failures that must still spend their slot: a 201 whose body was lost (GitHub
-// created that issue) and a rate-limit answer (GitHub counted the request, and
-// the #1116 pause must keep holding).
 func TestSubmitReport_FailuresThatMayHaveCreatedOrWereCountedKeepQuota(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -512,9 +483,6 @@ func TestSubmitReport_FailuresThatMayHaveCreatedOrWereCountedKeepQuota(t *testin
 	}
 }
 
-// throttlingGitHub is a fake GitHub API whose first create call answers with the
-// given (rate-limit/abuse) response and every later call succeeds with a 201.
-// It counts every request that actually reaches it.
 func throttlingGitHub(t *testing.T, status int, headers map[string]string, body string) (*GitHubIssueTracker, *atomic.Int32) {
 	t.Helper()
 	var hits atomic.Int32
@@ -539,8 +507,6 @@ type steppedClock struct{ t time.Time }
 
 func (c *steppedClock) now() time.Time { return c.t }
 
-// generousLimits keeps the local sliding-window caps out of the way so only the
-// reaction to GitHub's throttling signal can refuse a submission.
 var generousLimits = service.SubmissionLimits{
 	PerUser:       1000,
 	PerUserWindow: time.Minute,
@@ -570,19 +536,12 @@ func assertRefusedLocally(t *testing.T, err error) {
 	}
 }
 
-// TestAdmission_PausesOnGitHubThrottleSignal reproduces #1116: GitHub answering a
-// create with a rate-limit/abuse response used to leave the admission layer
-// admitting at its fixed local rate, so every following report hit GitHub again
-// during the lockout. Now the first throttle response pauses admissions for as
-// long as GitHub asked, refusing locally (429) without calling GitHub, and
-// admissions resume once that wait has elapsed.
 func TestAdmission_PausesOnGitHubThrottleSignal(t *testing.T) {
 	cases := []struct {
-		name    string
-		status  int
-		headers func() map[string]string
-		body    string
-		// stillPaused is a point inside the requested wait; resumed is past it.
+		name        string
+		status      int
+		headers     func() map[string]string
+		body        string
 		stillPaused time.Duration
 		resumed     time.Duration
 	}{
@@ -686,8 +645,6 @@ func TestRequestedBackoff_ReadsGitHubHeaders(t *testing.T) {
 	}
 }
 
-// TestAdmission_NonThrottleFailureDoesNotPause pins that only a rate-limit
-// signal pauses admissions: a plain GitHub outage or a dead token keeps admitting.
 func TestAdmission_NonThrottleFailureDoesNotPause(t *testing.T) {
 	cases := []struct {
 		name   string

@@ -7,13 +7,6 @@ import (
 	"time"
 )
 
-// reporterIdentityRow labels the diagnostics row that publishes the reporter's
-// opaque shared.UserId UUID into every filed issue. Publishing it is deliberate,
-// even though the issue repo is public: it is the durable locator an operator
-// uses to find and delete a user's reports on an erasure request, since a filed
-// issue is never read back, redacted, or removed by the service
-// (internal/feedback/RETENTION.md). No email, handle, or IP is ever published.
-// .env.example names this constant so the shipped contract cannot drift again.
 const reporterIdentityRow = "Reporter"
 
 func renderBody(report *domain.Report, correlationID string) string {
@@ -35,10 +28,6 @@ func renderBody(report *domain.Report, correlationID string) string {
 	return b.String()
 }
 
-// fenced renders untrusted text inside a code block so GitHub shows it
-// literally: no @mentions notify, no links or images render, and no forged
-// table can masquerade as the diagnostics. The fence is longer than any
-// backtick run in the text, so the text cannot close it early.
 func fenced(text string) string {
 	fence := strings.Repeat("`", max(3, longestBacktickRun(text)+1))
 	return fence + "\n" + text + "\n" + fence
@@ -64,17 +53,10 @@ func cell(value string) string {
 	return strings.ReplaceAll(value, "|", `\|`)
 }
 
-// literalDiagnostics wraps each client-supplied diagnostics value in an inline
-// code span, extending fenced's guarantee to the table: no @mention notifies
-// and no link, image, or HTML renders. The domain already flattened each value
-// to one line, so a span cannot be broken by a newline.
 func literalDiagnostics(d domain.Diagnostics) domain.Diagnostics {
 	return domain.NewDiagnostics(inlineCode(d.AppVersion), inlineCode(d.Platform), inlineCode(d.OSVersion), inlineCode(d.Screen))
 }
 
-// inlineCode renders single-line untrusted text as a code span whose delimiter
-// outlasts any backtick run inside it. Text starting or ending with a backtick
-// or space is padded by one space on each side, which the span strips again.
 func inlineCode(text string) string {
 	if text == "" {
 		return ""
@@ -86,13 +68,8 @@ func inlineCode(text string) string {
 	return delim + text + delim
 }
 
-// fullwidthAt stands in for "@" in an issue title: it reads the same, but
-// GitHub never treats it as the start of a mention.
 const fullwidthAt = "\uFF20"
 
-// plainTitle neutralizes @mentions in an issue title. GitHub matches mentions
-// in titles too and titles cannot be fenced, so the one app-wide token would
-// otherwise notify any account or team a reporter names.
 func plainTitle(title string) string {
 	return strings.ReplaceAll(title, "@", fullwidthAt)
 }

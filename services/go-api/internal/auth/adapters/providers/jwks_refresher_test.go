@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// newTestRefresher returns a refresher whose fetch fails with fetchErr (nil
-// for success) and counts calls, with a controllable clock and no jitter.
 func newTestRefresher(fetchErr *error) (*jwksRefresher, *atomic.Int64, *time.Time) {
 	var calls atomic.Int64
 	clock := time.Unix(1_700_000_000, 0)

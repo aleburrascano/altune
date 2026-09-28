@@ -13,13 +13,9 @@ import (
 )
 
 type SubmitReportInput struct {
-	Kind        string
-	Message     string
-	Diagnostics domain.Diagnostics
-	// IdempotencyKey is an optional caller-minted token, stable across retries
-	// of one logical submission. When set, a retry of a dropped response or a
-	// double-tapped Submit replays the first issue instead of creating another;
-	// nil means every call creates a fresh issue.
+	Kind           string
+	Message        string
+	Diagnostics    domain.Diagnostics
 	IdempotencyKey *string
 }
 
@@ -30,13 +26,10 @@ type SubmitReportService struct {
 	idempotency *submissionIdempotency
 }
 
-// NewSubmitReportService throttles submissions with DefaultSubmissionLimits.
 func NewSubmitReportService(tracker ports.IssueTracker, metrics ports.FeedbackMetrics) *SubmitReportService {
 	return NewSubmitReportServiceWithLimits(tracker, metrics, DefaultSubmissionLimits, time.Now)
 }
 
-// NewSubmitReportServiceWithLimits is NewSubmitReportService with explicit
-// limits and clock.
 func NewSubmitReportServiceWithLimits(
 	tracker ports.IssueTracker,
 	metrics ports.FeedbackMetrics,
@@ -51,9 +44,6 @@ func NewSubmitReportServiceWithLimits(
 	}
 }
 
-// maxIdempotencyKeyLength bounds the caller-supplied key so a hostile client
-// cannot store an unbounded token. A UUID is 36 chars; 200 leaves ample room
-// for other reasonable key schemes. Mirrors catalog's AddTrack key bound.
 const maxIdempotencyKeyLength = 200
 
 const trackerCreateTimeout = 15 * time.Second
@@ -93,19 +83,12 @@ func (s *SubmitReportService) Execute(
 	return s.submit(ctx, userId, report, input.IdempotencyKey)
 }
 
-// Rejection reasons are a fixed vocabulary so a wave of malformed submissions
-// can be counted by cause from logs alone.
 const (
 	rejectUnknownKind           = "unknown_kind"
 	rejectInvalidReport         = "invalid_report"
 	rejectInvalidIdempotencyKey = "invalid_idempotency_key"
 )
 
-// logRejection records a validation rejection and returns err unchanged. It
-// deliberately logs only the user, a fixed reason, the error code and
-// shape attributes (lengths, a parsed kind): never the error text or the raw
-// input, because a report can hold pasted secrets that are redacted only once
-// accepted, and ParseKind's error echoes the submitted kind.
 func logRejection(ctx context.Context, userId shared.UserId, err error, reason string, shape ...any) error {
 	attrs := append([]any{"user_id", userId.String(), "reason", reason}, shape...)
 	var coded interface{ ErrorCode() string }
@@ -123,9 +106,6 @@ func keyBytes(key *string) int {
 	return len(*key)
 }
 
-// submit routes a keyed submission through the idempotency store so a retry or
-// double-tap replays the first issue; a keyless one goes straight to admission
-// and create, preserving the original one-issue-per-call behaviour.
 func (s *SubmitReportService) submit(
 	ctx context.Context,
 	userId shared.UserId,
@@ -199,9 +179,6 @@ func (s *SubmitReportService) createOutlivingRequest(ctx context.Context, report
 	return s.tracker.Create(createCtx, report)
 }
 
-// refundable reports whether a failed create may hand its quota slot back: the
-// tracker must vouch that no issue exists, and it must not be a throttle, whose
-// request GitHub counted against the token (the throttle pause handles those).
 func refundable(err error) bool {
 	var uncreated ports.TrackerUncreated
 	if !errors.As(err, &uncreated) || !uncreated.Uncreated() {
@@ -216,8 +193,6 @@ func refundable(err error) bool {
 	return true
 }
 
-// trackerFailureCause names why a tracker create failed: the error's wire code
-// when the adapter classified it, else TrackerFailureUnclassified.
 func trackerFailureCause(err error) string {
 	var coded interface{ ErrorCode() string }
 	if errors.As(err, &coded) {

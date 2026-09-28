@@ -100,8 +100,6 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 	}
 }
 
-// The bound is the middleware's own, so it holds whatever MaxHeaderBytes the
-// server is configured with; httptest applies no header limit at all.
 func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 	for _, size := range []int{maxBearerTokenBytes + 1, 64 << 10, 1 << 20} {
 		verified := false
@@ -142,9 +140,6 @@ func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
 	}
 }
 
-// An oversized bearer is rejected by a length check before admission, like any
-// other malformed header: it does no verification work, so it spends none of
-// the caller's failure budget.
 func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
 	handler, _ := throttledMiddleware(stubVerifier(shared.NewUserId(uuid.New()), nil))
 	for range testFailureLimits.Burst * 5 {
@@ -218,7 +213,6 @@ func captureJSONLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// findLogRecord returns the first JSON record whose msg is want.
 func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
@@ -237,9 +231,6 @@ func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any 
 	return nil
 }
 
-// A rejection that names neither the caller nor the route cannot be traced back
-// to the source driving it — auth.throttled already carries both. The bearer
-// itself stays out: a 401 log is not a place to put a credential.
 func TestMiddleware_TokenRejectedLogNamesTheCallerAndRoute(t *testing.T) {
 	const bearer = "gqxz-token-value-that-must-not-be-logged"
 	buf := captureJSONLog(t)
@@ -362,11 +353,6 @@ func TestMiddleware_ThrottleIsPerClient(t *testing.T) {
 
 func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	// Verification takes real time, so the clock ticks between reserving a
-	// failure token and refunding it on success. A refund pinned to that later
-	// reading is dropped by rate.CancelAt, which would charge every success and
-	// throttle this caller after Burst requests. Refunding at the reservation
-	// instant keeps successes free.
 	verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
 		clock.advance(time.Millisecond)
 		return VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
@@ -391,9 +377,6 @@ func TestMiddleware_VerifierUnavailableCountsAsFailedAttempt(t *testing.T) {
 	}
 }
 
-// Expired and garbage tokens must spend the budget identically and the
-// throttled response must be byte-identical, so lockout adds no oracle beyond
-// the TokenRejectReason already returned before it.
 func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 	bodies := map[TokenRejectReason]string{}
 	for _, reason := range []TokenRejectReason{ReasonExpired, ReasonSignatureInvalid, ReasonMalformed} {
@@ -523,7 +506,6 @@ func TestUntilTokenExpiry_UnknownExpiryEndsOnlyWithParent(t *testing.T) {
 	}
 }
 
-// recordingMetrics is an AuthMetrics that remembers every call.
 type recordingMetrics struct {
 	mu          sync.Mutex
 	rejected    []string
@@ -596,8 +578,6 @@ func TestMiddleware_CountsEveryRejectionAndOutage(t *testing.T) {
 	}
 }
 
-// A throttled 429 never ran the verifier, so it is neither a token rejection
-// nor an outage and must not inflate either counter.
 func TestMiddleware_ThrottledRequestIsNotCounted(t *testing.T) {
 	metrics := &recordingMetrics{}
 	clock := &fakeClock{}
@@ -616,9 +596,6 @@ func TestMiddleware_ThrottledRequestIsNotCounted(t *testing.T) {
 	}
 }
 
-// A throttled caller never reaches the verifier, so the 429 count is the only
-// number left that shows it, and it has to move on every refusal rather than
-// only on the one that opened the lockout.
 func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
 	metrics := &recordingMetrics{}
 	clock := &fakeClock{}
@@ -641,8 +618,6 @@ func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
 	}
 }
 
-// The wired expvar adapter moves the published counters that
-// GET /observe/metrics/live exposes.
 func TestMiddleware_ExpvarCountersIncrementThroughRealMiddleware(t *testing.T) {
 	metrics := WithMetrics(authmetrics.NewExpvarAuthMetrics())
 	next, _ := noopHandler()

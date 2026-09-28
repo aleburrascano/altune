@@ -12,21 +12,11 @@ import (
 	"time"
 )
 
-// GitHub's documented secondary rate limits for content-generating requests
-// such as creating an issue:
-// https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits
-// "no more than 80 content-generating requests per minute and no more than 500
-// content-generating requests per hour".
 const (
 	githubContentPerMinute = 80
 	githubContentPerHour   = 500
 )
 
-// TestDefaultSubmissionLimits_StayUnderGitHubContentLimits replays a worst-case
-// flood (a fresh user every 500ms for two hours, so no per-user cap binds)
-// against the default limits and asserts that no sliding minute or hour of
-// admitted submissions exceeds GitHub's documented content-creation limits.
-// Before #1116 the 30/minute cap alone admitted 1800 issues an hour.
 func TestDefaultSubmissionLimits_StayUnderGitHubContentLimits(t *testing.T) {
 	clock := &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
 	admission := newSubmissionAdmission(DefaultSubmissionLimits, clock.now)
@@ -47,9 +37,6 @@ func TestDefaultSubmissionLimits_StayUnderGitHubContentLimits(t *testing.T) {
 	}
 }
 
-// TestDefaultSubmissionLimits_OneUserGetsASmallSliceOfTheHour grounds the
-// per-user figure: one account hammering all hour is held to a tenth of
-// GitHub's hourly content limit, leaving the rest for everyone else.
 func TestDefaultSubmissionLimits_OneUserGetsASmallSliceOfTheHour(t *testing.T) {
 	clock := &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
 	admission := newSubmissionAdmission(DefaultSubmissionLimits, clock.now)
@@ -66,19 +53,11 @@ func TestDefaultSubmissionLimits_OneUserGetsASmallSliceOfTheHour(t *testing.T) {
 	}
 }
 
-// admitErr admits one submission for key and keeps only the refusal, for tests
-// that never refund the slot.
 func admitErr(a *submissionAdmission, key string) error {
 	_, err := a.admit(key)
 	return err
 }
 
-// TestDefaultSubmissionLimits_FailingFloodStaysUnderGitHubContentLimits is the
-// abuse case for refunds (#1115): during an outage every create fails and asks
-// for its slot back, so a naive refund would let a flood call GitHub without
-// limit. The same worst-case flood, every attempt refunded, must still keep the
-// attempts that reach GitHub under its documented content limits, and one user
-// hammering through the outage must still get only a small slice of the hour.
 func TestDefaultSubmissionLimits_FailingFloodStaysUnderGitHubContentLimits(t *testing.T) {
 	clock := &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
 	admission := newSubmissionAdmission(DefaultSubmissionLimits, clock.now)
@@ -130,7 +109,6 @@ func TestAdmission_RefundHandsBackTheSlotWithinHalfEachCap(t *testing.T) {
 		t.Fatal("refunding the same slot twice handed back quota it no longer held")
 	}
 
-	// testLimits.PerUser is 3, so one user may refund only one slot per window.
 	second, _ := a.admit("someone")
 	if a.refund(second) {
 		t.Fatal("a second refund for one user exceeded half the per-user cap")
@@ -140,8 +118,6 @@ func TestAdmission_RefundHandsBackTheSlotWithinHalfEachCap(t *testing.T) {
 	}
 }
 
-// maxInWindow returns the most timestamps falling in any half-open window of
-// the given length; times must be ascending.
 func maxInWindow(times []time.Time, window time.Duration) int {
 	best, lo := 0, 0
 	for hi := range times {
@@ -153,7 +129,6 @@ func maxInWindow(times []time.Time, window time.Duration) int {
 	return best
 }
 
-// throttleErr stands in for a tracker failure carrying GitHub's rate-limit signal.
 type throttleErr struct {
 	backoff   time.Duration
 	throttled bool
@@ -167,8 +142,6 @@ func newTestAdmission() (*submissionAdmission, *fakeClock) {
 	return newSubmissionAdmission(testLimits, clock.now), clock
 }
 
-// pauseLength steps the clock a second at a time until admission admits again
-// and reports how long the pause lasted.
 func pauseLength(t *testing.T, a *submissionAdmission, clock *fakeClock) time.Duration {
 	t.Helper()
 	start := clock.t
@@ -222,9 +195,6 @@ func TestAdmission_RepeatedThrottlesBackOffExponentiallyUpToTheCeiling(t *testin
 	}
 }
 
-// TestAdmission_InFlightThrottlesDuringAPauseDoNotEscalate covers calls admitted
-// before the lockout that all fail at once: they belong to one throttle event,
-// so they extend the pause only as far as GitHub asks, without new strikes.
 func TestAdmission_InFlightThrottlesDuringAPauseDoNotEscalate(t *testing.T) {
 	a, clock := newTestAdmission()
 	for i := 0; i < 10; i++ {

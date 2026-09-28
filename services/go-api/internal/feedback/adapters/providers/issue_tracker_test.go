@@ -19,9 +19,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// newTestTracker builds a tracker via the production constructor, then points it
-// at a test server by setting the unexported baseURL directly (white-box). It
-// trims a trailing slash so it composes URLs the same way production does.
 func newTestTracker(baseURL string) *GitHubIssueTracker {
 	tracker := NewGitHubIssueTracker("o/r", "tok")
 	tracker.baseURL = strings.TrimSuffix(baseURL, "/")
@@ -37,8 +34,6 @@ func testReport(t *testing.T, kind domain.Kind, message string, diag domain.Diag
 	return report
 }
 
-// capturedRequest records what the fake GitHub server saw on the create call so
-// tests can assert on the outbound request.
 type capturedRequest struct {
 	body    createIssueRequest
 	path    string
@@ -46,10 +41,6 @@ type capturedRequest struct {
 	version string
 }
 
-// newFakeGitHub stands up an httptest server that always decodes the create
-// request body (so no test silently skips it) and replies with the given status
-// and body, then returns a tracker already pointed at it. The server is closed
-// on test cleanup.
 func newFakeGitHub(t *testing.T, status int, body string) (*GitHubIssueTracker, *capturedRequest) {
 	t.Helper()
 	got := &capturedRequest{}
@@ -114,9 +105,6 @@ func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
 	}
 }
 
-// TestCreate_ThreadsCorrelationIDFromContext reproduces #592: the request's
-// correlation ID lives on the context but never reached the issue body. Now Create
-// reads it from the context and renders it, so the issue links to the server logs.
 func TestCreate_ThreadsCorrelationIDFromContext(t *testing.T) {
 	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
@@ -158,10 +146,6 @@ func TestCreate_EscapesPipesInDiagnostics(t *testing.T) {
 	}
 }
 
-// TestCreate_TitleCannotMentionAccounts reproduces #1107: the title reached
-// GitHub as the raw first line of the message, and GitHub matches @mentions in
-// titles, so any reporter could make the app's shared token notify an arbitrary
-// account or team.
 func TestCreate_TitleCannotMentionAccounts(t *testing.T) {
 	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
 	report := testReport(t, domain.KindBug, "@octocat @acme/security-team \u202Eplayback stops\nmore", domain.Diagnostics{})
@@ -182,8 +166,6 @@ func TestCreate_FailsOnNonCreatedStatus(t *testing.T) {
 	}
 }
 
-// newFakeGitHubWithHeaders is newFakeGitHub with response headers set before the
-// status is written, so tests can drive GitHub's rate-limit and Retry-After signals.
 func newFakeGitHubWithHeaders(t *testing.T, status int, headers map[string]string) *GitHubIssueTracker {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,9 +180,6 @@ func newFakeGitHubWithHeaders(t *testing.T, status int, headers map[string]strin
 	return newTestTracker(server.URL)
 }
 
-// TestCreate_ClassifiesFailuresIntoDistinctStatuses reproduces #588: before the
-// fix every GitHub failure wrapped identically and collapsed to a generic 500.
-// Now each surfaces its own HTTPStatus/ErrorCode via httputil's error interfaces.
 func TestCreate_ClassifiesFailuresIntoDistinctStatuses(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -249,12 +228,10 @@ func codeOf(c httputil.ErrorCoder) string {
 	return c.ErrorCode()
 }
 
-// TestCreate_ClassifiesNetworkFailureAsUnreachable covers the transient transport
-// case: an unanswered request surfaces as a gateway timeout, not a generic 500.
 func TestCreate_ClassifiesNetworkFailureAsUnreachable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	baseURL := server.URL
-	server.Close() // nothing is listening now, so the dial fails
+	server.Close()
 	tracker := newTestTracker(baseURL)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 
@@ -269,8 +246,6 @@ func TestCreate_ClassifiesNetworkFailureAsUnreachable(t *testing.T) {
 	}
 }
 
-// logCapture records slog records so tests can assert on what a failure path
-// logged, mirroring the service package's capturing handler.
 type logCapture struct {
 	records []map[string]string
 }
@@ -308,15 +283,9 @@ func (h *logCapture) find(msg string) map[string]string {
 	return nil
 }
 
-// TestCreate_LogsConfirmed201WithUndecodableBodyDistinctly reproduces #589: a 201
-// means GitHub created the issue, so a body we cannot decode is a lost
-// confirmation, not a non-created issue. Before the fix this was indistinguishable
-// from a true failure in the logs, so a retry risked a real duplicate. Now the
-// confirmed-but-undecoded case is logged distinctly with the status and raw body,
-// while the caller still sees an error.
 func TestCreate_LogsConfirmed201WithUndecodableBodyDistinctly(t *testing.T) {
 	logs := captureLogs(t)
-	malformed := `{"number":7,` // truncated JSON: a 201 body we cannot decode
+	malformed := `{"number":7,`
 	tracker, _ := newFakeGitHub(t, http.StatusCreated, malformed)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 
@@ -335,9 +304,6 @@ func TestCreate_LogsConfirmed201WithUndecodableBodyDistinctly(t *testing.T) {
 	}
 }
 
-// TestCreate_LogsConfirmed201MissingIssueNumberDistinctly is the regression twin:
-// a well-formed 201 body that carries no issue number is still a confirmed create
-// we could not read, so it is logged distinctly too.
 func TestCreate_LogsConfirmed201MissingIssueNumberDistinctly(t *testing.T) {
 	logs := captureLogs(t)
 	tracker, _ := newFakeGitHub(t, http.StatusCreated, `{}`)
@@ -351,9 +317,6 @@ func TestCreate_LogsConfirmed201MissingIssueNumberDistinctly(t *testing.T) {
 	}
 }
 
-// TestCreate_DoesNotLogDistinctlyOnNonCreatedStatus guards the boundary: a true
-// creation failure (non-201) must NOT be logged as a confirmed-but-undecoded
-// case, or the distinction the fix draws would be meaningless.
 func TestCreate_DoesNotLogDistinctlyOnNonCreatedStatus(t *testing.T) {
 	logs := captureLogs(t)
 	tracker, _ := newFakeGitHub(t, http.StatusUnprocessableEntity, `not json at all`)

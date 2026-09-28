@@ -68,10 +68,6 @@ func (h *FeedbackHandler) handleSubmitReport(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// idempotencyKey reads the optional client-supplied Idempotency-Key header. A
-// blank or absent header yields nil, meaning every submit creates a fresh
-// issue; a present key collapses a retry or double-tapped Submit onto the first
-// issue. Mirrors the catalog track-create handler's header.
 func idempotencyKey(r *http.Request) *string {
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if key == "" {

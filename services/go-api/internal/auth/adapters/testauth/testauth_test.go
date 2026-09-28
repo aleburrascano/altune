@@ -41,7 +41,6 @@ func TestVerify_AcceptsIssuedTokenAsTestUser(t *testing.T) {
 	}
 }
 
-// The test identity must never collide with a real account marker.
 func TestTestUser_IsDistinctSyntheticIdentity(t *testing.T) {
 	if TestUserId() == shared.SystemUserId() {
 		t.Error("test user id collides with the system user id")
@@ -58,7 +57,7 @@ func TestVerify_RejectsForeignKey(t *testing.T) {
 		t.Fatalf("IssueToken: %v", err)
 	}
 
-	other := mustNew(t) // independent random key
+	other := mustNew(t)
 	_, err = other.Verify(context.Background(), token)
 	assertInvalidToken(t, err)
 }
@@ -71,14 +70,11 @@ func TestVerify_RejectsExpiredToken(t *testing.T) {
 		t.Fatalf("IssueToken: %v", err)
 	}
 
-	// Advance well past expiry + skew.
 	ta.now = func() time.Time { return time.Unix(1_000_000, 0).Add(tokenLifetime + time.Hour) }
 	_, err = ta.Verify(context.Background(), token)
 	assertInvalidToken(t, err)
 }
 
-// A token signed with the real key but claiming a different sub must never
-// authenticate as that sub — the test path only ever yields the test user.
 func TestVerify_RejectsForgedRealUserSub(t *testing.T) {
 	ta := mustNew(t)
 	realUser := uuid.New().String()
@@ -145,8 +141,6 @@ func TestVerify_RejectsGarbage(t *testing.T) {
 	}
 }
 
-// A different HMAC algorithm over the same bytes must not verify: the parse
-// pins HS256.
 func TestVerify_RejectsWrongAlg(t *testing.T) {
 	ta := mustNew(t)
 	now := time.Now()

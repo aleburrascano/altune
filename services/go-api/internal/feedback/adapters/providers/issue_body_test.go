@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// hostileMessage mentions accounts, embeds an image and a link, tries to break
-// out of a code fence, and forges a diagnostics table ahead of the real one.
 const hostileMessage = "@octocat @acme/admins look ![x](https://evil.test/p.png) [login](https://evil.test)\n" +
 	"```\n````\n\n---\n\n| | |\n| --- | --- |\n| Reporter | trusted-admin |\n"
 
@@ -41,10 +39,6 @@ func TestRenderBody_NeutralizesTheMessage(t *testing.T) {
 	}
 }
 
-// TestRenderBody_ShowsEveryDiagnosticField sets every diagnostics field to a
-// unique sentinel and asserts each one reaches the rendered body. A field added
-// to Diagnostics but missed in renderBody fails loudly here instead of never
-// showing in the issue.
 func TestRenderBody_ShowsEveryDiagnosticField(t *testing.T) {
 	var diag domain.Diagnostics
 	dv := reflect.ValueOf(&diag).Elem()
@@ -63,10 +57,6 @@ func TestRenderBody_ShowsEveryDiagnosticField(t *testing.T) {
 	}
 }
 
-// TestRenderBody_IncludesCorrelationID reproduces #592: the rendered issue body
-// never carried the request's correlation ID, so a support engineer could not jump
-// from the issue to the matching server logs. Now the ID reaches the diagnostics
-// table as its own row.
 func TestRenderBody_IncludesCorrelationID(t *testing.T) {
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	body := renderBody(report, "corr-9f8e7d")
@@ -76,11 +66,6 @@ func TestRenderBody_IncludesCorrelationID(t *testing.T) {
 	}
 }
 
-// TestRenderBody_ReporterIdentityMatchesShippedContract reproduces #1117: the
-// issue body published the reporter UUID while .env.example promised "reports
-// carry no reporter identity". The body must carry exactly the opaque UUID under
-// reporterIdentityRow, and the shipped .env.example must name that constant and
-// no longer deny publishing identity.
 func TestRenderBody_ReporterIdentityMatchesShippedContract(t *testing.T) {
 	report := testReport(t, domain.KindBug, "the queue forgets its order", domain.Diagnostics{})
 	body := renderBody(report, "corr-1117")
@@ -111,15 +96,8 @@ func TestRenderBody_FenceOutlastsLongestBacktickRun(t *testing.T) {
 	}
 }
 
-// hostileDiagnostic mentions a team, plants a tracking image and a link, and
-// embeds raw HTML: everything a diagnostics cell must show only literally. It
-// fits the domain's diagnostics length cap, so it reaches the table untruncated.
 const hostileDiagnostic = "@acme/admins ![x](https://e.test/t.png) [a](https://e.test) <b>"
 
-// TestRenderBody_NeutralizesDiagnostics reproduces #1107: diagnostics come
-// verbatim from the client and only had pipes escaped, so a value rendered a
-// live @mention, image, link, or HTML inside the issue table. Each value must
-// now reach the table as one inline code span.
 func TestRenderBody_NeutralizesDiagnostics(t *testing.T) {
 	cases := map[string]struct {
 		diag domain.Diagnostics

@@ -198,9 +198,6 @@ func TestSubmitReport_Returns500WhenTheTrackerFails(t *testing.T) {
 	assertStatus(t, rec, http.StatusInternalServerError)
 }
 
-// TestSubmitReport_IdempotencyKeyHeaderCollapsesRetries proves the header is
-// plumbed through: two identical POSTs sharing an Idempotency-Key create only
-// one issue and both return the first result.
 func TestSubmitReport_IdempotencyKeyHeaderCollapsesRetries(t *testing.T) {
 	tracker := &stubTracker{}
 	r := router(tracker)

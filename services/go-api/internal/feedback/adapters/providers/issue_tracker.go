@@ -23,13 +23,9 @@ const (
 	maxErrorBody   = 4 << 10
 	maxIssueBody   = 1 << 20
 	sourceLabel    = "from-app"
-	// errPrefix labels every failure from the issue-creation call chain so the
-	// wording stays identical across branches and cannot drift again.
-	errPrefix = "github issues"
+	errPrefix      = "github issues"
 )
 
-// wrapErr prefixes err with errPrefix while preserving its wrapped chain, so
-// every failure branch of Create reports through one shared mechanism.
 func wrapErr(err error) error {
 	return fmt.Errorf("%s: %w", errPrefix, err)
 }
@@ -50,9 +46,6 @@ func NewGitHubIssueTracker(repo, token string) *GitHubIssueTracker {
 	}
 }
 
-// kindLabels maps a feedback Kind to the GitHub issue label its issue gets.
-// The label vocabulary is GitHub's, so it lives here in the adapter rather than
-// in the domain. An undefined kind maps to "", never mislabelling it as a bug.
 var kindLabels = map[domain.Kind]string{
 	domain.KindBug:       "bug",
 	domain.KindIdea:      "enhancement",
@@ -92,11 +85,6 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	return t.readCreated(ctx, resp)
 }
 
-// readCreated decodes the issue GitHub confirmed with a 201. A read or decode
-// failure here is NOT a non-created issue: GitHub already wrote it, we merely
-// lost the confirmation. It is logged distinctly (status + raw body) so ops can
-// tell it apart from a true creation failure, then the error still propagates —
-// the caller must not blindly retry, which would create a real duplicate (#589).
 func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxIssueBody))
 	if err != nil {
@@ -109,9 +97,6 @@ func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Respons
 	return ref, nil
 }
 
-// confirmedButUndecoded logs a confirmed-201-but-undecoded response distinctly,
-// carrying the status and the raw body, then returns err unchanged so the HTTP
-// response to the caller stays an error.
 func confirmedButUndecoded(ctx context.Context, status int, raw []byte, err error) error {
 	slog.ErrorContext(ctx, "github.issue_confirmed_but_undecoded",
 		"status", status,
@@ -121,14 +106,10 @@ func confirmedButUndecoded(ctx context.Context, status int, raw []byte, err erro
 	return err
 }
 
-// boundedBody trims the raw body to a log-friendly size so a large or malformed
-// confirmation body cannot flood the logs.
 func boundedBody(raw []byte) string {
 	return strings.TrimSpace(string(raw[:min(len(raw), maxErrorBody)]))
 }
 
-// drain discards what is left of a body, bounded, before it is closed so the
-// keep-alive connection can be reused instead of torn down.
 func drain(body io.Reader) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxIssueBody))
 }
@@ -158,8 +139,6 @@ func setHeaders(req *http.Request, token string) {
 	req.Header.Set("Content-Type", "application/json")
 }
 
-// readErrorBody returns GitHub's error body, bounded and trimmed, for the
-// failure message. statusError (in errors.go) turns that into a classified error.
 func readErrorBody(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	return strings.TrimSpace(string(body))

@@ -37,7 +37,6 @@ func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
 		t.Errorf("JWKSFetchFailures = %d, want %d", after.JWKSFetchFailures, before.JWKSFetchFailures+1)
 	}
 
-	// The counters are published under their documented expvar names.
 	for _, name := range []string{TokenRejectionsVar, TokenRejectionsByReasonVar, RequestsThrottledVar, VerifierUnavailableVar, JWKSFetchFailuresVar} {
 		v := expvar.Get(name)
 		if v == nil {

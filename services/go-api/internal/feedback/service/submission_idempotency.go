@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// idempotencyTTL bounds how long a remembered submission stays dedup-eligible.
-// A retry of a dropped 201, or a double-tapped Submit, arrives within seconds
-// to minutes; past the window the key is forgotten and a fresh submission under
-// it creates a new issue. It also bounds memory: settled entries older than the
-// window are pruned on access.
 const idempotencyTTL = 30 * time.Minute
 
 type issueOutcome struct {
@@ -72,8 +67,6 @@ func awaitOutcome(ctx context.Context, entry *idempotencyEntry) *issueOutcome {
 	}
 }
 
-// claim returns the caller's own new entry (mine=true) or an existing one to
-// wait on (mine=false), pruning expired entries first.
 func (s *submissionIdempotency) claim(key string) (*idempotencyEntry, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -107,9 +100,6 @@ func mayHaveCreated(err error) bool {
 	return errors.As(err, &uncreated) && !uncreated.Uncreated()
 }
 
-// prune drops settled entries whose TTL has passed. In-flight entries (awaiting
-// settle) are kept regardless of age, so a slow create is never forgotten out
-// from under its waiters.
 func (s *submissionIdempotency) prune() {
 	for key, entry := range s.entries {
 		if entry.outcome != nil && s.now().Sub(entry.at) >= idempotencyTTL {

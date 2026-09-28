@@ -54,8 +54,6 @@ func TestFailureThrottle_TrackedClientsStayBounded(t *testing.T) {
 	}
 }
 
-// Under a flood of distinct penalised addresses a full-map scan must not run
-// on every new client, or the throttle itself becomes the amplifier.
 func TestFailureThrottle_EvictionScanIsAmortised(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	limits := FailureLimits{Burst: 1, Refill: time.Hour, MaxClients: 100}
