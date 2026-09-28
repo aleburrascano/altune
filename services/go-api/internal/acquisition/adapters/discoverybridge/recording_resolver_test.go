@@ -91,8 +91,6 @@ func (failingSearcher) Execute(context.Context, shared.UserId, *discoverydomain.
 	return nil, errors.New("search down")
 }
 
-// drinkingInLA is the merged result that failed acquisition on staging: the
-// album version's ISRC and length glued to the MBID of the "(Who Mix?)" remix.
 func drinkingInLA() stubSearcher {
 	return stubSearcher{out: &discoveryservice.SearchOutput{
 		Results: []discoverydomain.SearchResult{{

@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// fakeFfmpegProber returns a prober whose ffmpeg is the given shell script and
-// whose decode deadline is short enough for a test to outrun.
 func fakeFfmpegProber(t *testing.T, script string, decodeTimeout time.Duration) *FfprobeProber {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "ffmpeg")
@@ -35,10 +33,6 @@ func captureDefaultLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline
-// guards issue #1987: the deadline kills ffmpeg, so cmd.Run reports a signal
-// exit that used to be read as proof the file was undecodable, rejecting a good
-// download permanently.
 func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *testing.T) {
 	logs := captureDefaultLogs(t)
 	p := fakeFfmpegProber(t, "#!/bin/sh\nsleep 30\n", 100*time.Millisecond)

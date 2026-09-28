@@ -15,9 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ctxRecordingPublisher remembers whether each event type reached it on a live
-// context. A publisher backed by a real transport drops what arrives on a dead
-// one, so "was published" alone would prove nothing (#1975).
 type ctxRecordingPublisher struct {
 	mu     sync.Mutex
 	onLive map[string]bool
@@ -39,10 +36,6 @@ func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType string) bool {
 	return p.onLive[eventType]
 }
 
-// A job whose context ends mid-search must still be settled: against a store
-// that rejects a dead context (as a real pool does), both the failure row and
-// the failure event have to be issued on a context detached from the job's,
-// or the track stays pending until the stale sweep ten minutes later (#1975).
 func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetachedContext(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
@@ -79,8 +72,6 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 	}
 }
 
-// seedTwinTrack adds a second Ready track serving the same audio object, the
-// row the canonical (metadata-derived) ref produces for equivalent metadata.
 func seedTwinTrack(t *testing.T, repo *committingTrackRepo, userId shared.UserId, audioRef string) domain.TrackId {
 	t.Helper()
 	twin, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
@@ -94,9 +85,6 @@ func seedTwinTrack(t *testing.T, repo *committingTrackRepo, userId shared.UserId
 	return twin.ID
 }
 
-// A committed replace deletes the audio it swapped out — unless a second track
-// with equivalent metadata is still serving that same object, in which case the
-// delete would leave that track Ready with no file (#1984).
 func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) {
 	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
 	twinId := seedTwinTrack(t, repo, userId, originalRef)
@@ -299,9 +287,6 @@ func TestExecute_WithoutConfiguredEventsDoesNotPanic(t *testing.T) {
 	}
 }
 
-// Issue #979: the acquisition side must persist a failure_reason whose code the
-// catalog failure-message table recognises, so the wire failure_message is the
-// specific one for the case instead of the generic fallback.
 func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -496,8 +481,6 @@ func TestReconcileForReacquire_ExistsError_PreservesAudioRef(t *testing.T) {
 	}
 }
 
-// bytesAudioStore records the bytes behind each ref, so a test can tell the
-// original audio apart from a replacement written to the same key.
 type bytesAudioStore struct {
 	objects   map[string]string
 	deleteErr error
@@ -525,8 +508,6 @@ func (s *bytesAudioStore) Delete(_ context.Context, audioRef string) error {
 	return nil
 }
 
-// committingTrackRepo hands out copies so a mutation only becomes visible once
-// Update succeeds, the way a database row behaves.
 type committingTrackRepo struct {
 	rows      map[string]domain.Track
 	updateErr error
@@ -557,12 +538,10 @@ func (r *committingTrackRepo) AudioRefInUse(_ context.Context, audioRef string, 
 	return false, nil
 }
 
-// committed is the row as last durably written.
 func (r *committingTrackRepo) committed(id domain.TrackId, userId shared.UserId) domain.Track {
 	return r.rows[id.String()+":"+userId.String()]
 }
 
-// newAudioSource offers one fresh candidate and downloads it as "new bytes".
 type newAudioSource struct{}
 
 func (newAudioSource) Name() string { return "new-audio" }
@@ -581,9 +560,6 @@ func (newAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir st
 	return path, os.WriteFile(path, []byte("new bytes"), 0o600)
 }
 
-// seedReadyTrack stores a Ready track whose audio lives at the exact key a
-// fresh acquisition of the same metadata would build, i.e. the key a replace
-// collides with.
 func seedReadyTrack(t *testing.T) (*committingTrackRepo, *bytesAudioStore, shared.UserId, domain.TrackId, string) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
@@ -772,7 +748,6 @@ func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T
 	}
 }
 
-// cancellingSource cancels the job mid-search through the real SourceRegistry.
 type cancellingSource struct {
 	*fakeAudioSearcher
 	cancel func()
@@ -783,8 +758,6 @@ func (s *cancellingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports
 	return nil, errors.New("upstream closed")
 }
 
-// End to end: the persisted failure_reason of a job cancelled mid-search is
-// the cancellation code, not no_match_found.
 func TestExecute_CancelledMidSearch_PersistsCancellation(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
@@ -834,8 +807,6 @@ func markReadyWith(ref string) func(*domain.Track) error {
 	return func(tr *domain.Track) error { return tr.MarkReady(ref) }
 }
 
-// A failure reported by a job whose track a concurrent success already moved
-// to ready must not clobber that good audio.
 func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
@@ -853,7 +824,6 @@ func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 	}
 }
 
-// A duplicate failure must not overwrite the reason the first one recorded.
 func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()

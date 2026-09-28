@@ -46,9 +46,6 @@ func pendingTrackOnly(t *testing.T) *domain.Track {
 	return track
 }
 
-// fakeCooldownStore is an in-memory ports.CooldownStore with an injectable
-// clock. Sharing one instance across admissions models the shared database
-// that every process sees.
 type fakeCooldownStore struct {
 	mu         sync.Mutex
 	now        func() time.Time
@@ -128,10 +125,6 @@ func TestCooldownGate_RetryAndReacquireWindowsAreIndependent(t *testing.T) {
 	}
 }
 
-// TestAdmission_CooldownSurvivesRestart is the #986 regression: re-creating the
-// admission, as a restarted process or a second replica does, must not reopen
-// the window. Before the fix the window lived in a per-admission map, so the
-// second admission was granted.
 func TestAdmission_CooldownSurvivesRestart(t *testing.T) {
 	store := newFakeCooldownStore()
 	retryTrack, reacquireTrack := failedTrack(t), readyTrack(t)

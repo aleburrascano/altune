@@ -10,12 +10,6 @@ import (
 	"testing"
 )
 
-// Issue #980: a search or store step that fails because its context ended must
-// be reported as a cancellation, not as the permanent "no match" / "storage
-// failed" reason, even when the adapter's error does not wrap ctx.Err().
-
-// cancellingFinder ends the job context mid-search, then fails the way a source
-// fan-out does: with an error (or empty result) that drops the ctx cause.
 type cancellingFinder struct {
 	cancel func()
 	err    error

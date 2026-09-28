@@ -82,10 +82,6 @@ func (r *fakeTrackRepository) GetByDedupKey(_ context.Context, _ shared.UserId, 
 	return nil, nil
 }
 
-// liveCtxTrackRepository refuses reads and writes on a context that has already
-// ended, the way a real connection pool does. The plain fake ignores its
-// context, so only this one can tell a settle on a live context from one on the
-// job's dead context (#1975).
 type liveCtxTrackRepository struct{ *fakeTrackRepository }
 
 func (r liveCtxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
@@ -102,10 +98,6 @@ func (r liveCtxTrackRepository) Update(ctx context.Context, track *domain.Track,
 	return r.fakeTrackRepository.Update(ctx, track, expectedVersion)
 }
 
-// blockingSource holds the search open until the job context ends, the shape of
-// a source fan-out still running when the deadline fires or the scheduler shuts
-// down. searching closes on the first Find, so a test can end the job at the
-// moment one is genuinely in flight.
 type blockingSource struct {
 	*fakeAudioSearcher
 	searching chan struct{}
@@ -243,10 +235,6 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	}
 }
 
-// Shutdown cancels the scheduler's base context with no drain window, so a job
-// blocked mid-search settles on a context that has already ended. The failure
-// still has to reach the store, or the track spins as pending until the stale
-// sweep ten minutes later (#1975).
 func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
@@ -309,11 +297,6 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 	}
 }
 
-// cookieJarPath stands for the host path yt-dlp names in its stderr when the
-// --cookies file will not open. The acquisition error chain carries subprocess
-// stderr verbatim, and the scheduler's own failure wrapper is the last place
-// that text can be stopped before it reaches the job log — which the admin
-// status endpoint serves as `reason` (#1972).
 const cookieJarPath = "/home/x/cookies.txt"
 
 func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog(t *testing.T) {
@@ -479,9 +462,6 @@ func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	wg.Wait()
 }
 
-// awaitSettledJob returns trackID's record once the job has left the active
-// log. Polling rather than blocking keeps a job that never settles a readable
-// failure instead of a hung test.
 func awaitSettledJob(t *testing.T, s *BackgroundAcquisitionScheduler, trackID string) acqports.JobRecord {
 	t.Helper()
 	deadline := time.Now().Add(jobSettleTimeout)
@@ -505,10 +485,6 @@ func settledJob(s *BackgroundAcquisitionScheduler, trackID string) (acqports.Job
 	return acqports.JobRecord{}, false
 }
 
-// trackHeldByJob starts hold's job and returns the scheduler once that job is
-// running, so the track's in-flight slot is genuinely taken, plus a drain that
-// lets the job finish and waits for it: past drain the slot is free. Cleanup
-// drains again for whatever the test scheduled afterwards.
 func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) error) (*BackgroundAcquisitionScheduler, func()) {
 	t.Helper()
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
@@ -531,10 +507,6 @@ func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) err
 	return scheduler, drain
 }
 
-// The in-flight registry is keyed by track alone, so a replace asked for while
-// a plain acquisition runs used to be reported as queued: the replace never
-// ran, and the gate kept the reacquire cooldown for a job that did not exist,
-// locking the user out for the whole window (#1980).
 func TestReacquireAdmission_PlainJobInFlight_RefusesAndRefundsCooldown(t *testing.T) {
 	track := readyTrack(t)
 	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
@@ -553,8 +525,6 @@ func TestReacquireAdmission_PlainJobInFlight_RefusesAndRefundsCooldown(t *testin
 	}
 }
 
-// The mirror of the case above, the same defect from the other side: a retry
-// must not be reported as queued because a replace happens to hold the track.
 func TestRetryAdmission_ReplaceInFlight_RefusesAndRefundsCooldown(t *testing.T) {
 	track := failedTrack(t)
 	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
@@ -591,8 +561,6 @@ func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
 	}
 }
 
-// stubAcquirer is the seam's payoff: a scheduler job can be driven without a
-// repository, a store, or a provider registry behind it.
 type stubAcquirer struct {
 	mu  sync.Mutex
 	ran []string
@@ -662,10 +630,6 @@ func TestBackgroundScheduler_RunsTheStubbedAcquirerEntryPoint(t *testing.T) {
 	}
 }
 
-// burstRepo blocks the first in-flight acquisition until release is closed,
-// letting a test saturate the worker semaphore and observe how many jobs pile
-// up behind it. sync.Once guards the started signal so repeated GetByID calls
-// (one per admitted job once drained) do not double-close the channel.
 type burstRepo struct {
 	started chan struct{}
 	release chan struct{}
@@ -686,11 +650,6 @@ func (r *burstRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId)
 	return false, nil
 }
 
-// TestBackgroundScheduler_BoundsQueueDepthUnderBurst reproduces the
-// backpressure defect: a burst of Schedule calls far beyond the configured
-// worker concurrency must not register a job-log entry (and spawn a goroutine)
-// per arrival. Total outstanding work has to stay bounded relative to
-// concurrency, not grow with arrivals.
 func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -708,7 +667,6 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 		scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), "")
 	}
 
-	// Ensure a worker is actually in-flight so the semaphore is saturated.
 	<-repo.started
 
 	active := len(scheduler.Status().ActiveJobs)
@@ -755,10 +713,6 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 	}
 }
 
-// corrCapturingRepo records the correlation ID carried by the context the
-// background job hands to the acquisition service. The job context is built in
-// scheduler.go from s.baseCtx, so before the fix it carried no link to the
-// originating request and this observed empty.
 type corrCapturingRepo struct {
 	*fakeTrackRepository
 	mu     sync.Mutex
@@ -774,11 +728,6 @@ func (r *corrCapturingRepo) GetByID(ctx context.Context, id domain.TrackId, user
 	return r.fakeTrackRepository.GetByID(ctx, id, userId)
 }
 
-// TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext reproduces the
-// defect: a scheduled job's context must carry the request's correlation ID so
-// every slog.*Context call made deep in the acquisition pipeline traces back to
-// the originating request. Red before the job context was derived with the
-// request's corr_id; green once Schedule threads r.Context() through.
 func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 	repo := &corrCapturingRepo{fakeTrackRepository: newFakeTrackRepository()}
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -806,10 +755,6 @@ func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 	}
 }
 
-// A ready track whose audio still exists is the one input where the two
-// service entry points diverge observably: Execute reconciles and skips it,
-// ExecuteReplace searches for a new source. So it pins which one each
-// scheduler method dispatches to.
 func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -995,17 +940,6 @@ func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
 	wg.Wait()
 }
 
-// TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission reproduces the
-// missing-kill-switch defect: a misbehaving downloader can only be stopped by
-// taking the process down, because admission is gated solely on the
-// process-lifetime shutdown flag. A runtime pause must refuse new jobs without
-// a restart, and a resume must re-admit them — all on the same live scheduler
-// instance.
-//
-// Setup: jobs complete immediately (release closed), so nothing stays in
-// flight to confound the admission result. Enabled -> admit, Pause -> refuse
-// with ErrAcquisitionPaused, Resume -> admit again. Before the fix there is no
-// Pause/Resume control at all and the toggle cannot even be expressed.
 func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	var wg sync.WaitGroup
@@ -1150,9 +1084,6 @@ func TestSchedulerJobReporter_StageWithoutConfiguredEventsDoesNotPanic(t *testin
 	}
 }
 
-// blockingAcquirer holds every Execute/ExecuteReplace call open until release
-// closes, so a test can saturate the worker semaphore and observe admission
-// past it without a real acquire pipeline behind it.
 type blockingAcquirer struct {
 	release chan struct{}
 	calls   atomic.Int32
@@ -1170,10 +1101,6 @@ func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, userId shared.Use
 
 func (a *blockingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
 
-// One user's 6th quick save used to be refused with ErrPrincipalQueueFull
-// because the wired default equalled the worker concurrency (#1418). The
-// scheduler's own default (no WithPrincipalQueueDepth) must let one principal
-// occupy the whole shared admission queue, bounded only by the global depth.
 func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) {
 	const concurrency = 2
 	acq := &blockingAcquirer{release: make(chan struct{})}
@@ -1197,8 +1124,6 @@ func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *te
 	}
 }
 
-// recordingPublisher counts every event published, by type, so a test can
-// assert an exact number of terminal events rather than "at least one".
 type recordingPublisher struct {
 	mu     sync.Mutex
 	byType map[string]int
@@ -1228,9 +1153,6 @@ func (p *recordingPublisher) payload(eventType string) map[string]any {
 	return p.last[eventType]
 }
 
-// holdOneTrackRepo blocks GetByID for exactly one track id until release
-// closes; every other id (and every Update) passes straight through to the
-// embedded fake, so a settle on a different track observes a real row.
 type holdOneTrackRepo struct {
 	*fakeTrackRepository
 	hold     domain.TrackId
@@ -1356,9 +1278,6 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	}
 }
 
-// A queue-wait timeout landing after another path already settled the track
-// (a race with the stale-pending sweep, or a concurrent success) must not
-// clobber the winner: RefuseQueued's CAS conflict is a quiet no-op.
 func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
@@ -1390,7 +1309,6 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 	}
 }
 
-// scheduleQueued stands in for a scheduler that accepted the job.
 func scheduleQueued() error { return nil }
 
 func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
@@ -1498,11 +1416,6 @@ func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 	}
 }
 
-// TestAcquisitionVerification_FullyArmed_RequiresYtDlp reproduces the defect:
-// when yt-dlp is unavailable but ffprobe/ffmpeg/fpcalc are present, the
-// verification must report as degraded so WithVerificationStatus logs the
-// startup warning. Before yt-dlp joined the verification, FullyArmed reported
-// armed and no warning ever fired.
 func TestAcquisitionVerification_FullyArmed_RequiresYtDlp(t *testing.T) {
 	armed := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true, Streamrip: true}
 	if !armed.FullyArmed() {
@@ -1515,8 +1428,6 @@ func TestAcquisitionVerification_FullyArmed_RequiresYtDlp(t *testing.T) {
 	}
 }
 
-// TestAcquisitionVerification_FullyArmed_RequiresStreamrip: a configured but
-// unrunnable streamrip binary must report degraded, like every other tool.
 func TestAcquisitionVerification_FullyArmed_RequiresStreamrip(t *testing.T) {
 	missingStreamrip := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}
 	if missingStreamrip.FullyArmed() {

@@ -45,9 +45,6 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	}
 }
 
-// TestFind_RejectsAVideoIDThatIsNotAWatchID covers the request-forgery class: the
-// id is third-party provider data concatenated onto the watch prefix, so anything
-// but an 11-character watch id can rewrite the URL the downloader fetches.
 func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 	hostile := []string{
 		"abc&list=1",

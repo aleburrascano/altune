@@ -23,10 +23,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ErrMissingAPIKey signals that the AcoustID API key is absent or blank. A
-// lookup returns it instead of an empty match so a misconfigured (empty) key
-// stays distinguishable from a genuine no-match, which returns a zero
-// RecordingMatch with a nil error.
 var ErrMissingAPIKey = errors.New("chromaprint: AcoustID API key is empty")
 
 const (

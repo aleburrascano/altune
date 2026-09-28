@@ -26,7 +26,6 @@ var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) 
 	return auth.VerifiedToken{UserID: reacquireTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
-// reacquireFakeScheduler records queued replaces; while err is set it refuses them.
 type reacquireFakeScheduler struct {
 	replaced []catdomain.TrackId
 	err      error

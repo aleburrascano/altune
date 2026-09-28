@@ -2,9 +2,6 @@ package service
 
 import "altune/go-api/internal/acquisition/ports"
 
-// sourceKey is ports.SourceKey under the name this package's exclude and log
-// call sites already use; the canonicalizer lives in ports so candidate dedupe
-// keys on the same identity an exclude does.
 func sourceKey(rawURL string) string { return ports.SourceKey(rawURL) }
 
 func SourceKeys(rawURLs []string) []string {

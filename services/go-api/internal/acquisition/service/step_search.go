@@ -37,7 +37,6 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 		kept = append(kept, c)
 	}
 	if len(kept) == 0 {
-		// Sources that swallow their own cancellation surface as an empty result.
 		return afterSearch{}, withCancellation(ctx, fmt.Errorf("no candidates found"))
 	}
 

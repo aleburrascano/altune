@@ -23,13 +23,9 @@ func TestFailureReason(t *testing.T) {
 		{"select", &StepError{Step: "select", Err: errors.New("no candidates passed matching gates")}, "no_match_found"},
 		{"download", &StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}, "download_failed"},
 		{"store", &StepError{Step: "store", Err: errors.New("store audio: disk full")}, "storage_failed"},
-		// Issue #963: classify on the wrapped context error, not on a message
-		// prefix. runStage wraps ctx.Err() with %w; errors.Is must reach it.
 		{"cancelled (pipeline wrap)", fmt.Errorf("pipeline cancelled: %w", context.Canceled), "acquisition_cancelled"},
 		{"cancelled (deadline, wrapped in step)", &StepError{Step: "download", Err: fmt.Errorf("no candidate produced acceptable audio: %w", context.DeadlineExceeded)}, "acquisition_cancelled"},
 		{"unknown step", &StepError{Step: "update_track", Err: errors.New("persist track update: boom")}, "acquisition_failed"},
-		// Issue #1983: the last candidate's throttle is what the download step
-		// wraps, and the step name alone would call all eight a failed download.
 		{"download throttled on every candidate", &StepError{Step: "download", Err: fmt.Errorf(
 			"no candidate produced acceptable audio: %w",
 			&ports.SourceUnavailableError{Source: "ytdlp", Err: errors.New("yt-dlp download: exit status 1 (stderr: HTTP Error 429: Too Many Requests)")},
@@ -46,11 +42,6 @@ func TestFailureReason(t *testing.T) {
 	}
 }
 
-// Issue #1967: the step names are the seam between a step and the failure code
-// persisted on the track, and the console and client match the strings. The
-// literals here are written out deliberately — they are the contract the
-// constants must keep, so a rename goes red here instead of silently
-// reclassifying a failure.
 func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	tests := []struct {
 		step     undoable
@@ -80,9 +71,6 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	}
 }
 
-// Issue #963: classification must not depend on message text. A message that
-// merely reads "pipeline cancelled" but wraps no context error is a genuine
-// failure, not a cancellation — a reworded prefix must never flip the branch.
 func TestFailureReason_MessageTextAloneIsNotCancellation(t *testing.T) {
 	err := errors.New("pipeline cancelled: context canceled")
 	if got := failureReason(err); got == "acquisition_cancelled" {
@@ -90,10 +78,6 @@ func TestFailureReason_MessageTextAloneIsNotCancellation(t *testing.T) {
 	}
 }
 
-// Issue #1983: a source that was throttled, unreachable, or never installed is
-// evidence about the source and none about the track. Classified by the step it
-// died in, a rate-limited search persists as no_match_found and tells the user
-// a track that exists does not.
 func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -148,9 +132,6 @@ func TestFailureReason_DropsInternalDetails(t *testing.T) {
 	}
 }
 
-// Every failure_reason code the acquisition side can emit must be a key of the
-// catalog failure-message table; a code missing there silently degrades to the
-// generic message.
 func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
 	errs := []error{
 		errors.New("pipeline cancelled: context canceled"),
@@ -171,7 +152,6 @@ func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
 	}
 }
 
-// A genuine failure with a live context keeps its permanent reason.
 func TestSearchAndStoreSteps_GenuineFailure_KeepsStepReason(t *testing.T) {
 	ctx := context.Background()
 
@@ -188,8 +168,6 @@ func TestSearchAndStoreSteps_GenuineFailure_KeepsStepReason(t *testing.T) {
 	}
 }
 
-// failureCode must classify a wrapped context error as cancellation for every
-// step, not only via the pipeline's "pipeline cancelled" prefix.
 func TestFailureReason_WrappedContextErrorIsCancellationForEveryStep(t *testing.T) {
 	for _, step := range []string{"search", "select", "download", "tag", "store", "update_track"} {
 		for _, ctxErr := range []error{context.Canceled, context.DeadlineExceeded} {

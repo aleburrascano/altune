@@ -19,8 +19,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// newPool opens a fresh pool per call, so two pools stand in for two go-api
-// processes (a restart, or a second replica) sharing one database.
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dbURL := os.Getenv("DATABASE_URL")
@@ -58,9 +56,6 @@ func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
 
 func queued() error { return nil }
 
-// TestPgxCooldownStore_SurvivesRestart is the #986 regression against a real
-// database: an admission made through one process's pool still blocks the same
-// track through a second, freshly constructed process.
 func TestPgxCooldownStore_SurvivesRestart(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	first, second := newPool(t), newPool(t)
@@ -109,8 +104,6 @@ func TestPgxCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
 	}
 }
 
-// TestPgxCooldownStore_ConcurrentReservesAdmitOne races many processes on one
-// track: exactly one reservation may win.
 func TestPgxCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)

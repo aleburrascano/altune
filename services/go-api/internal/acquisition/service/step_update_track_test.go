@@ -137,9 +137,6 @@ func TestUpdateTrackStep_Name(t *testing.T) {
 	}
 }
 
-// A second completion under the canonical key the first one already wrote
-// rewrote that same object, so it must succeed: refusing it would roll back the
-// store step and delete the audio the ready track serves.
 func TestUpdateTrackStep_DuplicateCompletionUnderSameRefSucceeds(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
@@ -155,8 +152,6 @@ func TestUpdateTrackStep_DuplicateCompletionUnderSameRefSucceeds(t *testing.T) {
 	}
 }
 
-// A second completion under a different ref for an already-ready track (not a
-// replace) is refused and keeps the audio the first completion stored.
 func TestUpdateTrackStep_DuplicateCompletionUnderOtherRefIsRefused(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()

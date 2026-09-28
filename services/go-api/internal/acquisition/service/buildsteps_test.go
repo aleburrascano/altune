@@ -24,8 +24,6 @@ func assertStepOrder(t *testing.T, got, want []string) {
 	}
 }
 
-// acquirableFixture is a real track plus fakes under which every real stage
-// succeeds, so the whole assembled pipeline runs end to end.
 func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, *AcquisitionContext) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
@@ -58,10 +56,6 @@ func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, 
 	return svc, track, ac
 }
 
-// TestBuildSteps_RunsAllSixInOrder runs the production assembly for real and
-// records the stages RunPipeline actually executed, so it proves execution
-// order rather than a declared list. The order itself is fixed by the stage
-// token types; this pins the observable result.
 func TestBuildSteps_RunsAllSixInOrder(t *testing.T) {
 	svc, track, ac := acquirableFixture(t)
 	rep := &recordingReporter{}

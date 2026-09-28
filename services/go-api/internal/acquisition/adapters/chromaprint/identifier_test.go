@@ -155,8 +155,6 @@ func TestNewIdentifier_DefaultsToAcoustIDEndpoint(t *testing.T) {
 	}
 }
 
-// warnCapture records slog records at Warn or above so a test can assert that a
-// misconfiguration announced itself at startup rather than staying silent.
 type warnCapture struct {
 	warned bool
 	msgs   []string
@@ -186,8 +184,6 @@ func captureWarnings(t *testing.T) *warnCapture {
 	return h
 }
 
-// A misconfigured (empty) key must fail loudly at startup — the constructor
-// logs a warning — instead of degrading silently until the first lookup.
 func TestNewIdentifier_EmptyKeyWarnsAtStartup(t *testing.T) {
 	logs := captureWarnings(t)
 
@@ -198,8 +194,6 @@ func TestNewIdentifier_EmptyKeyWarnsAtStartup(t *testing.T) {
 	}
 }
 
-// A whitespace-only key is just as misconfigured as an empty one and must not
-// masquerade as a usable secret.
 func TestNewIdentifier_WhitespaceOnlyKeyWarnsAndDisables(t *testing.T) {
 	logs := captureWarnings(t)
 
@@ -213,7 +207,6 @@ func TestNewIdentifier_WhitespaceOnlyKeyWarnsAndDisables(t *testing.T) {
 	}
 }
 
-// A genuine configuration stays quiet: a real key produces no startup warning.
 func TestNewIdentifier_ValidKeyDoesNotWarn(t *testing.T) {
 	logs := captureWarnings(t)
 
@@ -224,8 +217,6 @@ func TestNewIdentifier_ValidKeyDoesNotWarn(t *testing.T) {
 	}
 }
 
-// At first use a missing key must return ErrMissingAPIKey, not a silent empty
-// match, so a misconfig stays distinguishable from a genuine no-match.
 func TestLookup_EmptyKeyReturnsError(t *testing.T) {
 	id := NewIdentifier("", "")
 
@@ -246,8 +237,6 @@ func TestAcoustIDsFor_EmptyKeyReturnsError(t *testing.T) {
 	}
 }
 
-// The regression's flip side: a valid key with no results is a genuine no-match
-// — an empty slice and a nil error — and must stay distinct from a misconfig.
 func TestAcoustIDsFor_ValidKeyNoResultsIsNilError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

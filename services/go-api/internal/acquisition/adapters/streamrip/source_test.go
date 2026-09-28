@@ -93,9 +93,6 @@ func TestFind_SoundCloudAcceptsOnlyItsOwnHostsOverHTTPS(t *testing.T) {
 	}
 }
 
-// TestFind_SoundCloudRejectsAForeignFetchTarget covers the request-forgery class:
-// the permalink is third-party provider data handed straight to rip, so any host
-// or scheme but SoundCloud over https must produce no candidate at all.
 func TestFind_SoundCloudRejectsAForeignFetchTarget(t *testing.T) {
 	hostile := []string{
 		"http://169.254.169.254/x",
@@ -130,9 +127,6 @@ func TestFind_SoundCloudRejectsAForeignFetchTarget(t *testing.T) {
 	}
 }
 
-// TestFind_RejectsACatalogIDThatIsNotDigits pins the second half of the same
-// class: the id is concatenated onto a fixed prefix, so anything but digits can
-// rewrite the path or query of the URL rip is handed.
 func TestFind_RejectsACatalogIDThatIsNotDigits(t *testing.T) {
 	tests := []struct {
 		service string
@@ -250,9 +244,6 @@ func TestLargestAudioFile_RejectsTinyFile(t *testing.T) {
 	}
 }
 
-// Issue #1976: rip has no size flag of its own, so an oversize file arrives
-// whole and Fetch is the place that must refuse it. The error is what the
-// download step turns into a RejectionDownload and a removed temp dir.
 func TestFetch_RejectsAFileOverTheSizeCap(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "rip")
@@ -275,9 +266,6 @@ func TestFetch_RejectsAFileOverTheSizeCap(t *testing.T) {
 	}
 }
 
-// Issue #1983: rip exits non-zero both for a track its provider does not carry
-// and for a provider that refused to serve us. Undistinguished, a throttled
-// provider reaches the user as a track that could not be downloaded at all.
 func TestFetch_ClassifiesAProviderThatRefusedToServe(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -311,8 +299,6 @@ func TestFetch_ClassifiesAProviderThatRefusedToServe(t *testing.T) {
 	}
 }
 
-// Issue #1983: a rip that is not installed is the source being unavailable, the
-// one case where no output exists to classify on.
 func TestFetch_MissingBinaryIsAnUnavailableSource(t *testing.T) {
 	src := NewSource("tidal").WithBinary(filepath.Join(t.TempDir(), "rip-absent"))
 
@@ -323,8 +309,6 @@ func TestFetch_MissingBinaryIsAnUnavailableSource(t *testing.T) {
 	}
 }
 
-// writeSparseFile gives a file the requested size without writing its bytes, so
-// a cap measured in hundreds of megabytes can be exercised in a unit test.
 func writeSparseFile(t *testing.T, path string, size int64) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -353,9 +337,6 @@ func TestWithBinary_IgnoresEmpty(t *testing.T) {
 	}
 }
 
-// TestFetch_TerminatesOptionsBeforeTheCandidateURL proves a candidate URL that
-// looks like a flag reaches rip as a positional argument: the fake binary
-// records its argv, and the URL must follow a "--" terminator.
 func TestFetch_TerminatesOptionsBeforeTheCandidateURL(t *testing.T) {
 	dir := t.TempDir()
 	argvFile := filepath.Join(dir, "argv")
@@ -406,10 +387,6 @@ func TestDiagnose_TurnsTracebacksIntoActionableCauses(t *testing.T) {
 	}
 }
 
-// Issue #1973: an unclassified rip failure hands its stderr back inside the
-// error, and rip prints its own config in a traceback — the Deezer arl is a
-// session cookie, and the config path is host layout. The error is stored as a
-// failure detail and logged, so neither may ride along.
 func TestFetch_RedactsCredentialsRipPrintedInItsTraceback(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "rip")
@@ -436,8 +413,6 @@ func TestFetch_RedactsCredentialsRipPrintedInItsTraceback(t *testing.T) {
 	}
 }
 
-// A traceback prints a config dict in Python's own repr, so the credential
-// name arrives quoted and separated from its value by a colon.
 func TestDiagnose_MasksCredentialsWhateverShapeTheTracebackPrintsThem(t *testing.T) {
 	shapes := []string{
 		"arl=SECRET123",

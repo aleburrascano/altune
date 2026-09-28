@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-// secretCookiePath is where an operator mounts the yt-dlp cookie jar.
 const secretCookiePath = "/secret/cookies.txt"
 
 func TestYtDlpAudioSearcher_Search(t *testing.T) {
@@ -47,8 +46,6 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	}
 }
 
-// withStubYtDlp puts a yt-dlp on PATH that prints the given stdout, so the
-// search runs through the real DumpJSON exec and line scan.
 func withStubYtDlp(t *testing.T, stdout string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -59,9 +56,6 @@ func withStubYtDlp(t *testing.T, stdout string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// withDecoyYtDlp puts a yt-dlp on PATH that fails and downloads nothing, so a
-// Download that execs the bare name instead of the configured binary fails
-// visibly rather than falling through to whatever the host has installed.
 func withDecoyYtDlp(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -71,8 +65,6 @@ func withDecoyYtDlp(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// stubDownloaderAt writes an executable standing in for an operator-configured
-// yt-dlp path: it produces one mp3 over Download's minimum size in outDir.
 func stubDownloaderAt(t *testing.T, outDir string) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "custom-yt-dlp")
@@ -99,9 +91,6 @@ func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
 	}
 }
 
-// argvRecordingDownloaderAt writes an executable that records its argv and then
-// produces one mp3 over Download's minimum size, so a test can assert on the
-// flags yt-dlp is actually invoked with.
 func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -114,8 +103,6 @@ func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile st
 	return binary, argvFile
 }
 
-// Issue #1976: a three-hour set must be refused before its bytes are spent, so
-// the size cap has to reach yt-dlp itself rather than be checked afterwards.
 func TestYtDlpAudioSearcher_Download_CapsTheSourceFileSize(t *testing.T) {
 	withDecoyYtDlp(t)
 	outDir := t.TempDir()
@@ -199,9 +186,6 @@ func TestRunYtDlpSearch_NoOutputIsAnEmptyResult(t *testing.T) {
 	}
 }
 
-// withFailingYtDlp puts a yt-dlp on PATH that exits 1 with the given stderr, so
-// a test can drive the real exec path with the output a throttled or unreachable
-// yt-dlp prints.
 func withFailingYtDlp(t *testing.T, stderr string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -212,9 +196,6 @@ func withFailingYtDlp(t *testing.T, stderr string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// Issue #1983: yt-dlp exits 1 both for a query nothing matches and for a
-// provider that refused to answer. Only the second is evidence about the
-// source, and undistinguished it reaches the user as "couldn't find this track".
 func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -243,8 +224,6 @@ func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
 	}
 }
 
-// Issue #1983: a yt-dlp that is not installed is the source being unavailable,
-// the one case where no output exists to classify on.
 func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testing.T) {
 	s := NewYtDlpAudioSearcher("", "", "")
 	s.binary = filepath.Join(t.TempDir(), "yt-dlp-absent")
@@ -256,17 +235,11 @@ func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testi
 	}
 }
 
-// cookieJarError mirrors the chain runYtDlpSearch builds: the exec error with
-// yt-dlp's stderr embedded verbatim, which names the --cookies file an operator
-// mounted (ARCHITECTURE §2.7).
 func cookieJarError() error {
 	return fmt.Errorf("yt-dlp search: %w (stderr: ERROR: unable to open --cookies %s)",
 		errors.New("exit status 1"), secretCookiePath)
 }
 
-// Issue #1973: the engine failure log carried the subprocess error verbatim,
-// and the cookie jar path is a credential location the service-side log sites
-// have masked all along.
 func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
 	logs := captureLogs(t)
 	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
@@ -454,9 +427,6 @@ func TestDownload_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
 	}
 }
 
-// With a cookie jar YouTube serves only combined video+audio formats, so a
-// bare "bestaudio" matched nothing and every YouTube download failed with
-// "Requested format is not available" (#2847).
 func formatArgRecorder(t *testing.T, outDir, stdout string) (binary, argsFile string) {
 	t.Helper()
 	argsFile = filepath.Join(t.TempDir(), "args")

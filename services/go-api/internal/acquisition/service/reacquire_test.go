@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestReacquirePolicy_Reconcile pins every outcome of reconcile so the
-// Ready-branch exists-check can be restructured without changing behavior.
 func TestReacquirePolicy_Reconcile(t *testing.T) {
 	t.Parallel()
 	const audioRef = "user/artist/album/song.mp3"

@@ -1,4 +1,3 @@
-// Package persistence holds the acquisition context's Postgres adapters.
 package persistence
 
 import (
@@ -13,14 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// dbCallTimeout caps one cooldown query so a wedged connection cannot hold the
-// retry/reacquire handler open.
 const dbCallTimeout = 5 * time.Second
 
-// PgxCooldownStore implements ports.CooldownStore over the
-// acquisition_cooldowns table (migrations/019_acquisition_cooldowns.sql). The
-// database clock timestamps every admission, so replicas with skewed clocks
-// still share one window.
 type PgxCooldownStore struct {
 	pool *pgxpool.Pool
 }
@@ -31,11 +24,6 @@ func NewPgxCooldownStore(pool *pgxpool.Pool) *PgxCooldownStore {
 	return &PgxCooldownStore{pool: pool}
 }
 
-// reserveSQL inserts the first admission or overwrites one older than the
-// window. When the existing row is still inside the window the conditional
-// update matches nothing and no row is returned. The row lock taken by ON
-// CONFLICT serialises concurrent reservations of the same pair, and the
-// loser re-evaluates the WHERE against the winner's timestamp.
 const reserveSQL = `
 INSERT INTO acquisition_cooldowns (track_id, kind, admitted_at)
 VALUES ($1, $2, clock_timestamp())

@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// recordingCanaryBinary writes an executable that records its argv, copies
-// whatever file follows --cookies to cookieContentFile (so a test can inspect
-// what the probe actually sent before Canary's own cleanup removes it), and
-// prints duration to stdout.
 func recordingCanaryBinary(t *testing.T, argvFile, cookiePathFile, cookieContentFile, duration string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -205,10 +201,6 @@ func TestCanary_TimesOutRatherThanHangingForever(t *testing.T) {
 	}
 }
 
-// withYtDlpScript writes an executable standing in for yt-dlp and returns its
-// path, so a test can drive Canary's real exec path without touching PATH (a
-// canary test must not accidentally exercise a real yt-dlp another test left
-// on PATH).
 func withYtDlpScript(t *testing.T, script string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "yt-dlp")

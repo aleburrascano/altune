@@ -14,9 +14,6 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
 }
 
-// CoreSteps assembles search→select→download→tag→store. The execution order is
-// fixed by Pipeline's stage types, not by the field order here: a step placed in
-// the wrong slot does not compile.
 func CoreSteps(
 	sources *SourceRegistry,
 	tagger ports.AudioTagger,

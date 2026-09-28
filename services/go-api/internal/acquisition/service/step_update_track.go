@@ -32,8 +32,6 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 			return err
 		}
 		if duration := ac.MeasuredDuration(); duration > 0 {
-			// An implausible probe (ffprobe "inf", a bogus provider value) must
-			// not fail an otherwise good acquisition: keep the duration unknown.
 			if err := track.SetDuration(duration); err != nil {
 				slog.WarnContext(ctx, "acquisition.duration_rejected",
 					"track_id", track.ID.String(), "duration", duration, "error", logSafeError(err))
@@ -50,8 +48,6 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 	})
 }
 
-// settleAudio records the acquired audio: a replace swaps the audio the track
-// had when the job started, any other run completes the acquisition.
 func settleAudio(track *domain.Track, ac *AcquisitionContext) error {
 	if ac.Replace.PreservedRef != "" {
 		if err := track.ReplaceAudio(ac.AudioRef); err != nil {
@@ -65,8 +61,6 @@ func settleAudio(track *domain.Track, ac *AcquisitionContext) error {
 	return nil
 }
 
-// Rollback reverts the track to pending. A track already pending has nothing
-// to undo, so the refused transition is not reported as a rollback failure.
 func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
 	err := loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, nil, func(track *domain.Track) error {
 		return track.RevertToPending()

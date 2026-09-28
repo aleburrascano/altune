@@ -24,12 +24,8 @@ type jobLog struct {
 	recent    []ports.JobRecord
 	succeeded atomic.Uint64
 	failed    atomic.Uint64
-	// now stamps ScheduledAt with a monotonic-bearing instant; since measures
-	// elapsed from it. Both are monotonic-safe (immune to wall-clock jumps) in
-	// production and injectable so tests can simulate clock steps. UTC is
-	// applied only at the serialization edge, never to the instant used here.
-	now   func() time.Time
-	since func(time.Time) time.Duration
+	now       func() time.Time
+	since     func(time.Time) time.Duration
 }
 
 func newJobLog() *jobLog {

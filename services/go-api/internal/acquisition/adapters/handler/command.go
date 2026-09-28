@@ -13,8 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// trackAdmission gates a command on the track's state and cooldown, running
-// schedule only when admitted and keeping the cooldown only if it succeeds.
 type trackAdmission interface {
 	Admit(ctx context.Context, track *domain.Track, schedule func() error) error
 }
@@ -23,8 +21,7 @@ type acquisitionCommand struct {
 	trackRepo ports.TrackRepository
 	admission trackAdmission
 	logMsg    string
-	// schedule queues the job; a non-nil error means nothing was queued.
-	schedule func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+	schedule  func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {

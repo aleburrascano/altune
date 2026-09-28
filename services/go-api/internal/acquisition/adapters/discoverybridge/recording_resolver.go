@@ -255,9 +255,6 @@ func toIdentity(res discoverydomain.SearchResult) acqports.RecordingIdentity {
 	return identity
 }
 
-// providerKey maps a discovery provider onto the acquisition identity key that
-// source adapters look up, so both sides share acqports' constants. Providers no
-// adapter consumes keep their discovery string form.
 func providerKey(p discoverydomain.ProviderName) string {
 	switch p {
 	case discoverydomain.ProviderYouTube:

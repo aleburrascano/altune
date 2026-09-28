@@ -21,10 +21,6 @@ const (
 	minFileSize         = 10 * 1024
 	defaultBin          = "rip"
 
-	// maxFileSize caps what a fetch may hand back. rip has no size flag of its
-	// own, so the cap lands after the walk: a lossless single track stays far
-	// below it, and a file above it is a set or a mix that would fill /tmp for
-	// every concurrent worker and be rejected on duration anyway.
 	maxFileSize = 200 * 1024 * 1024
 )
 
@@ -37,9 +33,6 @@ var trackURLs = map[string]string{
 	ports.ProviderSoundCloud: "",
 }
 
-// A poisoned provider record must not get to choose the address the server
-// fetches: the id is concatenated onto a fixed prefix and the permalink reaches
-// rip verbatim, both of them third-party discovery data.
 var (
 	catalogIDPattern = regexp.MustCompile(`^\d+$`)
 
@@ -74,15 +67,10 @@ func (s *Source) WithBinary(bin string) *Source {
 	return s
 }
 
-// Available reports whether the configured rip binary resolves to something
-// runnable, so wiring can surface a missing binary at startup instead of at the
-// first background Fetch.
 func (s *Source) Available() bool {
 	return binpath.Runnable(s.bin)
 }
 
-// Binary is the rip binary the source invokes: the configured path, or "rip"
-// resolved on PATH when none was configured.
 func (s *Source) Binary() string { return s.bin }
 
 func (s *Source) Name() string { return "streamrip:" + s.service }
@@ -153,15 +141,10 @@ func isSoundCloudTrackPath(path string) bool {
 		!soundCloudNonTrackSegments[strings.ToLower(segments[1])]
 }
 
-// isSoundCloudAddress rejects credentials and a port alongside the host, so the
-// string rip parses cannot carry an authority Go read one way and Python another.
 func isSoundCloudAddress(u *url.URL) bool {
 	return u.Scheme == "https" && u.User == nil && soundCloudHosts[strings.ToLower(u.Host)]
 }
 
-// logUnusableSource surfaces a provider record that named this service yet
-// carried nothing fetchable, so a poisoned or drifted catalog is visible rather
-// than an unexplained missing candidate.
 func logUnusableSource(ctx context.Context, service string, source ports.RecordingSource) {
 	if source.ExternalID == "" && source.URL == "" {
 		return
@@ -181,10 +164,6 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 	return largestAudioFile(outDir)
 }
 
-// classifiedFailure marks a rip run that failed for a reason carrying no
-// evidence about the track — a throttle, an outage, a dead network, or a rip
-// binary that is not installed — so the pipeline reports it as an unavailable
-// source instead of a download the track can never satisfy.
 func (s *Source) classifiedFailure(err error, stderr string, timedOut bool) error {
 	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
 		return err
@@ -204,16 +183,8 @@ func diagnose(stderr string) string {
 	}
 }
 
-// stderrTokenRe splits a traceback into the tokens a credential name and its
-// value occupy. Quotes, brackets, commas, "=" and ":" end a token, so
-// "arl=SECRET", "arl = SECRET" and "{'arl': 'SECRET'}" all put the name and the
-// value in two adjacent tokens.
 var stderrTokenRe = regexp.MustCompile(`[^\s'"(){}\[\],;=:]+`)
 
-// redactedStderr strips the credentials and host layout rip prints about itself
-// before the text becomes an error the caller stores and logs. redact.Secrets
-// reaches only the pairs inside a URL query, and rip echoes its config as bare
-// assignments in a Python traceback.
 func redactedStderr(stderr string) string {
 	afterCredentialName := false
 	return stderrTokenRe.ReplaceAllStringFunc(redact.LogText(stderr), func(tok string) string {
@@ -226,10 +197,6 @@ func redactedStderr(stderr string) string {
 	})
 }
 
-// isProviderCredential adds the credential names rip's own providers use to the
-// codebase vocabulary: "arl" is the Deezer session cookie, a name no altune
-// config carries and too short to become a marker in redact.IsSecretKey, where
-// it would mask every field whose name merely contains those three letters.
 func isProviderCredential(name string) bool {
 	return redact.IsSecretKey(name) || strings.EqualFold(name, "arl")
 }

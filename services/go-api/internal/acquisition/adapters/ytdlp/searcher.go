@@ -23,10 +23,6 @@ const (
 	downloadTimeout = 5 * time.Minute
 )
 
-// maxSourceFileSize caps the media yt-dlp will pull before extraction. A single
-// track cannot approach it, so anything that does is a mix or a full set that
-// would burn the job's budget transcoding and fill /tmp for every concurrent
-// worker. yt-dlp's own flag is what stops it, before the bytes are spent.
 const maxSourceFileSize = "200M"
 
 const audioFormatSelector = "bestaudio/best[height<=480][protocol=https]/best[height<=480]/best"
@@ -64,18 +60,10 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 	return s
 }
 
-// Available reports whether the yt-dlp binary is runnable, mirroring the
-// ffprobe/ffmpeg (prober) and fpcalc (identifier) availability probes. Surfacing
-// this at wiring time turns a missing yt-dlp into a startup verification warning
-// rather than a generic error deep in a background acquisition goroutine.
 func (s *YtDlpAudioSearcher) Available() bool {
 	return binpath.Runnable(s.binary)
 }
 
-// classifiedFailure marks a yt-dlp run that failed for a reason carrying no
-// evidence about the track — a throttle, an outage, a dead network, or a yt-dlp
-// that is not installed — so the pipeline reports it as an unavailable source
-// instead of a track that does not exist.
 func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string, timedOut bool) error {
 	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
 		return err
@@ -215,10 +203,6 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 	return candidates, nil
 }
 
-// candidatesFromEntryLines maps yt-dlp NDJSON lines to candidates, skipping any
-// line that does not yield an entry with a URL (a URL-less candidate is dropped
-// by the dedupe downstream anyway). The skipped count is what lets the caller
-// tell a drifted output format from a genuinely empty search.
 func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate, skipped int) {
 	for _, line := range lines {
 		var entry ytDlpEntry

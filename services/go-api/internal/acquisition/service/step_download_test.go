@@ -115,12 +115,6 @@ func TestDownloadStep_Rollback_RemovesTempFile(t *testing.T) {
 	}
 }
 
-// Issue #963: a cancelled or timed-out job must surface as a cancellation, not
-// keep iterating candidates and then report a permanent "download failed".
-
-// cancellingFetcher ends the job context on its first Fetch, then fails the way
-// a real downloader does: with an error that does not wrap ctx.Err(). calls
-// records how many candidates were attempted.
 type cancellingFetcher struct {
 	cancel func()
 	err    error
@@ -141,7 +135,7 @@ func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T)
 		ctxErr  error
 		newCtx  func() (context.Context, context.CancelFunc)
 		fetch   error
-		wantMax int // max candidates that should be attempted before bailing
+		wantMax int
 	}{
 		{
 			name:  "cancel mid-loop, adapter drops ctx cause",
@@ -185,9 +179,6 @@ func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T)
 	}
 }
 
-// The single-candidate path exercises the withCancellation wrap: the cancel
-// lands on the only candidate's Fetch, so the loop ends before its guard can
-// re-check ctx. The exhausted-candidates return must still classify as cancel.
 func TestDownloadStep_CancelledOnLastCandidate_ReportsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -204,7 +195,6 @@ func TestDownloadStep_CancelledOnLastCandidate_ReportsCancellation(t *testing.T)
 	}
 }
 
-// An already-expired deadline must bail before the first attempt runs.
 func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
@@ -224,8 +214,6 @@ func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.
 	}
 }
 
-// Regression: a genuine download failure under a live context keeps its
-// permanent reason and does exhaust the candidate list.
 func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T) {
 	fetcher := &cancellingFetcher{err: errors.New("yt-dlp: exit 1")}
 	step := NewDownloadStep(fetcher)
@@ -245,10 +233,6 @@ func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T
 		t.Errorf("attempted %d candidates, want 2 (whole list under a live context)", fetcher.calls)
 	}
 }
-
-// Issue #1976: search already reports a duration per candidate, so a candidate
-// the duration gate is certain to reject must never be downloaded and
-// transcoded first — the wasted minutes are what starve the right candidate.
 
 func TestDownloadStep_ImplausibleSearchDuration_IsSkippedBeforeFetch(t *testing.T) {
 	const mix = "https://example.com/three-hour-mix"
@@ -281,9 +265,6 @@ func TestDownloadStep_ImplausibleSearchDuration_IsSkippedBeforeFetch(t *testing.
 	}
 }
 
-// A search duration only ever rules a candidate out. Every case where the number
-// is absent or not the search's to judge must still reach the probe, which is
-// the authoritative gate.
 func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
@@ -326,9 +307,6 @@ func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *
 	}
 }
 
-// The attempt cap exists to bound what a job pays for. A candidate skipped
-// before Fetch costs nothing, so it must not spend the budget the job still
-// needs for a candidate worth downloading further down the ranking.
 func TestDownloadStep_SkippedCandidatesDoNotSpendTheAttemptBudget(t *testing.T) {
 	ranked := make([]ports.AudioCandidate, 0, maxDownloadAttempts+1)
 	for i := 0; i < maxDownloadAttempts; i++ {
@@ -350,8 +328,6 @@ func TestDownloadStep_SkippedCandidatesDoNotSpendTheAttemptBudget(t *testing.T) 
 	}
 }
 
-// panicProber explodes the moment verification touches the downloaded file,
-// standing in for any probe/identify dependency that panics mid-pipeline.
 type panicProber struct{}
 
 func (panicProber) ProbeDuration(context.Context, string) (float64, error) {
@@ -360,11 +336,6 @@ func (panicProber) ProbeDuration(context.Context, string) (float64, error) {
 
 func (panicProber) ValidateDecodable(context.Context, string) error { return nil }
 
-// TestDownloadStep_PanicDuringVerify_CleansTempDir reproduces the leak that
-// survives #340: the per-candidate temp dir is created, the fetch succeeds, then
-// verify panics. ac.TempPath is only set on the success path, so neither the
-// pipeline's recover -> Rollback nor acquire.go's CleanupTemp can find this dir.
-// Without deferred cleanup at the MkdirTemp site the altune-acquire-* dir leaks.
 func TestDownloadStep_PanicDuringVerify_CleansTempDir(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	step := NewDownloadStep(searcher, WithDownloadProber(panicProber{}))
@@ -468,9 +439,6 @@ func TestDownloadStep_VerifiesAndFallsBack(t *testing.T) {
 	prober := &queueProber{durations: []float64{840, 227}}
 	step := NewDownloadStep(searcher, WithDownloadProber(prober))
 
-	// The bloated candidate carries no search duration (#1976 skips one that
-	// does before Fetch), so reaching it is still the probe's job and this stays
-	// a test of the post-download fallback.
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "How Sweet", Artist: "NewJeans", Duration: 226},
 		Ranked: []ports.AudioCandidate{
@@ -607,7 +575,6 @@ const (
 	logTestSource  = "soundcloud"
 )
 
-// scriptedProber returns fixed probe/decode results for every call.
 type scriptedProber struct {
 	duration  float64
 	probeErr  error
@@ -629,7 +596,6 @@ func captureJSONLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// findLogRecord returns the first JSON record whose msg is want.
 func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
@@ -663,9 +629,6 @@ func logTestDownloadContext() *AcquisitionContext {
 	}
 }
 
-// TestCandidateLogs_StampTrackIDAndSource pins that every candidate-level
-// rejection/evaluation log line carries track_id and source, so a log query
-// filtered on track_id explains why a track failed to acquire (#984).
 func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 	identityCtx := func(cluster []string) *AcquisitionContext {
 		ac := logTestDownloadContext()
@@ -783,8 +746,6 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 	}
 }
 
-// runDownloadForLog runs the download step over ac and removes any accepted
-// temp audio so fail-open scenarios do not leak scratch dirs.
 func runDownloadForLog(ctx context.Context, t *testing.T, ac *AcquisitionContext, opts ...func(*DownloadStep)) {
 	t.Helper()
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, opts...)

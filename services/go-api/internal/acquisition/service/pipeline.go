@@ -10,12 +10,6 @@ import (
 	"time"
 )
 
-// The pipeline's stage order is carried by the types, not by a slice literal.
-// Each stage's Execute takes the token only the previous stage returns and
-// returns the token the next stage needs, so RunPipeline can only compose the
-// stages search→select→download→tag→store→update_track; any reorder is a
-// compile error. Tokens are empty proofs: the work product still lives on the
-// shared *AcquisitionContext.
 type (
 	pipelineStart struct{}
 	afterSearch   struct{}
@@ -26,9 +20,6 @@ type (
 	afterUpdate   struct{}
 )
 
-// The step names are a contract, not labels. reasonForStep turns each into the
-// failure code persisted on the track, and the console and client match the
-// values byte for byte, so renaming one here changes what a user is told.
 const (
 	stepNameSearch      = "search"
 	stepNameSelect      = "select"
@@ -38,28 +29,23 @@ const (
 	stepNameUpdateTrack = "update_track"
 )
 
-// undoable is the order-free half of a stage: its contract name and its
-// rollback, which RunPipeline invokes in reverse completion order.
 type undoable interface {
 	Name() string
 	Rollback(ctx context.Context, ac *AcquisitionContext) error
 }
 
-// stage is one pipeline step that may run only after the stage producing In.
 type stage[In, Out any] interface {
 	undoable
 	Execute(ctx context.Context, ac *AcquisitionContext, prev In) (Out, error)
 }
 
-// Pipeline is the fixed-arity acquisition pipeline. Build it with CoreSteps
-// (search through store) and, for the production service, withUpdateTrack.
 type Pipeline struct {
 	search      stage[pipelineStart, afterSearch]
 	selectBest  stage[afterSearch, afterSelect]
 	download    stage[afterSelect, afterDownload]
 	tag         stage[afterDownload, afterTag]
 	store       stage[afterTag, afterStore]
-	updateTrack stage[afterStore, afterUpdate] // nil: the pipeline stops after store
+	updateTrack stage[afterStore, afterUpdate]
 }
 
 func (p Pipeline) withUpdateTrack(s stage[afterStore, afterUpdate]) Pipeline {
@@ -75,8 +61,6 @@ type StepError struct {
 func (e *StepError) Error() string { return fmt.Sprintf("step %s: %v", e.Step, e.Err) }
 func (e *StepError) Unwrap() error { return e.Err }
 
-// pipelineRun is one RunPipeline invocation's bookkeeping: the stages that
-// completed (for rollback) and the stage currently executing (for panics).
 type pipelineRun struct {
 	ac        *AcquisitionContext
 	reporter  jobReporter
@@ -87,12 +71,6 @@ type pipelineRun struct {
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err error) {
 	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx)}
 
-	// A panic in any step must not skip rollback or propagate past this use
-	// case: scheduler.go's recover is a last resort that bypasses acquire.go's
-	// "mark track Failed" path, stranding the track at Pending forever. Mirror
-	// registry.go's per-goroutine recover here — convert the panic into a
-	// *StepError and roll back the completed steps so the normal failure path
-	// runs.
 	defer func() {
 		if rec := recover(); rec != nil {
 			step := "pipeline"
@@ -133,9 +111,6 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 	return err
 }
 
-// runStage executes one stage under the pipeline's per-step contract: honor
-// cancellation before starting, report the stage, and on failure roll back
-// every completed stage and wrap the error in a *StepError.
 func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Out], prev In) (Out, error) {
 	var none Out
 	ac := run.ac
@@ -164,15 +139,8 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 	return out, nil
 }
 
-// rollbackBudget is how long the compensations get once the job's own budget
-// is gone.
 const rollbackBudget = 30 * time.Second
 
-// rollback compensates the completed stages in reverse. It detaches from ctx's
-// cancellation because it runs precisely when ctx is already done — the
-// acquireTimeout fired or the scheduler is shutting down — and a rollback on a
-// dead context deletes nothing, orphaning the stored audio and stranding the
-// track. ctx's values are kept so the compensations stay correlated to the job.
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackBudget)
 	defer cancel()
@@ -198,8 +166,6 @@ type AcquisitionContext struct {
 	DurationVerified bool
 	IdentityVerified bool
 
-	// Rejections accumulates, per candidate, why it was discarded across the
-	// select and download steps so the failure is explainable beyond the logs.
 	Rejections []CandidateRejection
 
 	Replace ReplaceState

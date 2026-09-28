@@ -11,12 +11,8 @@ import (
 	"testing"
 )
 
-// secretCookiePath is where an operator mounts the yt-dlp cookie jar; it must
-// never reach log output (ARCHITECTURE §2.7).
 const secretCookiePath = "/run/secrets/altune/yt_cookies.txt"
 
-// ytdlpCookieErr mirrors the chain ytdlp.Download builds: the exec error with
-// yt-dlp's stderr embedded verbatim, which names the --cookies file.
 func ytdlpCookieErr() error {
 	stderr := "ERROR: '" + secretCookiePath + "' does not look like a Netscape format cookies file " +
 		"(called with --cookies " + secretCookiePath + ")"

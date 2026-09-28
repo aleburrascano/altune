@@ -274,9 +274,6 @@ func isTopicChannel(channel string) bool {
 	return strings.HasSuffix(channel, "- Topic")
 }
 
-// An artist made only of non-word runes ("!!!", "???") normalizes to "", which
-// is a substring of every channel. Treating that as provenance would make the
-// identity gate unable to reject anything, so it never counts as a match.
 func artistMatchesChannel(trackArtist, channel string) bool {
 	artistNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(trackArtist), " ", "")
 	if artistNorm == "" {
@@ -346,9 +343,6 @@ func lessOther(a, b candidateEntry) bool {
 	return breakTie(a, b)
 }
 
-// rankAndCollect ranks the candidates and, alongside the ordered list, returns
-// the per-candidate rejections produced by the identity gate so the caller can
-// persist why nothing was selectable.
 func rankAndCollect(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) ([]ports.AudioCandidate, []CandidateRejection) {
 	if len(candidates) == 0 {
 		return nil, nil
@@ -433,11 +427,6 @@ func classifyCandidates(
 			resolved = append(resolved, entry)
 			continue
 		}
-		// The identity gate exists to drop candidates that do not resemble the
-		// track. A candidate whose channel names the track's artist (its Topic
-		// or official channel) has already established that resemblance through
-		// provenance, so a title padded with remaster/quality/year noise must
-		// not be silently discarded on the fuzzy title score alone.
 		if ident < identityMin && !artMatch {
 			rejected = append(rejected, CandidateRejection{
 				URL:    c.URL,

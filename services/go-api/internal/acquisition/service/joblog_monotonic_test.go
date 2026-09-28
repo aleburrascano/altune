@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// jobClock drives the now/since seams independently so a test can diverge wall
-// time (now) from monotonic elapsed (since) the way an OS clock step does.
 type jobClock struct {
 	wall    time.Time
 	elapsed time.Duration
@@ -15,9 +13,6 @@ type jobClock struct {
 func (c *jobClock) now() time.Time                { return c.wall }
 func (c *jobClock) since(time.Time) time.Duration { return c.elapsed }
 
-// TestJobLog_ElapsedImmuneToWallClockJump pins the bug fix: elapsed time must be
-// judged by monotonic elapsed (since), not a wall-clock subtraction. A backward
-// wall step while a job is in flight must never produce a negative ElapsedMs.
 func TestJobLog_ElapsedImmuneToWallClockJump(t *testing.T) {
 	base := time.Unix(3_000_000, 0)
 
@@ -26,7 +21,6 @@ func TestJobLog_ElapsedImmuneToWallClockJump(t *testing.T) {
 		l := newJobLogWithClock(clk.now, clk.since)
 		l.register("trk-1", "https://src.example/one")
 
-		// Wall clock steps backward a minute, but two real seconds elapsed.
 		clk.wall = base.Add(-time.Minute)
 		clk.elapsed = 2 * time.Second
 

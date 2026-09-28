@@ -45,9 +45,6 @@ func TestTagStep_Execute_TaggerError_Swallowed(t *testing.T) {
 	}
 }
 
-// Issue #1973: the tagger writes to the acquisition temp file and its failures
-// name whatever path the OS reports, so this log site needs the same redaction
-// the rest of the pipeline's log sites have.
 func TestTagStep_Execute_TaggerErrorLogRedactsHostPaths(t *testing.T) {
 	logs := captureDefaultLog(t)
 	tagger := &fakeTagger{err: errors.New("open /run/secrets/altune/yt_cookies.txt: permission denied")}

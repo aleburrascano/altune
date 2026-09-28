@@ -14,9 +14,6 @@ const (
 	catalogChannel = "YouTube Music catalog"
 )
 
-// videoIDPattern is YouTube's watch-id shape. The id arrives as third-party
-// discovery data and is concatenated onto watchURLPrefix, so any other shape
-// could steer the download off the watch endpoint entirely.
 var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 type audioFetcher interface {

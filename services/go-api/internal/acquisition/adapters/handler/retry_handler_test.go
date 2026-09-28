@@ -87,7 +87,6 @@ func (r *retryFakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }
 
-// retryFakeScheduler records queued jobs; while err is set it refuses them.
 type retryFakeScheduler struct {
 	scheduled []catdomain.TrackId
 	err       error

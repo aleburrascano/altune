@@ -19,9 +19,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// A cooldown refusal that carries no Retry-After leaves the client guessing the
-// window, so both kinds assert the header alongside the 429 and its code.
-
 func TestHandleRetryAcquisition_CooldownSendsRetryAfter(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
 	track := newTrackOrFatal(t, retryTestUserId)
@@ -91,10 +88,6 @@ func newTrackOrFatal(t *testing.T, userId shared.UserId) *catdomain.Track {
 	return track
 }
 
-// A shed job must not answer 202: the caller sees a 503 with the queue-full
-// code, and because nothing was queued the cooldown is not burned, so an
-// immediate retry once the queue drains is accepted rather than 429'd.
-
 func TestHandleRetryAcquisition_QueueFullSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
 	scheduler := &retryFakeScheduler{err: service.ErrAcquisitionQueueFull}
@@ -149,9 +142,6 @@ func assertQueueFull(t *testing.T, status int, body []byte) {
 	}
 }
 
-// admitAlways stands in for the cooldown admissions: it admits every command,
-// including the pending track both real admissions refuse, so a 202 here can
-// only come from the handler holding this stub.
 type admitAlways struct{}
 
 func (admitAlways) Admit(_ context.Context, _ *catdomain.Track, schedule func() error) error {
@@ -194,7 +184,6 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 	}
 }
 
-// memCooldownStore is an in-memory ports.CooldownStore for handler tests.
 type memCooldownStore struct {
 	mu     sync.Mutex
 	lastAt map[string]time.Time

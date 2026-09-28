@@ -94,8 +94,6 @@ func schedulerCancelledJobContext(ctx context.Context) bool {
 	return ownedByScheduler && ctx.Err() != nil
 }
 
-// Execute acquires audio for a track, first reconciling any existing audio so
-// a track that already has a valid file is not re-acquired.
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
@@ -111,8 +109,6 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	}
 
 	ac := s.startAcquisition(ctx, userId, trackId, track)
-	// Guard temp cleanup with defer so a panic anywhere in the pipeline (or in
-	// acquire.go itself) still removes the downloaded temp dir on the way out.
 	defer CleanupTemp(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		if schedulerCancelledJobContext(jobCtx) {
@@ -123,9 +119,6 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	return nil
 }
 
-// ExecuteReplace acquires a different source for a track that already has
-// audio, excluding the current and previously rejected sources. A failed
-// replace leaves the track's existing audio and status untouched.
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
@@ -137,8 +130,6 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	}
 
 	ac := s.startAcquisition(ctx, userId, trackId, track)
-	// Guard temp cleanup with defer so a panic anywhere in the pipeline (or in
-	// acquire.go itself) still removes the downloaded temp dir on the way out.
 	defer CleanupTemp(ctx, ac)
 	configureReplaceExclusion(ctx, ac, track, trackId)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
@@ -182,8 +173,6 @@ func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, tra
 	return inUse
 }
 
-// loadTrack returns (nil, nil) when the track does not exist, which both
-// entry points treat as nothing to do.
 func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
@@ -196,8 +185,6 @@ func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.
 	return track, nil
 }
 
-// startAcquisition announces the acquisition and returns its pipeline context.
-// The caller owns deferring CleanupTemp on the returned context.
 func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, track *domain.Track) *AcquisitionContext {
 	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
 
@@ -212,8 +199,6 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 	return &AcquisitionContext{Track: buildTrackRef(track)}
 }
 
-// runAcquisition runs the pipeline and reports success; a pipeline error is
-// returned unreported so the caller can apply its own failure policy.
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) error {
 	s.resolveIdentity(ctx, ac)
 	if err := RunPipeline(ctx, s.buildSteps(userId, trackId), ac); err != nil {
@@ -241,22 +226,12 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 	}
 }
 
-// settleBudget is how long recording a failure gets once the job's own budget
-// is gone.
 const settleBudget = 10 * time.Second
 
-// settleContext detaches from ctx's cancellation for the failure settle. The
-// settle runs precisely when ctx is most likely already done — acquireTimeout
-// fired, or Shutdown cancelled the scheduler's base context — and a settle on a
-// dead context records nothing: the track stays pending until the stale sweep
-// ten minutes later, spinning in the user's library on every deploy (#1975).
-// ctx's values are kept so the write and its event stay correlated to the job.
 func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), settleBudget)
 }
 
-// reportReplaceFailure publishes track_replace_failed and returns err. The
-// track is not marked failed: its existing audio is still valid.
 func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		"track_id", trackId.String(),
@@ -283,8 +258,6 @@ func (s *AcquireTrackAudioService) reportSchedulerCancelledWithoutMarkingFailed(
 	return err
 }
 
-// reportAcquireFailure marks the track failed, publishes
-// track_acquisition_failed, and returns err.
 func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		"track_id", trackId.String(),
@@ -303,8 +276,6 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 	return err
 }
 
-// rejectionAwareReason is the user-facing failure reason, suffixed with a
-// summary of rejected candidates when there were any.
 func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error, ac *AcquisitionContext) string {
 	reason := failureReason(err)
 	summary := summarizeRejections(ac.Rejections)
@@ -394,8 +365,6 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 		return track.FailAcquisition(reason)
 	})
 	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
-		// Another path already settled the track (a concurrent success, the
-		// stale-pending sweep): this failure is stale and must not overwrite it.
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
 			"track_id", trackId.String(), "error", logSafeError(err))
 		return false
@@ -428,25 +397,8 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-// loadAndUpdateMaxAttempts bounds the CAS retry in loadAndUpdate so a
-// pathological stream of concurrent writers cannot spin it forever. Real settle
-// contention on one track is tiny (a racing settle, the stale-pending sweeper),
-// so a handful of attempts converges; the bound is a live-lock guard, not a
-// tuned value.
 const loadAndUpdateMaxAttempts = 5
 
-// loadAndUpdate is the read-modify-write behind every acquisition settle: read
-// the owned track, drive a state change on it, write it back under the
-// optimistic-lock CAS at the version that was read (#1419).
-//
-// A CAS miss (catalogports.ErrTrackVersionConflict) means a concurrent writer —
-// a racing settle, or the stale-pending sweeper — advanced the row between the
-// read and the write, so the snapshot mutate ran against is stale. Rather than
-// clobber the winner, it reloads and re-applies: mutate re-runs on the fresh
-// state, so a mutate that guards on state (MarkReady, MarkFailed,
-// RevertToPending) surfaces its own "already settled" error when the winner has
-// reached a terminal state — the intended resolution of the sweeper-vs-settle
-// race. A non-conflict error, or exhausting the bounded attempts, is returned.
 func loadAndUpdate(ctx context.Context, repo ports.TrackRepository, id domain.TrackId, userId shared.UserId, notFound error, mutate func(*domain.Track) error) error {
 	var lastErr error
 	for attempt := 0; attempt < loadAndUpdateMaxAttempts; attempt++ {

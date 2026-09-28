@@ -127,10 +127,6 @@ func (c *capturingSource) tried(url string) bool {
 	return false
 }
 
-// A candidate on the track artist's own channel whose title is padded with
-// remaster/quality/year noise scores far below the 60 identity gate. It is the
-// Cutting Crew "I've Been in Love Before" failure from issue #31: provenance
-// already resembles the track, so the fuzzy title score must not drop it.
 func TestRankAndCollect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
 	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", Duration: 253}
 	candidates := []ports.AudioCandidate{{
@@ -149,9 +145,6 @@ func TestRankAndCollect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
 	}
 }
 
-// The rescue is scoped to the track's own artist: a low-identity candidate on an
-// unrelated channel is still gated out, and the reason is captured, not merely
-// logged.
 func TestRankAndCollect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
 	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", Duration: 253}
 	candidates := []ports.AudioCandidate{{
@@ -196,8 +189,6 @@ func TestSummarizeRejections(t *testing.T) {
 	}
 }
 
-// RejectionStage values are persisted inside failure_reason and logged, so
-// each constant must keep its original literal byte-for-byte.
 func TestRejectionStage_LiteralsArePinned(t *testing.T) {
 	want := map[RejectionStage]string{
 		RejectionIdentity:     "identity",
@@ -229,9 +220,6 @@ func TestRejectionStage_LiteralsArePinned(t *testing.T) {
 	}
 }
 
-// The whole point of issue #31: when acquisition fails, the persisted
-// failure_reason must explain why beyond the generic message, and it survives
-// on the track row rather than only in the logs.
 func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
@@ -264,9 +252,6 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	}
 }
 
-// Issue #987: the download loop stops at maxDownloadAttempts even when more
-// candidates are ranked. The persisted summary must say so, or an operator
-// cannot tell an exhaustive failure from a capped one.
 func TestExecute_AttemptCapLeavesUntriedCandidatesInTheSummary(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")

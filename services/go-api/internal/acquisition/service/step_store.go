@@ -13,26 +13,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// rollbackDeleteTries bounds how many times a rollback re-attempts the
-// compensating delete before surfacing the failure to the caller.
 const rollbackDeleteTries = 3
 
 type StoreStep struct {
-	audioStore ports.AudioWriter
-	prober     ports.AudioProber
-	// trackRefs guards the compensating delete against an object another track
-	// still serves; ownTrackID is the track this attempt is acquiring, the one
-	// reference that does not count. Both stay unset where there is no track
-	// store to ask (the eval harness, the reacquire command), which leaves the
-	// delete as it was.
-	trackRefs  ports.AudioRefLookup
-	ownTrackID domain.TrackId
-	attemptID  func() string
-	orphans    catalogports.OrphanedAudioRecorder
-	userID     shared.UserId
-	keyPrefix  string
-	// deleteTries and sleep make the compensating delete a bounded, retryable
-	// operation; sleep is a seam so tests need not wait on real backoff.
+	audioStore  ports.AudioWriter
+	prober      ports.AudioProber
+	trackRefs   ports.AudioRefLookup
+	ownTrackID  domain.TrackId
+	attemptID   func() string
+	orphans     catalogports.OrphanedAudioRecorder
+	userID      shared.UserId
+	keyPrefix   string
 	deleteTries int
 	sleep       func(time.Duration)
 }
@@ -87,11 +78,6 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 
 	audioRef := s.keyPrefix + BuildAudioRef(ac.Track, ac.TempPath)
 	if ac.Replace.PreservedRef != "" {
-		// A replace must never write over the object the track is still
-		// serving: the canonical key commonly equals PreservedRef, and only
-		// update_track confirms the swap. Stage the new audio under its own
-		// key; the track points at it once update_track commits, and
-		// ExecuteReplace deletes the superseded object only after that.
 		audioRef = stagedReplaceRef(audioRef, s.attemptID())
 	}
 	ac.AudioRef = audioRef
@@ -114,9 +100,6 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 	return err
 }
 
-// stillServesATrack reports whether the stored object is another track's
-// audio: the replaced track's own preserved ref, or — since the canonical ref
-// is shared by tracks with equivalent metadata — some other track's row.
 func (s *StoreStep) stillServesATrack(ctx context.Context, ac *AcquisitionContext) bool {
 	if ac.AudioRef == ac.Replace.PreservedRef {
 		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)

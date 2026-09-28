@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// flakyDeleteStore is an AudioWriter whose Delete fails the first failDeletes
-// calls, then succeeds. It lets a rollback test drive both the permanent and
-// the transient delete-failure paths.
 type flakyDeleteStore struct {
 	stored      map[string]bool
 	deleteErr   error
@@ -37,15 +34,12 @@ func (s *flakyDeleteStore) Delete(_ context.Context, audioRef string) error {
 	return nil
 }
 
-// A rollback whose delete never succeeds must not silently return nil: doing so
-// orphans the stored object with no signal to the caller, no retry, and no
-// reaper. The failure has to be surfaced (wrapped) so the pipeline sees it.
 func TestStoreRollback_SurfacesDeleteFailureInsteadOfOrphaning(t *testing.T) {
 	deleteErr := errors.New("object store unavailable")
 	store := &flakyDeleteStore{
 		stored:      map[string]bool{"u/a/b/new.mp3": true},
 		deleteErr:   deleteErr,
-		failDeletes: 1 << 30, // never succeeds
+		failDeletes: 1 << 30,
 	}
 	step := NewStoreStep(store)
 	step.sleep = func(_ time.Duration) {}
@@ -63,8 +57,6 @@ func TestStoreRollback_SurfacesDeleteFailureInsteadOfOrphaning(t *testing.T) {
 	}
 }
 
-// A transient delete failure must be retried until it succeeds so the object is
-// actually removed rather than left orphaned.
 func TestStoreRollback_RetriesTransientDeleteFailure(t *testing.T) {
 	store := &flakyDeleteStore{
 		stored:      map[string]bool{"u/a/b/new.mp3": true},
@@ -86,8 +78,6 @@ func TestStoreRollback_RetriesTransientDeleteFailure(t *testing.T) {
 	}
 }
 
-// trackRefIndex answers the rollback's reference check from the tracks holding
-// each ref, the way the repository answers it from the tracks table.
 type trackRefIndex struct {
 	holders map[string][]domain.TrackId
 	err     error
@@ -105,9 +95,6 @@ func (i trackRefIndex) AudioRefInUse(_ context.Context, audioRef string, exclude
 	return false, nil
 }
 
-// Tracks with equivalent metadata resolve to one canonical audioRef, so the
-// object a failed attempt wrote over may be the file another Ready track is
-// serving. Compensating by deleting it leaves that track with no audio (#1984).
 func TestStoreRollback_KeepsAudioAnotherTrackStillServes(t *testing.T) {
 	const sharedRef = "u/the weeknd/after hours/blinding lights.mp3"
 	acquiring, serving := domain.NewTrackId(), domain.NewTrackId()
@@ -125,8 +112,6 @@ func TestStoreRollback_KeepsAudioAnotherTrackStillServes(t *testing.T) {
 	}
 }
 
-// The reference check must not block the compensation it guards: an object no
-// other track holds is this attempt's alone, and leaving it is an orphan.
 func TestStoreRollback_DeletesAudioNoOtherTrackHolds(t *testing.T) {
 	const ownRef = "u/a/b/own.mp3"
 	acquiring := domain.NewTrackId()
@@ -144,8 +129,6 @@ func TestStoreRollback_DeletesAudioNoOtherTrackHolds(t *testing.T) {
 	}
 }
 
-// An unanswerable reference check has to read as "in use": an orphan is
-// reapable, a deleted object another track serves is not recoverable.
 func TestStoreRollback_KeepsAudioWhenTheReferenceCheckFails(t *testing.T) {
 	const ref = "u/a/b/unknown.mp3"
 	store := &flakyDeleteStore{stored: map[string]bool{ref: true}}
@@ -162,8 +145,6 @@ func TestStoreRollback_KeepsAudioWhenTheReferenceCheckFails(t *testing.T) {
 	}
 }
 
-// cancelSensitiveStore refuses every call on a done context, the way a real
-// object-store client does once its request context is cancelled.
 type cancelSensitiveStore struct {
 	stored map[string]bool
 }
@@ -191,9 +172,6 @@ func (s *cancelSensitiveStore) Delete(ctx context.Context, audioRef string) erro
 	return nil
 }
 
-// The store stage completes, then the job is cancelled — an acquireTimeout or a
-// scheduler shutdown. The compensating delete must still remove the object it
-// wrote; nothing else ever will, since no reaper covers orphaned audio.
 func TestStoreRollback_DeletesStoredAudioAfterTheJobContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -224,9 +202,6 @@ func TestStoreRollback_DeletesStoredAudioAfterTheJobContextIsCancelled(t *testin
 	}
 }
 
-// Two textually-equivalent-but-differently-cased/Unicode-composed artist names
-// must resolve to the same physical storage path, so one artist is never split
-// across multiple folders on the case-sensitive Linux target.
 func TestBuildAudioRefNormalizesCaseAndUnicode(t *testing.T) {
 	cases := []struct {
 		name string
@@ -284,8 +259,6 @@ func TestStoreRollback_DeletesAFreshlyWrittenRef(t *testing.T) {
 	}
 }
 
-// cancellingWriter ends the job context mid-upload, then fails with a
-// transport error that does not wrap ctx.Err().
 type cancellingWriter struct {
 	cancel func()
 }
@@ -343,9 +316,6 @@ func TestStoreStep_Execute(t *testing.T) {
 	}
 }
 
-// TestStoreStep_Execute_KeyPrefix pins that WithStoreKeyPrefix prepends the
-// prefix to a fresh ref, so a deploy scoped to e.g. "staging/" never writes
-// outside its namespace in a bucket shared with prod (#3090).
 func TestStoreStep_Execute_KeyPrefix(t *testing.T) {
 	store := newFakeAudioStore()
 	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"))
@@ -372,9 +342,6 @@ func TestStoreStep_Execute_KeyPrefix(t *testing.T) {
 	}
 }
 
-// TestStoreStep_Execute_KeyPrefixOnReplace pins that the prefix also lands on
-// the staged-replace ref: a replace must still write under the deploy's own
-// namespace, not just a fresh acquisition.
 func TestStoreStep_Execute_KeyPrefixOnReplace(t *testing.T) {
 	store := newFakeAudioStore()
 	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"))

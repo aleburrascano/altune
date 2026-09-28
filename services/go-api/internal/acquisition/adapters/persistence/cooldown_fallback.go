@@ -13,18 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// undefinedTableCode is the Postgres SQLSTATE for a missing relation.
 const undefinedTableCode = "42P01"
 
-// cooldownMigration names the migration whose absence triggers the fallback.
 const cooldownMigration = "migrations/019_acquisition_cooldowns.sql"
 
-// FallbackCooldownStore wraps the durable cooldown store and degrades to a
-// per-process cooldown while the acquisition_cooldowns table does not exist.
-// Deploys ship before migrations are applied by hand, so without it every
-// retry/reacquire would fail with 500 until 019 runs. The primary store is
-// tried on every call, so the durable path resumes as soon as the table
-// appears, with no restart. Any other primary error is returned unchanged.
 type FallbackCooldownStore struct {
 	primary  ports.CooldownStore
 	mem      *memoryCooldowns
@@ -37,10 +29,6 @@ func NewFallbackCooldownStore(primary ports.CooldownStore) *FallbackCooldownStor
 	return &FallbackCooldownStore{primary: primary, mem: newMemoryCooldowns(time.Now)}
 }
 
-// Reserve refuses while a per-process reservation from the degraded period is
-// still inside its window, so the switch back to the durable store cannot
-// admit a track twice in one window. Otherwise it reserves in the primary
-// store, falling back to the process when the table is missing.
 func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, error) {
 	if s.mem.active(trackID, kind, cooldown) {
 		return time.Time{}, false, nil
@@ -57,9 +45,6 @@ func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID domain.Trac
 	return at, ok, err
 }
 
-// Release refunds a per-process reservation when at matches one; otherwise the
-// reservation came from the primary store and is released there. A missing
-// table there means nothing durable exists to release.
 func (s *FallbackCooldownStore) Release(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
 	if s.mem.release(trackID, kind, at) {
 		return nil
@@ -71,8 +56,6 @@ func (s *FallbackCooldownStore) Release(ctx context.Context, trackID domain.Trac
 	return err
 }
 
-// markDegraded logs one warning per transition into the fallback, not one per
-// request.
 func (s *FallbackCooldownStore) markDegraded(ctx context.Context, err error) {
 	if s.degraded.CompareAndSwap(false, true) {
 		slog.WarnContext(ctx, "acquisition: cooldown table missing, using per-process cooldown until migration is applied",
@@ -91,8 +74,6 @@ func isUndefinedTable(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == undefinedTableCode
 }
 
-// memoryCooldowns is the per-process cooldown used before #986: one admission
-// per (track, kind) per window, with release undoing exactly one reservation.
 type memoryCooldowns struct {
 	mu     sync.Mutex
 	now    func() time.Time
@@ -115,8 +96,6 @@ func (m *memoryCooldowns) active(trackID domain.TrackId, kind ports.CooldownKind
 	return ok && m.now().Sub(last) < cooldown
 }
 
-// reserve atomically checks the window and records now as the last admission,
-// pruning entries old enough that no window can still cover them.
 func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -133,8 +112,6 @@ func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKin
 	return now, true
 }
 
-// release deletes the reservation recorded at at and reports whether it did.
-// A newer reservation is left untouched.
 func (m *memoryCooldowns) release(trackID domain.TrackId, kind ports.CooldownKind, at time.Time) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

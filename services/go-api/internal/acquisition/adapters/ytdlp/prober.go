@@ -18,8 +18,6 @@ import (
 const (
 	probeTimeout = 30 * time.Second
 
-	// defaultDecodeTimeout bounds a full-file decode, which is I/O bound and
-	// runs on the acquisition worker's budget. Tests shorten it per prober.
 	defaultDecodeTimeout = 90 * time.Second
 )
 
@@ -71,10 +69,6 @@ func (p *FfprobeProber) ProbeDuration(ctx context.Context, filePath string) (flo
 	return duration, nil
 }
 
-// ValidateDecodable returns an error only for what the decoder itself refused.
-// A decode killed by its own deadline, and a decoder that never started, are
-// silence rather than a verdict, so both are accepted with a warn: treating
-// them as "undecodable" condemns a good download the caller never retries.
 func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) error {
 	decodeCtx, cancel := context.WithTimeout(ctx, p.decodeTimeout)
 	defer cancel()

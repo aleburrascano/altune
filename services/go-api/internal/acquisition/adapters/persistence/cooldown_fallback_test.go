@@ -16,8 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// scriptedCooldownStore is a durable store whose calls fail with err while it
-// is set, standing in for Postgres before and after migration 019 is applied.
 type scriptedCooldownStore struct {
 	mu       sync.Mutex
 	err      error
@@ -65,7 +63,6 @@ func (s *scriptedCooldownStore) Release(_ context.Context, trackID domain.TrackI
 	return nil
 }
 
-// missingTableErr is the error PgxCooldownStore returns before 019 is applied.
 func missingTableErr() error {
 	return fmt.Errorf("reserve cooldown: %w", &pgconn.PgError{
 		Code:    "42P01",
@@ -137,10 +134,6 @@ func TestFallbackCooldownStore_MissingTableWindowElapses(t *testing.T) {
 	}
 }
 
-// TestFallbackCooldownStore_ResumesDurablePathOnceTableExists covers the
-// migration being applied while the process runs: the next call uses the
-// durable store with no restart, and a reservation made in the degraded
-// period still holds its window.
 func TestFallbackCooldownStore_ResumesDurablePathOnceTableExists(t *testing.T) {
 	primary := newScriptedCooldownStore(missingTableErr())
 	admission := service.NewRetryAdmission(NewFallbackCooldownStore(primary))
@@ -152,7 +145,7 @@ func TestFallbackCooldownStore_ResumesDurablePathOnceTableExists(t *testing.T) {
 		t.Fatalf("degraded Admit = %v, want nil", err)
 	}
 
-	primary.setErr(nil) // migration 019 applied
+	primary.setErr(nil)
 
 	if err := admission.Admit(ctx, freshTrack, queued); err != nil {
 		t.Fatalf("Admit after migration = %v, want nil", err)

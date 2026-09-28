@@ -60,8 +60,6 @@ func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.
 	}
 }
 
-// Issue #1973: the per-query failure log carried the subprocess error verbatim,
-// cookie jar path included.
 func TestSource_Find_QueryFailureLogRedactsTheCookiePath(t *testing.T) {
 	logs := captureLogs(t)
 	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {

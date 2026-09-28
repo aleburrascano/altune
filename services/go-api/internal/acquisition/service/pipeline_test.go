@@ -11,12 +11,9 @@ import (
 )
 
 type mockStep struct {
-	name         string
-	executeErr   error
-	executePanic any
-	// cancelJob, when set, cancels the pipeline's own context from inside
-	// Execute: the acquireTimeout firing or the scheduler shutting down
-	// mid-pipeline.
+	name           string
+	executeErr     error
+	executePanic   any
 	cancelJob      context.CancelFunc
 	rollbackErr    error
 	executed       bool
@@ -54,7 +51,6 @@ func (s *mockStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
 	return s.rollbackErr
 }
 
-// mockStage adapts a mockStep into the typed slot of one pipeline stage.
 type mockStage[In, Out any] struct{ *mockStep }
 
 func (m mockStage[In, Out]) Execute(ctx context.Context, ac *AcquisitionContext, _ In) (Out, error) {
@@ -64,8 +60,6 @@ func (m mockStage[In, Out]) Execute(ctx context.Context, ac *AcquisitionContext,
 
 var pipelineStageNames = []string{"search", "select", "download", "tag", "store", "update_track"}
 
-// pipelineOf fills the pipeline's stages in order with steps. Stages past
-// len(steps) get an unlogged pass-through mock named for the stage.
 func pipelineOf(steps ...*mockStep) Pipeline {
 	all := make([]*mockStep, len(pipelineStageNames))
 	for i, name := range pipelineStageNames {
@@ -282,10 +276,6 @@ func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
 	}
 }
 
-// A rollback runs precisely when the job's context is already done: the
-// acquireTimeout fired, or the scheduler is shutting down. Compensations that
-// inherit that cancellation fail their first call, so the audio stays in object
-// storage with no reaper and the track never reverts.
 func TestRunPipeline_RollbackRunsOnALiveContextAfterTheJobIsCancelled(t *testing.T) {
 	cancellations := []struct {
 		name       string
@@ -325,11 +315,6 @@ func TestRunPipeline_RollbackRunsOnALiveContextAfterTheJobIsCancelled(t *testing
 	}
 }
 
-// TestRunPipeline_StepPanic_RollsBackAndReturnsStepError reproduces the defect
-// where a panic mid-pipeline skipped rollback and propagated out, leaving the
-// track stranded at Pending. RunPipeline must recover the panic, roll back the
-// completed steps in reverse, and return it as a *StepError so acquire.go's
-// normal failure path can mark the track Failed.
 func TestRunPipeline_StepPanic_RollsBackAndReturnsStepError(t *testing.T) {
 	var log []string
 	s1 := newMockStep("search", &log)
@@ -512,8 +497,6 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 		{"Post Malone", "Mac Miller - Topic", false},
 		{"The Weeknd", "TheWeekndVEVO", true},
 		{"Bad Bunny", "RandomUploader", false},
-		// An artist of pure punctuation normalizes to "", which is a substring
-		// of every channel: the whole class must fail to match, not just "!!!".
 		{"!!!", "Random - Topic", false},
 		{"???", "TheWeekndVEVO", false},
 		{"", "x", false},
@@ -529,9 +512,6 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 	}
 }
 
-// A symbol-only artist must not be read as provenance: without a real artist to
-// recognise in the channel, the identity gate is the only thing standing between
-// the track and an unrelated recording.
 func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
 	track := TrackRef{Title: "Must Be the Moon", Artist: "!!!", Duration: 253}
 	candidates := []ports.AudioCandidate{{

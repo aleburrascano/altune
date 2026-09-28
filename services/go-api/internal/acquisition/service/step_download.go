@@ -8,9 +8,6 @@ import (
 	"os"
 )
 
-// maxDownloadAttempts bounds the fetches one job may pay for, not the ranked
-// positions it may walk: a candidate skipped before Fetch costs nothing, so it
-// must not consume budget the job needs for a candidate worth downloading.
 const maxDownloadAttempts = ports.EnoughCandidates
 
 type candidateFetcher interface {
@@ -46,11 +43,6 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 	attempts := 0
 
 	for i := range ac.Ranked {
-		// A cancelled or timed-out job must surface as a cancellation, not keep
-		// grinding through the remaining candidates and then report a permanent
-		// download failure. Guard before each attempt so a mid-loop cancellation
-		// stops here; withCancellation below covers a cancel that lands on the
-		// last candidate's own Fetch without wrapping ctx.Err().
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return afterDownload{}, fmt.Errorf("download cancelled: %w", ctxErr)
 		}
@@ -90,9 +82,6 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 	return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio")
 }
 
-// recordNotAttempted gives every ranked candidate left untried by the attempt
-// cap its own rejection, so the persisted summary counts the whole ranked list
-// and shows the failure was capped rather than exhaustive.
 func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) {
 	for _, c := range untried {
 		ac.recordRejection(c.URL, c.Title, c.Source, RejectionNotAttempted,
@@ -100,10 +89,6 @@ func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) 
 	}
 }
 
-// recordImplausibleDuration rejects a candidate on the duration search already
-// reported for it, so a three-hour mix is never downloaded and transcoded only
-// to lose to the probe afterwards. It is the same stage the probe would record,
-// with a reason naming search metadata as the source of the number.
 func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) {
 	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDuration,
 		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.Track.Duration))
@@ -116,12 +101,6 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 	)
 }
 
-// tryCandidate downloads and verifies one candidate into tmpDir. The temp dir
-// is removed on every exit path — failure, rejection, or a panic in fetch or
-// verify — except when the candidate is accepted, where it holds the audio file
-// at ac.TempPath. Deferring the cleanup is what keeps a panicking step from
-// leaking an altune-acquire-* dir: ac.TempPath is unset here, so neither the
-// pipeline's rollback nor acquire.go's CleanupTemp could otherwise find it.
 func (s *DownloadStep) tryCandidate(
 	ctx context.Context,
 	ac *AcquisitionContext,
@@ -165,9 +144,6 @@ type verificationResult struct {
 	probed   float64
 }
 
-// downloadRejection is why a downloaded candidate was discarded: reason is a
-// safe, persistable summary (durations, stage), while err carries the full
-// internal detail for the pipeline's last-error wrapping only.
 type downloadRejection struct {
 	stage  RejectionStage
 	reason string

@@ -34,12 +34,6 @@ func (ac *AcquisitionContext) lengthCorroborated() bool {
 	return durationWithinAuthoritativeTolerance(saved, resolved)
 }
 
-// candidateDurationPlausible judges a candidate on its search-time duration
-// alone, before anything is downloaded, against the same tolerance the probed
-// file will face. Search metadata is advisory, so it only ever rules a candidate
-// out: a candidate carrying no duration, one a catalog resolved, or a track with
-// no saved duration to compare against stays eligible for the post-download
-// probe, which is still the authoritative gate.
 func (ac *AcquisitionContext) candidateDurationPlausible(candidate ports.AudioCandidate) bool {
 	if candidate.Resolved || candidate.Duration <= 0 || ac.Track.Duration <= 0 {
 		return true

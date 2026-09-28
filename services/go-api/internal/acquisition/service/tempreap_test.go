@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-// TestSweepStaleTempDirsReapsAbandonedKeepsLive proves #1978: a temp dir left by
-// a hard kill (SIGKILL, OOM, a redeploy past the drain deadline), where
-// step_download's defers never run, is reaped at startup, while a dir a running
-// job could still own survives the sweep.
 func TestSweepStaleTempDirsReapsAbandonedKeepsLive(t *testing.T) {
 	tempRoot := useTempRoot(t)
 	abandoned := agedDir(t, tempRoot, tempDirPrefix+"abandoned", maxLiveTempAge+time.Hour)
@@ -26,9 +22,6 @@ func TestSweepStaleTempDirsReapsAbandonedKeepsLive(t *testing.T) {
 	}
 }
 
-// TestSweepStaleTempDirsLeavesForeignEntriesAlone pins the blast radius: the
-// sweep deletes inside a world-writable temp dir, so age alone must never be
-// enough — an old entry that is not one of our directories stays.
 func TestSweepStaleTempDirsLeavesForeignEntriesAlone(t *testing.T) {
 	tempRoot := useTempRoot(t)
 	foreignDir := agedDir(t, tempRoot, "unrelated-service-cache", maxLiveTempAge+time.Hour)
@@ -43,8 +36,6 @@ func TestSweepStaleTempDirsLeavesForeignEntriesAlone(t *testing.T) {
 	}
 }
 
-// useTempRoot points os.TempDir() at a directory of this test's own, so the
-// sweep can never reach the real temp dir of the machine running the suite.
 func useTempRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -55,9 +46,6 @@ func useTempRoot(t *testing.T) string {
 	return root
 }
 
-// agedDir creates a directory holding a downloaded file and backdates it,
-// standing in for what an earlier acquisition left in the temp root. The file is
-// what holds the sweep to removing a dir that still carries a download.
 func agedDir(t *testing.T, root, name string, age time.Duration) string {
 	t.Helper()
 	path := filepath.Join(root, name)
