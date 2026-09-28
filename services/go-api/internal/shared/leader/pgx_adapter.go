@@ -6,7 +6,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// pgxConnector adapts *pgxpool.Pool to connector.
 type pgxConnector struct{ pool *pgxpool.Pool }
 
 func (c pgxConnector) Acquire(ctx context.Context) (heldConn, error) {
@@ -17,7 +16,6 @@ func (c pgxConnector) Acquire(ctx context.Context) (heldConn, error) {
 	return pgxHeldConn{conn: conn}, nil
 }
 
-// pgxHeldConn adapts a pooled *pgxpool.Conn to heldConn.
 type pgxHeldConn struct{ conn *pgxpool.Conn }
 
 func (c pgxHeldConn) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {

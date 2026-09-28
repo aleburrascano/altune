@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// The state values are the admin client's wire vocabulary, so typing State must
-// leave them on the strings the client already branches on.
 func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
 	wire := map[State]string{
 		StateDisabled:   `"state":"disabled"`,
@@ -76,9 +74,6 @@ func TestMeter_ErrorState(t *testing.T) {
 	}
 }
 
-// A run whose queries errored reaches the status as a count, so an operator
-// reading a depressed score can tell an outage from a ranking regression. The
-// count was previously dropped at the wiring boundary.
 func TestMeter_StatusSurfacesErroredQueryCount(t *testing.T) {
 	m := New(true, 0, func(context.Context) (Result, error) {
 		return Result{Score: 0.60, Baseline: 0.80, Regressed: false, Errored: 2}, nil
@@ -94,9 +89,6 @@ func TestMeter_StatusSurfacesErroredQueryCount(t *testing.T) {
 	}
 }
 
-// TestMeter_RunnerTimeoutSurfacesAsFailure checks that a runner which only
-// returns once its context is cancelled (a hung dependency) cannot stall the
-// scheduler forever: runOnce returns under the bound and surfaces an error.
 func TestMeter_RunnerTimeoutSurfacesAsFailure(t *testing.T) {
 	m := New(true, 0, func(ctx context.Context) (Result, error) {
 		<-ctx.Done()
@@ -120,9 +112,6 @@ func TestMeter_RunnerTimeoutSurfacesAsFailure(t *testing.T) {
 	}
 }
 
-// TestMeter_PausedTickSkipsRun reproduces the runtime kill-switch gap: a paused
-// meter must skip its scheduled run without a restart, and run again once
-// resumed.
 func TestMeter_PausedTickSkipsRun(t *testing.T) {
 	calls := 0
 	m := New(true, 0, func(context.Context) (Result, error) {
@@ -143,9 +132,6 @@ func TestMeter_PausedTickSkipsRun(t *testing.T) {
 	}
 }
 
-// TestMeter_PanickingRunnerSurfacesAsError reproduces the crash: a runner that
-// panics used to take the whole process down, since nothing between the eval
-// and the scheduler goroutine recovered it.
 func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
 	m := New(true, 0, func(context.Context) (Result, error) {
 		panic("scorer dereferenced a nil provider")
@@ -162,9 +148,6 @@ func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
 	}
 }
 
-// TestMeter_RunAfterAPanicExecutes covers the slot leak behind the panic: the
-// run slot was cleared only on the success path, so a run that did not reach
-// the end left the meter permanently "running" and skipped every later run.
 func TestMeter_RunAfterAPanicExecutes(t *testing.T) {
 	calls := 0
 	m := New(true, 0, func(context.Context) (Result, error) {

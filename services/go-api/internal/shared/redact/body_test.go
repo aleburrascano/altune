@@ -23,8 +23,6 @@ func TestSecretsInBody_masksCredentialFieldsAtAnyDepth(t *testing.T) {
 	}
 }
 
-// Case is the provider's choice, not ours: ACCESS_TOKEN, accessToken and
-// Access-Token name the same credential.
 func TestSecretsInBody_masksCredentialFieldsWhateverTheCase(t *testing.T) {
 	in := `{"ACCESS_TOKEN":"` + bearer + `","Api_Key":"` + bearer + `","ClientSecret":"` + bearer + `"}`
 
@@ -35,8 +33,6 @@ func TestSecretsInBody_masksCredentialFieldsWhateverTheCase(t *testing.T) {
 	}
 }
 
-// A body truncated by a read error never parses, and the recorder stores it
-// anyway — the text fallback has to catch the credential the walk could not.
 func TestSecretsInBody_masksCredentialsInUndecodableJSON(t *testing.T) {
 	cases := map[string]string{
 		"truncated":       `{"accessToken":"` + bearer + `","expires`,
@@ -69,8 +65,6 @@ func TestSecretsInBody_keepsBodiesThatCarryNoCredentialByteForByte(t *testing.T)
 	}
 }
 
-// Replay match keys are built from an already-scrubbed recorded body and a live
-// raw one, so scrubbing twice must equal scrubbing once.
 func TestSecretsInBody_isIdempotent(t *testing.T) {
 	cases := []string{
 		`{"accessToken":"` + bearer + `","q":"blue"}`,
@@ -100,8 +94,6 @@ func TestSecretsInBody_masksCredentialParamsInsideStringValues(t *testing.T) {
 	}
 }
 
-// A hostile provider can answer with arbitrary nesting; the walk must degrade
-// rather than exhaust the stack, both under and over the decoder's depth limit.
 func TestSecretsInBody_survivesPathologicalNesting(t *testing.T) {
 	for _, depth := range []int{5_000, 20_000} {
 		nested := strings.Repeat("[", depth) + strings.Repeat("]", depth)

@@ -135,9 +135,6 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 	}
 }
 
-// TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher pins #2594: Emit
-// (discovery's search/play telemetry) never lands in a mobile client's own
-// per-user event stream, and never carries a user id or subject.
 func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 	bus := events.NewInProcessBus()
 	tp := New(bus)

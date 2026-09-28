@@ -39,10 +39,6 @@ func TestNewClient_InvalidURLDoesNotLogCredentials(t *testing.T) {
 	}
 }
 
-// The pool ceiling must come from configuration, never from GOMAXPROCS
-// (go-redis's own default), and an unusable value must land on the documented
-// default. The address is unreachable on purpose: NewClient returns the client
-// anyway, so the ceiling is observable without a live redis.
 func TestNewClient_PinsPoolSizeFromConfiguration(t *testing.T) {
 	cases := []struct {
 		name     string

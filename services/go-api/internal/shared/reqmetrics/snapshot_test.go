@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// TestReadSnapshot_ReflectsObserved records through the exported Observe (which
-// writes the process-global registry) and reads it back through ReadSnapshot.
 func TestReadSnapshot_ReflectsObserved(t *testing.T) {
 	const route = "/v1/snapshot-probe/{id}"
 	before := reqmetrics.ReadSnapshot().Routes[route].Count
@@ -38,8 +36,6 @@ func TestObserve_EmptyRouteRecordsUnmatched(t *testing.T) {
 	}
 }
 
-// TestReadSnapshot_TalliesStatusClassesPerRoute proves each observed status
-// lands in its own 2xx/4xx/5xx slot on the route it belongs to.
 func TestReadSnapshot_TalliesStatusClassesPerRoute(t *testing.T) {
 	const route = "/v1/status-probe/{id}"
 	before := reqmetrics.ReadSnapshot().Routes[route].Status
@@ -60,9 +56,6 @@ func TestReadSnapshot_TalliesStatusClassesPerRoute(t *testing.T) {
 	}
 }
 
-// TestRouteLatency_StatusSerializesUnderStatusKey pins the seam contract overseer
-// reads: the status classes serialize as {"2xx":..,"4xx":..,"5xx":..} under
-// "status" on each route.
 func TestRouteLatency_StatusSerializesUnderStatusKey(t *testing.T) {
 	route := reqmetrics.RouteLatency{Status: reqmetrics.StatusClasses{Count2xx: 7, Count4xx: 3, Count5xx: 1}}
 

@@ -36,10 +36,6 @@ func decodeSingleValue(r *http.Request, dst any) error {
 	return nil
 }
 
-// PathID reads the chi URL param named `name`, parses it with `parse`, and on
-// failure writes a 400 Bad Request with `invalidMsg` and returns false. The
-// message is passed explicitly so each caller keeps its exact wording (e.g.
-// "invalid track ID" vs "invalid playlist ID").
 func PathID[T any](w http.ResponseWriter, r *http.Request, name string, parse func(string) (T, error), invalidMsg string) (T, bool) {
 	value, err := parse(chi.URLParam(r, name))
 	if err != nil {

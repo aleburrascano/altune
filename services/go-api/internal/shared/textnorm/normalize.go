@@ -35,15 +35,8 @@ func normalize(text string, dropBrackets bool) string {
 	return strings.TrimSpace(s)
 }
 
-// KeySeparator joins the parts of a composite key. NormalizeForMatch strips it
-// from text, so no part can contain one and no two splits of the same words can
-// produce the same key.
 const KeySeparator = "\x1f"
 
-// NameKey is the key a name-keyed store is written and read under. Both sides
-// must derive it here: a second derivation that drifts turns every lookup into a
-// silent miss. It is empty when every part is, because a name that normalizes
-// away identifies nothing and every such entity would share one entry.
 func NameKey(parts ...string) string {
 	normalized := make([]string, len(parts))
 	hasIdentity := false

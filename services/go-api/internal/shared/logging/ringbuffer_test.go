@@ -38,8 +38,6 @@ func TestRing_CapturesDebugBelowStdoutLevel(t *testing.T) {
 
 const leakedAPIKey = "0123456789abcdeflastfmkey"
 
-// lastfmURLError produces the real *url.Error a timed-out Last.fm call yields:
-// Go embeds the full request URL, api_key included, in err.Error().
 func lastfmURLError(t *testing.T) error {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -79,9 +77,6 @@ func assertNoKey(t *testing.T, recs []CapturedRecord) {
 	}
 }
 
-// TestRingHandler_RedactsSecretQueryParamInURLError reproduces #997: a wrapped
-// *url.Error logged under the conventional "error" key carried the live
-// Last.fm api_key straight into the admin logs feed.
 func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 10)
 	ch, cancel, subErr := ring.Subscribe()
@@ -106,7 +101,6 @@ func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
 		t.Errorf("message not redacted: %q", snap[1].Message)
 	}
 
-	// The live stream is fed from the same choke point.
 	for i := 0; i < 2; i++ {
 		select {
 		case rec := <-ch:
@@ -117,8 +111,6 @@ func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
 	}
 }
 
-// TestRingHandler_RedactsSecretsInGroupsAndWithAttrs covers attrs a top-level
-// record scan misses: nested group leaves and logger.With attrs.
 func TestRingHandler_RedactsSecretsInGroupsAndWithAttrs(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 10)
 
@@ -143,10 +135,6 @@ func TestRingHandler_RedactsSecretsInGroupsAndWithAttrs(t *testing.T) {
 	}
 }
 
-// newStreamCaptureLogger builds the production handler shape — a ringHandler
-// wrapping the JSON handler that writes the persisted stream — with that
-// stream captured, so a test can assert on what leaves the process rather than
-// only on the ring the admin viewer reads.
 func newStreamCaptureLogger(t *testing.T, ring *RingBuffer) (*slog.Logger, func() string) {
 	t.Helper()
 	var stream bytes.Buffer
@@ -161,9 +149,6 @@ func assertStreamHasNoKey(t *testing.T, stream string) {
 	}
 }
 
-// TestRingHandler_KeepsWithBoundSecretsOutOfTheStream pins #1612: an attr bound
-// once via logger.With was handed to the stdout handler unfiltered, so it rode
-// every later record from that logger while the ring's own view looked clean.
 func TestRingHandler_KeepsWithBoundSecretsOutOfTheStream(t *testing.T) {
 	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
 
@@ -178,10 +163,6 @@ func TestRingHandler_KeepsWithBoundSecretsOutOfTheStream(t *testing.T) {
 	}
 }
 
-// TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream pins the second half of
-// #1612: the record sanitizer only scanned top-level attrs, so a secret inside
-// a group whose own key is no marker (the shape fanOutFailureAttr builds)
-// reached stdout while the ring's flattened copy redacted it.
 func TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream(t *testing.T) {
 	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
 
@@ -197,9 +178,6 @@ func TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream(t *testing.T) {
 	}
 }
 
-// TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted covers the degenerate
-// end of the scrub: a derived logger whose entire bound set is secret, under an
-// open group, must still deliver its records to both sinks.
 func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
 	ring := NewRingBuffer(10)
 	logger, stream := newStreamCaptureLogger(t, ring)
@@ -218,10 +196,6 @@ func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
 	}
 }
 
-// TestRingHandler_KeepsURLErrorSecretsOutOfTheStream pins #2227: a *url.Error
-// logged under the conventional "error" key names nothing secret, so the
-// key-based drop let it through and the api_key inside its URL reached the
-// stdout stream docker persists, while the ring's own copy looked clean.
 func TestRingHandler_KeepsURLErrorSecretsOutOfTheStream(t *testing.T) {
 	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
 	err := lastfmURLError(t)
@@ -245,9 +219,6 @@ func TestRingHandler_KeepsURLErrorSecretsOutOfTheStream(t *testing.T) {
 	}
 }
 
-// cleanThenLeakingValue answers the first resolve cleanly and every later one
-// with the secret — the shape that beats a redaction check which resolves for
-// the check and hands the unresolved attr to the handler to resolve again.
 type cleanThenLeakingValue struct{ resolves *int }
 
 func (v cleanThenLeakingValue) LogValue() slog.Value {
@@ -285,8 +256,6 @@ func TestRingBuffer_EvictsRecordsPastRetention(t *testing.T) {
 		t.Fatalf("snapshot = %+v, want empty after every record aged out", snap)
 	}
 
-	// Capacity eviction still applies alongside age eviction, and the ring
-	// keeps working after being fully drained by age.
 	for _, m := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"} {
 		ring.append(CapturedRecord{Message: m})
 	}

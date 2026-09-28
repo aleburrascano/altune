@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// withBinary points DumpJSON at a stand-in executable for the duration of a
-// test (yt-dlp is not installed in CI, and the binary name is otherwise fixed).
 func withBinary(t *testing.T, name string) {
 	t.Helper()
 	prev := binaryName
@@ -18,10 +16,6 @@ func withBinary(t *testing.T, name string) {
 	t.Cleanup(func() { binaryName = prev })
 }
 
-// Exec, capture and process-tree kill are execcmd's; their tests live there.
-
-// TestDumpJSON_CapsCapturedOutput reproduces the unbounded-buffer gap: stdout
-// beyond the cap must not be buffered.
 func TestDumpJSON_CapsCapturedOutput(t *testing.T) {
 	withBinary(t, "sh")
 	over := execcmd.MaxCaptureBytes + 4096
@@ -70,8 +64,6 @@ func TestDumpJSON_FailureCarriesStderrAndTheRawError(t *testing.T) {
 	}
 }
 
-// TestDumpJSON_CancelledContextEndsTheRun: cancellation is the only deadline
-// DumpJSON has, so the caller's ctx must still reach the process.
 func TestDumpJSON_CancelledContextEndsTheRun(t *testing.T) {
 	withBinary(t, "sh")
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

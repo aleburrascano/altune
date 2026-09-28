@@ -35,9 +35,6 @@ func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
 	return nil
 }
 
-// WithAttrs scrubs before binding: attrs bound here are never seen again by
-// Handle's choke point, so an unscrubbed secret would ride every later record
-// the derived logger writes to the persisted stream.
 func (h *ringHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	safe := withoutSensitiveLeaves("", attrs)
 	if len(safe) == 0 {

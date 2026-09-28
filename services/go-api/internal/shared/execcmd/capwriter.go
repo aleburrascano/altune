@@ -2,11 +2,6 @@ package execcmd
 
 import "bytes"
 
-// capWriter buffers writes up to limit bytes and silently discards the rest,
-// so a long-running or runaway command cannot grow the capture unbounded (and
-// concurrent jobs cannot compound it). It always reports the full write length
-// so the command is never killed with a short-write error — output past the
-// cap is simply dropped.
 type capWriter struct {
 	buf   bytes.Buffer
 	limit int

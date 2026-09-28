@@ -138,10 +138,6 @@ func TestRingBuffer_SlowSubscriberDropsNotBlocks(t *testing.T) {
 	}
 }
 
-// TestRingBuffer_CountsRecordsDroppedForAFullSubscriber pins #1607: records a
-// full subscriber channel discards used to vanish with no trace, so an
-// operator's live log view could lose the lines diagnosing an incident without
-// anything saying so.
 func TestRingBuffer_CountsRecordsDroppedForAFullSubscriber(t *testing.T) {
 	ring := NewRingBuffer(10)
 	_, cancelNeverDrainedSubscriber, err := ring.Subscribe()
@@ -197,9 +193,6 @@ func TestRingBuffer_ConcurrentAppends(t *testing.T) {
 	}
 }
 
-// TestRingBuffer_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are
-// live, Subscribe refuses the next one without disturbing existing subscribers,
-// and cancelling a subscription frees its slot.
 func TestRingBuffer_SubscribeRejectsPastCeiling(t *testing.T) {
 	ring := NewRingBuffer(10)
 	chans := make([]<-chan CapturedRecord, 0, MaxSubscribers)

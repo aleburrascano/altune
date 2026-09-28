@@ -42,8 +42,6 @@ func mustPost(t *testing.T, rt http.RoundTripper, url, body string) *http.Respon
 	return resp
 }
 
-// Regression for #642: the recorder feeds fixture files written to disk, so a
-// query-param secret must never survive into Exchange.URL or Exchange.Err.
 func TestRecorder_RedactsSecretInURLAndErr(t *testing.T) {
 	errMsg := `Get "https://ws.audioscrobbler.com/2.0/?api_key=` + fakeKey + `&method=x": dial tcp: i/o timeout`
 	rec := NewRecorder(errRT{err: errors.New(errMsg)})
@@ -83,9 +81,6 @@ func TestRecorder_RedactsSecretInURLOnSuccess(t *testing.T) {
 	}
 }
 
-// Regression for #1611: Exchanges are written to fixture files on disk, so the
-// live bearer token Spotify's token endpoint answers with must never survive
-// into Exchange.RespBody — while the caller still receives the real body.
 func TestRecorder_RedactsCredentialFieldInResponseBody(t *testing.T) {
 	const body = `{"accessToken":"` + fakeAccessToken + `","accessTokenExpirationTimestampMs":1770000000000,"isAnonymous":true}`
 	rec := NewRecorder(bodyRT{body: body})
@@ -108,10 +103,6 @@ func TestRecorder_RedactsCredentialFieldInResponseBody(t *testing.T) {
 	}
 }
 
-// Spotify's clienttoken response nests the credential inside granted_token, and
-// list-shaped payloads hide one per element; depth must not be an escape hatch.
-// A credential-named field holding an object is dropped whole rather than walked,
-// so a sub-field this list has never seen ("pass") cannot ride out inside it.
 func TestRecorder_RedactsCredentialFieldsAtAnyDepth(t *testing.T) {
 	const body = `{"granted_token":{"pass":"` + fakeAccessToken + `","expires_after_seconds":1209600},` +
 		`"clients":[{"name":"web","api_key":"` + fakeKey + `"}]}`
@@ -150,8 +141,6 @@ func TestRecorder_RedactsCredentialFieldInRequestBody(t *testing.T) {
 	}
 }
 
-// OAuth refresh posts a form, not JSON: the body must degrade to text masking
-// rather than being stored whole or crashing the recorder.
 func TestRecorder_RedactsCredentialParamInFormRequestBody(t *testing.T) {
 	const body = "grant_type=refresh_token&refresh_token=" + fakeKey + "&scope=user-read"
 	rec := NewRecorder(bodyRT{body: "<html>not json</html>"})
@@ -171,8 +160,6 @@ func TestRecorder_RedactsCredentialParamInFormRequestBody(t *testing.T) {
 	}
 }
 
-// A fixture recorded with a redacted URL must still replay for a live request
-// that carries the real key, or redaction would break record/replay.
 func TestReplayer_MatchesRedactedFixtureForKeyedRequest(t *testing.T) {
 	const url = "https://ws.audioscrobbler.com/2.0/?method=x&api_key=" + fakeKey
 	rec := NewRecorder(okRT{})
@@ -187,8 +174,6 @@ func TestReplayer_MatchesRedactedFixtureForKeyedRequest(t *testing.T) {
 	}
 }
 
-// The same must-hold for a POST: the fixture's request body is scrubbed, the
-// live one carries the real secret, and the match key has to bridge the two.
 func TestReplayer_MatchesFixtureRecordedWithScrubbedRequestBody(t *testing.T) {
 	const (
 		url     = "https://clienttoken.spotify.com/v1/clienttoken"

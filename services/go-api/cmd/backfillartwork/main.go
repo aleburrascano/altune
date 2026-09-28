@@ -20,13 +20,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// perTrackTimeout caps the wall time spent re-resolving one cover. The chained
-// resolver has its own internal budget; this is a belt-and-braces guard so a
-// single stuck provider cannot stall the whole backfill.
 const perTrackTimeout = 30 * time.Second
 
-// emptyArtHash is the md5 of an empty body: providers hand it back as a
-// "no artwork" placeholder, so a stored URL carrying it is really blank.
 const emptyArtHash = "d41d8cd98f00b204e9800998ecf8427e"
 
 type options struct {
@@ -47,8 +42,6 @@ type trackWriter interface {
 	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 }
 
-// artworkResolver is the slice of the discovery TaggingArtworkResolver this tool
-// needs. Kept local so heal() can be unit-tested with a fake.
 type artworkResolver interface {
 	ResolveTagged(ctx context.Context, kind discoveryDomain.ResultKind, title, subtitle, mbid string) (url string, source discoveryDomain.ProviderKey, err error)
 }
@@ -92,9 +85,6 @@ func run(opts options) error {
 	return heal(ctx, persistence.NewPgxTrackRepository(pool), resolver, candidates, opts.apply)
 }
 
-// isBlankOrSuspect reports whether a stored artwork_url is missing or a known
-// placeholder that should be re-resolved. Kept in sync with the SQL gate in
-// loadCandidates so the Go and DB views of "suspect" agree.
 func isBlankOrSuspect(url string) bool {
 	trimmed := strings.TrimSpace(url)
 	if trimmed == "" {
@@ -103,7 +93,6 @@ func isBlankOrSuspect(url string) bool {
 	if strings.Contains(trimmed, emptyArtHash) {
 		return true
 	}
-	// Deezer's artist placeholder path (empty artist id) — see providers.IsDeezerPlaceholder.
 	return strings.Contains(trimmed, "/images/artist//")
 }
 

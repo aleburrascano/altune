@@ -5,15 +5,10 @@ import (
 	"testing"
 )
 
-// TestRingHandler_RedactsConfigSecretFields reproduces the denylist gap from
-// issue #643: before the fix, only the literal "query" key was stripped, so an
-// attr keyed like any real Config secret field (redis_url, api_key, tokens,
-// access/secret keys) reached the live-tailing ring buffer unredacted.
 func TestRingHandler_RedactsConfigSecretFields(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 20)
 
 	const secret = "s3cr3t-value-should-never-surface"
-	// Log keys mirror how each Config secret field snake-cases when logged.
 	secretKeys := []string{
 		"supabase_anon_key",
 		"redis_url",
@@ -48,8 +43,6 @@ func TestRingHandler_RedactsConfigSecretFields(t *testing.T) {
 	}
 }
 
-// TestRingHandler_RedactsCredentialURLInErrorAttr covers a credential URL that
-// leaks through a generic "error" attr — the value, not the key, is the tell.
 func TestRingHandler_RedactsCredentialURLInErrorAttr(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 10)
 
@@ -73,9 +66,6 @@ func TestRingHandler_RedactsCredentialURLInErrorAttr(t *testing.T) {
 	}
 }
 
-// TestRedaction_KeepsNonSecretLookalikeKeys guards against over-redaction: keys
-// that merely resemble secret vocabulary (dedup_key, idempotency_key,
-// image_url, token_count) are not secrets and must survive.
 func TestRedaction_KeepsNonSecretLookalikeKeys(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 10)
 

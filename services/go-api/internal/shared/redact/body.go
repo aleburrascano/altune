@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-// SecretsInBody masks the credential-bearing fields of an HTTP request or
-// response body before it is stored: a JSON document is masked by field name at
-// any depth, and anything else (form-encoded, HTML, a truncated fragment) falls
-// back to the text masking Secrets does, so a malformed body degrades instead
-// of failing. It is idempotent, which httptrace replay match keys depend on.
 func SecretsInBody(body string) string {
 	scrubbed, isJSON := scrubbedJSON(body)
 	if !isJSON {
@@ -32,9 +27,6 @@ func scrubbedJSON(body string) (string, bool) {
 	return encodedOrMasked(scrubbed), true
 }
 
-// decodedJSONDocument reports false for anything but exactly one JSON value, so
-// trailing bytes cannot smuggle a credential past the walk below. Numbers are
-// kept as json.Number so re-encoding cannot change a value the body carried.
 func decodedJSONDocument(body string) (any, bool) {
 	decoder := json.NewDecoder(strings.NewReader(body))
 	decoder.UseNumber()
@@ -83,8 +75,6 @@ func maskedItems(items []any) ([]any, bool) {
 	return items, masked
 }
 
-// encodedOrMasked drops the whole document when a scrubbed value will not
-// re-encode: falling back to text masking would keep the credential just found.
 func encodedOrMasked(v any) string {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)

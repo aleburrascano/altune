@@ -112,22 +112,17 @@ func TestMonitor_NotifierFailureDoesNotPanic(t *testing.T) {
 
 func TestMonitor_RetriesAfterFailedNotify(t *testing.T) {
 	firing := true
-	// Fails on the first push, succeeds thereafter (transient outage).
 	n := &flakyNotifier{failCalls: 1}
 	m := newTestMonitor(n, signalCond("dep", &firing))
 
-	m.evaluate(context.Background()) // fires, notify fails
-	m.evaluate(context.Background()) // still firing, must re-attempt
+	m.evaluate(context.Background())
+	m.evaluate(context.Background())
 
 	if n.calls != 2 {
 		t.Fatalf("notify calls = %d, want 2 (failed push must re-arm, not permanently silence)", n.calls)
 	}
 }
 
-// TestMonitor_BlockingConditionDoesNotFreezeTicker reproduces the per-call
-// timeout defect: a condition whose Eval only returns when its context is
-// cancelled (a stuck, context-aware dependency) must not hang evaluate, and
-// the conditions after it must still run on the same tick.
 func TestMonitor_BlockingConditionDoesNotFreezeTicker(t *testing.T) {
 	secondRan := false
 	blocked := Condition{
@@ -163,9 +158,6 @@ func TestMonitor_BlockingConditionDoesNotFreezeTicker(t *testing.T) {
 	}
 }
 
-// TestMonitor_PausedTickSkipsEvaluation reproduces the runtime kill-switch gap:
-// a paused monitor must skip its per-tick work without a restart, and resume
-// evaluating once un-paused.
 func TestMonitor_PausedTickSkipsEvaluation(t *testing.T) {
 	firing := true
 	n := &stubNotifier{}
@@ -184,10 +176,6 @@ func TestMonitor_PausedTickSkipsEvaluation(t *testing.T) {
 	}
 }
 
-// TestMonitor_NonPositiveIntervalDoesNotPanic reproduces the unclamped-interval
-// defect. loop is called directly rather than through Start because the panic
-// would otherwise be raised on the spawned goroutine, where no recover can
-// reach it and the whole test binary dies with it.
 func TestMonitor_NonPositiveIntervalDoesNotPanic(t *testing.T) {
 	for _, interval := range []time.Duration{0, -time.Second} {
 		t.Run(interval.String(), func(t *testing.T) {
@@ -205,9 +193,6 @@ func TestMonitor_NonPositiveIntervalDoesNotPanic(t *testing.T) {
 	}
 }
 
-// TestMonitor_PanickingConditionDoesNotStopThePass reproduces the missing
-// recover: runloop.Spawn has none either, so today this panic unwinds the loop
-// goroutine and terminates the process.
 func TestMonitor_PanickingConditionDoesNotStopThePass(t *testing.T) {
 	firing := true
 	n := &stubNotifier{}
@@ -224,9 +209,6 @@ func TestMonitor_PanickingConditionDoesNotStopThePass(t *testing.T) {
 	}
 }
 
-// TestMonitor_PanickingConditionHoldsItsPreviousState pins the panic's meaning:
-// unknown, not recovered. Reading it as a recovery would clear firing and page
-// the same open incident again on the next pass.
 func TestMonitor_PanickingConditionHoldsItsPreviousState(t *testing.T) {
 	blowsUp := false
 	n := &stubNotifier{}
@@ -252,9 +234,6 @@ func TestMonitor_PanickingConditionHoldsItsPreviousState(t *testing.T) {
 	}
 }
 
-// TestMonitor_PauseMidPassStopsLaterNotifications reproduces the once-per-tick
-// pause check: conditions get up to 10s each, so an operator who pauses while
-// the first one is still blocked must not be paged by the ones behind it.
 func TestMonitor_PauseMidPassStopsLaterNotifications(t *testing.T) {
 	var m *Monitor
 	firing := true
@@ -275,9 +254,6 @@ func TestMonitor_PauseMidPassStopsLaterNotifications(t *testing.T) {
 	}
 }
 
-// TestMonitor_ResumeRearmsAnIncidentThatWentUnnotified reproduces the stale
-// firing state: the key was marked firing before the pause, nothing was pushed
-// during it, so after Resume the still-open incident must page again.
 func TestMonitor_ResumeRearmsAnIncidentThatWentUnnotified(t *testing.T) {
 	firing := true
 	n := &stubNotifier{}

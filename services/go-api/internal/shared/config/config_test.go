@@ -85,14 +85,9 @@ func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
 	}
 }
 
-// TestLoad_SupabaseJWTAudEmptyUsesDefault pins what the env library does with
-// an explicitly empty value: env/v11 treats set-but-empty as absent and applies
-// envDefault. An upgrade that started honouring the empty string instead would
-// hand the verifier an audience no token can match, so this is the boundary the
-// blank check below does not cover.
 func TestLoad_SupabaseJWTAudEmptyUsesDefault(t *testing.T) {
 	env := validConfigEnv(nil)
-	env["SUPABASE_JWT_AUD"] = "" // set here, not as an override: an empty override removes the key
+	env["SUPABASE_JWT_AUD"] = ""
 
 	setEnv(t, env)
 
@@ -105,10 +100,6 @@ func TestLoad_SupabaseJWTAudEmptyUsesDefault(t *testing.T) {
 	}
 }
 
-// TestLoad_SupabaseJWTAudBlank covers the values env/v11 does not replace with
-// the default: whitespace-only ones survive parsing, and an audience that
-// matches no token's aud claim lets the process start and then rejects every
-// real token with claim_invalid_aud (#2182).
 func TestLoad_SupabaseJWTAudBlank(t *testing.T) {
 	tests := []struct {
 		name string
@@ -424,8 +415,6 @@ func setEnv(t *testing.T, vars map[string]string) {
 	for _, k := range envKeys {
 		os.Unsetenv(k)
 	}
-	// AUDIO_KEY_PREFIX joined the list after envKeys was written; unset it here
-	// too so a leftover ambient value can't leak into a test.
 	os.Unsetenv("AUDIO_KEY_PREFIX")
 
 	for k, v := range vars {
@@ -433,10 +422,6 @@ func setEnv(t *testing.T, vars map[string]string) {
 	}
 }
 
-// validConfigEnv returns the canonical set of env vars that Load() currently
-// requires, with per-test overrides layered on top. This is the single place a
-// newly required env var needs adding. An override whose value is the empty
-// string removes that key, letting a test exercise a missing required var.
 func validConfigEnv(overrides map[string]string) map[string]string {
 	env := map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
@@ -452,9 +437,6 @@ func validConfigEnv(overrides map[string]string) map[string]string {
 	return env
 }
 
-// feedbackBaseEnv is the minimal valid environment plus feedback credentials,
-// so the FEEDBACK_ENABLED flag is exercised independently of credential
-// presence (the credentials stay set in every case).
 func feedbackBaseEnv() map[string]string {
 	return map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
@@ -464,9 +446,6 @@ func feedbackBaseEnv() map[string]string {
 	}
 }
 
-// TestLoad_FeedbackEnabledDefaultsOn guards that FEEDBACK_ENABLED defaults to
-// enabled, so existing deployments with credentials keep wiring the feedback
-// integration exactly as before unless an operator opts out.
 func TestLoad_FeedbackEnabledDefaultsOn(t *testing.T) {
 	setEnv(t, feedbackBaseEnv())
 
@@ -482,9 +461,6 @@ func TestLoad_FeedbackEnabledDefaultsOn(t *testing.T) {
 	}
 }
 
-// TestLoad_FeedbackEnabledRespectsEnv guards that FEEDBACK_ENABLED=false turns
-// the flag off while the stored credentials remain intact, so the feature can
-// be disabled at runtime without discarding the repo/token values.
 func TestLoad_FeedbackEnabledRespectsEnv(t *testing.T) {
 	env := feedbackBaseEnv()
 	env["FEEDBACK_ENABLED"] = "false"
@@ -502,10 +478,6 @@ func TestLoad_FeedbackEnabledRespectsEnv(t *testing.T) {
 	}
 }
 
-// TestHasIssueTracker_PassesMalformedRepo documents the gap that motivated the
-// startup format check: HasIssueTracker only gates on presence, so a repo that
-// is not owner/repo shape still reports true and would only fail at the first
-// user submission. Load() is what must reject it (see below).
 func TestHasIssueTracker_PassesMalformedRepo(t *testing.T) {
 	cfg := &Config{GitHubIssueRepo: "altune-no-slash", GitHubIssueToken: "ghp_secret"}
 	if !cfg.HasIssueTracker() {
@@ -513,9 +485,6 @@ func TestHasIssueTracker_PassesMalformedRepo(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubIssueRepoMalformed guards that a repo which is not in
-// owner/repo shape fails loud at startup, naming GITHUB_ISSUE_REPO, instead of
-// starting up healthy and only erroring at first submission.
 func TestLoad_GitHubIssueRepoMalformed(t *testing.T) {
 	tests := []struct {
 		name string
@@ -544,9 +513,6 @@ func TestLoad_GitHubIssueRepoMalformed(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubIssueRepoValid guards that a well-formed owner/repo slug loads
-// cleanly and wires the issue tracker on, so the format check never rejects a
-// legitimate config.
 func TestLoad_GitHubIssueRepoValid(t *testing.T) {
 	setEnv(t, feedbackBaseEnv())
 
@@ -559,9 +525,6 @@ func TestLoad_GitHubIssueRepoValid(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubIssueRepoOptionalWhenUnset guards that the format check is
-// skipped when no repo is configured, so deployments without the feedback
-// integration still load.
 func TestLoad_GitHubIssueRepoOptionalWhenUnset(t *testing.T) {
 	env := feedbackBaseEnv()
 	delete(env, "GITHUB_ISSUE_REPO")
@@ -778,9 +741,6 @@ func TestConfig_HasOCIS3_AllCombinations(t *testing.T) {
 	}
 }
 
-// TestLoad_PoolSizes guards the connection-pool knobs (#1610): both default to
-// a ceiling derived from this service's own concurrency rather than from the
-// host's CPU count, and an operator can tune either from the environment.
 func TestLoad_PoolSizes(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -863,8 +823,6 @@ func TestLoad_RedisURLErrorRedactsCredentials(t *testing.T) {
 	}
 }
 
-// TestLoad_SSEMaxConns guards the SSE_MAX_CONNS knob (#1022): it defaults to a
-// bounded global ceiling and an operator can tune it from the environment.
 func TestLoad_SSEMaxConns(t *testing.T) {
 	cases := []struct {
 		name string
@@ -897,9 +855,6 @@ func TestLoad_SSEMaxConns(t *testing.T) {
 	}
 }
 
-// The JWKS endpoint is the trust root for every bearer-token signature check,
-// so a plaintext URL would let a network-positioned attacker substitute the key
-// set and mint tokens that verify (#1030).
 func TestLoad_SupabaseURLsRejectPlaintext(t *testing.T) {
 	fields := []string{"SUPABASE_JWT_JWKS_URL", "SUPABASE_PROJECT_URL"}
 	urls := []struct {
@@ -930,8 +885,6 @@ func TestLoad_SupabaseURLsRejectPlaintext(t *testing.T) {
 	}
 }
 
-// Loopback traffic never crosses a network an attacker can sit on, so local
-// Supabase (supabase start serves http://127.0.0.1:54321) stays usable.
 func TestLoad_SupabaseURLsAllowLoopbackHTTP(t *testing.T) {
 	for _, base := range []string{
 		"http://127.0.0.1:54321",
@@ -952,8 +905,6 @@ func TestLoad_SupabaseURLsAllowLoopbackHTTP(t *testing.T) {
 	}
 }
 
-// TestAuthEnabled must require BOTH an explicit opt-in (TEST_AUTH_ENABLED=true)
-// AND a non-prod ENV, and fail closed on any absent/ambiguous input.
 func TestTestAuthEnabled_RequiresOptInAndNonProdEnv(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -961,13 +912,11 @@ func TestTestAuthEnabled_RequiresOptInAndNonProdEnv(t *testing.T) {
 		optIn bool
 		want  bool
 	}{
-		// Only opt-in + non-prod env enables the backdoor.
 		{"optin + development enables", "development", true, true},
 		{"optin + test enables", "test", true, true},
 		{"optin + case-insensitive env", "Development", true, true},
 		{"optin + trims padding", "  test  ", true, true},
 
-		// Opt-in alone in a prod-like or unknown env stays DISABLED.
 		{"optin + production disabled", "production", true, false},
 		{"optin + prod disabled", "prod", true, false},
 		{"optin + unknown env disabled", "staging", true, false},
@@ -975,13 +924,9 @@ func TestTestAuthEnabled_RequiresOptInAndNonProdEnv(t *testing.T) {
 		{"optin + substring not matched", "development-prod", true, false},
 		{"optin + empty env disabled (fail closed)", "", true, false},
 
-		// Non-prod env WITHOUT the explicit opt-in stays DISABLED (fail closed):
-		// this is the #1384 case — ENV defaults to development, so ENV alone must
-		// never be sufficient.
 		{"no optin + development disabled", "development", false, false},
 		{"no optin + test disabled", "test", false, false},
 
-		// Unset ENV and no opt-in — the exact prod-misconfig shape — DISABLED.
 		{"unset env + no optin disabled (fail closed)", "", false, false},
 		{"production + no optin disabled", "production", false, false},
 	}
@@ -996,8 +941,6 @@ func TestTestAuthEnabled_RequiresOptInAndNonProdEnv(t *testing.T) {
 	}
 }
 
-// The zero-value Config (ENV unset, opt-in unset) — the shape a prod deploy that
-// forgets to set anything lands in — must resolve to DISABLED.
 func TestTestAuthEnabled_ZeroValueFailsClosed(t *testing.T) {
 	if (&Config{}).TestAuthEnabled() {
 		t.Fatal("zero-value Config enabled test auth; must fail closed to DISABLED")
@@ -1042,9 +985,6 @@ func TestLoad_OverseerPrincipalMustBeAUUID(t *testing.T) {
 	}
 }
 
-// TestLoad_YtProviderTogglesDefaultEnabled guards that the new per-source kill
-// switches default to enabled, so existing deployments keep wiring ytmusic and
-// yt-dlp exactly as before unless an operator opts out.
 func TestLoad_YtProviderTogglesDefaultEnabled(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
@@ -1060,8 +1000,6 @@ func TestLoad_YtProviderTogglesDefaultEnabled(t *testing.T) {
 	}
 }
 
-// TestLoad_YtProviderTogglesRespectEnv guards that setting the env flags to
-// false pulls the corresponding source out of the startup wiring.
 func TestLoad_YtProviderTogglesRespectEnv(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{
 		"YTMUSIC_ENABLED": "false",
@@ -1080,9 +1018,6 @@ func TestLoad_YtProviderTogglesRespectEnv(t *testing.T) {
 	}
 }
 
-// TestLoad_ScrapedProviderKillSwitches guards the env contract of the
-// reverse-engineered provider kill switches: enabled by default, and each
-// independently disabled by setting its flag to false.
 func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 	base := validConfigEnv(nil)
 	switches := []struct {
@@ -1123,8 +1058,6 @@ func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 	}
 }
 
-// TestLoad_AudioPrefetchKillSwitch guards that AUDIO_PREFETCH_ENABLED defaults
-// to true (clients keep prefetching) and that false turns it off remotely.
 func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
 	t.Setenv("AUDIO_PREFETCH_ENABLED", "")
 	os.Unsetenv("AUDIO_PREFETCH_ENABLED")
@@ -1147,9 +1080,6 @@ func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
 	}
 }
 
-// TestLoad_NowPlayingEnrichmentKillSwitch guards the env contract of
-// PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED (#1125): enabled by default so resume
-// keeps enriching the current track, and false sheds the lookup.
 func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "")
 	os.Unsetenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
@@ -1172,9 +1102,6 @@ func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 	}
 }
 
-// TestLoad_AcquisitionPaused guards the ACQUISITION_PAUSED startup setting
-// (#2800): it defaults to false and an operator can pause acquisition from
-// the environment, without an /observe/acquisition POST.
 func TestLoad_AcquisitionPaused(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1202,9 +1129,6 @@ func TestLoad_AcquisitionPaused(t *testing.T) {
 	}
 }
 
-// TestLoad_DisabledJobs guards the DISABLED_JOBS startup setting (#2800): it
-// splits on commas, trims whitespace around each name, and an unset or empty
-// value leaves no jobs disabled.
 func TestLoad_DisabledJobs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1293,9 +1217,6 @@ func TestLoad_AudioKeyPrefixAccepted(t *testing.T) {
 	}
 }
 
-// TestLoad_AudioKeyPrefixRefusedInProduction pins the contract's safety net:
-// prod must never start with a key prefix set, since a promote/sync tool
-// depends on prod's refs being unprefixed (#3090).
 func TestLoad_AudioKeyPrefixRefusedInProduction(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{
 		"ENV":              "production",

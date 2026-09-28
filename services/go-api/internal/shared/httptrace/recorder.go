@@ -34,9 +34,6 @@ func NewRecorder(base http.RoundTripper) *Recorder {
 }
 
 func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Exchanges are written to fixture files on disk, so secrets in the URL,
-	// the bodies, or the error text are masked before they are stored. The
-	// caller's own request and response still carry the real bytes.
 	ex := Exchange{Method: req.Method, URL: redact.Secrets(req.URL.String())}
 
 	if req.Body != nil {

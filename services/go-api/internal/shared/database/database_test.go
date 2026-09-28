@@ -13,9 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// A listener that is never accepted from: the kernel completes the TCP
-// handshake but the server never speaks, so the Postgres startup exchange
-// blocks forever unless NewPool bounds it.
 func TestNewPool_UnresponsiveHostFailsFastWithNamedError(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -55,9 +52,6 @@ func TestNewPool_UnresponsiveHostFailsFastWithNamedError(t *testing.T) {
 	}
 }
 
-// The pool ceiling must come from configuration, never from the host's CPU
-// count (pgx's own default), and an unusable value must land on the documented
-// default rather than on whatever int32 conversion produces.
 func TestPoolConfig_PinsMaxConnsFromConfiguration(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -82,9 +76,6 @@ func TestPoolConfig_PinsMaxConnsFromConfiguration(t *testing.T) {
 	}
 }
 
-// Saturation is only readable if the ceiling and the acquire counters are, so
-// ReadPoolStats is asserted against a pool that has never dialled: pgxpool
-// connects lazily, which is what keeps this a unit test.
 func TestReadPoolStats_ReportsCeilingAndSaturationCounters(t *testing.T) {
 	cfg, err := poolConfig("postgres://u:p@127.0.0.1:1/db?sslmode=disable", 11)
 	if err != nil {

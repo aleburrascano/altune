@@ -14,9 +14,6 @@ func (h *ringHandler) flattenedAttrs(r slog.Record) map[string]string {
 	return attrs
 }
 
-// dottedKey is the key a leaf is judged and displayed under. Both walks over
-// attrs — this one and the redaction filter — build it here, so neither can
-// drift into judging a nested leaf by a different key than the other.
 func dottedKey(prefix, key string) string {
 	if prefix == "" {
 		return key
@@ -33,8 +30,6 @@ func flattenAttr(dst map[string]string, prefix string, a slog.Attr) {
 		}
 		return
 	}
-	// Checked per leaf with the full dotted key, so secrets nested in a group
-	// or bound via logger.With are caught, not just top-level record attrs.
 	if isSensitiveLeaf(key, val) {
 		return
 	}

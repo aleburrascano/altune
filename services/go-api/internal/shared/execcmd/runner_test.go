@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// TestRunWithTimeout_CapsCapturedOutput reproduces the unbounded-buffer gap: a
-// command that emits more than the cap must not grow the capture past it.
 func TestRunWithTimeout_CapsCapturedOutput(t *testing.T) {
 	over := MaxCaptureBytes + 4096
 	stdout, _, err := RunWithTimeout(

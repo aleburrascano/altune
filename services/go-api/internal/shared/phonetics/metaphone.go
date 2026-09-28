@@ -34,8 +34,6 @@ func DoubleMetaphone(s string) (primary, alternate string) {
 	return pri.String(), alt.String()
 }
 
-// cursor is a letter of the upper-cased word plus the letters around it; every
-// coding rule below is expressed as an offset from the letter being coded.
 type cursor struct {
 	runes []rune
 	pos   int
@@ -104,8 +102,6 @@ func codeAt(cur cursor) (code string, next int) {
 	}
 }
 
-// doubledLetterCode covers the letters whose whole rule is "emit this, and a
-// doubled one still emits it once".
 func doubledLetterCode(letter rune) (string, bool) {
 	switch letter {
 	case 'B':

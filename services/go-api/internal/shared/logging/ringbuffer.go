@@ -13,13 +13,8 @@ const logRetentionWindow = 30 * time.Minute
 
 const subscriberChanSize = 64
 
-// MaxSubscribers bounds concurrent live subscribers to the log stream. The
-// stream is operator-only, so a handful of open consoles is the real load; the
-// ceiling exists so a leaked token or reconnect storm cannot grow the
-// subscriber set (one goroutine and buffered channel each) without limit.
 const MaxSubscribers = 16
 
-// ErrTooManySubscribers is returned by Subscribe once MaxSubscribers are live.
 var ErrTooManySubscribers = errors.New("logging: too many log stream subscribers")
 
 type CapturedRecord struct {
@@ -30,10 +25,8 @@ type CapturedRecord struct {
 }
 
 type RingBuffer struct {
-	mu  sync.Mutex
-	buf []CapturedRecord
-	// capturedAt stamps when each slot was appended, by the ring's own clock,
-	// so age eviction never trusts a caller-supplied record time.
+	mu         sync.Mutex
+	buf        []CapturedRecord
 	capturedAt []time.Time
 	head       int
 	count      int
@@ -42,14 +35,9 @@ type RingBuffer struct {
 	subs       map[int]chan CapturedRecord
 	nextSub    int
 	maxSubs    int
-	// dropped is read by callers that do not hold mu, so it is atomic rather
-	// than mu-guarded like the ring itself.
-	dropped atomic.Uint64
+	dropped    atomic.Uint64
 }
 
-// Dropped reports how many records a full subscriber channel discarded since
-// startup. A rising count means the live log stream an operator is watching
-// has gaps the stream itself cannot show.
 func (rb *RingBuffer) Dropped() uint64 { return rb.dropped.Load() }
 
 func NewRingBuffer(capacity int) *RingBuffer {
@@ -83,8 +71,6 @@ func (rb *RingBuffer) append(rec CapturedRecord) {
 	rb.fanOutDroppingWhenSubscriberIsFull(rec)
 }
 
-// evictExpiredLocked drops records older than the retention window, oldest
-// first, zeroing each slot so the evicted contents are released.
 func (rb *RingBuffer) evictExpiredLocked() {
 	cutoff := rb.now().Add(-rb.retention)
 	for rb.count > 0 {
@@ -101,10 +87,6 @@ func (rb *RingBuffer) oldestLocked() int {
 	return (rb.head - rb.count + len(rb.buf)) % len(rb.buf)
 }
 
-// A drop is counted and never logged, unlike the identical case in
-// events.InProcessBus: this runs inside the slog handler's own append path
-// while holding mu, so a log line here would re-enter append and deadlock, and
-// would add to the very burst that filled the channel. Dropped is the signal.
 func (rb *RingBuffer) fanOutDroppingWhenSubscriberIsFull(rec CapturedRecord) {
 	for _, ch := range rb.subs {
 		select {
@@ -127,9 +109,6 @@ func (rb *RingBuffer) Snapshot() []CapturedRecord {
 	return out
 }
 
-// Subscribe opens a live record subscription. It returns
-// ErrTooManySubscribers, and no channel, once MaxSubscribers subscriptions are
-// open; the returned cancel func must be called to release the slot.
 func (rb *RingBuffer) Subscribe() (<-chan CapturedRecord, func(), error) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()

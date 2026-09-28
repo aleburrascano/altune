@@ -5,20 +5,14 @@ import (
 	"log/slog"
 )
 
-// correlationAttrKey is the log attribute under which the request's
-// correlation ID is recorded. Kept stable so operators can grep for it.
 const correlationAttrKey = "corr_id"
 
 type correlationIDKey struct{}
 
-// WithCorrelationID returns a context carrying the given correlation ID.
-// It is the single source of truth for the key the context-aware handler
-// reads, so any *Context log call made under this context is tagged.
 func WithCorrelationID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, correlationIDKey{}, id)
 }
 
-// CorrelationIDFromContext reports the correlation ID carried by ctx, if any.
 func CorrelationIDFromContext(ctx context.Context) string {
 	id, _ := ctx.Value(correlationIDKey{}).(string)
 	return id
@@ -28,10 +22,6 @@ func CorrelationAttr(ctx context.Context) slog.Attr {
 	return slog.String(correlationAttrKey, CorrelationIDFromContext(ctx))
 }
 
-// correlationHandler is the outermost handler in the chain. It reads the
-// correlation ID from the context and stamps it onto every record, so any
-// InfoContext/WarnContext/ErrorContext call deep in the stack carries it
-// without each call site having to add it.
 type correlationHandler struct {
 	inner slog.Handler
 }

@@ -19,9 +19,6 @@ import (
 
 var errNoAudioStore = errors.New("no audio store configured (need MUSIC_DIR or OCI_S3_* env vars)")
 
-// exitOnError is the single process-exit point for the CLI commands. Keeping it
-// free of any defer lets the command bodies own their deferred cleanup and run
-// it before this returns control and the process exits.
 func exitOnError(err error) {
 	if err != nil {
 		fmt.Printf("ERROR: %v\n", err)

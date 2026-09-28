@@ -34,9 +34,6 @@ func TestFeed_FanOutToSubscribers(t *testing.T) {
 	}
 }
 
-// TestFeed_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are live,
-// Subscribe refuses the next one without disturbing existing subscribers, and
-// cancelling a subscription frees its slot.
 func TestFeed_SubscribeRejectsPastCeiling(t *testing.T) {
 	f := NewFeed()
 	chans := make([]<-chan TapEvent, 0, MaxSubscribers)
@@ -80,9 +77,6 @@ func TestFeed_SubscribeRejectsPastCeiling(t *testing.T) {
 	cancels = append(cancels, cancel)
 }
 
-// TestFeed_AvailableOnlyWhileDraining pins #2005: a feed whose Start could not
-// subscribe drains nothing, and must not report the same state as a live feed
-// with no events yet.
 func TestFeed_AvailableOnlyWhileDraining(t *testing.T) {
 	t.Run("never started", func(t *testing.T) {
 		if NewFeed().Available() {

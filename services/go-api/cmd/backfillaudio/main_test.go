@@ -223,10 +223,6 @@ func TestVerifyRefs_LeavesAResolvableRefAlone(t *testing.T) {
 	}
 }
 
-// TestCandidateRefs_StillFindsAPreCapLegacyFile pins that a file stored before
-// capSegmentBytes existed, under a segment in the 120-254 byte range (valid
-// then, under the 255-byte filesystem limit), is still located: candidateRefs
-// must also try the pre-cap legacy path, not only the capped one.
 func TestCandidateRefs_StillFindsAPreCapLegacyFile(t *testing.T) {
 	c := testCandidate(t)
 	c.artist = strings.Repeat("a", 200)
@@ -245,9 +241,6 @@ func TestCandidateRefs_StillFindsAPreCapLegacyFile(t *testing.T) {
 	}
 }
 
-// TestReconcile_LocatesAPreCapLegacyFile is the end-to-end regression: a
-// track whose stored object lives at the pre-cap legacy path (200-byte
-// artist segment) must still be found and marked ready by reconcile.
 func TestReconcile_LocatesAPreCapLegacyFile(t *testing.T) {
 	c := testCandidate(t)
 	c.artist = strings.Repeat("a", 200)

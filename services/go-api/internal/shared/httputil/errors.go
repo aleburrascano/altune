@@ -30,8 +30,6 @@ type ClientDetailer interface {
 	ClientDetail() string
 }
 
-// RetryAfterer is implemented by an error whose caller may retry once a known
-// wait has passed; the wait reaches the client as a Retry-After header.
 type RetryAfterer interface {
 	RetryAfter() time.Duration
 }
@@ -64,9 +62,6 @@ func writeStatusError(w http.ResponseWriter, r *http.Request, err error, se Stat
 	})
 }
 
-// setRetryAfter rounds the wait up to whole seconds, so a client that honors
-// the header retries after the wait has passed rather than just before. A
-// header a caller already set wins: it knows the more precise wait.
 func setRetryAfter(h http.Header, err error) {
 	var retryable RetryAfterer
 	if !errors.As(err, &retryable) || h.Get("Retry-After") != "" {
@@ -131,9 +126,6 @@ func BadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
 }
 
-// BadRequestCode rejects a request with a code the caller can branch on, for a
-// validation failure caught at the boundary, where no error value exists to
-// carry the code through HandleServiceError.
 func BadRequestCode(w http.ResponseWriter, code, message string) {
 	WriteJSON(w, http.StatusBadRequest, ErrorResponse{Detail: message, Code: code})
 }

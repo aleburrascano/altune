@@ -21,9 +21,6 @@ func TestFoldName_UnifiesUnicodeForms(t *testing.T) {
 	}
 }
 
-// TestFoldName_UnchangedForAlreadyNormalInput pins that the NFKC step leaves
-// the fold of ASCII and NFC text without compatibility characters unchanged, so
-// featured-artist keys persisted before NFKC was added still match.
 func TestFoldName_UnchangedForAlreadyNormalInput(t *testing.T) {
 	legacy := func(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
 	inputs := []string{

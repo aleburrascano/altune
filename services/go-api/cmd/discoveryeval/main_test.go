@@ -7,20 +7,12 @@ import (
 	"testing"
 )
 
-// reportModeRequiredEnv sets the config env vars run() needs to reach mode
-// dispatch, deliberately leaving DATABASE_URL unset: the report mode must
-// never need a database connection (#2806).
 func reportModeRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
 	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
 }
 
-// TestRun_ReportModeNeverTouchesTheDatabase pins run()'s mode dispatch: -mode
-// report must reach runReport without ever building a database pool, so a
-// manual nightly report run succeeds with no DATABASE_URL configured (#2806).
-// Without the dispatch, run() falls through to database.NewPool, which fails
-// with a distinct "DATABASE_URL not set" error instead of the report error.
 func TestRun_ReportModeNeverTouchesTheDatabase(t *testing.T) {
 	reportModeRequiredEnv(t)
 

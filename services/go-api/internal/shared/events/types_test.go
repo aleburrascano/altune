@@ -8,9 +8,6 @@ type publishedType struct {
 	wire     string
 }
 
-// Every event type a service publishes, pinned to the string deployed clients
-// match on. The pinned column is what makes a value change deliberate: editing
-// a constant alone turns this red.
 var publishedTypes = []publishedType{
 	{"TypeTrackAddedToLibrary", TypeTrackAddedToLibrary, "track_added_to_library"},
 	{"TypeTrackDeleted", TypeTrackDeleted, "track_deleted"},

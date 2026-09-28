@@ -42,7 +42,7 @@ func (f fakeResolver) ResolveTagged(_ context.Context, _ discoveryDomain.ResultK
 
 type fakeRepo struct {
 	tracks  map[string]*domain.Track
-	updated map[string]string // trackID -> new artwork url
+	updated map[string]string
 }
 
 func newFakeRepo(candidates []candidate) *fakeRepo {
@@ -105,9 +105,9 @@ func TestHealApplyUpdatesResolvedCovers(t *testing.T) {
 	repo := newFakeRepo(cands)
 	resolver := fakeResolver{byTitle: map[string]string{
 		"Song A": "https://cdn/new-a.jpg",
-		"Song B": "", // resolver finds nothing
+		"Song B": "",
 		"Song C": "https://cdn/same-c.jpg",
-		"Song D": "https://e-cdns-images.dzcdn.net/images/artist//x.jpg", // still a placeholder
+		"Song D": "https://e-cdns-images.dzcdn.net/images/artist//x.jpg",
 	}}
 
 	if err := heal(context.Background(), repo, resolver, cands, true); err != nil {

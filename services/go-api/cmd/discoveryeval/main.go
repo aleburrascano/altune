@@ -85,14 +85,8 @@ func main() {
 	}
 }
 
-// aggregateRetentionDays is the aggregate retention window in whole days — the
-// oldest telemetry the prune keeps, so the ceiling on any -since-days read.
 const aggregateRetentionDays = int(discoveryPersistence.AggregateEventRetention / (24 * time.Hour))
 
-// clampSinceDays bounds a requested -since-days to the aggregate retention window.
-// Past it the prune has already evicted the rows, so a wider window would read a
-// silently truncated history; clamping — with a stderr notice so the operator sees
-// the ceiling — mirrors clampWindowDays on the discography read path.
 func clampSinceDays(notice io.Writer, sinceDays int) int {
 	if sinceDays <= aggregateRetentionDays {
 		return sinceDays

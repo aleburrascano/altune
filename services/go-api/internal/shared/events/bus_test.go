@@ -75,8 +75,6 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	}
 }
 
-// restartAt stands in for a process restart: a fresh bus over the same floor
-// file, reading a wall clock that has moved to at.
 func restartAt(at time.Time, floorPath string) *InProcessBus {
 	return newBus(func() time.Time { return at }, floorPath)
 }

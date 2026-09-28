@@ -38,13 +38,8 @@ func (us *userState) evictIfReclaimable(cutoff time.Time, removeFromMap func()) 
 }
 
 type InProcessBus struct {
-	users   sync.Map
-	ringCap int
-	// highestIssuedID is the largest event ID issued to any user in this
-	// process. A new or evict-recreated user's sequence starts above it, so an
-	// ID is never reused for a user and a pre-eviction afterID stays below
-	// every post-eviction event. idFloor carries the same guarantee across a
-	// process restart.
+	users           sync.Map
+	ringCap         int
 	highestIssuedID atomic.Uint64
 	dropped         atomic.Uint64
 	now             func() time.Time
@@ -55,8 +50,6 @@ type InProcessBus struct {
 
 func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 
-// HighestIssuedID returns the process-wide event ID high-water mark: the
-// largest ID issued so far, or the startup seed if none has been.
 func (b *InProcessBus) HighestIssuedID() uint64 { return b.highestIssuedID.Load() }
 
 var (

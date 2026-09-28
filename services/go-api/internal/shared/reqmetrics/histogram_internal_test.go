@@ -59,7 +59,7 @@ func TestRegistryObserve_TalliesStatusClass(t *testing.T) {
 	reg.observe("/r", time.Millisecond, 204)
 	reg.observe("/r", time.Millisecond, 404)
 	reg.observe("/r", time.Millisecond, 500)
-	reg.observe("/r", time.Millisecond, 302) // 3xx: latency only, no status class
+	reg.observe("/r", time.Millisecond, 302)
 
 	h := reg.mustLoad("/r")
 	if got := h.statusClass[class2xx]; got != 2 {
@@ -106,14 +106,12 @@ func TestRegistryObserve_NegativeDurationClampsToZero(t *testing.T) {
 
 func TestObserve_EmptyRouteFoldsToUnmatched(t *testing.T) {
 	reg := newRegistry()
-	reg.observe(unmatchedRoute, time.Millisecond, 404) // Observe folds "" to this key.
+	reg.observe(unmatchedRoute, time.Millisecond, 404)
 	if reg.mustLoad(unmatchedRoute).count != 1 {
 		t.Fatal("unmatched route did not record")
 	}
 }
 
-// TestRegistry_BoundedCardinality proves a flood of distinct routes cannot grow
-// the key set without limit: extras fold into the shared overflow key.
 func TestRegistry_BoundedCardinality(t *testing.T) {
 	reg := newRegistry()
 	for i := 0; i < maxRoutes*4; i++ {
@@ -122,7 +120,6 @@ func TestRegistry_BoundedCardinality(t *testing.T) {
 	got := 0
 	reg.routes.Range(func(_, _ any) bool { got++; return true })
 
-	// maxRoutes dynamic keys + the two reserved keys (unmatched, overflow).
 	if want := maxRoutes + 2; got > want {
 		t.Fatalf("distinct route keys = %d, want <= %d (overflow must fold)", got, want)
 	}
@@ -131,9 +128,6 @@ func TestRegistry_BoundedCardinality(t *testing.T) {
 	}
 }
 
-// TestRegistryObserve_Concurrent exercises the -race detector: many goroutines
-// record into shared and distinct routes at once, each cycling through the
-// status classes so the status counters share the same race scrutiny.
 func TestRegistryObserve_Concurrent(t *testing.T) {
 	reg := newRegistry()
 	const goroutines, perG = 32, 500
@@ -163,7 +157,7 @@ func TestRegistryObserve_Concurrent(t *testing.T) {
 
 func BenchmarkRegistryObserve(b *testing.B) {
 	reg := newRegistry()
-	reg.observe("/v1/tracks/{trackId}", time.Millisecond, 200) // register before timing
+	reg.observe("/v1/tracks/{trackId}", time.Millisecond, 200)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -171,8 +165,6 @@ func BenchmarkRegistryObserve(b *testing.B) {
 	}
 }
 
-// TestRegistryObserve_ZeroAllocHotPath is the Plant invariant: recording into an
-// already-seen route allocates nothing on the hot path.
 func TestRegistryObserve_ZeroAllocHotPath(t *testing.T) {
 	res := testing.Benchmark(BenchmarkRegistryObserve)
 	if got := res.AllocsPerOp(); got != 0 {

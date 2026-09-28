@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// countingHandler records the corr_id attribute value of each handled record,
-// so a test can assert exactly how many reach the inner handler.
 type countingHandler struct {
 	corrValues []string
 }
@@ -28,9 +26,6 @@ func (h *countingHandler) Handle(_ context.Context, r slog.Record) error {
 func (h *countingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *countingHandler) WithGroup(string) slog.Handler      { return h }
 
-// TestCorrelationHandler_StampsEveryContextLog proves the generalized fix:
-// any *Context log call made under a correlation context is tagged, without
-// the call site adding corr_id itself.
 func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -54,8 +49,6 @@ func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 	}
 }
 
-// TestCorrelationHandler_NoIDLeavesRecordUntagged guards against stamping an
-// empty corr_id onto logs made outside a request (background jobs, startup).
 func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -74,8 +67,6 @@ func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 	t.Fatal("expected no.correlation captured")
 }
 
-// TestCorrelationHandler_DoesNotDuplicate ensures a call site that already set
-// corr_id is left alone, so the request-level logs carry exactly one.
 func TestCorrelationHandler_DoesNotDuplicate(t *testing.T) {
 	base := &countingHandler{}
 	h := newCorrelationHandler(base)

@@ -10,10 +10,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// defaultPoolSize is the connection ceiling applied when the caller passes a
-// non-positive REDIS_POOL_SIZE. go-redis's own default is 10 x GOMAXPROCS,
-// which makes the ceiling a property of the container shape; the fallback is a
-// fixed number so a misconfiguration cannot silently reintroduce that.
 const defaultPoolSize = 50
 
 func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Client {
@@ -61,9 +57,6 @@ func clientOptions(redisURL string, poolSize int) (*goredis.Options, error) {
 	return opts, nil
 }
 
-// PoolStats is a point-in-time read of the client pool's saturation. Timeouts
-// is the saturation signal: it advances only when a caller waited for a
-// connection and gave up because all PoolSize of them were busy.
 type PoolStats struct {
 	PoolSize   int    `json:"pool_size"`
 	TotalConns uint32 `json:"total_conns"`
@@ -71,10 +64,6 @@ type PoolStats struct {
 	Timeouts   uint32 `json:"timeouts"`
 }
 
-// ReadPoolStats reads the counters without blocking the pool, so the fields can
-// be marginally inconsistent with each other — acceptable for an operator view.
-// A nil client (redis not configured, the degraded-cache path) reads as a zero
-// value.
 func ReadPoolStats(client *goredis.Client) PoolStats {
 	if client == nil {
 		return PoolStats{}
@@ -88,8 +77,6 @@ func ReadPoolStats(client *goredis.Client) PoolStats {
 	}
 }
 
-// redactURLError strips the original URL from a *url.Error, whose Error()
-// string embeds the raw input (credentials included), keeping only the reason.
 func redactURLError(err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {

@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// The event types publishers pass to Publish. The values are the wire contract
-// with subscribed clients (apps/mobile/src/shared/events/eventTypes.ts keeps the
-// matching list), so changing one breaks every client already deployed.
 const (
 	TypeTrackAddedToLibrary      = "track_added_to_library"
 	TypeTrackDeleted             = "track_deleted"
@@ -51,8 +48,5 @@ func (noopPublisher) Publish(context.Context, shared.UserId, string, map[string]
 type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
 	Replay(userId shared.UserId, afterID uint64) []Event
-	// HighestIssuedID is the largest event ID this process could have issued to
-	// any client. A resume ID above it was never issued here (stale or corrupt)
-	// and cannot be replayed from.
 	HighestIssuedID() uint64
 }

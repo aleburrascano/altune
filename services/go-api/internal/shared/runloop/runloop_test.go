@@ -8,17 +8,10 @@ import (
 	"time"
 )
 
-// loopStartWindow is how long a test waits on a loop that must never start
-// before calling it absent. Spawn decides synchronously, so this is slack for
-// the scheduler, not an expected wait.
 const loopStartWindow = 100 * time.Millisecond
 
-// shutdownBudget bounds every Shutdown under test so a loop that escapes its
-// owner fails the test instead of hanging the package.
 const shutdownBudget = 2 * time.Second
 
-// countingLoop runs until its context is canceled, counting its start and
-// reporting its exit. exited is buffered so an orphaned loop can still report.
 func countingLoop(starts *atomic.Int64, exited chan<- struct{}) func(context.Context) {
 	return func(ctx context.Context) {
 		starts.Add(1)
@@ -45,9 +38,6 @@ func TestBackground_PauseResumeGate(t *testing.T) {
 	}
 }
 
-// TestBackground_SecondSpawnStartsNoSecondLoop reproduces the orphan: Spawn
-// overwrote cancel and done, so a second Spawn left the first goroutine running
-// with nothing left able to stop it.
 func TestBackground_SecondSpawnStartsNoSecondLoop(t *testing.T) {
 	var b Background
 	var starts atomic.Int64
@@ -69,9 +59,6 @@ func TestBackground_SecondSpawnStartsNoSecondLoop(t *testing.T) {
 	}
 }
 
-// TestBackground_ShutdownBeforeSpawnKeepsTheLoopFromRunning reproduces the lost
-// shutdown: Shutdown saw a nil cancel, returned having stopped nothing, and the
-// Spawn that landed just after started a loop no one would ever stop.
 func TestBackground_ShutdownBeforeSpawnKeepsTheLoopFromRunning(t *testing.T) {
 	var b Background
 	var starts atomic.Int64
@@ -88,10 +75,6 @@ func TestBackground_ShutdownBeforeSpawnKeepsTheLoopFromRunning(t *testing.T) {
 	}
 }
 
-// TestBackground_ConcurrentSpawnAndShutdownLeavesNoLoopRunning reproduces the
-// race: Start runs on the leader-election goroutine while Shutdown runs on the
-// app shutdown path, so Spawn's writes to cancel and done raced Shutdown's
-// reads of them. Whichever of the two lands first, no loop may outlive the pair.
 func TestBackground_ConcurrentSpawnAndShutdownLeavesNoLoopRunning(t *testing.T) {
 	var b Background
 	var running atomic.Int64

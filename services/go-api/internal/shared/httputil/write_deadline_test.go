@@ -11,20 +11,10 @@ import (
 
 const (
 	testWriteDeadline = 150 * time.Millisecond
-	// cutoffWait is how long a test waits for a write to be cut off. Without a
-	// deadline the write blocks until the client goes away, so exceeding it is
-	// the failure signal.
-	cutoffWait = 3 * time.Second
-	// deadlineSlack absorbs the scheduler gap between WriteDeadline setting the
-	// connection deadline and the handler recording its start: the deadline is
-	// set first, so elapsed under-reports the true window by however long the
-	// goroutine took to reach the handler. It stays far below the deadline, so a
-	// regression that cut writes off early still trips the lower bound.
-	deadlineSlack = 25 * time.Millisecond
+	cutoffWait        = 3 * time.Second
+	deadlineSlack     = 25 * time.Millisecond
 )
 
-// writeUntilError writes chunks to w until a write fails or giveUp elapses,
-// then reports the error (nil if it gave up).
 func writeUntilError(w io.Writer, giveUp time.Duration) error {
 	chunk := bytes.Repeat([]byte("x"), 16<<10)
 	stop := time.Now().Add(giveUp)
@@ -36,8 +26,6 @@ func writeUntilError(w io.Writer, giveUp time.Duration) error {
 	return nil
 }
 
-// deadlineStack mirrors production ordering: WriteDeadline wraps the request
-// logger, which wraps the handler.
 func deadlineStack(h http.HandlerFunc) http.Handler {
 	return WriteDeadline(testWriteDeadline)(RequestLogger(h))
 }
@@ -62,7 +50,7 @@ func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 		errs <- writeUntilError(w, 2*cutoffWait)
 	}))
 
-	httputiltest.Get(t, srv, "/", nil) // never reads
+	httputiltest.Get(t, srv, "/", nil)
 
 	began := <-start
 	awaitWriteError(t, errs)
@@ -92,9 +80,6 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 }
 
 func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.T) {
-	// The client drains 32KB every 20ms, so the body (far larger than the
-	// socket buffers) takes over a second: several times the route deadline,
-	// while every individual write completes well inside the idle timeout.
 	const size = 2 << 20
 	srv := httputiltest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
 		ew := ExtendWriteDeadlineOnWrite(w, time.Second)
@@ -129,7 +114,7 @@ func TestExtendWriteDeadlineOnWrite_CutsOffStalledClient(t *testing.T) {
 		errs <- writeUntilError(ExtendWriteDeadlineOnWrite(w, testWriteDeadline), 2*cutoffWait)
 	}))
 
-	httputiltest.Get(t, srv, "/", nil) // never reads
+	httputiltest.Get(t, srv, "/", nil)
 
 	awaitWriteError(t, errs)
 }
