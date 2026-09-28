@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// fakeReader is a controllable stand-in for the admin-read (mirror) path.
 type fakeReader struct {
 	mu     sync.Mutex
 	health goapi.OperatorHealth
@@ -31,8 +30,6 @@ func (f *fakeReader) set(h goapi.OperatorHealth, err error) {
 	f.health, f.err = h, err
 }
 
-// fakeChecker is a controllable stand-in for the independent reachability poll. It
-// shares no field with fakeReader, which is the whole point.
 type fakeChecker struct {
 	mu     sync.Mutex
 	health goapi.Health
@@ -82,9 +79,6 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// TestMirrorCollectStoreSnapshot is the core Done proof: a healthy operator-health
-// read flows into the mirror and the snapshot carries DB/Redis/Auth plus a bounded
-// history sample, with the own poll reachability set live.
 func TestMirrorCollectStoreSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -121,9 +115,6 @@ func TestMirrorCollectStoreSnapshot(t *testing.T) {
 	}
 }
 
-// TestDegradesToStaleOnAdminDown is the degrade-don't-crash proof: after a good
-// read, an unreachable admin read (poll still up) flags the panel stale while
-// still carrying the last-known pills — and the own poll stays authoritative live.
 func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -134,7 +125,7 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("first collect = %v, want nil", err)
 	}
-	b.poller.pollOnce(context.Background()) // poll: up
+	b.poller.pollOnce(context.Background())
 
 	if snap := b.Snapshot(); snap.State != core.StateLive {
 		t.Fatalf("pre-degrade state = %q, want live", snap.State)
@@ -144,10 +135,9 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	if err := collectStore(t, b); err == nil {
 		t.Fatal("Collect with admin read down returned nil, want an error so the shell keeps last-known")
 	}
-	b.poller.pollOnce(context.Background()) // poll still: up
+	b.poller.pollOnce(context.Background())
 
 	snap := b.Snapshot()
-	// Poll authoritative up + admin mirror stale = stale (not source_down).
 	if snap.State != core.StateStale {
 		t.Errorf("post-degrade state = %q, want stale", snap.State)
 	}
@@ -163,8 +153,6 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	}
 }
 
-// TestSnapshotCarriesRawText is the injection proof: a hostile dependency error
-// string is carried VERBATIM in the JSON (React escapes it on render).
 func TestSnapshotCarriesRawText(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -186,7 +174,6 @@ func TestSnapshotCarriesRawText(t *testing.T) {
 	}
 }
 
-// TestStaysBoundedUnderLoad is the bounded-storage proof.
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -203,7 +190,6 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndSnapshot is the concurrency attack — run under -race.
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -243,8 +229,6 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// TestUnconfiguredDegradesNotCrashes proves the production constructor with no
-// go-api env yields a bucket that reports source_down (poll down) and never panics.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
@@ -265,10 +249,6 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 }
 
-// TestSeverityCriticalWhenDependencyDown is the health-grade proof: go-api is
-// reachable and the admin mirror is perfectly fresh, but go-api reports its
-// database down — so the bucket grades itself critical while State stays live.
-// Freshness and health are separate answers.
 func TestSeverityCriticalWhenDependencyDown(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -295,9 +275,6 @@ func TestSeverityCriticalWhenDependencyDown(t *testing.T) {
 	}
 }
 
-// TestSeverityOKWhenEveryDependencyHealthy is the other arm: the same probe
-// window with nothing down grades ok, so the critical above is about the payload
-// and not about the bucket always being red.
 func TestSeverityOKWhenEveryDependencyHealthy(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -319,22 +296,15 @@ func TestSeverityOKWhenEveryDependencyHealthy(t *testing.T) {
 	}
 }
 
-// TestSeverityWarnsAfterAFlap proves the middle grade: the app is up right now
-// but the bounded probe window still holds a failed probe, which is worth a look
-// rather than a page.
 func TestSeverityWarnsAfterAFlap(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
 	b := newBucket(reader, checker, defaultPollInterval)
 
-	// The two manual probes below are the whole window this test grades, so it
-	// must not go through Collect: that starts the background poll goroutine,
-	// whose own immediate probe would land a third, unordered sample in the ring
-	// and turn the intended 1-down/1-up window into a flaky ratio.
 	checker.set(goapi.Health{}, srcDown("GET /health"))
-	b.poller.pollOnce(context.Background()) // probe: down
+	b.poller.pollOnce(context.Background())
 	checker.set(goapi.Health{Status: "ok"}, nil)
-	b.poller.pollOnce(context.Background()) // probe: back up
+	b.poller.pollOnce(context.Background())
 
 	snap := b.Snapshot()
 
@@ -346,9 +316,6 @@ func TestSeverityWarnsAfterAFlap(t *testing.T) {
 	}
 }
 
-// countingChecker records how many reachability probes the poller has fired, so a
-// test can prove the poll loop keeps running past the first tick and stops once
-// its ctx is cancelled.
 type countingChecker struct {
 	mu    sync.Mutex
 	count int
@@ -367,12 +334,6 @@ func (c *countingChecker) probes() int {
 	return c.count
 }
 
-// TestStartKeepsPollerRunningPastFirstTick drives the reachability poller through
-// the real app-lifetime Start hook (#1950) and proves it keeps probing after the
-// first collect tick's ctx is cancelled. Before #1950 the poller was launched from
-// Collect with the per-tick collect-timeout ctx (#1812), so it froze after one
-// run; here a climbing probe count proves it now runs on the app ctx. Cancelling
-// that ctx returns the poll goroutine, so the count stops climbing (no leak).
 func TestStartKeepsPollerRunningPastFirstTick(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(healthyHealth(), nil)
@@ -384,9 +345,6 @@ func TestStartKeepsPollerRunningPastFirstTick(t *testing.T) {
 
 	b.Start(appCtx)
 
-	// First mirror tick on its own short-lived ctx, then cancel it — the #1812
-	// per-bucket collect deadline. Under the regression the poller ran on this ctx
-	// and froze here; on the Start hook it keeps probing on the app ctx.
 	firstCtx, firstCancel := context.WithCancel(context.Background())
 	_, _ = b.Collect(firstCtx)
 	firstCancel()
@@ -402,7 +360,7 @@ func TestStartKeepsPollerRunningPastFirstTick(t *testing.T) {
 
 	cancel()
 	settled := checker.probes()
-	time.Sleep(50 * time.Millisecond) // many poll intervals at 1ms
+	time.Sleep(50 * time.Millisecond)
 	if got := checker.probes(); got > settled+1 {
 		t.Fatalf("poller kept probing after app ctx cancel: %d -> %d — leaked past shutdown", settled, got)
 	}

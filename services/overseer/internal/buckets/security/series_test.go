@@ -42,9 +42,6 @@ func (r *recordingSeries) named(series string) []core.Point {
 	return out
 }
 
-// TestRecordWritesEachSeriesOncePerRun proves one probe run records exactly one
-// findings_open point and one probe_failures point, counting a served (failing)
-// probe as a finding.
 func TestRecordWritesEachSeriesOncePerRun(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	series := &recordingSeries{}
@@ -68,9 +65,6 @@ func TestRecordWritesEachSeriesOncePerRun(t *testing.T) {
 	}
 }
 
-// TestRecordCountsUnreachedRunAsProbeFailures proves a fully-down run — the
-// degrade-to-stale path — still records one series point per series, counting
-// every check as an unreached probe failure rather than a gap in the series.
 func TestRecordCountsUnreachedRunAsProbeFailures(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	series := &recordingSeries{}

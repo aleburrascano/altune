@@ -13,19 +13,8 @@ import (
 	"time"
 )
 
-// observeLogStreamPath is go-api's operator log SSE endpoint
-// (internal/observe/handler/streams.go mounts "/logs/stream" under "/observe";
-// the handler is streamLogs over the in-process log ring). It is the second SSE
-// stream Overseer consumes — the events Consumer targets /observe/events/stream and
-// stays untouched; this leaf reuses the frame decoder and reconnect typing rather
-// than generalizing that consumer.
 const observeLogStreamPath = "/observe/logs/stream"
 
-// LogRecord is one structured log line decoded from go-api's log SSE stream. Its
-// fields mirror go-api's wire record (internal/shared/logging.CapturedRecord):
-// the timestamp, the level, the message, and a bag of string attributes. Every
-// one of these is watched-app data — the bucket HTML-escapes each before it ever
-// reaches a panel.
 type LogRecord struct {
 	Time    time.Time         `json:"time"`
 	Level   string            `json:"level"`
@@ -33,13 +22,6 @@ type LogRecord struct {
 	Fields  map[string]string `json:"attrs,omitempty"`
 }
 
-// logSSEDecoder reads go-api's text/event-stream log body one frame at a time. It
-// reuses sse.go's frame grammar — the same splitField parser, the same
-// maxEventBytes cap on both a single line and the accumulated multi-line frame,
-// and the same errFrameTooLarge signal the pump treats as a dropped stream — but
-// flushes each frame into a LogRecord instead of an Event. Sharing the events
-// decoder's grammar without editing it keeps the two streams disjoint (the design
-// decision) while a hostile or runaway upstream still cannot OOM Overseer.
 type logSSEDecoder struct {
 	sc   *bufio.Scanner
 	data strings.Builder
@@ -51,10 +33,6 @@ func newLogSSEDecoder(r io.Reader) *logSSEDecoder {
 	return &logSSEDecoder{sc: sc}
 }
 
-// next returns the next decoded log record, io.EOF when the stream ends cleanly,
-// or a read/scan error (including an over-long frame). A malformed JSON frame is
-// skipped rather than tearing down the stream — one bad record must not cost the
-// resume.
 func (d *logSSEDecoder) next() (LogRecord, error) {
 	for d.sc.Scan() {
 		line := d.sc.Text()
@@ -74,9 +52,6 @@ func (d *logSSEDecoder) next() (LogRecord, error) {
 	return LogRecord{}, io.EOF
 }
 
-// accumulate folds one non-blank line into the pending frame, keeping only the
-// data field and bounding the accumulated frame at maxEventBytes so a multi-line
-// frame that never terminates cannot grow the buffer without bound.
 func (d *logSSEDecoder) accumulate(line string) error {
 	name, value := splitField(line)
 	if name != "data" {
@@ -84,7 +59,7 @@ func (d *logSSEDecoder) accumulate(line string) error {
 	}
 	extra := len(value)
 	if d.data.Len() > 0 {
-		extra++ // the '\n' separator between folded data lines
+		extra++
 	}
 	if d.data.Len()+extra > maxEventBytes {
 		return errFrameTooLarge
@@ -96,8 +71,6 @@ func (d *logSSEDecoder) accumulate(line string) error {
 	return nil
 }
 
-// flush decodes and clears the pending frame. ok is false for an empty or
-// malformed frame, so the caller keeps reading instead of emitting a zero record.
 func (d *logSSEDecoder) flush() (LogRecord, bool) {
 	raw := d.data.String()
 	d.data.Reset()
@@ -111,14 +84,6 @@ func (d *logSSEDecoder) flush() (LogRecord, bool) {
 	return rec, true
 }
 
-// LogsConsumer streams go-api's operator log SSE from outside the process. It is
-// the events Consumer's sibling for the second stream: same read-only auth
-// (TokenSource), same reconnect-with-backoff across go-api restarts, same typed
-// source-down Status buckets read to degrade instead of crash — but it decodes
-// LogRecords off /observe/logs/stream and yields them on its own channel. A
-// LogsConsumer runs once; construct another to run again. Kept a separate type
-// rather than generalizing Consumer so this epic never touches the events
-// consumer (the design decision; factor a shared core if a third stream appears).
 type LogsConsumer struct {
 	base    *url.URL
 	path    string
@@ -133,12 +98,8 @@ type LogsConsumer struct {
 	outage  outage
 }
 
-// LogsConsumerOption customizes a LogsConsumer at construction.
 type LogsConsumerOption func(*LogsConsumer)
 
-// WithLogsHTTPClient supplies the underlying *http.Client (tests or a shared
-// transport). A nil client is ignored. The stream is long-lived, so a client with
-// a non-zero Timeout would sever a healthy stream — prefer the default.
 func WithLogsHTTPClient(h *http.Client) LogsConsumerOption {
 	return func(c *LogsConsumer) {
 		if h != nil {
@@ -147,7 +108,6 @@ func WithLogsHTTPClient(h *http.Client) LogsConsumerOption {
 	}
 }
 
-// WithLogsBackoff sets the reconnect backoff policy. A nil policy is ignored.
 func WithLogsBackoff(b Backoff) LogsConsumerOption {
 	return func(c *LogsConsumer) {
 		if b != nil {
@@ -156,8 +116,6 @@ func WithLogsBackoff(b Backoff) LogsConsumerOption {
 	}
 }
 
-// WithLogsBuffer sets the records channel capacity. A non-positive value is
-// ignored, keeping the default bound.
 func WithLogsBuffer(n int) LogsConsumerOption {
 	return func(c *LogsConsumer) {
 		if n > 0 {
@@ -166,8 +124,6 @@ func WithLogsBuffer(n int) LogsConsumerOption {
 	}
 }
 
-// WithLogsStreamPath overrides the SSE path (defaults to the observe log stream).
-// A blank path is ignored.
 func WithLogsStreamPath(p string) LogsConsumerOption {
 	return func(c *LogsConsumer) {
 		if strings.TrimSpace(p) != "" {
@@ -176,9 +132,6 @@ func WithLogsStreamPath(p string) LogsConsumerOption {
 	}
 }
 
-// NewLogsConsumer builds a log SSE consumer against baseURL, authenticating with
-// tokens. It errors on an empty or unparseable baseURL or a nil TokenSource, so
-// misconfiguration fails at startup rather than at first connect.
 func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOption) (*LogsConsumer, error) {
 	if tokens == nil {
 		return nil, errors.New("goapi: nil TokenSource")
@@ -202,15 +155,10 @@ func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOpt
 	return c, nil
 }
 
-// Records is the receive-only channel of decoded log records. Run closes it on
-// exit, so a `range` over it terminates cleanly on shutdown.
 func (c *LogsConsumer) Records() <-chan LogRecord { return c.records.pending }
 
-// Status returns the current connection state to the log stream.
 func (c *LogsConsumer) Status() Status { return c.health.load().status }
 
-// LastError returns the most recent connection failure (a *SourceDownError for an
-// unreachable upstream, an *APIError for a non-2xx), or nil while healthy.
 func (c *LogsConsumer) LastError() error {
 	return c.health.load().err
 }
@@ -220,10 +168,6 @@ func (c *LogsConsumer) Health() (Status, error) {
 	return current.status, current.err
 }
 
-// Run streams log records until ctx is cancelled. It connects, emits decoded
-// records on Records(), and on any disconnect waits a backoff interval and
-// reconnects — resuming the stream. It returns ctx.Err() on
-// shutdown and closes Records(). Run may be called at most once per consumer.
 func (c *LogsConsumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
 		return errors.New("goapi: logs consumer already running")
@@ -235,7 +179,7 @@ func (c *LogsConsumer) Run(ctx context.Context) error {
 			return err
 		}
 		if c.stream(ctx) {
-			attempt = 0 // a real session resets the backoff
+			attempt = 0
 		}
 		attempt++
 		if err := c.wait(ctx, attempt); err != nil {
@@ -244,8 +188,6 @@ func (c *LogsConsumer) Run(ctx context.Context) error {
 	}
 }
 
-// stream runs one connection attempt, returning whether a stream was actually
-// established (a 200 body) so Run resets backoff only after real progress.
 func (c *LogsConsumer) stream(ctx context.Context) bool {
 	resp, err := c.connect(ctx)
 	if err != nil {
@@ -258,8 +200,6 @@ func (c *LogsConsumer) stream(ctx context.Context) bool {
 	return true
 }
 
-// pump reads records off body until the stream ends or ctx is cancelled, sending
-// each on the records channel.
 func (c *LogsConsumer) pump(ctx context.Context, body io.ReadCloser) {
 	watchdog := watchIdle(ctx, body)
 	defer watchdog.stop()
@@ -289,9 +229,6 @@ func (c *LogsConsumer) drainPending() []LogRecord { return c.records.drain() }
 
 var _ pendingDrainer[LogRecord] = (*LogsConsumer)(nil)
 
-// connect issues the SSE GET with the read-only bearer token. A transport failure
-// becomes a *SourceDownError; a non-2xx becomes an *APIError. The caller owns
-// closing the body on success.
 func (c *LogsConsumer) connect(ctx context.Context) (*http.Response, error) {
 	reqURL := c.base.JoinPath(c.path).String()
 	req, err := bearerRequest(ctx, c.tokens, reqURL, "text/event-stream")
@@ -311,10 +248,6 @@ func (c *LogsConsumer) connect(ctx context.Context) (*http.Response, error) {
 	return resp, nil
 }
 
-// rejectStatus drains a bounded snippet, closes the body, and returns the typed
-// APIError for a non-2xx response. On a 401 it discards a refreshing source's
-// cached token so the next reconnect presents a fresh one rather than re-offering
-// the token go-api just refused.
 func (c *LogsConsumer) rejectStatus(resp *http.Response, presented string) error {
 	defer func() { _ = resp.Body.Close() }()
 	invalidateOn401(c.tokens, resp.StatusCode, presented)
@@ -322,9 +255,6 @@ func (c *LogsConsumer) rejectStatus(resp *http.Response, presented string) error
 	return &APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 }
 
-// wait blocks for the backoff interval before attempt n, returning early with
-// ctx.Err() if the consumer is shut down mid-wait — so a pending backoff never
-// delays a clean shutdown and its timer never leaks.
 func (c *LogsConsumer) wait(ctx context.Context, attempt int) error {
 	return sleepThroughOutage(ctx, c.backoff.Backoff(attempt), &c.outage, &c.health)
 }

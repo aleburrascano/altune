@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// TestSearchRollupStaysBounded is the bounded-rollup proof for top-N searches:
-// feeding many times the key capacity of distinct queries never grows the tracked
-// map past its cap, and the surfaced top list is bounded by searchTopN.
 func TestSearchRollupStaysBounded(t *testing.T) {
 	src := newFakeSource(8 * searchKeyCap)
 	b := newBucket(src)
@@ -27,15 +24,10 @@ func TestSearchRollupStaysBounded(t *testing.T) {
 	}
 }
 
-// TestPlayRollupStaysBounded proves per-kind play counts stay capped even under a
-// flood of unexpected distinct kinds.
 func TestPlayRollupStaysBounded(t *testing.T) {
 	src := newFakeSource(8 * playKindCap)
 	b := newBucket(src)
 	for i := 0; i < 8*playKindCap; i++ {
-		// Distinct fabricated play-family kinds classify as catPlay only for the
-		// known set; unknown kinds fall to catOther. Use the known "play" kind plus
-		// a wide fabricated space via subject to exercise the countMap cap directly.
 		b.roll.plays.add(fmt.Sprintf("kind-%d", i))
 	}
 	if got := b.roll.plays.len(); got > playKindCap {
@@ -43,15 +35,11 @@ func TestPlayRollupStaysBounded(t *testing.T) {
 	}
 }
 
-// TestTimelineStaysBounded is the bounded-rollup proof for the activity timeline:
-// events spread across far more windows than the ring holds never grow retained
-// storage past timelineWindows.
 func TestTimelineStaysBounded(t *testing.T) {
 	src := newFakeSource(8 * timelineWindows)
 	b := newBucket(src)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 8*timelineWindows; i++ {
-		// One event per distinct window pushes a new completed window each step.
 		src.push(goapi.Event{Type: "play", Timestamp: base.Add(time.Duration(i) * timelineWindow)})
 	}
 	drainAll(t, b)
@@ -64,8 +52,6 @@ func TestTimelineStaysBounded(t *testing.T) {
 	}
 }
 
-// TestTopNOrders proves top() ranks by count desc then key asc so the busiest
-// queries surface first, deterministically.
 func TestTopNOrders(t *testing.T) {
 	c := newCountMap(16)
 	for i := 0; i < 5; i++ {
@@ -84,15 +70,13 @@ func TestTopNOrders(t *testing.T) {
 	}
 }
 
-// TestEvictKeepsBoundAndPrefersFrequent proves eviction drops the lowest-count
-// key, so a one-off query cannot push out a repeatedly-searched one under load.
 func TestEvictKeepsBoundAndPrefersFrequent(t *testing.T) {
 	c := newCountMap(2)
 	for i := 0; i < 10; i++ {
 		c.add("frequent")
 	}
-	c.add("rare-a") // fills the second slot
-	c.add("rare-b") // at cap → evicts a rare one, never "frequent"
+	c.add("rare-a")
+	c.add("rare-b")
 	if c.len() > 2 {
 		t.Fatalf("map len = %d, want capped at 2", c.len())
 	}
@@ -101,8 +85,6 @@ func TestEvictKeepsBoundAndPrefersFrequent(t *testing.T) {
 	}
 }
 
-// drainAll runs collect/store cycles until every queued event is folded into the
-// rollups, the way the tick loop drains the source over successive ticks.
 func drainAll(t *testing.T, b *Bucket) {
 	t.Helper()
 	for i := 0; i < 100; i++ {

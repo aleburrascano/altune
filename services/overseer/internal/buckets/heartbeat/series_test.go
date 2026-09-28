@@ -41,8 +41,6 @@ func (r *recordingSeries) named(series string) []core.Point {
 	return out
 }
 
-// fixedClock returns each of ticks in order on successive calls, for a
-// deterministic tick_gap_ms.
 func fixedClock(ticks []time.Time) func() time.Time {
 	i := 0
 	return func() time.Time {
@@ -54,9 +52,6 @@ func fixedClock(ticks []time.Time) func() time.Time {
 	}
 }
 
-// TestCollectRecordsTickGapOncePerTickAfterTheFirst proves tick_gap_ms records
-// exactly once for every tick after the first — the first tick has no
-// predecessor to gap against.
 func TestCollectRecordsTickGapOncePerTickAfterTheFirst(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	b := New()

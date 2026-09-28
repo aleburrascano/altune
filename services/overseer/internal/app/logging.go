@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// SetupLogging installs a process-wide slog logger, matching go-api's split of
-// JSON in production and a readable text handler in development.
 func SetupLogging(level string, development bool) {
 	opts := &slog.HandlerOptions{Level: parseLevel(level), AddSource: true}
 	var h slog.Handler

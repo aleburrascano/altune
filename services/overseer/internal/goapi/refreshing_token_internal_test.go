@@ -20,15 +20,11 @@ import (
 	"time"
 )
 
-// The refresh token the tests seed and the access tokens the stub mints. The
-// secret-leakage assertions grep for these exact strings.
 const (
 	rtsSeedRefresh = "seed-refresh-token-SECRET-000"
 	rtsAccessMark  = "ACCESS-TOKEN-SECRET"
 )
 
-// rtsFakeClock is a race-safe injectable clock so the proactive-refresh math is
-// driven deterministically from concurrent goroutines.
 type rtsFakeClock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -46,29 +42,23 @@ func (c *rtsFakeClock) advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// rtsMakeJWT builds an unsigned-looking JWT whose exp claim is expUnix. Only the
-// exp claim matters: the source parses it without verifying the signature.
 func rtsMakeJWT(mark string, expUnix int64) string {
 	hdr := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	payload := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"exp":%d,"mark":%q}`, expUnix, mark)))
 	return hdr + "." + payload + ".sig-" + mark
 }
 
-// rtsStub is a fake Supabase token endpoint. It records how many exchanges it
-// served and the refresh token each one presented, and mints a fresh access token
-// per call so the proactive-refresh path is observable.
 type rtsStub struct {
 	clock     *rtsFakeClock
 	lifetime  time.Duration
 	calls     atomic.Int64
-	release   chan struct{} // when non-nil, each handler blocks until closed
+	release   chan struct{}
 	mu        sync.Mutex
 	gotAPIKey []string
 	gotBody   []refreshGrantBody
-	// overrides for hostile-response tests
-	status  int
-	rawBody string
-	rotate  bool // emit a rotated refresh_token
+	status    int
+	rawBody   string
+	rotate    bool
 }
 
 func (s *rtsStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +97,6 @@ func (s *rtsStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// rtsNewSource wires a RefreshingTokenSource at the stub with the fake clock.
 func rtsNewSource(t *testing.T, stub *rtsStub) (*RefreshingTokenSource, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(stub)
@@ -156,7 +145,7 @@ func TestRefreshingCachesWithinWindow(t *testing.T) {
 	src, _ := rtsNewSource(t, stub)
 
 	first, _ := src.Token(context.Background())
-	clock.advance(30 * time.Minute) // inside the 48-minute (80%) window
+	clock.advance(30 * time.Minute)
 	second, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token: %v", err)
@@ -175,14 +164,12 @@ func TestRefreshingProactiveRefreshBeforeExpiry(t *testing.T) {
 	src, _ := rtsNewSource(t, stub)
 
 	first, _ := src.Token(context.Background())
-	// 80% of a 1h token is 48m. Just before: still cached.
 	clock.advance(47 * time.Minute)
 	again, _ := src.Token(context.Background())
 	if again != first || stub.calls.Load() != 1 {
 		t.Fatalf("token refreshed too early: calls=%d", stub.calls.Load())
 	}
-	// Cross the 80% mark while the token is still valid (exp is at 60m): refresh.
-	clock.advance(2 * time.Minute) // now at 49m
+	clock.advance(2 * time.Minute)
 	refreshed, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token: %v", err)
@@ -214,8 +201,6 @@ func TestRefreshingSingleFlightUnderConcurrency(t *testing.T) {
 		}(i)
 	}
 	close(start)
-	// Give every goroutine time to pile onto the single in-flight exchange, then
-	// release the one blocked handler.
 	time.Sleep(50 * time.Millisecond)
 	close(stub.release)
 	wg.Wait()
@@ -239,7 +224,7 @@ func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	src, _ := rtsNewSource(t, stub)
 
 	first, _ := src.Token(context.Background())
-	src.invalidateRejected(first) // models the client dropping the 401'd token before its window
+	src.invalidateRejected(first)
 	second, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token after invalidate: %v", err)
@@ -252,10 +237,6 @@ func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	}
 }
 
-// TestRefreshingRefreshOn401ViaClient exercises the 401 retry through
-// AdminHealth: Health is now public and unauthenticated by design (#2357), so
-// it can never 401, but AdminHealth is still bearer-guarded and is the read
-// this retry path exists for.
 func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour}
@@ -342,8 +323,6 @@ func rtsMakeNoExpJWT() string {
 }
 
 func TestRefreshingHostileHugeBodyIsBounded(t *testing.T) {
-	// A multi-megabyte body must neither hang nor be read past the cap: it is
-	// invalid JSON once truncated, so the exchange fails typed instead of OOMing.
 	huge := `{"access_token":"` + strings.Repeat("A", 4<<20) + `"`
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour, rawBody: huge}
@@ -361,9 +340,6 @@ func TestRefreshingHostileHugeBodyIsBounded(t *testing.T) {
 }
 
 func TestRefreshingHugeExpDoesNotOverflow(t *testing.T) {
-	// A hostile exp absurdly far in the future must not overflow the 4/5 multiply
-	// nor pin the cache for millennia: the lifetime is capped, so the token is
-	// accepted with a bounded refresh window and nothing panics.
 	clock := rtsClock()
 	huge := `{"access_token":"` + rtsMakeJWT("huge", 1<<62) + `"}`
 	stub := &rtsStub{clock: clock, lifetime: time.Hour, rawBody: huge}
@@ -388,7 +364,7 @@ func TestRefreshingRotationPersistsAndNeverBricks(t *testing.T) {
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("first Token: %v", err)
 	}
-	clock.advance(50 * time.Minute) // force a proactive refresh
+	clock.advance(50 * time.Minute)
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("second Token: %v", err)
 	}
@@ -404,7 +380,7 @@ func TestRefreshingRotationPersistsAndNeverBricks(t *testing.T) {
 
 func TestRefreshingOmittedRotationKeepsSeed(t *testing.T) {
 	clock := rtsClock()
-	stub := &rtsStub{clock: clock, lifetime: time.Hour, rotate: false} // response omits refresh_token
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, rotate: false}
 	src, _ := rtsNewSource(t, stub)
 
 	_, _ = src.Token(context.Background())
@@ -425,14 +401,12 @@ func TestRefreshingNoSecretsInRenderOrLogs(t *testing.T) {
 	src, _ := rtsNewSource(t, stub)
 	tok, _ := src.Token(context.Background())
 
-	// The rendered/formatted forms of the source must not carry token material.
 	renders := []string{
 		src.String(),
 		fmt.Sprintf("%v", src),
 		fmt.Sprintf("%+v", src),
 		fmt.Sprintf("wired source: %s", src),
 	}
-	// slog output of the source.
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 	logger.Info("wired", "source", src)
@@ -450,8 +424,6 @@ func TestRefreshingNoSecretsInRenderOrLogs(t *testing.T) {
 
 func TestRefreshingErrorNeverCarriesSecrets(t *testing.T) {
 	clock := rtsClock()
-	// Error body echoes the seed refresh token (a hostile/verbose endpoint); our
-	// typed error must still not surface it.
 	stub := &rtsStub{clock: clock, lifetime: time.Hour, status: http.StatusBadRequest, rawBody: `{"error":"invalid_grant","refresh_token":"` + rtsSeedRefresh + `"}`}
 	src, _ := rtsNewSource(t, stub)
 	_, err := src.Token(context.Background())
@@ -463,12 +435,6 @@ func TestRefreshingErrorNeverCarriesSecrets(t *testing.T) {
 	}
 }
 
-// TestRefreshingDoesNotFollowRedirectLeakingSecrets is the D1 regression: a 3xx
-// from a compromised/MITM/misconfigured token endpoint must NOT be followed, so
-// the Supabase apikey and the refresh token never reach the redirect target. The
-// exchange fails typed with no cached token instead. It builds the source through
-// the constructor (whose client carries CheckRedirect) and, unlike rtsNewSource,
-// does NOT override src.http — that is the whole point of the assertion.
 func TestRefreshingDoesNotFollowRedirectLeakingSecrets(t *testing.T) {
 	var (
 		attackerHits atomic.Int64
@@ -522,10 +488,6 @@ func TestRefreshingDoesNotFollowRedirectLeakingSecrets(t *testing.T) {
 	}
 }
 
-// TestClientDoesNotFollowRedirectLeakingBearer is the D1 regression for the REST
-// client: a 3xx from go-api must not be followed carrying the operator bearer,
-// which would turn the client into an SSRF that replays the operator credential to
-// the redirect target.
 func TestClientDoesNotFollowRedirectLeakingBearer(t *testing.T) {
 	var (
 		attackerHits atomic.Int64
@@ -562,8 +524,6 @@ func TestClientDoesNotFollowRedirectLeakingBearer(t *testing.T) {
 }
 
 func TestSelectTokenSource(t *testing.T) {
-	// Point persistence at a fresh temp dir so the file-store load at construction
-	// is hermetic (absent file -> first-boot seed), not the machine's real volume.
 	persistPath := filepath.Join(t.TempDir(), "refresh_token")
 	refreshEnv := func(k string) string {
 		switch k {
@@ -614,10 +574,6 @@ func TestSelectTokenSource(t *testing.T) {
 	}
 }
 
-// TestSelectTokenSource_NoOperatorFallback pins #1810's fail-closed rule: with
-// only the pre-#1810 operator credentials in the environment, Overseer takes
-// none of them and degrades to source-down. Adopting one would restore exactly
-// the write scope the read-only principal exists to drop.
 func TestSelectTokenSource_NoOperatorFallback(t *testing.T) {
 	operatorEnv := func(k string) string {
 		switch k {
@@ -643,11 +599,6 @@ func isNullSource(src TokenSource) bool {
 	return ok
 }
 
-// TestRefreshTokenPathIsPrincipalScoped pins that the persisted refresh token
-// has the read-only principal's own file. The deployed volume still holds the
-// operator chain at the pre-#1810 path, and seedFromStore prefers a persisted
-// token over the env seed — so sharing that path would resurrect the operator
-// credential one restart after the switch.
 func TestRefreshTokenPathIsPrincipalScoped(t *testing.T) {
 	const operatorPath = "/var/lib/overseer/refresh_token"
 
@@ -672,14 +623,10 @@ func TestNullTokenSourceFailsClosed(t *testing.T) {
 	}
 }
 
-// rtsSwitchStub is a token endpoint whose response is switched between calls: it
-// serves failWith (an HTTP status) until a test stores 0, after which it mints a
-// valid access token. failWith and the call counter are atomic so -race stays clean
-// when a test flips the mode while the source's refresh goroutine is mid-exchange.
 type rtsSwitchStub struct {
 	clock    *rtsFakeClock
 	lifetime time.Duration
-	failWith atomic.Int64 // HTTP status served while > 0; 0 mints a valid token
+	failWith atomic.Int64
 	calls    atomic.Int64
 }
 
@@ -711,11 +658,6 @@ func rtsNewSwitchSource(t *testing.T, stub *rtsSwitchStub) *RefreshingTokenSourc
 	return src
 }
 
-// TestRefreshingTerminalFailureBacksOffNotStorms is the ticket's core "Done when":
-// a spent seed (Supabase 400 refresh_token_already_used) produces a bounded number
-// of exchanges, not one per collect cycle — the storm that Supabase turned into a
-// 429 in prod. Buckets keep failing closed on the typed error while the source
-// stays quiet.
 func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
@@ -731,8 +673,6 @@ func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
 		t.Fatalf("error %v is not a *TokenRefreshError", err)
 	}
 
-	// Twenty more collect cycles arrive inside the backoff window: the source must
-	// suppress every one of them, not exchange once each.
 	for i := 0; i < 20; i++ {
 		if _, err := src.Token(context.Background()); err == nil {
 			t.Fatal("a backed-off source must keep failing closed, not return a token")
@@ -742,7 +682,6 @@ func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
 		t.Fatalf("exchanges = %d, want 1 (backoff must suppress the retry storm)", got)
 	}
 
-	// Once the window elapses, exactly one probe fires — bounded, not a storm.
 	clock.advance(refreshBackoffBase + time.Second)
 	if _, err := src.Token(context.Background()); err == nil {
 		t.Fatal("still 400: want an error")
@@ -752,10 +691,6 @@ func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
 	}
 }
 
-// TestRefreshingRecoversPromptlyAfterReseed is the other half: after a terminal
-// 400, a healed endpoint / reseed is exchanged on the next cycle past the window,
-// and the success resets backoff so a later failure starts from the short base
-// window rather than a wedged-open one.
 func TestRefreshingRecoversPromptlyAfterReseed(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
@@ -766,7 +701,7 @@ func TestRefreshingRecoversPromptlyAfterReseed(t *testing.T) {
 		t.Fatal("want the initial 400 to fail")
 	}
 
-	stub.failWith.Store(0) // endpoint heals / operator reseeds
+	stub.failWith.Store(0)
 	clock.advance(refreshBackoffBase + time.Second)
 	tok, err := src.Token(context.Background())
 	if err != nil {
@@ -784,10 +719,6 @@ func TestRefreshingRecoversPromptlyAfterReseed(t *testing.T) {
 	}
 }
 
-// TestRefreshingTransientFailureRecoversNotWedged proves a transient 5xx is not
-// mistaken for a terminal failure and permanently wedged: after the endpoint
-// recovers, the next attempt past the window succeeds. This is the attack pass's
-// "does a 5xx wrongly wedge?" turned into a regression.
 func TestRefreshingTransientFailureRecoversNotWedged(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
@@ -798,17 +729,13 @@ func TestRefreshingTransientFailureRecoversNotWedged(t *testing.T) {
 		t.Fatal("want the 5xx to fail the first exchange")
 	}
 
-	stub.failWith.Store(0) // Supabase recovers
+	stub.failWith.Store(0)
 	clock.advance(refreshBackoffBase + time.Second)
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("a transient 5xx must recover on retry, not wedge: %v", err)
 	}
 }
 
-// TestRefreshingBackoffHoldsUnderConcurrency is the attack pass's concurrency
-// check: a whole fleet of buckets waking in one collect cycle inside the backoff
-// window must not collectively defeat the backoff — single-flight plus the mutex-
-// guarded window keep it to zero further exchanges.
 func TestRefreshingBackoffHoldsUnderConcurrency(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
@@ -838,9 +765,6 @@ func TestRefreshingBackoffHoldsUnderConcurrency(t *testing.T) {
 	}
 }
 
-// rtsSourceWithStore wires a RefreshingTokenSource at a fresh stub with the given
-// persistence store, modelling one process lifetime. Each call returns an
-// independent stub so a "restart" (a second call) has its own exchange counter.
 func rtsSourceWithStore(t *testing.T, store refreshTokenStore) (*RefreshingTokenSource, *rtsStub) {
 	t.Helper()
 	clock := rtsClock()
@@ -856,9 +780,6 @@ func rtsSourceWithStore(t *testing.T, store refreshTokenStore) (*RefreshingToken
 	return src, stub
 }
 
-// TestRefreshTokenPersistsAcrossRestart is the ticket's core "Done when": a rotated
-// refresh token is written to the durable store on rotation, and a fresh source
-// (a restart) reads it and presents it — the spent env seed is never replayed.
 func TestRefreshTokenPersistsAcrossRestart(t *testing.T) {
 	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
 
@@ -898,13 +819,11 @@ func TestRefreshTokenPersistsAcrossRestart(t *testing.T) {
 	}
 }
 
-// TestRefreshTokenFirstBootSeedsFromEnv is the other half: with no persisted file
-// (first boot) the source still seeds from OVERSEER_GOAPI_REFRESH_TOKEN.
 func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
 	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
 
 	clock := rtsClock()
-	stub := &rtsStub{clock: clock, lifetime: time.Hour} // rotate:false -> nothing to persist
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
 	srv := httptest.NewServer(stub)
 	t.Cleanup(srv.Close)
 	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
@@ -923,13 +842,8 @@ func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
 	}
 }
 
-// TestFileRefreshTokenStoreLoadErrorContinuesFromSeed: a persistence path that
-// cannot be read (here, a directory) must not abort construction. Like a lock or
-// mkdir failure, it logs and continues unpersisted from the env seed with
-// persistFailed set, so a mis-mounted volume degrades for this process instead of
-// bricking the credential until restart.
 func TestFileRefreshTokenStoreLoadErrorContinuesFromSeed(t *testing.T) {
-	store := fileRefreshTokenStore{path: t.TempDir()} // a directory: ReadFile errors, not ErrNotExist
+	store := fileRefreshTokenStore{path: t.TempDir()}
 	src, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
 	if err != nil {
 		t.Fatalf("an unreadable persistence path must not fail construction, got %v", err)
@@ -942,8 +856,6 @@ func TestFileRefreshTokenStoreLoadErrorContinuesFromSeed(t *testing.T) {
 	}
 }
 
-// TestFileRefreshTokenStoreNeverLeaksToken: the persisted token is written to the
-// file only, never to a log line the store or source emits.
 func TestFileRefreshTokenStoreNeverLeaksToken(t *testing.T) {
 	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
 	src, _ := rtsSourceWithStore(t, store)
@@ -1142,11 +1054,6 @@ func TestStreamConnect401DiscardsThePresentedToken(t *testing.T) {
 	}
 }
 
-// TestRefreshingServesCachedTokenPastRefreshAtDuringBackoff is the ticket's core
-// "Done when": once the proactive-refresh window passes but the token has not
-// actually expired, a failing refresh must not throw the still-valid token away —
-// Token keeps serving it through the backoff, rather than every caller failing
-// closed for up to the backoff window.
 func TestRefreshingServesCachedTokenPastRefreshAtDuringBackoff(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
@@ -1158,7 +1065,7 @@ func TestRefreshingServesCachedTokenPastRefreshAtDuringBackoff(t *testing.T) {
 	}
 
 	stub.failWith.Store(http.StatusInternalServerError)
-	clock.advance(49 * time.Minute) // past the 48m (80%) refreshAt, before the 60m exp
+	clock.advance(49 * time.Minute)
 
 	tok, err := src.Token(context.Background())
 	if err != nil {
@@ -1168,7 +1075,7 @@ func TestRefreshingServesCachedTokenPastRefreshAtDuringBackoff(t *testing.T) {
 		t.Fatalf("expected the still-valid cached token to be served, got a different one")
 	}
 
-	clock.advance(12 * time.Minute) // now past the 60m exp
+	clock.advance(12 * time.Minute)
 	if _, err := src.Token(context.Background()); err == nil {
 		t.Fatal("want an error once the cached token has actually expired")
 	}

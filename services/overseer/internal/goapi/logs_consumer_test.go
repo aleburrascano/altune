@@ -16,11 +16,6 @@ import (
 	"time"
 )
 
-// stubLogSSE is a controllable operator log SSE endpoint. It streams the
-// configured records per connection, and in "down" mode hijacks and drops the
-// connection before any response — a genuine transport failure, so the consumer
-// must report source-down. It can also emit a raw body (malformed or oversized
-// frames) to exercise the decoder's error paths.
 type stubLogSSE struct {
 	mu       sync.Mutex
 	down     bool
@@ -120,9 +115,6 @@ func runLogsConsumer(t *testing.T, c *goapi.LogsConsumer, ctx context.Context) <
 	return done
 }
 
-// TestLogsConsumerDecodesRecords is the core Done proof: the consumer connects to
-// a stubbed operator log SSE endpoint and yields decoded records — level, message
-// and every field — on its channel.
 func TestLogsConsumerDecodesRecords(t *testing.T) {
 	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	stub := &stubLogSSE{
@@ -154,9 +146,6 @@ func TestLogsConsumerDecodesRecords(t *testing.T) {
 	eventually(t, "status up while streaming", func() bool { return c.Status() == goapi.StatusUp })
 }
 
-// TestLogsConsumerReconnectsWithBackoff proves the consumer survives a forced
-// disconnect: each connection streams one record then closes, and the consumer
-// reconnects (via the injected backoff) to receive the next.
 func TestLogsConsumerReconnectsWithBackoff(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubLogSSE{records: []goapi.LogRecord{{Time: when, Level: "INFO", Message: "tick"}}}
@@ -179,11 +168,6 @@ func TestLogsConsumerReconnectsWithBackoff(t *testing.T) {
 	}
 }
 
-// TestLogsConsumerReportsSourceDownAndRecovers is the spine primitive: drop the
-// upstream and the consumer reports connecting (not source-down) while it
-// retries within the reconnect grace, only falls to source-down (typed
-// SourceDownError, not a panic) once repeated reconnects fail past that grace,
-// then recovers to StatusUp and resumes records on reconnect.
 func TestLogsConsumerReportsSourceDownAndRecovers(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubLogSSE{holdOpen: true, records: []goapi.LogRecord{{Time: when, Level: "INFO", Message: "alive"}}}
@@ -217,9 +201,6 @@ func TestLogsConsumerReportsSourceDownAndRecovers(t *testing.T) {
 	}
 }
 
-// TestLogsConsumerNon200IsAPIErrorNotSourceDown proves a reachable-but-rejecting
-// go-api (e.g. 401 rejecting the operator token) flips the status down but keeps
-// the typed distinction: an APIError, not source-down.
 func TestLogsConsumerNon200IsAPIErrorNotSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -243,9 +224,6 @@ func TestLogsConsumerNon200IsAPIErrorNotSourceDown(t *testing.T) {
 	}
 }
 
-// TestLogsConsumerSkipsMalformedFrameKeepsStream proves one bad frame does not
-// tear down the stream: a malformed data line is skipped and the next valid
-// record still arrives (resilience of the reused decoder grammar).
 func TestLogsConsumerSkipsMalformedFrameKeepsStream(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubLogSSE{
@@ -266,16 +244,9 @@ func TestLogsConsumerSkipsMalformedFrameKeepsStream(t *testing.T) {
 	}
 }
 
-// TestLogsConsumerOversizedFrameReconnects proves the maxEventBytes cap the
-// decoder inherits from sse.go holds on the log stream too: a frame that never
-// terminates under the cap is surfaced as a dropped stream and the consumer
-// reconnects rather than buffering without bound (resource-exhaustion); since
-// every reconnect re-serves the same oversized frame, the flap reports
-// connecting while it keeps retrying and only source-down once retries fail
-// past the 10s reconnect grace.
 func TestLogsConsumerOversizedFrameReconnects(t *testing.T) {
 	huge := strings.Repeat("A", (1<<20)+16)
-	stub := &stubLogSSE{rawBody: "data: " + huge} // no terminating blank line
+	stub := &stubLogSSE{rawBody: "data: " + huge}
 	srv := httptest.NewServer(stub)
 	defer srv.Close()
 
@@ -292,8 +263,6 @@ func TestLogsConsumerOversizedFrameReconnects(t *testing.T) {
 	})
 }
 
-// TestLogsConsumerRunOnce proves a LogsConsumer runs at most once: a second Run is
-// rejected rather than racing a second producer onto the records channel.
 func TestLogsConsumerRunOnce(t *testing.T) {
 	srv := httptest.NewServer(&stubLogSSE{holdOpen: true})
 	defer srv.Close()
@@ -309,9 +278,6 @@ func TestLogsConsumerRunOnce(t *testing.T) {
 	}
 }
 
-// TestLogsConsumerShutdownClosesRecordsNoLeak proves clean shutdown: cancelling
-// ctx returns Run with ctx.Err, closes the records channel, and leaks no goroutine
-// per connection (the reconnect/stream watcher pattern).
 func TestLogsConsumerShutdownClosesRecordsNoLeak(t *testing.T) {
 	stub := &stubLogSSE{records: []goapi.LogRecord{{Time: time.Now().UTC(), Level: "INFO", Message: "tick"}}}
 	srv := httptest.NewServer(stub)
@@ -341,7 +307,6 @@ func TestLogsConsumerShutdownClosesRecordsNoLeak(t *testing.T) {
 	})
 }
 
-// TestNewLogsConsumerValidatesConfig rejects misconfiguration at construction.
 func TestNewLogsConsumerValidatesConfig(t *testing.T) {
 	cases := []struct {
 		name    string

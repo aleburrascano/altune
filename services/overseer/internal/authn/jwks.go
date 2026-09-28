@@ -17,21 +17,12 @@ import (
 	"time"
 )
 
-// maxJWKSBytes bounds the JWKS response Overseer reads, so a hostile or runaway
-// endpoint cannot exhaust memory. A real JWKS is a few KiB.
-const maxJWKSBytes = 1 << 20 // 1 MiB
+const maxJWKSBytes = 1 << 20
 
-// jwksHTTPTimeout bounds one JWKS fetch end to end.
 const jwksHTTPTimeout = 10 * time.Second
 
-// minRefetchInterval throttles JWKS refetches triggered by an unknown kid, so a
-// stream of tokens bearing forged/unknown kids cannot turn the guard into a
-// request amplifier against Supabase.
 const minRefetchInterval = 30 * time.Second
 
-// jwksCache fetches and caches Supabase signing keys by kid. It refetches at most
-// once per minRefetchInterval when asked for a kid it does not hold (key
-// rotation), and never grows without bound: it holds only the current key set.
 type jwksCache struct {
 	url  string
 	http *http.Client
@@ -48,9 +39,6 @@ func newJWKSCache(url string, httpClient *http.Client) *jwksCache {
 	return &jwksCache{url: url, http: httpClient, keys: make(map[string]any)}
 }
 
-// key returns the public key for kid, fetching (or refetching, throttled) the
-// JWKS when the kid is not cached. It returns ErrNoKey when the key cannot be
-// found after a fetch, so an asymmetric token with an unknown kid fails closed.
 func (c *jwksCache) key(ctx context.Context, kid string) (any, error) {
 	if k := c.cached(kid); k != nil {
 		return k, nil
@@ -70,14 +58,6 @@ func (c *jwksCache) cached(kid string) any {
 	return c.keys[kid]
 }
 
-// refresh fetches the JWKS and replaces the cached key set. It is throttled on
-// *attempt*, not on success: a call within minRefetchInterval of the last attempt
-// is a no-op. Recording the attempt time (under the lock, before releasing to
-// fetch) is what bounds amplification — otherwise a failing JWKS endpoint would
-// be re-hit on every unknown-kid token, since a failed fetch would never advance
-// the throttle, and concurrent callers during one slow fetch would all fetch too.
-// The window applies whether the fetch succeeds or fails, so an unknown-kid flood
-// during a JWKS outage triggers at most one upstream fetch per window.
 func (c *jwksCache) refresh(ctx context.Context) error {
 	c.mu.Lock()
 	if !c.lastAttempt.IsZero() && time.Since(c.lastAttempt) < minRefetchInterval {
@@ -98,7 +78,6 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 	return nil
 }
 
-// fetch downloads and parses the JWKS into a kid→public-key map.
 func (c *jwksCache) fetch(ctx context.Context) (map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, http.NoBody)
 	if err != nil {
@@ -124,7 +103,7 @@ func (c *jwksCache) fetch(ctx context.Context) (map[string]any, error) {
 	for _, jwk := range doc.Keys {
 		pub, err := jwk.publicKey()
 		if err != nil || jwk.Kid == "" {
-			continue // skip a key we cannot use rather than failing the whole set
+			continue
 		}
 		out[jwk.Kid] = pub
 	}
@@ -135,8 +114,6 @@ type jwksDoc struct {
 	Keys []jwk `json:"keys"`
 }
 
-// jwk is one JSON Web Key. Only the fields needed to reconstruct an RSA or EC
-// public key are read.
 type jwk struct {
 	Kty string `json:"kty"`
 	Kid string `json:"kid"`
@@ -147,8 +124,6 @@ type jwk struct {
 	Y   string `json:"y"`
 }
 
-// publicKey reconstructs the crypto public key from the JWK, supporting the RSA
-// and EC key types Supabase issues.
 func (k jwk) publicKey() (any, error) {
 	switch k.Kty {
 	case "RSA":
@@ -174,7 +149,6 @@ func (k jwk) rsaKey() (*rsa.PublicKey, error) {
 		e = e<<8 | int(b)
 	}
 	if e == 0 {
-		// Some encoders pad; fall back to a 4-byte big-endian read.
 		padded := make([]byte, 4)
 		copy(padded[4-len(eBytes):], eBytes)
 		e = int(binary.BigEndian.Uint32(padded))
@@ -218,9 +192,6 @@ func ecCurve(crv string) (elliptic.Curve, error) {
 	}
 }
 
-// refuseRedirect forbids the JWKS client from following any redirect: the JWKS
-// endpoint is a fixed same-project URL, and following a redirect could send the
-// request (and any future credential) somewhere unintended.
 func refuseRedirect(_ *http.Request, _ []*http.Request) error {
 	return http.ErrUseLastResponse
 }

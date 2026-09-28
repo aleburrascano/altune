@@ -13,9 +13,6 @@ import (
 	"time"
 )
 
-// newTestApp wires an App with only what the collect loop needs: a registry and the
-// two durations that bound a cycle. Everything else (server, verifier, SPA) belongs
-// to the HTTP surface, which these tests never raise.
 func newTestApp(reg *core.Registry, tickInterval, bucketTimeout time.Duration) *App {
 	return &App{
 		cfg:      &config.Config{TickInterval: tickInterval, BucketTimeout: bucketTimeout},
@@ -24,9 +21,6 @@ func newTestApp(reg *core.Registry, tickInterval, bucketTimeout time.Duration) *
 	}
 }
 
-// panicBucket panics in Collect and Store to prove the collect loop contains a
-// misbehaving bucket instead of crashing the process — the degrade-don't-crash
-// invariant on the collect side, matching shell.safeSnapshot on the render side.
 type panicBucket struct{ where string }
 
 func (panicBucket) Meta() core.Meta { return core.Meta{ID: "boom", Title: "Boom"} }
@@ -44,8 +38,6 @@ func (p panicBucket) Store([]core.Signal) {
 }
 func (panicBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
-// stubBucket collects cleanly, or returns collectErr to model a down source, so a
-// cycle can be driven with a known mix of healthy and failing buckets.
 type stubBucket struct {
 	id         string
 	collectErr error
@@ -63,9 +55,6 @@ func (s stubBucket) Collect(context.Context) ([]core.Signal, error) {
 func (stubBucket) Store([]core.Signal)     {}
 func (stubBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
-// toggleBucket models a source that goes down and later recovers within one test:
-// Collect fails while *down is true, so a single instance drives a whole outage and
-// its recovery across successive ticks.
 type toggleBucket struct {
 	id   string
 	down *bool
@@ -83,9 +72,6 @@ func (b *toggleBucket) Collect(context.Context) ([]core.Signal, error) {
 func (*toggleBucket) Store([]core.Signal)     {}
 func (*toggleBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
-// stalledBucket models the failure the per-bucket deadline exists for: a Collect
-// that waits on a source which never answers. It returns only when its context ends
-// and closes cancelled to prove the deadline, not the source, freed the loop.
 type stalledBucket struct {
 	id        string
 	cancelled chan struct{}
@@ -106,8 +92,6 @@ func (s *stalledBucket) Collect(ctx context.Context) ([]core.Signal, error) {
 func (*stalledBucket) Store([]core.Signal)     {}
 func (*stalledBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
-// storingBucket closes stored when its Store runs, so a test can prove a bucket
-// queued behind a stalled one still completed its own cycle.
 type storingBucket struct {
 	id     string
 	stored chan struct{}
@@ -126,11 +110,6 @@ func (*storingBucket) Collect(context.Context) ([]core.Signal, error) {
 func (s *storingBucket) Store([]core.Signal)   { close(s.stored) }
 func (*storingBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
-// schedulerBucket models a bucket that owns background work through the Start hook:
-// Start launches a fast ticker that counts refreshes and returns when its ctx is
-// cancelled, closing stopped so a test can observe the goroutine drain. It stands in
-// for the security self-test scheduler without importing the bucket, proving the
-// generic hook — not one bucket's wiring — outlives a collect tick and shuts down.
 type schedulerBucket struct {
 	refreshes *atomic.Int32
 	stopped   chan struct{}
@@ -157,9 +136,6 @@ func (s schedulerBucket) Start(ctx context.Context) {
 	}()
 }
 
-// eventually polls cond until it holds or the deadline passes, failing with msg. It
-// lets a test wait on a background goroutine's effect without a fixed sleep that is
-// either flaky or slow.
 func eventually(t *testing.T, within time.Duration, cond func() bool, msg string) {
 	t.Helper()
 	deadline := time.After(within)
@@ -175,7 +151,6 @@ func eventually(t *testing.T, within time.Duration, cond func() bool, msg string
 	}
 }
 
-// isClosed reports whether ch was closed, without waiting.
 func isClosed(ch chan struct{}) bool {
 	select {
 	case <-ch:
@@ -185,21 +160,15 @@ func isClosed(ch chan struct{}) bool {
 	}
 }
 
-// captureSlog redirects the default logger into a buffer for the duration of the
-// test, restoring the previous logger afterwards so the process-wide logger is
-// left as it was found.
 func captureSlog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
-	// DEBUG so the heartbeat, demoted from INFO once /health owns liveness, is still
-	// captured by the count assertions below.
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return &buf
 }
 
-// linesFor returns every captured log record whose msg matches, in emission order.
 func linesFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any {
 	t.Helper()
 	var matched []map[string]any
@@ -215,8 +184,6 @@ func linesFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any {
 	return matched
 }
 
-// findCycle returns the fields of the single "overseer.collect.cycle" heartbeat in
-// buf, failing if none was emitted.
 func findCycle(t *testing.T, buf *bytes.Buffer) map[string]any {
 	t.Helper()
 	lines := linesFor(t, buf, "overseer.collect.cycle")
@@ -226,11 +193,6 @@ func findCycle(t *testing.T, buf *bytes.Buffer) map[string]any {
 	return lines[0]
 }
 
-// TestCollectAllHeartbeatCounts: a cycle over one healthy and one down bucket must
-// close with an overseer.collect.cycle heartbeat reporting ok=1, failed=1 — proving
-// the loop ran and separating a partial failure (still ok>=1) from an all-down
-// cycle. Without this heartbeat success is silent and the smoke gate can only test
-// for the ABSENCE of errors.
 func TestCollectAllHeartbeatCounts(t *testing.T) {
 	reg := core.NewRegistry()
 	reg.Register(stubBucket{id: "healthy"})
@@ -246,11 +208,6 @@ func TestCollectAllHeartbeatCounts(t *testing.T) {
 	}
 }
 
-// TestCollectAllCountsStorePanicAsFailed: a bucket that collects cleanly but panics
-// in Store must land under failed, never ok. It is the one failure the heartbeat
-// could flatter: Collect succeeded, so a safeStore that swallowed the panic and
-// reported success would emit ok=2 failed=0 and the smoke gate would read a cycle
-// that stored nothing as fully healthy.
 func TestCollectAllCountsStorePanicAsFailed(t *testing.T) {
 	reg := core.NewRegistry()
 	reg.Register(stubBucket{id: "healthy"})
@@ -266,11 +223,6 @@ func TestCollectAllCountsStorePanicAsFailed(t *testing.T) {
 	}
 }
 
-// TestStartBucketsDrivesBackgroundWorkPastFirstRefreshThenStops is the #1950 fix
-// proof at the seam: a bucket's Start hook runs on the app-lifetime ctx, so its
-// background loop keeps firing past the first refresh — the per-tick collect
-// deadline (1ms here) cannot cancel it the way it did when the loop was launched
-// from Collect. On ctx cancel the loop drains, leaking no goroutine past shutdown.
 func TestStartBucketsDrivesBackgroundWorkPastFirstRefreshThenStops(t *testing.T) {
 	var refreshes atomic.Int32
 	bucket := schedulerBucket{refreshes: &refreshes, stopped: make(chan struct{})}
@@ -292,15 +244,12 @@ func TestStartBucketsDrivesBackgroundWorkPastFirstRefreshThenStops(t *testing.T)
 	}
 }
 
-// TestStartBucketsSkipsBucketsWithoutTheHook proves the hook is optional: a plain
-// Bucket that implements no Starter is passed over rather than erroring, so the
-// existing tick-only buckets keep working unchanged.
 func TestStartBucketsSkipsBucketsWithoutTheHook(t *testing.T) {
 	reg := core.NewRegistry()
 	reg.Register(stubBucket{id: "plain"})
 	a := newTestApp(reg, time.Second, time.Second)
 
-	a.startBuckets(context.Background()) // must not panic on a non-Starter bucket
+	a.startBuckets(context.Background())
 
 	captureSlog(t)
 	a.collectAll(context.Background())
@@ -309,8 +258,6 @@ func TestStartBucketsSkipsBucketsWithoutTheHook(t *testing.T) {
 	}
 }
 
-// TestSafeCollectContainsPanic: a bucket panicking in Collect yields an error,
-// not a process-killing panic.
 func TestSafeCollectContainsPanic(t *testing.T) {
 	signals, err := safeCollect(context.Background(), panicBucket{where: "collect"})
 	if err == nil {
@@ -321,14 +268,7 @@ func TestSafeCollectContainsPanic(t *testing.T) {
 	}
 }
 
-// TestCollectAllDeadlineFreesTheCycleFromAStalledBucket: a bucket whose Collect
-// never returns on its own is cancelled at the per-bucket deadline, and the bucket
-// behind it in the same serial cycle still collects and stores. Without the deadline
-// the stalled bucket holds the one tickLoop goroutine forever: every later bucket
-// goes stale and no further cycle ever runs.
 func TestCollectAllDeadlineFreesTheCycleFromAStalledBucket(t *testing.T) {
-	// The registry orders by ID, so "a-stalled" runs before "z-healthy" — the
-	// starved-sibling case, not the lucky order.
 	stalled := newStalledBucket("a-stalled")
 	healthy := newStoringBucket("z-healthy")
 	reg := core.NewRegistry()
@@ -350,9 +290,6 @@ func TestCollectAllDeadlineFreesTheCycleFromAStalledBucket(t *testing.T) {
 	}
 }
 
-// TestCollectStatusIsUnhealthyUntilACycleCompletes: /health must not read green off
-// a loop that has never completed a cycle. Run collects once synchronously before the
-// listener opens, so a serving Overseer with no recorded cycle never started one.
 func TestCollectStatusIsUnhealthyUntilACycleCompletes(t *testing.T) {
 	reg := core.NewRegistry()
 	reg.Register(stubBucket{id: "healthy"})
@@ -377,14 +314,9 @@ func TestCollectStatusIsUnhealthyUntilACycleCompletes(t *testing.T) {
 	}
 }
 
-// TestCollectStatusGoesUnhealthyOnAStalledLoop: once the last completed cycle is
-// older than the staleness budget — the slowest cycle the config allows plus a few
-// missed ticks — the loop counts as wedged and /health must be able to say so.
 func TestCollectStatusGoesUnhealthyOnAStalledLoop(t *testing.T) {
 	reg := core.NewRegistry()
 	reg.Register(stubBucket{id: "healthy"})
-	// One bucket at a 1ms deadline and a 1ms tick: a budget of 4ms, so the sleep
-	// below outlives it by an order of magnitude on any machine.
 	a := newTestApp(reg, time.Millisecond, time.Millisecond)
 	captureSlog(t)
 	a.collectAll(context.Background())
@@ -396,8 +328,6 @@ func TestCollectStatusGoesUnhealthyOnAStalledLoop(t *testing.T) {
 	}
 }
 
-// TestSafeStoreContainsPanic: a bucket panicking in Store must not escape; it is
-// returned as an error so the cycle counts it as failed instead of crashing.
 func TestSafeStoreContainsPanic(t *testing.T) {
 	err := safeStore(panicBucket{where: "store"}, []core.Signal{{Text: "x"}})
 	if err == nil {
@@ -405,9 +335,6 @@ func TestSafeStoreContainsPanic(t *testing.T) {
 	}
 }
 
-// TestSustainedOutageLogsOneTransitionNotAFloodPerTick: a source that stays down
-// across many ticks logs exactly one source_down line, then exactly one source_up
-// when it recovers — the incident, not a WARN-per-tick flood over the whole outage.
 func TestSustainedOutageLogsOneTransitionNotAFloodPerTick(t *testing.T) {
 	sourceDown := true
 	reg := core.NewRegistry()
@@ -430,9 +357,6 @@ func TestSustainedOutageLogsOneTransitionNotAFloodPerTick(t *testing.T) {
 	}
 }
 
-// TestBucketPanicLogsOnceAtErrorNotWarn: a bucket that panics every tick is logged
-// once at ERROR as a crash, never re-logged at WARN as a down source — a real crash
-// must not be downgraded, nor flood ERROR every tick.
 func TestBucketPanicLogsOnceAtErrorNotWarn(t *testing.T) {
 	reg := core.NewRegistry()
 	reg.Register(panicBucket{where: "collect"})

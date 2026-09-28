@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// TestSparkCacheReadsTheStoreAtMostOncePerMinute is the load proof: many
-// snapshot reads for the same bucket within one refresh window must cost the
-// store exactly one read, however many callers (concurrent SSE clients, or a
-// tight poll loop) ask for the spark in that window.
 func TestSparkCacheReadsTheStoreAtMostOncePerMinute(t *testing.T) {
 	var reads atomic.Int64
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -33,8 +29,6 @@ func TestSparkCacheReadsTheStoreAtMostOncePerMinute(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Simulate every 2s SSE tick for a minute straight: still one read, because
-	// the clock has not crossed the refresh window.
 	for i := 0; i < 29; i++ {
 		c.load("reliability", read)
 	}
@@ -50,10 +44,6 @@ func TestSparkCacheReadsTheStoreAtMostOncePerMinute(t *testing.T) {
 	}
 }
 
-// TestSparkCacheServesLastGoodSparkOnAFailedRead proves a failing refresh keeps
-// serving the last successful spark rather than dropping it, and that a failure
-// streak logs once, not once per call (noteFailure only flips failing on the
-// first failure of a streak).
 func TestSparkCacheServesLastGoodSparkOnAFailedRead(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	c := newSparkCache()
@@ -96,9 +86,6 @@ func (r *recordingTailReader) Tail(_, _ string, _, _ time.Time, limit int) ([]co
 	return []core.Point{{At: time.Now(), Value: 1}}, nil
 }
 
-// TestQueryTailPrefersTheTailReaderPushDown proves the spark read pushes the
-// LIMIT into SQL via TailReader when the reader supports it, rather than
-// falling back to a full Query and trimming in Go.
 func TestQueryTailPrefersTheTailReaderPushDown(t *testing.T) {
 	reader := &recordingTailReader{}
 	h := NewHandler(fixedRegistryStub{}, WithSeries(reader))

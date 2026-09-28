@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// fakeReader drives both operator reads deterministically, including one-up-one-
-// down so the independent degrade can be proven.
 type fakeReader struct {
 	eval     goapi.EvalStatus
 	evalErr  error
@@ -58,8 +56,6 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// TestSnapshotScoreAndRate is the core Done proof: a fresh collect carries the eval
-// score/baseline and the acquisition counters in the snapshot payload.
 func TestSnapshotScoreAndRate(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq()})
 	if _, err := b.Collect(context.Background()); err != nil {
@@ -79,8 +75,6 @@ func TestSnapshotScoreAndRate(t *testing.T) {
 	}
 }
 
-// TestDegradeToSourceDownPreservesLastKnown: both sources down flips the panel
-// source_down while keeping the last-known values flagged stale.
 func TestDegradeToSourceDownPreservesLastKnown(t *testing.T) {
 	reader := &togglingReader{fakeReader: fakeReader{eval: scoredEval(), acq: healthyAcq()}}
 	b := newBucket(reader)
@@ -107,8 +101,6 @@ func TestDegradeToSourceDownPreservesLastKnown(t *testing.T) {
 	}
 }
 
-// TestIndependentDegrade: eval down while acquisition stays live flags only eval
-// stale, and Collect does NOT error because one side is still fresh.
 func TestIndependentDegrade(t *testing.T) {
 	b := newBucket(fakeReader{
 		evalErr: &goapi.SourceDownError{Op: "GET /observe/eval", Err: errors.New("boom")},
@@ -133,9 +125,6 @@ func TestIndependentDegrade(t *testing.T) {
 	}
 }
 
-// TestNeverSucceededSourceIsLogged is the #1377 regression: a source that fails on
-// every collect from process start is logged per-side even while the other side is
-// live and Collect does not error.
 func TestNeverSucceededSourceIsLogged(t *testing.T) {
 	var logBuf bytes.Buffer
 	prev := slog.Default()
@@ -162,8 +151,6 @@ func TestNeverSucceededSourceIsLogged(t *testing.T) {
 	}
 }
 
-// TestSnapshotCarriesRawText proves a hostile go-api response is carried verbatim
-// in the payload (React escapes it on render).
 func TestSnapshotCarriesRawText(t *testing.T) {
 	evil := goapi.EvalStatus{
 		Enabled: true, State: "ok", Score: ptr(0.5), Baseline: ptr(0.5),
@@ -183,7 +170,6 @@ func TestSnapshotCarriesRawText(t *testing.T) {
 	}
 }
 
-// TestMetaIsStable pins the bucket identity the registry and shell rely on.
 func TestMetaIsStable(t *testing.T) {
 	m := newBucket(nullReader{}).Meta()
 	if m.ID != "domainquality" || m.Title != "Domain quality" {
@@ -191,13 +177,12 @@ func TestMetaIsStable(t *testing.T) {
 	}
 }
 
-// TestUnconfiguredDegradesNotCrash proves the null reader degrades cleanly.
 func TestUnconfiguredDegradesNotCrash(t *testing.T) {
 	b := New()
 	if _, err := b.Collect(context.Background()); !errors.Is(err, errBothDown) {
 		t.Fatalf("unconfigured Collect err = %v, want errBothDown", err)
 	}
-	snap := b.Snapshot() // must not panic
+	snap := b.Snapshot()
 	if snap.Title != "Domain quality" || snap.State != core.StateSourceDown {
 		t.Fatalf("snapshot = %+v, want title 'Domain quality' state source_down", snap)
 	}
@@ -216,9 +201,6 @@ func radioheadDisco() goapi.DiscographyQuality {
 	}
 }
 
-// TestSuspectRateRidesIntoSnapshot proves the served windowed suspect-rate headline
-// and its last-sample time are carried verbatim into the snapshot payload — the
-// bucket renders go-api's served number, it never recomputes it.
 func TestSuspectRateRidesIntoSnapshot(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco()})
 	if _, err := b.Collect(context.Background()); err != nil {
@@ -237,8 +219,6 @@ func TestSuspectRateRidesIntoSnapshot(t *testing.T) {
 	}
 }
 
-// TestDiscographyCaseInSnapshot proves the discography case, with its provider
-// split, is carried in the payload verbatim.
 func TestDiscographyCaseInSnapshot(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco()})
 	if _, err := b.Collect(context.Background()); err != nil {
@@ -252,8 +232,6 @@ func TestDiscographyCaseInSnapshot(t *testing.T) {
 	if c.ArtistRef != "spotify:4Z8W4fKeB5YxbusRsdQVPb" || c.Releases != 42 || c.SingleProvider != 9 {
 		t.Fatalf("discography case not carried verbatim: %+v", c)
 	}
-	// The id-backing evidence must ride through to the panel row verbatim: of the 9
-	// single-provider releases, 4 lack a shared id — the real suspects.
 	if c.SingleProviderNoID != 4 {
 		t.Fatalf("id-backing evidence not carried: single_provider_no_id = %d, want 4", c.SingleProviderNoID)
 	}
@@ -262,18 +240,11 @@ func TestDiscographyCaseInSnapshot(t *testing.T) {
 	}
 }
 
-// TestDiscoTrendSignalIDAnchoredAndEvidenced plants the id-anchor render rule on
-// the trend headline: the worst case is picked by the no-id suspect ratio, not raw
-// headcount, and the rendered text carries the id-backing evidence. An id-verified
-// single-provider artist (headcount ratio 1.0 but zero no-id suspects) is NOT
-// chosen over a genuine no-id suspect with a lower headcount ratio.
 func TestDiscoTrendSignalIDAnchoredAndEvidenced(t *testing.T) {
 	d := goapi.DiscographyQuality{
 		WindowDays: 30, GroupBy: "artist",
 		Cases: []goapi.DiscographyCase{
-			// Every single-provider release is id-verified: no real suspects.
 			{Artist: "IdVerified", ArtistRef: "a", Releases: 10, SingleProvider: 10, SingleProviderNoID: 0},
-			// Lower headcount ratio, but the single-provider releases carry no id.
 			{Artist: "NoId", ArtistRef: "b", Releases: 10, SingleProvider: 3, SingleProviderNoID: 3},
 		},
 	}
@@ -289,7 +260,6 @@ func TestDiscoTrendSignalIDAnchoredAndEvidenced(t *testing.T) {
 	}
 }
 
-// TestDiscographyIndependentDegrade proves the discography read degrades on its own.
 func TestDiscographyIndependentDegrade(t *testing.T) {
 	b := newBucket(fakeReader{
 		eval:     scoredEval(),
@@ -308,8 +278,6 @@ func TestDiscographyIndependentDegrade(t *testing.T) {
 	}
 }
 
-// TestDiscographyTrendBounded proves the top-contamination-ratio trend is carried
-// and its ring is bounded across many collect cycles.
 func TestDiscographyTrendBounded(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco()})
 	if _, err := b.Collect(context.Background()); err != nil {
@@ -328,9 +296,6 @@ func TestDiscographyTrendBounded(t *testing.T) {
 	}
 }
 
-// TestDiscographyStaleGoodThenDown proves the STALE independent-degrade: after a
-// good read the endpoint goes down; the discography half flips stale with its
-// last-known cases while eval and acquisition stay live.
 func TestDiscographyStaleGoodThenDown(t *testing.T) {
 	reader := &discoTogglingReader{fakeReader: fakeReader{
 		eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco(),
@@ -357,7 +322,6 @@ func TestDiscographyStaleGoodThenDown(t *testing.T) {
 	}
 }
 
-// discoTogglingReader flips only the discography reads to source-down.
 type discoTogglingReader struct {
 	fakeReader
 	discoDown bool
@@ -370,10 +334,6 @@ func (r *discoTogglingReader) AdminDiscographyQuality(ctx context.Context) (goap
 	return r.fakeReader.AdminDiscographyQuality(ctx)
 }
 
-// TestSeverityCriticalWhenSuspectRateHigh is the health-grade proof: every read
-// is fresh and live, but go-api reports most discography opens firing a suspect —
-// the product is bad right now, so the bucket grades itself critical and the
-// headline is the number that says so.
 func TestSeverityCriticalWhenSuspectRateHigh(t *testing.T) {
 	b := newBucket(fakeReader{
 		eval:  scoredEval(),
@@ -397,11 +357,6 @@ func TestSeverityCriticalWhenSuspectRateHigh(t *testing.T) {
 	}
 }
 
-// TestSeverityCriticalWhenAcquisitionFailing proves the second gradeable read
-// stands on its own: search quality is fine and nothing is suspect, but most
-// acquisitions in the recent window are failing. The window is the delta between
-// two collects (3 succeeded, 17 failed since the baseline), so the grade reads
-// the recent spike, not a lifetime average.
 func TestSeverityCriticalWhenAcquisitionFailing(t *testing.T) {
 	reader := &steppingAcqReader{
 		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
@@ -423,16 +378,12 @@ func TestSeverityCriticalWhenAcquisitionFailing(t *testing.T) {
 	}
 }
 
-// TestAcquisitionRateReflectsRecentWindow is the ticket's headline proof: a
-// lifetime-healthy loop (99% succeeded) that just started failing grades critical
-// on the recent window, and the served AcqWindow rate is ~0 — an all-time ratio
-// stayed green through the same spike.
 func TestAcquisitionRateReflectsRecentWindow(t *testing.T) {
 	reader := &steppingAcqReader{
 		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
 		acqs: []goapi.AcquisitionStatus{
-			{Succeeded: 990, Failed: 10},  // lifetime ~99%
-			{Succeeded: 990, Failed: 110}, // 100 recent failures, none succeeded
+			{Succeeded: 990, Failed: 10},
+			{Succeeded: 990, Failed: 110},
 		},
 	}
 	b := newBucket(reader)
@@ -451,9 +402,6 @@ func TestAcquisitionRateReflectsRecentWindow(t *testing.T) {
 	}
 }
 
-// TestAcquisitionWindowUndefinedOnFirstCollect proves the window needs two samples:
-// a single collect (only a lifetime cumulative baseline) yields no windowed rate,
-// so the measure is skipped rather than read as a spurious 0%.
 func TestAcquisitionWindowUndefinedOnFirstCollect(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}})
 	if _, err := b.Collect(context.Background()); err != nil {
@@ -465,8 +413,6 @@ func TestAcquisitionWindowUndefinedOnFirstCollect(t *testing.T) {
 	}
 }
 
-// TestEvalScoreFlaggedStaleByAge proves a score go-api last computed long ago is
-// flagged stale even while the read that fetched it is perfectly reachable.
 func TestEvalScoreFlaggedStaleByAge(t *testing.T) {
 	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 	ranLongAgo := now.Add(-5 * 24 * time.Hour)
@@ -488,8 +434,6 @@ func TestEvalScoreFlaggedStaleByAge(t *testing.T) {
 	}
 }
 
-// TestFreshEvalScoreNotFlaggedStaleByAge is the arm that must disagree: a score
-// go-api computed moments ago is not age-stale.
 func TestFreshEvalScoreNotFlaggedStaleByAge(t *testing.T) {
 	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 	ranJustNow := now.Add(-2 * time.Hour)
@@ -507,9 +451,6 @@ func TestFreshEvalScoreNotFlaggedStaleByAge(t *testing.T) {
 	}
 }
 
-// TestSeverityWarnsWhenEvalBelowBaseline proves a search-quality regression warns
-// rather than pages: nothing is down, the results just got worse than the
-// baseline go-api scores against.
 func TestSeverityWarnsWhenEvalBelowBaseline(t *testing.T) {
 	regressed := scoredEval()
 	regressed.Score = ptr(0.61)
@@ -532,9 +473,6 @@ func TestSeverityWarnsWhenEvalBelowBaseline(t *testing.T) {
 	}
 }
 
-// TestSeverityOKWhenEveryMeasureHealthy is the arm that has to disagree with the
-// three above: healthy payloads grade ok and the headline falls back to the
-// bucket's own declared headline number.
 func TestSeverityOKWhenEveryMeasureHealthy(t *testing.T) {
 	b := newBucket(fakeReader{
 		eval:  scoredEval(),
@@ -555,9 +493,6 @@ func TestSeverityOKWhenEveryMeasureHealthy(t *testing.T) {
 	}
 }
 
-// TestSeverityIgnoresUnrateableMeasures proves a measure that could not be taken
-// never counts as healthy OR as a fault: with no read ever mirrored the bucket
-// says so rather than reporting a green all-clear it never measured.
 func TestSeverityIgnoresUnrateableMeasures(t *testing.T) {
 	snap := newBucket(fakeReader{}).Snapshot()
 
@@ -569,7 +504,6 @@ func TestSeverityIgnoresUnrateableMeasures(t *testing.T) {
 	}
 }
 
-// togglingReader flips both anchor reads to source-down when down is set.
 type togglingReader struct {
 	fakeReader
 	down bool
@@ -589,9 +523,6 @@ func (r *togglingReader) AdminAcquisition(ctx context.Context) (goapi.Acquisitio
 	return r.fakeReader.AdminAcquisition(ctx)
 }
 
-// steppingAcqReader walks a sequence of acquisition snapshots across successive
-// collects, holding the last one, so a test can drive the cumulative counters that
-// the windowed success rate reads as a delta.
 type steppingAcqReader struct {
 	fakeReader
 	acqs []goapi.AcquisitionStatus
@@ -604,8 +535,6 @@ func (r *steppingAcqReader) AdminAcquisition(context.Context) (goapi.Acquisition
 	return a, nil
 }
 
-// collectN drives n collect cycles, failing the test on any error, so a windowed
-// assertion can build up the samples it needs.
 func collectN(t *testing.T, b *Bucket, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {

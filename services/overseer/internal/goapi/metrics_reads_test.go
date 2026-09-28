@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// metricsLiveBody is a representative GET /observe/metrics/live payload: the
-// per-module counters the bucket ignores, plus the per-route latency histogram
-// it reads. It proves the mirror decodes the latency block while tolerating the
-// counter fields it does not model.
 const metricsLiveBody = `{
 	"auth": {"token_rejections_total": 3},
 	"catalog": {"lookups_total": 10},
@@ -33,9 +29,6 @@ const metricsLiveBody = `{
 	}
 }`
 
-// TestAdminMetricsLiveDecodesStubbedResponse is the core Done proof for the read:
-// the client hits a stubbed go-api /observe/metrics/live and decodes the per-route
-// latency histogram, ignoring the counter fields it does not model.
 func TestAdminMetricsLiveDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -71,9 +64,6 @@ func TestAdminMetricsLiveDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAdminMetricsLiveDecodesStatusClasses proves the mirror decodes the per-route
-// 2xx/4xx/5xx status tally (#1938), the raw material the bucket turns into an error
-// rate. The "2xx"/"4xx"/"5xx" JSON keys must map onto the typed counts.
 func TestAdminMetricsLiveDecodesStatusClasses(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -92,9 +82,6 @@ func TestAdminMetricsLiveDecodesStatusClasses(t *testing.T) {
 	}
 }
 
-// TestAdminMetricsLiveAttachesOperatorBearer proves the operator principal is
-// authenticated on the operator-guarded read: without the bearer, go-api's
-// OperatorOnly guard would 403 the histogram.
 func TestAdminMetricsLiveAttachesOperatorBearer(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -111,12 +98,10 @@ func TestAdminMetricsLiveAttachesOperatorBearer(t *testing.T) {
 	}
 }
 
-// TestAdminMetricsLiveUnreachableYieldsSourceDown proves an unreachable go-api
-// surfaces as the typed source-down error the bucket branches on to render stale.
 func TestAdminMetricsLiveUnreachableYieldsSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
-	srv.Close() // nothing is listening now
+	srv.Close()
 
 	_, err := newClient(t, url).AdminMetricsLive(context.Background())
 	if !goapi.IsSourceDown(err) {
@@ -128,9 +113,6 @@ func TestAdminMetricsLiveUnreachableYieldsSourceDown(t *testing.T) {
 	}
 }
 
-// TestAdminMetricsLiveForbiddenYieldsAPIError proves the auth-rejection path: a
-// non-operator principal is a reachable-but-refused read, so it surfaces as an
-// APIError (go-api is up; it said no), NOT source-down.
 func TestAdminMetricsLiveForbiddenYieldsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

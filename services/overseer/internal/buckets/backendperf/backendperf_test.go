@@ -11,9 +11,6 @@ import (
 	"testing"
 )
 
-// fakeReader is a controllable stand-in for the live-metrics read path. A test
-// sets the snapshot and/or error it returns, exercising collect, snapshot and the
-// degrade-to-source-down path with no network.
 type fakeReader struct {
 	mu   sync.Mutex
 	live goapi.LiveMetrics
@@ -56,8 +53,6 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// TestCollectStoreSnapshot is the core Done proof: a live histogram flows into the
-// bucket and the snapshot carries per-route percentiles plus the throughput trend.
 func TestCollectStoreSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -92,7 +87,6 @@ func TestCollectStoreSnapshot(t *testing.T) {
 	}
 }
 
-// TestSlowestRouteFirst proves the slowest route by p99 heads the list.
 func TestSlowestRouteFirst(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -110,9 +104,6 @@ func TestSlowestRouteFirst(t *testing.T) {
 	}
 }
 
-// TestDegradesToSourceDown proves degrade-don't-crash: after a live read, an
-// unreachable read flips the panel source_down while still carrying the last-known
-// latency, and the collect error surfaces as source-down for the shell.
 func TestDegradesToSourceDown(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -144,9 +135,6 @@ func TestDegradesToSourceDown(t *testing.T) {
 	}
 }
 
-// TestSnapshotCarriesRawRoute proves route templates — watched-app text from
-// go-api — are carried VERBATIM in the JSON payload (React escapes them on render,
-// the escaping invariant moved off html/template onto the client).
 func TestSnapshotCarriesRawRoute(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -163,7 +151,6 @@ func TestSnapshotCarriesRawRoute(t *testing.T) {
 	}
 }
 
-// TestStaysBoundedUnderLoad proves the throughput history is bounded.
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -184,8 +171,6 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndSnapshot proves the collect loop and the HTTP read can
-// run at once without a data race (asserted under -race).
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -210,9 +195,6 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// TestSeverityCriticalWhenSlowestRouteIsHot is the health-grade proof: the
-// metrics read is fresh and live, but a route's p99 sits in the red band — so the
-// bucket grades itself critical and names the route that is slow.
 func TestSeverityCriticalWhenSlowestRouteIsHot(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -236,8 +218,6 @@ func TestSeverityCriticalWhenSlowestRouteIsHot(t *testing.T) {
 	}
 }
 
-// TestSeverityWarnsInTheAmberBand proves the middle grade: a p99 past the warning
-// threshold but short of the red one is a warning, not a page.
 func TestSeverityWarnsInTheAmberBand(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -258,8 +238,6 @@ func TestSeverityWarnsInTheAmberBand(t *testing.T) {
 	}
 }
 
-// TestSeverityOKWhenEveryRouteIsFast is the arm that has to disagree: the same
-// live read with fast routes grades ok.
 func TestSeverityOKWhenEveryRouteIsFast(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -280,9 +258,6 @@ func TestSeverityOKWhenEveryRouteIsFast(t *testing.T) {
 	}
 }
 
-// TestRouteWithFailingResponsesShowsErrorRate is the core error-rate proof: a
-// route whose window carries 5xx responses reports a non-zero error rate in the
-// snapshot, so a failing route is visible even when it is fast.
 func TestRouteWithFailingResponsesShowsErrorRate(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -304,10 +279,6 @@ func TestRouteWithFailingResponsesShowsErrorRate(t *testing.T) {
 	}
 }
 
-// TestHighErrorRateRaisesSeverity proves the second Done clause: a route that is
-// fast (p99 in the green band) but serving only 5xx grades critical on error rate
-// alone, and the headline names the error rate and the route — latency health can
-// never mask a failing backend.
 func TestHighErrorRateRaisesSeverity(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -332,11 +303,6 @@ func TestHighErrorRateRaisesSeverity(t *testing.T) {
 	}
 }
 
-// TestSingleErrorOnIdleRouteDoesNotGradeCritical is the sample-floor proof: a
-// near-idle route whose whole window is one 5xx reads 100%, and a bucket with no
-// floor would page on that one request. The rate is still reported (with the
-// sample size behind it, so the panel can mark it provisional) — it just does not
-// raise severity.
 func TestSingleErrorOnIdleRouteDoesNotGradeCritical(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -362,10 +328,6 @@ func TestSingleErrorOnIdleRouteDoesNotGradeCritical(t *testing.T) {
 	}
 }
 
-// TestErrorRateGradesCriticalAtTheSampleFloor is the boundary arm: the same
-// failing route grades critical the moment its window carries minErrorSamples
-// classified responses, so the floor silences tiny samples without silencing the
-// alarm.
 func TestErrorRateGradesCriticalAtTheSampleFloor(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -390,9 +352,6 @@ func TestErrorRateGradesCriticalAtTheSampleFloor(t *testing.T) {
 	}
 }
 
-// TestIdleRouteDoesNotHideAFailingBusyRoute proves the floor skips low-sample
-// routes rather than capping the worst rate: an idle route reading 100% must not
-// shadow a busy route that is genuinely failing under it.
 func TestIdleRouteDoesNotHideAFailingBusyRoute(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -422,12 +381,6 @@ func TestIdleRouteDoesNotHideAFailingBusyRoute(t *testing.T) {
 	}
 }
 
-// TestWindowsErrorRateAcrossSuccessiveReads is the windowing proof for the error
-// rate: go-api's status counts are cumulative, so a burst of healthy traffic on top
-// of a failing lifetime history must move the panel's error rate toward the recent
-// window. The first read is all 5xx (critical); the second adds only 2xx, and the
-// windowed error rate grades ok. A bucket reading lifetime cumulative would stay
-// critical here.
 func TestWindowsErrorRateAcrossSuccessiveReads(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -467,8 +420,6 @@ func TestWindowsErrorRateAcrossSuccessiveReads(t *testing.T) {
 	}
 }
 
-// TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket (null reader)
-// never panics: collect reports source-down and the snapshot is source_down.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	b := newBucket(nullReader{})
 
@@ -480,12 +431,6 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 }
 
-// TestWindowsLatencyAcrossSuccessiveReads is the windowing proof: go-api's
-// histogram is cumulative, so a burst of fast traffic on top of a slow lifetime
-// history must move the panel's p99 toward the recent window, not stay pinned to
-// the diluted lifetime estimate. The first read is all slow (p99 critical); the
-// second read adds only fast requests, and the windowed p99 grades ok. A bucket
-// still reading lifetime cumulative would stay critical here.
 func TestWindowsLatencyAcrossSuccessiveReads(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -523,8 +468,6 @@ func TestWindowsLatencyAcrossSuccessiveReads(t *testing.T) {
 	}
 }
 
-// TestWindowsTrafficAsDeltaNotLifetime proves the throughput trend reports the
-// requests observed since the previous read, not the ever-climbing lifetime total.
 func TestWindowsTrafficAsDeltaNotLifetime(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -552,9 +495,6 @@ func TestWindowsTrafficAsDeltaNotLifetime(t *testing.T) {
 	}
 }
 
-// TestWindowSurvivesCounterReset proves a go-api restart — cumulative counts drop
-// below the previous read — is treated as a fresh window rather than underflowing
-// the unsigned delta into a spurious spike.
 func TestWindowSurvivesCounterReset(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{

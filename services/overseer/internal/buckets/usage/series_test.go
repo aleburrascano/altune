@@ -49,9 +49,6 @@ func bucketWithSeries(src source) (*Bucket, *recordingSeries) {
 	return b, series
 }
 
-// TestCollectRecordsRequestsAndUsersOncePerCompletedWindow proves the series
-// record exactly once per completed one-minute window, no matter how many
-// events land in it, and never for the still-open current window.
 func TestCollectRecordsRequestsAndUsersOncePerCompletedWindow(t *testing.T) {
 	src := newFakeSource(16)
 	b, series := bucketWithSeries(src)
@@ -66,7 +63,6 @@ func TestCollectRecordsRequestsAndUsersOncePerCompletedWindow(t *testing.T) {
 		t.Fatalf("requests_per_min recorded %d points before the window completed, want 0: %+v", len(got), got)
 	}
 
-	// An event in the next window rolls the first one over.
 	src.push(goapi.Event{Type: "play", Timestamp: base.Add(90 * time.Second), User: "carol"})
 	collectStore(t, b)
 

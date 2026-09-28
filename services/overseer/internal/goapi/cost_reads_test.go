@@ -10,11 +10,6 @@ import (
 	"testing"
 )
 
-// providerUsageBody is a representative GET /observe/metrics/live payload for the
-// provider-usage read: the per-provider outbound-call counts the Cost bucket
-// reads, plus the latency and per-module fields it ignores. It proves the mirror
-// decodes only the "providers" block while tolerating the sibling fields it does
-// not model.
 const providerUsageBody = `{
 	"auth": {"token_rejections_total": 3},
 	"latency": {"routes": {}},
@@ -25,10 +20,6 @@ const providerUsageBody = `{
 	}
 }`
 
-// TestAdminProviderUsageDecodesStubbedResponse is the core Done proof for the
-// read: the client hits a stubbed go-api /observe/metrics/live and decodes the
-// per-provider call counts, ignoring the latency and counter fields it does not
-// model.
 func TestAdminProviderUsageDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -64,9 +55,6 @@ func TestAdminProviderUsageDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAdminProviderUsageAttachesOperatorBearer proves the operator principal is
-// authenticated on the operator-guarded read: without the bearer, go-api's
-// OperatorOnly guard would 403 the provider counts.
 func TestAdminProviderUsageAttachesOperatorBearer(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,13 +71,10 @@ func TestAdminProviderUsageAttachesOperatorBearer(t *testing.T) {
 	}
 }
 
-// TestAdminProviderUsageUnreachableYieldsSourceDown proves an unreachable go-api
-// surfaces as the typed source-down error the bucket branches on to render the
-// provider half stale.
 func TestAdminProviderUsageUnreachableYieldsSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
-	srv.Close() // nothing is listening now
+	srv.Close()
 
 	_, err := newClient(t, url).AdminProviderUsage(context.Background())
 	if !goapi.IsSourceDown(err) {
@@ -101,9 +86,6 @@ func TestAdminProviderUsageUnreachableYieldsSourceDown(t *testing.T) {
 	}
 }
 
-// TestAdminProviderUsageForbiddenYieldsAPIError proves the auth-rejection path: a
-// non-operator principal is a reachable-but-refused read, so it surfaces as an
-// APIError (go-api is up; it said no), NOT source-down.
 func TestAdminProviderUsageForbiddenYieldsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -124,12 +106,6 @@ func TestAdminProviderUsageForbiddenYieldsAPIError(t *testing.T) {
 	}
 }
 
-// TestProviderOutcomesTotalSaturatesOnOverflow proves a hostile or corrupt go-api
-// response with per-outcome counts near the int64 ceiling cannot wrap the
-// provider total: a plain int64 add would wrap MaxInt64+MaxInt64 to -2 (a huge
-// active provider misread as inactive, desyncing the render gates). The
-// saturating sum pins the total at MaxInt64 instead, staying large-and-positive,
-// and is zero only when every outcome is genuinely zero.
 func TestProviderOutcomesTotalSaturatesOnOverflow(t *testing.T) {
 	for _, tc := range []struct {
 		name string

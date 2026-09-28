@@ -221,11 +221,6 @@ func (d *disk) Query(bucket, series string, from, to time.Time) ([]core.Point, e
 	})
 }
 
-// Tail reads at most limit of the most recent points for bucket/series within
-// [from, to], ordered oldest to newest. It is the bounded read the spark path
-// uses: pushing the LIMIT into SQL means a long-lived series costs the same to
-// tail-read no matter how many rows it holds, rather than fetching the whole
-// window and trimming in Go.
 func (d *disk) Tail(bucket, series string, from, to time.Time, limit int) ([]core.Point, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
@@ -245,9 +240,6 @@ func (d *disk) Tail(bucket, series string, from, to time.Time, limit int) ([]cor
 	return reverse(points), nil
 }
 
-// reverse returns points in the opposite order, leaving the caller's window
-// bound (DESC ... LIMIT, newest first) presented ascending like Query's, oldest
-// first. A nil or single-element slice returns unchanged.
 func reverse(points []core.Point) []core.Point {
 	reversed := make([]core.Point, len(points))
 	for i, p := range points {

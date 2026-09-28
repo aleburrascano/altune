@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// readOnlyMethods is the exhaustive allowlist of exported methods the client may
-// expose. Every entry is a GET. Adding any method forces a deliberate edit here,
-// and adding a non-read one trips the forbidden-verb guard below — so the
-// observe-only invariant cannot regress silently.
 var readOnlyMethods = map[string]bool{
 	"Health":                  true,
 	"AdminHealth":             true,
@@ -21,10 +17,6 @@ var readOnlyMethods = map[string]bool{
 	"AdminDiscographyQuality": true,
 }
 
-// mutatingVerbs are name fragments that betray a write/command/mutating method.
-// Overseer authenticates as go-api's read-only principal, which go-api refuses on
-// every mutating admin route (#1810); the client must have no such method at all,
-// so a write is impossible on both sides of the seam.
 var mutatingVerbs = []string{
 	"post", "put", "patch", "delete", "create", "update", "write", "mutate",
 	"command", "send", "trigger", "remove", "reacquire", "retry", "enqueue",
@@ -32,10 +24,6 @@ var mutatingVerbs = []string{
 	"do",
 }
 
-// TestClientExposesOnlyReads is the observe-only spine test: it asserts, by
-// reflection over the client's method set, that the client type exposes no
-// write/command/mutating method — only reads. This realizes #1154's observe-only
-// + "operator, no write scope" invariants at the client boundary.
 func TestClientExposesOnlyReads(t *testing.T) {
 	typ := reflect.TypeOf(&goapi.Client{})
 	if typ.NumMethod() == 0 {

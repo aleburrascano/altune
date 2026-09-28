@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-// fakeReader is a controllable stand-in for the OCI spend read path. It counts
-// reads so a test can prove spend does not ride the collect tick.
 type fakeReader struct {
 	mu    sync.Mutex
 	spend oci.Spend
@@ -36,7 +34,6 @@ func (f *fakeReader) set(spend oci.Spend, err error) {
 	f.spend, f.err = spend, err
 }
 
-// fakeUsageReader is a controllable stand-in for the go-api provider-usage read.
 type fakeUsageReader struct {
 	mu    sync.Mutex
 	usage goapi.ProviderUsage
@@ -92,15 +89,11 @@ func liveBucket() (*Bucket, *fakeReader, *fakeUsageReader) {
 	return newBucket(spend, usage, time.Hour), spend, usage
 }
 
-// refreshSpend drives the spend half deterministically, standing in for the slow
-// scheduler that owns it in production (which the collect tick never triggers).
 func refreshSpend(t *testing.T, b *Bucket) {
 	t.Helper()
 	b.refreshSpend(context.Background())
 }
 
-// waitFor polls cond until it holds or the deadline passes, so a test can assert on
-// the background scheduler's progress without a fixed sleep racing a slow machine.
 func waitFor(t *testing.T, cond func() bool, within time.Duration, msg string) {
 	t.Helper()
 	deadline := time.Now().Add(within)
@@ -129,9 +122,6 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// TestCollectStoreSnapshot is the core Done proof: a scheduled spend refresh and a
-// live provider-usage collect both flow into the bucket and the snapshot carries
-// both halves.
 func TestCollectStoreSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
@@ -161,11 +151,6 @@ func TestCollectStoreSnapshot(t *testing.T) {
 	}
 }
 
-// TestStartPollsSpendAcrossTicks is the cadence-survival proof, driven through the
-// REAL Start hook (not a direct refresh call): the scheduler runs on the
-// app-lifetime ctx, so it refreshes once immediately AND keeps ticking past the
-// first — a second refresh lands, proving it is not once-and-frozen the way the
-// prior Collect-launched attempt was after the per-tick deadline cancelled it.
 func TestStartPollsSpendAcrossTicks(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
@@ -183,10 +168,6 @@ func TestStartPollsSpendAcrossTicks(t *testing.T) {
 	}
 }
 
-// TestStartLaunchesSchedulerOnce is the double-start proof: the sync.Once means a
-// second Start never launches a second poller. The first Start is handed an
-// already-cancelled ctx, so its goroutine does exactly one immediate refresh then
-// exits; a second Start on a fast-ticking live ctx must NOT add refreshes.
 func TestStartLaunchesSchedulerOnce(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
@@ -202,18 +183,12 @@ func TestStartLaunchesSchedulerOnce(t *testing.T) {
 	defer cancelLive()
 	b.Start(live)
 
-	// A rogue second goroutine on the 1ms ticker would drive calls far past 1
-	// within this window; the sync.Once must keep it at exactly the one refresh.
 	time.Sleep(50 * time.Millisecond)
 	if got := spend.calls.Load(); got != 1 {
 		t.Errorf("spend refreshed %d times; a second Start launched another poller (want 1, once)", got)
 	}
 }
 
-// TestSpendNotFetchedOnEveryCollect is the cadence proof: the metered OCI spend
-// read is owned by the slow scheduler, never the 5s collect tick, so many collects
-// do not multiply usage-api reads. Collect touches only the cheap provider-usage
-// half.
 func TestSpendNotFetchedOnEveryCollect(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
@@ -233,8 +208,6 @@ func TestSpendNotFetchedOnEveryCollect(t *testing.T) {
 	}
 }
 
-// TestSpendServedWithItsAge proves the spend half carries when it last refreshed,
-// so the panel can show how old the served figure is between slow refreshes.
 func TestSpendServedWithItsAge(t *testing.T) {
 	b, _, _ := liveBucket()
 
@@ -250,8 +223,6 @@ func TestSpendServedWithItsAge(t *testing.T) {
 	}
 }
 
-// TestSpendDegradesIndependently: OCI down, go-api up -> only the spend half stale,
-// last-known spend preserved, provider half live, no collect error.
 func TestSpendDegradesIndependently(t *testing.T) {
 	b, spend, _ := liveBucket()
 	refreshSpend(t, b)
@@ -276,8 +247,6 @@ func TestSpendDegradesIndependently(t *testing.T) {
 	}
 }
 
-// TestUsageDegradesIndependently: go-api down, OCI up -> only the provider half
-// stale, last-known usage preserved, spend half live, no collect error.
 func TestUsageDegradesIndependently(t *testing.T) {
 	b, _, usage := liveBucket()
 	refreshSpend(t, b)
@@ -301,9 +270,6 @@ func TestUsageDegradesIndependently(t *testing.T) {
 	}
 }
 
-// TestBothDownReturnsError: the usage read fails while the spend half is already
-// unreachable -> collect error, source_down state, both halves stale but last-known
-// preserved.
 func TestBothDownReturnsError(t *testing.T) {
 	b, spend, usage := liveBucket()
 	refreshSpend(t, b)
@@ -334,8 +300,6 @@ func TestBothDownReturnsError(t *testing.T) {
 	}
 }
 
-// TestSnapshotCarriesRawServiceName proves service names — external usage-api data
-// — are carried verbatim in the payload (React escapes them on render).
 func TestSnapshotCarriesRawServiceName(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(oci.Spend{
@@ -355,8 +319,6 @@ func TestSnapshotCarriesRawServiceName(t *testing.T) {
 	}
 }
 
-// TestNoOCIIdentifierInSnapshot proves nothing OCI-identifying reaches the
-// payload: the spend model carries no identifier field, so no "ocid1." appears.
 func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 	refreshSpend(t, b)
@@ -368,9 +330,6 @@ func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndSnapshot proves the collect loop, the spend scheduler's
-// refresh and the HTTP read can run at once without a data race (asserted under
-// -race) — the shared last-known state is guarded by the bucket mutex.
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
@@ -397,8 +356,6 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket never panics: a
-// scheduled spend read and a collect both degrade to source-down.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	b := newBucket(nullSpendReader{}, nullUsageReader{}, time.Hour)
 
@@ -416,9 +373,6 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 }
 
-// TestSourceErrorsClassifyTyped proves each half keeps its typed source-down
-// classification: the usage cause survives inside the aggregate both-down error,
-// and the spend read still classifies as OCI source-down.
 func TestSourceErrorsClassifyTyped(t *testing.T) {
 	b := newBucket(nullSpendReader{}, nullUsageReader{}, time.Hour)
 	refreshSpend(t, b)
@@ -434,8 +388,6 @@ func TestSourceErrorsClassifyTyped(t *testing.T) {
 	}
 }
 
-// TestLazyReaderDegradesOnBuildFailure proves the lazy production OCI reader
-// degrades to source-down when the build fails, rather than panicking, and retries.
 func TestLazyReaderDegradesOnBuildFailure(t *testing.T) {
 	calls := 0
 	l := &lazyReader{build: func() (spendReader, error) {
@@ -453,7 +405,6 @@ func TestLazyReaderDegradesOnBuildFailure(t *testing.T) {
 	}
 }
 
-// TestLazyReaderBuildsOnceOnSuccess proves the lazy reader builds the client once.
 func TestLazyReaderBuildsOnceOnSuccess(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(sampleSpend(), nil)
@@ -472,7 +423,6 @@ func TestLazyReaderBuildsOnceOnSuccess(t *testing.T) {
 	}
 }
 
-// TestOCIEnabledParsing proves the enablement gate reads the env flag correctly.
 func TestOCIEnabledParsing(t *testing.T) {
 	for _, tc := range []struct {
 		val  string
@@ -485,9 +435,6 @@ func TestOCIEnabledParsing(t *testing.T) {
 	}
 }
 
-// TestSpendIntervalFromEnv proves the cadence knob defaults to the slow interval,
-// honours a valid override, and rejects a malformed value back to the default
-// rather than disabling the refresh.
 func TestSpendIntervalFromEnv(t *testing.T) {
 	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "")
 	if got := spendIntervalFromEnv(); got != defaultSpendInterval {
@@ -505,9 +452,6 @@ func TestSpendIntervalFromEnv(t *testing.T) {
 	}
 }
 
-// TestSpendSchedulerExitsOnCancel proves the background goroutine drains on ctx
-// cancellation — no goroutine leaks past the app's lifetime — after its immediate
-// refresh.
 func TestSpendSchedulerExitsOnCancel(t *testing.T) {
 	var runs atomic.Int32
 	s := newSpendScheduler(time.Millisecond, func(context.Context) { runs.Add(1) })
@@ -527,8 +471,6 @@ func TestSpendSchedulerExitsOnCancel(t *testing.T) {
 	}
 }
 
-// TestSpendSchedulerContainsPanic proves a panicking refresh is contained: the
-// process survives and the scheduler keeps ticking rather than crashing the shell.
 func TestSpendSchedulerContainsPanic(t *testing.T) {
 	panicking := func(context.Context) { panic("spend read blew up") }
 
@@ -547,8 +489,6 @@ func TestSpendSchedulerContainsPanic(t *testing.T) {
 	}
 }
 
-// TestSpendSchedulerClampsInterval proves a non-positive interval cannot disable
-// the ticker: it is clamped to the default rather than panicking NewTicker.
 func TestSpendSchedulerClampsInterval(t *testing.T) {
 	s := newSpendScheduler(0, func(context.Context) {})
 	if s.interval != defaultSpendInterval {
@@ -556,10 +496,6 @@ func TestSpendSchedulerClampsInterval(t *testing.T) {
 	}
 }
 
-// TestSeverityCriticalWhenAProviderNeverSucceeds is the health-grade proof: both
-// reads are fresh and live, but every call to one provider is being rejected —
-// a dead integration Altune is still paying for, so the bucket grades itself
-// critical while State stays live.
 func TestSeverityCriticalWhenAProviderNeverSucceeds(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
@@ -587,8 +523,6 @@ func TestSeverityCriticalWhenAProviderNeverSucceeds(t *testing.T) {
 	}
 }
 
-// TestSeverityWarnsWhenAProviderMostlyFails proves the middle grade: the provider
-// still serves some calls, but it fails more than it serves.
 func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
@@ -605,9 +539,6 @@ func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
 	}
 }
 
-// TestSeverityOKWhenProvidersMostlySucceed is the arm that has to disagree: the
-// sample usage carries a few quota rejections and one error, which is normal
-// traffic, so it grades ok. A provider with no calls at all is not a fault either.
 func TestSeverityOKWhenProvidersMostlySucceed(t *testing.T) {
 	b, _, _ := liveBucket()
 	refreshSpend(t, b)
@@ -625,8 +556,6 @@ func TestSeverityOKWhenProvidersMostlySucceed(t *testing.T) {
 	}
 }
 
-// TestUsageReaderFromEnvDegradesWhenUnconfigured proves the provider-usage half
-// falls back to a null reader when go-api is unconfigured.
 func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")

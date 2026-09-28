@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// TestSearchRollupCountsMaskedSearches pins #2594: go-api's admin stream masks
-// search text (#2585), so a real search_performed signal ordinarily carries no
-// Subject. The usage bucket must still show the search count moving rather
-// than silently dropping the event as an empty key.
 func TestSearchRollupCountsMaskedSearches(t *testing.T) {
 	src := newFakeSource(4)
 	b := newBucket(src)

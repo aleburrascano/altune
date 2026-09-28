@@ -9,9 +9,6 @@ import (
 	"testing"
 )
 
-// recordingTransport captures the host of every request that actually reaches
-// the transport, so an attack can prove not merely that a request was sent but
-// exactly which host it would have connected to.
 type recordingTransport struct {
 	calls atomic.Int32
 	hosts []string
@@ -23,10 +20,6 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	return &http.Response{StatusCode: 401, Body: http.NoBody, Header: make(http.Header)}, nil
 }
 
-// TestFenceHostConfusionRefused is the whole-bucket attack on the fence: every
-// classic host-confusion trick that could smuggle a probe off the own-infra
-// allowlist must be refused BEFORE a socket opens. The allowlist is exactly
-// "allowed.test"; each target below is crafted to look adjacent to it.
 func TestFenceHostConfusionRefused(t *testing.T) {
 	c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
 	if err != nil {
@@ -35,9 +28,6 @@ func TestFenceHostConfusionRefused(t *testing.T) {
 	rt := &recordingTransport{}
 	c.http.Transport = rt
 
-	// Each URL's real connect host (url.Hostname()) is NOT "allowed.test", so
-	// the fence must refuse it. The names are chosen to defeat naive substring,
-	// suffix, userinfo, and separator checks.
 	offAllowlist := []struct {
 		name string
 		u    *url.URL
@@ -64,9 +54,6 @@ func TestFenceHostConfusionRefused(t *testing.T) {
 	}
 }
 
-// TestFenceCaseFoldedHostAllowed proves the fence folds case rather than
-// deny-by-accident: the SAME owned host in a different case is still the owned
-// host and must be allowed, so a legitimate probe is never refused on casing.
 func TestFenceCaseFoldedHostAllowed(t *testing.T) {
 	c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
 	if err != nil {
@@ -84,11 +71,6 @@ func TestFenceCaseFoldedHostAllowed(t *testing.T) {
 	}
 }
 
-// TestHostilePathCannotMoveHost is the TOCTOU-style attack: the suite path and
-// query are the only attacker-influenced inputs to target(). A path or query
-// crafted to look like an authority ("//evil", "@evil") must not move the
-// resolved request off the fixed base host — the fence validates the base host,
-// and the request must actually connect there, not to a smuggled authority.
 func TestHostilePathCannotMoveHost(t *testing.T) {
 	hostilePaths := []struct {
 		path, query string
@@ -100,8 +82,6 @@ func TestHostilePathCannotMoveHost(t *testing.T) {
 		{"/v1/library", "q=%zz%00#@evil.example"},
 	}
 	for _, hp := range hostilePaths {
-		// A fresh client+transport per case so the recorded host is exactly this
-		// probe's connect host, with nothing carried over.
 		c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
 		if err != nil {
 			t.Fatalf("newFencedClient: %v", err)
@@ -122,9 +102,6 @@ func TestHostilePathCannotMoveHost(t *testing.T) {
 	}
 }
 
-// TestExplicitOffAllowlistConfigFailsClosed proves an explicit allowlist that
-// omits the base host is refused at construction (fail-closed), so a
-// misconfiguration cannot silently leave the base host unvalidated.
 func TestExplicitOffAllowlistConfigFailsClosed(t *testing.T) {
 	if _, err := newFencedClient("https://allowed.test", []string{"other.test", "allowed.test.evil"}); err == nil {
 		t.Fatal("newFencedClient accepted an allowlist omitting the base host, want fail-closed")

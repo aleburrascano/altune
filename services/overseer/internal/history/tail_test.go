@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-// TestTailReturnsOnlyTheMostRecentPointsOldestFirst proves the spark path's
-// bounded read: LIMIT is pushed into SQL rather than the caller fetching the
-// whole window and trimming in Go, and the result comes back oldest-to-newest
-// like Query's.
 func TestTailReturnsOnlyTheMostRecentPointsOldestFirst(t *testing.T) {
 	d, _ := openTemp(t)
 	for i := 0; i < 40; i++ {
@@ -31,9 +27,6 @@ func TestTailReturnsOnlyTheMostRecentPointsOldestFirst(t *testing.T) {
 	}
 }
 
-// TestTailRespectsTheWindow proves the LIMIT push-down does not defeat the
-// from/to bound: a point outside the window is never returned even if it would
-// otherwise fall within the limit.
 func TestTailRespectsTheWindow(t *testing.T) {
 	d, _ := openTemp(t)
 	d.Record("reliability", "latency_ms", core.Point{At: base.Add(-2 * time.Hour), Value: 1})

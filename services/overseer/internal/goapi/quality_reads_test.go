@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// adminDiscographyQualityBody is the pinned seam response (epic #1425): one
-// artist's cross-provider structural-quality case.
 const adminDiscographyQualityBody = `{
 	"window_days": 30,
 	"group_by": "artist",
@@ -28,9 +26,6 @@ const adminDiscographyQualityBody = `{
 	]
 }`
 
-// TestAdminDiscographyQualityDecodesStubbedResponse is the Done proof for the
-// read: the client hits a stubbed /observe/quality/discography with a GET and
-// decodes the pinned case list, including the per-provider split.
 func TestAdminDiscographyQualityDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -80,8 +75,6 @@ func TestAdminDiscographyQualityDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAdminDiscographyQualityToleratesVersionSkew proves the mirror ignores
-// unknown fields a newer go-api adds rather than failing the read.
 func TestAdminDiscographyQualityToleratesVersionSkew(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"window_days":7,"group_by":"artist","trend":[1,2,3],"cases":[{"artist_ref":"deezer:1","releases":3,"single_provider":1,"provider_counts":{"deezer":3},"future_field":"x"}]}`))
@@ -97,8 +90,6 @@ func TestAdminDiscographyQualityToleratesVersionSkew(t *testing.T) {
 	}
 }
 
-// TestAdminDiscographyQualityRejectsNonOperator proves the read surfaces a
-// non-operator/unauth rejection as an APIError rather than silently succeeding.
 func TestAdminDiscographyQualityRejectsNonOperator(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

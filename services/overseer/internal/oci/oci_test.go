@@ -14,9 +14,6 @@ import (
 	"github.com/oracle/oci-go-sdk/v65/usageapi"
 )
 
-// fakeUsageAPI is a controllable stand-in for the OCI usage-api SDK client. A test
-// sets the response and/or error it returns and inspects the request it received,
-// exercising the SDK→Spend mapping and the degrade path with no OCI auth.
 type fakeUsageAPI struct {
 	resp usageapi.RequestSummarizedUsagesResponse
 	err  error
@@ -33,10 +30,9 @@ func item(service, currency string, amount float32) usageapi.UsageSummary {
 		Service:        common.String(service),
 		Currency:       common.String(currency),
 		ComputedAmount: common.Float32(amount),
-		// Identifiers the usage-api returns that must NOT survive into Spend.
-		TenantId:      common.String("ocid1.tenancy.oc1..aaaaSECRET"),
-		CompartmentId: common.String("ocid1.compartment.oc1..bbbbSECRET"),
-		ResourceId:    common.String("ocid1.instance.oc1..ccccSECRET"),
+		TenantId:       common.String("ocid1.tenancy.oc1..aaaaSECRET"),
+		CompartmentId:  common.String("ocid1.compartment.oc1..bbbbSECRET"),
+		ResourceId:     common.String("ocid1.instance.oc1..ccccSECRET"),
 	}
 }
 
@@ -48,10 +44,6 @@ func newTestClient(f *fakeUsageAPI) *Client {
 	}
 }
 
-// TestUsageAPISeamIsSingleReadOnlyMethod is the read-only invariant made a test:
-// the SDK seam the client depends on exposes exactly one operation and it is the
-// read RequestSummarizedUsages. No mutating usage-api call can reach the client
-// because none is in the seam.
 func TestUsageAPISeamIsSingleReadOnlyMethod(t *testing.T) {
 	typ := reflect.TypeOf((*usageAPI)(nil)).Elem()
 	if got := typ.NumMethod(); got != 1 {
@@ -68,14 +60,12 @@ func TestUsageAPISeamIsSingleReadOnlyMethod(t *testing.T) {
 	}
 }
 
-// TestCurrentPeriodSpendSummarizes proves the SDK response is projected into a
-// Spend: totalled, grouped by service largest-first, with the currency carried.
 func TestCurrentPeriodSpendSummarizes(t *testing.T) {
 	f := &fakeUsageAPI{resp: usageapi.RequestSummarizedUsagesResponse{
 		UsageAggregation: usageapi.UsageAggregation{Items: []usageapi.UsageSummary{
 			item("COMPUTE", "USD", 10),
 			item("STORAGE", "USD", 25),
-			item("COMPUTE", "USD", 5), // same service, must fold into one line
+			item("COMPUTE", "USD", 5),
 		}},
 	}}
 	spend, err := newTestClient(f).CurrentPeriodSpend(context.Background())
@@ -99,8 +89,6 @@ func TestCurrentPeriodSpendSummarizes(t *testing.T) {
 	}
 }
 
-// TestCurrentPeriodSpendReadsMonthlyCost proves the client asks the usage-api for
-// month-to-date COST at monthly granularity — a read query, never a mutation.
 func TestCurrentPeriodSpendReadsMonthlyCost(t *testing.T) {
 	f := &fakeUsageAPI{}
 	if _, err := newTestClient(f).CurrentPeriodSpend(context.Background()); err != nil {
@@ -121,10 +109,6 @@ func TestCurrentPeriodSpendReadsMonthlyCost(t *testing.T) {
 	}
 }
 
-// TestSpendCarriesNoOCIIdentifier proves the projection drops every OCI identifier:
-// the usage-api items carry tenancy/compartment/resource OCIDs, but neither the
-// Spend nor its formatted form contains an "ocid1." token. This is the no-leak
-// invariant enforced at the mapping, where the identifiers are still present.
 func TestSpendCarriesNoOCIIdentifier(t *testing.T) {
 	f := &fakeUsageAPI{resp: usageapi.RequestSummarizedUsagesResponse{
 		UsageAggregation: usageapi.UsageAggregation{Items: []usageapi.UsageSummary{
@@ -138,7 +122,6 @@ func TestSpendCarriesNoOCIIdentifier(t *testing.T) {
 	if dump := fmt.Sprintf("%+v", spend); strings.Contains(dump, "ocid1.") {
 		t.Errorf("Spend leaked an OCI identifier:\n%s", dump)
 	}
-	// Also guard against a future field being added that carries an identifier.
 	for _, f := range structFieldNames(spend) {
 		lower := strings.ToLower(f)
 		for _, banned := range []string{"ocid", "tenant", "compartment", "resourceid"} {
@@ -149,12 +132,6 @@ func TestSpendCarriesNoOCIIdentifier(t *testing.T) {
 	}
 }
 
-// TestSpendSerializesCamelCase pins the wire shape the cost panel parses: Spend
-// and SpendLine serialize with camelCase keys (amount, currency, periodStart,
-// periodEnd, lines, service), uniform with every other Overseer payload. The
-// panel's co-located Data type mirrors these keys, so a regression to the old
-// PascalCase form (untagged fields) would silently break the render — this test
-// is the lockstep guard for that cross-language contract.
 func TestSpendSerializesCamelCase(t *testing.T) {
 	blob, err := json.Marshal(Spend{
 		Amount:   41.5,
@@ -177,9 +154,6 @@ func TestSpendSerializesCamelCase(t *testing.T) {
 	}
 }
 
-// fakeServiceError implements the OCI common.ServiceError interface with a
-// free-form message and request id that (hostilely) embed OCI identifiers, so a
-// test can prove they are stripped before the error can reach a log.
 type fakeServiceError struct{}
 
 func (fakeServiceError) GetHTTPStatusCode() int { return 404 }
@@ -190,10 +164,6 @@ func (fakeServiceError) GetMessage() string {
 func (fakeServiceError) GetOpcRequestID() string { return "req-ocid1.request.oc1..dddd" }
 func (fakeServiceError) Error() string           { return "Service error: " + fakeServiceError{}.GetMessage() }
 
-// TestServiceErrorSanitisedBeforeLog proves the leakage-path defence: a usage-api
-// service error whose message and request id carry OCI identifiers is reduced to
-// just its HTTP status and service code, so the SourceDownError that reaches the
-// bucket (and the shell's collect-failure log) contains no identifier.
 func TestServiceErrorSanitisedBeforeLog(t *testing.T) {
 	f := &fakeUsageAPI{err: fakeServiceError{}}
 	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
@@ -209,14 +179,8 @@ func TestServiceErrorSanitisedBeforeLog(t *testing.T) {
 	}
 }
 
-// TestNotAuthorizedIsNamedAsPolicyGap proves the 404 the usage-api returns when the
-// instance principal lacks usage-api read is surfaced as an authorization denial that
-// names its fix — not the spurious bare "HTTP 404" that reads like a wrong endpoint.
-// The endpoint, region and request are correct; only the IAM policy is missing, so the
-// collect-failure log must say so. The message still carries the status and code for
-// diagnostics and still leaks no OCI identifier.
 func TestNotAuthorizedIsNamedAsPolicyGap(t *testing.T) {
-	f := &fakeUsageAPI{err: fakeServiceError{}} // 404 NotAuthorizedOrNotFound
+	f := &fakeUsageAPI{err: fakeServiceError{}}
 	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
 	if !IsSourceDown(err) {
 		t.Fatalf("error = %v, want source-down", err)
@@ -238,9 +202,6 @@ func TestNotAuthorizedIsNamedAsPolicyGap(t *testing.T) {
 	}
 }
 
-// TestServiceErrorRetainsStatusForNonAuthFailure proves the policy-gap phrasing is
-// scoped to authorization: a genuine 5xx (a real usage-api fault) is still reported
-// as a bare status+code, not misattributed to a missing policy.
 func TestServiceErrorRetainsStatusForNonAuthFailure(t *testing.T) {
 	f := &fakeUsageAPI{err: serviceErrorAt(503, "InternalServerError")}
 	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
@@ -256,9 +217,6 @@ func TestServiceErrorRetainsStatusForNonAuthFailure(t *testing.T) {
 	}
 }
 
-// codedServiceError is a common.ServiceError with a caller-chosen status and code
-// and a benign, non-identifying message, for driving the status-dependent branches
-// of the sanitiser.
 type codedServiceError struct {
 	status int
 	code   string
@@ -274,12 +232,6 @@ func serviceErrorAt(status int, code string) error {
 	return codedServiceError{status: status, code: code}
 }
 
-// circuitBreakerOpenErr reproduces the plain error the OCI SDK returns when the
-// usage-api client's default circuit breaker is open (common.getCircuitBreakerError):
-// a non-service error that embeds the request endpoint and a history of the prior
-// service failures — opc-request-id, error code and the free-form message, here
-// carrying OCIDs. It is NOT a common.ServiceError, so it is the shape that would slip
-// past the service-error branch of sanitize.
 func circuitBreakerOpenErr() error {
 	return fmt.Errorf(
 		"circuit breaker is open, so this request was not sent to the Usageapi service.\n\n" +
@@ -290,10 +242,6 @@ func circuitBreakerOpenErr() error {
 			"ErrorMessage - not authorized for ocid1.tenancy.oc1..aaaaSECRET on ocid1.instance.oc1..ccccSECRET\n\n")
 }
 
-// TestCircuitBreakerErrorSanitisedBeforeLog is the epic-close regression guard: when
-// a sustained usage-api outage trips the SDK's default circuit breaker, the open-
-// breaker error embeds the endpoint, opc-request-id and OCIDs but is not a service
-// error — so it must be redacted before it reaches the shell's collect-failure log.
 func TestCircuitBreakerErrorSanitisedBeforeLog(t *testing.T) {
 	f := &fakeUsageAPI{err: circuitBreakerOpenErr()}
 	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
@@ -311,9 +259,6 @@ func TestCircuitBreakerErrorSanitisedBeforeLog(t *testing.T) {
 	}
 }
 
-// TestTransportErrorKeptVerbatim proves the redaction is targeted: a genuine
-// transport/dial error carries no OCI identifier, so it is preserved verbatim for
-// diagnostics rather than over-redacted.
 func TestTransportErrorKeptVerbatim(t *testing.T) {
 	f := &fakeUsageAPI{err: errors.New("dial tcp 169.254.169.254:443: connect: connection refused")}
 	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
@@ -325,8 +270,6 @@ func TestTransportErrorKeptVerbatim(t *testing.T) {
 	}
 }
 
-// TestCurrentPeriodSpendDegradesOnError proves an unreachable usage-api surfaces as
-// a SourceDownError so the bucket keeps last-known spend flagged stale.
 func TestCurrentPeriodSpendDegradesOnError(t *testing.T) {
 	f := &fakeUsageAPI{err: errors.New("dial 169.254.169.254: connection refused")}
 	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
@@ -338,8 +281,6 @@ func TestCurrentPeriodSpendDegradesOnError(t *testing.T) {
 	}
 }
 
-// structFieldNames returns the field names of a struct value, for the identifier
-// guard above.
 func structFieldNames(v any) []string {
 	t := reflect.TypeOf(v)
 	names := make([]string, 0, t.NumField())

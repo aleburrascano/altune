@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// TestPathCannotChangeHost is the confused-deputy / token-leak guard: a path
-// that tries to inject a host (userinfo, protocol-relative, absolute URL) must
-// stay on the configured base host, so the operator bearer can never be sent
-// elsewhere. get is unexported, so this white-box test drives it directly.
 func TestPathCannotChangeHost(t *testing.T) {
 	var evilHit bool
 	evil := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -33,12 +29,10 @@ func TestPathCannotChangeHost(t *testing.T) {
 	hostiledPaths := []string{
 		"@" + evil.Listener.Addr().String(),
 		"//" + evil.Listener.Addr().String() + "/x",
-		evil.URL, // a fully absolute URL as the "path"
+		evil.URL,
 	}
 	for _, p := range hostiledPaths {
 		var out Health
-		// Errors are fine (the joined path likely 404s on the good host); what
-		// matters is the request never reaches the evil host.
 		_ = c.get(context.Background(), p, &out)
 	}
 

@@ -15,9 +15,6 @@ import (
 	"time"
 )
 
-// fastBackoff makes reconnect timing deterministic: every attempt waits a fixed
-// tiny interval, so tests exercise the reconnect path without sleeping long or
-// flaking on wall-clock timing. It records attempts for assertions.
 type fastBackoff struct {
 	mu    sync.Mutex
 	calls int
@@ -37,10 +34,6 @@ func (b *fastBackoff) attempts() int {
 	return b.calls
 }
 
-// stubSSE is a controllable operator SSE endpoint. It streams the configured
-// events per connection, and in "down" mode hijacks and drops the connection
-// before any response — a genuine transport failure, so the consumer must report
-// source-down. Mode flips are how a test forces a disconnect and a recovery.
 type stubSSE struct {
 	mu       sync.Mutex
 	down     bool
@@ -89,9 +82,8 @@ func (s *stubSSE) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 	if hold {
-		<-r.Context().Done() // keep the stream open until the client disconnects
+		<-r.Context().Done()
 	}
-	// Returning here closes the stream, so the consumer sees EOF and reconnects.
 }
 
 func hijackClose(w http.ResponseWriter) {
@@ -124,8 +116,6 @@ func newConsumer(t *testing.T, baseURL string) (*goapi.Consumer, *fastBackoff) {
 	return c, bo
 }
 
-// recv waits for one event or fails the test, so a broken stream can never hang
-// the suite.
 func recv(t *testing.T, ch <-chan goapi.Event) goapi.Event {
 	t.Helper()
 	select {
@@ -157,8 +147,6 @@ func eventuallyWithin(t *testing.T, why string, timeout time.Duration, cond func
 	t.Fatalf("condition never held: %s", why)
 }
 
-// TestConsumerReceivesDecodedEvents is the core Done proof: the consumer connects
-// to a stubbed operator SSE endpoint and yields decoded events on its channel.
 func TestConsumerReceivesDecodedEvents(t *testing.T) {
 	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	stub := &stubSSE{
@@ -189,10 +177,6 @@ func TestConsumerReceivesDecodedEvents(t *testing.T) {
 	eventually(t, "status up while streaming", func() bool { return c.Status() == goapi.StatusUp })
 }
 
-// TestConsumerReconnectsWithBackoff proves the consumer survives a forced
-// disconnect: each connection streams one event then closes, and the consumer
-// reconnects (via the injected backoff) to receive the next — resuming the stream
-// across go-api restarts.
 func TestConsumerReconnectsWithBackoff(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubSSE{events: []goapi.Event{{Type: "heartbeat", Timestamp: when}}}
@@ -215,11 +199,6 @@ func TestConsumerReconnectsWithBackoff(t *testing.T) {
 	}
 }
 
-// TestConsumerReportsSourceDownAndRecovers is the spine primitive: drop the
-// upstream and the consumer reports connecting (not down) while it keeps
-// retrying within the reconnect grace, only falls to source-down once repeated
-// reconnects fail past that grace, and recovers to StatusUp and resumes events
-// once a connection succeeds again.
 func TestConsumerReportsSourceDownAndRecovers(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubSSE{holdOpen: true, events: []goapi.Event{{Type: "alive", Timestamp: when}}}
@@ -236,8 +215,8 @@ func TestConsumerReportsSourceDownAndRecovers(t *testing.T) {
 	}
 	eventually(t, "status up before the drop", func() bool { return c.Status() == goapi.StatusUp })
 
-	stub.setDown(true)           // future connects fail at the transport (hijack + close)
-	srv.CloseClientConnections() // and drop the live connection so the consumer must reconnect
+	stub.setDown(true)
+	srv.CloseClientConnections()
 	eventually(t, "status connecting right after the drop", func() bool { return c.Status() == goapi.StatusConnecting })
 	eventuallyWithin(t, "status down once reconnects fail past the 10s grace", 15*time.Second, func() bool {
 		return c.Status() == goapi.StatusDown
@@ -246,16 +225,13 @@ func TestConsumerReportsSourceDownAndRecovers(t *testing.T) {
 		t.Fatalf("LastError = %v (%T), want a source-down error while down", err, err)
 	}
 
-	stub.setDown(false) // upstream returns
+	stub.setDown(false)
 	eventually(t, "status up after recovery", func() bool { return c.Status() == goapi.StatusUp })
 	if ev := recv(t, c.Events()); ev.Type != "alive" {
 		t.Fatalf("post-recovery event = %+v, want alive", ev)
 	}
 }
 
-// TestConsumerNon200IsAPIErrorNotSourceDown proves a reachable-but-rejecting
-// go-api (e.g. a 502 mid-deploy) still flips the status down, but keeps the typed
-// distinction: the recorded error is an APIError, not source-down.
 func TestConsumerNon200IsAPIErrorNotSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
@@ -279,9 +255,6 @@ func TestConsumerNon200IsAPIErrorNotSourceDown(t *testing.T) {
 	}
 }
 
-// TestConsumerHungConnectIsSourceDown proves a go-api that accepts the socket but
-// never sends response headers cannot wedge the consumer: the response-header
-// timeout fires and the attempt surfaces as source-down, then keeps retrying.
 func TestConsumerHungConnectIsSourceDown(t *testing.T) {
 	block := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -309,8 +282,6 @@ func TestConsumerHungConnectIsSourceDown(t *testing.T) {
 	})
 }
 
-// TestConsumerRunOnce proves a Consumer runs at most once: a second Run is
-// rejected rather than racing a second producer onto the events channel.
 func TestConsumerRunOnce(t *testing.T) {
 	srv := httptest.NewServer(&stubSSE{holdOpen: true})
 	defer srv.Close()
@@ -326,9 +297,6 @@ func TestConsumerRunOnce(t *testing.T) {
 	}
 }
 
-// TestConsumerShutdownClosesEventsNoLeak proves clean shutdown: cancelling ctx
-// returns Run with ctx.Err, closes the events channel, and leaks no goroutine
-// per connection (the reconnect/stream watcher pattern).
 func TestConsumerShutdownClosesEventsNoLeak(t *testing.T) {
 	stub := &stubSSE{events: []goapi.Event{{Type: "tick", Timestamp: time.Now().UTC()}}}
 	srv := httptest.NewServer(stub)
@@ -340,7 +308,6 @@ func TestConsumerShutdownClosesEventsNoLeak(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- c.Run(ctx) }()
 
-	// Let it reconnect a few times so any per-connection goroutine leak accrues.
 	eventually(t, "several reconnects happened", func() bool { return stub.connections() >= 3 })
 	cancel()
 
@@ -359,7 +326,6 @@ func TestConsumerShutdownClosesEventsNoLeak(t *testing.T) {
 	})
 }
 
-// TestNewConsumerValidatesConfig rejects misconfiguration at construction.
 func TestNewConsumerValidatesConfig(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -389,8 +355,6 @@ func runConsumer(t *testing.T, c *goapi.Consumer, ctx context.Context) <-chan st
 	return done
 }
 
-// drainUntilClosed reads any buffered events and asserts the channel is closed on
-// shutdown (a closed channel yields ok=false), so a range over Events() ends.
 func drainUntilClosed(t *testing.T, ch <-chan goapi.Event) {
 	t.Helper()
 	timeout := time.After(2 * time.Second)

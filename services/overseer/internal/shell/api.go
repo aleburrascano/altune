@@ -9,38 +9,14 @@ import (
 	"time"
 )
 
-// bucketsResponse is the GET /api/buckets envelope: every bucket's snapshot,
-// ID-sorted (the registry already sorts).
 type bucketsResponse struct {
 	Buckets []core.Snapshot `json:"buckets"`
 }
 
-// handleBuckets returns every bucket's current snapshot as JSON. A bucket that
-// panics on Snapshot is contained and reported as a degraded source_down snapshot
-// rather than taking down the whole response (degrade-don't-crash).
 func (h *Handler) handleBuckets(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, bucketsResponse{Buckets: h.snapshots()})
 }
 
-// handleStream is the SSE live channel. It emits every bucket's snapshot on
-// connect, then re-emits on a fixed cadence, one `data: <Snapshot JSON>` frame per
-// bucket. It is already behind the owner-only guard (verified at connect); the SPA
-// reads it with a fetch ReadableStream so it can send the bearer header, and
-// reconnects with a refreshed token on a 401. Per-connection work is bounded: each
-// tick writes the current snapshots and flushes, holding no growing buffer.
-//
-// Auth is enforced only at connect: the middleware validates the bearer token when
-// the stream is opened and does not re-check it per frame. A token that expires
-// mid-stream therefore keeps receiving frames until the connection drops (client
-// teardown, network loss, or process exit), at which point the SPA reconnects and
-// re-authenticates. This is standard SSE behavior — the stream carries no per-frame
-// auth to re-validate against — and is acceptable here: Overseer is single-owner,
-// read-only, and exposes only snapshot data the owner is already entitled to see,
-// so the window between token expiry and reconnect grants no authority the holder
-// lacked at connect. Periodic mid-stream re-validation is deliberately not added; it
-// would buy nothing for a single-owner read surface and only add a failure mode
-// (a re-check that tears down a live, legitimate stream). Revisit if the stream ever
-// carries multi-tenant data or a revocation requirement with a bounded blast radius.
 func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -54,7 +30,7 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	ctx := r.Context()
-	h.emitAll(w, flusher) // initial paint, no wait
+	h.emitAll(w, flusher)
 
 	ticker := time.NewTicker(h.streamInterval)
 	defer ticker.Stop()
@@ -70,9 +46,6 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// emitAll writes one SSE frame per bucket snapshot and flushes. It returns false
-// on the first write error (the client went away), so the stream loop exits
-// promptly rather than spinning against a dead connection.
 func (h *Handler) emitAll(w http.ResponseWriter, flusher http.Flusher) bool {
 	for _, snap := range h.snapshots() {
 		payload, err := json.Marshal(snap)
@@ -93,11 +66,6 @@ func (h *Handler) emitAll(w http.ResponseWriter, flusher http.Flusher) bool {
 	return true
 }
 
-// snapshots collects every bucket's snapshot, each through the panic-containing
-// safeSnapshot, in the registry's stable ID order. The spark is fetched through
-// h.spark, which carries its own recover: a panic in a bucket's KeySeries or in
-// the history read degrades that one bucket's spark to nil rather than the
-// snapshot built moments before by safeSnapshot.
 func (h *Handler) snapshots() []core.Snapshot {
 	buckets := h.registry.Buckets()
 	out := make([]core.Snapshot, 0, len(buckets))
@@ -109,10 +77,6 @@ func (h *Handler) snapshots() []core.Snapshot {
 	return out
 }
 
-// safeSnapshot drives one bucket's Snapshot, converting a panic into a degraded
-// source_down snapshot so a single misbehaving bucket cannot take down the whole
-// API response or stream (the degrade-don't-crash invariant on the read side, the
-// successor to the old safeRender).
 func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
 	meta := b.Meta()
 	defer func() {

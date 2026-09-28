@@ -97,9 +97,6 @@ func TestUnreachableProbeRecordsDownWithoutALatency(t *testing.T) {
 	}
 }
 
-// TestAnsweredDegradedProbeRecordsUpAndItsLatency proves a degraded-but-answered
-// probe reads as up, not down: go-api reachable but slow/impaired must not be
-// mistaken for go-api being unreachable (#2357).
 func TestAnsweredDegradedProbeRecordsUpAndItsLatency(t *testing.T) {
 	checker := &fakeChecker{}
 	checker.set(goapi.Health{Status: "degraded"}, nil)

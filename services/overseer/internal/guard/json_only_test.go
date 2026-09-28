@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// Architectural must-hold (JSON-only contract): the core is a pure JSON API now,
-// so no bucket emits HTML and `core` no longer imports html/template. This guard
-// fails the build if html/template creeps back into core or any bucket — the
-// escaping invariant has moved to the React client, and a reintroduced
-// html/template import would be a silent regression toward server-rendered HTML.
 func TestNoHTMLTemplateInCoreOrBuckets(t *testing.T) {
 	pkgs := []string{"altune/overseer/internal/core"}
 	pkgs = append(pkgs, bucketPackages(t)...)
@@ -24,7 +19,6 @@ func TestNoHTMLTemplateInCoreOrBuckets(t *testing.T) {
 	}
 }
 
-// bucketPackages lists every concrete bucket import path.
 func bucketPackages(t *testing.T) []string {
 	t.Helper()
 	out, err := exec.Command("go", "list", "altune/overseer/internal/buckets/...").Output()

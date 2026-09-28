@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// fakeSource is a controllable stand-in for the log SSE consumer.
 type fakeSource struct {
 	ch     chan goapi.LogRecord
 	status goapi.Status
@@ -41,10 +40,6 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// pumpSource models the real log SSE consumer: its Run loop keeps pushing records
-// until ITS OWN ctx is cancelled, and it closes stopped when Run returns. That
-// lets a test prove the pump both survives past the first collect tick and exits
-// cleanly on shutdown, driven through the real Start hook.
 type pumpSource struct {
 	ch      chan goapi.LogRecord
 	stopped chan struct{}
@@ -74,12 +69,6 @@ func (p *pumpSource) Run(ctx context.Context) error {
 func (p *pumpSource) Records() <-chan goapi.LogRecord { return p.ch }
 func (p *pumpSource) Status() goapi.Status            { return goapi.StatusUp }
 
-// TestStartKeepsPumpFeedingPastFirstTick drives the log SSE pump through the real
-// app-lifetime Start hook (#1950) and proves it keeps feeding the tail after the
-// first collect tick's ctx is cancelled. Before #1950 the pump was launched from
-// Collect with the per-tick collect-timeout ctx (#1812), so it froze the instant
-// that ctx was cancelled; here a second wave of records proves it now runs on the
-// app ctx. Cancelling that ctx returns the pump goroutine, so nothing leaks.
 func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	src := newPumpSource()
 	b := newBucket(src, "")
@@ -88,14 +77,11 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 
 	b.Start(appCtx)
 
-	// First tick on its own short-lived ctx, then cancel it — the #1812 per-bucket
-	// collect deadline. Under the regression the pump ran on this ctx and froze here.
 	firstCtx, firstCancel := context.WithCancel(context.Background())
 	first, _ := b.Collect(firstCtx)
 	b.Store(first)
 	firstCancel()
 
-	// The pump lives on the app ctx, so later ticks keep draining fresh records.
 	seen := len(first)
 	deadline := time.After(2 * time.Second)
 	for seen < len(first)+logCapacity {
@@ -117,7 +103,6 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	}
 }
 
-// TestBucketRegisters proves the additive-buckets wiring.
 func TestBucketRegisters(t *testing.T) {
 	found := false
 	for _, bk := range core.Default.Buckets() {
@@ -130,9 +115,6 @@ func TestBucketRegisters(t *testing.T) {
 	}
 }
 
-// TestCollectStoreSnapshotRoundTrip is the functional Done proof: records queued on
-// the source are drained, stored, and carried in the snapshot as a live tail with
-// level, message and fields intact.
 func TestCollectStoreSnapshotRoundTrip(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 8)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "queue resumed", Fields: map[string]string{"queue": "q1"}}
@@ -157,7 +139,6 @@ func TestCollectStoreSnapshotRoundTrip(t *testing.T) {
 	}
 }
 
-// TestRingStaysCapped is the resource-exhaustion proof.
 func TestRingStaysCapped(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 0)
 	b := newBucket(src, "")
@@ -175,9 +156,6 @@ func TestRingStaysCapped(t *testing.T) {
 	}
 }
 
-// TestSnapshotSurfacesDroppedCount is the truncation-visibility proof: once the
-// ring is full, the snapshot reports how many older records were evicted, so an
-// operator can tell a full window from a lossy one under a burst.
 func TestSnapshotSurfacesDroppedCount(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 0)
 	b := newBucket(src, "")
@@ -193,8 +171,6 @@ func TestSnapshotSurfacesDroppedCount(t *testing.T) {
 	}
 }
 
-// TestLevelFilter proves the tail filters by minimum level, mirroring go-api's
-// ranking: at ≥ WARN, INFO and DEBUG lines drop and WARN/ERROR remain.
 func TestLevelFilter(t *testing.T) {
 	records := []core.Signal{
 		{Kind: "DEBUG", Text: `{"msg":"d"}`},
@@ -216,8 +192,6 @@ func TestLevelFilter(t *testing.T) {
 	}
 }
 
-// TestSnapshotFiltersByConfiguredLevel proves the configured minimum level is
-// applied end to end through Snapshot.
 func TestSnapshotFiltersByConfiguredLevel(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Level: "INFO", Message: "info-line"}
@@ -235,9 +209,6 @@ func TestSnapshotFiltersByConfiguredLevel(t *testing.T) {
 	}
 }
 
-// TestDegradeToSourceDown is the outlives-the-app proof: with the source down and
-// nothing fresh, Collect signals source-down and the snapshot serves the
-// last-known tail flagged source_down rather than crashing or going blank.
 func TestDegradeToSourceDown(t *testing.T) {
 	src := newFakeSource(goapi.StatusDown, 0)
 	b := newBucket(src, "")
@@ -259,9 +230,6 @@ func TestDegradeToSourceDown(t *testing.T) {
 	}
 }
 
-// TestSeverityCriticalWhenTheTailHoldsAnError is the health-grade proof: the log
-// stream is connected and perfectly fresh, but the watched app is logging an
-// ERROR — so the bucket grades itself critical while State stays live.
 func TestSeverityCriticalWhenTheTailHoldsAnError(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "started"}
@@ -282,8 +250,6 @@ func TestSeverityCriticalWhenTheTailHoldsAnError(t *testing.T) {
 	}
 }
 
-// TestSeverityWarnsWhenTheTailHoldsOnlyWarnings proves the middle grade: warnings
-// with no error are worth a look, not a page.
 func TestSeverityWarnsWhenTheTailHoldsOnlyWarnings(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "WARN", Message: "retrying"}
@@ -295,8 +261,6 @@ func TestSeverityWarnsWhenTheTailHoldsOnlyWarnings(t *testing.T) {
 	}
 }
 
-// TestSeverityOKWhenTheTailIsClean is the arm that has to disagree: the same live
-// stream carrying only INFO grades ok.
 func TestSeverityOKWhenTheTailIsClean(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 4)
 	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "started"}
@@ -313,9 +277,6 @@ func TestSeverityOKWhenTheTailIsClean(t *testing.T) {
 	}
 }
 
-// TestToSignalRedactsDenylistedKeys is the redaction Done proof: every sensitive
-// attr key is stored with its value masked while benign attrs and the message ride
-// through unchanged.
 func TestToSignalRedactsDenylistedKeys(t *testing.T) {
 	for _, key := range []string{"token", "authorization", "email", "password", "secret"} {
 		rec := decodeRecord(toSignal(goapi.LogRecord{
@@ -335,8 +296,6 @@ func TestToSignalRedactsDenylistedKeys(t *testing.T) {
 	}
 }
 
-// TestToSignalRedactsKeyVariants is the attack proof: case and separator variants
-// of a sensitive key cannot smuggle a credential past the key denylist.
 func TestToSignalRedactsKeyVariants(t *testing.T) {
 	for _, key := range []string{"Authorization", "ACCESS TOKEN", "user.email", "api-key", "X-Auth-Token", "Api_Key", "Set-Cookie"} {
 		rec := decodeRecord(toSignal(goapi.LogRecord{
@@ -349,9 +308,6 @@ func TestToSignalRedactsKeyVariants(t *testing.T) {
 	}
 }
 
-// TestSnapshotCarriesRawFields is the escaping-invariant proof (moved to the
-// client): a hostile message and hostile field key/value are carried VERBATIM in
-// the JSON payload for React to escape on render, not mangled by the backend.
 func TestSnapshotCarriesRawFields(t *testing.T) {
 	src := newFakeSource(goapi.StatusUp, 1)
 	src.ch <- goapi.LogRecord{

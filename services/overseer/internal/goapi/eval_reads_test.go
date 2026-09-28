@@ -32,9 +32,6 @@ const adminAcquisitionBody = `{
 	"queue_capacity": 64
 }`
 
-// TestAdminEvalDecodesStubbedResponse is the core Done proof for the eval read:
-// the client hits a stubbed /observe/eval and gets a fully decoded eval-meter
-// status, including the score-vs-baseline and the per-query results.
 func TestAdminEvalDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -70,8 +67,6 @@ func TestAdminEvalDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAdminEvalNoDataLeavesScoreNil proves the "not scored yet" state decodes to
-// a nil Score rather than a spurious zero the panel would render as 0%.
 func TestAdminEvalNoDataLeavesScoreNil(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"enabled":true,"state":"no_data"}`))
@@ -87,9 +82,6 @@ func TestAdminEvalNoDataLeavesScoreNil(t *testing.T) {
 	}
 }
 
-// TestAdminAcquisitionDecodesStubbedResponse is the core Done proof for the
-// acquisition read: the counters and gauges decode and the success rate is
-// computed from succeeded/(succeeded+failed).
 func TestAdminAcquisitionDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/observe/acquisition" {
@@ -116,13 +108,9 @@ func TestAdminAcquisitionDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAcquisitionWindowedRateSeesRecentSpike is the core windowing proof: a
-// lifetime-healthy loop (990/1000 succeeded) that just started failing shows a
-// low rate over the recent delta, so an all-time 99% can no longer mask a current
-// 100% failure spike.
 func TestAcquisitionWindowedRateSeesRecentSpike(t *testing.T) {
-	base := goapi.AcquisitionStatus{Succeeded: 990, Failed: 10} // lifetime ~99%
-	now := goapi.AcquisitionStatus{Succeeded: 990, Failed: 110} // 100 recent failures, none succeeded
+	base := goapi.AcquisitionStatus{Succeeded: 990, Failed: 10}
+	now := goapi.AcquisitionStatus{Succeeded: 990, Failed: 110}
 
 	rate, ok := now.SuccessRateSince(base)
 	if !ok {
@@ -133,9 +121,6 @@ func TestAcquisitionWindowedRateSeesRecentSpike(t *testing.T) {
 	}
 }
 
-// TestAcquisitionWindowedRateUndefinedWithNoRecentCompletions proves an idle
-// window (no completions since prev) is undefined, not a divide-by-zero or a
-// misleading 0%, so the bucket renders "no recent data".
 func TestAcquisitionWindowedRateUndefinedWithNoRecentCompletions(t *testing.T) {
 	base := goapi.AcquisitionStatus{Succeeded: 42, Failed: 7}
 	if rate, ok := base.SuccessRateSince(base); ok || rate != 0 {
@@ -143,9 +128,6 @@ func TestAcquisitionWindowedRateUndefinedWithNoRecentCompletions(t *testing.T) {
 	}
 }
 
-// TestAcquisitionWindowedRateUndefinedAcrossCounterReset proves a go-api restart
-// (cumulative counters drop below the window's baseline) reads as an invalid
-// window, not a negative delta that would corrupt the rate.
 func TestAcquisitionWindowedRateUndefinedAcrossCounterReset(t *testing.T) {
 	base := goapi.AcquisitionStatus{Succeeded: 990, Failed: 10}
 	afterRestart := goapi.AcquisitionStatus{Succeeded: 3, Failed: 1}
@@ -154,11 +136,6 @@ func TestAcquisitionWindowedRateUndefinedAcrossCounterReset(t *testing.T) {
 	}
 }
 
-// TestAcquisitionWindowedRateSurvivesCounterOverflow proves a hostile or corrupt
-// go-api response with counters near the uint64 ceiling cannot wrap the
-// completed-jobs sum: a raw uint64 add would wrap 2^63+2^63 to 0 (spurious "no
-// data") and (2^64-1)+5 to 4 (a rate far above 100%). The delta feeds a float64
-// sum that never wraps, so the rate stays defined and bounded to [0,1].
 func TestAcquisitionWindowedRateSurvivesCounterOverflow(t *testing.T) {
 	const maxU64 = ^uint64(0)
 	for _, tc := range []struct {
@@ -185,8 +162,6 @@ func TestAcquisitionWindowedRateSurvivesCounterOverflow(t *testing.T) {
 	}
 }
 
-// TestEvalAgeReportsElapsedSinceLastRun proves Age measures the score's age from
-// the injected now and reports it as known.
 func TestEvalAgeReportsElapsedSinceLastRun(t *testing.T) {
 	ran := time.Date(2026, 9, 18, 6, 0, 0, 0, time.UTC)
 	now := ran.Add(3 * time.Hour)
@@ -201,19 +176,15 @@ func TestEvalAgeReportsElapsedSinceLastRun(t *testing.T) {
 	}
 }
 
-// TestEvalAgeUnknownWhenNeverRun proves a meter with no last_run has no age — an
-// unscored meter is not "0s old".
 func TestEvalAgeUnknownWhenNeverRun(t *testing.T) {
 	if _, known := (goapi.EvalStatus{}).Age(time.Now()); known {
 		t.Fatal("Age reported known for a meter that never ran")
 	}
 }
 
-// TestEvalStaleByAgePastThreshold proves a score older than the freshness
-// threshold is flagged stale, independent of read reachability.
 func TestEvalStaleByAgePastThreshold(t *testing.T) {
 	ran := time.Date(2026, 9, 13, 6, 0, 0, 0, time.UTC)
-	now := ran.Add(5 * 24 * time.Hour) // the ticket's 5-day-old score
+	now := ran.Add(5 * 24 * time.Hour)
 	e := goapi.EvalStatus{LastRun: &ran}
 
 	if !e.StaleByAge(now, 12*time.Hour) {
@@ -221,8 +192,6 @@ func TestEvalStaleByAgePastThreshold(t *testing.T) {
 	}
 }
 
-// TestEvalFreshWithinThresholdNotStale is the arm that must disagree: a recent
-// score is not stale.
 func TestEvalFreshWithinThresholdNotStale(t *testing.T) {
 	ran := time.Date(2026, 9, 18, 6, 0, 0, 0, time.UTC)
 	now := ran.Add(2 * time.Hour)
@@ -233,21 +202,16 @@ func TestEvalFreshWithinThresholdNotStale(t *testing.T) {
 	}
 }
 
-// TestEvalNeverRunIsNotStale proves an unscored meter is unscored, not stale: a
-// missing last_run must never trip the age flag.
 func TestEvalNeverRunIsNotStale(t *testing.T) {
 	if (goapi.EvalStatus{}).StaleByAge(time.Now(), 12*time.Hour) {
 		t.Fatal("a never-run meter was wrongly flagged stale by age")
 	}
 }
 
-// TestAdminEvalUnreachableYieldsSourceDown proves the degrade path: an
-// unreachable go-api yields the typed source-down error the bucket branches on to
-// serve last-known state flagged stale.
 func TestAdminEvalUnreachableYieldsSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
-	srv.Close() // nothing is listening now
+	srv.Close()
 
 	if _, err := newClient(t, url).AdminEval(context.Background()); !goapi.IsSourceDown(err) {
 		t.Fatalf("AdminEval against a closed server: err = %v, want source-down", err)
@@ -257,9 +221,6 @@ func TestAdminEvalUnreachableYieldsSourceDown(t *testing.T) {
 	}
 }
 
-// TestAdminEvalForbiddenYieldsAPIError proves the auth-rejection path: a
-// non-operator principal is a reachable-but-refused read, so it surfaces as an
-// APIError, NOT source-down. go-api is up; it said no.
 func TestAdminEvalForbiddenYieldsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -277,8 +238,6 @@ func TestAdminEvalForbiddenYieldsAPIError(t *testing.T) {
 	}
 }
 
-// TestAdminEvalAttachesOperatorBearer proves both new reads authenticate as the
-// operator principal: without the bearer go-api's OperatorOnly guard would 403.
 func TestAdminEvalAttachesOperatorBearer(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -302,9 +261,6 @@ func TestAdminEvalAttachesOperatorBearer(t *testing.T) {
 	}
 }
 
-// TestAdminEvalMalformedBodyIsDecodeError proves a garbage 2xx body fails as a
-// decode error, not a silent zero-value status the bucket would mistake for a
-// healthy, unscored meter.
 func TestAdminEvalMalformedBodyIsDecodeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`not json at all`))

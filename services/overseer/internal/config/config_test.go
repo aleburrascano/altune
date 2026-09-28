@@ -21,7 +21,6 @@ const (
 	jwtSecret   = "super-secret-hs256-signing-key-value"
 )
 
-// validEnv is the minimal set that lets Load succeed.
 func validEnv() map[string]string {
 	return map[string]string{
 		"OVERSEER_OWNER_USER_ID":     ownerUserID,
@@ -77,7 +76,6 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
-// JWKSURL derives from the Supabase URL by default, and honors an explicit override.
 func TestJWKSURL(t *testing.T) {
 	setEnv(t, validEnv())
 	cfg, err := config.Load()
@@ -100,8 +98,6 @@ func TestJWKSURL(t *testing.T) {
 	}
 }
 
-// IssuerURL is the GoTrue issuer derived from the project URL, and a JWKS override
-// (where keys come from) must not move it (who signed the token).
 func TestIssuerURL(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_SUPABASE_URL"] = supaURL + "/"
@@ -134,10 +130,6 @@ func TestLoadRejectsBadTick(t *testing.T) {
 	}
 }
 
-// The per-bucket deadline must stay under the goapi client's 10s request timeout, so
-// a bucket's own remote call fails with a reason before the loop cancels it blind. A
-// zero or negative value would make every Collect time out instantly, so it is
-// rejected at startup rather than at the first tick.
 func TestBucketTimeout(t *testing.T) {
 	setEnv(t, validEnv())
 	cfg, err := config.Load()
@@ -166,9 +158,6 @@ func TestBucketTimeout(t *testing.T) {
 	}
 }
 
-// The Cost bucket refreshes OCI billing spend on this slow cadence instead of the
-// 5s tick, so the default must be well above a tick. A malformed value is rejected
-// at startup with its name rather than silently becoming a zero interval.
 func TestCostSpendInterval(t *testing.T) {
 	setEnv(t, validEnv())
 	cfg, err := config.Load()
@@ -197,7 +186,6 @@ func TestCostSpendInterval(t *testing.T) {
 	}
 }
 
-// OVERSEER_BASE_PATH is normalized to a safe outbound prefix.
 func TestLoadNormalizesBasePath(t *testing.T) {
 	cases := []struct {
 		name string
@@ -230,7 +218,6 @@ func TestLoadNormalizesBasePath(t *testing.T) {
 	}
 }
 
-// LogValue must never leak the HS256 JWT secret.
 func TestLogValueRedactsJWTSecret(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_SUPABASE_JWT_SECRET"] = jwtSecret

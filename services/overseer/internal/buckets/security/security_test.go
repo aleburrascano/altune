@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// staticProber drives the suite deterministically: it answers every probe with
-// a fixed status, or reports every probe source-down when downErr is set.
 type staticProber struct {
 	status  int
 	downErr error
@@ -28,8 +26,6 @@ func (p staticProber) do(context.Context, *url.URL) probeResult {
 	return probeResult{status: p.status}
 }
 
-// TestSuitePassesWhenAppRejects proves the whole suite passes when go-api
-// rejects every probe (401): the app is defending itself.
 func TestSuitePassesWhenAppRejects(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), b.scheduler.client, b.scheduler.checks, time.Now))
@@ -44,8 +40,6 @@ func TestSuitePassesWhenAppRejects(t *testing.T) {
 	}
 }
 
-// TestSuiteFailsWhenProbeServed proves a probe that is SERVED (200) fails its
-// check: the defense let it through, which is a regression the panel must show.
 func TestSuiteFailsWhenProbeServed(t *testing.T) {
 	res := runSuite(context.Background(), staticProber{status: 200}, defaultSuite(), time.Now)
 	if res.passed() != 0 {
@@ -53,8 +47,6 @@ func TestSuiteFailsWhenProbeServed(t *testing.T) {
 	}
 }
 
-// TestSuiteFailsOnServerError proves a 500 fails the check: the app fell over
-// rather than cleanly rejecting, which is not a pass.
 func TestSuiteFailsOnServerError(t *testing.T) {
 	res := runSuite(context.Background(), staticProber{status: 500}, defaultSuite(), time.Now)
 	if res.passed() != 0 {
@@ -62,8 +54,6 @@ func TestSuiteFailsOnServerError(t *testing.T) {
 	}
 }
 
-// TestBurstAccepts429 proves the rate-limit check passes when a burst is shed
-// with 429 — the defense holding.
 func TestBurstAccepts429(t *testing.T) {
 	res := runSuite(context.Background(), staticProber{status: 429}, defaultSuite(), time.Now)
 	var burst checkResult
@@ -77,14 +67,10 @@ func TestBurstAccepts429(t *testing.T) {
 	}
 }
 
-// TestDegradeToStale is the degrade-don't-crash proof: after a good run, a run
-// where go-api is fully unreachable preserves the last-known verdict and flags
-// it STALE rather than dropping it.
 func TestDegradeToStale(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), staticProber{status: 401}, defaultSuite(), time.Now))
 
-	// Now a fully-down run: no check reaches go-api.
 	down := runSuite(context.Background(), staticProber{downErr: errors.New("dial tcp: refused")}, defaultSuite(), time.Now)
 	b.record(down)
 
@@ -101,8 +87,6 @@ func TestDegradeToStale(t *testing.T) {
 	}
 }
 
-// TestStaleClearsOnRecovery proves the stale flag clears once go-api is
-// reachable again.
 func TestStaleClearsOnRecovery(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), staticProber{downErr: errors.New("down")}, defaultSuite(), time.Now))
@@ -115,8 +99,6 @@ func TestStaleClearsOnRecovery(t *testing.T) {
 	}
 }
 
-// TestBoundedHistory proves the retained self-test history is capped no matter
-// how many runs record — memory is bounded by construction.
 func TestBoundedHistory(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	for i := 0; i < 4*historyCapacity; i++ {
@@ -127,12 +109,6 @@ func TestBoundedHistory(t *testing.T) {
 	}
 }
 
-// TestStartKeepsSelfTestFiringPastOneRefresh drives the real self-test scheduler
-// through the app-lifetime Start hook (#1950) on a fast cadence and proves a SECOND
-// reachable refresh lands. Before #1950 the scheduler was launched from Collect with
-// the per-tick collect-timeout ctx (#1812), so it ran once and froze; a second
-// history entry proves it now keeps firing. history grows only on a reachable run
-// recorded through the scheduler's sink, so reaching 2 is the once-and-freeze fix.
 func TestStartKeepsSelfTestFiringPastOneRefresh(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Millisecond)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,8 +126,6 @@ func TestStartKeepsSelfTestFiringPastOneRefresh(t *testing.T) {
 	}
 }
 
-// TestSelfRegisters proves the bucket self-registers into the Default registry
-// from its package init via nothing but the blank import — the additive path.
 func TestSelfRegisters(t *testing.T) {
 	found := false
 	for _, bk := range core.Default.Buckets() {
@@ -164,10 +138,6 @@ func TestSelfRegisters(t *testing.T) {
 	}
 }
 
-// TestSeverityCriticalWhenASelfTestFails is the health-grade proof: go-api is
-// perfectly reachable and the verdict is fresh, but it SERVED a probe the
-// hardening is supposed to reject — the defense regressed, so the bucket grades
-// itself critical while State stays live.
 func TestSeverityCriticalWhenASelfTestFails(t *testing.T) {
 	b := newBucket(staticProber{status: 200}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), b.scheduler.client, b.scheduler.checks, time.Now))
@@ -185,8 +155,6 @@ func TestSeverityCriticalWhenASelfTestFails(t *testing.T) {
 	}
 }
 
-// TestSeverityOKWhenEveryDefenseHolds is the arm that has to disagree: the same
-// suite against an app that rejects every probe grades ok.
 func TestSeverityOKWhenEveryDefenseHolds(t *testing.T) {
 	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), b.scheduler.client, b.scheduler.checks, time.Now))
@@ -201,8 +169,6 @@ func TestSeverityOKWhenEveryDefenseHolds(t *testing.T) {
 	}
 }
 
-// TestSeverityWarnsBeforeTheFirstRun proves an unproven suite never reports a
-// green all-clear nobody measured: with no run yet the grade is warn, not ok.
 func TestSeverityWarnsBeforeTheFirstRun(t *testing.T) {
 	snap := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour).Snapshot()
 
@@ -214,9 +180,6 @@ func TestSeverityWarnsBeforeTheFirstRun(t *testing.T) {
 	}
 }
 
-// TestUnconfiguredDegrades proves an unconfigured bucket (no go-api URL) builds a
-// null prober and reports source_down rather than crashing. A fully-down first run
-// leaves no last-known verdict, so the payload's HasRun is false.
 func TestUnconfiguredDegrades(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	if _, ok := clientFromEnv().(nullProber); !ok {
@@ -225,7 +188,7 @@ func TestUnconfiguredDegrades(t *testing.T) {
 	b := newBucket(nullProber{}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), nullProber{}, defaultSuite(), time.Now))
 
-	snap := b.Snapshot() // must not panic
+	snap := b.Snapshot()
 	if snap.State != core.StateSourceDown {
 		t.Errorf("unconfigured state = %q, want source_down", snap.State)
 	}

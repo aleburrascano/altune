@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// countingTransport records how many requests actually left the client, so a
-// test can prove the fence refuses BEFORE a socket is opened.
 type countingTransport struct {
 	calls atomic.Int32
 	inner http.RoundTripper
@@ -26,8 +24,6 @@ func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return nil, errors.New("no inner transport")
 }
 
-// newTestClient builds a fenced client allowing only "allowed.test" with a
-// counting transport wired in, so the fence test can assert no request is sent.
 func newTestClient(t *testing.T) (*fencedClient, *countingTransport) {
 	t.Helper()
 	c, err := newFencedClient("https://allowed.test", []string{"allowed.test"})
@@ -39,18 +35,12 @@ func newTestClient(t *testing.T) (*fencedClient, *countingTransport) {
 	return c, ct
 }
 
-// TestFenceRefusesOffAllowlistNoRequestSent is the load-bearing invariant: point
-// a probe at a host that is not on the allowlist and it is REFUSED without a
-// socket being opened. The counting transport proves the http.Client was never
-// touched — the fence is structural, not a post-hoc check on a sent request.
 func TestFenceRefusesOffAllowlistNoRequestSent(t *testing.T) {
 	c, ct := newTestClient(t)
 
 	offTargets := []*url.URL{
 		{Scheme: "https", Host: "evil.example", Path: "/v1/library"},
-		// link-local cloud metadata address — a classic SSRF target
 		{Scheme: "http", Host: "169.254.169.254", Path: "/latest/meta-data"},
-		// suffix trick: an allowlisted name as a subdomain of an attacker host
 		{Scheme: "https", Host: "allowed.test.evil.example", Path: "/"},
 		{Scheme: "https", Host: "localhost", Path: "/"},
 	}
@@ -65,8 +55,6 @@ func TestFenceRefusesOffAllowlistNoRequestSent(t *testing.T) {
 	}
 }
 
-// TestFenceAllowsAllowlistedHost proves the fence is not a blanket deny: a probe
-// to the allowlisted base host reaches the transport.
 func TestFenceAllowsAllowlistedHost(t *testing.T) {
 	c, _ := newTestClient(t)
 	ct := &countingTransport{inner: roundTripStatus(401)}
@@ -84,18 +72,12 @@ func TestFenceAllowsAllowlistedHost(t *testing.T) {
 	}
 }
 
-// TestNewFencedClientFailsClosed proves a base host absent from its own
-// allowlist is rejected at construction, not left to refuse every probe at
-// runtime.
 func TestNewFencedClientFailsClosed(t *testing.T) {
 	if _, err := newFencedClient("https://api.test", []string{"other.test"}); err == nil {
 		t.Fatal("newFencedClient accepted a base host off its own allowlist, want fail-closed")
 	}
 }
 
-// TestProbeIssuesGetOnly is the no-mutation proof: every probe the client sends
-// is a GET with no body, so the suite cannot mutate go-api state by
-// construction. A recording server captures the actual method and body.
 func TestProbeIssuesGetOnly(t *testing.T) {
 	var gotMethod, gotBody atomic.Value
 	gotMethod.Store("")
@@ -114,7 +96,6 @@ func TestProbeIssuesGetOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newFencedClient: %v", err)
 	}
-	// Run the whole default suite against the recording server.
 	_ = runSuite(context.Background(), c, defaultSuite(), func() time.Time { return time.Unix(0, 0) })
 
 	if m := gotMethod.Load().(string); m != http.MethodGet {
@@ -125,13 +106,8 @@ func TestProbeIssuesGetOnly(t *testing.T) {
 	}
 }
 
-// TestFenceBlocksRedirectOffAllowlist proves a redirect cannot bounce a probe to
-// an off-allowlist host: the client refuses to follow redirects, returning the
-// 3xx as-is rather than chasing it to another host.
 func TestFenceBlocksRedirectOffAllowlist(t *testing.T) {
 	var followed atomic.Bool
-	// A server that 302s to an off-allowlist absolute URL. If the client followed
-	// it, evil would be hit; CheckRedirect must stop that.
 	evil := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		followed.Store(true)
 	}))
@@ -158,7 +134,6 @@ func TestFenceBlocksRedirectOffAllowlist(t *testing.T) {
 	}
 }
 
-// roundTripStatus is a RoundTripper that answers every request with status.
 func roundTripStatus(status int) http.RoundTripper {
 	return roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: status, Body: http.NoBody, Header: make(http.Header)}, nil

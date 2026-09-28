@@ -17,11 +17,8 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 )
 
-// jwksServer serves a JWKS with one ES256 key for the given kid, backed by key.
 func jwksServer(t *testing.T, kid string, key *ecdsa.PrivateKey) *httptest.Server {
 	t.Helper()
-	// Encode the public point without touching the deprecated X/Y fields: Bytes()
-	// yields the uncompressed SEC1 form (0x04 || X || Y), 65 bytes for P-256.
 	pub, err := key.PublicKey.Bytes()
 	if err != nil {
 		t.Fatalf("public key bytes: %v", err)
@@ -59,15 +56,11 @@ func genKey(t *testing.T) *ecdsa.PrivateKey {
 	return k
 }
 
-// testIssuer stands in for {SupabaseURL}/auth/v1, the issuer the verifier is
-// built against; testAudience is GoTrue's signed-in-user audience.
 const (
 	testIssuer   = "https://proj.supabase.co/auth/v1"
 	testAudience = "authenticated"
 )
 
-// validClaims is what a live Supabase access token carries: the owner's subject,
-// the project issuer, the signed-in audience, and an unexpired exp.
 func validClaims(sub string) jwt.RegisteredClaims {
 	return jwt.RegisteredClaims{
 		Subject:   sub,
@@ -78,8 +71,6 @@ func validClaims(sub string) jwt.RegisteredClaims {
 	}
 }
 
-// TestVerifiesValidES256Token: a JWKS-signed ES256 token verifies and yields its
-// subject.
 func TestVerifiesValidES256Token(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -96,7 +87,6 @@ func TestVerifiesValidES256Token(t *testing.T) {
 	}
 }
 
-// TestRejectsExpiredToken: an expired token fails verification.
 func TestRejectsExpiredToken(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -111,8 +101,6 @@ func TestRejectsExpiredToken(t *testing.T) {
 	}
 }
 
-// TestRejectsWrongSignature: a token signed by a different key than the JWKS
-// advertises fails.
 func TestRejectsWrongSignature(t *testing.T) {
 	srvKey := genKey(t)
 	attackerKey := genKey(t)
@@ -126,15 +114,12 @@ func TestRejectsWrongSignature(t *testing.T) {
 	}
 }
 
-// TestRejectsAlgNone is the classic downgrade attack: an unsigned alg=none token
-// must never be accepted.
 func TestRejectsAlgNone(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
 	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
-	// Build an alg=none token by hand: header.payload with an empty signature.
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
 	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"owner-sub","exp":9999999999}`))
 	token := header + "." + payload + "."
@@ -143,14 +128,11 @@ func TestRejectsAlgNone(t *testing.T) {
 	}
 }
 
-// TestRejectsHS256WhenNoSecret is the algorithm-confusion guard: with no HS secret
-// configured, an HS256 token (which an attacker could try to sign with the public
-// key material) is rejected outright.
 func TestRejectsHS256WhenNoSecret(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, testIssuer, "", srv.Client()) // no HS secret
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, validClaims("owner-sub"))
 	signed, err := tok.SignedString([]byte("attacker-guess"))
@@ -162,8 +144,6 @@ func TestRejectsHS256WhenNoSecret(t *testing.T) {
 	}
 }
 
-// TestVerifiesHS256WhenSecretConfigured: a legacy HS256 project secret verifies
-// HS256 tokens when explicitly configured.
 func TestVerifiesHS256WhenSecretConfigured(t *testing.T) {
 	secret := "legacy-hs256-secret"
 	v := authn.New("http://unused.invalid/jwks", testIssuer, secret, http.DefaultClient)
@@ -182,7 +162,6 @@ func TestVerifiesHS256WhenSecretConfigured(t *testing.T) {
 	}
 }
 
-// TestRejectsUnknownKid: a token whose kid is not in the JWKS fails closed.
 func TestRejectsUnknownKid(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -195,8 +174,6 @@ func TestRejectsUnknownKid(t *testing.T) {
 	}
 }
 
-// TestRejectsMissingSubject: a verified token with no subject claim has no identity
-// to allowlist and is rejected.
 func TestRejectsMissingSubject(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -210,10 +187,6 @@ func TestRejectsMissingSubject(t *testing.T) {
 	}
 }
 
-// TestVerifiesTokenWithStringEncodedAudience: GoTrue puts aud on the wire as a
-// plain string ("aud":"authenticated"), not the one-element array the typed
-// fixture above produces. Binding to the audience must accept the shape real
-// tokens actually carry, or every owner login breaks while the suite stays green.
 func TestVerifiesTokenWithStringEncodedAudience(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -241,9 +214,6 @@ func TestVerifiesTokenWithStringEncodedAudience(t *testing.T) {
 	}
 }
 
-// TestRejectsForeignIssuer: a token the project's own keys signed, carrying the
-// owner's subject, is still rejected when another issuer minted it. The owner sub
-// allowlist is not the only binding.
 func TestRejectsForeignIssuer(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -258,8 +228,6 @@ func TestRejectsForeignIssuer(t *testing.T) {
 	}
 }
 
-// TestRejectsForeignAudience: a correctly-signed owner token minted for another
-// audience (a service_role or anon token from the same project) is rejected.
 func TestRejectsForeignAudience(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -274,10 +242,6 @@ func TestRejectsForeignAudience(t *testing.T) {
 	}
 }
 
-// TestRejectsAbsentIssuerClaim pins the library behaviour the binding rests on: a
-// token that simply omits iss must fail, not skip the check. Some JWT libraries
-// (and older golang-jwt v5 releases) treat an absent claim as "nothing to compare",
-// which would let a claim-stripped token walk straight past the issuer binding.
 func TestRejectsAbsentIssuerClaim(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -292,8 +256,6 @@ func TestRejectsAbsentIssuerClaim(t *testing.T) {
 	}
 }
 
-// TestRejectsAbsentAudienceClaim is the aud half of the claim-stripping attack: an
-// omitted aud must fail closed rather than skip the audience check.
 func TestRejectsAbsentAudienceClaim(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -308,9 +270,6 @@ func TestRejectsAbsentAudienceClaim(t *testing.T) {
 	}
 }
 
-// TestRejectsEverythingWithNoExpectedIssuer: a Verifier built with no issuer has no
-// binding to enforce, so it rejects even an otherwise-valid token rather than
-// verifying with the check silently switched off.
 func TestRejectsEverythingWithNoExpectedIssuer(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
@@ -323,7 +282,6 @@ func TestRejectsEverythingWithNoExpectedIssuer(t *testing.T) {
 	}
 }
 
-// TestRejectsGarbage: a non-JWT string fails cleanly, never panics.
 func TestRejectsGarbage(t *testing.T) {
 	v := authn.New("http://unused.invalid/jwks", testIssuer, "", http.DefaultClient)
 	for _, bad := range []string{"", "not-a-jwt", "a.b", "a.b.c.d"} {

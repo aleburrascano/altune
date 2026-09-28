@@ -8,31 +8,15 @@ import (
 )
 
 const (
-	sparkPoints = 30
-	sparkWindow = time.Hour
-	// sparkRefresh is how often a bucket's spark is re-read from the store.
-	// Rollups are minute-grained, so refreshing more often than this buys no
-	// fresher data — it would only re-run the same query against the single
-	// SQLite connection every 2s SSE tick, per connected client.
+	sparkPoints  = 30
+	sparkWindow  = time.Hour
 	sparkRefresh = time.Minute
 )
 
-// TailReader is the optional push-down seam a SeriesReader implements when it can
-// bound a query to its most recent N points in SQL rather than fetching the whole
-// window and trimming in Go. The spark path is the only caller: it always wants
-// the tail, never the full window, so pushing the LIMIT into the query keeps a
-// long-lived series cheap to read regardless of how many rows it holds.
 type TailReader interface {
 	Tail(bucket, series string, from, to time.Time, limit int) ([]core.Point, error)
 }
 
-// spark builds a bucket's spark, cached and refreshed at most once per
-// sparkRefresh so N clients (every SSE connection re-emitting every
-// streamInterval, plus every /api/buckets GET) cost at most one store read per
-// bucket per refresh window, not one per frame. It carries its own recover: a
-// panic in the bucket's KeySeries() or in the underlying history read degrades
-// this one bucket's spark to nil rather than the snapshot safeSnapshot already
-// built, matching the degrade-don't-crash invariant on the render side.
 func (h *Handler) spark(b core.Bucket, id string) (spark []core.SparkPoint) {
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -53,9 +37,6 @@ func (h *Handler) spark(b core.Bucket, id string) (spark []core.SparkPoint) {
 	})
 }
 
-// readSpark performs the actual bounded history read, tail-limited in SQL when
-// the reader supports it (every production reader does; test fakes that only
-// implement SeriesReader fall back to a full-window read trimmed in Go).
 func (h *Handler) readSpark(id, name string) ([]core.SparkPoint, error) {
 	to := time.Now().UTC()
 	points, err := h.queryTail(id, name, to.Add(-sparkWindow), to)
@@ -83,10 +64,6 @@ func (h *Handler) queryTail(bucket, series string, from, to time.Time) ([]core.P
 	return points, nil
 }
 
-// sparkEntry holds one bucket's cached spark and the bookkeeping for a
-// once-per-refresh-window read: the last successfully read spark (served on a
-// failed read, never dropped), when it was fetched, and whether the current
-// failure streak has already been logged.
 type sparkEntry struct {
 	mu        sync.Mutex
 	points    []core.SparkPoint
@@ -94,11 +71,6 @@ type sparkEntry struct {
 	failing   bool
 }
 
-// sparkCache serves every bucket's spark from a small per-bucket cache refreshed
-// at most once per sparkRefresh. Refreshing holds only the entry's own lock —
-// never the cache's map lock, and never anything the snapshot path holds — so a
-// slow or contended store read blocks at most the other callers racing to
-// refresh the SAME bucket, not the whole response.
 type sparkCache struct {
 	mu      sync.Mutex
 	entries map[string]*sparkEntry
@@ -120,10 +92,6 @@ func (c *sparkCache) entry(id string) *sparkEntry {
 	return e
 }
 
-// load serves the bucket's cached spark, refreshing through read at most once
-// per sparkRefresh. A refresh that fails logs once per failure streak (not once
-// per call) and serves the last good spark, which is nil until the first
-// successful read ever completes.
 func (c *sparkCache) load(id string, read func() ([]core.SparkPoint, error)) []core.SparkPoint {
 	e := c.entry(id)
 	e.mu.Lock()

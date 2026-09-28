@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// Spine invariant: bounded storage, always. Feeding N x capacity must never grow
-// the store past its bound.
 func TestRingStoreStaysBounded(t *testing.T) {
 	const capacity = 8
 	s := core.NewRingStore(capacity)
@@ -28,7 +26,6 @@ func TestRingStoreStaysBounded(t *testing.T) {
 	}
 }
 
-// The ring must retain the most recent capacity signals, oldest first.
 func TestRingStoreRetainsNewest(t *testing.T) {
 	const capacity = 3
 	s := core.NewRingStore(capacity)
@@ -48,8 +45,6 @@ func TestRingStoreRetainsNewest(t *testing.T) {
 	}
 }
 
-// Filling the ring exactly to capacity evicts nothing, so the wrap boundary does
-// not report a phantom drop.
 func TestRingStoreDropsNothingUntilFull(t *testing.T) {
 	const capacity = 4
 	s := core.NewRingStore(capacity)
@@ -63,8 +58,6 @@ func TestRingStoreDropsNothingUntilFull(t *testing.T) {
 	}
 }
 
-// Once full, every Add overwrites the oldest entry and counts exactly one drop,
-// so the dropped total equals the overflow beyond capacity.
 func TestRingStoreCountsEachOverwriteOnceFull(t *testing.T) {
 	const capacity = 4
 	s := core.NewRingStore(capacity)
@@ -78,9 +71,6 @@ func TestRingStoreCountsEachOverwriteOnceFull(t *testing.T) {
 	}
 }
 
-// The dropped counter is guarded by the store's own lock, so concurrent Adds and
-// Dropped reads (the collect loop writing while an HTTP render reads) neither race
-// nor lose a count. Run under -race.
 func TestRingStoreDroppedIsRaceFreeUnderConcurrentAddAndRead(t *testing.T) {
 	const capacity = 8
 	const adds = 10000
@@ -107,7 +97,6 @@ func TestRingStoreDroppedIsRaceFreeUnderConcurrentAddAndRead(t *testing.T) {
 	}
 }
 
-// A non-positive capacity must be clamped, never unbounded and never panicking.
 func TestRingStoreClampsCapacity(t *testing.T) {
 	for _, c := range []int{0, -5} {
 		s := core.NewRingStore(c)

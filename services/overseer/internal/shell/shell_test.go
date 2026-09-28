@@ -15,11 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// TestBucketsAPIReturnsSortedSnapshots is the core Done proof for the JSON API:
-// GET /api/buckets returns {"buckets":[...]} ID-sorted, one snapshot per bucket.
 func TestBucketsAPIReturnsSortedSnapshots(t *testing.T) {
-	// Register out of order into a real core registry, whose Buckets() sorts by ID
-	// — the sort guarantee the API relies on.
 	reg := core.NewRegistry()
 	reg.Register(stubBucket{id: "usage", state: core.StateLive})
 	reg.Register(stubBucket{id: "liveactivity", state: core.StateLive})
@@ -41,15 +37,11 @@ func TestBucketsAPIReturnsSortedSnapshots(t *testing.T) {
 	if len(resp.Buckets) != 2 {
 		t.Fatalf("buckets = %d, want 2", len(resp.Buckets))
 	}
-	// Registry sorts by ID.
 	if resp.Buckets[0].ID != "liveactivity" || resp.Buckets[1].ID != "usage" {
 		t.Errorf("order = %s,%s, want liveactivity,usage", resp.Buckets[0].ID, resp.Buckets[1].ID)
 	}
 }
 
-// Must-hold (outlives-the-app): a bucket reporting source_down is still served, the
-// shell stays 200, and the open /health + SPA keep responding — never a blank,
-// never a crash.
 func TestSourceDownBucketStillServedAndShellUp(t *testing.T) {
 	reg := fixedRegistry{buckets: []core.Bucket{stubBucket{id: "reliability", state: core.StateSourceDown}}}
 	srv := newServer(reg)
@@ -70,9 +62,6 @@ func TestSourceDownBucketStillServedAndShellUp(t *testing.T) {
 	}
 }
 
-// Must-hold (degrade-don't-crash): a bucket that panics on Snapshot is contained
-// and reported as a source_down snapshot; siblings still render and the response
-// stays 200.
 func TestPanickingBucketContained(t *testing.T) {
 	reg := fixedRegistry{buckets: []core.Bucket{panicBucket{}, stubBucket{id: "ok", state: core.StateLive}}}
 	srv := newServer(reg)
@@ -99,8 +88,6 @@ func TestPanickingBucketContained(t *testing.T) {
 	}
 }
 
-// Must-hold (live channel is authed): the SSE stream rejects an unauthenticated
-// reader with 401 and a non-owner with 403.
 func TestStreamIsGuarded(t *testing.T) {
 	srv := newServer(fixedRegistry{buckets: []core.Bucket{stubBucket{id: "a", state: core.StateLive}}})
 
@@ -114,8 +101,6 @@ func TestStreamIsGuarded(t *testing.T) {
 	}
 }
 
-// The SSE stream emits a data frame per bucket to an authed owner, using a
-// cancellable context so the handler returns.
 func TestStreamEmitsFrames(t *testing.T) {
 	srv := newServer(fixedRegistry{buckets: []core.Bucket{stubBucket{id: "liveactivity", state: core.StateLive}}})
 
@@ -128,7 +113,6 @@ func TestStreamEmitsFrames(t *testing.T) {
 		srv.ServeHTTP(rec, req)
 		close(done)
 	}()
-	// The initial paint is synchronous; give the goroutine a moment then cancel.
 	time.Sleep(30 * time.Millisecond)
 	cancel()
 	<-done
@@ -155,8 +139,6 @@ func TestStreamEmitsFrames(t *testing.T) {
 	}
 }
 
-// Open routes carry no data guard: /health, /config.json and the SPA are served
-// without a token. /config.json returns the public Supabase client config.
 func TestOpenRoutes(t *testing.T) {
 	srv := newServer(fixedRegistry{})
 
@@ -185,10 +167,6 @@ func TestOpenRoutes(t *testing.T) {
 	}
 }
 
-// Must-hold (observe-only): the JSON API exposes no mutating route. Every mounted
-// route is a GET — there is no POST/PUT/PATCH/DELETE anywhere on the surface, so
-// the observe-only invariant holds on the new HTTP surface, not just the go-api
-// client.
 func TestOnlyGetRoutes(t *testing.T) {
 	srv := newServer(fixedRegistry{})
 	routes, ok := srv.(chi.Routes)
@@ -206,9 +184,6 @@ func TestOnlyGetRoutes(t *testing.T) {
 	}
 }
 
-// Must-hold (failure detection): /health is the collect loop's liveness, not a
-// hardcoded ok. A stalled loop must answer non-200, or the container healthcheck and
-// the off-box uptime probe both read a listening socket as a working Overseer.
 func TestHealthIsNon200WhenTheCollectLoopStalled(t *testing.T) {
 	lastCycle := time.Date(2026, 9, 18, 10, 0, 0, 0, time.UTC)
 	srv := newServer(fixedRegistry{}, fixedCollectStatus(shell.CollectStatus{
@@ -240,9 +215,6 @@ func TestHealthIsNon200WhenTheCollectLoopStalled(t *testing.T) {
 	}
 }
 
-// Must-hold (outlives-the-app): buckets failing is the watched app being down, not
-// Overseer being down. A live loop whose every bucket failed keeps /health at 200 —
-// the whole point of a control room is to stay up while the thing it watches is not.
 func TestHealthStaysOKWhenEveryBucketFailedButTheLoopRan(t *testing.T) {
 	srv := newServer(fixedRegistry{}, fixedCollectStatus(shell.CollectStatus{
 		Healthy:   true,
@@ -261,7 +233,6 @@ func TestHealthStaysOKWhenEveryBucketFailedButTheLoopRan(t *testing.T) {
 	}
 }
 
-// An unknown deep-link path falls back to the SPA index (client-side routing).
 func TestSPAFallback(t *testing.T) {
 	srv := newServer(fixedRegistry{})
 	rec := do(srv, httptest.NewRequest(http.MethodGet, "/some/deep/link", nil))

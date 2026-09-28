@@ -25,8 +25,6 @@ const adminHealthBody = `{
 	"heap_mb": 17
 }`
 
-// TestAdminHealthDecodesStubbedResponse is the core Done proof: the client hits a
-// stubbed go-api /observe/health and gets a fully decoded operator health snapshot.
 func TestAdminHealthDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -59,8 +57,6 @@ func TestAdminHealthDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAdminHealthReportsDownDependency proves a degraded snapshot decodes and the
-// down verdict propagates: a single down pill flips Healthy and carries its error.
 func TestAdminHealthReportsDownDependency(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"db":"ok","redis":"down","auth":"ok","detail":{"redis_error":"dial tcp: connection refused"}}`))
@@ -79,9 +75,6 @@ func TestAdminHealthReportsDownDependency(t *testing.T) {
 	}
 }
 
-// TestAdminHealthAttachesOperatorBearer proves the operator principal is
-// authenticated on the operator-guarded read: the request carries the token from
-// the single TokenSource. Without it, go-api's OperatorOnly guard would 403.
 func TestAdminHealthAttachesOperatorBearer(t *testing.T) {
 	var gotAuth, gotAccept string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,13 +95,10 @@ func TestAdminHealthAttachesOperatorBearer(t *testing.T) {
 	}
 }
 
-// TestAdminHealthUnreachableYieldsSourceDown is the other Done proof: an
-// unreachable go-api yields the typed source-down error buckets branch on to
-// serve last-known state flagged stale.
 func TestAdminHealthUnreachableYieldsSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
-	srv.Close() // nothing is listening now
+	srv.Close()
 
 	_, err := newClient(t, url).AdminHealth(context.Background())
 	if err == nil {
@@ -123,9 +113,6 @@ func TestAdminHealthUnreachableYieldsSourceDown(t *testing.T) {
 	}
 }
 
-// TestAdminHealthForbiddenYieldsAPIError proves the auth-rejection path: a
-// non-operator principal (or a rejected token) is a reachable-but-refused read,
-// so it surfaces as an APIError, NOT source-down. go-api is up; it said no.
 func TestAdminHealthForbiddenYieldsAPIError(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -148,12 +135,10 @@ func TestAdminHealthForbiddenYieldsAPIError(t *testing.T) {
 	}
 }
 
-// TestAdminHealthTimeoutIsSourceDown proves a hung go-api cannot wedge a collect
-// cycle: it surfaces as source-down within the configured timeout.
 func TestAdminHealthTimeoutIsSourceDown(t *testing.T) {
 	block := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		<-block // never respond within the timeout
+		<-block
 	}))
 	defer srv.Close()
 	defer close(block)
@@ -167,9 +152,6 @@ func TestAdminHealthTimeoutIsSourceDown(t *testing.T) {
 	}
 }
 
-// TestAdminHealthMalformedBodyIsDecodeError proves a hostile/garbage 2xx body
-// fails as a decode error, not a silent zero-value snapshot the bucket would
-// mistake for a healthy app.
 func TestAdminHealthMalformedBodyIsDecodeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`not json at all`))
@@ -181,9 +163,6 @@ func TestAdminHealthMalformedBodyIsDecodeError(t *testing.T) {
 	}
 }
 
-// TestAdminHealthOversizedBodyIsBounded proves a runaway response body cannot
-// exhaust Overseer's memory: the read is capped, so a multi-megabyte reply fails
-// rather than being swallowed whole.
 func TestAdminHealthOversizedBodyIsBounded(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"db":"`))
@@ -197,9 +176,6 @@ func TestAdminHealthOversizedBodyIsBounded(t *testing.T) {
 	}
 }
 
-// TestAdminHealthTokenSourceErrorFailsClosed proves no operator read leaves
-// without credentials: a TokenSource error stops the call before any transport,
-// so the operator bearer is never sent half-formed.
 func TestAdminHealthTokenSourceErrorFailsClosed(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -207,7 +183,7 @@ func TestAdminHealthTokenSourceErrorFailsClosed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := goapi.New(srv.URL, goapi.StaticTokenSource("")) // empty => ErrNoToken
+	c, err := goapi.New(srv.URL, goapi.StaticTokenSource(""))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

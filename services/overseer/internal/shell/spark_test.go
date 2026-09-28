@@ -126,13 +126,10 @@ func TestBucketsOmitSparkWhenTheHistoryReadFails(t *testing.T) {
 	}
 }
 
-// panicKeySeriesBucket panics inside KeySeries, the seam h.spark reads before it
-// ever reaches the store.
 type panicKeySeriesBucket struct{ stubBucket }
 
 func (panicKeySeriesBucket) KeySeries() string { panic("keyseries blew up") }
 
-// panicSeries panics inside the history read h.spark drives.
 type panicSeries struct{}
 
 func (panicSeries) Names(string) ([]string, error) { return nil, nil }
@@ -141,10 +138,6 @@ func (panicSeries) Query(string, string, time.Time, time.Time) ([]core.Point, er
 	panic("query blew up")
 }
 
-// TestBucketsSurviveAPanickingKeySeries proves a panic in a bucket's KeySeries
-// degrades only that bucket's spark to nil rather than crashing the whole
-// /api/buckets response — the same degrade-don't-crash guarantee safeSnapshot
-// gives Snapshot, now extended to the spark read that runs alongside it.
 func TestBucketsSurviveAPanickingKeySeries(t *testing.T) {
 	reg := fixedRegistry{buckets: []core.Bucket{
 		panicKeySeriesBucket{stubBucket: stubBucket{id: "boom", state: core.StateLive}},
@@ -162,8 +155,6 @@ func TestBucketsSurviveAPanickingKeySeries(t *testing.T) {
 	}
 }
 
-// TestBucketsSurviveAPanickingHistoryRead proves the same containment when the
-// panic happens one level deeper, inside the history read itself.
 func TestBucketsSurviveAPanickingHistoryRead(t *testing.T) {
 	reg := fixedRegistry{buckets: []core.Bucket{
 		keyedStubBucket{stubBucket: stubBucket{id: "reliability", state: core.StateLive}, key: "latency_ms"},
@@ -180,9 +171,6 @@ func TestBucketsSurviveAPanickingHistoryRead(t *testing.T) {
 	}
 }
 
-// TestStreamSurvivesAPanickingKeySeries proves the SSE path, which drives the
-// same snapshots() through emitAll, gets the same containment: a panicking
-// bucket among several never stops the frame that carries the rest.
 func TestStreamSurvivesAPanickingKeySeries(t *testing.T) {
 	reg := fixedRegistry{buckets: []core.Bucket{
 		panicKeySeriesBucket{stubBucket: stubBucket{id: "boom", state: core.StateLive}},

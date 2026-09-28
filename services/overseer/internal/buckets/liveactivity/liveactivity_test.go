@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// fakeSource is a controllable stand-in for the SSE consumer: a test pushes
-// events onto it and flips its status, so the collect/snapshot/degrade paths are
-// exercised deterministically with no network and no wall-clock timing.
 type fakeSource struct {
 	events chan goapi.Event
 	status atomic.Int32
@@ -31,7 +28,6 @@ func (f *fakeSource) Status() goapi.Status          { return goapi.Status(f.stat
 func (f *fakeSource) setStatus(s goapi.Status)      { f.status.Store(int32(s)) }
 func (f *fakeSource) push(ev goapi.Event)           { f.events <- ev }
 
-// collectStore runs one collect/store cycle, the pair the shell drives on a tick.
 func collectStore(t *testing.T, b *Bucket) {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
@@ -41,7 +37,6 @@ func collectStore(t *testing.T, b *Bucket) {
 	b.Store(signals)
 }
 
-// snapData unmarshals a snapshot's Data into the bucket's typed payload.
 func snapData(t *testing.T, snap core.Snapshot) Data {
 	t.Helper()
 	var d Data
@@ -51,10 +46,6 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// TestCollectStoreSnapshotLiveFeed is the core Done proof: events flow from the
-// source into the bounded ring and appear in the snapshot as a live feed, with the
-// raw (unescaped) watched-app text carried in the JSON payload — escaping is the
-// frontend's job now, so the API must carry the value verbatim.
 func TestCollectStoreSnapshotLiveFeed(t *testing.T) {
 	src := newFakeSource(8)
 	b := newBucket(src)
@@ -83,8 +74,6 @@ func TestCollectStoreSnapshotLiveFeed(t *testing.T) {
 	if d.InFlightAvailable {
 		t.Error("inFlightAvailable = true, want false (no go-api in-flight read yet)")
 	}
-	// The raw, unescaped watched-app text must be carried verbatim; the frontend
-	// (React) escapes it on render.
 	if d.Events[1].Text != "search.performed <script>jazz" {
 		t.Errorf("event text = %q, want raw unescaped subject", d.Events[1].Text)
 	}
@@ -93,9 +82,6 @@ func TestCollectStoreSnapshotLiveFeed(t *testing.T) {
 	}
 }
 
-// TestEventCorrelationIDPropagatesToSignal proves the corr id go-api stamps on an
-// event survives into the stored signal and the snapshot payload, so an operator
-// can tie a live event to the go-api log line for the same request.
 func TestEventCorrelationIDPropagatesToSignal(t *testing.T) {
 	src := newFakeSource(4)
 	b := newBucket(src)
@@ -112,9 +98,6 @@ func TestEventCorrelationIDPropagatesToSignal(t *testing.T) {
 	}
 }
 
-// TestDegradesToSourceDownWhenSourceDown is the spine proof: drop the source and
-// the snapshot flips to source_down while still carrying the last-known feed, so
-// the panel never goes blank.
 func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 	src := newFakeSource(8)
 	b := newBucket(src)
@@ -125,7 +108,7 @@ func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 		t.Fatalf("pre-drop state = %q, want live", snap.State)
 	}
 
-	src.setStatus(goapi.StatusDown) // the source drops
+	src.setStatus(goapi.StatusDown)
 
 	snap := b.Snapshot()
 	if snap.State != core.StateSourceDown {
@@ -137,10 +120,6 @@ func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 	}
 }
 
-// TestHeadlineSurvivesTheSourceGoingDown proves the health half is read off the
-// payload, not off freshness: the source drops, State flips to source_down, and
-// the headline still reports the feed the bucket is serving. Live activity grades
-// ok by construction — a domain-event feed carries what happened, not what failed.
 func TestHeadlineSurvivesTheSourceGoingDown(t *testing.T) {
 	src := newFakeSource(8)
 	b := newBucket(src)
@@ -164,8 +143,6 @@ func TestHeadlineSurvivesTheSourceGoingDown(t *testing.T) {
 	}
 }
 
-// TestConnectingIsStale proves the third state: a source that is connecting (not
-// yet up, not down) reports stale.
 func TestConnectingIsStale(t *testing.T) {
 	src := newFakeSource(1)
 	src.setStatus(goapi.StatusConnecting)
@@ -175,9 +152,6 @@ func TestConnectingIsStale(t *testing.T) {
 	}
 }
 
-// TestCollectReportsSourceDownWithNoFreshEvents proves Collect follows the Bucket
-// contract: an unreachable source with nothing fresh returns an error (so the
-// shell keeps last-known state), while a healthy source returns no error.
 func TestCollectReportsSourceDownWithNoFreshEvents(t *testing.T) {
 	src := newFakeSource(1)
 	b := newBucket(src)
@@ -193,8 +167,6 @@ func TestCollectReportsSourceDownWithNoFreshEvents(t *testing.T) {
 	}
 }
 
-// TestStaysBoundedUnderLoad is the bounded-storage proof: feeding many times the
-// ring capacity never grows retained storage past the cap.
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	src := newFakeSource(4 * eventCapacity)
 	b := newBucket(src)
@@ -214,9 +186,6 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
-// TestSnapshotSurfacesDroppedCount is the truncation-visibility proof: once the
-// ring is full the snapshot reports how many older events were evicted, so an
-// operator can tell a full feed from a lossy one under a burst.
 func TestSnapshotSurfacesDroppedCount(t *testing.T) {
 	const overflow = 30
 	src := newFakeSource(eventCapacity + overflow)
@@ -231,9 +200,6 @@ func TestSnapshotSurfacesDroppedCount(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndSnapshot is the concurrency attack: the collect/store
-// cycle and Snapshot run together (as the tick loop and HTTP handlers do) with no
-// data race — run under -race.
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	src := newFakeSource(256)
 	b := newBucket(src)
@@ -262,10 +228,6 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// pumpSource models the real SSE consumer: its Run loop keeps pushing events
-// until ITS OWN ctx is cancelled, and it closes stopped when Run returns. That
-// lets a test prove the pump both survives past the first collect tick and exits
-// cleanly on shutdown, driven through the real Start hook.
 type pumpSource struct {
 	events  chan goapi.Event
 	stopped chan struct{}
@@ -295,12 +257,6 @@ func (p *pumpSource) Run(ctx context.Context) error {
 func (p *pumpSource) Events() <-chan goapi.Event { return p.events }
 func (p *pumpSource) Status() goapi.Status       { return goapi.StatusUp }
 
-// TestStartKeepsPumpFeedingPastFirstTick drives the SSE pump through the real
-// app-lifetime Start hook (#1950) and proves it keeps feeding the ring after the
-// first collect tick's ctx is cancelled. Before #1950 the pump was launched from
-// Collect with the per-tick collect-timeout ctx (#1812), so it froze the instant
-// that ctx was cancelled; here a second wave of events proves it now runs on the
-// app ctx. Cancelling that ctx returns the pump goroutine, so nothing leaks.
 func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	src := newPumpSource()
 	b := newBucket(src)
@@ -309,14 +265,11 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 
 	b.Start(appCtx)
 
-	// First tick on its own short-lived ctx, then cancel it — the #1812 per-bucket
-	// collect deadline. Under the regression the pump ran on this ctx and froze here.
 	firstCtx, firstCancel := context.WithCancel(context.Background())
 	first, _ := b.Collect(firstCtx)
 	b.Store(first)
 	firstCancel()
 
-	// The pump lives on the app ctx, so later ticks keep draining fresh events.
 	seen := len(first)
 	deadline := time.After(2 * time.Second)
 	for seen < len(first)+eventCapacity {
@@ -338,9 +291,6 @@ func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
 	}
 }
 
-// TestUnconfiguredDegradesNotCrashes proves the production constructor with no
-// go-api env yields a bucket that reports source_down and stays bounded, never
-// panicking.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")

@@ -7,13 +7,6 @@ import (
 	"time"
 )
 
-// blockedEvalReader drives one read (eval) that blocks until its own context is
-// cancelled, and answers acquisition/discography from their own per-call
-// context — each returning an error if THAT context is already done, rather
-// than sharing the caller's outer deadline. It proves the three reads run on
-// independent contexts: under sequential reads sharing one outer deadline,
-// acquisition and discography would only be called once eval's block released
-// the shared deadline, by which time it would already be expired.
 type blockedEvalReader struct {
 	acq   goapi.AcquisitionStatus
 	disco goapi.DiscographyQuality
@@ -81,10 +74,6 @@ func TestParallelReadPanicDoesNotCrashProcess(t *testing.T) {
 	}
 }
 
-// TestParallelReadsIsolateASlowOne is the ticket's Done proof: eval blocks past
-// its own deadline while acquisition and discography still record fresh data in
-// the same Collect cycle, because each read runs on its own context rather than
-// waiting its turn behind a read ahead of it.
 func TestParallelReadsIsolateASlowOne(t *testing.T) {
 	reader := blockedEvalReader{
 		acq: goapi.AcquisitionStatus{Succeeded: 19, Failed: 1, InFlight: 2, QueueDepth: 4, QueueCapacity: 64},

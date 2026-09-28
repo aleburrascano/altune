@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// bucketDirs returns the on-disk directory of every concrete bucket package.
 func bucketDirs(t *testing.T) []string {
 	t.Helper()
 	out, err := exec.Command("go", "list", "-f", "{{.Dir}}", "altune/overseer/internal/buckets/...").Output()
@@ -24,19 +23,11 @@ func bucketDirs(t *testing.T) []string {
 	return dirs
 }
 
-// Auth invariant: no bucket constructs goapi.StaticTokenSource directly. Every
-// bucket that builds a go-api client or SSE consumer must take its operator
-// credential from goapi.SharedTokenSource, so the whole fleet shares ONE token
-// source — that is what makes the refreshing source's single-flight span buckets
-// and what activates refresh when the OVERSEER_SUPABASE_* / OVERSEER_GOAPI_REFRESH_TOKEN
-// vars are set. A bucket that reaches for StaticTokenSource again would silently
-// re-fragment the fleet's auth and pin it to a token that never refreshes; this
-// guard fails the build before that ships.
 func TestBucketsDoNotConstructStaticTokenSource(t *testing.T) {
 	var (
 		scanned    int
 		usesShared bool
-		usesStatic []string // "file:line" of any StaticTokenSource construction
+		usesStatic []string
 		fset       = token.NewFileSet()
 	)
 

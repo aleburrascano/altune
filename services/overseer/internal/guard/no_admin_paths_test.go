@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// Spine invariant: no go-api request path names "/admin" anywhere under
-// internal/. Overseer's go-api surface moved to "/observe/*"; this fails the
-// moment an "/admin" literal is reintroduced.
 func TestNoAdminPaths(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
@@ -24,8 +21,6 @@ func TestNoAdminPaths(t *testing.T) {
 	}
 }
 
-// Proves the scan itself fires: a file with a reintroduced "/admin" literal is
-// reported, not silently missed.
 func TestNoAdminPaths_CatchesReintroducedLiteral(t *testing.T) {
 	dir := t.TempDir()
 	src := "package fixture\n\nconst reintroduced = \"/admin/health\"\n"

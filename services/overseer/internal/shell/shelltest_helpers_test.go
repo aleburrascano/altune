@@ -16,21 +16,13 @@ import (
 	"time"
 )
 
-// ownerID is the single allowlisted owner subject used across the shell tests.
 const ownerID = "00000000-0000-0000-0000-000000000001"
 
-// ownerToken and nonOwnerToken are opaque strings the fakeVerifier maps to
-// subjects; they stand in for real Supabase JWTs so the guard's 401/403 paths are
-// exercised without minting real signatures (the signature verification itself is
-// covered by the authn package tests).
 const (
 	ownerToken    = "valid-owner-token"
 	nonOwnerToken = "valid-nonowner-token"
 )
 
-// fakeVerifier is a controllable shell.Verifier: it maps a known token string to a
-// subject and rejects everything else, so a test drives the missing/invalid (401)
-// and non-owner (403) paths deterministically.
 type fakeVerifier struct {
 	subjects map[string]string
 }
@@ -49,7 +41,6 @@ func (v fakeVerifier) Verify(_ context.Context, token string) (authn.Claims, err
 	return authn.Claims{}, errors.New("invalid token")
 }
 
-// stubBucket is a fixed-snapshot bucket used to assert API shape and ordering.
 type stubBucket struct {
 	id    string
 	state core.State
@@ -62,7 +53,6 @@ func (s stubBucket) Snapshot() core.Snapshot {
 	return core.Snapshot{ID: s.id, Title: s.id, State: s.state, Data: json.RawMessage(`{"ok":true}`)}
 }
 
-// panicBucket panics on Snapshot to prove containment.
 type panicBucket struct{}
 
 func (panicBucket) Meta() core.Meta                                { return core.Meta{ID: "boom", Title: "Boom"} }
@@ -74,7 +64,6 @@ type fixedRegistry struct{ buckets []core.Bucket }
 
 func (f fixedRegistry) Buckets() []core.Bucket { return f.buckets }
 
-// testStaticFS is a minimal embedded-SPA stand-in.
 func testStaticFS() fstest.MapFS {
 	return fstest.MapFS{
 		"index.html":    {Data: []byte("<!doctype html><title>Overseer</title>")},
@@ -82,9 +71,6 @@ func testStaticFS() fstest.MapFS {
 	}
 }
 
-// newServer builds a shell handler wired like production: a verifier, the owner
-// allowlist, a static SPA, and public client config. Extra options let a test wire
-// the collect-loop liveness /health reports.
 func newServer(reg shell.Registry, opts ...shell.Option) http.Handler {
 	return shell.NewHandler(reg,
 		append([]shell.Option{
@@ -97,7 +83,6 @@ func newServer(reg shell.Registry, opts ...shell.Option) http.Handler {
 	).Router()
 }
 
-// fixedCollectStatus wires /health to a known loop state.
 func fixedCollectStatus(status shell.CollectStatus) shell.Option {
 	return shell.WithCollectStatus(func() shell.CollectStatus { return status })
 }
@@ -113,9 +98,6 @@ func withOwner(r *http.Request) *http.Request {
 	return r
 }
 
-// captureSlog redirects the default logger into a buffer for the duration of the
-// test, restoring the previous logger afterwards so the process-wide logger is
-// left as it was found.
 func captureSlog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -125,8 +107,6 @@ func captureSlog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// logRecordsNamed returns the parsed records in buf whose msg is name, in the
-// order they were emitted.
 func logRecordsNamed(buf *bytes.Buffer, name string) []map[string]any {
 	var found []map[string]any
 	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {

@@ -13,8 +13,6 @@ import (
 
 const testToken = "operator-jwt-token-value"
 
-// TestHealthDecodesStubbedResponse is the core Done proof: the client hits a
-// stubbed go-api and gets a decoded read response.
 func TestHealthDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -38,10 +36,6 @@ func TestHealthDecodesStubbedResponse(t *testing.T) {
 	}
 }
 
-// TestAttachesOperatorBearer proves the operator principal is authenticated:
-// every request carries the token from the single TokenSource. Health is now
-// public and unauthenticated by design (#2357), so this targets AdminHealth,
-// the operator-only read that still requires the bearer.
 func TestAttachesOperatorBearer(t *testing.T) {
 	var gotAuth, gotAccept string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,12 +56,10 @@ func TestAttachesOperatorBearer(t *testing.T) {
 	}
 }
 
-// TestUnreachableYieldsSourceDown is the other Done proof: an unreachable stub
-// yields the typed source-down error the SSE leaf and buckets branch on.
 func TestUnreachableYieldsSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
-	srv.Close() // nothing is listening now
+	srv.Close()
 
 	c := newClient(t, url)
 	_, err := c.Health(context.Background())
@@ -83,9 +75,6 @@ func TestUnreachableYieldsSourceDown(t *testing.T) {
 	}
 }
 
-// TestSendsCorrelationID proves every outbound read carries an X-Correlation-ID
-// go-api can adopt: present, and well-formed enough that go-api keeps it rather
-// than minting its own (which would break the correlation).
 func TestSendsCorrelationID(t *testing.T) {
 	var got string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,10 +99,6 @@ func TestSendsCorrelationID(t *testing.T) {
 	}
 }
 
-// TestAPIErrorRecordsEchoedCorrelationID is the read-error proof: overseer reads
-// the correlation id off the *response* and records it on APIError, so a failed
-// read names the id in go-api's own logs. The stub echoes a distinctive value to
-// prove the id comes from the response, not merely the request.
 func TestAPIErrorRecordsEchoedCorrelationID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Correlation-ID", "srvecho01")
@@ -131,9 +116,6 @@ func TestAPIErrorRecordsEchoedCorrelationID(t *testing.T) {
 	}
 }
 
-// TestSourceDownRecordsOutboundCorrelationID proves an unreachable go-api — where
-// no response comes back to echo an id — still records the id the failed request
-// carried, so even a transport failure ties to go-api's logs if it got that far.
 func TestSourceDownRecordsOutboundCorrelationID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
@@ -149,12 +131,10 @@ func TestSourceDownRecordsOutboundCorrelationID(t *testing.T) {
 	}
 }
 
-// TestTimeoutIsSourceDown proves a hung go-api cannot wedge a collect cycle: it
-// surfaces as source-down within the configured timeout.
 func TestTimeoutIsSourceDown(t *testing.T) {
 	block := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		<-block // never respond within the timeout
+		<-block
 	}))
 	defer srv.Close()
 	defer close(block)
@@ -168,8 +148,6 @@ func TestTimeoutIsSourceDown(t *testing.T) {
 	}
 }
 
-// TestNon2xxYieldsAPIError proves a reachable-but-rejecting go-api is a distinct
-// typed error, NOT source-down (the app is up, it said no).
 func TestNon2xxYieldsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -190,8 +168,6 @@ func TestNon2xxYieldsAPIError(t *testing.T) {
 	}
 }
 
-// TestMalformedBodyIsDecodeError proves a hostile/garbage 2xx body fails as a
-// decode error, not a silent zero value.
 func TestMalformedBodyIsDecodeError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`not json at all`))
@@ -203,9 +179,6 @@ func TestMalformedBodyIsDecodeError(t *testing.T) {
 	}
 }
 
-// TestOversizedBodyIsBounded proves a runaway response body cannot exhaust
-// memory: the read is capped, so a multi-megabyte reply fails rather than being
-// swallowed whole.
 func TestOversizedBodyIsBounded(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"status":"`))
@@ -214,17 +187,11 @@ func TestOversizedBodyIsBounded(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// The cap truncates mid-string, so decoding the bounded body fails rather
-	// than reading the full 2 MiB.
 	if _, err := newClient(t, srv.URL).Health(context.Background()); err == nil {
 		t.Fatal("oversized body returned nil error; read was not bounded")
 	}
 }
 
-// TestTokenSourceErrorFailsClosed proves no request leaves without credentials:
-// a TokenSource error stops the call before any transport happens. Health is
-// now public and unauthenticated by design (#2357), so this targets
-// AdminHealth, the operator-only read that still requires a token.
 func TestTokenSourceErrorFailsClosed(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -232,7 +199,7 @@ func TestTokenSourceErrorFailsClosed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := goapi.New(srv.URL, goapi.StaticTokenSource("")) // empty => ErrNoToken
+	c, err := goapi.New(srv.URL, goapi.StaticTokenSource(""))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

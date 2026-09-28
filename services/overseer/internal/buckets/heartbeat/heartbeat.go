@@ -1,7 +1,3 @@
-// Package heartbeat is the tracer-bullet bucket: a trivial tick that proves the
-// whole plugin path end to end — register -> collect -> bounded store -> render
-// -> served. It owns all its own files and self-registers with one line (the
-// blank import in the composition root).
 package heartbeat
 
 import (
@@ -11,8 +7,6 @@ import (
 	"time"
 )
 
-// capacity bounds the retained heartbeat ticks. The ring enforces the
-// bounded-storage invariant regardless of how long the service runs.
 const capacity = 60
 
 const (
@@ -20,7 +14,6 @@ const (
 	seriesTickGap = "tick_gap_ms"
 )
 
-// Bucket collects a periodic tick and renders the recent ones.
 type Bucket struct {
 	store    *core.RingStore
 	now      func() time.Time
@@ -29,7 +22,6 @@ type Bucket struct {
 	haveLast bool
 }
 
-// New builds a heartbeat bucket backed by a bounded ring store.
 func New() *Bucket {
 	return &Bucket{store: core.NewRingStore(capacity), now: time.Now, series: discardSeries{}}
 }
@@ -50,9 +42,6 @@ func (b *Bucket) Rings() map[string]*core.RingStore {
 	return map[string]*core.RingStore{"ticks": b.store}
 }
 
-// Collect emits a single tick signal. It never fails: the heartbeat's source is
-// Overseer's own clock, which proves the collect path without depending on the
-// watched app being up.
 func (b *Bucket) Collect(_ context.Context) ([]core.Signal, error) {
 	now := b.now()
 	b.recordGap(now)
@@ -78,20 +67,10 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-// Data is the heartbeat panel payload: the recent ticks, newest last. Text is
-// Overseer's own clock, not watched-app data, but the frontend escapes it like
-// everything else on render.
 type Data struct {
 	Ticks []core.Signal `json:"ticks"`
 }
 
-// Snapshot builds the heartbeat envelope. The source is Overseer's own clock, so
-// the state is always live: the heartbeat proves the collect path without
-// depending on the watched app being up. UpdatedAt is the newest stored tick.
-//
-// Severity is always ok: a tick from Overseer's own clock cannot report a fault,
-// and a stalled collect loop shows as a frozen UpdatedAt rather than a grade — the
-// bucket has no cadence to compare against, so it invents no threshold.
 func (b *Bucket) Snapshot() core.Snapshot {
 	ticks := b.store.Snapshot()
 	updated := time.Time{}
@@ -109,8 +88,6 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	}
 }
 
-// ticksHeadline is the depth of the retained tick ring: how much of the collect
-// path this bucket has proven so far.
 func ticksHeadline(ticks int) string {
 	if ticks == 0 {
 		return "no ticks yet"

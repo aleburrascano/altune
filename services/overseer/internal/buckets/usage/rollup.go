@@ -9,30 +9,14 @@ import (
 	"time"
 )
 
-// Rollup caps for the usage aggregator. Every rollup structure is bounded by one
-// of these constants, so intake stays bounded no matter how long the stream runs
-// or how many distinct queries/kinds arrive — the "bounded rollups, aggregate on
-// ingest" invariant made real at the leaf.
 const (
-	// searchKeyCap bounds the number of distinct search queries tracked at once.
-	// When full, the lowest-count query is evicted to make room, so a flood of
-	// unique queries can never grow the map without limit.
-	searchKeyCap = 64
-	// playKindCap bounds the number of distinct play kinds tracked. The known set
-	// is small; the cap defends against an unexpectedly wide kind space.
-	playKindCap = 32
-	// searchTopN is how many top queries Render surfaces.
-	searchTopN = 10
-	// timelineWindows is the number of completed activity windows the ring retains.
+	searchKeyCap    = 64
+	playKindCap     = 32
+	searchTopN      = 10
 	timelineWindows = 60
-	// timelineWindow is the width of one activity-timeline bucket.
-	timelineWindow = time.Minute
+	timelineWindow  = time.Minute
 )
 
-// countMap is a bounded key→count aggregator. It increments existing keys
-// forever but caps the number of distinct keys: once at capacity, adding a new
-// key first evicts the current lowest-count key. Bounded by construction, so
-// N×capacity distinct inputs never grow it past cap.
 type countMap struct {
 	counts  map[string]int
 	cap     int
@@ -46,8 +30,6 @@ func newCountMap(capacity int) *countMap {
 	return &countMap{counts: make(map[string]int), cap: capacity}
 }
 
-// add records one observation of key. An empty key is ignored so blank subjects
-// never occupy a tracked slot.
 func (c *countMap) add(key string) {
 	if key == "" {
 		return
@@ -62,8 +44,6 @@ func (c *countMap) add(key string) {
 	c.counts[key] = 1
 }
 
-// evictMin removes one lowest-count entry so a new key can be admitted while the
-// map stays at or below cap. Ties break on key order for determinism.
 func (c *countMap) evictMin() {
 	minKey := ""
 	minCount := 0
@@ -75,26 +55,19 @@ func (c *countMap) evictMin() {
 	}
 	if !first {
 		delete(c.counts, minKey)
-		// Saturate so a counter that overflowed to a negative could never read as
-		// "no keys dropped" and hide the cardinality truncation it exists to report.
 		if c.evicted < math.MaxInt {
 			c.evicted++
 		}
 	}
 }
 
-// evictions is how many distinct keys the map has dropped to stay under cap, so a
-// render can show that a flood of one-off keys truncated the tracked set.
 func (c *countMap) evictions() int { return c.evicted }
 
-// entry is one key and its count for rendering.
 type entry struct {
 	Key   string
 	Count int
 }
 
-// top returns the highest-count entries, at most n (n < 0 means all), sorted by
-// count desc then key asc for a stable render.
 func (c *countMap) top(n int) []entry {
 	out := make([]entry, 0, len(c.counts))
 	for k, v := range c.counts {
@@ -114,12 +87,6 @@ func (c *countMap) top(n int) []entry {
 
 func (c *countMap) len() int { return len(c.counts) }
 
-// timeline is a bounded activity-over-time rollup. Events fold into a current
-// fixed-width window; when time crosses into a later window the completed window's
-// count is flushed as one Signal into a core.RingStore, which caps the number of
-// retained windows by construction. Only completed-window counts are stored — the
-// raw events are never retained. The window count rides in the Signal's Text field
-// (the shared Signal shape has no numeric field), parsed back on render.
 type timeline struct {
 	store    *core.RingStore
 	window   time.Duration
@@ -131,10 +98,6 @@ func newTimeline() *timeline {
 	return &timeline{store: core.NewRingStore(timelineWindows), window: timelineWindow}
 }
 
-// record folds one event at time at into the timeline. Events at or after the
-// current window's successor flush the current window and open a new one; an
-// out-of-order (older) event folds into the current window rather than rewinding,
-// keeping the structure monotonic and bounded.
 func (t *timeline) record(at time.Time) {
 	slot := at.Truncate(t.window)
 	if t.curStart.IsZero() {
@@ -151,13 +114,10 @@ func (t *timeline) record(at time.Time) {
 	t.curCount++
 }
 
-// flush stores the current window's count as one ring entry, count encoded in Text.
 func (t *timeline) flush() {
 	t.store.Add(core.Signal{At: t.curStart, Kind: "activity", Text: strconv.Itoa(t.curCount)})
 }
 
-// windows returns the retained completed windows oldest-first plus the current
-// in-progress window (if any), for rendering.
 func (t *timeline) windows() []entry {
 	snap := t.store.Snapshot()
 	out := make([]entry, 0, len(snap)+1)
@@ -171,8 +131,6 @@ func (t *timeline) windows() []entry {
 	return out
 }
 
-// storedWindows is the number of completed windows retained (never exceeds the
-// ring cap); used by tests to prove the timeline stays bounded.
 func (t *timeline) storedWindows() int { return t.store.Len() }
 
 type windowTotals struct {
@@ -216,9 +174,6 @@ func (w *activityWindow) reset(start time.Time) {
 	w.curUsers = make(map[string]struct{})
 }
 
-// aggregator holds all bounded usage rollups behind one mutex: the tick goroutine
-// ingests while HTTP handlers render, so every read and write is serialized to
-// stay race-free.
 type aggregator struct {
 	mu       sync.Mutex
 	searches *countMap
@@ -234,13 +189,6 @@ func newAggregator() *aggregator {
 	}
 }
 
-// ingest folds one collected signal into the bounded rollups. It classifies by
-// kind: search_performed contributes its query to top-N searches when go-api
-// carries one, playback kinds increment per-kind play counts, and every event
-// advances the activity timeline. go-api's admin stream masks search text
-// (#2585), so a search_performed signal ordinarily carries no query; falling
-// back to its kind keeps the search count itself moving under that masking
-// instead of the event vanishing into an empty, ignored key (#2594).
 func (a *aggregator) ingest(s core.Signal) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -254,9 +202,6 @@ func (a *aggregator) ingest(s core.Signal) {
 	a.line.record(s.At)
 }
 
-// searchKey is the top-N search key for one search_performed signal: its query
-// when go-api carried one, otherwise the event kind, so a masked query still
-// registers as one countable search rather than being dropped as an empty key.
 func searchKey(s core.Signal) string {
 	if s.Text != "" {
 		return s.Text
@@ -264,7 +209,6 @@ func searchKey(s core.Signal) string {
 	return s.Kind
 }
 
-// view is an immutable snapshot of the rollups for one Render call.
 type view struct {
 	searches    []entry
 	plays       []entry
@@ -291,8 +235,6 @@ const (
 	catPlay
 )
 
-// classify maps a go-api event kind to its usage category. Search events carry
-// the query as their subject; playback events are counted per kind.
 func classify(kind string) category {
 	switch kind {
 	case "search_performed":

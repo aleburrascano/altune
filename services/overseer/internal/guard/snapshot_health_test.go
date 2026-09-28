@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	// Every real bucket, so its self-registration runs and the registry walked
-	// below is the whole fleet rather than a sample.
 	_ "altune/overseer/internal/buckets/backendperf"
 	_ "altune/overseer/internal/buckets/cost"
 	_ "altune/overseer/internal/buckets/domainquality"
@@ -18,12 +16,6 @@ import (
 	_ "altune/overseer/internal/buckets/usage"
 )
 
-// Contract invariant (health model): every bucket grades its own snapshot. The
-// shared overview reads severity + headline off every envelope, so a bucket that
-// leaves either unset serializes `"severity": ""` — a value the frontend's union
-// does not admit — and reads as silently healthy, which is the exact failure the
-// health model exists to remove. The registry is walked rather than a list being
-// kept here, so a bucket added later is covered the day it self-registers.
 func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 	graded := map[core.Severity]bool{
 		core.SeverityOK:       true,
@@ -42,11 +34,6 @@ func TestEveryBucketGradesItsOwnSnapshot(t *testing.T) {
 	}
 }
 
-// The walk above only proves what it can reach, so this pins the reach: one
-// registered bucket per bucket package. A failure means either a new bucket
-// package is missing its blank import in this file (so the grading invariant is
-// not being checked against it) or a package registers a number of buckets other
-// than one.
 func TestEveryBucketPackageIsRepresentedInTheRegistry(t *testing.T) {
 	packages := bucketPackages(t)
 	registered := core.Default.Buckets()

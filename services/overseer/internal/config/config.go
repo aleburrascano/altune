@@ -1,6 +1,3 @@
-// Package config loads Overseer's runtime configuration from the environment,
-// mirroring go-api's env-driven approach (see services/go-api/internal/shared/
-// config) but with an OVERSEER_ prefix so the two services can share a host.
 package config
 
 import (
@@ -12,65 +9,33 @@ import (
 	"time"
 )
 
-// Config is Overseer's fully-resolved configuration.
 type Config struct {
 	Env      string
 	LogLevel string
 	Host     string
 	Port     int
 
-	// OwnerUserID is the single Supabase user id (the JWT `sub` claim) allowed to
-	// reach Overseer data. It IS the access control — one allowlisted id, no RBAC.
-	// Required: without it every data request is rejected and the service will not
-	// start (fail closed).
 	OwnerUserID string
 
-	// SupabaseURL is the Supabase project URL. It serves two purposes: the SPA's
-	// supabase-js client logs in against it, and Overseer derives the JWKS endpoint
-	// ({SupabaseURL}/auth/v1/.well-known/jwks.json) from it to verify JWT
-	// signatures locally. Required.
 	SupabaseURL string
 
-	// SupabaseAnonKey is the Supabase publishable anon key. It is a public client
-	// value (safe in the browser) the SPA needs for supabase-js login. Required so
-	// the login screen can function.
 	SupabaseAnonKey string
 
-	// SupabaseJWTSecret is the optional legacy HS256 JWT secret. When set, Overseer
-	// also accepts HS256-signed Supabase tokens verified with it. Modern Supabase
-	// projects use asymmetric keys served via JWKS and need no secret here.
 	SupabaseJWTSecret string
 
-	// SupabaseJWKSURL optionally overrides the derived JWKS endpoint. Empty means
-	// derive it from SupabaseURL.
 	SupabaseJWKSURL string
 
-	// BasePath is the URL prefix Overseer is mounted under (e.g. "/overseer"). It is
-	// used only to build outbound paths so they land back inside the mount when a
-	// reverse proxy strips the prefix. Optional, defaults to "" (rootless).
 	BasePath string
 
-	// TickInterval is how often each bucket's collect cycle runs.
 	TickInterval time.Duration
 
-	// BucketTimeout bounds a single bucket's Collect + Store. Buckets run serially
-	// in one goroutine, so without it a bucket that blocks stalls every other bucket
-	// and ends the collect cycle. The default sits under the goapi client's 10s
-	// request timeout so a bucket's own remote call fails first and reports why.
 	BucketTimeout time.Duration
 
-	// CostSpendInterval is how often the Cost bucket refreshes OCI billing spend,
-	// which it polls on its own slow cadence rather than on every collect tick: a
-	// metered month-to-date figure moves hourly at best, so a 5s tick would bill
-	// hundreds of redundant usage-api reads an hour. Validated here so a typo fails
-	// at startup with its name; the bucket reads the same knob to drive its refresh.
 	CostSpendInterval time.Duration
 
 	HistoryPath string
 }
 
-// Load reads configuration from the environment, applies defaults and validates
-// it. A returned error must abort startup.
 func Load() (*Config, error) {
 	c := &Config{
 		Env:               getenv("OVERSEER_ENV", "development"),
@@ -123,9 +88,6 @@ func (c *Config) applyDurations() error {
 	return nil
 }
 
-// positiveDuration reads a duration from the environment, falling back when unset.
-// A malformed or non-positive value is an error so a typo fails at startup with the
-// variable's name rather than silently becoming a zero deadline at first tick.
 func positiveDuration(key string, fallback time.Duration) (time.Duration, error) {
 	raw := os.Getenv(key)
 	if raw == "" {
@@ -138,10 +100,6 @@ func positiveDuration(key string, fallback time.Duration) (time.Duration, error)
 	return d, nil
 }
 
-// validate enforces the owner-only boundary at startup: the allowlisted owner id
-// and the Supabase project settings the auth guard and the SPA login both need
-// must all be present, or the service fails closed rather than shipping an open or
-// unusable dashboard.
 func (c *Config) validate() error {
 	if c.OwnerUserID == "" {
 		return fmt.Errorf("OVERSEER_OWNER_USER_ID must be set (the single allowlisted owner; owner-only rejects every request without it)")
@@ -155,9 +113,6 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// JWKSURL returns the JWKS endpoint the JWT verifier fetches signing keys from:
-// the explicit override when set, else the standard Supabase GoTrue path derived
-// from the project URL.
 func (c *Config) JWKSURL() string {
 	if c.SupabaseJWKSURL != "" {
 		return c.SupabaseJWKSURL
@@ -165,9 +120,6 @@ func (c *Config) JWKSURL() string {
 	return c.authBaseURL() + "/.well-known/jwks.json"
 }
 
-// IssuerURL returns the iss claim the project's GoTrue stamps on its tokens,
-// which the verifier binds every accepted token to. It ignores the JWKS override:
-// that says where keys are fetched from, never who issued the token.
 func (c *Config) IssuerURL() string {
 	return c.authBaseURL()
 }
@@ -176,14 +128,10 @@ func (c *Config) authBaseURL() string {
 	return strings.TrimRight(c.SupabaseURL, "/") + "/auth/v1"
 }
 
-// IsDevelopment reports whether the service runs in the development environment,
-// which selects human-readable logging.
 func (c *Config) IsDevelopment() bool {
 	return c.Env == "development"
 }
 
-// LogValue redacts the JWT secret so it never reaches a log sink; the anon key is
-// public so it is safe to log, but reported only as presence for tidiness.
 func (c *Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("env", c.Env),
@@ -201,10 +149,6 @@ func (c *Config) LogValue() slog.Value {
 	)
 }
 
-// normalizeBasePath turns a raw OVERSEER_BASE_PATH value into a safe outbound
-// prefix. An empty value stays ""; a non-empty value is coerced to exactly one
-// leading slash and no trailing slash. Purely-slash inputs collapse to "". The
-// value is server-configured only; no request input ever flows into it.
 func normalizeBasePath(raw string) string {
 	p := strings.TrimSpace(raw)
 	if p == "" {

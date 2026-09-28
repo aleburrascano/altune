@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// snapshotData unmarshals a heartbeat snapshot's Data payload.
 func snapshotData(t *testing.T, snap core.Snapshot) heartbeat.Data {
 	t.Helper()
 	var d heartbeat.Data
@@ -18,12 +17,9 @@ func snapshotData(t *testing.T, snap core.Snapshot) heartbeat.Data {
 	return d
 }
 
-// The heartbeat bucket proves the full plugin path in the small: collect ->
-// store -> snapshot, with a payload that reflects the stored ticks.
 func TestHeartbeatCollectStoreSnapshot(t *testing.T) {
 	b := heartbeat.New()
 
-	// Empty state is a live but empty payload, not an error.
 	empty := b.Snapshot()
 	if empty.State != core.StateLive {
 		t.Errorf("empty state = %q, want live", empty.State)
@@ -48,9 +44,6 @@ func TestHeartbeatCollectStoreSnapshot(t *testing.T) {
 	}
 }
 
-// The heartbeat grades ok by construction — a tick from Overseer's own clock
-// cannot report a fault — but its headline still tracks the payload: how much of
-// the collect path it has proven so far.
 func TestHeartbeatHeadlineTracksTheTicks(t *testing.T) {
 	b := heartbeat.New()
 
@@ -75,8 +68,6 @@ func TestHeartbeatHeadlineTracksTheTicks(t *testing.T) {
 	}
 }
 
-// Bounded storage holds at the bucket level too: many collects never grow the
-// snapshot's tick list past the bucket's capacity.
 func TestHeartbeatStaysBounded(t *testing.T) {
 	b := heartbeat.New()
 	for i := 0; i < 500; i++ {
