@@ -12,7 +12,9 @@ set -uo pipefail
 
 root=$(git rev-parse --show-toplevel) || exit 3
 cd "$root" || exit 3
-base=$(git merge-base "${1:-origin/main}" HEAD) || { echo "precheck: no merge base with ${1:-origin/main}"; exit 3; }
+default_base_ref() { git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
+base_ref=${1:-$(default_base_ref)}
+base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with $base_ref"; exit 3; }
 
 PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 
@@ -157,6 +159,6 @@ if touches '^\.(github|gitea)/workflows/.*\.ya?ml$|\.sh$'; then
   check "workflows and shell no new comments" . hash_comments '.github/workflows/*.yml' '.github/workflows/*.yaml' '.gitea/workflows/*.yml' '.gitea/workflows/*.yaml' '*.sh'
 fi
 
-[ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh"; exit 1; }
+[ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"; exit 1; }
 [ $missing = 1 ] && { echo "precheck: incomplete, see SKIP lines"; exit 3; }
 echo "precheck: green"
