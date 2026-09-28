@@ -23,6 +23,16 @@ export function SessionExpiredNotice() {
           void signOut();
         }}
       />
+      {state.status === 'error' ? (
+        <Text
+          testID="session-expired-error"
+          variant="body"
+          tone="danger"
+          style={{ textAlign: 'center' }}
+        >
+          Couldn't reach the server. You've been signed out on this device.
+        </Text>
+      ) : null}
     </AuthFullScreenNotice>
   );
 }

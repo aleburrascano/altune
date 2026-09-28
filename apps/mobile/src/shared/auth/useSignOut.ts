@@ -34,26 +34,35 @@ function signOutFailed(error: unknown): SignOutResult {
   return { status: 'error', error: cause };
 }
 
+async function endLocalSession(): Promise<void> {
+  await clearPersistedAuthSession().catch(() => undefined);
+  await withinAuthDeadline(supabase.auth.signOut({ scope: 'local' }), 'sign-out-local').catch(
+    (error: unknown) => console.warn('[auth] local sign out failed', signOutFailureFields(error)),
+  );
+}
+
 export function useSignOut() {
   const queryClient = useQueryClient();
   const [state, setState] = useState<SignOutResult>({ status: 'idle' });
+
+  async function failSignOut(error: unknown): Promise<void> {
+    await endLocalSession();
+    forgetPreviousUsersLocalData(queryClient);
+    setState(signOutFailed(error));
+  }
 
   async function signOut(): Promise<void> {
     setState({ status: 'loading' });
     try {
       const { error } = await withinAuthDeadline(supabase.auth.signOut(), 'sign-out');
       if (error) {
-        await clearPersistedAuthSession().catch(() => undefined);
-        forgetPreviousUsersLocalData(queryClient);
-        setState(signOutFailed(error));
+        await failSignOut(error);
         return;
       }
       forgetPreviousUsersLocalData(queryClient);
       setState({ status: 'ok' });
     } catch (error) {
-      await clearPersistedAuthSession().catch(() => undefined);
-      forgetPreviousUsersLocalData(queryClient);
-      setState(signOutFailed(error));
+      await failSignOut(error);
     }
   }
 

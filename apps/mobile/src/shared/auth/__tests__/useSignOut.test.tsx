@@ -244,6 +244,62 @@ describe('useSignOut(): clearPersistedAuthSession is best-effort — its own rej
   });
 });
 
+describe('useSignOut(): a failed remote sign-out still ends the local session', () => {
+  const remoteFailures = [
+    [
+      'returns an error',
+      () => mockSignOut.mockResolvedValueOnce({ error: { message: 'fetch failed', status: 0 } }),
+    ],
+    ['rejects', () => mockSignOut.mockRejectedValueOnce(new Error('network request failed'))],
+  ] as const;
+
+  it.each(remoteFailures)(
+    'when the remote call %s, signs out with scope local after the stored session is cleared',
+    async (_label, arrange) => {
+      mockClearPersistedAuthSession.mockClear();
+      arrange();
+      mockSignOut.mockResolvedValueOnce({ error: null });
+      const { result } = renderHook(() => useSignOut(), {
+        wrapper: createWrapper(new QueryClient()),
+      });
+
+      await act(async () => {
+        await result.current.signOut();
+      });
+
+      expect(mockSignOut).toHaveBeenCalledTimes(2);
+      expect(mockSignOut).toHaveBeenLastCalledWith({ scope: 'local' });
+      expect(mockClearPersistedAuthSession.mock.invocationCallOrder[0]).toBeLessThan(
+        mockSignOut.mock.invocationCallOrder[1] ?? 0,
+      );
+    },
+  );
+
+  it.each(remoteFailures)(
+    'when the remote call %s and the local sign-out fails too, reports the remote failure and still clears local data',
+    async (_label, arrange) => {
+      arrange();
+      mockSignOut.mockRejectedValueOnce(new Error('local teardown failed'));
+      const cleanup = jest.fn();
+      const unregister = onSignOut(cleanup);
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
+      const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
+
+      await act(async () => {
+        await result.current.signOut();
+      });
+
+      expect(mockSignOut).toHaveBeenLastCalledWith({ scope: 'local' });
+      expect(result.current.state.status).toBe('error');
+      expect(JSON.stringify(result.current.state)).not.toContain('local teardown failed');
+      expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      unregister();
+    },
+  );
+});
+
 describe('auth deadline', () => {
   let warn: jest.SpyInstance;
 
@@ -280,6 +336,9 @@ describe('auth deadline', () => {
 
       await act(async () => {
         jest.advanceTimersByTime(1);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(15_000);
         await signOutCall;
       });
 
