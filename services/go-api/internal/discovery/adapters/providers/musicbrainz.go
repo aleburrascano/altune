@@ -70,9 +70,9 @@ func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track
 func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 	switch kind {
 	case domain.ResultKindTrack:
-		return `artist:"` + mbLuceneEscape(artist) + `" AND recording:"` + mbLuceneEscape(track) + `"`
+		return "artist:" + dslQuote(mbLuceneEscape(artist)) + " AND recording:" + dslQuote(mbLuceneEscape(track))
 	case domain.ResultKindAlbum:
-		return `artist:"` + mbLuceneEscape(artist) + `" AND release:"` + mbLuceneEscape(track) + `"`
+		return "artist:" + dslQuote(mbLuceneEscape(artist)) + " AND release:" + dslQuote(mbLuceneEscape(track))
 	case domain.ResultKindArtist:
 		return mbLuceneEscape(artist)
 	default:
