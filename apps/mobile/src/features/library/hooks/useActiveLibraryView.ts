@@ -14,7 +14,7 @@ import { useTracksView } from './useTracksView';
 import type { ActiveView, LibraryChip } from '../activeView';
 import type { SortKey } from '../sort';
 
-export type ActiveLibraryViewDeps = {
+type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;
   navigation: ReturnType<typeof useLibraryNavigation>;
   selection: Selection;
@@ -24,7 +24,7 @@ export type ActiveLibraryViewDeps = {
   onTrackMore: (track: TrackResponse, anchor: MenuAnchor) => void;
 };
 
-export type ActiveLibraryView = {
+type ActiveLibraryView = {
   active: ActiveView;
   tracks: TrackResponse[];
   playlists: PlaylistResponse[];

@@ -24,9 +24,9 @@ const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
 export const BULK_DELETE_CONCURRENCY = 4;
 export const BULK_DELETE_DEADLINE_MS = 60_000;
 
-export type DeleteTrackFailure = { trackId: TrackId; error: unknown };
+type DeleteTrackFailure = { trackId: TrackId; error: unknown };
 
-export type DeleteTracksResult = {
+type DeleteTracksResult = {
   deleted: number;
   requested: number;
   failures: DeleteTrackFailure[];

@@ -13,7 +13,7 @@ import type { ListPaging, ListRefresh } from '../refresh';
 import { TRACK_SORT_OPTIONS, type SortKey } from '../sort';
 import { TracksList } from '../ui/TracksList';
 
-export type TracksViewDeps = {
+type TracksViewDeps = {
   query: string;
   sort: SortKey;
   isActive: boolean;
@@ -25,7 +25,7 @@ export type TracksViewDeps = {
   onTrackMore: (track: TrackResponse, anchor: MenuAnchor) => void;
 };
 
-export type TracksView = {
+type TracksView = {
   view: ActiveView;
   tracks: TrackResponse[];
   shuffleWholeLibrary: () => Promise<void>;

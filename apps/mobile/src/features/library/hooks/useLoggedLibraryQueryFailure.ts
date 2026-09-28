@@ -6,9 +6,9 @@ import { failureLogFields } from '../failureLogFields';
 import type { LibraryChip } from '../activeView';
 import type { SortKey } from '../sort';
 
-export type LibraryQueryChip = LibraryChip;
+type LibraryQueryChip = LibraryChip;
 
-export type LibraryQueryContext = {
+type LibraryQueryContext = {
   chip: LibraryQueryChip;
   sort?: LibrarySort | SortKey;
   isSearching: boolean;

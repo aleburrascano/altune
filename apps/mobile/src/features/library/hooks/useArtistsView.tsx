@@ -6,7 +6,7 @@ import type { ListPaging, ListRefresh } from '../refresh';
 import { ARTIST_SORT_OPTIONS, type SortKey } from '../sort';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 
-export type ArtistsViewDeps = {
+type ArtistsViewDeps = {
   query: string;
   sort: SortKey;
   isActive: boolean;

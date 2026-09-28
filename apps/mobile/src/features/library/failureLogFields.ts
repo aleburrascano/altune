@@ -2,7 +2,7 @@ import { ApiError, correlationIdOf } from '@shared/errors';
 
 import { classifyLibraryError, type LibraryFailure } from './state';
 
-export type FailureLogFields = {
+type FailureLogFields = {
   status?: number;
   code?: string;
   failure: LibraryFailure;

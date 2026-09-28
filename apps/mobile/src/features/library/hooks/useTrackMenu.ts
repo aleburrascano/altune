@@ -9,7 +9,7 @@ import { buildTrackMenuItems } from '../trackMenu';
 import { useLibraryOffline } from './useLibraryOffline';
 import { useReacquireTrack } from './useReacquireTrack';
 
-export type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
+type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
 
 export type TrackMenuOptions = {
   queue: ReturnType<typeof useQueuePlayback>;

@@ -15,7 +15,7 @@ type Router = ReturnType<typeof useRouter>;
 
 type SetBusy = (busy: boolean) => void;
 
-export type ExploreArtist = {
+type ExploreArtist = {
   explore: (artist: string, detailPath: DetailPath) => Promise<void>;
   exploring: boolean;
 };

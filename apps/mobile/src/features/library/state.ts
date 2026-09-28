@@ -2,7 +2,7 @@ import { ApiError, ContractError, NetworkError, isSessionFetchFailure } from '@s
 import { asyncView } from '@shared/lib/async-view';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 
-export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
+type ScreenView = 'loading' | 'error' | 'empty' | 'list';
 
 export type LibraryFailure = 'network' | 'auth' | 'not-found' | 'server' | 'unknown';
 
@@ -20,7 +20,7 @@ export function failureTail(failure: LibraryFailure): string {
   return failure === 'auth' ? 'Sign in again, then retry.' : RETRY_TAIL;
 }
 
-export type ScreenState = {
+type ScreenState = {
   view: ScreenView;
   failure: LibraryFailure | null;
 };

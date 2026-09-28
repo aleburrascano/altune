@@ -3,7 +3,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 
 import { spacing, type Theme } from '@shared/ui';
 
-export type WideRowPressableState = {
+type WideRowPressableState = {
   pressed: boolean;
   hovered?: boolean;
   focused?: boolean;

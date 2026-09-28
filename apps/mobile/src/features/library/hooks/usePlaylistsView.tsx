@@ -6,13 +6,13 @@ import type { ListPaging, ListRefresh } from '../refresh';
 import { PLAYLIST_SORT_OPTIONS, type SortKey } from '../sort';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 
-export type PlaylistsViewDeps = {
+type PlaylistsViewDeps = {
   pl: PlaylistActionsState;
   sort: SortKey;
   onPlaylistPress: (playlist: PlaylistResponse) => void;
 };
 
-export type PlaylistsView = {
+type PlaylistsView = {
   view: ActiveView;
   playlists: PlaylistResponse[];
 };

@@ -6,7 +6,7 @@ import type { ListPaging, ListRefresh } from '../refresh';
 import { ALBUM_SORT_OPTIONS, type SortKey } from '../sort';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 
-export type AlbumsViewDeps = {
+type AlbumsViewDeps = {
   query: string;
   sort: SortKey;
   isActive: boolean;

@@ -2,7 +2,7 @@ import { ArrowDownCircle, CircleAlert, CircleCheck, type LucideIcon } from 'luci
 
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
-export type PinnedStatusDisplay = {
+type PinnedStatusDisplay = {
   a11ySuffix: string;
   icon: {
     glyph: LucideIcon;
