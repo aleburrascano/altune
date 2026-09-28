@@ -1,30 +1,35 @@
 #!/usr/bin/env bash
-# Debug audio acquisition against the live backend from a terminal, without the
-# app. Everything runs on the OCI VM over SSH and is read-only: the database
-# session is forced read-only, yt-dlp runs with --simulate against a throwaway
-# copy of the cookie file, and no secret is ever printed.
-#
-# Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
-#   summary [days]        status mix, failure codes, which sources delivered, stuck pending (default 14 days)
-#   track <text|uuid>     a track's acquisition row(s), then its log lines from the running go-api
-#   client [since] [track]  acquisition_ui/client_error events from discovery_events (default
-#                         since 24 hours ago; track filters on the event's track_id)
-#   probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
-#                         candidate the way the download step would — shows bot-checks, previews, dead ids
-#   tools                 binary versions and a live canary per source (is YouTube / SoundCloud reachable?)
-#   logs [since] [regex]  acquisition log lines from the running go-api (default since 1h)
-#   sql <select>          an ad-hoc read-only query against the tier's database
-#
-# Env: ALTUNE_HOST (required: user@host or an ~/.ssh/config alias for the VM),
-#      ALTUNE_SSH_KEY (optional identity file; else ssh's config and agent decide),
-#      ALTUNE_REMOTE_DIR (checkout on the VM, relative to the remote home; default altune).
-# Exit: 0 ok, 1 a check failed, 3 could not run (no SSH, no container, bad usage).
+usage() {
+  cat <<'USAGE'
+Debug audio acquisition against the live backend from a terminal, without the
+app. Everything runs on the OCI VM over SSH and is read-only: the database
+session is forced read-only, yt-dlp runs with --simulate against a throwaway
+copy of the cookie file, and no secret is ever printed.
+
+Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
+  summary [days]        status mix, failure codes, which sources delivered, stuck pending (default 14 days)
+  track <text|uuid>     a track's acquisition row(s), then its log lines from the running go-api
+  capture <title|uuid>  replay a track's rejection log through cmd/acquisitioneval's evaluator
+  client [since] [track]  acquisition_ui/client_error events from discovery_events (default
+                        since 24 hours ago; track filters on the event's track_id)
+  probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
+                        candidate the way the download step would — shows bot-checks, previews, dead ids
+  tools                 binary versions and a live canary per source (is YouTube / SoundCloud reachable?)
+  logs [since] [regex]  acquisition log lines from the running go-api (default since 1h)
+  sql <select>          an ad-hoc read-only query against the tier's database
+
+Env: ALTUNE_HOST (required: user@host or an ~/.ssh/config alias for the VM),
+     ALTUNE_SSH_KEY (optional identity file; else ssh's config and agent decide),
+     ALTUNE_REMOTE_DIR (checkout on the VM, relative to the remote home; default altune).
+Exit: 0 ok, 1 a check failed, 3 could not run (no SSH, no container, bad usage).
+USAGE
+}
 set -uo pipefail
 
 tier=prod
 if [ "${1:-}" = --staging ]; then tier=staging; shift; fi
 if [ $# -eq 0 ] || [ "$1" = help ] || [ "$1" = -h ]; then
-  sed -n '2,/^set -uo/p' "$0" | sed '$d; s/^# \{0,1\}//'
+  usage
   exit 0
 fi
 
@@ -49,9 +54,6 @@ api=$(docker ps --filter "name=^${prefix}-" --format '{{.Names}}' | head -1)
 
 need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* container" >&2; exit 3; }; }
 
-# Read-only by construction: the SET runs first in the same session, so any write
-# below it fails instead of landing. The Supabase pooler drops PGOPTIONS, so the
-# guard has to live in the session; `sql` below keeps callers from undoing it.
 db() {
   local url
   url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
@@ -60,9 +62,6 @@ db() {
     psql "$url" -X -q -v ON_ERROR_STOP=1 "$@"
 }
 
-# The flags the app's searcher and downloader put in front of every yt-dlp call
-# (adapters/ytdlp/searcher.go), with a scratch copy of the cookie jar because
-# yt-dlp writes cookies back and the live file belongs to the app.
 YTDLP_PRELUDE='ck=$(mktemp); trap "rm -f $ck" EXIT
 [ -n "${YTDLP_COOKIE_FILE:-}" ] && [ -f "$YTDLP_COOKIE_FILE" ] && cp "$YTDLP_COOKIE_FILE" "$ck"
 yt() { set -- --no-warnings "$@"
@@ -191,13 +190,11 @@ tools)
   docker exec "$api" sh -c 'for b in yt-dlp rip ffprobe ffmpeg; do printf "%-8s %s\n" "$b" "$($b --version 2>&1 | head -1 | cut -c1-60)"; done
     printf "%-8s %s\n" fpcalc "$(fpcalc -version 2>&1 | head -1)"
     echo "cookie file: ${YTDLP_COOKIE_FILE:-unset}  js runtime: ${YTDLP_JS_RUNTIME:-unset}  streamrip services: ${STREAMRIP_SERVICES:-none}"'
-  # One long-lived public item per source; OK means the source can extract from this IP today.
   in_api '
 status=0
 for c in "youtube https://www.youtube.com/watch?v=jNQXAC9IVRw" "ytmusic https://music.youtube.com/watch?v=jNQXAC9IVRw" "soundcloud https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A157015344"; do
   name=${c%% *}; url=${c#* }
   out=$(yt --simulate --print "%(duration)s" -- "$url" 2>&1 | tail -1)
-  # 30s is the length of a SoundCloud Go+ preview: reachable, but not a usable source.
   case $out in
     30|30.0) echo "canary $name: PREVIEW ONLY (30s)" ;;
     [0-9]*) echo "canary $name: OK (${out}s)" ;;
@@ -218,10 +215,6 @@ logs)
 
 sql)
   [ $# -ge 1 ] || { echo "usage: sql <select>"; exit 3; }
-  # One read statement only. A second statement could switch the read-only
-  # guard off before writing, and a backslash is a psql meta-command (\! runs
-  # a shell on the VM). A single statement inside a read-only transaction
-  # cannot write: data-modifying CTEs and SELECT INTO are refused.
   q=$(printf '%s' "$*" | sed -E 's/[[:space:];]+$//')
   case $q in *\;*|*\\*) echo "acq-debug: sql takes one statement, no ';' or backslash"; exit 3 ;; esac
   printf '%s' "$q" | grep -qiE '^[[:space:]]*(select|with|explain|show|table|values)[[:space:](]' ||

@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Local parity with the PR gate, scoped to what this branch changed, so a PR
-# goes up green instead of bouncing on a rule CI would have caught. Runs the
-# fast, blocking checks of test-backend, test-overseer, test-mobile and the
-# cycles and test-home jobs for each side the diff touches. Left to CI:
-# govulncheck, nilaway, integration tests (need Postgres and INTEGRATION=1),
-# the coverage and fallow ratchets, react-doctor.
-#
-# Usage: bash scripts/precheck.sh [base-ref]   (default origin/main)
-# Exit: 0 green, 1 a check failed, 3 could not run (a toolchain is missing).
 set -uo pipefail
 
 root=$(git rev-parse --show-toplevel) || exit 3
@@ -44,7 +35,7 @@ missing=0
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 
-check() { # <name> <dir> <command...>
+check() {
   local name=$1 dir=$2; shift 2
   if (cd "$dir" && "$@") >"$log" 2>&1; then
     echo "ok    $name"
@@ -57,11 +48,11 @@ check() { # <name> <dir> <command...>
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "SKIP  $2: $1 not installed"; missing=1; return 1; }; }
 
-go_pin() { # <module dir>: golangci-lint v2.12.2 panics on the Go 1.27 stdlib, so pin each module's go.mod version, as CI does
+go_pin() {
   export GOTOOLCHAIN="go$(awk '/^go /{print $2; exit}' "$1/go.mod")"
 }
 
-go_pkgs() { # <module dir>: the packages holding changed .go files, relative to it
+go_pkgs() {
   local m=$1 d
   grep -E "^$m/.*\.go$" <<<"$changed" | xargs -r -n1 dirname | sort -u \
     | sed "s#^$m#.#" | while read -r d; do

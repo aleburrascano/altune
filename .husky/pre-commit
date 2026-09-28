@@ -1,14 +1,5 @@
 #!/usr/bin/env sh
-# pre-commit: lightweight checks before commit.
-# Note: full verification belongs in /verify-end-to-end (slower); pre-commit stays fast.
 
-# Prevent commits of files matching obviously sensitive patterns.
-#    Exempt .env.example and per-tier .env.<tier>.example templates — these are
-#    intentionally checked in as documented placeholders (variable names and
-#    dummy values only, no real secrets), so they're safe to commit.
-#    The exemption is anchored to the known locations (repo-root and the
-#    services/go-api[/deploy] contract dirs) so a nested/unexpected
-#    .env.*.example (e.g. under secrets/) isn't blanket-exempted.
 SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' | grep -Ev '^(services/go-api/(deploy/)?)?\.env(\..*)?\.example$' || true)"
 if [ -n "$SENSITIVE" ]; then
   echo "❌ pre-commit: refusing to commit sensitive files:"

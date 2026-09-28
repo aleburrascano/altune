@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Delivery scoreboard for the software factory.
-#
-# Local:  scripts/delivery-scoreboard.sh [owner/repo] [days]
-# Defaults: repo = $GITHUB_REPOSITORY or aleburrascano/altune, days = $DAYS or 14.
 
 set -euo pipefail
 R="${1:-${GITHUB_REPOSITORY:-aleburrascano/altune}}"
@@ -12,7 +8,6 @@ OUT="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 count() { forge issue list -R "$R" --state all --search "$1" --limit 5000 --json number -q length 2>/dev/null || echo 0; }
 
-# merged PRs: true count + a 500-row sample for medians
 merged=$(forge pr list -R "$R" --state merged --search "merged:>=$SINCE" --limit 5000 --json number -q length 2>/dev/null || echo 0)
 PRS=$(forge pr list -R "$R" --state merged --search "merged:>=$SINCE" --limit 500 \
   --json title,createdAt,mergedAt,labels 2>/dev/null || echo '[]')
@@ -27,7 +22,6 @@ cfr_n=$(jq '[.[] | select((.title|test("revert|rollback|hotfix";"i")) or (any(.l
 cfr=$([ "$sample" -gt 0 ] && awk "BEGIN{printf \"%.1f\", 100*$cfr_n/$sample}" || echo 0)
 types=$(jq -r '[.[].title | (try (capture("^(?<t>[a-z]+)").t) catch "other")] | group_by(.) | map({t:.[0], n:length}) | sort_by(-.n) | map("\(.t)=\(.n)") | join("  ")' <<<"$PRS")
 
-# quality side
 bugs=$(count "label:bug created:>=$SINCE")
 c_review=$(count "label:bug label:caught:review created:>=$SINCE")
 c_qa=$(count "label:bug label:caught:qa created:>=$SINCE")
@@ -39,7 +33,6 @@ escaped=$([ "$tagged" -gt 0 ] && awk "BEGIN{printf \"%.0f\", 100*$c_prod/$tagged
 rel=$(forge api "repos/$R/releases" --paginate 2>/dev/null | jq --arg s "${SINCE}T00:00:00Z" '[.[]|select(.published_at>=$s)]|length' 2>/dev/null || echo 0)
 perday=$([ "$DAYS" -gt 0 ] && awk "BEGIN{printf \"%.1f\", $merged/$DAYS}" || echo 0)
 
-# local telemetry (skipped in CI)
 TEL="$HOME/.claude/telemetry"; loops="n/a"
 if ls "$TEL"/*.jsonl >/dev/null 2>&1; then
   loops=$(jq -s 'group_by(.session_id + "|" + .tool + "|" + (.target//"")) | map(select(length>2)) | length' "$TEL"/*.jsonl 2>/dev/null || echo 0)

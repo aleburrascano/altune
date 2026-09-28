@@ -1,15 +1,8 @@
 #!/usr/bin/env sh
-# commit-msg: 1) strip AI attribution lines  2) run commitlint
-# Installed by husky on `npm install` via the `prepare` script.
 
 MSG_FILE="$1"
 
-# 1. Strip AI co-author lines (Claude / Anthropic / generic AI / emoji-generated footers)
 if [ -f "$MSG_FILE" ]; then
-  # Use Python for cross-platform sed-equivalent. Prefer python3 — many systems
-  # (incl. modern macOS) ship only python3; a bare `python` may not exist.
-  # Probe by executing, not by `command -v`: Windows ships a Microsoft Store
-  # stub `python3` that exists on PATH but always fails with "not found".
   PYTHON=""
   for candidate in python3 python; do
     if "$candidate" -c "" >/dev/null 2>&1; then
@@ -40,7 +33,6 @@ PYEOF
   fi
 fi
 
-# 2. Run commitlint (only if node_modules present)
 if [ -d node_modules/@commitlint ]; then
   npx --no -- commitlint --edit "$MSG_FILE"
 fi
