@@ -99,7 +99,7 @@ func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) 
 		return fmt.Errorf("audio stream failed to decode: %s", firstLine(stderr))
 	default:
 		slog.WarnContext(ctx, "acquisition.decoder_unavailable_accepting",
-			"file", filePath, "error", redact.Secrets(err.Error()))
+			"file", filePath, "error", redact.LogError(err))
 		return nil
 	}
 }

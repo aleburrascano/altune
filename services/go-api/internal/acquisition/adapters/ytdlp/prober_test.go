@@ -67,6 +67,24 @@ func TestFfprobeProber_ValidateDecodable_WarnsWhenTheDecoderCannotStart(t *testi
 	}
 }
 
+func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannotStart(t *testing.T) {
+	logs := captureDefaultLogs(t)
+	p := NewFfprobeProber("")
+	p.ffmpeg = "/opt/altune/vendor-bin/ffmpeg"
+
+	err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus")
+	if err != nil {
+		t.Fatalf("ValidateDecodable() = %v, want nil when ffmpeg is missing", err)
+	}
+	logged := logs.String()
+	if strings.Contains(logged, "/opt/altune/vendor-bin/ffmpeg") {
+		t.Errorf("decoder-unavailable log leaked the host bin path, got logs:\n%s", logged)
+	}
+	if !strings.Contains(logged, "acquisition.decoder_unavailable_accepting") {
+		t.Errorf("fail-open on a missing decoder logged nothing, got logs:\n%s", logged)
+	}
+}
+
 func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing.T) {
 	p := fakeFfmpegProber(t, "#!/bin/sh\necho 'Invalid data found when processing input' >&2\nexit 1\n", time.Minute)
 
