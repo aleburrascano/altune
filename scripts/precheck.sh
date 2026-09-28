@@ -26,6 +26,17 @@ link_deps() {
   eval "$out"
 }
 
+heavy=()
+[ -f "$HOME/.claude/bin/heavy.sh" ] && heavy=(bash "$HOME/.claude/bin/heavy.sh")
+
+hash_comments() {
+  git diff -U0 --diff-filter=ACMR "$base" -- "$@" | awk '
+    /^\+\+\+ b\// { file = substr($0, 7); next }
+    /^@@/ { split($3, a, ","); line = substr(a[1], 2) - 1; next }
+    /^\+/ { line++; if ($0 ~ /^\+[[:space:]]*#([[:space:]]|$)/ || $0 ~ /^\+.*[[:space:]]#([[:space:]]|$)/) { print file ":" line ": " substr($0, 2); hits++ } }
+    END { exit hits > 0 }'
+}
+
 failed=0
 missing=0
 log=$(mktemp)
@@ -61,13 +72,13 @@ if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
   if need go "go-api" && need golangci-lint "go-api lint"; then
-    check "go-api vet" $m go vet ./...
-    check "go-api import direction" $m golangci-lint run --allow-serial-runners
-    check "go-api strict linters (new code)" $m golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
+    check "go-api vet" $m "${heavy[@]}" go vet ./...
+    check "go-api import direction" $m "${heavy[@]}" golangci-lint run --allow-serial-runners
+    check "go-api strict linters (new code)" $m "${heavy[@]}" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
     check "go-api no new comments" $m go run scripts/lint-changed-comments.go "$base"
     check "go-api no new vague names" $m go run scripts/lint-changed-names.go "$base"
     mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && check "go-api tests (changed packages)" $m go test -count=1 "${pkgs[@]}"
+    [ ${#pkgs[@]} -gt 0 ] && check "go-api tests (changed packages)" $m "${heavy[@]}" go test -count=1 "${pkgs[@]}"
   fi
 fi
 
@@ -75,19 +86,19 @@ if touches '^services/overseer/'; then
   m=services/overseer
   go_pin $m
   if need go "overseer" && need golangci-lint "overseer lint"; then
-    check "overseer build" $m go build ./...
-    check "overseer vet" $m go vet ./...
-    check "overseer strict linters" $m golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
+    check "overseer build" $m "${heavy[@]}" go build ./...
+    check "overseer vet" $m "${heavy[@]}" go vet ./...
+    check "overseer strict linters" $m "${heavy[@]}" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
     check "overseer no new comments" services/go-api go run scripts/lint-changed-comments.go "$base" ../overseer
     mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && check "overseer tests (changed packages)" $m go test -count=1 "${pkgs[@]}"
+    [ ${#pkgs[@]} -gt 0 ] && check "overseer tests (changed packages)" $m "${heavy[@]}" go test -count=1 "${pkgs[@]}"
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
-      check "overseer web typecheck" $m/web npm run --silent typecheck
-      check "overseer web lint" $m/web npm run --silent lint
+      check "overseer web typecheck" $m/web "${heavy[@]}" npm run --silent typecheck
+      check "overseer web lint" $m/web "${heavy[@]}" npm run --silent lint
       check "overseer web no new comments" $m/web node scripts/lint-changed-comments.mjs "$base"
-      check "overseer web test" $m/web npm run --silent test
+      check "overseer web test" $m/web "${heavy[@]}" npm run --silent test
     else
       echo "SKIP  overseer web: no node_modules here or in $main_tree"; missing=1
     fi
@@ -98,11 +109,11 @@ if touches '^apps/mobile/'; then
   m=apps/mobile
   if need npx "mobile" && link_deps $m; then
     src=$(grep -E '^apps/mobile/src/.*\.(ts|tsx)$' <<<"$changed" | sed 's#^apps/mobile/##')
-    check "mobile typecheck" $m npx tsc --noEmit
-    [ -n "$src" ] && check "mobile lint (changed files)" $m npx eslint $src
+    check "mobile typecheck" $m "${heavy[@]}" npx tsc --noEmit
+    [ -n "$src" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $src
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
     check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
-    [ -n "$src" ] && check "mobile tests (related)" $m npx jest --ci --passWithNoTests --findRelatedTests $src
+    [ -n "$src" ] && check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --findRelatedTests $src
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
   fi
@@ -125,10 +136,24 @@ fi
 
 if touches '\.(go|ts|tsx)$' && need npx "cycles"; then
   if link_deps .; then
-    check "no dependency cycles" . sh -c 'node_modules/.bin/graft build >/dev/null && node scripts/check-cycles.mjs'
+    check "no dependency cycles" . "${heavy[@]}" sh -c 'node_modules/.bin/graft build >/dev/null && node scripts/check-cycles.mjs'
   else
     echo "SKIP  cycles: no root node_modules"; missing=1
   fi
+fi
+
+if touches '^(scripts/[^/]*|[^/]+)\.[cm]?[jt]sx?$' && need node "repo scripts comments"; then
+  if link_deps services/overseer/web; then
+    check "repo scripts no new comments" . node services/overseer/web/scripts/lint-changed-comments.mjs "$base" \
+      ':(top,glob)*.js' ':(top,glob)*.jsx' ':(top,glob)*.ts' ':(top,glob)*.tsx' ':(top,glob)*.mjs' ':(top,glob)*.cjs' \
+      ':(top,glob)scripts/*.js' ':(top,glob)scripts/*.jsx' ':(top,glob)scripts/*.ts' ':(top,glob)scripts/*.tsx' ':(top,glob)scripts/*.mjs' ':(top,glob)scripts/*.cjs'
+  else
+    echo "SKIP  repo scripts comments: no services/overseer/web/node_modules here or in $main_tree"; missing=1
+  fi
+fi
+
+if touches '^\.(github|gitea)/workflows/.*\.ya?ml$|\.sh$'; then
+  check "workflows and shell no new comments" . hash_comments '.github/workflows/*.yml' '.github/workflows/*.yaml' '.gitea/workflows/*.yml' '.gitea/workflows/*.yaml' '*.sh'
 fi
 
 [ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh"; exit 1; }

@@ -9,9 +9,10 @@ const DIFF_DETECT_FLAGS = ["-M", "-C", "--find-copies-harder"];
 
 const rawBase = process.argv[2];
 if (!rawBase || rawBase.startsWith("-")) {
-  process.stderr.write("usage: lint-changed-comments.mjs <base-ref>\n");
+  process.stderr.write("usage: lint-changed-comments.mjs <base-ref> [pathspec...]\n");
   process.exit(2);
 }
+const pathspecs = process.argv.slice(3).length > 0 ? process.argv.slice(3) : ["."];
 
 const git = (args) => execFileSync("git", ["-c", "core.quotePath=false", ...args], { encoding: "utf8" });
 
@@ -24,7 +25,7 @@ try {
 }
 
 const changedFilePaths = () =>
-  git(["diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "--relative", base, "--", "."])
+  git(["diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "--relative", base, "--", ...pathspecs])
     .split("\0")
     .filter(Boolean);
 
@@ -45,7 +46,7 @@ const addedLinesByFile = () => {
     }
     return added;
   };
-  const patch = git(["diff", "--text", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "-U0", "--relative", base, "--", "."]);
+  const patch = git(["diff", "--text", "--diff-filter=ACMR", ...DIFF_DETECT_FLAGS, "-U0", "--relative", base, "--", ...pathspecs]);
   const blocks = patch.split(/^diff --git .*$/m).slice(1);
   const byFile = new Map();
   allFiles.forEach((file, i) => byFile.set(file, hunksOf(blocks[i] ?? "")));
