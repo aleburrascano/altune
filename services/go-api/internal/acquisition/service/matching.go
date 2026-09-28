@@ -8,8 +8,11 @@ import (
 	"log/slog"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
@@ -49,7 +52,7 @@ var qualifierRe = regexp.MustCompile(`[\(\[\{]([^\)\]\}]*)[\)\]\}]`)
 
 func qualifierTokens(title string) map[string]bool {
 	tokens := make(map[string]bool)
-	for _, segment := range qualifierRe.FindAllStringSubmatch(title, -1) {
+	for _, segment := range qualifierRe.FindAllStringSubmatch(norm.NFKC.String(title), -1) {
 		if featuredRe.MatchString(segment[1]) {
 			continue
 		}
@@ -76,6 +79,125 @@ func qualifierDistance(trackTitle, candidateTitle string) int {
 		}
 	}
 	return distance
+}
+
+type qualifierEntry struct {
+	label  string
+	veto   bool
+	tokens []string
+}
+
+var qualifierLexicon = []qualifierEntry{
+	{"instrumental", true, []string{"instrumental"}},
+	{"karaoke", true, []string{"karaoke"}},
+	{"a cappella", true, []string{"acapella"}},
+	{"a cappella", true, []string{"a", "cappella"}},
+	{"remix", true, []string{"remix"}},
+	{"remix", true, []string{"remixed"}},
+	{"mix", true, []string{"mix"}},
+	{"live", true, []string{"live"}},
+	{"cover", true, []string{"cover"}},
+	{"slowed", true, []string{"slowed"}},
+	{"reverb", true, []string{"reverb"}},
+	{"sped up", true, []string{"sped", "up"}},
+	{"nightcore", true, []string{"nightcore"}},
+	{"8d", true, []string{"8d"}},
+	{"reaction", true, []string{"reaction"}},
+	{"reacts", true, []string{"reacts"}},
+	{"leak", true, []string{"leak"}},
+	{"leak", true, []string{"leaked"}},
+	{"snippet", true, []string{"snippet"}},
+	{"in the booth", true, []string{"in", "the", "booth"}},
+	{"type beat", true, []string{"type", "beat"}},
+	{"100% accurate", true, []string{"100", "accurate"}},
+	{"edit", false, []string{"edit"}},
+	{"radio edit", false, []string{"radio", "edit"}},
+	{"extended", false, []string{"extended"}},
+	{"version", false, []string{"version"}},
+}
+
+var longestQualifierPhrase = longestPhraseIn(qualifierLexicon)
+
+func longestPhraseIn(lexicon []qualifierEntry) int {
+	longest := 0
+	for _, entry := range lexicon {
+		longest = max(longest, len(entry.tokens))
+	}
+	return longest
+}
+
+var titleSeparatorRe = regexp.MustCompile(`\s+[\p{Pd}\x{2212}|/]\s+`)
+
+func withoutFeatureCredits(title string) string {
+	pieces := titleSeparatorRe.Split(norm.NFKC.String(title), -1)
+	for i, piece := range pieces {
+		pieces[i] = featuredRe.ReplaceAllString(piece, "")
+	}
+	return strings.Join(pieces, " ")
+}
+
+var qualifierSeparatorRe = regexp.MustCompile(`[._,]+`)
+
+func normalizeToTokens(s string) []string {
+	return strings.Fields(textnorm.NormalizeForIdentity(qualifierSeparatorRe.ReplaceAllString(s, " ")))
+}
+
+func containsPhrase(tokens, phrase []string) bool {
+	for i := 0; i+len(phrase) <= len(tokens); i++ {
+		if slices.Equal(tokens[i:i+len(phrase)], phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func lexiconEntryAt(tokens []string, pos int) (qualifierEntry, bool) {
+	for length := min(longestQualifierPhrase, len(tokens)-pos); length >= 1; length-- {
+		phrase := tokens[pos : pos+length]
+		for _, entry := range qualifierLexicon {
+			if slices.Equal(entry.tokens, phrase) {
+				return entry, true
+			}
+		}
+	}
+	return qualifierEntry{}, false
+}
+
+func lexiconMatches(tokens []string) []qualifierEntry {
+	var matches []qualifierEntry
+	for pos := 0; pos < len(tokens); {
+		entry, ok := lexiconEntryAt(tokens, pos)
+		if !ok {
+			pos++
+			continue
+		}
+		matches = append(matches, entry)
+		pos += len(entry.tokens)
+	}
+	return matches
+}
+
+func appendQualifier(labels []string, label string) []string {
+	if slices.Contains(labels, label) {
+		return labels
+	}
+	return append(labels, label)
+}
+
+func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto, fallback []string) {
+	titleTokens := normalizeToTokens(trackTitle)
+	artistTokens := normalizeToTokens(trackArtist)
+	for _, entry := range lexiconMatches(normalizeToTokens(withoutFeatureCredits(candidateTitle))) {
+		if containsPhrase(titleTokens, entry.tokens) || containsPhrase(artistTokens, entry.tokens) {
+			continue
+		}
+		if entry.veto {
+			veto = appendQualifier(veto, entry.label)
+			continue
+		}
+		fallback = appendQualifier(fallback, entry.label)
+	}
+	return veto, fallback
 }
 
 const (

@@ -757,6 +757,70 @@ func TestQualifierDistance_IgnoresFeatureCredits(t *testing.T) {
 	}
 }
 
+func TestQualifierDistance_HandlesFullwidthBrackets(t *testing.T) {
+	cases := []struct {
+		name  string
+		track string
+	}{
+		{"ascii brackets", "Song (Live)"},
+		{"fullwidth brackets", "Song （Live）"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := qualifierDistance("Song", c.track); got == 0 {
+				t.Errorf("qualifierDistance(%q, %q) = 0, want an unrequested marker cost", "Song", c.track)
+			}
+		})
+	}
+}
+
+func joinQualifiers(labels []string) string {
+	return strings.Join(labels, "|")
+}
+
+func assertQualifiers(t *testing.T, name string, got, want []string) {
+	t.Helper()
+	if joinQualifiers(got) != joinQualifiers(want) {
+		t.Errorf("%s = %v, want %v", name, got, want)
+	}
+}
+
+func TestUnrequestedQualifiers_InstrumentalAndAccuracyClaimAreVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
+	assertQualifiers(t, "veto", veto, []string{"instrumental", "100% accurate"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_ReactionVideoIsVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
+	assertQualifiers(t, "veto", veto, []string{"reacts"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_RadioEditIsFallbackNotEdit(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Song", "Someone", "Song (Radio Edit)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, []string{"radio edit"})
+}
+
+func TestUnrequestedQualifiers_RequestedWordInTrackTitleIsNotAQualifier(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Live Forever", "Oasis", "Live Forever (Remastered)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestUnrequestedQualifiers_RequestedWordAtEndOfTrackTitleIsNotAQualifier(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Forever Live", "Oasis", "Forever Live (Remastered)")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
+func TestQualifierDistance_CountsEachUnrequestedBracketSegment(t *testing.T) {
+	if got := qualifierDistance("Song", "Song (Acoustic) (Live)"); got != 2*unrequestedQualifierCost {
+		t.Errorf("qualifierDistance with two unrequested bracket segments = %d, want %d", got, 2*unrequestedQualifierCost)
+	}
+}
+
 func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing.T) {
 	track := TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 232}
 	candidates := []ports.AudioCandidate{
@@ -839,5 +903,148 @@ func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing
 	ranked, _ := rankAndCollect(context.Background(), track, candidates)
 	if ranked[0].Channel != "TheWeekndVEVO" {
 		t.Fatalf("selected %q — off Topic, label provenance outranks a shorter qualifier list", ranked[0].Channel)
+	}
+}
+
+func TestUnrequestedQualifiers(t *testing.T) {
+	tests := []struct {
+		name          string
+		title, artist string
+		candidate     string
+		wantVeto      []string
+		wantFallback  []string
+	}{
+		{"unbracketed slowed and reverb", "Song", "Someone", "Someone - Song slowed + reverb", []string{"slowed", "reverb"}, nil},
+		{"punctuation folded", "Song", "Someone", "Song 100 accurate", []string{"100% accurate"}, nil},
+		{"fullwidth brackets", "Song", "Someone", "Song （Live）", []string{"live"}, nil},
+		{"remixed labelled remix", "Song", "Someone", "Song remixed", []string{"remix"}, nil},
+		{"mix is a whole word", "Song", "Someone", "Song (Remix) mix", []string{"remix", "mix"}, nil},
+		{"remix does not match mix", "Song", "Someone", "Song (Remix)", []string{"remix"}, nil},
+		{"acapella spellings share a label", "Song", "Someone", "Song acapella (A Cappella)", []string{"a cappella"}, nil},
+		{"title order and deduplicated", "Song", "Someone", "Song (Live) [Snippet] live leaked leak", []string{"live", "snippet", "leak"}, nil},
+		{"phrases", "Song", "Someone", "Someone Type Beat - Song In The Booth Sped Up 8D", []string{"type beat", "in the booth", "sped up", "8d"}, nil},
+		{"lone phrase word is not the phrase", "Song", "Someone", "Song in the studio type", nil, nil},
+		{"veto and fallback split", "Song", "Someone", "Song (Extended Version) [Karaoke]", []string{"karaoke"}, []string{"extended", "version"}},
+		{"bare edit is fallback", "Song", "Someone", "Song (Edit)", nil, []string{"edit"}},
+		{"artist word is requested", "Song", "Live", "Live - Song", nil, nil},
+		{"title phrase is requested", "Slowed Down", "Someone", "Slowed Down (Reverb)", []string{"reverb"}, nil},
+		{"requested qualifier in title brackets", "Song (Remix)", "Someone", "Song (Remix)", nil, nil},
+		{"feature credit is never a qualifier", "Song", "Someone", "Song (feat. Live Cover Band)", nil, nil},
+		{"unbracketed feature credit", "Song", "Someone", "Song ft. Live Band", nil, nil},
+		{"feature credit stops at a separator", "Song", "Someone", "Song ft. Other - Instrumental", []string{"instrumental"}, nil},
+		{"fullwidth feature credit stops at its bracket", "Song", "Someone", "Song （feat. Other） （Instrumental）", []string{"instrumental"}, nil},
+		{"remastered is not a qualifier", "Song", "Someone", "Song (Remastered 2011)", nil, nil},
+		{"empty candidate", "Song", "Someone", "", nil, nil},
+		{"empty track", "", "", "Song (Cover)", []string{"cover"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			veto, fallback := UnrequestedQualifiers(tt.title, tt.artist, tt.candidate)
+			assertQualifiers(t, "veto of "+tt.candidate, veto, tt.wantVeto)
+			assertQualifiers(t, "fallback of "+tt.candidate, fallback, tt.wantFallback)
+		})
+	}
+}
+
+func FuzzUnrequestedQualifiers(f *testing.F) {
+	f.Add("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instrumental) [100% Accurate]")
+	f.Add("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
+	f.Add("Song", "Someone", "Song （feat. Other） （Radio Edit） a")
+	labels := make(map[string]bool)
+	for _, entry := range qualifierLexicon {
+		labels[entry.label] = true
+	}
+	f.Fuzz(func(t *testing.T, title, artist, candidate string) {
+		veto, fallback := UnrequestedQualifiers(title, artist, candidate)
+		seen := make(map[string]bool)
+		for _, label := range append(veto, fallback...) {
+			if !labels[label] || seen[label] {
+				t.Fatalf("UnrequestedQualifiers(%q, %q, %q) = %v, %v: %q is unknown or repeated", title, artist, candidate, veto, fallback, label)
+			}
+			seen[label] = true
+		}
+	})
+}
+
+func TestUnrequestedQualifiers_TitlesFromTheOutsideWorld(t *testing.T) {
+	longCandidate := "Song" + strings.Repeat(" (Live)", 5000) + " [Instrumental]"
+	tests := []struct {
+		name          string
+		title, artist string
+		candidate     string
+		wantVeto      []string
+		wantFallback  []string
+	}{
+		{"all caps instrumental upload is vetoed", "SPEED DEMON", "Lucy Bedroque", "Lucy Bedroque - SPEED DEMON (INSTRUMENTAL)", []string{"instrumental"}, nil},
+		{"lower case track title still requests the word", "live forever", "oasis", "LIVE FOREVER (LIVE)", nil, nil},
+		{"veto order follows the title not the lexicon", "Song", "Someone", "Song [Karaoke] (Instrumental) reverb slowed", []string{"karaoke", "instrumental", "reverb", "slowed"}, nil},
+		{"fullwidth letters are folded", "Song", "Someone", "Song （ＬＩＶＥ）", []string{"live"}, nil},
+		{"lenticular brackets are separators", "Song", "Someone", "Song【Instrumental】", []string{"instrumental"}, nil},
+		{"corner brackets are separators", "Song", "Someone", "Song「Live」", []string{"live"}, nil},
+		{"en dash is a separator", "Song", "Someone", "Song–Instrumental", []string{"instrumental"}, nil},
+		{"unclosed bracket still carries its qualifier", "Song", "Someone", "Song (Instrumental", []string{"instrumental"}, nil},
+		{"stray closing bracket still carries its qualifier", "Song", "Someone", "Song Instrumental)", []string{"instrumental"}, nil},
+		{"nested brackets carry both qualifiers", "Song", "Someone", "Song [Live (Instrumental)]", []string{"live", "instrumental"}, nil},
+		{"hyphenated sped up", "Song", "Someone", "Song (sped-up)", []string{"sped up"}, nil},
+		{"accuracy claim without a space", "Song", "Someone", "Song [100%Accurate]", []string{"100% accurate"}, nil},
+		{"live version splits into both families", "Song", "Someone", "Song (Live Version)", []string{"live"}, []string{"version"}},
+		{"repeated qualifier in mixed case is reported once", "Song", "Someone", "Song (LIVE) live Live", []string{"live"}, nil},
+		{"live inside a longer word is not live", "Song", "Someone", "Song (Livestream Audio)", nil, nil},
+		{"mix inside a longer word is not mix", "Song", "Someone", "Song (Mixtape Version)", nil, []string{"version"}},
+		{"8d inside a longer token is not 8d", "Song", "Someone", "Song 18d", nil, nil},
+		{"title containing live as a substring does not request live", "Delivery", "Someone", "Delivery (Live)", []string{"live"}, nil},
+		{"title word mix does not request remix", "Mix Tape", "Someone", "Mix Tape (Remix)", []string{"remix"}, nil},
+		{"nightcore uploader prefix is vetoed", "Song", "Someone", "Nightcore - Song", []string{"nightcore"}, nil},
+		{"very long candidate is reported once per qualifier", "Song", "Someone", longCandidate, []string{"live", "instrumental"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			veto, fallback := UnrequestedQualifiers(tt.title, tt.artist, tt.candidate)
+			assertQualifiers(t, "veto", veto, tt.wantVeto)
+			assertQualifiers(t, "fallback", fallback, tt.wantFallback)
+		})
+	}
+}
+
+func TestUnrequestedQualifiers_DotCommaAndUnderscoreAreSeparators(t *testing.T) {
+	tests := []struct {
+		candidate string
+		wantVeto  []string
+	}{
+		{"Song_Instrumental", []string{"instrumental"}},
+		{"Song.Instrumental", []string{"instrumental"}},
+		{"Song,Live", []string{"live"}},
+		{"Song...Live", []string{"live"}},
+		{"Song (Slowed.Reverb)", []string{"slowed", "reverb"}},
+		{"Song (Slowed_Reverb)", []string{"slowed", "reverb"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.candidate, func(t *testing.T) {
+			veto, _ := UnrequestedQualifiers("Song", "Someone", tt.candidate)
+			assertQualifiers(t, "veto", veto, tt.wantVeto)
+		})
+	}
+}
+
+func TestUnrequestedQualifiers_UnicodeDashSeparatorsAfterFeatureCredit(t *testing.T) {
+	tests := []struct {
+		name      string
+		separator rune
+	}{
+		{"hyphen", '‐'},
+		{"non-breaking hyphen", '‑'},
+		{"figure dash", '‒'},
+		{"horizontal bar", '―'},
+		{"minus sign", '−'},
+		{"small em dash", '﹘'},
+		{"small hyphen-minus", '﹣'},
+		{"fullwidth hyphen-minus", '－'},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidate := "Someone " + string(tt.separator) + " Song ft. Other " + string(tt.separator) + " Instrumental"
+			veto, _ := UnrequestedQualifiers("Song", "Someone", candidate)
+			assertQualifiers(t, "veto", veto, []string{"instrumental"})
+		})
 	}
 }
