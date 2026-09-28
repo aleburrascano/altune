@@ -47,7 +47,7 @@ func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
 func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
-			return a.searchKind(ctx, query, kind)
+			return a.searchKind(ctx, mbLuceneEscape(query), kind)
 		})
 }
 
@@ -67,22 +67,16 @@ func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track
 	return results, nil
 }
 
-func mbEscapeQuotes(s string) string {
-	return strings.ReplaceAll(s, `"`, `\"`)
-}
-
 func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 	switch kind {
 	case domain.ResultKindTrack:
-		//nolint:gocritic // Lucene query DSL: quotes are pre-escaped by mbEscapeQuotes; %q would double-escape and corrupt the query
-		return fmt.Sprintf(`artist:"%s" AND recording:"%s"`, mbEscapeQuotes(artist), mbEscapeQuotes(track))
+		return `artist:"` + mbLuceneEscape(artist) + `" AND recording:"` + mbLuceneEscape(track) + `"`
 	case domain.ResultKindAlbum:
-		//nolint:gocritic // Lucene query DSL: quotes are pre-escaped by mbEscapeQuotes; %q would double-escape and corrupt the query
-		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, mbEscapeQuotes(artist), mbEscapeQuotes(track))
+		return `artist:"` + mbLuceneEscape(artist) + `" AND release:"` + mbLuceneEscape(track) + `"`
 	case domain.ResultKindArtist:
-		return artist
+		return mbLuceneEscape(artist)
 	default:
-		return artist + " " + track
+		return mbLuceneEscape(artist) + " " + mbLuceneEscape(track)
 	}
 }
 
@@ -299,7 +293,7 @@ func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) err
 
 func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query string) ([]mbRecording, error) {
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/recording/?query=%s&fmt=json&limit=10",
-		url.QueryEscape(query))
+		url.QueryEscape(mbLuceneEscape(query)))
 	var body mbRecordingResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err

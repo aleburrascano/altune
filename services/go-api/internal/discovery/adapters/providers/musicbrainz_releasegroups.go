@@ -81,7 +81,7 @@ func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistNa
 
 func (a *MusicBrainzAdapter) fetchReleaseGroupMatches(ctx context.Context, query string) ([]mbReleaseGroup, error) {
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=10",
-		url.QueryEscape(query))
+		url.QueryEscape(mbLuceneEscape(query)))
 	var body mbReleaseGroupResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err

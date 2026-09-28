@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -695,5 +696,122 @@ func TestMapMBReleaseGroup_partialDate(t *testing.T) {
 	r := mapMBReleaseGroup(mbReleaseGroup{ID: "rg-2", Title: "Early", FirstReleaseDate: "2005"})
 	if r.ReleaseDate != "2005" {
 		t.Errorf("ReleaseDate = %q, want 2005", r.ReleaseDate)
+	}
+}
+
+func TestMusicBrainzAdapter_Search_escapesLuceneMetacharacters(t *testing.T) {
+	var rawQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"artists": []}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	_, err := adapter.Search(context.Background(), "*NSYNC", map[domain.ResultKind]bool{
+		domain.ResultKindArtist: true,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	q, err := url.QueryUnescape(strings.Split(rawQuery, "&")[0])
+	if err != nil {
+		t.Fatalf("QueryUnescape: %v", err)
+	}
+	q = strings.TrimPrefix(q, "query=")
+	if q != `\*NSYNC` {
+		t.Errorf("query sent to MusicBrainz = %q, want the leading * backslash-escaped so it is not Lucene wildcard syntax", q)
+	}
+}
+
+func TestMusicBrainzAdapter_ResolveArtistIdentity_escapesLuceneMetacharacters(t *testing.T) {
+	var rawQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"artists": []}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Sunn O)))"); err != nil {
+		t.Fatalf("ResolveArtistIdentity: %v", err)
+	}
+
+	q, err := url.QueryUnescape(strings.Split(rawQuery, "&")[0])
+	if err != nil {
+		t.Fatalf("QueryUnescape: %v", err)
+	}
+	q = strings.TrimPrefix(q, "query=")
+	if q != `Sunn O\)\)\)` {
+		t.Errorf("query sent to MusicBrainz = %q, want the unbalanced parens backslash-escaped", q)
+	}
+}
+
+func TestMusicBrainzAdapter_fetchRecordingMatches_escapesLuceneMetacharacters(t *testing.T) {
+	var rawQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"recordings": []}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	if _, err := adapter.fetchRecordingMatches(context.Background(), `Track\`); err != nil {
+		t.Fatalf("fetchRecordingMatches: %v", err)
+	}
+
+	q, err := url.QueryUnescape(strings.Split(rawQuery, "&")[0])
+	if err != nil {
+		t.Fatalf("QueryUnescape: %v", err)
+	}
+	q = strings.TrimPrefix(q, "query=")
+	if q != `Track\\` {
+		t.Errorf("query sent to MusicBrainz = %q, want the trailing backslash escaped so the phrase terminates", q)
+	}
+}
+
+func TestMusicBrainzAdapter_fetchReleaseGroupMatches_escapesLuceneMetacharacters(t *testing.T) {
+	var rawQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"release-groups": []}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	if _, err := adapter.fetchReleaseGroupMatches(context.Background(), "genre:rock"); err != nil {
+		t.Fatalf("fetchReleaseGroupMatches: %v", err)
+	}
+
+	q, err := url.QueryUnescape(strings.Split(rawQuery, "&")[0])
+	if err != nil {
+		t.Fatalf("QueryUnescape: %v", err)
+	}
+	q = strings.TrimPrefix(q, "query=")
+	if q != `genre\:rock` {
+		t.Errorf("query sent to MusicBrainz = %q, want the field-colon backslash-escaped", q)
+	}
+}
+
+func TestMBStructuredQuery_escapesArtistOnlyAndDefaultBranches(t *testing.T) {
+	if got, want := mbStructuredQuery("*NSYNC", "Bye Bye Bye", domain.ResultKindArtist), `\*NSYNC`; got != want {
+		t.Errorf("artist branch = %q, want %q", got, want)
+	}
+	if got, want := mbStructuredQuery("Sunn O)))", "Bye Bye Bye", domain.ResultKindUnknown), `Sunn O\)\)\) Bye Bye Bye`; got != want {
+		t.Errorf("default branch = %q, want %q", got, want)
+	}
+}
+
+func TestMBStructuredQuery_escapesTrackAndAlbumBranches(t *testing.T) {
+	if got, want := mbStructuredQuery("*NSYNC", `Bye\`, domain.ResultKindTrack), `artist:"\*NSYNC" AND recording:"Bye\\"`; got != want {
+		t.Errorf("track branch = %q, want %q (leading * and trailing backslash backslash-escaped)", got, want)
+	}
+	if got, want := mbStructuredQuery("Sunn O)))", "Bye Bye Bye", domain.ResultKindAlbum), `artist:"Sunn O\)\)\)" AND release:"Bye Bye Bye"`; got != want {
+		t.Errorf("album branch = %q, want %q (unbalanced parens backslash-escaped)", got, want)
 	}
 }
