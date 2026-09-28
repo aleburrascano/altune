@@ -1,7 +1,3 @@
-// #930: the detail screen resolves the tapped result from its own route param,
-// so a second navigation can never change what an earlier screen (or the hooks
-// under it) reads.
-
 import { Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 

@@ -35,8 +35,6 @@ function artistResult(): DiscoveryResult {
   };
 }
 
-// The payload each enricher answers with for an entity it found nothing for: the
-// full DTO flagged has_content:false, which is what the api-client contract-parses.
 const emptyEnrichment = {
   has_content: false,
   mbid: '',
@@ -69,8 +67,6 @@ beforeEach(() => {
     data: { session: { access_token: 'tok' } },
     error: null,
   });
-  // MusicBrainz is enabled for artists too; keep it a clean empty result so the
-  // scenario under test is purely about the Last.fm provider.
   __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -89,8 +85,6 @@ describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one
     });
 
     await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
-    // Data is null on failure — same as an empty result — so the error flag is
-    // the only signal a consumer has to tell a fetch failure apart.
     expect(result.current.lastfm).toBeNull();
   });
 
@@ -106,8 +100,6 @@ describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one
     });
 
     await waitFor(() => expect(result.current.lastfm).toBeNull());
-    // Same null payload as the failure case, but the error flag stays false —
-    // this is the distinction the bug was collapsing to a single null.
     expect(result.current.errors.lastfm).toBe(false);
   });
 });
@@ -147,9 +139,6 @@ describe('useDetailEnrichments: naming the entity and provider behind a failed f
 
     await waitFor(() => expect(result.current.lastfm).toBeNull());
 
-    expect(warnSpy).not.toHaveBeenCalledWith(
-      '[detail] enrichment fetch failed',
-      expect.anything(),
-    );
+    expect(warnSpy).not.toHaveBeenCalledWith('[detail] enrichment fetch failed', expect.anything());
   });
 });

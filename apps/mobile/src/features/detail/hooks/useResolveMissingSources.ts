@@ -7,10 +7,6 @@ import { resolveEntityQuery } from '../resolve-entity-query';
 import { normalizeForCompare } from '../text-compare';
 import { useDetailFetchEnabled } from './detailFetchGate';
 
-// A failed resolve leaves no candidates — the exact shape of an entity that
-// genuinely has no external sources — so without this line the two are
-// indistinguishable on the client and a broken search needs a live repro to
-// find, for an entity nobody can name afterwards.
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
   useEffect(() => {
     if (error === null) {

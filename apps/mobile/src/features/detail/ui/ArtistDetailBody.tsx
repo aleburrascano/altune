@@ -72,7 +72,11 @@ function apiDiscographyErrorProps(artist: ArtistDetailState) {
   };
 }
 
-const API_DISCOGRAPHY_EMPTY = { message: 'No albums found.', variant: 'body' as const, tone: 'tertiary' as const };
+const API_DISCOGRAPHY_EMPTY = {
+  message: 'No albums found.',
+  variant: 'body' as const,
+  tone: 'tertiary' as const,
+};
 
 function apiDiscographyProps(artist: ArtistDetailState) {
   return {
@@ -117,7 +121,9 @@ type AboutArtistProps = {
   lastfmError: boolean;
 };
 
-function AboutArtistWithLastfm(props: AboutArtistProps & { lastfm: LastFmEnrichmentResponse }): ReactElement {
+type AboutArtistWithLastfmProps = AboutArtistProps & { lastfm: LastFmEnrichmentResponse };
+
+function AboutArtistWithLastfm(props: AboutArtistWithLastfmProps): ReactElement {
   return (
     <View testID="detail-artist-about">
       <Section label="About">
@@ -134,13 +140,23 @@ function AboutArtist(props: AboutArtistProps): ReactElement {
   return <AboutArtistWithLastfm {...props} lastfm={props.lastfm} />;
 }
 
-function ArtistDetailContent(props: ArtistDetailBodyProps & { artist: ArtistDetailState }): ReactElement {
+function ArtistDetailContentBody(props: ArtistDetailBodyProps & { artist: ArtistDetailState }) {
   return (
-    <View testID="detail-artist-content">
+    <>
       <ArtistTopTracks artist={props.artist} artistResult={props.result} />
       <LibraryAlbums artist={props.artist} />
       <ArtistDiscography artist={props.artist} />
       <AboutArtist lastfm={props.lastfm} lastfmError={props.lastfmError ?? false} />
+    </>
+  );
+}
+
+function ArtistDetailContent(
+  props: ArtistDetailBodyProps & { artist: ArtistDetailState },
+): ReactElement {
+  return (
+    <View testID="detail-artist-content">
+      <ArtistDetailContentBody {...props} />
     </View>
   );
 }

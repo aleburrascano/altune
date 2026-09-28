@@ -68,9 +68,6 @@ function unownedTrack(i: number, extras: Record<string, unknown> = {}): Discover
 
 type Deferred = { resolve: () => void; reject: (e: unknown) => void };
 
-// A useSaveTrack double whose mutateAsync stays pending until the test releases
-// it, so the number of concurrent saves in flight is observable. mutate is the
-// old fire-and-forget path — kept so the test stays honest if the code regresses.
 function saveDouble() {
   let active = 0;
   let maxConcurrent = 0;
@@ -174,7 +171,6 @@ describe('useAlbumDetailState — onSaveAll', () => {
       await flush();
     });
 
-    // While saves are in flight the control reports itself busy.
     expect(result.current.savingAll).toBe(true);
 
     await act(async () => {
@@ -184,8 +180,6 @@ describe('useAlbumDetailState — onSaveAll', () => {
       await flush();
     });
 
-    // Once every save has settled — including the failure — the control frees up
-    // again, and the failed track is still unowned and therefore retryable.
     expect(result.current.savingAll).toBe(false);
     expect(result.current.owned.unownedCount).toBe(3);
   });
@@ -245,7 +239,6 @@ describe('useAlbumDetailState — onSaveAll', () => {
       await flush();
     });
 
-    // The two that landed are not written a second time; only the failure is.
     expect(savedTitles(dbl).slice(3)).toEqual(['Track 1']);
     warn.mockRestore();
   });
@@ -270,8 +263,6 @@ describe('useAlbumDetailState — onSaveAll', () => {
       await flush();
     });
 
-    // The last track has not been dispatched yet — the batch still owns it, so its
-    // row must not offer a quick-save that would race the dispatch.
     expect(dbl.started).toBe(SAVE_ALL_CONCURRENCY);
     expect(result.current.isSavingInBatch(tracks[tracks.length - 1]!)).toBe(true);
 
@@ -282,8 +273,6 @@ describe('useAlbumDetailState — onSaveAll', () => {
       }
     });
 
-    // And it is the batch's claim, not the track, that disables it: the claim lifts
-    // as soon as the run is over.
     expect(result.current.isSavingInBatch(tracks[tracks.length - 1]!)).toBe(false);
   });
 
@@ -383,7 +372,11 @@ describe('saving all with a partial library lookup', () => {
 
 describe('useAlbumDetailState — onTrackPress', () => {
   it('pushes the given detail route carrying the tapped track', () => {
-    mockUseSaveTrack.mockReturnValue({ mutate: jest.fn(), mutateAsync: jest.fn(), isPending: false });
+    mockUseSaveTrack.mockReturnValue({
+      mutate: jest.fn(),
+      mutateAsync: jest.fn(),
+      isPending: false,
+    });
     mockUseAlbumTracks.mockReturnValue({
       tracks: [],
       isLoading: false,

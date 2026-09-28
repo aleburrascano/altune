@@ -77,13 +77,6 @@ describe('useArtistContent bounds the artist albums fetch', () => {
 });
 
 describe('logging degraded content', () => {
-  // These detail hooks each have a silent failure path: the failure reason is
-  // discarded with no log, so a real incident can't be told apart from a one-off
-  // without a live repro. Each test drives its hook into that failure path and
-  // asserts the site now logs enough to diagnose it (status/provider/artist, the
-  // save error + track identity, the lateral-nav query/kind + error, the entity a
-  // failed discovery search was looking for).
-
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -95,13 +88,20 @@ describe('logging degraded content', () => {
     warnSpy.mockRestore();
   });
 
-  function contentResponse(overrides: {
-    topStatus?: string;
-    albumsStatus?: string;
-  }): unknown {
+  function contentResponse(overrides: { topStatus?: string; albumsStatus?: string }): unknown {
     return {
-      top_tracks: { items: [], provider: 'spotify', status: overrides.topStatus ?? 'ok', latency_ms: 1 },
-      albums: { items: [], provider: 'spotify', status: overrides.albumsStatus ?? 'ok', latency_ms: 1 },
+      top_tracks: {
+        items: [],
+        provider: 'spotify',
+        status: overrides.topStatus ?? 'ok',
+        latency_ms: 1,
+      },
+      albums: {
+        items: [],
+        provider: 'spotify',
+        status: overrides.albumsStatus ?? 'ok',
+        latency_ms: 1,
+      },
     };
   }
 

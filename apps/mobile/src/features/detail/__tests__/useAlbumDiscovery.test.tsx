@@ -64,7 +64,9 @@ describe('bounding the fetch', () => {
               subtitle: 'Fleetwood Mac',
               image_url: null,
               confidence: 'high',
-              sources: [{ provider: 'spotify', external_id: 'album-1', url: 'https://s.example/1' }],
+              sources: [
+                { provider: 'spotify', external_id: 'album-1', url: 'https://s.example/1' },
+              ],
               extras: {},
             },
           ],
@@ -97,13 +99,6 @@ describe('bounding the fetch', () => {
 });
 
 describe('logging a failed search', () => {
-  // These detail hooks each have a silent failure path: the failure reason is
-  // discarded with no log, so a real incident can't be told apart from a one-off
-  // without a live repro. Each test drives its hook into that failure path and
-  // asserts the site now logs enough to diagnose it (status/provider/artist, the
-  // save error + track identity, the lateral-nav query/kind + error, the entity a
-  // failed discovery search was looking for).
-
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -115,8 +110,6 @@ describe('logging a failed search', () => {
     warnSpy.mockRestore();
   });
 
-  // Issue #1660: the resolve request's own log strips the query string, so a
-  // failed discography search named no entity at all.
   describe('useAlbumDiscovery logs the album its search step was looking for', () => {
     it('logs the title, artist and reason when the search step fails', async () => {
       mockResolveEntityQuery.mockReturnValue({
@@ -140,7 +133,6 @@ describe('logging a failed search', () => {
           error: 'search transport failed',
         }),
       );
-      // One failure, one line: a re-render must not re-log it.
       expect(warnSpy).toHaveBeenCalledTimes(1);
     });
   });

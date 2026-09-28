@@ -27,17 +27,12 @@ type SaveContext = { optimisticId: TrackId; identity: string | null };
 
 type SaveMutation = UseMutationResult<TrackResponse, Error, CreateTrackRequest, SaveContext>;
 
-// Why the save failed, in the two terms the UI branches on. `isRetryable` is the
-// app's one transient/permanent classifier — the same one the QueryClient's retry
-// policy uses — so a permanent refusal is never offered as a retry (#1661).
 export type SaveFailure = {
   message: string;
   isRetryable: boolean;
   trackId?: TrackId;
 };
 
-// Narrow view over the TanStack mutation: only what save consumers actually
-// use, so callers can't reach for the other ~12 members of UseMutationResult.
 export type SaveTrack = {
   mutate: SaveMutation['mutate'];
   mutateAsync: SaveMutation['mutateAsync'];
@@ -45,10 +40,10 @@ export type SaveTrack = {
   failure: SaveFailure | null;
 };
 
-function saveFailure(error: Error | null, body: CreateTrackRequest | undefined): SaveFailure | null {
-  if (error === null) {
-    return null;
-  }
+type SaveBody = CreateTrackRequest | undefined;
+
+function saveFailure(error: Error | null, body: SaveBody): SaveFailure | null {
+  if (error === null) return null;
   return {
     message: error.message,
     isRetryable: isRetryable(error),
@@ -104,9 +99,6 @@ export function useSaveTrack(): SaveTrack {
       });
     },
     onError: (error, body, context) => {
-      // The save POST failed. Log the actual reason plus the track identity so a
-      // real incident (a provider/API outage) can be told apart from a one-off
-      // without a live repro, and the classification the UI acted on with it.
       console.warn('[detail] save track failed', {
         title: body.title,
         artist: body.artist,
@@ -114,10 +106,6 @@ export function useSaveTrack(): SaveTrack {
         retryable: isRetryable(error),
       });
       if (context) {
-        // The POST never landed, so drop the optimistic library row. Keep the
-        // per-track status linked to its identity and mark it failed instead of
-        // wiping it, so the row's save control shows a visible failure/retry
-        // state rather than silently reverting to "add".
         removeTrackFromCaches(queryClient, context.optimisticId);
         patchTrackStatus(
           context.optimisticId,

@@ -44,8 +44,6 @@ function createWrapper(queryClient: QueryClient) {
 const TITLE = 'Midnight City';
 const ARTIST = 'M83';
 
-// Pressable's onPress calls e.stopPropagation(); fireEvent doesn't synthesize an
-// event, so hand it one.
 const pressEvent = { stopPropagation: () => {} };
 
 function request(): CreateTrackRequest {
@@ -64,8 +62,6 @@ function request(): CreateTrackRequest {
   };
 }
 
-// A row's quick-save control wired to a real save mutation, the same shape as
-// the album/artist detail rows: onPress fires save.mutate for this track.
 function QuickSaveRow(): React.ReactElement {
   const save = useSaveTrack();
   return (
@@ -110,16 +106,10 @@ afterEach(() => {
 
 describe('TrackSaveControl quick-save re-entrancy', () => {
   it('fires a single createTrack POST when the save glyph is double-tapped before the mutation settles', async () => {
-    // The request resolves (as a server error), but the batched taps below both
-    // fire before the mutation settles, so the outcome is irrelevant — only how
-    // many POSTs the double-tap produced.
     __http.reply('POST /v1/tracks', { status: 500 });
     const queryClient = freshClient();
     render(<QuickSaveRow />, { wrapper: createWrapper(queryClient) });
 
-    // Both releases land on the same render, before the first save's status has
-    // flushed back through the store — the real fast-double-tap race. Batching
-    // them in one act() keeps that flush from happening between the taps.
     const control = screen.getByTestId('quick-save');
     act(() => {
       fireEvent.press(control, pressEvent);
@@ -132,9 +122,6 @@ describe('TrackSaveControl quick-save re-entrancy', () => {
 });
 
 describe('TrackSaveControl identity collision', () => {
-  // "Encore" / "Jay Z Interlude" and "Encore Jay Z" / "Interlude" are different
-  // tracks that both space-join to "encore jay z interlude". A plain-space
-  // identity key lets the second, unsaved track inherit the first's saved status.
   const SAVED_TITLE = 'Encore';
   const SAVED_ARTIST = 'Jay Z Interlude';
   const OTHER_TITLE = 'Encore Jay Z';
@@ -162,26 +149,18 @@ describe('TrackSaveControl identity collision', () => {
 
   it('does not show a different, unsaved track as saved when its title/artist space-collides', async () => {
     __http.reply('POST /v1/tracks', { status: 200, json: trackResponse() });
-    // The successful save enqueues library_add telemetry; accept it so the outbox
-    // does not arm a retry timer that fires after this file has finished.
     __http.reply('POST /v1/discovery/events', { status: 202 });
     const queryClient = freshClient();
 
-    // Save the first track and let its saved ("in library") status settle.
     const saved = render(<SaveRow title={SAVED_TITLE} artist={SAVED_ARTIST} />, {
       wrapper: createWrapper(queryClient),
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId('quick-save'), pressEvent);
     });
-    await waitFor(() =>
-      expect(screen.getByLabelText(`${SAVED_TITLE} in library`)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByLabelText(`${SAVED_TITLE} in library`)).toBeTruthy());
     saved.unmount();
 
-    // A different, never-saved track whose fields space-collide with the saved
-    // one must still render as savable — not inherit the saved status. The
-    // zustand identity/status store survives the unmount above.
     render(<SaveRow title={OTHER_TITLE} artist={OTHER_ARTIST} />, {
       wrapper: createWrapper(queryClient),
     });
@@ -191,8 +170,6 @@ describe('TrackSaveControl identity collision', () => {
   });
 });
 
-// A "Save all" run holds every track it claimed, dispatched or still queued. A row
-// that still offers its own save lets the user write the same track twice (#1658).
 describe('TrackSaveControl under a Save all run', () => {
   function ClaimedRow(): React.ReactElement {
     const save = useSaveTrack();
@@ -237,19 +214,11 @@ describe('TrackSaveControl quick-save failure', () => {
       fireEvent.press(screen.getByTestId('quick-save'), pressEvent);
     });
 
-    await waitFor(() =>
-      expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy(),
-    );
-    // And it never silently reverts to the plain "add" affordance.
+    await waitFor(() => expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy());
     expect(screen.queryByLabelText(`Save ${TITLE}`)).toBeNull();
   });
 });
 
-// Regression for #748: a stamped-owned row and the shared owned-track rule used
-// by the detail rows must give the save control the SAME answer. Previously the
-// control ignored the row's stamped extras and resolved purely by the
-// (title, artist) identity link, so a stale/foreign link to a different trackId
-// made the control disagree with the detail row for the very same track.
 describe('TrackSaveControl stamped-owned vs identity-only agreement', () => {
   const OWNED_TITLE = 'Ivy';
   const OWNED_ARTIST = 'Frank Ocean';
@@ -259,16 +228,12 @@ describe('TrackSaveControl stamped-owned vs identity-only agreement', () => {
   const stamped: OwnedTrack = { trackId: STAMPED_ID, acquisitionStatus: 'ready' };
   const identity: TrackIdentity = { title: OWNED_TITLE, artist: OWNED_ARTIST };
 
-  // The detail-row code path: the shared rule fed the row's own stamped extras.
   function DetailRowProbe(): React.ReactElement {
     const owned = useResolvedOwnedTrack(stamped, identity);
     return <Text>{saveControlState(owned)}</Text>;
   }
 
-  it('shows the row\'s own stamped status, not a foreign identity link, and matches the detail-row rule', () => {
-    // The (title, artist) key is linked to a DIFFERENT track that is mid-download.
-    // A resolver that trusts the identity link over the stamped extras would show
-    // this row as "downloading".
+  it("shows the row's own stamped status, not a foreign identity link, and matches the detail-row rule", () => {
     linkTrackIdentity(trackIdentityKey(OWNED_TITLE, OWNED_ARTIST), FOREIGN_ID);
     patchTrackStatus(FOREIGN_ID, { acquisitionStatus: 'pending', failureMessage: null });
 
@@ -285,27 +250,20 @@ describe('TrackSaveControl stamped-owned vs identity-only agreement', () => {
       </>,
     );
 
-    // Save control resolves the stamped-owned answer ("in library"), not the
-    // foreign link's "downloading".
     expect(screen.getByLabelText(`${OWNED_TITLE} in library`)).toBeTruthy();
     expect(screen.queryByLabelText(`${OWNED_TITLE} downloading`)).toBeNull();
 
-    // And it is the SAME answer the detail rows compute from the shared rule.
     expect(screen.getByText(saveControlState(stamped))).toBeTruthy();
-    expect(screen.getByLabelText(saveControlLabel(saveControlState(stamped), OWNED_TITLE))).toBeTruthy();
+    expect(
+      screen.getByLabelText(saveControlLabel(saveControlState(stamped), OWNED_TITLE)),
+    ).toBeTruthy();
   });
 });
 
-// The dim under a finger is the only feedback a quick-save gives before its
-// glyph changes, and it must stay off a control that ignores the press — a
-// control that dims without saving reads as a save that silently failed.
 describe('TrackSaveControl press dim', () => {
   const DIM_TITLE = 'Nightcall';
   const DIM_ARTIST = 'Kavinsky';
 
-  // Pressable's `pressed` comes from the touch responder, not from an onPressIn
-  // prop, and fireEvent.press() grants and releases in one go — so hold the
-  // responder open by hand to observe the held-down style.
   function holdDown(testID: string): void {
     fireEvent(screen.getByTestId(testID), 'responderGrant', {
       persist: () => {},
@@ -360,8 +318,6 @@ describe('TrackSaveControl press dim', () => {
   });
 });
 
-// The row shares the pill's "can the user tap save" rule (#2817): a tap reaches
-// onPress only to add a track or retry a failed one.
 describe('TrackSaveControl tap guard', () => {
   const ROW_TITLE = 'Oblivion';
   const ROW_ARTIST = 'Grimes';
@@ -398,7 +354,10 @@ describe('TrackSaveControl tap guard', () => {
   });
 
   it('ignores a tap while the track is downloading', () => {
-    const onPress = renderRow({ trackId: 'pending-oblivion' as TrackId, acquisitionStatus: 'pending' });
+    const onPress = renderRow({
+      trackId: 'pending-oblivion' as TrackId,
+      acquisitionStatus: 'pending',
+    });
 
     expect(onPress).not.toHaveBeenCalled();
     expect(screen.getByLabelText(`${ROW_TITLE} downloading`)).toBeTruthy();

@@ -4,8 +4,6 @@ import type { OwnedTrack } from './hooks/useOwnedTrack';
 import type { SaveFailure } from './hooks/useSaveTrack';
 import { isOptimisticTrackId } from './save-cache';
 
-// `failed` is a save worth re-attempting; `rejected` is one that was refused for
-// good, so no control offers a retry for it.
 export type SaveControlState = 'add' | 'saving' | 'ready' | 'failed' | 'rejected';
 
 export type SaveState = SaveControlState | 'disabled';

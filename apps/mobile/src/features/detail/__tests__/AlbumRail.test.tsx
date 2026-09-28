@@ -61,10 +61,9 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
     mockWindowWidth = 1440;
     renderRail();
 
-    const flattened = StyleSheet.flatten(screen.getByTestId('detail-album-0').props.style) as Record<
-      string,
-      unknown
-    >;
+    const flattened = StyleSheet.flatten(
+      screen.getByTestId('detail-album-0').props.style,
+    ) as Record<string, unknown>;
 
     expect(flattened.borderWidth).toBeUndefined();
   });
@@ -89,7 +88,9 @@ describe('AlbumRail: grid on the web at a wide width', () => {
     renderRail();
 
     const measure = screen.getByTestId('detail-discography-grid-measure');
-    fireEvent(measure, 'layout', { nativeEvent: { layout: { width: 640, height: 400, x: 0, y: 0 } } });
+    fireEvent(measure, 'layout', {
+      nativeEvent: { layout: { width: 640, height: 400, x: 0, y: 0 } },
+    });
 
     const grid = screen.UNSAFE_getByProps({ testID: 'detail-discography-grid' });
     expect(grid.props.numColumns).toBe(4);
@@ -100,7 +101,9 @@ describe('AlbumRail: grid on the web at a wide width', () => {
     renderRail();
 
     const measure = screen.getByTestId('detail-discography-grid-measure');
-    fireEvent(measure, 'layout', { nativeEvent: { layout: { width: 1152, height: 400, x: 0, y: 0 } } });
+    fireEvent(measure, 'layout', {
+      nativeEvent: { layout: { width: 1152, height: 400, x: 0, y: 0 } },
+    });
 
     const grid = screen.UNSAFE_getByProps({ testID: 'detail-discography-grid' });
     expect(grid.props.numColumns).toBe(6);
@@ -231,10 +234,16 @@ describe('AlbumRail: grid edges on the web at a wide width', () => {
     });
 
     const cardWidth = (
-      StyleSheet.flatten(screen.getByTestId('detail-album-0').props.style) as Record<string, unknown>
+      StyleSheet.flatten(screen.getByTestId('detail-album-0').props.style) as Record<
+        string,
+        unknown
+      >
     ).width;
     const seeAllWidth = (
-      StyleSheet.flatten(screen.getByTestId('detail-see-all-album').props.style) as Record<string, unknown>
+      StyleSheet.flatten(screen.getByTestId('detail-see-all-album').props.style) as Record<
+        string,
+        unknown
+      >
     ).width;
 
     expect(seeAllWidth).toBe(cardWidth);

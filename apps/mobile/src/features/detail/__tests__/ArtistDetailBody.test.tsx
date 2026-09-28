@@ -1,9 +1,3 @@
-// Regression for issue #683: when a library-only artist's discography *search*
-// step fails, the "Explore Discography" Retry button used to call only
-// refetchAlbums() — a query that is disabled while the search has produced no
-// source, so the tap was a permanent no-op. The button must re-invoke the
-// search step itself.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
@@ -22,14 +16,10 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
 }));
 
-// Playback needs a PlaybackProvider we don't set up; it is irrelevant to the
-// discovery-search retry under test.
 jest.mock('@shared/playback/useQueuePlayback', () => ({
   useQueuePlayback: () => ({ playFromList: jest.fn(), enqueue: jest.fn() }),
 }));
 
-// apiFetch demands a live session before it ever calls fetch; hand it one so
-// the search request actually reaches the http double (and then fails there).
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
     auth: {
@@ -73,10 +63,7 @@ describe('ArtistDetailBody: explore-discography Retry after a failed search step
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    // #1660: the failed search names the artist it was looking for in a log;
-    // failure-logging.test.tsx asserts that line, so here it is only silenced.
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    // Every peripheral library lookup resolves empty; only the search fails.
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     __http.fail(SEARCH);
   });
@@ -88,28 +75,18 @@ describe('ArtistDetailBody: explore-discography Retry after a failed search step
   it('re-invokes the discovery search query when Retry is tapped (was a no-op)', async () => {
     renderBody();
 
-    // Expand the explore section so the search step runs and then fails.
     fireEvent.press(screen.getByTestId('detail-explore-discography'));
 
     await waitFor(() => expect(__http.countFor(SEARCH)).toBe(1));
 
     const retry = await screen.findByTestId('detail-explore-retry');
-    // #667: the explore error state carries the same testID pair as its siblings.
     expect(screen.getByTestId('detail-explore-error')).toBeTruthy();
 
     fireEvent.press(retry);
 
-    // With the bug, Retry called only refetchAlbums() on a disabled query and
-    // the search count stayed at 1 forever. The fix must re-run the search.
     await waitFor(() => expect(__http.countFor(SEARCH)).toBe(2));
   });
 });
-
-// #2816: split ArtistDetailBody into section components with one shared
-// collapsible header. These pin the composition's observable behaviour
-// (section order, the top-tracks cap, explore expand/collapse, facts) before
-// any structural edit, and again after — this same test file must pass
-// unmodified through the split.
 
 function collectTestIds(node: unknown, out: string[] = []): string[] {
   if (node == null) return out;
@@ -146,10 +123,14 @@ function libraryTrackRow(index: number, artist: string) {
 const TRACK_CAP = 5;
 const TRACKS = 'GET /v1/tracks';
 
-function renderLibraryArtistBody(options: {
-  lastfm?: DiscoveryResult extends never ? never : Parameters<typeof ArtistDetailBody>[0]['lastfm'];
-  lastfmError?: boolean;
-} = {}) {
+function renderLibraryArtistBody(
+  options: {
+    lastfm?: DiscoveryResult extends never
+      ? never
+      : Parameters<typeof ArtistDetailBody>[0]['lastfm'];
+    lastfmError?: boolean;
+  } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -249,14 +230,6 @@ describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle 
   });
 
   it('hides the facts row when there is nothing to show', async () => {
-    // The describe block's beforeEach registers a standing TRACKS rule with
-    // 7 ready tracks, and the http double matches rules in registration
-    // order, so a later __http.reply(TRACKS, ...) here would never be
-    // reached. Reset the double and rebuild only what a truly empty artist
-    // needs: buildArtistFacts shows "In library" from owned.playable +
-    // acquiringCount and "Releases" from apiAlbums/libraryAlbums, so this
-    // fixture must have zero library tracks, zero albums and no lastfm
-    // listeners (the default here, since no `lastfm` option is passed).
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     __http.reply(TRACKS, {
@@ -270,9 +243,6 @@ describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle 
     expect(screen.queryByTestId('detail-artist-facts')).toBeNull();
   });
 });
-
-// Probe (#2816): edge cases of the section split, pinned through the body a
-// caller renders. The ticket promises behaviour unchanged by the split.
 
 let mockProbeWindowWidth: number | null = null;
 
@@ -575,7 +545,9 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
 
   it('pushes the exact top track tapped', async () => {
     const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
+    jest
+      .spyOn(require('expo-router'), 'useRouter')
+      .mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
     renderLibraryArtistBody();
 
     fireEvent.press(await screen.findByTestId('detail-top-track-0'));
@@ -588,7 +560,9 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
 
   it('pushes the exact album tapped', async () => {
     const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
+    jest
+      .spyOn(require('expo-router'), 'useRouter')
+      .mockReturnValue({ push, replace: jest.fn(), back: jest.fn() });
     renderLibraryArtistBody();
 
     fireEvent.press(await screen.findByTestId('detail-album-0'));

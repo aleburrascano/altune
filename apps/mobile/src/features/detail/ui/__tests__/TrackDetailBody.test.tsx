@@ -1,8 +1,3 @@
-// #1661: every save failure used to render one hardcoded banner and an
-// always-tappable Retry, so a permanent refusal (a 400 the server will give
-// again) was indistinguishable from a transient 503 — and the retry it offered
-// could never work.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
@@ -335,9 +330,8 @@ describe('TrackDetailBody pins its router calls', () => {
   });
 
   it('pushes the exact related track that was tapped', async () => {
-    const { RelatedTracksSection: RealRelatedTracksSection } = jest.requireActual(
-      '../RelatedTracksSection',
-    );
+    const { RelatedTracksSection: RealRelatedTracksSection } =
+      jest.requireActual('../RelatedTracksSection');
     const push = jest.fn();
     jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
 

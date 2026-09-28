@@ -9,7 +9,6 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 
 import { SectionError, type SectionErrorProps } from './SectionError';
 
-/** Copy + styling for the empty slot of an {@link AsyncListSection}. */
 export interface AsyncEmptyConfig {
   message: string;
   variant: TypographyVariant;
@@ -20,21 +19,12 @@ export interface AsyncListSectionProps {
   isLoading: boolean;
   isError: boolean;
   isEmpty: boolean;
-  /** Builds the loading placeholder. Called only while loading. */
   skeleton: () => ReactNode;
-  /** Copy, testID prefix and retry for the shared {@link SectionError} slot. */
   error: SectionErrorProps;
   empty: AsyncEmptyConfig;
-  /** Rendered when content is ready. */
   children: ReactNode;
 }
 
-/**
- * The one loading → error → empty → ready list block for artist detail. The
- * error slot is always the shared {@link SectionError}, so the three detail
- * lists (tracks, API discography, explore discography) cannot drift apart in
- * tone or testIDs; per-list copy stays verbatim via props.
- */
 export function AsyncListSection({
   isLoading,
   isError,

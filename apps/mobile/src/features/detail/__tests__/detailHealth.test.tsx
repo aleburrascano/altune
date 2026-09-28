@@ -1,8 +1,3 @@
-// Regression for issue #1665: enrichment and detail content fetches fall back to an empty
-// section silently, so their outcomes must be tallied into an aggregate `detail_health` event
-// from which a per-provider success rate can be computed — one event per batch, never one per
-// fetch.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
@@ -111,7 +106,6 @@ function albumTracksResponse(status: string): Record<string, unknown> {
   return { items: [], provider_name: 'spotify', status };
 }
 
-// A MusicBrainz lookup that found nothing still answers with the full DTO.
 function emptyEnrichmentResponse(): Record<string, unknown> {
   return {
     has_content: false,
@@ -218,9 +212,7 @@ describe('detail health metric', () => {
 
     for (const listener of appStateListeners()) listener('background');
 
-    expect(sentPayloads()).toEqual([
-      expect.objectContaining({ content_artist_content_failed: 1 }),
-    ]);
+    expect(sentPayloads()).toEqual([expect.objectContaining({ content_artist_content_failed: 1 })]);
   });
 
   it('sends nothing when there is nothing to report, and swallows a failed send', async () => {

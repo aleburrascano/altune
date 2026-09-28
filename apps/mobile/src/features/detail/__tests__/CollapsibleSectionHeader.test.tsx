@@ -1,7 +1,3 @@
-// #2816: one collapsible chevron header shared by the artist explore section and
-// AlbumMoreTracks. Contract from the ticket:
-// CollapsibleSectionHeader({ label, expanded, onToggle?, testID, accessibilityLabel }).
-
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
@@ -63,9 +59,7 @@ describe('CollapsibleSectionHeader with a toggle', () => {
 
 describe('CollapsibleSectionHeader without a toggle', () => {
   it('renders its label as a static header that offers no button', () => {
-    render(
-      <CollapsibleSectionHeader label="More from this album" expanded />,
-    );
+    render(<CollapsibleSectionHeader label="More from this album" expanded />);
 
     expect(screen.getByText('More from this album')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();

@@ -44,7 +44,11 @@ function showAllAction(artist: ArtistDetailState, showAllTracks: boolean, onShow
   return { action: { label, onPress: onShowAll, testID: 'detail-show-all-tracks' } };
 }
 
-function topTracksSectionProps(artist: ArtistDetailState, showAllTracks: boolean, onShowAll: () => void) {
+function topTracksSectionProps(
+  artist: ArtistDetailState,
+  showAllTracks: boolean,
+  onShowAll: () => void,
+) {
   return {
     label: artist.hasSources ? 'Popular tracks' : 'Your tracks',
     ...showAllAction(artist, showAllTracks, onShowAll),
@@ -64,7 +68,11 @@ function topTracksErrorProps(artist: ArtistDetailState) {
   };
 }
 
-const TOP_TRACKS_EMPTY = { message: 'No tracks found.', variant: 'body' as const, tone: 'tertiary' as const };
+const TOP_TRACKS_EMPTY = {
+  message: 'No tracks found.',
+  variant: 'body' as const,
+  tone: 'tertiary' as const,
+};
 
 function topTracksAsyncProps(artist: ArtistDetailState) {
   return {
@@ -77,14 +85,27 @@ function topTracksAsyncProps(artist: ArtistDetailState) {
   };
 }
 
-function topTrackRowProps(artist: ArtistDetailState, artistResult: DiscoveryResult, track: DiscoveryResult, index: number) {
+function topTrackHandlers(artist: ArtistDetailState, track: DiscoveryResult) {
+  return {
+    onPress: () => artist.onTrackPress(track),
+    onQuickSave: () => artist.onQuickSave(track),
+  };
+}
+
+type TopTrackRowArgs = {
+  artist: ArtistDetailState;
+  artistResult: DiscoveryResult;
+  track: DiscoveryResult;
+  index: number;
+};
+
+function topTrackRowProps({ artist, artistResult, track, index }: TopTrackRowArgs) {
   return {
     track,
     index,
     owned: artist.ownedFor(track),
     fallbackArtist: artistResult.title,
-    onPress: () => artist.onTrackPress(track),
-    onQuickSave: () => artist.onQuickSave(track),
+    ...topTrackHandlers(artist, track),
   };
 }
 
@@ -92,15 +113,15 @@ function TopTrackRows({ artist, artistResult, showAllTracks }: TopTrackRowsProps
   return visibleTopTracks(artist, showAllTracks).map((track, index) => (
     <ArtistTopTrackRow
       key={track.sources[0]?.external_id ?? index}
-      {...topTrackRowProps(artist, artistResult, track, index)}
+      {...topTrackRowProps({ artist, artistResult, track, index })}
     />
   ));
 }
 
-function TopTracksAsyncList({ artist, artistResult, showAllTracks }: TopTrackRowsProps): ReactElement {
+function TopTracksAsyncList(props: TopTrackRowsProps): ReactElement {
   return (
-    <AsyncListSection {...topTracksAsyncProps(artist)}>
-      <TopTrackRows artist={artist} artistResult={artistResult} showAllTracks={showAllTracks} />
+    <AsyncListSection {...topTracksAsyncProps(props.artist)}>
+      <TopTrackRows {...props} />
     </AsyncListSection>
   );
 }
@@ -110,7 +131,11 @@ export function ArtistTopTracks({ artist, artistResult }: TopTracksProps): React
   const onShowAll = () => setShowAllTracks(true);
   return (
     <Section {...topTracksSectionProps(artist, showAllTracks, onShowAll)}>
-      <TopTracksAsyncList artist={artist} artistResult={artistResult} showAllTracks={showAllTracks} />
+      <TopTracksAsyncList
+        artist={artist}
+        artistResult={artistResult}
+        showAllTracks={showAllTracks}
+      />
     </Section>
   );
 }
@@ -136,7 +161,12 @@ function TrackTitleLabel({ title }: { title: string }): ReactElement {
 function TrackIdentity({ track }: { track: DiscoveryResult }): ReactElement {
   return (
     <>
-      <Artwork uri={track.image_url} size={40} radius={radius.sm} accessibilityLabel={track.title} />
+      <Artwork
+        uri={track.image_url}
+        size={40}
+        radius={radius.sm}
+        accessibilityLabel={track.title}
+      />
       <TrackTitleLabel title={track.title} />
     </>
   );

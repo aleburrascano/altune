@@ -60,9 +60,6 @@ export function useLateralNav(): LateralNavHandle {
 
         openDetail(router, detailRouteFor(tabRoot), result);
       } catch (error) {
-        // A non-"not found" failure (fetch/transport/parse error) otherwise
-        // vanishes here, leaving the user stuck with no diagnosis. Log the
-        // query/kind and the reason so a real incident is distinguishable.
         console.warn('[detail] lateral nav fetch failed', {
           query,
           kind,

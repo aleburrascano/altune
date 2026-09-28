@@ -10,27 +10,14 @@ import type { ContentFailure } from '../content-status';
 import { sharedStyles } from './styles';
 
 export interface SectionErrorProps {
-  /**
-   * Derives `${testIDPrefix}-error` (container), `${testIDPrefix}-retry`
-   * (button) and `${testIDPrefix}-settled` (the no-retry note).
-   */
   testIDPrefix: string;
   message: string;
   onRetry: () => void;
-  /** An unclassified failure keeps the retry: a cause we cannot read may still pass on a second ask. */
   failure?: ContentFailure | null;
 }
 
 const SETTLED_NOTE = 'Not available right now — try again later.';
 
-/**
- * The one "couldn't load X" block for detail lists. Tone, layout and testIDs
- * are fixed here so no call site can drift to a muted tone or drop the testID
- * pair its siblings carry; callers supply only the copy and the retry.
- *
- * A settled failure offers no Retry, because the server has already decided
- * this request and tapping would deterministically fail again.
- */
 export function SectionError({
   testIDPrefix,
   message,

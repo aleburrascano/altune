@@ -37,8 +37,6 @@ export function useAlbumDiscovery({
 
   useLoggedSearchFailure(searchError, { kind: 'album', title: albumTitle, artist });
 
-  // The search step carries no provider status of its own, so the only reading
-  // left is the one its retry affordance needs: settled or worth asking again.
   const searchFailure = contentFailure(isSearchError, searchError, null);
 
   const source = searchResult?.sources[0];
@@ -69,18 +67,10 @@ export function useAlbumDiscovery({
   });
 
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];
-  // A degraded provider status is a failed tracks step, not an album with no
-  // more tracks — same reading as every other detail list.
   const tracksFailure = contentFailure(isTracksQueryError, tracksError, tracksData);
 
-  // Either step failing leaves this album's discography with nothing to show,
-  // and one retry re-runs both, so callers read one failure whichever step it
-  // came from.
   const failure = searchFailure ?? tracksFailure;
 
-  // A retry must re-run whichever step failed. When the search step fails the
-  // tracks query is disabled (source is null), so refetching only the tracks
-  // query would be a permanent no-op — re-run both so either failure recovers.
   const refetch = useGatedRefetch(() => {
     void refetchSearch();
     void refetchTracks();

@@ -42,8 +42,6 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   const lateralNav = useLateralNav();
 
   const isArtist = result.kind === 'artist';
-  // Keyed off the handoff, not the resolved result: backfilling sources brings an
-  // artist no artwork, so a library-originated artist still needs the image search.
   const isLibraryArtist = isArtist && rawResult.sources.length === 0;
   const artistDiscovery = useArtistDiscovery({
     artistName: result.title,

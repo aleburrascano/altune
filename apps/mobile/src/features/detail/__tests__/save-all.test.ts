@@ -2,8 +2,6 @@ import { runBounded, SAVE_ALL_CONCURRENCY } from '../save-all';
 
 type Deferred = { resolve: () => void; reject: (e: unknown) => void };
 
-// A worker double that records how many calls are in flight at once and only
-// settles when the test releases each one — so concurrency is observable.
 function tracker() {
   let active = 0;
   let maxConcurrent = 0;
@@ -26,9 +24,14 @@ function tracker() {
       });
     });
   };
-  return { worker, started, pending, get maxConcurrent() {
-    return maxConcurrent;
-  } };
+  return {
+    worker,
+    started,
+    pending,
+    get maxConcurrent() {
+      return maxConcurrent;
+    },
+  };
 }
 
 async function flush(): Promise<void> {
@@ -43,7 +46,6 @@ describe('runBounded', () => {
 
     const done = runBounded(items, 4, t.worker);
 
-    // The first wave fills exactly the lane budget, not all 20.
     expect(t.started).toHaveLength(4);
     for (let guard = 0; guard < 50 && t.pending.length > 0; guard += 1) {
       t.pending.splice(0).forEach((d) => d.resolve());
@@ -67,8 +69,6 @@ describe('runBounded', () => {
     t.pending[2]!.resolve();
     await flush();
 
-    // Which items got through is the difference between "retry the batch" and
-    // "retry the one that failed", so the outcome names them rather than dropping them.
     await expect(done).resolves.toEqual({ succeeded: [0, 2], failed: [1] });
     expect(t.started).toEqual([0, 1, 2]);
   });

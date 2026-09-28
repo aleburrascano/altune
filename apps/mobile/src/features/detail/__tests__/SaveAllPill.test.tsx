@@ -1,7 +1,3 @@
-// Probe (#2819): the album's "Save N" pill, driven through its own props now it
-// is its own unit. The body-level characterization pins its label and text; these
-// pin the tap guard and the ticket's "no busy state" assumption.
-
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 

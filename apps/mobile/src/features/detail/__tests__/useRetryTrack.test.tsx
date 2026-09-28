@@ -1,7 +1,3 @@
-// #2852: a detail-side Retry on an already-owned, failed track must hit the
-// acquisition endpoint the server actually schedules from, and the status store
-// it patches must be the same one the save pill and failure banner already read.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';

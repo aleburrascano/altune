@@ -32,8 +32,6 @@ describe('SectionError', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  // #1663: a settled failure is one the server has already decided, so the
-  // retry that used to be offered here could only fail again.
   it('replaces the retry with a try-later note when the failure is settled', () => {
     render(
       <SectionError

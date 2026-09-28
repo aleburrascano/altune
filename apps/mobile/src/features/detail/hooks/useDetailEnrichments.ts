@@ -11,8 +11,6 @@ import { useDeezerEnrichment } from './useDeezerEnrichment';
 import { useEnrichment } from './useEnrichment';
 import { useLastFmEnrichment } from './useLastFmEnrichment';
 
-// One flag per provider, keyed off the same union the health tally counts, so the
-// two vocabularies cannot drift.
 export type EnrichmentErrors = Record<EnrichmentProvider, boolean>;
 
 export type DetailEnrichments = {

@@ -3,8 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-// New (#2819): `within` scopes assertions to the Save-N pill and facts row
-// pinned below, alongside the existing testing-library import above.
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
 
@@ -14,8 +12,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
 }));
 
-// apiFetch demands a live session before it ever calls fetch; hand it one so the
-// search request actually reaches the http double.
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
     auth: {
@@ -31,8 +27,6 @@ jest.mock('../hooks/useLibraryTracks', () => ({
   useLibraryTracksForAlbum: () => mockUseLibraryTracksForAlbum(),
 }));
 
-// Playback wiring is irrelevant to the discovery error under test; avoid needing
-// a PlaybackProvider.
 jest.mock('../hooks/useOwnedPlayback', () => ({
   useOwnedPlayback: () => ({
     owned: { playable: [], unownedCount: 0, acquiringCount: 0 },
@@ -43,22 +37,9 @@ jest.mock('../hooks/useOwnedPlayback', () => ({
   }),
 }));
 
-// useAlbumDiscovery searches, finds the album with a deezer/d1 source, then lists
-// that album's tracks at this path — the step we fail.
 const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';
 
 describe('a library album\'s "More from this album" section', () => {
-  // Regression for issue #684: a library album's "More from this album" section is
-  // fed by useAlbumDiscovery, which searches for the album and then lists its
-  // tracks. When the tracks-for-album step failed, the error signal was computed
-  // but never read — the section was gated solely on `moreTracks.length > 0`, so a
-  // failed fetch made the whole section silently vanish with no error or retry.
-  // The fix surfaces the tracks-for-album failure as an error+retry state and
-  // re-runs the failed step when Retry is tapped.
-
-  // The album is in the library, so it has an owned track. Stubbing the library
-  // lookup keeps the test focused on the discovery step (the code under test)
-  // while giving the main "Tracks" list content so it is not an empty screen.
   beforeEach(() => {
     mockUseLibraryTracksForAlbum.mockImplementation(() => {
       const { asTrackId } = require('@shared/api-client/ids');
@@ -141,9 +122,6 @@ describe('a library album\'s "More from this album" section', () => {
 
   describe('AlbumDetailBody: "More from this album" when the tracks-for-album step fails', () => {
     beforeEach(() => {
-      // Every unrelated lookup (including useAlbumTracks' disabled-path fetch)
-      // resolves empty; the search succeeds; only listing the found album's
-      // tracks fails.
       __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
       __http.reply(SEARCH, searchResponse);
       __http.fail(ALBUM_TRACKS);
@@ -152,8 +130,6 @@ describe('a library album\'s "More from this album" section', () => {
     it('surfaces an error+retry instead of silently hiding the section', async () => {
       renderBody();
 
-      // The section renders its error state — with the bug this testID never
-      // existed because the section returned null on an empty (failed) fetch.
       const error = await screen.findByTestId('detail-more-from-album-error');
       expect(error).toBeTruthy();
       expect(screen.getByTestId('detail-more-from-album-retry')).toBeTruthy();
@@ -203,15 +179,14 @@ describe('a library album\'s "More from this album" section', () => {
     });
   });
 
-  // Issue #667: the tracks-for-album step used to ignore the provider `status`,
-  // so a degraded response (an empty item list with a non-'ok' status) read as
-  // "no more tracks" and the section vanished. It now shares the one
-  // status->isError reading with every other detail list.
   describe('AlbumDetailBody: "More from this album" when the tracks step is degraded', () => {
     it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
       'surfaces the error+retry for status %s',
       async (status) => {
-        __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
+        __http.replyAll({
+          status: 200,
+          json: { items: [], provider_name: 'deezer', status: 'ok' },
+        });
         __http.reply(SEARCH, searchResponse);
         __http.reply(ALBUM_TRACKS, {
           status: 200,
@@ -226,15 +201,10 @@ describe('a library album\'s "More from this album" section', () => {
     );
   });
 
-  // Issue #1660: the search step failing was read as "this album was never found"
-  // rather than "the search request itself failed", so the section rendered
-  // nothing at all — no error, no retry — for a library album whose search broke.
   describe('AlbumDetailBody: "More from this album" when the source-search step fails', () => {
     let warnSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      // The failed search now logs which album it was searching for; keep that
-      // line out of the run's output without asserting on it here.
       warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
       __http.fail(SEARCH);
@@ -262,8 +232,6 @@ describe('a library album\'s "More from this album" section', () => {
     });
   });
 
-  // Issue #1663: a failure the server has already settled cannot be retried away,
-  // so this section says so instead of offering a tap that fails again.
   describe('AlbumDetailBody: "More from this album" when the tracks step is settled as unserved', () => {
     it('shows the error without a retry', async () => {
       __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
@@ -279,13 +247,6 @@ describe('a library album\'s "More from this album" section', () => {
 });
 
 describe('the tracklist error', () => {
-  // Regression for issue #1663: the tracklist showed the same always-tappable
-  // Retry whether the fetch hit a one-off network blip or a failure the server
-  // had already settled (a `discovery.*` code). Tapping Retry on the settled one
-  // deterministically failed again, with nothing telling the user it would.
-
-  // The album is not in the library, so the tracklist is entirely the API's —
-  // the fetch under test.
   beforeEach(() => {
     mockUseLibraryTracksForAlbum.mockImplementation(() => []);
   });
@@ -347,10 +308,6 @@ describe('the tracklist error', () => {
   });
 });
 
-// Characterization for #2819: AlbumDetailBody's inline "Save N" pill and facts
-// row move into SaveAllPill / buildAlbumFacts unchanged. These pin the pill's
-// visibility, label, a11y and saving state, and the facts row, through this
-// component before that extraction.
 describe('AlbumDetailBody: the Save N pill', () => {
   const { within } = require('@testing-library/react-native');
 
@@ -436,10 +393,6 @@ describe('AlbumDetailBody: the Save N pill', () => {
   beforeEach(() => {
     mockUseLibraryTracksForAlbum.mockImplementation(() => []);
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
-    // Registered ahead of the reply just below: the http double matches the
-    // first registered rule for a path, so this shaped-correctly reply
-    // (carrying the `status`/`provider_name` the real endpoint always sends)
-    // is the one every request in this describe actually receives.
     __http.reply(ALBUM_TRACKS, {
       status: 200,
       json: { ...ALBUM_TRACKS_ITEMS.json, provider_name: 'deezer', status: 'ok' },
@@ -485,11 +438,6 @@ describe('AlbumDetailBody: the Save N pill', () => {
 });
 
 describe('AlbumDetailBody: the facts row', () => {
-  // Registered ahead of the beforeEach below: the http double matches the
-  // first registered rule for a path, so this shaped-correctly reply
-  // (carrying the `status`/`provider_name` the real album-tracks endpoint
-  // always sends) is the one every request in this describe actually
-  // receives.
   beforeEach(() => {
     __http.reply(ALBUM_TRACKS, {
       status: 200,

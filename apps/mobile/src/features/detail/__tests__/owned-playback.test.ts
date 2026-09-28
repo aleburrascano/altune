@@ -196,8 +196,14 @@ describe('playButtonState', () => {
   it('labels with the playable count while some tracks are still unowned', () => {
     const split = {
       playable: [
-        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const }, result: trackResult() },
-        { owned: { trackId: asTrackId('b'), acquisitionStatus: 'ready' as const }, result: trackResult() },
+        {
+          owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const },
+          result: trackResult(),
+        },
+        {
+          owned: { trackId: asTrackId('b'), acquisitionStatus: 'ready' as const },
+          result: trackResult(),
+        },
       ],
       unownedCount: 1,
       acquiringCount: 0,
@@ -209,7 +215,10 @@ describe('playButtonState', () => {
   it('labels with the playable count while some tracks are still acquiring', () => {
     const split = {
       playable: [
-        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const }, result: trackResult() },
+        {
+          owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const },
+          result: trackResult(),
+        },
       ],
       unownedCount: 0,
       acquiringCount: 2,
@@ -221,7 +230,10 @@ describe('playButtonState', () => {
   it('uses the bare Play label when every track is playable', () => {
     const split = {
       playable: [
-        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const }, result: trackResult() },
+        {
+          owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const },
+          result: trackResult(),
+        },
       ],
       unownedCount: 0,
       acquiringCount: 0,

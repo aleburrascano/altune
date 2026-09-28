@@ -41,8 +41,6 @@ function _unownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
   return tracks.filter((t) => ownedFromExtras(trackExtras(t.extras)) === null);
 }
 
-// The same (title, artist) identity the save itself is keyed by, so a row, the batch
-// that claims it, and the save's idempotency key all name the track the same way.
 function _trackIdentity(track: DiscoveryResult): string | null {
   return trackIdentityKey(track.title, track.subtitle ?? '');
 }
@@ -56,8 +54,6 @@ function _identitiesOf(tracks: readonly DiscoveryResult[]): Set<string> {
   return identities;
 }
 
-// A track with no usable identity cannot be remembered, so it is never skipped: the
-// stable idempotency key, not this filter, is what keeps its re-save from duplicating.
 function _notYetSaved(
   tracks: readonly DiscoveryResult[],
   saved: ReadonlySet<string>,
@@ -90,7 +86,6 @@ export type AlbumDetailState = {
   discoveryFailure: ContentFailure | null;
   discoveryRefetch: () => void;
   savingAll: boolean;
-  // True while a "Save all" run owns this track's write — dispatched or still queued.
   isSavingInBatch: (track: DiscoveryResult) => boolean;
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
@@ -132,8 +127,6 @@ export function useAlbumDetailState(
   const [savingAll, setSavingAll] = useState(false);
   const savingAllRef = useRef(false);
   const [saveAllClaims, setSaveAllClaims] = useState<ReadonlySet<string>>(NO_CLAIMS);
-  // Identities a "Save all" run on this screen has already written. Held in a ref
-  // because only the next tap reads it, never a render.
   const savedBySaveAll = useRef(new Set<string>());
 
   const discovery = useAlbumDiscovery({
@@ -150,7 +143,6 @@ export function useAlbumDetailState(
     : {
         tracks: localAsDiscovery,
         isLoading: localTracks.length > 0 && discovery.isLoading,
-        // The tracklist is the library's own, which cannot fail.
         failure: null,
       };
 
@@ -163,8 +155,6 @@ export function useAlbumDetailState(
       savedBySaveAll.current.add(identity);
     }
     if (outcome.failed.length === 0) return;
-    // Each save logs its own reason; this line adds the one thing none of them carry —
-    // how much of the batch got through — so a partial failure is visible as partial.
     console.warn('[detail] save all finished with failures', {
       album: result.title,
       saved: outcome.succeeded.length,
@@ -223,10 +213,6 @@ export function useAlbumDetailState(
     moreExpanded,
     setMoreExpanded,
     moreTracks,
-    // Either discovery step failing — the search for this album, or the listing
-    // of its tracks — leaves "More from this album" with nothing to show, and
-    // one retry re-runs both. A search that ran and found nothing is not a
-    // failure and stays an absent section.
     discoveryError: discovery.isError,
     discoveryFailure: discovery.failure,
     discoveryRefetch: () => {

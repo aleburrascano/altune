@@ -1,8 +1,3 @@
-// #1656: the detail screen read "is this library-only?" from the handoff result,
-// before useResolveMissingSources had backfilled its sources. A successful
-// backfill was then thrown away: the screen kept rendering library-only data and
-// the artist path fell back to a fuzzy search it no longer needed.
-
 import { render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -26,8 +21,6 @@ jest.mock('expo-router', () => {
   };
 });
 
-// The resolver under the real screen: a library result arrives with no sources
-// and leaves with the exact match's sources backfilled.
 jest.mock('../hooks/useResolveMissingSources', () => ({
   useResolveMissingSources: (result: DiscoveryResult) => ({
     resolved:
@@ -58,8 +51,6 @@ jest.mock('../hooks/useOwnedPlayback', () => ({
   }),
 }));
 
-// The fuzzy fallbacks a library-only entity would use. They stay empty here, so
-// anything the screen renders came from the resolved sources or the library.
 jest.mock('../hooks/useArtistDiscovery', () => ({
   useArtistDiscovery: () => ({
     imageUrl: null,

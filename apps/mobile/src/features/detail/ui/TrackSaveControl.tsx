@@ -24,14 +24,10 @@ export function TrackSaveControl({
   savingInBatch = false,
   testID,
 }: {
-  // The row's own owning extras (its stamped trackId + status), or null when the
-  // row was never saved. Passed straight into the shared owned-track rule so this
-  // control resolves the same answer as the detail rows — see useResolvedOwnedTrack.
   owned: OwnedTrack | null;
   onPress: () => void;
   title: string;
   artist?: string | null;
-  // A "Save all" run already owns this track's write, dispatched or still queued.
   savingInBatch?: boolean;
   testID?: string;
 }): ReactElement {
@@ -39,19 +35,10 @@ export function TrackSaveControl({
   const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
   const resolved = useResolvedOwnedTrack(owned, identity);
 
-  // A batch-claimed track is being saved by someone else, so this control must not
-  // offer a second write (#1658). Until the batch reaches the track its own state is
-  // still 'add'; reporting 'saving' there says what is true instead of inviting a
-  // duplicate tap, while a claimed track that already landed keeps its own state.
   const ownState: SaveControlState = saveControlState(resolved);
   const effective: SaveControlState = savingInBatch && ownState === 'add' ? 'saving' : ownState;
   const interactive = !savingInBatch && saveControlInteractive(effective);
 
-  // A quick-save mutation flushes its in-flight status through the (batched)
-  // store a beat after onPress fires, so a fast double-tap can re-enter before
-  // `effective` reflects the first save. This synchronous one-shot latch blocks
-  // the second tap at the event, then releases when `effective` next changes
-  // (the store caught up, or the save settled into a retryable failure).
   const inFlight = useRef(false);
   useEffect(() => {
     inFlight.current = false;

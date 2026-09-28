@@ -16,10 +16,7 @@ export function resolveEntityQuery(
   return queryOptions<DiscoveryResult[]>({
     queryKey: ['resolve-entity', kind, q, limit],
     queryFn: async ({ signal }) => {
-      const res = await searchDiscovery(
-        { q, kinds: [kind], limit, saveHistory: false },
-        signal,
-      );
+      const res = await searchDiscovery({ q, kinds: [kind], limit, saveHistory: false }, signal);
       return res.results;
     },
     staleTime: RESOLVE_STALE_TIME,

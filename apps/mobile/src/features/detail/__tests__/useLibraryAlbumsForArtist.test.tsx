@@ -1,6 +1,3 @@
-// #1668: the one detail list that asked the library for albums without stating a
-// bound, leaving the row count to a server default the client cannot see.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
@@ -54,8 +51,6 @@ describe('useLibraryAlbumsForArtist bounds the library albums fetch', () => {
   it('caches under a key the library screen’s uncapped albums query cannot satisfy', async () => {
     __http.reply(LIBRARY_ALBUMS_PATH, { status: 200, json: { items: [], total: 0 } });
     const queryClient = freshClient();
-    // What the library home screen stores for the same artist name and sort: the
-    // server's default page, which is shorter than this list asked for.
     queryClient.setQueryData(libraryKeys.albums('daft punk', 'recent'), { items: [], total: 0 });
 
     renderHook(() => useLibraryAlbumsForArtist('daft punk', true), {
@@ -67,11 +62,6 @@ describe('useLibraryAlbumsForArtist bounds the library albums fetch', () => {
 });
 
 describe('aborting on unmount', () => {
-  // #1667: leaving a detail screen must abort its in-flight library lookup instead of
-  // letting it run to the shared 15s deadline. TanStack only aborts on unmount when the
-  // queryFn consumed the context signal, so this drives the real api-client against the
-  // fetch double and checks the recorded request's signal.
-
   let client: QueryClient;
 
   function wrapper({ children }: { children: ReactNode }) {

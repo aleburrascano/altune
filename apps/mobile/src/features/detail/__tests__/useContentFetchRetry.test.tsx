@@ -16,12 +16,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
-// Since #1102 a failed content fetch is a non-2xx with a discovery.* code. The
-// app-wide query retry (app/_layout.tsx) retries 5xx five times with backoff,
-// so the detail screen spun ~30s before showing its retry UI. These hooks must
-// surface the error after a single request instead.
-
-// The same default the app installs, so the test proves the per-hook override.
 function appQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -75,7 +69,6 @@ const settledFailures = [
   { status: 503, code: 'discovery.provider_rate_limited' },
 ];
 
-// Well past the app-wide backoff (1+2+4+8+16s) so any retry would have fired.
 async function renderWithPastBackoff<T>(use: () => T): Promise<T> {
   const queryClient = appQueryClient();
   const { result, unmount } = renderHook(use, { wrapper: createWrapper(queryClient) });
@@ -124,8 +117,6 @@ describe.each(hooks)('$name fails fast on a settled content failure', ({ path, u
   });
 });
 
-// #1663: the same classification the fail-fast policy reads must reach the
-// caller, so a section can tell "asking again is pointless" from "worth a tap".
 describe.each(hooks)('$name reports why the content fetch failed', ({ path, useFailure }) => {
   it.each(settledFailures)('classifies $status $code as settled', async (f) => {
     __http.reply(path, { status: f.status, json: { status: 'error', code: f.code } });

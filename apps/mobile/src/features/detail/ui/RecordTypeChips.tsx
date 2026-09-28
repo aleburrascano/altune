@@ -12,7 +12,10 @@ type ChipProps = { group: RecordTypeGroup; on: boolean; onSelect: (type: string)
 function chipStyle(theme: ReturnType<typeof useTheme>, on: boolean) {
   return ({ pressed }: { pressed: boolean }) => [
     styles.chip,
-    { backgroundColor: on ? theme.color.accent : theme.color.surface2, borderColor: on ? 'transparent' : theme.color.border },
+    {
+      backgroundColor: on ? theme.color.accent : theme.color.surface2,
+      borderColor: on ? 'transparent' : theme.color.border,
+    },
     pressed ? sharedStyles.pressed : null,
   ];
 }
@@ -50,7 +53,12 @@ export function RecordTypeChips(props: RecordTypeChipsProps): ReactElement | nul
   return (
     <View style={styles.chips}>
       {props.present.map((group) => (
-        <Chip key={group.type} group={group} on={group.type === props.active.type} onSelect={props.onSelect} />
+        <Chip
+          key={group.type}
+          group={group}
+          on={group.type === props.active.type}
+          onSelect={props.onSelect}
+        />
       ))}
     </View>
   );

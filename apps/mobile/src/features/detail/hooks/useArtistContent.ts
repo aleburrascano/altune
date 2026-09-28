@@ -16,10 +16,6 @@ import { recordContentFetchOutcome } from '../detailHealth';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
-// A discovery request that yielded a response but with a degraded per-provider
-// status still collapses into `isErrorTracks`/`isErrorAlbums` for the UI. Log
-// the status/provider/artist here so an incident can be diagnosed without a
-// live repro of which side (top tracks vs albums) or which provider failed.
 type ContentFetchContext = {
   provider: string;
   externalId: string;
@@ -41,7 +37,6 @@ function logContentStatuses(content: ArtistContentResponse, ctx: ContentFetchCon
   }
 }
 
-// One request carries both sides, so either one degraded is a degraded artist-content fetch.
 function isFullyServed(content: ArtistContentResponse): boolean {
   return !hasDegradedStatus(content.top_tracks) && !hasDegradedStatus(content.albums);
 }

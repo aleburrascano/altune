@@ -86,7 +86,11 @@ type ScrollingContentProps = DetailScaffoldProps & { scrollY: Animated.Value; he
 
 function WideScrollingBody(props: ScrollingContentProps): ReactElement {
   return (
-    <DetailBodyLayout hero={<DetailHeroBanner {...props} />} actions={props.actions} facts={props.facts}>
+    <DetailBodyLayout
+      hero={<DetailHeroBanner {...props} />}
+      actions={props.actions}
+      facts={props.facts}
+    >
       {props.children}
     </DetailBodyLayout>
   );

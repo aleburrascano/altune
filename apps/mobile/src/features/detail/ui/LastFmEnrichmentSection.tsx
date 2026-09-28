@@ -18,13 +18,9 @@ export function LastFmEnrichmentSection({
   isError,
 }: {
   enrichment: LastFmEnrichmentResponse | null;
-  /** True only when the fetch failed — an artist with no Last.fm page is not an error. */
   isError: boolean;
 }): ReactElement | null {
   if (enrichment === null) {
-    // A failed fetch is retry-worthy where "no Last.fm page" is not, and both
-    // arrive as a null enrichment. Keeping them apart in the tree is what lets a
-    // later notice/retry treatment land here without re-plumbing the signal.
     return isError ? <View testID="detail-lastfm-unavailable" /> : null;
   }
 
@@ -43,8 +39,6 @@ export function LastFmEnrichmentSection({
   );
 }
 
-// The bio's expand/collapse state is the only state in this file, so it lives
-// with the one branch that can read it rather than above every early return.
 function ArtistBio({ bio }: { bio: string }): ReactElement {
   const [expanded, setExpanded] = useState(false);
   const isLong = bio.length > BIO_LONG_THRESHOLD;

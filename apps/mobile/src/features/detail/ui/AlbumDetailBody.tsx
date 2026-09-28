@@ -47,17 +47,39 @@ function albumSecondary(album: AlbumDetailState) {
   );
 }
 
-function scaffoldContentProps(album: AlbumDetailState, discoveryResult: DiscoveryResult, mbYear?: number) {
+function albumFacts(album: AlbumDetailState, discoveryResult: DiscoveryResult, mbYear?: number) {
+  return (
+    <DetailFacts
+      facts={buildAlbumFacts(album.tracks, albumYearFor(discoveryResult, mbYear))}
+      testID="detail-album-meta"
+    />
+  );
+}
+
+type ScaffoldArgs = {
+  album: AlbumDetailState;
+  discoveryResult: DiscoveryResult;
+  mbYear?: number | undefined;
+};
+
+function scaffoldContentProps({ album, discoveryResult, mbYear }: ScaffoldArgs) {
   return {
-    facts: <DetailFacts facts={buildAlbumFacts(album.tracks, albumYearFor(discoveryResult, mbYear))} testID="detail-album-meta" />,
-    actions: <DetailActions primary={albumPrimaryAction(album)} secondary={albumSecondary(album)} />,
+    facts: albumFacts(album, discoveryResult, mbYear),
+    actions: (
+      <DetailActions primary={albumPrimaryAction(album)} secondary={albumSecondary(album)} />
+    ),
   };
 }
 
 export function AlbumDetailBody(props: AlbumDetailBodyProps): ReactElement {
   const album = useAlbumDetailState(props.result, props.detailRoute);
+  const scaffoldProps = scaffoldContentProps({
+    album,
+    discoveryResult: props.result,
+    mbYear: props.mbYear,
+  });
   return (
-    <DetailScaffold {...props.chrome} {...scaffoldContentProps(album, props.result, props.mbYear)}>
+    <DetailScaffold {...props.chrome} {...scaffoldProps}>
       <AlbumTrackList album={album} />
     </DetailScaffold>
   );

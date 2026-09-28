@@ -1,8 +1,3 @@
-// Two writes about one track must land on one library row. The row's own quick-save
-// and the "Save all" batch both POST /v1/tracks, and the server only collapses them
-// when both carry the same Idempotency-Key — with a per-call random key it never can,
-// so the overlap writes the track twice (#1658).
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
@@ -24,8 +19,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 jest.mock('@shared/playback/useQueuePlayback', () => ({
   useQueuePlayback: () => ({ playFromList: jest.fn() }),
 }));
-// A landed save enqueues library_add telemetry, whose own flush/retry schedule has
-// nothing to do with the write key under test.
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('../hooks/useLibraryTracks', () => ({
   useLibraryTracksForAlbum: () => [],
@@ -142,7 +135,6 @@ describe('a track written by its own row and by "Save all" at once', () => {
     const tracks = [albumTrack('Nude'), albumTrack('Reckoner')];
     const { result } = renderAlbum(tracks);
 
-    // Both dispatches leave before either response lands — the overlap itself.
     await act(async () => {
       result.current.onQuickSave(tracks[0]!);
       result.current.onSaveAll();

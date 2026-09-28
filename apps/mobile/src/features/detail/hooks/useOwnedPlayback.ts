@@ -3,12 +3,7 @@ import type { RetryEntryPoint } from '@shared/acquisition/acquisitionTelemetry';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
 import { trackExtras } from '../extras-accessors';
-import {
-  playButtonState,
-  splitOwned,
-  toPlaybackQueue,
-  type OwnedSplit,
-} from '../owned-playback';
+import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
 import { ownedRetryTrackId } from '../save-control-state';
 import { toCreateTrackRequest } from '../save-cache';
 import { ownedFromExtras, resolveOwnedTrackAtActionTime, type OwnedTrack } from './useOwnedTrack';
@@ -26,9 +21,6 @@ export type OwnedPlayback = {
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
-  // The row's own owning extras, resolved through the shared owned-track rule by
-  // TrackSaveControl. Not a precomputed status: the stamped trackId must reach
-  // the rule so the save control and the detail rows never disagree (#748).
   ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
   onQuickSave: (track: DiscoveryResult) => void;
 };

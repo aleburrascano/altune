@@ -19,5 +19,9 @@ function listenersFact(listeners: string | null): DetailFact | null {
 }
 
 export function buildArtistFacts(input: ArtistFactsInput): (DetailFact | null)[] {
-  return [releasesFact(input.releases), inLibraryFact(input.inLibrary), listenersFact(input.listeners)];
+  return [
+    releasesFact(input.releases),
+    inLibraryFact(input.inLibrary),
+    listenersFact(input.listeners),
+  ];
 }

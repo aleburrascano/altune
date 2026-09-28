@@ -1,7 +1,3 @@
-// Regression for issue #1666: every enrichment and discovery fetch on the detail screen must be
-// gated by the remote kill switch, so a chatty provider integration can be stopped without a
-// release.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -55,8 +51,6 @@ function switchDetailFetches(enabled: boolean): void {
   act(() => applyKillSwitches({ detail_enrichment_enabled: enabled }));
 }
 
-// A disabled query never resolves a promise, so nothing waits: let React and react-query settle
-// once, then assert that no request was made.
 async function settle(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -70,8 +64,6 @@ beforeEach(() => {
   });
   setKillSwitchFileStore(createMemoryFileStore());
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  // Every endpoint answers, so a fetch that slips past the switch shows up as a request rather
-  // than as an unrelated "no rule registered" failure.
   __http.replyAll({
     status: 200,
     json: { items: [], results: [], provider: 'spotify', status: 'ok' },
@@ -146,8 +138,6 @@ const gatedHooks: GatedHookCase[] = [
   },
 ];
 
-// react-query's own `refetch` fetches whatever `enabled` says, so every retry affordance the
-// screen exposes is its own way past the switch.
 const retryAffordances: { hook: string; useRetryAffordance: () => () => void }[] = [
   {
     hook: 'useAlbumTracks',

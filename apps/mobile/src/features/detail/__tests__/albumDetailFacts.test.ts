@@ -1,7 +1,3 @@
-// Probe (#2819): buildAlbumFacts is pure now it is out of AlbumDetailBody. The
-// body characterization pins one track with a year; these pin the edges: summed
-// runtime, tracks with no duration, and no year.
-
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { buildAlbumFacts } from '../ui/albumDetailFacts';

@@ -34,9 +34,7 @@ function renderScaffold(overrides: Partial<Parameters<typeof DetailScaffold>[0]>
 describe('DetailScaffold', () => {
   it('renders the title in the banner', () => {
     renderScaffold();
-    expect(screen.getByTestId('detail-banner-title')).toHaveTextContent(
-      'Random Access Memories',
-    );
+    expect(screen.getByTestId('detail-banner-title')).toHaveTextContent('Random Access Memories');
   });
 
   it('renders the secondary node under the banner title', () => {
@@ -308,7 +306,9 @@ describe('DetailScaffold on the web at 1440px: what lands in each column', () =>
     });
 
     const right = screen.getByTestId('detail-body-right');
-    expect(right.findAll((node) => node.props.testID === 'detail-discography-grid').length).toBeGreaterThan(0);
+    expect(
+      right.findAll((node) => node.props.testID === 'detail-discography-grid').length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByTestId('detail-discography-rail')).toBeNull();
   });
 });

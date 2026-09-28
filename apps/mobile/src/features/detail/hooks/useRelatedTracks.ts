@@ -19,30 +19,41 @@ type UseRelatedTracksReturn = {
   failure: ContentFailure | null;
 };
 
-export function useRelatedTracks({
-  sources,
-}: UseRelatedTracksParams): UseRelatedTracksReturn {
-  const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
-  const retry = useContentFetchRetry();
-  const isFetchEnabled = useDetailFetchEnabled();
+function fetchRelated(scSource: DiscoverySource | null, signal: AbortSignal | undefined) {
+  return fetchTallyingOutcome('related_tracks', () =>
+    getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
+  );
+}
 
-  const { data, isLoading, isError, error } = useQuery({
+function useRelatedTracksQuery(scSource: DiscoverySource | null, isFetchEnabled: boolean) {
+  const retry = useContentFetchRetry();
+  return useQuery({
     queryKey: ['related-tracks', scSource?.external_id ?? ''],
-    queryFn: ({ signal }) =>
-      fetchTallyingOutcome('related_tracks', () =>
-        getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
-      ),
+    queryFn: ({ signal }) => fetchRelated(scSource, signal),
     enabled: isFetchEnabled && scSource !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
+}
 
-  const failure = contentFailure(isError, error, data);
+type RelatedTracksQuery = ReturnType<typeof useRelatedTracksQuery>;
 
+function relatedTracksItems(query: RelatedTracksQuery): DiscoveryResult[] {
+  return query.data?.status === 'ok' ? query.data.items : [];
+}
+
+function relatedTracksResult(query: RelatedTracksQuery): UseRelatedTracksReturn {
+  const failure = contentFailure(query.isError, query.error, query.data);
   return {
-    relatedTracks: data?.status === 'ok' ? data.items : [],
-    isLoading,
+    relatedTracks: relatedTracksItems(query),
+    isLoading: query.isLoading,
     isError: failure !== null,
     failure,
   };
+}
+
+export function useRelatedTracks({ sources }: UseRelatedTracksParams): UseRelatedTracksReturn {
+  const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
+  const isFetchEnabled = useDetailFetchEnabled();
+  return relatedTracksResult(useRelatedTracksQuery(scSource, isFetchEnabled));
 }

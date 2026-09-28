@@ -1,8 +1,3 @@
-// Probe (#2819): AlbumTrackList is the tracklist lifted out of AlbumDetailBody,
-// and it hands AlbumMoreTracks its row actions as one group. These drive it with
-// a hand-built AlbumDetailState, as the body would, and pin that each list state
-// keeps one "Tracks" header and that each row action reaches the right track.
-
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -28,7 +23,6 @@ function track(title: string): DiscoveryResult {
 const DREAMS = track('Dreams');
 const SONGBIRD = track('Songbird');
 
-// The row save control stops the press reaching its row, so it needs an event.
 const pressEvent = { stopPropagation: () => {} };
 
 function albumState(overrides: Partial<AlbumDetailState> = {}): AlbumDetailState {
@@ -58,7 +52,6 @@ function albumState(overrides: Partial<AlbumDetailState> = {}): AlbumDetailState
   };
 }
 
-// A library album (no sources) with its "More from this album" section open.
 function libraryAlbumWithMore(overrides: Partial<AlbumDetailState> = {}): AlbumDetailState {
   return albumState({
     hasSources: false,

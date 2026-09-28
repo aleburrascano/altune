@@ -16,8 +16,6 @@ function album(extras: Record<string, unknown>): DiscoveryResult {
   };
 }
 
-// A locally-saved album: no provider source, which is the case that reaches this
-// rail through "Your albums" (#1668).
 function savedAlbum(title: string): DiscoveryResult {
   return {
     kind: 'album',
@@ -33,13 +31,14 @@ function savedAlbum(title: string): DiscoveryResult {
 describe('DiscographySections(): a track_count of 0 is announced exactly as it is shown', () => {
   it('shows "0 tracks" and announces it in the accessibility label', () => {
     render(
-      <DiscographySections albums={[album({ record_type: 'album', track_count: 0 })]} onAlbumPress={jest.fn()} />,
+      <DiscographySections
+        albums={[album({ record_type: 'album', track_count: 0 })]}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
-    // The visible caption prints "0 tracks".
     expect(screen.getByText('0 tracks')).toBeTruthy();
 
-    // The accessibility label must announce the same count it shows.
     const label = screen.getByTestId('detail-album-0').props.accessibilityLabel;
     expect(label).toContain('0 tracks');
   });
@@ -52,8 +51,6 @@ describe('DiscographySections(): "See all" on a discography longer than the rail
 
     fireEvent.press(screen.getByTestId('detail-see-all-album'));
 
-    // Expanding must not turn the whole list into one synchronous mount: the rail
-    // renders its first window and reaches the rest as the user scrolls.
     const cards = screen.queryAllByTestId(/^detail-album-\d+$/);
     expect(cards.length).toBeGreaterThan(0);
     expect(cards.length).toBeLessThanOrEqual(10);
@@ -82,22 +79,37 @@ describe('DiscographySections(): which record-type chips show', () => {
     expect(empty.toJSON()).toBeNull();
 
     const unknown = render(
-      <DiscographySections albums={[release('X', 'bootleg'), release('Y', '')]} onAlbumPress={jest.fn()} />,
+      <DiscographySections
+        albums={[release('X', 'bootleg'), release('Y', '')]}
+        onAlbumPress={jest.fn()}
+      />,
     );
     expect(unknown.toJSON()).toBeNull();
   });
 
   it('shows no chip bar when only one record type is present, just its rail', () => {
-    render(<DiscographySections albums={[release('S1', 'single'), release('S2', 'single')]} onAlbumPress={jest.fn()} />);
+    render(
+      <DiscographySections
+        albums={[release('S1', 'single'), release('S2', 'single')]}
+        onAlbumPress={jest.fn()}
+      />,
+    );
 
     expect(screen.queryAllByTestId(/^detail-discography-(album|single|ep)$/)).toHaveLength(0);
-    expect(screen.getByTestId('detail-single-0').props.accessibilityLabel).toBe('Singles: S1, 1 tracks');
+    expect(screen.getByTestId('detail-single-0').props.accessibilityLabel).toBe(
+      'Singles: S1, 1 tracks',
+    );
   });
 
   it('shows albums, singles, EPs in that order whatever the input order, each announcing its count', () => {
     render(
       <DiscographySections
-        albums={[release('E', 'ep'), release('S', 'single'), release('A1', 'album'), release('A2', 'album')]}
+        albums={[
+          release('E', 'ep'),
+          release('S', 'single'),
+          release('A1', 'album'),
+          release('A2', 'album'),
+        ]}
         onAlbumPress={jest.fn()}
       />,
     );
@@ -108,34 +120,63 @@ describe('DiscographySections(): which record-type chips show', () => {
       'detail-discography-single',
       'detail-discography-ep',
     ]);
-    expect(chips.map((chip) => chip.props.accessibilityLabel)).toEqual(['Albums, 2', 'Singles, 1', 'EPs, 1']);
-    expect(screen.getByTestId('detail-discography-album').props.accessibilityState).toEqual({ selected: true });
+    expect(chips.map((chip) => chip.props.accessibilityLabel)).toEqual([
+      'Albums, 2',
+      'Singles, 1',
+      'EPs, 1',
+    ]);
+    expect(screen.getByTestId('detail-discography-album').props.accessibilityState).toEqual({
+      selected: true,
+    });
   });
 });
 
 describe('DiscographySections(): choosing a chip', () => {
   it('marks only the pressed chip selected and shows only its releases', () => {
-    render(<DiscographySections albums={[release('A1', 'album'), release('E1', 'ep')]} onAlbumPress={jest.fn()} />);
+    render(
+      <DiscographySections
+        albums={[release('A1', 'album'), release('E1', 'ep')]}
+        onAlbumPress={jest.fn()}
+      />,
+    );
 
     fireEvent.press(screen.getByTestId('detail-discography-ep'));
 
-    expect(screen.getByTestId('detail-discography-ep').props.accessibilityState).toEqual({ selected: true });
-    expect(screen.getByTestId('detail-discography-album').props.accessibilityState).toEqual({ selected: false });
+    expect(screen.getByTestId('detail-discography-ep').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(screen.getByTestId('detail-discography-album').props.accessibilityState).toEqual({
+      selected: false,
+    });
     expect(screen.getByTestId('detail-ep-0').props.accessibilityLabel).toBe('EPs: E1, 1 tracks');
     expect(screen.queryByText('A1')).toBeNull();
   });
 
   it('falls back to the first present type when the chosen type leaves the discography', () => {
     const { rerender } = render(
-      <DiscographySections albums={[release('A1', 'album'), release('S1', 'single')]} onAlbumPress={jest.fn()} />,
+      <DiscographySections
+        albums={[release('A1', 'album'), release('S1', 'single')]}
+        onAlbumPress={jest.fn()}
+      />,
     );
     fireEvent.press(screen.getByTestId('detail-discography-single'));
 
-    rerender(<DiscographySections albums={[release('A1', 'album'), release('E1', 'ep')]} onAlbumPress={jest.fn()} />);
+    rerender(
+      <DiscographySections
+        albums={[release('A1', 'album'), release('E1', 'ep')]}
+        onAlbumPress={jest.fn()}
+      />,
+    );
 
-    expect(screen.getByTestId('detail-discography-album').props.accessibilityState).toEqual({ selected: true });
-    expect(screen.getByTestId('detail-discography-ep').props.accessibilityState).toEqual({ selected: false });
-    expect(screen.getByTestId('detail-album-0').props.accessibilityLabel).toBe('Albums: A1, 1 tracks');
+    expect(screen.getByTestId('detail-discography-album').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(screen.getByTestId('detail-discography-ep').props.accessibilityState).toEqual({
+      selected: false,
+    });
+    expect(screen.getByTestId('detail-album-0').props.accessibilityLabel).toBe(
+      'Albums: A1, 1 tracks',
+    );
   });
 });
 
@@ -166,7 +207,9 @@ describe('DiscographySections(): pressing a release', () => {
 
 describe('DiscographySections(): the 10-release cap and "See all"', () => {
   it('offers "See all" at 11 releases of a type but not at exactly 10', () => {
-    const { rerender } = render(<DiscographySections albums={releases(10, 'album', 'A')} onAlbumPress={jest.fn()} />);
+    const { rerender } = render(
+      <DiscographySections albums={releases(10, 'album', 'A')} onAlbumPress={jest.fn()} />,
+    );
     expect(screen.queryByTestId('detail-see-all-album')).toBeNull();
 
     rerender(<DiscographySections albums={releases(11, 'album', 'A')} onAlbumPress={jest.fn()} />);
@@ -193,7 +236,10 @@ describe('DiscographySections(): the 10-release cap and "See all"', () => {
 
   it('collapses back to the cap when the already-selected chip is pressed again', () => {
     render(
-      <DiscographySections albums={[...releases(12, 'album', 'A'), release('S', 'single')]} onAlbumPress={jest.fn()} />,
+      <DiscographySections
+        albums={[...releases(12, 'album', 'A'), release('S', 'single')]}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     fireEvent.press(screen.getByTestId('detail-see-all-album'));
@@ -308,7 +354,9 @@ describe('DiscographySections(): the grid on the web at 1440px', () => {
     render(<DiscographySections albums={releases(15, 'album', 'A')} onAlbumPress={jest.fn()} />);
     measureDiscographyGrid(800);
 
-    expect(screen.getByTestId('detail-see-all-album').props.accessibilityLabel).toBe('See all 15 albums');
+    expect(screen.getByTestId('detail-see-all-album').props.accessibilityLabel).toBe(
+      'See all 15 albums',
+    );
     expect(screen.getByTestId('detail-album-9')).toBeTruthy();
     expect(screen.queryByTestId('detail-album-10')).toBeNull();
 
@@ -337,7 +385,9 @@ describe('DiscographySections(): the grid on the web at 1440px', () => {
 
     fireEvent.press(screen.getByTestId('detail-discography-single'));
 
-    expect(screen.getByTestId('detail-see-all-single').props.accessibilityLabel).toBe('See all 13 singles');
+    expect(screen.getByTestId('detail-see-all-single').props.accessibilityLabel).toBe(
+      'See all 13 singles',
+    );
   });
 
   it('swaps the grid to the chosen chip and opens the pressed release from it', () => {

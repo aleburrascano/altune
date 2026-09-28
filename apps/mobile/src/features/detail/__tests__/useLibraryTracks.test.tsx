@@ -82,11 +82,6 @@ describe('useLibraryTracksForAlbum pages the lookup', () => {
 });
 
 describe('aborting on unmount', () => {
-  // #1667: leaving a detail screen must abort its in-flight library lookup instead of
-  // letting it run to the shared 15s deadline. TanStack only aborts on unmount when the
-  // queryFn consumed the context signal, so this drives the real api-client against the
-  // fetch double and checks the recorded request's signal.
-
   let client: QueryClient;
 
   function wrapper({ children }: { children: ReactNode }) {

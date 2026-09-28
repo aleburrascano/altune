@@ -1,7 +1,3 @@
-// Probe (#2819): the pill shell TrackSavePill and SaveAllPill now share. Pins
-// what a caller hands it reaching the pressable: label, testID, a11y state,
-// children, and the press guard.
-
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';

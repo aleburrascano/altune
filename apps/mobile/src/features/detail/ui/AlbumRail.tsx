@@ -23,7 +23,13 @@ function railKey(album: DiscoveryResult, index: number): string {
   return `${album.title}-${album.sources[0]?.external_id ?? index}`;
 }
 
-type SeeAllProps = { typeKey: string; typeLabel: string; total: number; onPress: () => void; size: number };
+type SeeAllProps = {
+  typeKey: string;
+  typeLabel: string;
+  total: number;
+  onPress: () => void;
+  size: number;
+};
 
 function seeAllStyle(theme: ReturnType<typeof useTheme>, size: number) {
   return ({ pressed }: { pressed: boolean }) => [
@@ -74,11 +80,21 @@ type AlbumRailProps = {
   onSeeAll: () => void;
 };
 
-function railFooter(props: AlbumRailProps, size: number = DISCOGRAPHY_CARD_SIZE): ReactElement | null {
-  if (!props.hasMore) return null;
-  return (
-    <SeeAllButton typeKey={props.typeKey} typeLabel={props.typeLabel} total={props.total} onPress={props.onSeeAll} size={size} />
-  );
+function seeAllPropsFor(props: AlbumRailProps, size: number): SeeAllProps {
+  return {
+    typeKey: props.typeKey,
+    typeLabel: props.typeLabel,
+    total: props.total,
+    onPress: props.onSeeAll,
+    size,
+  };
+}
+
+function railFooter(
+  props: AlbumRailProps,
+  size: number = DISCOGRAPHY_CARD_SIZE,
+): ReactElement | null {
+  return props.hasMore ? <SeeAllButton {...seeAllPropsFor(props, size)} /> : null;
 }
 
 type RailCardProps = {
@@ -91,7 +107,14 @@ type RailCardProps = {
 
 function RailCard(props: RailCardProps): ReactElement {
   const onPress = () => props.onAlbumPress(props.item);
-  return <AlbumCard album={props.item} testID={`detail-${props.typeKey}-${props.index}`} typeLabel={props.typeLabel} onPress={onPress} />;
+  return (
+    <AlbumCard
+      album={props.item}
+      testID={`detail-${props.typeKey}-${props.index}`}
+      typeLabel={props.typeLabel}
+      onPress={onPress}
+    />
+  );
 }
 
 function railStyleProps() {
@@ -112,7 +135,13 @@ function railStaticProps() {
 function railDynamicProps(props: AlbumRailProps) {
   return {
     renderItem: ({ item, index }: { item: DiscoveryResult; index: number }) => (
-      <RailCard item={item} index={index} typeKey={props.typeKey} typeLabel={props.typeLabel} onAlbumPress={props.onAlbumPress} />
+      <RailCard
+        item={item}
+        index={index}
+        typeKey={props.typeKey}
+        typeLabel={props.typeLabel}
+        onAlbumPress={props.onAlbumPress}
+      />
     ),
     ListFooterComponent: railFooter(props),
   };
@@ -153,7 +182,14 @@ function gridStaticProps(columns: number) {
 function gridDynamicProps(props: AlbumRailProps, cardWidth: number) {
   return {
     renderItem: ({ item, index }: { item: DiscoveryResult; index: number }) => (
-      <GridCard item={item} index={index} typeKey={props.typeKey} typeLabel={props.typeLabel} onAlbumPress={props.onAlbumPress} cardWidth={cardWidth} />
+      <GridCard
+        item={item}
+        index={index}
+        typeKey={props.typeKey}
+        typeLabel={props.typeLabel}
+        onAlbumPress={props.onAlbumPress}
+        cardWidth={cardWidth}
+      />
     ),
     ListFooterComponent: railFooter(props, cardWidth),
   };
@@ -174,7 +210,12 @@ function AlbumGrid(props: AlbumRailProps): ReactElement {
   const { columns, cardWidth } = gridGeometry(width);
   return (
     <View testID="detail-discography-grid-measure" onLayout={onGridLayout(setWidth)}>
-      <FlatList key={`detail-discography-grid-${columns}`} {...gridStaticProps(columns)} {...gridDynamicProps(props, cardWidth)} data={props.items} />
+      <FlatList
+        key={`detail-discography-grid-${columns}`}
+        {...gridStaticProps(columns)}
+        {...gridDynamicProps(props, cardWidth)}
+        data={props.items}
+      />
     </View>
   );
 }
@@ -205,7 +246,9 @@ function TrackCountCaption({ trackCount }: { trackCount: number | null }): React
   );
 }
 
-function CardMeta({ year, trackCount }: { year: string | null; trackCount: number | null }): ReactElement {
+type CardMetaProps = { year: string | null; trackCount: number | null };
+
+function CardMeta({ year, trackCount }: CardMetaProps): ReactElement {
   return (
     <>
       <YearCaption year={year} />
@@ -223,7 +266,11 @@ type AlbumCardProps = {
   isGrid?: boolean;
 };
 
-function albumCardLabel(props: AlbumCardProps, year: string | null, trackCount: number | null): string {
+function albumCardLabel(
+  props: AlbumCardProps,
+  year: string | null,
+  trackCount: number | null,
+): string {
   const yearPart = year ? `, ${year}` : '';
   const trackPart = trackCount !== null ? `, ${trackCount} tracks` : '';
   return `${props.typeLabel}: ${props.album.title}${yearPart}${trackPart}`;
@@ -265,10 +312,28 @@ function CardTitle({ title }: { title: string }): ReactElement {
   );
 }
 
-function CardBody(props: { album: DiscoveryResult; year: string | null; trackCount: number | null; cardWidth: number }): ReactElement {
+type CardBodyProps = {
+  album: DiscoveryResult;
+  year: string | null;
+  trackCount: number | null;
+  cardWidth: number;
+};
+
+function CardArtwork(props: CardBodyProps): ReactElement {
+  return (
+    <Artwork
+      uri={props.album.image_url}
+      size={props.cardWidth}
+      radius={radius.md}
+      accessibilityLabel={props.album.title}
+    />
+  );
+}
+
+function CardBody(props: CardBodyProps): ReactElement {
   return (
     <>
-      <Artwork uri={props.album.image_url} size={props.cardWidth} radius={radius.md} accessibilityLabel={props.album.title} />
+      <CardArtwork {...props} />
       <CardTitle title={props.album.title} />
       <CardMeta year={props.year} trackCount={props.trackCount} />
     </>

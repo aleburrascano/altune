@@ -48,7 +48,11 @@ function AddToPlaylistAction({ actions, title }: TrackActionsProps): ReactElemen
 function TrackSecondary(props: TrackActionsProps): ReactElement {
   return (
     <>
-      <TrackSavePill save={props.actions.save.state} onSave={props.actions.onSave} title={props.title} />
+      <TrackSavePill
+        save={props.actions.save.state}
+        onSave={props.actions.onSave}
+        title={props.title}
+      />
       <AddToPlaylistAction {...props} />
     </>
   );

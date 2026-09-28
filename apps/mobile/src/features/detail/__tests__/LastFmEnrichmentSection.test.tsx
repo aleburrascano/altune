@@ -5,10 +5,6 @@ import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 
 import { LastFmEnrichmentSection } from '../ui/LastFmEnrichmentSection';
 
-// A failed Last.fm fetch and an artist with no Last.fm page both arrive here as
-// `enrichment === null`. These tests hold the seam that keeps them apart, so a
-// later notice/retry treatment has something to branch on.
-
 function emptyEnrichment(): LastFmEnrichmentResponse {
   return {
     has_content: true,
@@ -23,7 +19,6 @@ function emptyEnrichment(): LastFmEnrichmentResponse {
   };
 }
 
-// Past the 220-character threshold that earns the Read more/Read less toggle.
 function longBioEnrichment(): LastFmEnrichmentResponse {
   return { ...emptyEnrichment(), bio: 'Radiohead formed in Abingdon. '.repeat(10) };
 }
@@ -36,9 +31,7 @@ describe('LastFmEnrichmentSection: a failed fetch vs an artist with nothing to s
   });
 
   it('renders nothing at all when the artist genuinely has no Last.fm content', () => {
-    const { queryByTestId } = render(
-      <LastFmEnrichmentSection enrichment={null} isError={false} />,
-    );
+    const { queryByTestId } = render(<LastFmEnrichmentSection enrichment={null} isError={false} />);
 
     expect(queryByTestId('detail-lastfm-unavailable')).toBeNull();
     expect(queryByTestId('detail-lastfm')).toBeNull();

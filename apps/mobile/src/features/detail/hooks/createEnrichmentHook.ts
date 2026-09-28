@@ -22,10 +22,6 @@ type EnrichmentReturn<T> = {
   isError: boolean;
 };
 
-// A provider that fails leaves `enrichment` null — the exact shape of an entity
-// that genuinely has no data there. The shared apiFetch log strips the query
-// string by design, so without this line neither the entity nor the provider
-// survives the failure and a retry-worthy incident is undiagnosable.
 type EnrichmentFetchContext = {
   provider: EnrichmentProvider;
   kind: DiscoveryKind;
@@ -33,8 +29,6 @@ type EnrichmentFetchContext = {
   subtitle: string | null;
 };
 
-// Two readings of the same outcome: the log names this entity so one incident can be
-// diagnosed, the tally names only the provider so the batch's success rate can be computed.
 async function fetchReportingOutcome<T>(
   fetch: () => Promise<T>,
   ctx: EnrichmentFetchContext,
@@ -55,27 +49,15 @@ async function fetchReportingOutcome<T>(
 }
 
 type EnrichmentHookConfig<T> = {
-  /** react-query cache-key namespace for this provider. */
   keyPrefix: string;
-  /** Names the provider in the failure log and in the health tally. */
   provider: EnrichmentProvider;
-  /** Provider fetcher; receives the resolved params and picks what it sends. */
-  fetch: (params: Required<Pick<EnrichmentParams, 'kind' | 'title'>> &
-    Pick<EnrichmentParams, 'subtitle' | 'mbid'> & { signal: AbortSignal }) => Promise<T>;
-  /**
-   * When true, a present mbid drives the cache key and can enable the query on
-   * its own (MusicBrainz). When false, the query keys on `title|subtitle` and
-   * enables on title alone (Deezer, Last.fm). This single flag is what used to
-   * silently drift between the three hand-copied hook bodies.
-   */
+  fetch: (
+    params: Required<Pick<EnrichmentParams, 'kind' | 'title'>> &
+      Pick<EnrichmentParams, 'subtitle' | 'mbid'> & { signal: AbortSignal },
+  ) => Promise<T>;
   mbidAware: boolean;
 };
 
-/**
- * Builds a single-provider enrichment hook. Collapses the previously
- * hand-copied `useEnrichment` / `useDeezerEnrichment` / `useLastFmEnrichment`
- * bodies into one place so their cache-key and enable logic cannot diverge.
- */
 export function createEnrichmentHook<T extends { has_content: boolean }>(
   config: EnrichmentHookConfig<T>,
 ) {

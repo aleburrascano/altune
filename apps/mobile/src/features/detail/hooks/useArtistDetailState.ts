@@ -93,7 +93,6 @@ export function useArtistDetailState(
     : {
         topTracks: libraryTracksAsDiscovery,
         isLoadingTracks: false,
-        // The top tracks are the library's own, which cannot fail.
         tracksFailure: null,
       };
 

@@ -6,22 +6,10 @@ import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
 
 import { hasDegradedStatus } from './content-status';
 
-// Enrichment and detail content fetches degrade silently: a failed provider leaves the same
-// empty section an entity with genuinely no data there renders. This tallies outcomes and
-// reports them as one aggregate `detail_health` event (never one per fetch), from which a
-// per-provider success rate per client batch can be computed without waiting for user
-// reports. Same shape and channel as playback's own health tally (features/playback/
-// playbackHealth.ts), so both are consumed the same way.
-
-/** The enrichment providers, named as the server's enrichment routes name them. */
 export type EnrichmentProvider = 'musicbrainz' | 'deezer' | 'lastfm';
 
-// The detail content fetches, named for the endpoint behind each. Album tracks count under one
-// name whether the album arrived from a discovery search or from a known id: one endpoint, one
-// provider health.
 export type ContentFetch = 'album_tracks' | 'artist_content' | 'related_tracks';
 
-// Outcomes per reported batch; the batch also flushes when the app goes to the background.
 export const DETAIL_HEALTH_BATCH = 25;
 
 type Tally = {
@@ -73,11 +61,6 @@ export function recordContentFetchOutcome(fetch: ContentFetch, ok: boolean): voi
   count(`content_${fetch}_${ok ? 'ok' : 'failed'}`);
 }
 
-/**
- * Runs one detail content fetch and tallies its outcome. A degraded provider status counts as
- * a failure, the reading the retry UI already renders; an aborted fetch counts as neither, so
- * a screen the user navigated away from cannot read as provider degradation.
- */
 export async function fetchTallyingOutcome<T extends { status: DiscoveryProviderStatus }>(
   fetch: ContentFetch,
   run: () => Promise<T>,
@@ -92,8 +75,6 @@ export async function fetchTallyingOutcome<T extends { status: DiscoveryProvider
   }
 }
 
-// Best effort: a batch that fails to send is dropped, since a health sample is not worth an
-// outbox slot the label-critical events need.
 export function flushDetailHealth(): void {
   if (outcomes === 0) return;
   const payload = tally;

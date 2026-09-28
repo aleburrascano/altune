@@ -40,7 +40,10 @@ jest.mock('../hooks/useRelatedTracks', () => ({
   }),
 }));
 
-function album(title: string, extras: Record<string, unknown> = { record_type: 'album' }): DiscoveryResult {
+function album(
+  title: string,
+  extras: Record<string, unknown> = { record_type: 'album' },
+): DiscoveryResult {
   return {
     kind: 'album',
     title,
@@ -53,7 +56,9 @@ function album(title: string, extras: Record<string, unknown> = { record_type: '
 }
 
 function styleOf(testID: string): Record<string, unknown> {
-  return (StyleSheet.flatten(screen.getByTestId(testID).props.style) as Record<string, unknown>) ?? {};
+  return (
+    (StyleSheet.flatten(screen.getByTestId(testID).props.style) as Record<string, unknown>) ?? {}
+  );
 }
 
 function widthsInSubtree(node: ReactTestRendererJSON): number[] {
@@ -137,9 +142,7 @@ describe('detail layout: current rendered widths and margins stay pinned', () =>
   });
 
   it('keeps related-tracks cards at 132px wide', () => {
-    render(
-      <RelatedTracksSection result={album('Seed Album')} detailRoute="/discover/detail" />,
-    );
+    render(<RelatedTracksSection result={album('Seed Album')} detailRoute="/discover/detail" />);
 
     expect(styleOf('detail-related-0').width).toBe(132);
   });

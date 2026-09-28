@@ -21,7 +21,11 @@ afterEach(() => {
 
 function renderLayout(hero: React.ReactNode = <Text>hero-slot</Text>) {
   render(
-    <DetailBodyLayout hero={hero} actions={<Text>actions-slot</Text>} facts={<Text>facts-slot</Text>}>
+    <DetailBodyLayout
+      hero={hero}
+      actions={<Text>actions-slot</Text>}
+      facts={<Text>facts-slot</Text>}
+    >
       <Text>children-slot</Text>
     </DetailBodyLayout>,
   );

@@ -1,7 +1,3 @@
-// #2852: a quick-save on an album/artist row that is already owned and `failed`
-// must retry the acquisition instead of re-POSTing a create, which the server
-// dedups onto the existing failed row and schedules nothing.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
@@ -90,14 +86,13 @@ describe('useOwnedPlayback — onQuickSave', () => {
     const track = trackResult();
     const { result } = renderHook(() => useOwnedPlayback([], context, save), { wrapper });
 
-    // Mirrors what useSaveTrack itself leaves behind when its own create POST fails:
-    // the identity stays linked to the client-minted placeholder id, marked failed.
     act(() => {
       const identity = trackIdentityKey(track.title, track.subtitle ?? '')!;
       useTrackStatusStore.getState().link(identity, asTrackId('optimistic-abc'));
-      useTrackStatusStore
-        .getState()
-        .patch(asTrackId('optimistic-abc'), { acquisitionStatus: 'failed', failureMessage: 'boom' });
+      useTrackStatusStore.getState().patch(asTrackId('optimistic-abc'), {
+        acquisitionStatus: 'failed',
+        failureMessage: 'boom',
+      });
     });
 
     act(() => {

@@ -19,11 +19,6 @@ jest.mock('@shared/api-client/tracks', () => ({
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 describe('seeding download meta', () => {
-  // A save's response is the real TrackResponse under the real id — the same shape
-  // the SSE track_added_to_library carries. It should seed the download store the
-  // same way, so a started/failed acquisition event that arrives with nothing in the
-  // query caches still shows the real title (#downloads-bar-title).
-
   function saved(): TrackResponse {
     return {
       id: asTrackId('server-1'),
@@ -104,10 +99,6 @@ describe('seeding download meta', () => {
 });
 
 describe('invalidating derived caches', () => {
-  // A save changes library membership, so it must mark the same derived caches stale
-  // as every other add/delete site (#938) — including the library summary, which the
-  // hand-rolled key list here used to skip.
-
   function saved(): TrackResponse {
     return {
       id: asTrackId('server-1'),
@@ -185,13 +176,6 @@ describe('invalidating derived caches', () => {
 });
 
 describe('logging a failed save', () => {
-  // These detail hooks each have a silent failure path: the failure reason is
-  // discarded with no log, so a real incident can't be told apart from a one-off
-  // without a live repro. Each test drives its hook into that failure path and
-  // asserts the site now logs enough to diagnose it (status/provider/artist, the
-  // save error + track identity, the lateral-nav query/kind + error, the entity a
-  // failed discovery search was looking for).
-
   function createWrapper(queryClient: QueryClient) {
     return function Wrapper({ children }: { children: React.ReactNode }) {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;

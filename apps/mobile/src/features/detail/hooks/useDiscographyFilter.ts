@@ -51,21 +51,38 @@ function activeGroupOf(present: RecordTypeGroup[], selected: string | null): Rec
   return present.find((t) => t.type === selected) ?? present[0]!;
 }
 
-function windowOf(items: DiscoveryResult[], expanded: boolean): { capped: DiscoveryResult[]; hasMore: boolean } {
+function windowOf(
+  grouped: Map<string, DiscoveryResult[]>,
+  active: RecordTypeGroup,
+  expanded: boolean,
+): { items: DiscoveryResult[]; capped: DiscoveryResult[]; hasMore: boolean } {
+  const items = grouped.get(active.type) ?? [];
   const capped = expanded ? items : items.slice(0, SECTION_CAP);
   const hasMore = !expanded && items.length > SECTION_CAP;
-  return { capped, hasMore };
+  return { items, capped, hasMore };
 }
 
 type DerivedFilter = Omit<DiscographyFilter, 'select' | 'expand'>;
 
-function deriveFilter(albums: DiscoveryResult[], selected: string | null, expanded: boolean): DerivedFilter | null {
+function activeAndWindow(
+  grouped: Map<string, DiscoveryResult[]>,
+  present: RecordTypeGroup[],
+  selected: string | null,
+  expanded: boolean,
+) {
+  const active = activeGroupOf(present, selected);
+  return { active, ...windowOf(grouped, active, expanded) };
+}
+
+function deriveFilter(
+  albums: DiscoveryResult[],
+  selected: string | null,
+  expanded: boolean,
+): DerivedFilter | null {
   const grouped = groupByRecordType(albums);
   const present = presentGroups(grouped);
   if (present.length === 0) return null;
-  const active = activeGroupOf(present, selected);
-  const items = grouped.get(active.type) ?? [];
-  return { present, active, items, ...windowOf(items, expanded) };
+  return { present, ...activeAndWindow(grouped, present, selected, expanded) };
 }
 
 function selectHandler(
@@ -83,7 +100,11 @@ export function useDiscographyFilter(albums: DiscoveryResult[]): DiscographyFilt
   const [selected, setSelected] = useState<string | null>(null);
   const derived = deriveFilter(albums, selected, expanded);
   if (derived === null) return null;
-  return { ...derived, select: selectHandler(setSelected, setExpanded), expand: () => setExpanded(true) };
+  return {
+    ...derived,
+    select: selectHandler(setSelected, setExpanded),
+    expand: () => setExpanded(true),
+  };
 }
 
 export { SECTION_CAP };

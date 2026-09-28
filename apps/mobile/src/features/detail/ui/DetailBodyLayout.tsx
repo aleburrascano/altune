@@ -25,7 +25,9 @@ function CompactBody(props: CompactBodyProps): ReactElement {
   );
 }
 
-function WideLeftColumn({ hero, actions }: Pick<DetailBodyLayoutProps, 'hero' | 'actions'>): ReactElement {
+type WideLeftColumnProps = Pick<DetailBodyLayoutProps, 'hero' | 'actions'>;
+
+function WideLeftColumn({ hero, actions }: WideLeftColumnProps): ReactElement {
   return (
     <View testID="detail-body-left" style={styles.left}>
       {hero}

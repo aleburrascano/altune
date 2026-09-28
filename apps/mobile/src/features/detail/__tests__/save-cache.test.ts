@@ -185,7 +185,10 @@ describe('optimisticTrack', () => {
   });
 
   it('leaves featured_artists off the placeholder when the request omits them', () => {
-    const track = optimisticTrack(toCreateTrackRequest(result({ extras: {} })), '2026-01-01T00:00:00Z');
+    const track = optimisticTrack(
+      toCreateTrackRequest(result({ extras: {} })),
+      '2026-01-01T00:00:00Z',
+    );
 
     expect('featured_artists' in track).toBe(false);
   });

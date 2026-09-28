@@ -3,12 +3,7 @@ import type { ImperativeRouter } from 'expo-router';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { clearDetailHandoffs, readDetailHandoff } from '@shared/lib/detail-handoff';
 
-import {
-  detailRouteFor,
-  featuringRouteFor,
-  openDetail,
-  tabRootFromSegments,
-} from '../navigation';
+import { detailRouteFor, featuringRouteFor, openDetail, tabRootFromSegments } from '../navigation';
 
 function track(title: string): DiscoveryResult {
   return {

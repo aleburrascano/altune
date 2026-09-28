@@ -1,6 +1,11 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { ownedRetryTrackId, saveControlInteractive, saveControlState, type SaveState } from '../save-control-state';
+import {
+  ownedRetryTrackId,
+  saveControlInteractive,
+  saveControlState,
+  type SaveState,
+} from '../save-control-state';
 import { toCreateTrackRequest } from '../save-cache';
 
 import type { OwnedTrack } from './useOwnedTrack';
@@ -35,7 +40,12 @@ function deriveState(
   return saveControlState(owned);
 }
 
-type SaveDeps = { owned: OwnedTrack | null; track: DiscoveryResult; save: SaveTrack; retry: RetryTrack };
+type SaveDeps = {
+  owned: OwnedTrack | null;
+  track: DiscoveryResult;
+  save: SaveTrack;
+  retry: RetryTrack;
+};
 
 function saveOrRetry(deps: SaveDeps): () => void {
   const retryId = ownedRetryTrackId(deps.owned);

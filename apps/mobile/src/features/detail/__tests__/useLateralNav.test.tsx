@@ -22,13 +22,6 @@ jest.mock('expo-router', () => ({
 }));
 
 describe('logging a failed lateral navigation', () => {
-  // These detail hooks each have a silent failure path: the failure reason is
-  // discarded with no log, so a real incident can't be told apart from a one-off
-  // without a live repro. Each test drives its hook into that failure path and
-  // asserts the site now logs enough to diagnose it (status/provider/artist, the
-  // save error + track identity, the lateral-nav query/kind + error, the entity a
-  // failed discovery search was looking for).
-
   function createWrapper(queryClient: QueryClient) {
     return function Wrapper({ children }: { children: React.ReactNode }) {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -73,7 +66,6 @@ describe('logging a failed lateral navigation', () => {
           error: 'transport failed',
         }),
       );
-      // The visible "not found" path stays silent; only real failures log.
       expect(result.current.state).toBe('idle');
     });
 
