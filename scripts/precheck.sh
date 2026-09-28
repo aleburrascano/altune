@@ -147,6 +147,7 @@ if touches '^apps/mobile/'; then
     check "mobile typecheck" $m "${heavy[@]}" npx tsc --noEmit
     [ -n "$src" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $src
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
+    check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
     [ -n "$src" ] && check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --findRelatedTests $src
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
