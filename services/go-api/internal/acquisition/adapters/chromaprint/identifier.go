@@ -159,9 +159,12 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, lookupBodyCap))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, lookupBodyCap+1))
 	if err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("read acoustid response: %w", err)
+	}
+	if len(body) >= lookupBodyCap {
+		return ports.RecordingMatch{}, fmt.Errorf("read acoustid response: exceeds %d byte cap", lookupBodyCap)
 	}
 
 	var parsed lookupResponse

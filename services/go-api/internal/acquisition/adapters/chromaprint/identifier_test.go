@@ -614,6 +614,50 @@ func TestAcoustIDsFor_OversizedBodyErrorNamesTheClusterResponse(t *testing.T) {
 	}
 }
 
+func lookupBodyOfSize(t *testing.T, size int) string {
+	t.Helper()
+	valid := `{"status":"ok","results":[]}`
+	if size < len(valid) {
+		t.Fatalf("size %d too small for a valid body", size)
+	}
+	return valid + strings.Repeat(" ", size-len(valid))
+}
+
+func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
+	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap-1))
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	if err != nil {
+		t.Fatalf("a body under the cap must parse, got %v", err)
+	}
+	if match.AcoustID != "" {
+		t.Errorf("AcoustID = %q, want empty for a results-less body", match.AcoustID)
+	}
+}
+
+func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
+	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
+	defer srv.Close()
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	if err == nil {
+		t.Fatalf("oversized body must error, not parse the truncated prefix; got match %+v", match)
+	}
+}
+
+func TestLookup_BodyExactlyAtTheCapIsRejected(t *testing.T) {
+	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap))
+	defer srv.Close()
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	match, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+	if err == nil {
+		t.Fatalf("a body at the cap must error; got match %+v", match)
+	}
+}
+
 func TestAcoustIDsFor_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -650,5 +694,113 @@ func TestAcoustIDsFor_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
 		}
 	case <-time.After(15 * time.Second):
 		t.Fatal("AcoustIDsFor kept reading an endless body")
+	}
+}
+
+func matchingLookupBodyPaddedTo(t *testing.T, size int) string {
+	t.Helper()
+	valid := `{"status":"ok","results":[{"id":"ac-top","score":0.98,"recordings":[{"id":"mb-top","title":"Song One","duration":236}]}]}`
+	if size < len(valid) {
+		t.Fatalf("size %d too small for a valid body", size)
+	}
+	return valid + strings.Repeat(" ", size-len(valid))
+}
+
+func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing.T) {
+	srv := clusterServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap+1024))
+	defer srv.Close()
+	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
+
+	if err == nil {
+		t.Fatalf("an oversized body must error, not yield the prefix's match; got %+v", match)
+	}
+	if match.AcoustID != "" || match.Matches("mb-top") {
+		t.Errorf("match = %+v, want the zero match on error", match)
+	}
+}
+
+func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
+	srv := clusterServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap))
+	defer srv.Close()
+	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
+
+	if err == nil {
+		t.Fatalf("a body at the cap must error; got %+v", match)
+	}
+}
+
+func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
+	srv := clusterServerServing(matchingLookupBodyPaddedTo(t, lookupBodyCap-1))
+	defer srv.Close()
+	id := NewIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
+	if err != nil {
+		t.Fatalf("a body under the cap must parse, got %v", err)
+	}
+	if match.AcoustID != "ac-top" || !match.Matches("mb-top") {
+		t.Errorf("match = %+v, want ac-top linked to mb-top", match)
+	}
+}
+
+func TestLookup_OversizedBodyErrorNamesTheLookupResponse(t *testing.T) {
+	srv := clusterServerServing(lookupBodyOfSize(t, lookupBodyCap+1024))
+	defer srv.Close()
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+
+	_, err := id.lookup(context.Background(), fingerprint{Duration: 100, Fingerprint: "abc"})
+
+	if err == nil {
+		t.Fatal("oversized body must error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "read acoustid response: ") {
+		t.Errorf("err = %q, want it to name the read of the acoustid lookup response", msg)
+	}
+	if strings.Contains(msg, "cluster") {
+		t.Errorf("err = %q, names the cluster response; want the lookup response", msg)
+	}
+}
+
+func TestLookup_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
+		chunk := []byte(strings.Repeat(" ", 64<<10))
+		for {
+			if r.Context().Err() != nil {
+				return
+			}
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("an endless body must error, got nil")
+		}
+		if ctx.Err() != nil {
+			t.Fatalf("returned only because the context expired (%v); the cap must stop the read", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("lookup kept reading an endless body")
 	}
 }
