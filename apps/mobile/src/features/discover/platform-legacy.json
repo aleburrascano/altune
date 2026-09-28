@@ -1,5 +1,9 @@
 {
   "ui": [
     "src/features/discover/ui/DiscoverScreen.tsx"
+  ],
+  "logic": [
+    "src/features/discover/hooks/useImpressionLogger.ts",
+    "src/features/discover/hooks/useResultTap.ts"
   ]
 }

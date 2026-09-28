@@ -75,6 +75,7 @@ function platformLegacyPathsForRule(ruleKey) {
 }
 
 const noInlinePlatformBranchesInFeatureUi = {
+  name: 'noInlinePlatformBranchesInFeatureUi',
   files: ['src/features/*/ui/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
   ignores: [...TEST_FILES, ...platformLegacyPathsForRule('ui')],
   rules: {
@@ -89,6 +90,45 @@ const noInlinePlatformBranchesInFeatureUi = {
         selector: "MemberExpression[object.name='Keyboard'][property.name='dismiss']",
         message:
           'Feature UI must stay platform-neutral: split this into Foo.tsx + Foo.web.tsx, or move the divergent capability behind a port in src/shared/.',
+      },
+    ],
+  },
+};
+
+const CAPABILITY_HOMES =
+  'Feature logic must not import a platform API: Alert goes to @shared/ui/dialog, Keyboard to @shared/ui/keyboard, AppState to @shared/lifecycle, Platform and expo-constants to @shared/device, expo-router to @shared/navigation; or move the code into a ui/, native/ or web/ folder, or a .web.ts(x) split file.';
+
+const featureLogicStaysPlatformFree = {
+  name: 'featureLogicStaysPlatformFree',
+  files: ['src/features/**/*.{ts,tsx}'],
+  ignores: [
+    ...TEST_FILES,
+    'src/features/*/ui/**',
+    'src/features/**/native/**',
+    'src/features/**/web/**',
+    'src/features/**/*.web.{ts,tsx}',
+    'src/features/**/*.native.{ts,tsx}',
+    ...platformLegacyPathsForRule('logic'),
+  ],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: [
+              'react-native',
+              'react-native/*',
+              'react-native-*',
+              'react-native-*/**',
+              '@react-native*',
+              '@react-native*/**',
+              'expo-*',
+              'expo-*/**',
+            ],
+            message: CAPABILITY_HOMES,
+          },
+        ],
       },
     ],
   },
@@ -172,6 +212,7 @@ module.exports = [
   },
   rulesWrittenForTheWebAndWrongForReactNative,
   noInlinePlatformBranchesInFeatureUi,
+  featureLogicStaysPlatformFree,
   reactCompilerRulesRestoredToErrors,
   relaxationsForJestModuleMockingAndInlineMockComponents,
   relaxationForNativeModulesExpoGoDoesNotBundle,

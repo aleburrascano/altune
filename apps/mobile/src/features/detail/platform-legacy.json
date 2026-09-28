@@ -1,0 +1,8 @@
+{
+  "ui": [],
+  "logic": [
+    "src/features/detail/detailHealth.ts",
+    "src/features/detail/hooks/useLateralNav.ts",
+    "src/features/detail/navigation.ts"
+  ]
+}

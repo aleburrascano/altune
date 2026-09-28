@@ -1,0 +1,24 @@
+{
+  "ui": [],
+  "logic": [
+    "src/features/playback/audioCache.ts",
+    "src/features/playback/audioPrefetch.ts",
+    "src/features/playback/createNativePlaybackActions.ts",
+    "src/features/playback/hooks/PlaybackProvider.tsx",
+    "src/features/playback/hooks/trackPlayerProvider.tsx",
+    "src/features/playback/hooks/useAppStateChange.ts",
+    "src/features/playback/hooks/useIsForeground.ts",
+    "src/features/playback/hooks/usePlaybackPosition.ts",
+    "src/features/playback/hooks/usePlaybackSignals.ts",
+    "src/features/playback/hooks/useQueueResume.ts",
+    "src/features/playback/initPlayer.ts",
+    "src/features/playback/loadNativeTrack.ts",
+    "src/features/playback/nativeTrack.ts",
+    "src/features/playback/nativeTrackSwap.ts",
+    "src/features/playback/playbackHealth.ts",
+    "src/features/playback/playsThroughTrackPlayer.ts",
+    "src/features/playback/registerPlaybackService.ts",
+    "src/features/playback/seekControls.ts",
+    "src/features/playback/service.ts"
+  ]
+}
