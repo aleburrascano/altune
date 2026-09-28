@@ -127,8 +127,6 @@ func TestLiveTransport_NoRetryOnContextDeadline(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_HonorsRetryAfterSeconds is the repro: a 429 carrying a
-// delta-seconds Retry-After must wait that value, not the fixed backoff.
 func TestLiveTransport_HonorsRetryAfterSeconds(t *testing.T) {
 	h := http.Header{"Retry-After": []string{"2"}}
 	f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
@@ -149,7 +147,6 @@ func TestLiveTransport_HonorsRetryAfterSeconds(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_HonorsRetryAfterHTTPDate covers the HTTP-date format.
 func TestLiveTransport_HonorsRetryAfterHTTPDate(t *testing.T) {
 	when := time.Now().Add(5 * time.Second).UTC().Format(http.TimeFormat)
 	h := http.Header{"Retry-After": []string{when}}
@@ -168,10 +165,6 @@ func TestLiveTransport_HonorsRetryAfterHTTPDate(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_CapsRetryAfter ensures a huge value is clamped. The last
-// two rows are the overflow regression: multiplying those seconds into a
-// Duration wraps int64, which used to yield a near-zero delay and an immediate
-// retry against a host that asked to be left alone.
 func TestLiveTransport_CapsRetryAfter(t *testing.T) {
 	seconds := []string{"100000", "10000000000", "18446744074"}
 	for _, secs := range seconds {
@@ -191,8 +184,6 @@ func TestLiveTransport_CapsRetryAfter(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_FallsBackWithoutRetryAfter keeps the fixed backoff when the
-// header is absent or unparseable.
 func TestLiveTransport_FallsBackWithoutRetryAfter(t *testing.T) {
 	cases := map[string]http.Header{
 		"absent":   nil,
@@ -204,7 +195,7 @@ func TestLiveTransport_FallsBackWithoutRetryAfter(t *testing.T) {
 			f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
 			var delays []time.Duration
 			lt := recordDelays(f, &delays)
-			lt.randFloat = func() float64 { return 0.5 } // midpoint: no jitter offset
+			lt.randFloat = func() float64 { return 0.5 }
 			resp, err := lt.RoundTrip(getReq(t))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -218,13 +209,9 @@ func TestLiveTransport_FallsBackWithoutRetryAfter(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_FixedBackoffHasJitter is the regression for the lockstep
-// bug: repeated backoffs at the same attempt must not all be identical, yet
-// every draw must stay within the +/-liveBackoffJitter bound and never exceed
-// the documented max.
 func TestLiveTransport_FixedBackoffHasJitter(t *testing.T) {
 	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
-	lt.randFloat = rand.New(rand.NewPCG(1, 2)).Float64 // seeded: deterministic yet varied
+	lt.randFloat = rand.New(rand.NewPCG(1, 2)).Float64
 
 	const attempt = 1
 	base := time.Duration(attempt) * liveBackoffBase
@@ -247,15 +234,13 @@ func TestLiveTransport_FixedBackoffHasJitter(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_LimitsMissingProviderHosts is the regression for #382: the
-// provider hosts that were previously unthrottled must each receive a limiter.
 func TestLiveTransport_LimitsMissingProviderHosts(t *testing.T) {
 	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
 	hosts := []string{
-		"api.deezer.com",             // Deezer search/content/artwork/consensus
-		"api-v2.soundcloud.com",      // SoundCloud API
-		"na.web.skill.music.a2z.com", // Amazon Music search
-		"api-partner.spotify.com",    // Spotify API
+		"api.deezer.com",
+		"api-v2.soundcloud.com",
+		"na.web.skill.music.a2z.com",
+		"api-partner.spotify.com",
 	}
 	for _, h := range hosts {
 		if lt.limiter(h) == nil {
@@ -264,8 +249,6 @@ func TestLiveTransport_LimitsMissingProviderHosts(t *testing.T) {
 	}
 }
 
-// TestBaseTransport_CapsConnsPerHost is the regression for the unbounded
-// concurrency half of #382: the shared base transport must cap per-host conns.
 func TestBaseTransport_CapsConnsPerHost(t *testing.T) {
 	tr, ok := baseTransport().(*http.Transport)
 	if !ok {

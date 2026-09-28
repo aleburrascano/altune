@@ -11,8 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// TestLatencyMiddleware_RecordPanicDoesNotFailRequest is the Plant invariant: a
-// panic in the recording path is contained and never reaches the client.
 func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 	panicRec := func(string, time.Duration, int) { panic("boom") }
 	r := chi.NewRouter()
@@ -33,8 +31,6 @@ func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 	}
 }
 
-// TestLatencyMiddleware_RecordsRoutePattern proves the middleware keys latency by
-// the chi template (bounded), not the raw path.
 func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 	var gotRoute atomic.Value
 	rec := func(route string, _ time.Duration, _ int) { gotRoute.Store(route) }
@@ -51,8 +47,6 @@ func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 	}
 }
 
-// TestLatencyMiddleware_RecordsResponseStatus proves the middleware observes the
-// status the downstream handler wrote, so reqmetrics can tally its class.
 func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
 	var gotStatus atomic.Int64
 	rec := func(_ string, _ time.Duration, status int) { gotStatus.Store(int64(status)) }
@@ -70,7 +64,7 @@ func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
 }
 
 func BenchmarkRecordLatency(b *testing.B) {
-	reqmetrics.Observe("/v1/tracks/{trackId}", time.Millisecond, 200) // register in the global registry
+	reqmetrics.Observe("/v1/tracks/{trackId}", time.Millisecond, 200)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -78,8 +72,6 @@ func BenchmarkRecordLatency(b *testing.B) {
 	}
 }
 
-// TestRecordLatency_ZeroAlloc is the Plant invariant: the timer's recording path,
-// recover guard included, adds no per-request heap allocation.
 func TestRecordLatency_ZeroAlloc(t *testing.T) {
 	res := testing.Benchmark(BenchmarkRecordLatency)
 	if got := res.AllocsPerOp(); got != 0 {

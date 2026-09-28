@@ -42,10 +42,6 @@ func TestCatalogTrackNumberSetter_SurfacesMalformedId(t *testing.T) {
 	}
 }
 
-// TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler is the
-// regression for #2800: ACQUISITION_PAUSED=true must pause the scheduler the
-// moment it is wired, with no /observe/acquisition POST needed, so
-// Status().Paused already reports true at startup.
 func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T) {
 	a := &App{
 		cfg: &config.Config{
@@ -73,9 +69,6 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 	}
 }
 
-// TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop confirms that with
-// no scheduler wired (no audio store/source enabled), ACQUISITION_PAUSED is a
-// no-op rather than a startup failure.
 func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
 	a := &App{cfg: &config.Config{AcquisitionPaused: true}}
 
@@ -84,9 +77,6 @@ func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
 	}
 }
 
-// TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob is the regression
-// for #2800: DISABLED_JOBS lists jobs that must report disabled in JobHealth()
-// at startup, without a runtime POST.
 func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
 	a := &App{cfg: &config.Config{DisabledJobs: []string{"eval meter", "stream recovery"}}}
 
@@ -102,10 +92,6 @@ func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
 	}
 }
 
-// TestApplyStartupSwitches_DisabledJobsUnknownNameFailsStartup is the
-// regression for #2800: a mistyped DISABLED_JOBS entry must fail app
-// construction with an error that names the offending job, rather than being
-// silently ignored.
 func TestApplyStartupSwitches_DisabledJobsUnknownNameFailsStartup(t *testing.T) {
 	a := &App{cfg: &config.Config{DisabledJobs: []string{"nope"}}}
 

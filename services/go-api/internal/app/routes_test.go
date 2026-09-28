@@ -64,9 +64,6 @@ func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
 
 const routeWriteDeadline = 150 * time.Millisecond
 
-// newDeadlineRouter builds the production root router (newRouter) with a short
-// write deadline and mounts a large non-SSE response next to /v1/events.
-// bulkErrs receives the error that ended the bulk handler's writes.
 func newDeadlineRouter(uid shared.UserId, sse *sseHandler, bulkErrs chan<- error) *chi.Mux {
 	a := &App{cfg: &config.Config{Env: "test"}}
 	r := a.newRouter(routeWriteDeadline)
@@ -87,16 +84,13 @@ func newDeadlineRouter(uid shared.UserId, sse *sseHandler, bulkErrs chan<- error
 	return r
 }
 
-// TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute is the regression
-// guard for #1018: a client that stops reading a non-SSE response must not hold
-// the handler goroutine blocked in Write past the route write deadline.
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
 	sse := newSSEHandler(events.NewInProcessBus(), 0)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(shared.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
-	httputiltest.Get(t, srv, "/v1/bulk", nil) // never reads
+	httputiltest.Get(t, srv, "/v1/bulk", nil)
 
 	select {
 	case err := <-bulkErrs:
@@ -111,8 +105,6 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	}
 }
 
-// TestRouter_SSEStreamOutlivesRouteWriteDeadline proves /v1/events keeps
-// delivering heartbeats and events long after the route write deadline.
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -133,13 +125,10 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	readUntil(t, body, func(l string) bool { return strings.HasPrefix(l, "event: late.event") })
 }
 
-// TestRouter_SSEPerFrameDeadlineReachesConnection proves the stream's own
-// per-frame write deadline takes effect through the router's middleware
-// wrappers: a stalled SSE client is cut off instead of blocking forever.
 func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	slog.SetDefault(slog.New(slog.DiscardHandler)) // the stalled subscriber's drops are expected noise
+	slog.SetDefault(slog.New(slog.DiscardHandler))
 
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -153,7 +142,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 		router.ServeHTTP(w, r)
 	}))
 
-	httputiltest.Get(t, srv, "/v1/events", nil) // never reads
+	httputiltest.Get(t, srv, "/v1/events", nil)
 
 	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
 	giveUp := time.After(5 * time.Second)

@@ -120,8 +120,6 @@ func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 
-	// A channel cannot be JSON-marshalled: without a resync signal this event
-	// vanishes silently and the client never learns it missed state.
 	bus.Publish(context.Background(), uid, "unmarshalable", map[string]any{"bad": make(chan int)})
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
@@ -137,8 +135,6 @@ func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A non-numeric Last-Event-ID cannot be parsed: without a resync signal the
-	// client silently resumes live-only, believing its replay is intact.
 	req.Header.Set("Last-Event-ID", "not-a-number")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -151,10 +147,6 @@ func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
 
-// TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive is the regression
-// guard for #1013: a Last-Event-ID beyond anything the bus has issued (a stale
-// or corrupted header) must force a resync, and later live events must still
-// reach the client instead of being deduped against the bogus ID forever.
 func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -184,8 +176,6 @@ func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: live" })
 }
 
-// TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp pins the boundary: the
-// most recently issued ID is a legitimate caught-up resume, not a gap.
 func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -211,8 +201,6 @@ func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
 	}
 }
 
-// waitForLog polls the ring buffer until a record with the given message is
-// captured, so an assertion does not race the handler goroutine that logs it.
 func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -228,11 +216,6 @@ func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.Capt
 	return logging.CapturedRecord{}
 }
 
-// TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID is the regression
-// guard for #372: the connect and disconnect log lines must carry the request's
-// correlation ID so a client-reported ID can be grepped server-side. Both calls
-// use the *Context slog variant with the request context, so the correlation
-// handler stamps corr_id automatically like RequestLogger.
 func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -262,8 +245,6 @@ func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 
-	// Cancelling the client request cancels the server's request context, which
-	// ends the stream and triggers the sse.disconnected log line.
 	cancel()
 	resp.Body.Close()
 
@@ -316,10 +297,6 @@ func TestSSEStreamGapped(t *testing.T) {
 	}
 }
 
-// busWithGapPublish wraps a real bus and publishes one event the instant a
-// replay snapshot is taken, landing it squarely in the replay/subscribe window.
-// A handler that replays THEN subscribes delivers it to neither and drops it
-// silently (#371); a subscribe-first handler catches it on the live channel.
 type busWithGapPublish struct {
 	*events.InProcessBus
 	uid  shared.UserId
@@ -334,9 +311,6 @@ func (b *busWithGapPublish) Replay(userId shared.UserId, afterID uint64) []event
 	return snapshot
 }
 
-// busWithDupPublish publishes one event at subscribe time, so it lands in BOTH
-// the live channel and the subsequent replay snapshot. The handler must emit it
-// exactly once, deduping by event ID, not twice.
 type busWithDupPublish struct {
 	*events.InProcessBus
 	uid  shared.UserId
@@ -351,10 +325,6 @@ func (b *busWithDupPublish) Subscribe(userId shared.UserId) (<-chan events.Event
 	return ch, cancel
 }
 
-// busWithOverflowingSubscriber floods a subscriber's channel the moment it is
-// handed out, before the handler can drain a single event. The bus buffers 16
-// and drops the rest on the floor, so the events after burstBufferedByBus never
-// reach the client while the connection stays perfectly healthy.
 type busWithOverflowingSubscriber struct {
 	*events.InProcessBus
 	uid   shared.UserId
@@ -372,15 +342,8 @@ func (b *busWithOverflowingSubscriber) Subscribe(userId shared.UserId) (<-chan e
 	return ch, cancel
 }
 
-// burstBufferedByBus mirrors the unexported events.subscriberChanSize: the
-// number of events a subscriber channel holds before Publish starts dropping.
 const burstBufferedByBus = 16
 
-// TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent is the regression
-// guard for #2016: when the bus drops events for a full subscriber channel the
-// client is never disconnected, so it never replays via Last-Event-ID. The next
-// event to get through must carry a resync ahead of it, or the client keeps
-// serving state it does not know is stale.
 func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
 	real := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -396,8 +359,6 @@ func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// Draining the buffered prefix frees the channel, so the sentinel published
-	// next is guaranteed a slot and arrives separated by the 4 dropped IDs.
 	br := bufio.NewReader(resp.Body)
 	lastBuffered := fmt.Sprintf("event: burst-%d", burstBufferedByBus-1)
 	readUntil(t, br, func(l string) bool { return l == lastBuffered })
@@ -428,9 +389,6 @@ func serveSSE(t *testing.T, h *sseHandler, uid shared.UserId) *httptest.Server {
 	return srv
 }
 
-// TestSSEHandler_EventInReplaySubscribeGapIsDelivered is the regression guard
-// for #371: an event published between the replay snapshot and the live
-// subscribe must still reach the client exactly once, never silently dropped.
 func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
 	real := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -456,9 +414,6 @@ func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: gap" })
 }
 
-// TestSSEHandler_ReplayLiveOverlapDedupesByID proves the subscribe-first fix
-// does not double-deliver: an event present in both the replay snapshot and the
-// live channel is written once, deduped by event ID.
 func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 	real := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -480,8 +435,6 @@ func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// The subscriber is registered before the first byte is flushed, so by the
-	// time Do returns this sentinel lands on the live channel behind the overlap.
 	real.Publish(context.Background(), uid, "after", map[string]any{"k": "v"})
 
 	br := bufio.NewReader(resp.Body)
@@ -522,8 +475,6 @@ func TestSSEHandler_EmitsHeartbeat(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 }
 
-// blockingFlushWriter models a client that has stopped reading: writes buffer
-// fine but the flush to the socket blocks until the write deadline fires.
 type blockingFlushWriter struct {
 	header http.Header
 	mu     sync.Mutex
@@ -555,8 +506,6 @@ func (w *blockingFlushWriter) FlushError() error {
 	w.mu.Unlock()
 
 	if dl.IsZero() {
-		// No deadline was set: emulate a flush that blocks on a non-reading
-		// client forever. Bounded by stop so a broken handler can't truly hang.
 		select {
 		case <-w.stop:
 			return errors.New("stream closed")
@@ -576,8 +525,6 @@ func (w *blockingFlushWriter) FlushError() error {
 	return os.ErrDeadlineExceeded
 }
 
-// Gap 1: a stalled client must not pin the handler goroutine forever. The
-// per-write deadline has to unblock the flush and tear the stream down.
 func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -602,8 +549,6 @@ func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 	}
 }
 
-// Gap 2: shutdown cancels the lifecycle context (wired as the server
-// BaseContext), which must propagate to r.Context() and stop the stream.
 func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -630,8 +575,6 @@ func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 	}
 }
 
-// Gap 3: a single user cannot open unbounded concurrent streams; the overflow
-// connection is handled with 429, not accepted and not fatal.
 func TestSSEHandler_PerUserConnectionCapRejectsOverflow(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -686,8 +629,6 @@ func TestConnLimiter(t *testing.T) {
 	}
 }
 
-// #1022: the global ceiling counts slots across all keys, a per-user rejection
-// reserves nothing, and a stray release cannot free phantom global capacity.
 func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
 	l := newConnLimiter(1, 2)
 	if err := l.acquire("a"); err != nil {
@@ -712,8 +653,6 @@ func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
 	}
 }
 
-// #1022: parallel connects from distinct users must never overshoot the
-// global ceiling.
 func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
 	const limit, attempts = 5, 200
 	l := newConnLimiter(defaultMaxConnsPerUser, limit)
@@ -734,9 +673,6 @@ func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
 	}
 }
 
-// #1022: past the server-wide ceiling, a stream from yet another user is shed
-// with the same 429 as the per-user cap, while the streams already open keep
-// receiving events; closing one frees its slot for a newcomer.
 func TestSSEHandler_GlobalConnectionCapRejectsOverflowAcrossUsers(t *testing.T) {
 	const globalCap = 3
 	bus := events.NewInProcessBus()
@@ -788,8 +724,6 @@ func newMultiUserSSEServer(t *testing.T, h *sseHandler) *httptest.Server {
 	return srv
 }
 
-// openUserStream opens /v1/events as uid and returns the status and body; the
-// body is closed at test cleanup.
 func openUserStream(t *testing.T, url string, uid shared.UserId) (int, io.ReadCloser) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
@@ -806,8 +740,6 @@ func openUserStream(t *testing.T, url string, uid shared.UserId) (int, io.ReadCl
 	return resp.StatusCode, resp.Body
 }
 
-// assertStreamsStillLive publishes to every open user and reads the event back
-// off the wire, proving the overflow rejection disturbed no existing stream.
 func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []shared.UserId, readers []*bufio.Reader) {
 	t.Helper()
 	for i, uid := range users {
@@ -816,8 +748,6 @@ func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []shar
 	}
 }
 
-// waitForSlotRelease polls until a newcomer is admitted, since the server
-// notices the closed client asynchronously.
 func waitForSlotRelease(t *testing.T, url string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

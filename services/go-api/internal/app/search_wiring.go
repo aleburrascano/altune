@@ -18,8 +18,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// BuildSearchService builds the production, content-serving search service
-// over the default live transport, with the Redis-backed vocabulary store.
 func BuildSearchService(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -29,10 +27,6 @@ func BuildSearchService(
 	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, nil)
 }
 
-// BuildSearchServiceWithTransport builds the production, content-serving
-// search service over the given transport: ranking plus exploration, artwork,
-// related lookups, favorites, identity and the result cache. A nil transport
-// uses the default; a nil vocabStore falls back to the Redis-backed store.
 func BuildSearchServiceWithTransport(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -47,10 +41,6 @@ func BuildSearchServiceWithTransport(
 	return w.service(append(opts, extra...))
 }
 
-// BuildRankingOnlySearchService builds the search service used by evals and
-// fixture record/replay: ranking only, without exploration, the
-// content-serving concerns, the result cache or an event store.
-// A nil transport uses the default.
 func BuildRankingOnlySearchService(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -61,9 +51,6 @@ func BuildRankingOnlySearchService(
 	return w.service(rankingOnlyServiceOptions(w, cfg, pool, redisClient))
 }
 
-// searchWiring holds the pieces both search service shapes share: the client
-// factory over the chosen transport, the shared MusicBrainz adapter, the
-// search provider list and the circuit breaker.
 type searchWiring struct {
 	cf        clientFactory
 	sharedMB  *providers.MusicBrainzAdapter
@@ -86,7 +73,6 @@ func (w searchWiring) service(opts []discoveryService.Option) *discoveryService.
 	return discoveryService.NewService(w.providers, w.breaker, opts...)
 }
 
-// contentServiceOptions composes the production option set.
 func contentServiceOptions(
 	w searchWiring,
 	cfg *config.Config,
@@ -102,7 +88,6 @@ func contentServiceOptions(
 	return append(opts, sharedSearchOptions(w, cfg, redisClient, eventStore, vocabStore)...)
 }
 
-// rankingOnlyServiceOptions composes the eval/fixture option set.
 func rankingOnlyServiceOptions(
 	w searchWiring,
 	cfg *config.Config,
@@ -113,8 +98,6 @@ func rankingOnlyServiceOptions(
 	return append(opts, sharedSearchOptions(w, cfg, redisClient, nil, nil)...)
 }
 
-// sharedSearchOptions wires the trailing concerns both shapes carry: the
-// ranking-side caches, vocabulary, events and the album validator.
 func sharedSearchOptions(
 	w searchWiring,
 	cfg *config.Config,
@@ -131,9 +114,6 @@ func sharedSearchOptions(
 	return opts
 }
 
-// baseSearchOptions wires the ranking concerns present in both shapes:
-// history persistence plus the independently-toggleable tail-demotion and
-// cross-kind-prominence ranking tweaks.
 func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool) []discoveryService.Option {
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(discoveryPersistence.NewPgxSearchHistoryRepository(pool)),
@@ -147,8 +127,6 @@ func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool) []discoveryServic
 	return opts
 }
 
-// explorationSearchOptions wires the exploration ranking tweak, which only
-// the content-serving shape carries.
 func explorationSearchOptions(cfg *config.Config) []discoveryService.Option {
 	if !cfg.ExplorationEnabled {
 		return nil
@@ -156,9 +134,6 @@ func explorationSearchOptions(cfg *config.Config) []discoveryService.Option {
 	return []discoveryService.Option{discoveryService.WithExploration(cfg.ExplorationRate)}
 }
 
-// contentSearchOptions wires the content-serving concerns absent from the
-// ranking-only shape: artwork resolution, related lookups, favorites, the
-// identity store and (when configured) identity verification on persist.
 func contentSearchOptions(
 	cf clientFactory,
 	cfg *config.Config,
@@ -185,11 +160,6 @@ func contentSearchOptions(
 		opts = append(opts, discoveryService.WithIdentityStore(identityStore))
 	}
 	if cfg.IdentityVerifyOnPersist && sharedMB != nil {
-		// Identity verification intentionally runs on a narrower set than the
-		// canonical artist-content map: Deezer + Spotify + Apple Music only.
-		// Build the shared map, then drop SoundCloud and Last.fm so this set is
-		// preserved exactly. Whether the verifier SHOULD include them is a
-		// behavior question tracked separately (see PR), not decided here.
 		verifyProviders := buildArtistContentProviders(cf, cfg)
 		delete(verifyProviders, domain.ProviderSoundCloud)
 		delete(verifyProviders, domain.ProviderLastFM)
@@ -200,7 +170,6 @@ func contentSearchOptions(
 	return opts
 }
 
-// resultCacheSearchOptions wires the Redis-backed result cache, content-only.
 func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
 	if redisClient == nil {
 		return nil
@@ -215,8 +184,6 @@ func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Op
 	}
 }
 
-// cacheSearchOptions wires the Redis-backed caches both shapes carry: artwork
-// cache, identity bridge and MBID index.
 func cacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
 	if redisClient == nil {
 		return nil
@@ -229,8 +196,6 @@ func cacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
 	}
 }
 
-// vocabularySearchOptions wires the vocabulary store, falling back to a
-// Redis-backed store when the caller does not supply one.
 func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discoveryPorts.VocabularyStore) []discoveryService.Option {
 	vs := vocabStore
 	if vs == nil {
@@ -242,8 +207,6 @@ func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discoveryPo
 	return []discoveryService.Option{discoveryService.WithVocabularyStore(vs)}
 }
 
-// eventSearchOptions wires the event store and, when behavioral ranking is
-// enabled and the store supports it, the satisfaction-signal consumer.
 func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore) []discoveryService.Option {
 	if eventStore == nil {
 		return nil
@@ -289,8 +252,6 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 	return providerList
 }
 
-// buildScrapedSearchProviders builds the search adapters that depend on
-// reverse-engineered credentials, each skipped when its kill switch is off.
 func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discoveryPorts.SearchProvider {
 	var list []discoveryPorts.SearchProvider
 	if sc := buildSoundCloudSearchAdapter(cf, cfg); sc != nil {
@@ -315,9 +276,6 @@ func buildLastFMAdapter(cfg *config.Config, client *http.Client) *providers.Last
 	return providers.NewLastFmAdapter(client, cfg.LastFMAPIKey)
 }
 
-// buildMusicBrainzAdapter constructs the shared MusicBrainz adapter from the
-// given client factory, returning nil when MusicBrainz is not configured. It is
-// the single construction site for the adapter across the app wiring.
 func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *providers.MusicBrainzAdapter {
 	if !cfg.HasMusicBrainz() {
 		return nil
@@ -325,9 +283,6 @@ func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *providers.Mu
 	return providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
 }
 
-// buildAppleMusicAdapter constructs the Apple Music adapter from the given
-// client factory, returning nil when its kill switch is off. It is the single
-// construction site for the adapter across the app wiring.
 func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *providers.AppleMusicAdapter {
 	if !cfg.HasAppleMusic() {
 		return nil
@@ -335,9 +290,6 @@ func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *providers.App
 	return providers.NewAppleMusicAdapter(cf.discovery())
 }
 
-// buildSpotifyAdapter constructs the Spotify adapter from the given client
-// factory, returning nil when its kill switch is off. It is the single
-// construction site for the adapter across the app wiring.
 func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *providers.SpotifyAdapter {
 	if !cfg.HasSpotify() {
 		return nil
@@ -345,28 +297,18 @@ func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *providers.Spotif
 	return providers.NewSpotifyAdapter(cf.discovery())
 }
 
-// buildSoundCloudAdapter constructs the SoundCloud API adapter without a search
-// fallback (content, consensus and artwork use), returning nil when its kill
-// switch is off.
 func buildSoundCloudAdapter(cf clientFactory, cfg *config.Config) *providers.SoundCloudAPIAdapter {
 	return newSoundCloudAdapter(cf, cfg, nil)
 }
 
-// buildSoundCloudSearchAdapter constructs the SoundCloud API adapter for the
-// search path, falling back to the yt-dlp adapter when the API search fails,
-// returning nil when its kill switch is off.
 func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *providers.SoundCloudAPIAdapter {
 	return newSoundCloudAdapter(cf, cfg, providers.NewSoundCloudAdapter())
 }
 
-// soundCloudSearchFallback is the secondary searcher a SoundCloud API adapter
-// may fall back to.
 type soundCloudSearchFallback interface {
 	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 }
 
-// newSoundCloudAdapter is the single construction site for the SoundCloud API
-// adapter across the app wiring; a nil fallback builds it without one.
 func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *providers.SoundCloudAPIAdapter {
 	if !cfg.HasSoundCloud() {
 		return nil

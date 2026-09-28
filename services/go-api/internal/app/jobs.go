@@ -45,20 +45,15 @@ func isKnownJobName(name jobName) bool {
 	return false
 }
 
-// jobControl carries the runtime kill switch and the health signal for one
-// background job. Every field is touched concurrently: the ticker goroutine
-// records outcomes while an operator toggles the switch and reads health at
-// runtime, so all access goes through atomics.
 type jobControl struct {
 	disabled    atomic.Bool
 	failures    atomic.Int64
 	consecutive atomic.Int64
-	skipped     atomic.Int64 // ticks that returned early because the kill switch was off
-	lastSuccess atomic.Int64 // unix nanoseconds of the last successful run; 0 = never
-	lastFailure atomic.Int64 // unix nanoseconds of the last failed run; 0 = never
+	skipped     atomic.Int64
+	lastSuccess atomic.Int64
+	lastFailure atomic.Int64
 }
 
-// record folds one run's outcome into the job's health signal.
 func (jc *jobControl) record(err error) {
 	now := time.Now().UnixNano()
 	if err != nil {
@@ -71,20 +66,15 @@ func (jc *jobControl) record(err error) {
 	jc.lastSuccess.Store(now)
 }
 
-// JobHealth is the queryable snapshot of one background job's kill switch and
-// last-success/failure signal, exposed so an operator (or a health probe) can
-// tell whether an unattended job is still doing its work.
 type JobHealth struct {
 	Name        string
 	Enabled     bool
 	Failures    int64
-	Skipped     int64     // ticks skipped by the kill switch
-	LastSuccess time.Time // zero when the job has never succeeded
-	LastFailure time.Time // zero when the job has never failed
+	Skipped     int64
+	LastSuccess time.Time
+	LastFailure time.Time
 }
 
-// job returns the control block for name, creating it on first use so a job's
-// health is queryable from the moment it is registered.
 func (a *App) job(name jobName) *jobControl {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
@@ -110,12 +100,6 @@ func (a *App) jobSwitch(name jobName) func() bool {
 	}
 }
 
-// SetJobEnabled flips a registered background job's kill switch at runtime and
-// returns the job's resulting health snapshot. A disabled job stays registered
-// and keeps ticking, but each tick returns early without doing work, so an
-// operator can stop a misbehaving job without a redeploy. An unknown name
-// reports ok=false and registers nothing, so a mistyped name cannot mint a
-// phantom job that appears in JobHealth.
 func (a *App) SetJobEnabled(name jobName, enabled bool) (JobHealth, bool) {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
@@ -127,8 +111,6 @@ func (a *App) SetJobEnabled(name jobName, enabled bool) (JobHealth, bool) {
 	return jc.snapshot(name), true
 }
 
-// JobHealth returns a snapshot of every registered background job's health,
-// ordered by name for stable output.
 func (a *App) JobHealth() []JobHealth {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
@@ -151,8 +133,6 @@ func (jc *jobControl) snapshot(name jobName) JobHealth {
 	}
 }
 
-// nanosToTime maps a stored unix-nano timestamp back to a time.Time, keeping the
-// "never happened" sentinel (0) as the zero time rather than the unix epoch.
 func nanosToTime(nanos int64) time.Time {
 	if nanos == 0 {
 		return time.Time{}

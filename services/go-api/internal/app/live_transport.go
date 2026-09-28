@@ -16,16 +16,14 @@ import (
 )
 
 var providerRateLimits = map[string]rate.Limit{
-	"musicbrainz.org":       1,
-	"itunes.apple.com":      0.5,
-	"ws.audioscrobbler.com": 5,
-	"music.youtube.com":     2,
-	"api.discogs.com":       1,
-	// Hosts below were previously unthrottled; values are conservative
-	// starting points for ops to tune, not provider-published limits.
-	"api.deezer.com":             5, // reused across search/content/artwork/consensus
+	"musicbrainz.org":            1,
+	"itunes.apple.com":           0.5,
+	"ws.audioscrobbler.com":      5,
+	"music.youtube.com":          2,
+	"api.discogs.com":            1,
+	"api.deezer.com":             5,
 	"api-v2.soundcloud.com":      3,
-	"na.web.skill.music.a2z.com": 2, // Amazon Music search
+	"na.web.skill.music.a2z.com": 2,
 	"api-partner.spotify.com":    3,
 }
 
@@ -36,13 +34,10 @@ var providerBursts = map[string]int{
 }
 
 type liveTransport struct {
-	base     http.RoundTripper
-	mu       sync.Mutex
-	limiters map[string]*rate.Limiter
-	// sleep is a test seam; when nil a real timer is used.
-	sleep func(context.Context, time.Duration) error
-	// randFloat returns a value in [0.0,1.0) and is a test seam for jitter.
-	// When nil the concurrency-safe global source is used.
+	base      http.RoundTripper
+	mu        sync.Mutex
+	limiters  map[string]*rate.Limiter
+	sleep     func(context.Context, time.Duration) error
 	randFloat func() float64
 }
 
@@ -106,8 +101,6 @@ func (t *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return nil, lastErr
 }
 
-// prepareRetry rewinds the request body and waits out the backoff before a
-// retry attempt.
 func (t *liveTransport) prepareRetry(req *http.Request, attempt int, retryAfter time.Duration) error {
 	body, err := rewindBody(req)
 	if err != nil {
@@ -117,7 +110,6 @@ func (t *liveTransport) prepareRetry(req *http.Request, attempt int, retryAfter 
 	return t.wait(req.Context(), t.retryDelay(attempt, retryAfter))
 }
 
-// awaitRateLimit blocks on the per-host limiter when one exists for the host.
 func (t *liveTransport) awaitRateLimit(req *http.Request) error {
 	l := t.limiter(req.URL.Host)
 	if l == nil {
@@ -140,8 +132,6 @@ func rewindBody(req *http.Request) (io.ReadCloser, error) {
 	return req.GetBody()
 }
 
-// liveMaxRetryAfter caps an honored Retry-After so a malicious or huge value
-// cannot wedge the client.
 const liveMaxRetryAfter = 30 * time.Second
 
 func (t *liveTransport) retryDelay(attempt int, retryAfter time.Duration) time.Duration {
@@ -151,21 +141,12 @@ func (t *liveTransport) retryDelay(attempt int, retryAfter time.Duration) time.D
 	return t.fixedBackoff(attempt)
 }
 
-// liveBackoffBase is the per-attempt step of the deterministic backoff.
 const liveBackoffBase = 250 * time.Millisecond
 
-// liveBackoffJitter is the fraction of the base delay randomly added or
-// subtracted so concurrent callers to the same rate-limited host spread out
-// their retries instead of resynchronizing in lockstep.
 const liveBackoffJitter = 0.2
 
-// liveMaxBackoff caps the jittered backoff so a stacked delay can never exceed
-// a documented upper bound.
 const liveMaxBackoff = liveMaxAttempts * liveBackoffBase
 
-// fixedBackoff returns attempt*liveBackoffBase spread by +/-liveBackoffJitter of
-// that base. The jitter desynchronizes concurrent retries; the result is
-// clamped to [0, liveMaxBackoff].
 func (t *liveTransport) fixedBackoff(attempt int) time.Duration {
 	base := time.Duration(attempt) * liveBackoffBase
 	if base <= 0 {
@@ -186,8 +167,6 @@ func (t *liveTransport) fixedBackoff(attempt int) time.Duration {
 	return d
 }
 
-// parseRetryAfter reads a Retry-After value in either supported form —
-// delta-seconds or an HTTP-date — returning the capped delay when valid.
 func parseRetryAfter(h string, now time.Time) (time.Duration, bool) {
 	h = strings.TrimSpace(h)
 	if h == "" {
@@ -203,8 +182,6 @@ func parseRetryAfter(h string, now time.Time) (time.Duration, bool) {
 	return capRetryAfter(when.Sub(now)), true
 }
 
-// liveMaxRetryAfterSeconds is the cap in the header's own unit, so delta-seconds
-// are compared against it before the multiply that would overflow int64.
 const liveMaxRetryAfterSeconds = int(liveMaxRetryAfter / time.Second)
 
 func retryAfterFromSeconds(secs int) (time.Duration, bool) {

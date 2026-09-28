@@ -49,9 +49,6 @@ type catalogWiring struct {
 	ytDlpAvailable    bool
 }
 
-// audioSourcesStaging carries the audio store, the acquisition track repository
-// and the (possibly nil) acquisition scheduler from wireAudioSources to the
-// catalog service and handler wiring steps.
 type audioSourcesStaging struct {
 	audioStore     catalogPorts.AudioStore
 	trackRepo      *persistence.PgxTrackRepository
@@ -60,8 +57,6 @@ type audioSourcesStaging struct {
 	ytDlpAvailable bool
 }
 
-// catalogServicesStaging carries the catalog services and the catalog track
-// repository from wireCatalogServices to wireCatalogHandlers.
 type catalogServicesStaging struct {
 	catalogTrackRepo      *persistence.PgxCatalogTrackRepository
 	orphanedAudio         *persistence.PgxOrphanedAudioRepository
@@ -83,9 +78,6 @@ func (a *App) wireCatalog(
 	featuredBridge *discoverybridge.FeaturedResolver,
 	searchSvc *discoveryService.Service,
 ) (catalogWiring, error) {
-	// Reap the temp dirs a hard-killed predecessor leaked before any scheduler
-	// exists to create new ones, so a dir older than a job's own deadline is
-	// provably abandoned rather than merely idle (#1978).
 	acqService.SweepStaleTempDirs()
 
 	audio, err := a.wireAudioSources(tap, searchSvc)
@@ -96,9 +88,6 @@ func (a *App) wireCatalog(
 	return a.wireCatalogHandlers(audio, services), nil
 }
 
-// wireAudioSources builds the audio store, the enabled acquisition sources and,
-// when both exist, the background acquisition scheduler with its verification
-// status. The scheduler is also recorded on the App for shutdown.
 func (a *App) wireAudioSources(
 	tap *eventtap.Tap,
 	searchSvc *discoveryService.Service,
@@ -129,11 +118,6 @@ func (a *App) wireAudioSources(
 	return staging, nil
 }
 
-// buildAcquisitionScheduler assembles the acquire service (prober, tagger,
-// optional recording resolver and fingerprint identifier) and wraps it in the
-// background scheduler that reports the resulting verification status. The
-// passed verification carries the source-level probes (yt-dlp, streamrip); the
-// ffprobe, ffmpeg and fpcalc probes are filled in here.
 func (a *App) buildAcquisitionScheduler(
 	tap *eventtap.Tap,
 	searchSvc *discoveryService.Service,
@@ -187,8 +171,6 @@ func (a *App) buildAcquisitionScheduler(
 	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem, schedulerOpts...)
 }
 
-// wireCatalogServices constructs the catalog application services over the
-// catalog and playlist repositories, the audio store and the scheduler.
 func (a *App) wireCatalogServices(
 	tap *eventtap.Tap,
 	featuredBridge *discoverybridge.FeaturedResolver,
@@ -221,8 +203,6 @@ func (a *App) wireCatalogServices(
 	}
 }
 
-// wireCatalogHandlers constructs the catalog HTTP handlers and, when an
-// acquisition scheduler exists, the retry and reacquire handlers.
 func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
 	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
 
@@ -271,11 +251,6 @@ func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
 	return ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 }
 
-// audioSourcesFor assembles the enabled acquisition sources. ytmusic and yt-dlp
-// are gated by YTMUSIC_ENABLED / YTDLP_ENABLED (both default enabled) so either
-// can be pulled at startup without a deploy, mirroring streamrip's per-service
-// opt-in. The passed searcher is shared between the ytmusic and yt-dlp sources.
-// The bool is the streamrip binary probe from buildStreamripSources.
 func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {
 	var sources []acqPorts.AudioSource
 	if a.cfg.YtMusicEnabled {
@@ -293,11 +268,6 @@ func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.Au
 	return sources, streamripOK
 }
 
-// buildStreamripSources builds one source per enabled, supported streamrip
-// service and probes the configured rip binary once, so a missing or
-// misconfigured binary is logged as degraded at startup rather than surfacing
-// only when a background Fetch fails. The bool is true when the binary is
-// runnable or when no streamrip source is enabled.
 func (a *App) buildStreamripSources() ([]acqPorts.AudioSource, bool) {
 	sources := a.streamripSourcesFor(a.cfg.StreamripServices)
 	if len(sources) == 0 {
@@ -366,9 +336,6 @@ func (a *App) scopeAudioStore(store catalogPorts.AudioStore) catalogPorts.AudioS
 
 const ociS3ConfigKeys = 4
 
-// missingAudioStoreError names the configuration that would have wired a live
-// audio store, so a misconfiguration fails at startup instead of panicking on
-// the first stream or delete with a nil store.
 func missingAudioStoreError(cfg *config.Config) error {
 	var missing []string
 	if cfg.OCIS3Endpoint == "" {

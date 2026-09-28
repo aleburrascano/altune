@@ -20,9 +20,6 @@ type stubAuthChecker struct {
 func (s stubAuthChecker) CheckHealth(context.Context) error { return s.err }
 
 func TestDependencyHealth_ReportsRealDBError(t *testing.T) {
-	// Regression for #398: a failing DB check must surface the live error
-	// (pool exhaustion, auth, TLS, ...) the same way the Redis branch does,
-	// not a fixed placeholder that leaves the operator blind.
 	wantErr := "connection refused: pool exhausted"
 	a := &App{dbHealth: func(context.Context) database.HealthStatus {
 		return database.HealthStatus{OK: false, Err: errors.New(wantErr)}
@@ -42,15 +39,10 @@ func TestDependencyHealth_ReportsRealDBError(t *testing.T) {
 }
 
 func TestDependencyHealth_HangingDBRespectsTimeout(t *testing.T) {
-	// Regression for #375: the plain /health route feeds dependencyHealth the
-	// bare request context, which has no deadline. A stalled DB call (outage,
-	// wedged pool) would otherwise hang the probe — and the endpoint — forever.
-	// dependencyHealth must bound each dependency call itself so a hang is
-	// reported as "down" within the probe timeout rather than blocking.
 	a := &App{
 		depProbeTimeout: 50 * time.Millisecond,
 		dbHealth: func(ctx context.Context) database.HealthStatus {
-			<-ctx.Done() // never returns unless the probe bounds the context
+			<-ctx.Done()
 			return database.HealthStatus{OK: false, Err: ctx.Err()}
 		},
 	}
@@ -97,8 +89,6 @@ func TestDependencyHealth_DBNotConfigured(t *testing.T) {
 }
 
 func TestDependencyHealth_ReflectsAuthDegradation(t *testing.T) {
-	// pool and redisClient are nil, so DB and Redis report "not_configured"
-	// (ready); the auth probe is the only moving part under test.
 	a := &App{authVerifier: stubAuthChecker{err: errors.New("fetch JWKS: boom")}}
 
 	health := a.dependencyHealth(context.Background())

@@ -69,11 +69,6 @@ type App struct {
 	jobs   map[jobName]*jobControl
 }
 
-// electionController is the leader-election surface the app depends on: winning
-// leadership, scoping a job's context to the current leadership term (nil/false
-// when not leader; canceled once leadership is lost), and releasing the lock on
-// shutdown. *leader.Election satisfies it in production; tests substitute a
-// fake to simulate a leadership handoff without a live Postgres advisory lock.
 type electionController interface {
 	Start(context.Context)
 	Await(context.Context) bool
@@ -124,9 +119,6 @@ func (a *App) Run(ctx context.Context) error {
 	outcomes := a.runShutdownSequence()
 
 	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {
-		// These components blew past their shutdown budget and are presumed
-		// still running. cleanup() is about to close the DB pool and Redis
-		// client out from under them, so name them loudly first.
 		slog.Warn("closing DB/Redis while components are still shutting down",
 			"components", strings.Join(unstopped, ", "))
 	}
@@ -165,8 +157,6 @@ func (a *App) setup(ctx context.Context) error {
 	tap := eventtap.New(a.eventBus)
 	a.eventTap = tap
 
-	// One client factory for the whole process, so every provider adapter shares
-	// the live transport's per-host rate limiters and connection pool.
 	clientTransport, err := providerTransport(a.cfg)
 	if err != nil {
 		return fmt.Errorf("provider replay: %w", err)
@@ -188,8 +178,6 @@ func (a *App) setup(ctx context.Context) error {
 	))
 
 	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler, a.wireFeedback())
-	// Mount the non-prod test-login route only when the guard built a test
-	// verifier; testAuth is nil in prod, so the route never exists there.
 	if testAuth != nil {
 		mountTestLogin(r, testAuth)
 	}
@@ -235,11 +223,6 @@ func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server 
 	}
 }
 
-// cleanup closes the Redis client and, when closePool is set, the DB pool.
-// closePool is false while leadership is retained: the election still holds its
-// advisory lock on an acquired pooled connection, and pgxpool.Close blocks until
-// every acquired connection is returned, so closing would hang shutdown forever.
-// Leaving the pool open lets process exit end the session and free the lock.
 func (a *App) cleanup(closePool bool) {
 	if !closePool {
 		slog.Error("leaving DB pool open so process exit releases the retained leader lock")
@@ -253,10 +236,6 @@ func (a *App) cleanup(closePool bool) {
 		}
 	}
 }
-
-// catalogOwnedTrackLister and catalogTrackNumberSetter sit at the catalog side of
-// the ownership seam: they translate catalog's domain types into the discovery
-// port types the catalogbridge speaks, so discovery never imports catalog/domain.
 
 type catalogOwnedTrackLister struct {
 	repo *catalogPersistence.PgxTrackRepository
@@ -285,9 +264,6 @@ type catalogTrackNumberSetter struct {
 }
 
 func (s catalogTrackNumberSetter) Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error) {
-	// The parse lives here, on the catalog side, so ParseTrackId stays catalog
-	// behavior and discovery hands the id across as a plain string. A malformed
-	// persisted id surfaces as an error rather than a silent no-op.
 	id, err := catalogDomain.ParseTrackId(trackId)
 	if err != nil {
 		return false, fmt.Errorf("parse track id: %w", err)

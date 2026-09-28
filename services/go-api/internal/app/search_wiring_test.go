@@ -17,9 +17,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// TestSearchServiceOptionSets pins the ordered option set each named search
-// constructor composes, captured from the former rankingOnly=false/true paths,
-// so the split into named constructors stays behavior-preserving.
 func TestSearchServiceOptionSets(t *testing.T) {
 	cfg := &config.Config{
 		ExplorationEnabled:         true,
@@ -87,10 +84,6 @@ func TestSearchServiceOptionSets(t *testing.T) {
 	}
 }
 
-// optionNames resolves each option closure to the discovery With* constructor
-// that produced it. The runtime name depends on inlining (plain builds yield
-// "service.WithX.func1", coverage builds "app.caller.WithX.func2"), so take the
-// last dot-separated segment that names a With* constructor.
 func optionNames(opts []discoveryService.Option) []string {
 	names := make([]string, 0, len(opts))
 	for _, opt := range opts {
@@ -110,10 +103,6 @@ func lastWithSegment(funcName string) string {
 	return funcName
 }
 
-// scrapedProvidersConfig returns a config with the three scraped-credential
-// kill switches (Apple Music, Spotify, SoundCloud) set to enabled and every
-// key-gated provider left unconfigured, so the wiring collections vary only
-// with the switches under test.
 func scrapedProvidersConfig(enabled bool) *config.Config {
 	return &config.Config{
 		AppleMusicEnabled: enabled,
@@ -122,7 +111,6 @@ func scrapedProvidersConfig(enabled bool) *config.Config {
 	}
 }
 
-// typeName renders a value's dynamic type, e.g. "*providers.SpotifyAdapter".
 func typeName(v reflect.Value) string {
 	if v.Kind() == reflect.Interface {
 		v = v.Elem()
@@ -135,10 +123,6 @@ func soundCloudFallbackIsNil(t *testing.T, v any) bool {
 	return reflect.ValueOf(v).Elem().FieldByName("fallback").IsNil()
 }
 
-// TestScrapedProviderWiringCollections pins which adapters each wiring builder
-// puts into its collection, in order, with the Apple Music / Spotify /
-// SoundCloud kill switches on and off, so collapsing their construction into
-// one builder each stays behavior-preserving.
 func TestScrapedProviderWiringCollections(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -222,8 +206,6 @@ func assertEqual(t *testing.T, what string, got, want []string) {
 	}
 }
 
-// TestScrapedProviderBuilders pins that each per-provider builder applies its
-// kill switch internally: nil when disabled, a live adapter when enabled.
 func TestScrapedProviderBuilders(t *testing.T) {
 	off, on := scrapedProvidersConfig(false), scrapedProvidersConfig(true)
 	cf := newClientFactory(nil)
@@ -248,8 +230,6 @@ func TestScrapedProviderBuilders(t *testing.T) {
 	}
 }
 
-// allScrapedProvidersEnabled mirrors the production defaults: every
-// reverse-engineered provider is wired unless an operator opts out.
 func allScrapedProvidersEnabled() config.Config {
 	return config.Config{
 		SpotifyEnabled:     true,
@@ -260,11 +240,6 @@ func allScrapedProvidersEnabled() config.Config {
 	}
 }
 
-// TestScrapedProviderKillSwitch reproduces the gap where the Spotify,
-// SoundCloud, Apple Music, Amazon Music and YTMusic adapters were wired
-// unconditionally: no config value could pull one out, so a scraped endpoint
-// that broke or had to be withdrawn needed a code change and redeploy. Each
-// must now be dropped from every discovery wiring site when its flag is off.
 func TestScrapedProviderKillSwitch(t *testing.T) {
 	tests := []struct {
 		name          string

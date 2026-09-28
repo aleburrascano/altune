@@ -25,9 +25,6 @@ func (a *App) wireFeedback() *feedbackHandler.FeedbackHandler {
 	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker, metrics))
 }
 
-// mountFeedback mounts the submit handler when wireFeedback built one, and the
-// coded-503 disabled routes otherwise, so a switched-off feature reads as
-// "disabled" to clients rather than as an unknown path.
 func mountFeedback(r chi.Router, h *feedbackHandler.FeedbackHandler) {
 	if h == nil {
 		r.Mount("/feedback", feedbackHandler.DisabledRoutes())

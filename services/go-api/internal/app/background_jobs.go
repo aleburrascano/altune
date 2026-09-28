@@ -20,12 +20,6 @@ import (
 	playbackService "altune/go-api/internal/playback/service"
 )
 
-// startSimpleJob schedules a job whose whole tick is one call that either
-// succeeds or fails, warning on the failure and announcing the start. Both
-// lines are spelled from the job's wire name ("<name> failed", "<name>
-// started") because operator alerting keys on that exact text: renaming a
-// jobName now renames its log lines with it, which
-// TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob pins.
 func (a *App) startSimpleJob(
 	ctx context.Context,
 	name jobName,
@@ -45,10 +39,6 @@ func (a *App) startSimpleJob(
 
 const stalePendingReconcileInterval = 10 * time.Minute
 
-// startStalePendingReconcile sweeps tracks orphaned at pending by an acquisition
-// job that died mid-flight, transitioning them to failed so the retry path can
-// reclaim them. The ticker runs once on leader acquisition (startup recovery) and
-// then on an interval (ongoing sweep).
 func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
 	svc := catalogService.NewReconcileStalePendingService(repo)
 	a.startSimpleJob(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
@@ -59,11 +49,6 @@ func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
 
-// startOrphanedAudioReconcile retries the storage delete of audio objects a
-// partial track delete left behind (recorded by DeleteTrackService), so an
-// orphan is cleaned up automatically instead of waiting on an operator. The
-// sweep never deletes a key any track still references; before migration 021
-// is applied it idles.
 func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPorts.OrphanedAudioQueue, audioStore catalogPorts.AudioStore) {
 	if audioStore == nil {
 		return
@@ -78,24 +63,8 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 	}, "interval", orphanedAudioReconcileInterval.String())
 }
 
-// deletedIdentityErasureInterval is how often the account-deletion sweep runs.
-// Hourly bounds how long a deleted account's PII outlives its identity, at one
-// indexed pass over the queue-state table and one over each discovery table per
-// hour. discovery_events is the widest of them, which is what keeps the cadence
-// at an hour rather than something finer.
 const deletedIdentityErasureInterval = time.Hour
 
-// startDeletedIdentityErasure erases what accounts deleted out-of-band in
-// Supabase left behind. Supabase deletes an identity without telling this
-// service, and neither playback_queue_state nor the discovery tables have a
-// cascade to reach, so without this the stored queue of a deleted account (track
-// list, natural order, free-text source_id — all PII) is erased only if its
-// owner called the self-service route first, with an identity they no longer
-// have (#1593), and its discovery search text, favorites and telemetry are never
-// erased at all (#2236). Queue erasures run through QueueService.Forget, leaving
-// the same audit record as that route. Where the identity store is unreadable (a
-// plain Postgres carrying no Supabase auth schema) the sweep idles rather than
-// erasing.
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
@@ -104,10 +73,6 @@ func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackServ
 	}, "interval", deletedIdentityErasureInterval.String())
 }
 
-// discoveryDeletedIdentityErasers is every discovery table that stores rows
-// keyed by an account and has no cascade to erase them by. A table added to
-// discovery with a user_id belongs in this list, and the sweep is the only thing
-// that reads it.
 func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentityEraser {
 	return []discoveryPorts.DeletedIdentityEraser{
 		discoveryPersistence.NewPgxSearchHistoryRepository(a.pool),
@@ -116,10 +81,6 @@ func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentity
 	}
 }
 
-// An identity store this deployment cannot read erases nothing and is not an
-// error: the sweep says so once and waits, the same answer the queue-state half
-// gives, because "no identity is visible" must never be acted on as "every
-// identity was deleted".
 func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discoveryPorts.DeletedIdentityEraser) error {
 	var erased int64
 	var failures []error
@@ -164,29 +125,13 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
-// discographyPruneInterval is how often the discography_observed retention prune
-// runs. Daily is ample: the retention window is far wider than a day, so nothing
-// is urgent to evict, and a missed tick only defers eviction, never skips it.
 const discographyPruneInterval = 24 * time.Hour
 
-// discoveryEventRetentionPruner is the slice of the event store this job drives:
-// the discography_observed prune (its own wider window) plus the per-type prune of
-// every other discovery_events type. Declared here, at the consumer, so scheduling
-// the whole-table retention needs no change to the discovery ports.
 type discoveryEventRetentionPruner interface {
 	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
 	PruneEvents(ctx context.Context, now time.Time) (int64, error)
 }
 
-// startDiscographyPrune schedules the retention prune that keeps the whole
-// discovery_events table bounded: every discography open appends a
-// discography_observed row and every search/behavioral signal appends its own, so
-// without this the shared table grows without limit (the epic's "bounded window,
-// always" must-hold). Each type is evicted only past its own retention window —
-// always wider than the widest window that type is read over — so the prune can
-// never remove a row a live read could still serve. It is leader-only and drained
-// with the other background jobs. (The job's name predates its widening to the
-// full table; a rename would touch the leader registry and wiring, out of scope.)
 func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRetentionPruner) {
 	a.startTicker(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
 		now := time.Now().UTC()
@@ -221,9 +166,6 @@ func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, voca
 	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
 		charts, vocabStore, 50,
 	)
-	// The service has no loop of its own: the shared ticker drives it, giving it
-	// the kill switch, the per-job health signal and the per-tick leadership
-	// re-check, and its goroutine is drained with the other background tasks.
 	a.startSimpleJob(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		return a.vocabRefresh.RunOnce(ctx)
 	})

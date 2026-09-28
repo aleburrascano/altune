@@ -11,10 +11,6 @@ import (
 	observeAlert "altune/go-api/internal/observe/alert"
 )
 
-// fakeCoverageEvents models the discovery event query. topN is what the capped
-// ZeroResultQueries(limit) returns (the top-1000 list); total is the unbounded
-// true count of zero-result searches in the window. totalErr, when set, makes
-// ZeroResultTotal fail.
 type fakeCoverageEvents struct {
 	topN     []discoveryPorts.QueryCount
 	total    int
@@ -39,8 +35,6 @@ func TestBuildCoverageCondition(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("breach beyond the top-1000 cap still fires (undercount regression)", func(t *testing.T) {
-		// 1500 distinct zero-result queries, one hit each: true total 1500.
-		// The top-1000 list sums to only 1000, which would miss a threshold of 1200.
 		rows := make([]discoveryPorts.QueryCount, 1500)
 		for i := range rows {
 			rows[i] = discoveryPorts.QueryCount{QueryNorm: "q", Count: 1}
@@ -90,8 +84,6 @@ func TestBuildCoverageCondition(t *testing.T) {
 	})
 }
 
-// The coverage alert is logged for the operator, so it must carry counts
-// only and never the user's search text.
 func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	const query = "my private search \"quoted\" term"
 	events := &fakeCoverageEvents{
@@ -115,8 +107,6 @@ func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	}
 }
 
-// evalTick runs the conditions in registration order, as the monitor does on
-// one tick, and returns the alerts that fired keyed by condition key.
 func evalTick(ctx context.Context, conds ...observeAlert.Condition) map[string]*observeAlert.Alert {
 	fired := make(map[string]*observeAlert.Alert)
 	for _, c := range conds {
@@ -127,8 +117,6 @@ func evalTick(ctx context.Context, conds ...observeAlert.Condition) map[string]*
 	return fired
 }
 
-// A failing coverage query must never read as "checked, no gap": the gap
-// verdict holds through the streak and the failure pages on its own key.
 func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 	ctx := context.Background()
 

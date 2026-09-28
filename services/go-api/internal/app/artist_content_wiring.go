@@ -10,10 +10,6 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
-// buildArtistContentProviders builds the canonical artist-content-provider map
-// and is the single source of truth for it: Deezer, Apple Music, Spotify and
-// SoundCloud (each behind its kill switch), plus Last.fm when configured.
-// Callers that need a narrower set must derive it explicitly from this result.
 func buildArtistContentProviders(
 	cf clientFactory,
 	cfg *config.Config,

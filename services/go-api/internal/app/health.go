@@ -40,16 +40,11 @@ type DependencyHealth struct {
 type DepStatus string
 
 const (
-	// DepUp means the dependency is configured and answered its probe.
-	DepUp DepStatus = "ok"
-	// DepNotConfigured means the dependency is not wired; it does not fail readiness.
+	DepUp            DepStatus = "ok"
 	DepNotConfigured DepStatus = "not_configured"
-	// DepDown means the dependency is configured but its probe failed.
-	DepDown DepStatus = "down"
+	DepDown          DepStatus = "down"
 )
 
-// DependencyDetail carries per-dependency latency and error information
-// gathered during a health probe.
 type DependencyDetail struct {
 	DBLatencyMs    int64
 	DBError        string
@@ -60,8 +55,6 @@ type DependencyDetail struct {
 	CheckedAt      time.Time
 }
 
-// Healthy reports readiness: a dependency that is DepDown fails the check, while
-// DepNotConfigured is treated as ready.
 func (d DependencyHealth) Healthy() bool {
 	return len(d.down()) == 0
 }
@@ -92,22 +85,12 @@ func probeDependency(configured bool, run func() error) (DepStatus, string, int6
 	return DepUp, "", ms
 }
 
-// authHealthChecker reports whether the auth subsystem can obtain its JWKS key
-// set. *authProviders.SupabaseJWTVerifier satisfies it.
 type authHealthChecker interface {
 	CheckHealth(ctx context.Context) error
 }
 
-// dbHealthChecker probes database reachability and returns the live
-// HealthStatus, so the handler can surface the real error rather than a
-// placeholder. It is a seam: production wires it to database.CheckHealth over
-// the pool, and tests inject a stub.
 type dbHealthChecker func(ctx context.Context) database.HealthStatus
 
-// defaultDependencyProbeTimeout bounds each individual DB/Redis/auth call made
-// by dependencyHealth. The plain, unauthenticated /health route passes the bare
-// request context (no deadline), so without this a stalled dependency would
-// hang the probe — and the endpoint — indefinitely.
 const defaultDependencyProbeTimeout = 2 * time.Second
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -141,8 +124,6 @@ func (a *App) dependencyHealth(ctx context.Context) DependencyHealth {
 	}}
 }
 
-// probeTimeout is the per-dependency bound, falling back to the package default
-// when unset.
 func (a *App) probeTimeout() time.Duration {
 	if a.depProbeTimeout > 0 {
 		return a.depProbeTimeout
@@ -150,15 +131,12 @@ func (a *App) probeTimeout() time.Duration {
 	return defaultDependencyProbeTimeout
 }
 
-// probeDB runs the DB health check under a bounded context derived from ctx.
 func (a *App) probeDB(ctx context.Context, timeout time.Duration) database.HealthStatus {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return a.dbHealth(ctx)
 }
 
-// probe runs an error-returning dependency check under a bounded context
-// derived from ctx, so a stalled call cannot hang the health probe.
 func probe(ctx context.Context, timeout time.Duration, check func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

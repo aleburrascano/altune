@@ -13,12 +13,8 @@ const (
 	chartHTTPTimeout     = 15 * time.Second
 )
 
-// liveMaxConnsPerHost bounds concurrent connections to any single upstream
-// host so provider traffic cannot exhaust local sockets or hammer a provider
-// without limit; ops can tune it.
 const liveMaxConnsPerHost = 8
 
-// baseTransport clones the default transport and caps per-host concurrency.
 func baseTransport() http.RoundTripper {
 	t, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -37,17 +33,10 @@ var sharedLiveTransport = sync.OnceValue(func() http.RoundTripper {
 	return countedProviderTransport(NewLiveTransport())
 })
 
-// clientFactory builds the HTTP clients the provider adapters take. Its
-// transport is always concrete, so a factory handed to wiring code redirects
-// every adapter that wiring builds.
 type clientFactory struct {
 	transport http.RoundTripper
 }
 
-// newClientFactory is the only place a nil transport resolves to the shared
-// live one; construct every factory through it. A non-nil transport is taken
-// verbatim: it is the caller's own chain, counted at the base it was built
-// over, so the factory never adds a second counter to it.
 func newClientFactory(transport http.RoundTripper) clientFactory {
 	if transport == nil {
 		return clientFactory{transport: sharedLiveTransport()}

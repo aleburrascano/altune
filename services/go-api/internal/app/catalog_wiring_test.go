@@ -34,11 +34,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestWireCatalogSchedulerGating pins wireCatalog's observable object graph so
-// splitting it into named wiring steps stays behavior-preserving: with no
-// acquisition source the scheduler and the retry/reacquire handlers must stay
-// nil, and with a source they must all be built and the scheduler recorded on
-// the App for shutdown.
 func TestWireCatalogSchedulerGating(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -96,8 +91,6 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 		},
 		sem: make(chan struct{}, concurrency),
 	}
-	// Saturate the workers so every admitted job blocks on the semaphore and
-	// keeps holding its slot for the duration of the test.
 	for i := 0; i < concurrency; i++ {
 		a.sem <- struct{}{}
 	}
@@ -121,7 +114,7 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 
 func TestWireCatalogEnforcesPrincipalQueueCap(t *testing.T) {
 	const concurrency = 2
-	const principalCap = concurrency // explicit opt-in via ACQUISITION_PRINCIPAL_QUEUE_DEPTH
+	const principalCap = concurrency
 	a := &App{
 		cfg: &config.Config{
 			MusicDir:                       t.TempDir(),
@@ -131,8 +124,6 @@ func TestWireCatalogEnforcesPrincipalQueueCap(t *testing.T) {
 		},
 		sem: make(chan struct{}, concurrency),
 	}
-	// Saturate the workers so every admitted job blocks on the semaphore and
-	// keeps holding its per-principal slot for the duration of the test.
 	for i := 0; i < concurrency; i++ {
 		a.sem <- struct{}{}
 	}
@@ -255,11 +246,6 @@ func assertReadyWithAudio(t *testing.T, track *domain.Track, musicDir string) {
 	}
 }
 
-// TestAudioSourcesToggle reproduces the defect where the yt-dlp and ytmusic
-// sources were wired unconditionally: before this change no config flag could
-// skip either one, so disabling a single misbehaving provider meant a code
-// change or taking down the whole audio store. Each source must now be gated
-// independently by YTMUSIC_ENABLED / YTDLP_ENABLED, mirroring streamrip.
 func TestAudioSourcesToggle(t *testing.T) {
 	searcher := ytdlp.NewYtDlpAudioSearcher("", "", "")
 
@@ -310,10 +296,6 @@ func containsSource(list []string, want string) bool {
 	return false
 }
 
-// TestBuildAudioStoreFailsFastWhenMisconfigured reproduces the defect where a
-// misconfigured audio store booted healthy and panicked on the first stream or
-// delete with a nil store. Startup must instead fail fast, naming the missing
-// configuration, and never hand a nil store to the catalog services.
 func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -331,7 +313,6 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 				OCIS3Endpoint:  "https://objectstorage.example.com",
 				OCIS3AccessKey: "key",
 				OCIS3SecretKey: "secret",
-				// OCI_S3_BUCKET deliberately missing.
 			},
 			wantContains: []string{"OCI_S3_BUCKET", "incomplete"},
 		},
@@ -357,8 +338,6 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 	}
 }
 
-// TestBuildAudioStoreFilesystemSucceeds guards that the supported filesystem
-// backend still resolves to a live store without error.
 func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}}
 
@@ -371,9 +350,6 @@ func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
 	}
 }
 
-// TestBuildAudioStoreScopesWhenKeyPrefixSet pins that AUDIO_KEY_PREFIX wraps
-// the store in the confining decorator: a delete outside the prefix must
-// leave the file on disk untouched (#3090).
 func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 	dir := t.TempDir()
 	a := &App{cfg: &config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}}
@@ -400,9 +376,6 @@ func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 	}
 }
 
-// TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty is the counterpart of
-// TestBuildAudioStoreScopesWhenKeyPrefixSet: with no AUDIO_KEY_PREFIX
-// configured (the prod default), a delete is not confined to any prefix.
 func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
 	dir := t.TempDir()
 	a := &App{cfg: &config.Config{MusicDir: dir}}
@@ -429,10 +402,6 @@ func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
 	}
 }
 
-// TestWireCatalogProbesStreamripBinary reproduces the defect where the
-// streamrip rip binary was stored without any startup probe: a missing binary
-// never showed up in AcquisitionVerification and only failed deep inside a
-// background Fetch. The wired scheduler must now report the probe result.
 func TestWireCatalogProbesStreamripBinary(t *testing.T) {
 	present := filepath.Join(t.TempDir(), "rip")
 	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {
@@ -477,8 +446,6 @@ func TestWireCatalogProbesStreamripBinary(t *testing.T) {
 	}
 }
 
-// blackHoleDatabase accepts TCP connections and never answers, standing in for
-// a wedged Postgres: the pgx handshake blocks until the caller's deadline.
 func blackHoleDatabase(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

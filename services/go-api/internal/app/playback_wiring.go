@@ -12,8 +12,6 @@ import (
 	playbackService "altune/go-api/internal/playback/service"
 )
 
-// playbackWiring is what the composition root keeps of the playback module: the
-// HTTP surface, and the erasure sweep the background scheduler drives.
 type playbackWiring struct {
 	handler                 *playbackHandler.QueueHandler
 	forgetDeletedIdentities *playbackService.ForgetDeletedIdentitiesService
@@ -31,18 +29,11 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) playbackWi
 	}
 }
 
-// playbackMetricsSink is the composition root's view of the one expvar adapter:
-// the union of the ports its consumers each depend on alone.
 type playbackMetricsSink interface {
 	ports.EnrichmentMetrics
 	ports.RateLimitMetrics
 }
 
-// newQueueService assembles the queue service over a queue-state store and the
-// catalog-backed now-playing reader; metrics is the enrichment sink of the
-// reader, the store arriving with its own already wired.
-// enrichmentEnabled is the PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED kill switch:
-// when false, resume never calls the reader.
 func newQueueService(
 	queueStateRepo ports.QueueStateRepository,
 	trackRepo *persistence.PgxTrackRepository,
@@ -57,8 +48,6 @@ func newQueueService(
 		playbackService.WithNowPlayingEnrichment(enrichmentEnabled))
 }
 
-// newQueueHandler serves the queue service over HTTP, with metrics as the
-// handler's rate-limit sink.
 func newQueueHandler(queueSvc *playbackService.QueueService, metrics playbackMetricsSink) *playbackHandler.QueueHandler {
 	return playbackHandler.NewQueueHandler(queueSvc, playbackHandler.WithQueueStateRateLimitMetrics(metrics))
 }

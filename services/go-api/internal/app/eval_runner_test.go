@@ -89,27 +89,20 @@ func runSmokeEvalRecording(t *testing.T, user shared.UserId) int {
 	return store.count()
 }
 
-// The smoke eval runs real per-user search paths, so running it as a real
-// account persists InteractionEvents under that id. It must instead run under
-// the synthetic system identity, which the search service refuses to record.
 func TestSmokeEval_RunsUnderSyntheticIdentity(t *testing.T) {
 	if !evalUserId().IsSystem() {
 		t.Fatal("smoke eval must run under the synthetic system identity")
 	}
 
-	// Control: a real operator account would get an event per query (contamination).
 	if n := runSmokeEvalRecording(t, shared.NewUserId(uuid.New())); n == 0 {
 		t.Fatal("real identity should persist InteractionEvents (control)")
 	}
 
-	// Fix: the identity the runner actually uses persists nothing.
 	if n := runSmokeEvalRecording(t, evalUserId()); n != 0 {
 		t.Fatalf("smoke eval persisted %d InteractionEvents under its identity; want 0", n)
 	}
 }
 
-// scriptedSearcher errors on the configured queries and returns a single
-// matching result for every other, so matchPosition scores them as passes.
 type scriptedSearcher struct{ failing map[string]bool }
 
 func searcherFailing(queries ...string) scriptedSearcher {
@@ -137,16 +130,11 @@ func (s scriptedSearcher) Execute(
 	if s.failing[query.Raw] {
 		return nil, errors.New("transient upstream failure")
 	}
-	// The smoke-eval expectation is a substring of its query, so echoing the
-	// query back as a result title lands a top-K match for the non-failing ones.
 	return &discoveryService.SearchOutput{
 		Results: []domain.SearchResult{{Title: query.Raw}},
 	}, nil
 }
 
-// A single erroring query must not discard the other queries' results. Before
-// the fix runSmokeEval returned early on the first error, collapsing the whole
-// scorecard to a fatal error and zero data.
 func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 	const failing = "Drake"
 	svc := searcherFailing(failing)
@@ -184,9 +172,6 @@ func TestSmokeEval_OneErroringQueryDoesNotDiscardOthers(t *testing.T) {
 	}
 }
 
-// An outage that takes every query down measured no ranking at all. Before the
-// fix it returned a nil error with score 0, which the meter reported as
-// StateRegression — every query looking like a ranking failure.
 func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 	svc := searcherFailingEveryQuery()
 
@@ -200,9 +185,6 @@ func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 	}
 }
 
-// A partial outage scores its errored queries as failed checks, so the score
-// alone drops below the baseline. Before the fix that drop was reported as a
-// ranking regression.
 func TestSmokeEval_PartialOutageIsNotReportedAsARegression(t *testing.T) {
 	svc := searcherFailing("Drake", "Bad Bunny")
 

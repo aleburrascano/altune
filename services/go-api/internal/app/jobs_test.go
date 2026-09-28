@@ -14,16 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestJobHealth_RecordsSuccessAndFailure is the regression for the missing
-// health signal: each run must leave a queryable last-success/last-failure
-// timestamp and a cumulative failure count per job.
 func TestJobHealth_RecordsSuccessAndFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var calls atomic.Int32
 	a := &App{}
-	// Odd calls succeed, even calls fail, so both signals accumulate.
 	a.runTicker(ctx, "rollup", time.Millisecond, func(context.Context) error {
 		if calls.Add(1)%2 == 0 {
 			return errors.New("boom")
@@ -49,8 +45,6 @@ func TestJobHealth_RecordsSuccessAndFailure(t *testing.T) {
 	}
 }
 
-// TestJobHealth_ReflectsKillSwitch confirms the queryable snapshot tracks the
-// kill switch so an operator can see which jobs are currently suspended.
 func TestJobHealth_ReflectsKillSwitch(t *testing.T) {
 	a := &App{}
 	a.job("paused")
@@ -75,8 +69,6 @@ func findJobHealth(t *testing.T, snapshot []JobHealth, name string) JobHealth {
 	return JobHealth{}
 }
 
-// TestSetJobEnabled_UnknownJobRegistersNothing guards the admin kill switch
-// against a mistyped job name minting a phantom job in the health snapshot.
 func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
 	a := &App{}
 	if _, ok := a.SetJobEnabled("typo", false); ok {

@@ -21,9 +21,7 @@ const (
 	defaultHeartbeatInterval = 25 * time.Second
 	defaultSSEWriteTimeout   = 10 * time.Second
 	defaultMaxConnsPerUser   = 8
-	// defaultMaxConnsTotal is the server-wide ceiling on concurrent /v1/events
-	// streams, applied when the configured SSE_MAX_CONNS is not positive.
-	defaultMaxConnsTotal = 2048
+	defaultMaxConnsTotal     = 2048
 )
 
 var (
@@ -39,9 +37,6 @@ type sseHandler struct {
 	shutdown     <-chan struct{}
 }
 
-// newSSEHandler builds the /v1/events handler. maxConnsTotal caps concurrent
-// streams across all users; a non-positive value falls back to
-// defaultMaxConnsTotal so a misconfiguration can never mean "unbounded".
 func newSSEHandler(bus events.Subscriber, maxConnsTotal int) *sseHandler {
 	if maxConnsTotal <= 0 {
 		maxConnsTotal = defaultMaxConnsTotal
@@ -59,10 +54,6 @@ func (h *sseHandler) withShutdown(done <-chan struct{}) *sseHandler {
 	return h
 }
 
-// connLimiter caps the concurrent streams a single user may hold open
-// (maxPerKey) and those held open across all users (maxTotal). A non-positive
-// limit disables that bound. Both are checked and reserved under one lock, so
-// parallel connects cannot overshoot either ceiling.
 type connLimiter struct {
 	mu        sync.Mutex
 	maxPerKey int
@@ -75,8 +66,6 @@ func newConnLimiter(maxPerKey, maxTotal int) *connLimiter {
 	return &connLimiter{maxPerKey: maxPerKey, maxTotal: maxTotal, count: make(map[string]int)}
 }
 
-// acquire reserves a slot for key, or returns errUserConnLimit or
-// errGlobalConnLimit without reserving anything when a ceiling is reached.
 func (l *connLimiter) acquire(key string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -91,8 +80,6 @@ func (l *connLimiter) acquire(key string) error {
 	return nil
 }
 
-// release frees a slot previously reserved for key. Releasing a key that holds
-// no slot is a no-op, so a stray release cannot drive the total negative.
 func (l *connLimiter) release(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -109,7 +96,6 @@ func (l *connLimiter) release(key string) {
 }
 
 func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Phase 1: authenticate, reserve a connection slot and subscribe.
 	userId, rc, ch, cancel, ok := h.setup(w, r)
 	if !ok {
 		return
@@ -117,32 +103,19 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer h.releaseSlot(userId)
 	defer cancel()
 
-	// Phase 2: replay any events the client missed since its Last-Event-ID.
 	replayed, ok := h.replayHistory(rc, w, r, userId)
 	if !ok {
 		return
 	}
 
-	// Phase 3: serve the live stream with heartbeats.
 	h.serveLive(r, rc, w, ch, userId, replayed)
 }
 
-// replayOutcome is what phase 2 leaves the live stream to work from. The two
-// IDs differ whenever a resync stood in for the replay: the client still holds
-// everything through dedupThroughID, but this handler delivered none of it, so
-// deliveredThroughID is zero and the live stream has no baseline to call a gap.
 type replayOutcome struct {
 	dedupThroughID     uint64
 	deliveredThroughID uint64
 }
 
-// setup authenticates the request, verifies streaming support, reserves a
-// connection slot, writes the SSE headers and subscribes to the user's event
-// channel. On success the caller owns the returned cancel func and must release
-// the connection slot. Subscribe happens BEFORE any replay so an event
-// published during replay lands on the live channel instead of the gap between
-// snapshot and subscribe (#371); the overlap is deduped by ID in stream via
-// lastReplayedID.
 func (h *sseHandler) setup(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -159,8 +132,6 @@ func (h *sseHandler) setup(
 		return shared.UserId{}, nil, nil, nil, false
 	}
 
-	// The stream outlives the route-level write deadline; writeFrame bounds
-	// each frame with its own deadline instead.
 	httputil.ClearWriteDeadline(w)
 	setSSEHeaders(w)
 	rc := http.NewResponseController(w)
@@ -168,8 +139,6 @@ func (h *sseHandler) setup(
 	return userId, rc, ch, cancel, true
 }
 
-// replayHistory replays events after the client's Last-Event-ID. The bool is
-// false when the connection should be abandoned (a write failed mid-replay).
 func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseWriter, r *http.Request, userId shared.UserId) (replayOutcome, bool) {
 	lastID := r.Header.Get("Last-Event-ID")
 	if lastID == "" {
@@ -182,8 +151,6 @@ func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseW
 	return replayed, true
 }
 
-// serveLive acknowledges the connection and then pumps the live event stream
-// and heartbeats until the client disconnects or a write fails.
 func (h *sseHandler) serveLive(
 	r *http.Request,
 	rc *http.ResponseController,
@@ -215,8 +182,6 @@ func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bo
 	return false
 }
 
-// connLimitLogEvent names the rejection so operators can tell one noisy account
-// (per-user cap) from server-wide saturation (global cap).
 func connLimitLogEvent(err error) string {
 	if errors.Is(err, errGlobalConnLimit) {
 		return "sse.global_connection_limit"
@@ -263,7 +228,7 @@ func (h *sseHandler) stream(
 			return
 		case evt := <-ch:
 			if evt.ID <= replayed.dedupThroughID {
-				continue // already delivered by replay; dedup the overlap window
+				continue
 			}
 			if err := h.writeLiveEvent(rc, w, userId, evt, deliveredThroughID); err != nil {
 				return
@@ -277,10 +242,6 @@ func (h *sseHandler) stream(
 	}
 }
 
-// writeLiveEvent writes evt, preceded by a resync when the bus dropped the
-// events between deliveredThroughID and it (#2016). A full subscriber channel
-// leaves the connection healthy, so the client never reconnects and never
-// replays: without the resync it holds stale state until it refetches by chance.
 func (h *sseHandler) writeLiveEvent(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, evt events.Event, deliveredThroughID uint64) error {
 	if streamGapped(deliveredThroughID, evt.ID) {
 		slog.Warn("sse.stream_gap",
@@ -293,9 +254,6 @@ func (h *sseHandler) writeLiveEvent(rc *http.ResponseController, w http.Response
 	return h.writeEvent(rc, w, evt)
 }
 
-// resume replays events after the client's Last-Event-ID. A malformed id cannot
-// be parsed, so it signals resync rather than silently dropping to a live-only
-// stream, mirroring the ring-buffer-gap case in replay.
 func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) (replayOutcome, error) {
 	id, err := strconv.ParseUint(lastID, 10, 64)
 	if err != nil {
@@ -322,19 +280,12 @@ func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, 
 	return outcome, nil
 }
 
-// resyncOutOfRange handles a Last-Event-ID this process never issued (#1013).
-// Replaying from it would come back empty and look "caught up", and deduping
-// live events against it would drop every one of them for the life of the
-// connection. Signal a resync instead and dedup nothing: after a resync any
-// overlap with the refetched state is harmless, a starved stream is not.
 func (h *sseHandler) resyncOutOfRange(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (replayOutcome, error) {
 	slog.Warn("sse.last_event_id_out_of_range",
 		"user_id", userId.String(), "after_id", afterID, "highest_issued_id", h.bus.HighestIssuedID())
 	return replayOutcome{}, h.writeResync(rc, w)
 }
 
-// writeFrame sets a per-write deadline so a client that has stopped reading
-// cannot block the handler goroutine on Write/Flush forever, then flushes.
 func (h *sseHandler) writeFrame(rc *http.ResponseController, w http.ResponseWriter, frame string) error {
 	if h.writeTimeout > 0 {
 		if err := rc.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
@@ -350,16 +301,12 @@ func (h *sseHandler) writeFrame(rc *http.ResponseController, w http.ResponseWrit
 func (h *sseHandler) writeEvent(rc *http.ResponseController, w http.ResponseWriter, evt events.Event) error {
 	data, err := json.Marshal(evt.Payload)
 	if err != nil {
-		// The event exists but cannot be serialized: signal a resync rather than
-		// dropping it silently, which would leave the client permanently unaware.
 		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
 		return h.writeResync(rc, w)
 	}
 	return h.writeFrame(rc, w, fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data))
 }
 
-// writeResync tells the client its view may be stale and it should refetch,
-// the same signal replay emits when the ring buffer has gapped.
 func (h *sseHandler) writeResync(rc *http.ResponseController, w http.ResponseWriter) error {
 	return h.writeFrame(rc, w, "event: resync\ndata: {}\n\n")
 }
@@ -378,10 +325,6 @@ func replayGapped(replayed []events.Event, afterID uint64) bool {
 	return replayed[0].ID > afterID+1
 }
 
-// streamGapped reports whether the bus dropped events between the last one this
-// connection delivered and the next to arrive. Per-user IDs are consecutive, so
-// any jump is a drop. A zero baseline means nothing has been delivered yet and
-// the first live ID is arbitrary: there is no gap to see.
 func streamGapped(deliveredThroughID, nextID uint64) bool {
 	if deliveredThroughID == 0 {
 		return false

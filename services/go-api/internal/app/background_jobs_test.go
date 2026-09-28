@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-// erasedRows is a discovery table that erases a fixed number of rows, or fails
-// the way the sweep has to tell apart.
 type erasedRows struct {
 	rows int64
 	err  error
@@ -28,13 +26,6 @@ func (e erasedRows) EraseRowsOfDeletedIdentities(context.Context) (int64, error)
 
 var errStoreDown = errors.New("connection refused")
 
-// TestEraseDiscoveryRowsOfDeletedIdentities_TellsIdleApartFromFailed holds the
-// two answers the sweep must not confuse. An identity store this deployment
-// cannot read is idle: it erases nothing and reports success, because "no
-// identity is visible" must never be acted on as "every identity was deleted",
-// and an hourly job that failed on every plain-Postgres deployment would be
-// noise nobody reads. Any other failure is reported, so the job's health signal
-// degrades and the erasure is retried rather than counted as done.
 func TestEraseDiscoveryRowsOfDeletedIdentities_TellsIdleApartFromFailed(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -107,8 +98,6 @@ func TestDeletedIdentitySweep_AFailingTableDoesNotSkipTheRest(t *testing.T) {
 	}
 }
 
-// simpleJobLogCase is one migrated job's two log lines, spelled here as the
-// literal text they carried before startSimpleJob existed.
 type simpleJobLogCase struct {
 	name         jobName
 	startedAttrs []any
@@ -116,10 +105,6 @@ type simpleJobLogCase struct {
 	wantFailed   string
 }
 
-// TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob is the guard for #2010:
-// the five hand-typed start/warn blocks collapsed into one helper, and alerting
-// keys on their exact text, so each line is pinned whole — level, message and
-// attributes — and a job that gains or loses an attribute fails here.
 func TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob(t *testing.T) {
 	cases := []simpleJobLogCase{
 		{
@@ -162,9 +147,6 @@ func TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob(t *testing.T) {
 	}
 }
 
-// TestStartSimpleJob_CountsAFailedRunAsAFailure holds the other half of the
-// warn block the helper absorbed: the run's error is still returned to the
-// ticker, so a failing job degrades its health signal instead of only logging.
 func TestStartSimpleJob_CountsAFailedRunAsAFailure(t *testing.T) {
 	a := &App{}
 	runFailingSimpleJobOn(t, a, simpleJobLogCase{name: jobStalePendingReconcile})
@@ -174,8 +156,6 @@ func TestStartSimpleJob_CountsAFailedRunAsAFailure(t *testing.T) {
 	}
 }
 
-// runFailingSimpleJob schedules tc as a job that always fails, lets it tick
-// once, and returns everything it logged.
 func runFailingSimpleJob(t *testing.T, tc simpleJobLogCase) string {
 	t.Helper()
 	var buf bytes.Buffer
@@ -187,8 +167,6 @@ func runFailingSimpleJob(t *testing.T, tc simpleJobLogCase) string {
 	return buf.String()
 }
 
-// runFailingSimpleJobOn drives one tick of tc on a, leadership included, and
-// returns once the job's goroutine has drained so its output can be read.
 func runFailingSimpleJobOn(t *testing.T, a *App, tc simpleJobLogCase) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -234,7 +212,7 @@ func TestStalePendingReconcile_AdminKillSwitchSuppressesSweep(t *testing.T) {
 	a.startStalePendingReconcile(ctx, repo)
 	flipNamedJob(t, a, jobStalePendingReconcile, "disable")
 	for _, job := range a.backgroundStarts {
-		job.start(ctx) // runs the first tick synchronously on its goroutine
+		job.start(ctx)
 	}
 
 	h := waitForHealth(t, a, jobStalePendingReconcile, func(h JobHealth) bool { return h.Skipped >= 1 })

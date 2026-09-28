@@ -38,8 +38,6 @@ type discoveryContentStaging struct {
 	suggestSvc     *discoveryService.SuggestService
 }
 
-// sharedFeaturedResolver maps discovery's own FeaturedArtist onto the shared
-// value the catalog bridge speaks, so catalog never imports discovery/domain.
 type sharedFeaturedResolver struct {
 	inner *discoveryService.FeaturedArtistResolver
 }
@@ -206,12 +204,6 @@ func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.Musi
 	)
 }
 
-// startDiscoveryBackgroundJobs schedules the detached background work that the
-// discovery object graph depends on: behavioral-ranking refresh (leader only),
-// corpus refresh, metrics rollup, discography-event retention prune and
-// vocabulary refresh. It is kept separate
-// from wireDiscovery's object-graph construction so the wiring stays free of
-// side effects.
 func (a *App) startDiscoveryBackgroundJobs(
 	ctx context.Context,
 	cf clientFactory,
@@ -273,13 +265,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		vocabStore,
 		a.searchActivityOptions()...,
 	)
-	// The search service owns detached background work (identity-bridge
-	// persistence, telemetry emit, vocab ingest) on context.WithoutCancel, so it
-	// outlives request cancellation. Hold the reference so Run()'s shutdown can
-	// drain it via WaitForBackground() before cleanup() closes the pool/Redis.
 	a.searchSvc = searchSvc
-	// The content-fetch services share the search fan-out's breaker, so a
-	// provider proven down on either path is short-circuited on both.
 	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB, searchSvc.CircuitBreaker())
 	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
@@ -370,8 +356,6 @@ func discogsConsensusFetcher(discogs *providers.DiscogsAdapter) func(context.Con
 	}
 }
 
-// discogsReleasesToSearchResults maps Discogs artist releases onto album
-// SearchResults, carrying the year and record type through as extras.
 func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []discoveryDomain.SearchResult {
 	results := make([]discoveryDomain.SearchResult, 0, len(releases))
 	for _, r := range releases {
@@ -387,10 +371,6 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 	return results
 }
 
-// BuildArtworkChain exposes the production artwork resolver chain to out-of-band
-// tools (e.g. cmd/backfillartwork) so they re-resolve covers through the exact
-// same corrected chain the live search path uses. It is a thin wrapper over the
-// internal wiring; the resolution logic itself lives in the discovery adapters.
 func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	return buildArtworkChain(newClientFactory(nil), cfg)
 }

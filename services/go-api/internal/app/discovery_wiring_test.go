@@ -21,9 +21,6 @@ import (
 	"time"
 )
 
-// countingProviderRT answers every provider request with an empty JSON body and
-// counts the round trips it served, so a test can compare what the wiring
-// observed against what actually left the process.
 type countingProviderRT struct {
 	mu    sync.Mutex
 	calls int
@@ -69,9 +66,6 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 		t.Run(route.name, func(t *testing.T) {
 			rt := &countingProviderRT{}
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
-			// The fake enters counted, where the composition root counts its own
-			// live base, so a second counter anywhere above it in the wiring
-			// surfaces here as a doubled count.
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
 			before := providermetrics.ReadSnapshot()
 			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, route.target, nil))

@@ -12,9 +12,6 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
-// EvalQueryResult is the app-owned outcome of a single smoke-eval query. The
-// wiring boundary (app.go) maps it to admin/evalmeter's wire DTO, so this
-// package's scoring logic no longer depends on that presentation type.
 type EvalQueryResult struct {
 	Query    string
 	Expect   string
@@ -22,13 +19,6 @@ type EvalQueryResult struct {
 	Position int
 }
 
-// EvalResult is the app-owned smoke-eval scorecard. app.go maps it to
-// admin/evalmeter.Result at the boundary; the JSON shape lives with the meter.
-//
-// Errored counts queries that failed to construct or search. Such a query is
-// scored as a failed check (it cannot match), so Score alone cannot tell an
-// outage from a ranking regression: read Errored alongside it. Regressed is the
-// ranking verdict and is only claimed when Errored is zero.
 type EvalResult struct {
 	Score     float64
 	Baseline  float64
@@ -37,9 +27,6 @@ type EvalResult struct {
 	Queries   []EvalQueryResult
 }
 
-// evalSearcher is the narrow slice of the discovery service the smoke eval
-// needs. Depending on the behaviour rather than the concrete *Service keeps the
-// scoring loop unit-testable with an error-injecting fake.
 type evalSearcher interface {
 	Execute(
 		ctx context.Context,
@@ -49,8 +36,6 @@ type evalSearcher interface {
 	) (*discoveryService.SearchOutput, error)
 }
 
-// EvalRunner runs one smoke eval and returns the app-owned result. app.go
-// adapts it to admin/evalmeter.Runner when wiring the meter.
 type EvalRunner func(ctx context.Context) (EvalResult, error)
 
 var evalSmokeChecks = []struct{ query, expect string }{
@@ -78,10 +63,6 @@ func (a *App) buildEvalRunner() EvalRunner {
 	}
 }
 
-// evalUserId is the identity the smoke eval runs under. It is the synthetic
-// system account, never the real operator: the eval exercises the real per-user
-// code paths, so running it as a real account would read and persist that
-// user's favorites and behavioral signal.
 func evalUserId() shared.UserId {
 	return shared.SystemUserId()
 }
@@ -98,8 +79,6 @@ func runSmokeEval(ctx context.Context, svc evalSearcher, user shared.UserId) (Ev
 	for _, check := range evalSmokeChecks {
 		res, err := evalQuery(ctx, svc, user, check.query, check.expect, kinds)
 		if err != nil {
-			// A per-query failure is scored as a failed check and the eval
-			// continues, so one transient error no longer discards the rest.
 			errored++
 			slog.WarnContext(ctx, "eval.smoke.query_errored", "query", check.query, "error", err)
 			res = EvalQueryResult{Query: check.query, Expect: check.expect, Position: -1}
@@ -123,14 +102,8 @@ func runSmokeEval(ctx context.Context, svc evalSearcher, user shared.UserId) (Ev
 	}, nil
 }
 
-// errEveryEvalQueryErrored reports a run that measured nothing. The meter turns
-// it into StateError, which is the honest reading: with no query scored, a zero
-// score says the dependencies are down, not that ranking got worse.
 var errEveryEvalQueryErrored = errors.New("every smoke-eval query errored")
 
-// isRankingRegression withholds the ranking verdict from a run that did not
-// score every query: an errored query counts as a failed check, so a partial
-// outage would otherwise be indistinguishable from ranking getting worse.
 func isRankingRegression(score float64, errored int) bool {
 	if errored > 0 {
 		return false
@@ -138,9 +111,6 @@ func isRankingRegression(score float64, errored int) bool {
 	return score < evalBaseline
 }
 
-// evalQuery runs a single smoke-eval check. Construction and search failures are
-// returned as errors for the caller to classify; a clean run yields the scored
-// per-query result.
 func evalQuery(
 	ctx context.Context,
 	svc evalSearcher,

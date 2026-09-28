@@ -20,9 +20,6 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*authProviders.Su
 	)
 }
 
-// authMiddleware is auth.Middleware with token-rejection and
-// verifier-unavailable counters wired to the expvar adapter. Every route group
-// that authenticates uses it, so no group's 401s or 503s go uncounted.
 func authMiddleware(verifier auth.TokenVerifier) func(http.Handler) http.Handler {
 	return auth.Middleware(verifier, auth.WithMetrics(authMetrics.NewExpvarAuthMetrics()))
 }

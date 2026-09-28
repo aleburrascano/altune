@@ -14,11 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// TestWireFeedback_KillSwitch reproduces the gap where the feedback/GitHub
-// integration could only be disabled by blanking the stored credentials: the
-// dedicated FEEDBACK_ENABLED flag must gate the wiring independently, so the
-// feature can be turned off (and back on) by config without discarding
-// GITHUB_ISSUE_REPO / GITHUB_ISSUE_TOKEN.
 func TestWireFeedback_KillSwitch(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -49,10 +44,6 @@ func TestWireFeedback_KillSwitch(t *testing.T) {
 	}
 }
 
-// TestMountFeedback_DisabledAnswers503WithCode proves the kill switch at the
-// route level: with FEEDBACK_ENABLED off (credentials still present) the real
-// submit handler is not mounted, and a report POST gets a coded 503 the client
-// can recognize instead of chi's bare plain-text 404.
 func TestMountFeedback_DisabledAnswers503WithCode(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -61,8 +52,6 @@ func TestMountFeedback_DisabledAnswers503WithCode(t *testing.T) {
 		wantStatus int
 		wantCode   string
 	}{
-		// The real handler is mounted: with no auth middleware in front of it,
-		// RequireUserID answers 401, proving the request reached it.
 		{"flag on with creds mounts the submit handler", true, "aleburrascano/altune", http.StatusUnauthorized, ""},
 		{"flag off with creds present answers disabled", false, "aleburrascano/altune", http.StatusServiceUnavailable, "feedback.disabled"},
 		{"flag on without creds answers disabled", true, "", http.StatusServiceUnavailable, "feedback.disabled"},

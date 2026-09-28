@@ -23,8 +23,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// storedQueue is a single-user QueueStateRepository standing in for the
-// queue-state table, so the test can wedge only the catalog side.
 type storedQueue struct {
 	mu    sync.Mutex
 	state *domain.QueueState

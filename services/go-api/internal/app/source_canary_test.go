@@ -19,9 +19,6 @@ func captureSourceCanaryLogs(t *testing.T) *bytes.Buffer {
 	return &logs
 }
 
-// fakeCanaryProbe reports the canned outcome canaryResults[source.Name] and
-// records every source it was asked to probe, so a test never needs a network
-// call or a real yt-dlp binary.
 type fakeCanaryProbe struct {
 	results map[string]error
 	probed  []string

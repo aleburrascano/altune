@@ -17,14 +17,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// stubConfig drives the wiring guard without loading a full config.
 type stubConfig struct{ enabled bool }
 
 func (c stubConfig) TestAuthEnabled() bool { return c.enabled }
 
-// realUser is what the stand-in Supabase verifier returns for the one token it
-// recognises, so tests can prove the real path still works and that a test
-// token is NOT it.
 var (
 	realUser      = shared.NewUserId(uuid.New())
 	realTokenStr  = "real-supabase-token"
@@ -40,9 +36,6 @@ func stubSupabaseVerifier() auth.TokenVerifier {
 	})
 }
 
-// buildRouter mirrors app.setup: it wires the verifier through the guard and
-// mounts /test/login only when the guard produced a test verifier, plus a
-// protected /whoami that echoes the authenticated user id.
 func buildRouter(t *testing.T, cfg testAuthConfig) chi.Router {
 	t.Helper()
 	testAuth, verifier, err := buildTestAuthVerifier(cfg, stubSupabaseVerifier())
@@ -90,8 +83,6 @@ func login(t *testing.T, r chi.Router) string {
 	return resp.AccessToken
 }
 
-// PROD-ABSENCE: with a production config, /test/login must 404 and a
-// test-signed token must be rejected by the verifier.
 func TestWiring_ProdHasNoTestLoginAndRejectsTestTokens(t *testing.T) {
 	prod := buildRouter(t, stubConfig{enabled: false})
 
@@ -99,8 +90,6 @@ func TestWiring_ProdHasNoTestLoginAndRejectsTestTokens(t *testing.T) {
 		t.Errorf("/test/login in prod: got %d, want 404", rec.Code)
 	}
 
-	// A genuinely test-signed token (minted by an out-of-band TestAuth) must be
-	// rejected: prod wired no test verifier.
 	ta, err := testauth.New()
 	if err != nil {
 		t.Fatalf("testauth.New: %v", err)
@@ -113,15 +102,11 @@ func TestWiring_ProdHasNoTestLoginAndRejectsTestTokens(t *testing.T) {
 		t.Errorf("test token in prod: got %d, want 401", rec.Code)
 	}
 
-	// The real Supabase path still authenticates in prod.
 	if rec := do(t, prod, http.MethodGet, "/whoami", realTokenStr); rec.Code != http.StatusOK {
 		t.Errorf("real token in prod: got %d, want 200", rec.Code)
 	}
 }
 
-// assertBackdoorClosed proves a router wired from cfg has no live test-auth
-// path: /test/login 404s and an out-of-band test-signed token is rejected,
-// while the real Supabase path still authenticates.
 func assertBackdoorClosed(t *testing.T, cfg testAuthConfig) {
 	t.Helper()
 	r := buildRouter(t, cfg)
@@ -146,11 +131,6 @@ func assertBackdoorClosed(t *testing.T, cfg testAuthConfig) {
 	}
 }
 
-// FAIL-CLOSED (#1384): driving the wiring through the REAL config guard, a
-// deploy with ENV unset and no explicit opt-in — the exact prod-misconfig shape,
-// since ENV defaults to development — must leave the backdoor closed. Likewise
-// the explicit opt-in alone in a production ENV must stay closed. Only opt-in +
-// non-prod ENV opens it.
 func TestWiring_RealConfigFailsClosedWithoutExplicitOptIn(t *testing.T) {
 	t.Run("ENV unset + no opt-in is closed", func(t *testing.T) {
 		assertBackdoorClosed(t, &config.Config{})
@@ -177,8 +157,6 @@ func TestWiring_RealConfigFailsClosedWithoutExplicitOptIn(t *testing.T) {
 	})
 }
 
-// NON-PROD: /test/login issues a token the middleware then accepts, and it
-// authenticates ONLY as the dedicated test user.
 func TestWiring_NonProdLoginIssuesAcceptedTestUserToken(t *testing.T) {
 	dev := buildRouter(t, stubConfig{enabled: true})
 
@@ -196,12 +174,10 @@ func TestWiring_NonProdLoginIssuesAcceptedTestUserToken(t *testing.T) {
 		t.Error("test login authenticated as a real user id")
 	}
 
-	// The real path still works alongside the test path in non-prod.
 	if rec := do(t, dev, http.MethodGet, "/whoami", realTokenStr); rec.Body.String() != realUser.String() {
 		t.Errorf("real token in non-prod: got %q, want %s", rec.Body.String(), realUser)
 	}
 
-	// A bogus token is still rejected in non-prod.
 	if rec := do(t, dev, http.MethodGet, "/whoami", "garbage"); rec.Code != http.StatusUnauthorized {
 		t.Errorf("garbage token in non-prod: got %d, want 401", rec.Code)
 	}
