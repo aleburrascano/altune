@@ -8,9 +8,14 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 )
 
 func main() {
+	if cmd, rest := subcommand(os.Args); cmd == "capture" {
+		os.Exit(runCapture(rest, os.Stdin, os.Stdout, time.Now()))
+	}
+
 	var (
 		goldenDir      = flag.String("goldens", "", "directory of golden json files (default: the embedded set)")
 		baselinePath   = flag.String("baseline", "", "baselines.json to gate against; a regression exits non-zero")
@@ -70,6 +75,13 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 	}
 	os.Exit(1)
 	return nil
+}
+
+func subcommand(args []string) (name string, rest []string) {
+	if len(args) > 1 && args[1] == "capture" {
+		return "capture", args[2:]
+	}
+	return "", args[1:]
 }
 
 func loadCases(goldenDir string) ([]eval.Case, error) {

@@ -34,9 +34,9 @@ ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10)
 [ -n "${ALTUNE_SSH_KEY:-}" ] && ssh_opts=(-i "$ALTUNE_SSH_KEY" "${ssh_opts[@]}")
 remote_dir=${ALTUNE_REMOTE_DIR:-altune}
 
-# printf %q keeps multi-word args (a probe query) intact through the remote shell.
-exec ssh "${ssh_opts[@]}" "$host" \
-  "bash -s -- $(printf '%q ' "$remote_dir" "$tier" "$@")" <<'REMOTE'
+run_remote() {
+  ssh "${ssh_opts[@]}" "$host" \
+    "bash -s -- $(printf '%q ' "$remote_dir" "$tier" "$@")" <<'REMOTE'
 set -uo pipefail
 dir=$1; tier=$2; cmd=$3; shift 3
 cd "$dir/services/go-api" || { echo "acq-debug: no checkout at $dir on the VM"; exit 3; }
@@ -47,7 +47,7 @@ case $tier in
 esac
 api=$(docker ps --filter "name=^${prefix}-" --format '{{.Names}}' | head -1)
 
-need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* container"; exit 3; }; }
+need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* container" >&2; exit 3; }; }
 
 # Read-only by construction: the SET runs first in the same session, so any write
 # below it fails instead of landing. The Supabase pooler drops PGOPTIONS, so the
@@ -123,6 +123,31 @@ SQL
       docker logs "$api" 2>&1 | grep -F "$id" | cut -c1-400 | tail -60
     fi
   done
+  ;;
+
+capture)
+  need_api
+  [ $# -ge 1 ] || { echo "usage: capture <title|uuid>" >&2; exit 3; }
+  id=$(db -A -t -v q="$1" <<'SQL' | grep -E '^[0-9a-f-]{36}$' | head -1
+SELECT id FROM tracks WHERE id::text = :'q' OR title ILIKE '%' || :'q' || '%' OR artist ILIKE '%' || :'q' || '%'
+ ORDER BY added_at DESC LIMIT 5;
+SQL
+)
+  [ -n "$id" ] || { echo "no track matches '$1'" >&2; exit 1; }
+  track_json=$(db -A -t -v id="$id" <<'SQL'
+SELECT json_build_object(
+         'id', id, 'title', title, 'artist', artist, 'album', album,
+         'duration_seconds', duration_seconds, 'isrc', isrc,
+         'acquisition_status', acquisition_status, 'failure_reason', failure_reason,
+         'audio_source_url', audio_source_url)
+  FROM tracks WHERE id = :'id';
+SQL
+)
+  [ -n "$track_json" ] || { echo "acq-debug: no track row for $id" >&2; exit 1; }
+  lines=$(docker logs "$api" 2>&1 | grep -F "$id" | grep -E '"msg":"(candidate_evaluated|acquisition\.rejection_summary)"')
+  logs_json=""
+  [ -n "$lines" ] && logs_json=$(printf '%s\n' "$lines" | paste -sd, -)
+  printf '{"track": %s, "logs": [%s]}\n' "$track_json" "$logs_json"
   ;;
 
 client)
@@ -207,3 +232,19 @@ sql)
 *) echo "acq-debug: unknown command '$cmd' (try: help)"; exit 3 ;;
 esac
 REMOTE
+}
+
+if [ "${1:-}" = capture ]; then
+  root=$(cd "$(dirname "$0")/.." && pwd)
+  dump=$(run_remote "$@")
+  status=$?
+  [ $status -eq 0 ] || exit $status
+  bin=$(mktemp)
+  trap 'rm -f "$bin"' EXIT
+  (cd "$root/services/go-api" && go build -o "$bin" ./cmd/acquisitioneval) || exit 1
+  printf '%s' "$dump" | "$bin" capture -tier "$tier"
+  exit $?
+fi
+
+run_remote "$@"
+exit $?

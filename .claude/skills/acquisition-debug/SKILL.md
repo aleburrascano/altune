@@ -42,4 +42,12 @@ Done when: you have seen the candidate list the pipeline saw.
 
 `logs [since] [regex]` gives the running container's acquisition lines. They only cover that container's lifetime, because every deploy starts a fresh container, and the DB is the only durable history. `sql "<select>"` answers anything else, read-only. The module map lives at `services/go-api/internal/acquisition/ARCHITECTURE.md`.
 
+A real failure worth keeping becomes a permanent eval case with:
+
+```bash
+bash scripts/acq-debug.sh [--staging] capture "<title|uuid>"
+```
+
+It pulls the track row plus its `candidate_evaluated` and `acquisition.rejection_summary` log lines and turns them into one `eval.Case` JSON object (`class: "RW"`), printed to stdout. It never commits or edits goldens: review the output, then add it under `services/go-api/internal/acquisition/service/eval/goldens/` yourself.
+
 Anything that writes to prod (retrying a track, failing a stuck row, replacing cookies) needs the user's yes first. Name the exact change and wait for approval.
