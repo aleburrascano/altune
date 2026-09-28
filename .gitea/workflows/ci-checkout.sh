@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo=/home/ubuntu/projects/altune
+repo=${ALTUNE_REPO:-/home/ubuntu/projects/altune}
 ref=$1
 find /tmp -maxdepth 1 -name 'ci-wf.*' -mmin +360 -print0 2>/dev/null \
   | xargs -0 -r -n1 git -C "$repo" worktree remove --force 2>/dev/null || true

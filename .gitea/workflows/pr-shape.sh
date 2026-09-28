@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 pr=$1
-forge=${FORGE:-/home/ubuntu/.local/bin/forge}
+forge=${FORGE:-$(command -v forge || echo /home/ubuntu/.local/bin/forge)}
 view=$("$forge" pr view "$pr" --json body,additions,deletions,files) || { echo "::warning::pr-shape could not read PR #$pr"; exit 0; }
 body=$(jq -r '.body // ""' <<<"$view")
 files=$(jq -r '.files[].path' <<<"$view")

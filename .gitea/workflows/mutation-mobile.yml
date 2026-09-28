@@ -17,18 +17,15 @@ defaults:
   run:
     shell: bash
 
-env:
-  REPO: /home/ubuntu/projects/altune
-
 jobs:
   mutate:
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 90
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
-          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+          git -C "$ALTUNE_REPO" fetch -q gitea || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea; }
+          git -C "$ALTUNE_REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
       - name: dependencies
         run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
       - name: mutation test

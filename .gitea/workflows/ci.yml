@@ -18,7 +18,6 @@ defaults:
     shell: bash
 
 env:
-  REPO: /home/ubuntu/projects/altune
   SHA: ${{ github.sha }}
   BEFORE: ${{ github.event.before }}
 
@@ -28,7 +27,7 @@ concurrency:
 
 jobs:
   ci-changes:
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 10
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
@@ -37,8 +36,8 @@ jobs:
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
+          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: paths
         id: filter
         run: cd "$WT" && bash .gitea/workflows/ci-changes.sh "$BEFORE"
@@ -52,13 +51,13 @@ jobs:
   ci-backend-static:
     needs: ci-changes
     if: needs.ci-changes.outputs.backend == 'true'
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 40
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
+          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: govulncheck
         run: cd "$WT/services/go-api" && govulncheck ./...
       - name: nilaway ceiling
@@ -84,13 +83,13 @@ jobs:
   ci-backend-tests:
     needs: ci-changes
     if: needs.ci-changes.outputs.backend == 'true'
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 40
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
+          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: postgres
         run: bash "$WT/.gitea/workflows/ci-postgres.sh"
       - name: apply migrations
@@ -114,13 +113,13 @@ jobs:
   ci-overseer:
     needs: ci-changes
     if: needs.ci-changes.outputs.overseer == 'true'
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 30
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
+          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: go test -race
         env:
           CGO_ENABLED: "1"
@@ -142,13 +141,13 @@ jobs:
   ci-mobile-tests:
     needs: ci-changes
     if: needs.ci-changes.outputs.mobile == 'true'
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 45
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
+          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: dependencies
         run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
       - name: jest with coverage ratchet
@@ -162,13 +161,13 @@ jobs:
   ci-mobile-quality:
     needs: ci-changes
     if: needs.ci-changes.outputs.mobile == 'true'
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 30
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+          git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
+          git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: dependencies
         run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
       - name: react-doctor

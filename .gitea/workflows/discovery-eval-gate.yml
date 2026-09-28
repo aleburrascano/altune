@@ -21,19 +21,18 @@ defaults:
     shell: bash
 
 env:
-  REPO: /home/ubuntu/projects/altune
   PR: ${{ github.event.pull_request.number }}
   BASE: ${{ github.base_ref }}
 
 jobs:
   eval-gate:
-    runs-on: host
+    runs-on: ci
     timeout-minutes: 20
     steps:
       - name: checkout
         run: |
-          git -C "$REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR" || { sleep 5; git -C "$REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; } || { sleep 5; git -C "$REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
-          git -C "$REPO" show "gitea/pr/$PR:.gitea/workflows/ci-checkout.sh" | bash -s "gitea/pr/$PR"
+          git -C "$ALTUNE_REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR" || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
+          git -C "$ALTUNE_REPO" show "gitea/pr/$PR:.gitea/workflows/ci-checkout.sh" | bash -s "gitea/pr/$PR"
       - name: harness compiles
         run: cd "$WT/services/go-api" && go build -o /dev/null ./cmd/discoveryeval
       - name: deterministic ranking and eval tests
