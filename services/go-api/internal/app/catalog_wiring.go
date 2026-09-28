@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
@@ -175,9 +176,13 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithSchedulerEvents(tap),
 		acqService.WithPrincipalQueueDepth(a.cfg.AcquisitionPrincipalQueueDepth),
 		acqService.WithVerificationStatus(verification),
+		acqService.WithDrainBudget(time.Duration(a.cfg.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
 	if a.pool != nil {
-		schedulerOpts = append(schedulerOpts, acqService.WithOutcomeRecorder(acqPersistence.NewPgxOutcomeStore(a.pool)))
+		schedulerOpts = append(schedulerOpts,
+			acqService.WithJobQueue(acqPersistence.NewPgxJobQueue(a.pool)),
+			acqService.WithJobNotifier(acqPersistence.NewPgxJobNotifier(a.pool)),
+			acqService.WithOutcomeRecorder(acqPersistence.NewPgxOutcomeStore(a.pool)))
 	}
 	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem, schedulerOpts...)
 }

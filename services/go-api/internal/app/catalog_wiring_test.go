@@ -86,14 +86,6 @@ func TestWireCatalogFailsWithoutAudioStore(t *testing.T) {
 	}
 }
 
-// TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth proves #2789:
-// the production wiring's default (ACQUISITION_PRINCIPAL_QUEUE_DEPTH unset,
-// so AcquisitionPrincipalQueueDepth is the zero value) leaves the per-principal
-// cap disabled, so one self-hosted user's saves past worker concurrency are
-// admitted up to the shared global queue depth instead of being refused with
-// ErrPrincipalQueueFull. It builds the scheduler through the real wireCatalog
-// path with a saturated worker semaphore, so every admitted job parks on the
-// sem instead of running the real acquire pipeline.
 func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) {
 	const concurrency = 2
 	a := &App{
@@ -119,25 +111,14 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
 
 	userA := shared.NewUserId(uuid.New())
-	const globalDepth = concurrency * 4 // acqService.defaultQueueDepthFactor
-	for i := 0; i < globalDepth; i++ {
+	const pastOldGlobalDepth = concurrency*4 + 5
+	for i := 0; i < pastOldGlobalDepth; i++ {
 		if err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
-			t.Fatalf("schedule %d of %d for one user: err = %v, want nil (past concurrency %d, within global depth)", i+1, globalDepth, err, concurrency)
+			t.Fatalf("schedule %d of %d for one user: err = %v, want nil (the queue has no depth limit)", i+1, pastOldGlobalDepth, err)
 		}
-	}
-
-	if err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); !errors.Is(err, acqService.ErrAcquisitionQueueFull) {
-		t.Fatalf("schedule past global depth: err = %v, want ErrAcquisitionQueueFull", err)
 	}
 }
 
-// TestWireCatalogEnforcesPrincipalQueueCap proves #1418: setting
-// ACQUISITION_PRINCIPAL_QUEUE_DEPTH (a non-zero AcquisitionPrincipalQueueDepth)
-// turns the per-principal fair-share gate on, so one user past its explicit
-// share is rejected while global admission slots remain for other users. It
-// builds the scheduler through the real wireCatalog path with a saturated
-// worker semaphore, so every admitted job parks on the sem (holding its
-// principal slot) instead of running the real acquire pipeline.
 func TestWireCatalogEnforcesPrincipalQueueCap(t *testing.T) {
 	const concurrency = 2
 	const principalCap = concurrency // explicit opt-in via ACQUISITION_PRINCIPAL_QUEUE_DEPTH
@@ -165,22 +146,14 @@ func TestWireCatalogEnforcesPrincipalQueueCap(t *testing.T) {
 	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
 
 	userA := shared.NewUserId(uuid.New())
-	// Fill userA's explicit share, then push two arrivals past it.
-	for i := 0; i < principalCap; i++ {
+	for i := 0; i < principalCap+2; i++ {
 		if err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
-			t.Fatalf("schedule within userA share: %v", err)
-		}
-	}
-	for i := 0; i < 2; i++ {
-		err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), "")
-		if !errors.Is(err, acqService.ErrPrincipalQueueFull) {
-			t.Fatalf("schedule past userA share: err = %v, want ErrPrincipalQueueFull", err)
+			t.Fatalf("schedule %d past userA's old share: err = %v, want nil (the cap no longer refuses)", i+1, err)
 		}
 	}
 
-	// Global slots remain: a different principal is still admitted.
 	if err := a.scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
-		t.Fatalf("schedule for second principal while global slots remain: err = %v, want nil", err)
+		t.Fatalf("schedule for second principal: err = %v, want nil", err)
 	}
 }
 

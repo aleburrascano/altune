@@ -83,9 +83,21 @@ func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
 
 const acquireTimeout = 10 * time.Minute
 
+type schedulerOwnedJobContextKey struct{}
+
+func withSchedulerOwnedJobContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, schedulerOwnedJobContextKey{}, true)
+}
+
+func schedulerCancelledJobContext(ctx context.Context) bool {
+	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
+	return ownedByScheduler && ctx.Err() != nil
+}
+
 // Execute acquires audio for a track, first reconciling any existing audio so
 // a track that already has a valid file is not re-acquired.
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
 
@@ -103,6 +115,9 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	// acquire.go itself) still removes the downloaded temp dir on the way out.
 	defer CleanupTemp(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
+		if schedulerCancelledJobContext(jobCtx) {
+			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+		}
 		return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
 	}
 	return nil
@@ -112,6 +127,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 // audio, excluding the current and previously rejected sources. A failed
 // replace leaves the track's existing audio and status untouched.
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
 
@@ -126,6 +142,9 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	defer CleanupTemp(ctx, ac)
 	configureReplaceExclusion(ctx, ac, track, trackId)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
+		if schedulerCancelledJobContext(jobCtx) {
+			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+		}
 		return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
 	}
 	s.deleteSupersededAudio(ctx, userId, trackId, ac)
@@ -252,6 +271,15 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
+	return err
+}
+
+func (s *AcquireTrackAudioService) reportSchedulerCancelledWithoutMarkingFailed(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error) error {
+	slog.WarnContext(ctx, "track_acquisition_cancelled",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"error", logSafeError(err),
+	)
 	return err
 }
 

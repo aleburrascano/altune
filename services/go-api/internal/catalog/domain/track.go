@@ -108,11 +108,6 @@ type Track struct {
 	AudioSourceURL        *string
 	RejectedSourceKeys    []string
 
-	// AcquisitionStartedAt is the durable "in-flight since T" marker. It is set
-	// while an acquisition is believed to be running (status pending) and cleared
-	// once the track reaches a terminal state (ready or failed). A pending track
-	// whose marker is older than the grace window is presumed orphaned by a
-	// process that died mid-flight, and is swept to failed so retry can pick it up.
 	AcquisitionStartedAt *time.Time
 
 	// Version is the monotonic row version behind the optimistic-lock CAS on

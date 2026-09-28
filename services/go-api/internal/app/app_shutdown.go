@@ -110,7 +110,7 @@ func (a *App) shutdownPlan() []componentShutdown {
 				a.evalMeter.Shutdown(ctx)
 			}
 		}},
-		{name: "acquisition scheduler", timeout: 30 * time.Second, shutdown: func(ctx context.Context) {
+		{name: "acquisition scheduler", timeout: 70 * time.Second, shutdown: func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
 			}

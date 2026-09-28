@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,7 +36,15 @@ SET acquisition_status = 'pending',
 		WHEN acquisition_status = 'pending' AND acquisition_lease_until >= now() THEN acquisition_lease_until
 	END,
 	failure_reason = ''
-WHERE id = $1`
+WHERE id = $1
+	AND (
+		acquisition_status <> 'pending'
+		OR acquisition_lease_until IS NULL
+		OR acquisition_lease_until < now()
+		OR acquisition_job_kind = $2
+	)`
+
+const jobKindForLeasedTrackSQL = `SELECT acquisition_job_kind FROM tracks WHERE id = $1`
 
 func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind ports.JobKind, availableAt time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -46,10 +55,26 @@ func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind 
 		return fmt.Errorf("enqueue acquisition job: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("enqueue acquisition job: track %s not found", trackID)
+		return q.resolveEnqueueNoop(ctx, trackID, kind)
 	}
 	if _, err := q.pool.Exec(ctx, "NOTIFY "+acquisitionJobChannel); err != nil {
-		return fmt.Errorf("notify acquisition job: %w", err)
+		slog.WarnContext(ctx, "acquisition.enqueue_notify_failed",
+			"track_id", trackID.String(), "error", err)
+	}
+	return nil
+}
+
+func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID domain.TrackId, kind ports.JobKind) error {
+	var runningKind string
+	err := q.pool.QueryRow(ctx, jobKindForLeasedTrackSQL, trackID.UUID()).Scan(&runningKind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("enqueue acquisition job: track %s not found", trackID)
+	}
+	if err != nil {
+		return fmt.Errorf("enqueue acquisition job: %w", err)
+	}
+	if ports.JobKind(runningKind) != kind {
+		return ports.ErrJobKindConflict
 	}
 	return nil
 }
@@ -72,7 +97,8 @@ WITH candidate AS (
 )
 UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $1),
-	acquisition_attempts = acquisition_attempts + 1
+	acquisition_attempts = acquisition_attempts + 1,
+	acquisition_started_at = now()
 FROM candidate
 WHERE tracks.id = candidate.id
 RETURNING tracks.id, tracks.user_id, tracks.acquisition_job_kind, tracks.acquisition_attempts`

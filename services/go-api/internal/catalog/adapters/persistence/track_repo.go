@@ -307,7 +307,9 @@ func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.T
 		 SET acquisition_status=$3, failure_reason=$2, acquisition_started_at=NULL
 		 WHERE acquisition_status=$4
 		   AND acquisition_started_at IS NOT NULL
-		   AND acquisition_started_at < $1`,
+		   AND acquisition_started_at < $1
+		   AND acquisition_attempts > 0
+		   AND (acquisition_lease_until IS NULL OR acquisition_lease_until < now())`,
 		cutoff, reason,
 		domain.AcquisitionFailed.String(), domain.AcquisitionPending.String(),
 	)

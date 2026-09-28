@@ -809,9 +809,8 @@ func TestPgxTrackRepo_FailStalePending(t *testing.T) {
 		t.Fatal("acquisition_started_at did not round-trip; marker is nil")
 	}
 
-	// Backdate the stale track's marker to well before the cutoff.
 	if _, err := pool.Exec(ctx,
-		`UPDATE tracks SET acquisition_started_at = $2 WHERE id = $1`,
+		`UPDATE tracks SET acquisition_started_at = $2, acquisition_attempts = 1 WHERE id = $1`,
 		stale.ID.UUID(), time.Now().UTC().Add(-time.Hour)); err != nil {
 		t.Fatalf("backdate marker: %v", err)
 	}
@@ -845,6 +844,78 @@ func TestPgxTrackRepo_FailStalePending(t *testing.T) {
 	}
 	if stillFresh.AcquisitionStatus != domain.AcquisitionPending {
 		t.Errorf("fresh track status = %v, want still pending", stillFresh.AcquisitionStatus)
+	}
+}
+
+func TestPgxTrackRepo_FailStalePending_LeavesALiveLeaseAlone(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	leased := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, leased.ID, userId)
+	if _, _, err := repo.Add(ctx, leased); err != nil {
+		t.Fatalf("Add leased: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_started_at = $2, acquisition_lease_until = $3, acquisition_attempts = 1 WHERE id = $1`,
+		leased.ID.UUID(), time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Minute)); err != nil {
+		t.Fatalf("backdate marker and set live lease: %v", err)
+	}
+
+	cutoff := time.Now().UTC().Add(-30 * time.Minute)
+	n, err := repo.FailStalePending(ctx, cutoff, string(domain.FailureAcquisitionInterrupted))
+	if err != nil {
+		t.Fatalf("FailStalePending: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("swept %d tracks, want 0 (the leased one is still live)", n)
+	}
+
+	stillPending, err := repo.GetByID(ctx, leased.ID, userId)
+	if err != nil || stillPending == nil {
+		t.Fatalf("GetByID after sweep: track=%v err=%v", stillPending, err)
+	}
+	if stillPending.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("leased track status = %v, want still pending", stillPending.AcquisitionStatus)
+	}
+}
+
+func TestPgxTrackRepo_FailStalePending_LeavesAnUnclaimedBacklogTrackAlone(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	backlogged := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, backlogged.ID, userId)
+	if _, _, err := repo.Add(ctx, backlogged); err != nil {
+		t.Fatalf("Add backlogged: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_started_at = $2 WHERE id = $1`,
+		backlogged.ID.UUID(), time.Now().UTC().Add(-time.Hour)); err != nil {
+		t.Fatalf("backdate marker: %v", err)
+	}
+
+	cutoff := time.Now().UTC().Add(-30 * time.Minute)
+	n, err := repo.FailStalePending(ctx, cutoff, string(domain.FailureAcquisitionInterrupted))
+	if err != nil {
+		t.Fatalf("FailStalePending: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("swept %d tracks, want 0 (never claimed, so it's backlog not mid-flight)", n)
+	}
+
+	stillPending, err := repo.GetByID(ctx, backlogged.ID, userId)
+	if err != nil || stillPending == nil {
+		t.Fatalf("GetByID after sweep: track=%v err=%v", stillPending, err)
+	}
+	if stillPending.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("backlogged track status = %v, want still pending", stillPending.AcquisitionStatus)
 	}
 }
 

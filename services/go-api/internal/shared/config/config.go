@@ -82,6 +82,7 @@ type Config struct {
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 
 	AcquisitionPrincipalQueueDepth int `env:"ACQUISITION_PRINCIPAL_QUEUE_DEPTH"`
+	AcquisitionDrainBudgetSeconds  int `env:"ACQUISITION_DRAIN_BUDGET_SECONDS" envDefault:"60"`
 
 	AcoustIDAPIKey    string   `env:"ACOUSTID_API_KEY"`
 	StreamripBin      string   `env:"STREAMRIP_BIN"`

@@ -16,8 +16,9 @@ const (
 )
 
 var (
-	ErrNoJobAvailable = errors.New("no acquisition job available")
-	ErrLeaseLost      = errors.New("acquisition lease lost")
+	ErrNoJobAvailable  = errors.New("no acquisition job available")
+	ErrLeaseLost       = errors.New("acquisition lease lost")
+	ErrJobKindConflict = errors.New("acquisition job of a different kind is already in flight")
 )
 
 type Job struct {
@@ -33,4 +34,8 @@ type JobQueue interface {
 	Heartbeat(ctx context.Context, trackID domain.TrackId, fence int, lease time.Duration) error
 	Release(ctx context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error
 	Settle(ctx context.Context, trackID domain.TrackId, fence int) error
+}
+
+type JobNotifier interface {
+	Listen(ctx context.Context, wake chan<- struct{})
 }

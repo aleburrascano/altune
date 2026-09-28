@@ -17,6 +17,7 @@ x-go-api: &go-api
     args:
       GIT_SHA: ${GIT_SHA:-unknown}
   restart: unless-stopped
+  stop_grace_period: 90s
   env_file:
     - ../.env.staging
   environment:

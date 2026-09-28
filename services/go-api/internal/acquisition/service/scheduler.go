@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
 	"context"
+	"errors"
 	"log/slog"
 	"runtime/debug"
 	"sync"
@@ -14,31 +15,18 @@ import (
 	"time"
 )
 
-// defaultQueueDepthFactor bounds total outstanding acquisition jobs (in-flight
-// + pending) at this multiple of the worker concurrency. A burst of Schedule
-// calls past that bound is reported as rejected instead of spawning an
-// unbounded number of goroutines and job-log entries.
 const defaultQueueDepthFactor = 4
-
-// defaultQueueWaitTimeout bounds how long an admitted job waits for a worker
-// slot. The whole queue can be ahead of it and each acquisition gets up to
-// acquireTimeout, so an unbounded wait leaves the last admitted job pending for
-// several ten-minute generations (#1981). Five minutes is short enough that a
-// user sees a settled job rather than a spinner, and long enough that a job
-// queued behind one normal acquisition still runs.
 const defaultQueueWaitTimeout = 5 * time.Minute
 
-// queueWaitTimeoutReason is the completion reason on a job abandoned at the
-// queue-wait deadline; it distinguishes "never got a worker" from the
-// shutdown cancellation that shares JobCancelled.
-const queueWaitTimeoutReason = "queue_wait_timeout"
+const (
+	defaultLeaseDuration     = 2 * time.Minute
+	defaultHeartbeatInterval = 30 * time.Second
+	defaultPollInterval      = 5 * time.Second
+	defaultDrainBudget       = 60 * time.Second
+)
 
 const outcomeRecordTimeout = 2 * time.Second
 
-// acquirer is the whole of the acquisition service the scheduler uses: the two
-// entry points a scheduled job runs. Depending on it rather than on
-// *AcquireTrackAudioService keeps the scheduler exercisable without the full
-// acquisition graph behind it.
 type acquirer interface {
 	Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
@@ -48,27 +36,39 @@ type acquirer interface {
 type BackgroundAcquisitionScheduler struct {
 	svc      acquirer
 	events   events.Publisher
-	wg       *sync.WaitGroup
-	sem      chan struct{}
-	admit    chan struct{}
-	cancel   context.CancelFunc
-	baseCtx  context.Context
-	closed   atomic.Bool
-	paused   atomic.Bool
-	inflight sync.Map
+	queue    ports.JobQueue
+	notifier ports.JobNotifier
 
-	// admitMu orders admission against the drain. Schedule holds it for reading
-	// from the shutdown check through wg.Add; Shutdown takes it for writing to
-	// set closed. Without that order a Schedule already past the check can Add
-	// after Wait began, which sync.WaitGroup forbids and which leaves the job
-	// running past the drain. It is always the outermost lock here: the drain
-	// releases it before waiting, and no job holds it.
+	wg         *sync.WaitGroup
+	pendingMu  sync.Mutex
+	pendingSet map[string]struct{}
+	jobsWG     sync.WaitGroup
+	runnersWG  sync.WaitGroup
+
+	corrIDs sync.Map
+
+	sem chan struct{}
+
+	cancel  context.CancelFunc
+	baseCtx context.Context
+
+	closed    atomic.Bool
+	paused    atomic.Bool
+	stop      chan struct{}
+	closeOnce sync.Once
+	wake      chan struct{}
+
 	admitMu sync.RWMutex
 
 	queueDepth       int
 	queueWaitTimeout time.Duration
 	principalCap     int
 	principals       *principalGate
+
+	leaseDuration     time.Duration
+	heartbeatInterval time.Duration
+	pollInterval      time.Duration
+	drainBudget       time.Duration
 
 	inflightCount atomic.Int64
 	rejected      atomic.Uint64
@@ -87,29 +87,47 @@ func NewBackgroundAcquisitionScheduler(
 ) *BackgroundAcquisitionScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BackgroundAcquisitionScheduler{
-		svc:     svc,
-		wg:      wg,
-		sem:     sem,
-		cancel:  cancel,
-		baseCtx: ctx,
-		log:     newJobLog(),
-		events:  events.NoopPublisher(),
+		svc:               svc,
+		wg:                wg,
+		sem:               sem,
+		cancel:            cancel,
+		baseCtx:           ctx,
+		stop:              make(chan struct{}),
+		wake:              make(chan struct{}, 1),
+		pendingSet:        make(map[string]struct{}),
+		log:               newJobLog(),
+		events:            events.NoopPublisher(),
+		leaseDuration:     defaultLeaseDuration,
+		heartbeatInterval: defaultHeartbeatInterval,
+		pollInterval:      defaultPollInterval,
+		drainBudget:       defaultDrainBudget,
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
-	depth := s.queueDepth
-	if depth <= 0 {
-		depth = cap(sem) * defaultQueueDepthFactor
-	}
-	if depth < 1 {
-		depth = 1
-	}
-	s.admit = make(chan struct{}, depth)
 	if s.queueWaitTimeout <= 0 {
 		s.queueWaitTimeout = defaultQueueWaitTimeout
 	}
 	s.principals = newPrincipalGate(s.principalCap)
+	if s.queue == nil {
+		s.queue = newMemJobQueue(s.wake)
+	}
+	if s.notifier != nil {
+		s.runnersWG.Add(1)
+		go func() {
+			defer s.runnersWG.Done()
+			s.notifier.Listen(s.baseCtx, s.wake)
+		}()
+	}
+
+	workers := cap(sem)
+	if workers < 1 {
+		workers = 1
+	}
+	for range workers {
+		s.runnersWG.Add(1)
+		go s.runWorker()
+	}
 	return s
 }
 
@@ -121,28 +139,58 @@ func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionSchedu
 	}
 }
 
-// WithQueueDepth caps the total number of outstanding acquisition jobs
-// (in-flight + pending). Schedule calls past the cap are rejected rather than
-// admitted. A non-positive value falls back to defaultQueueDepthFactor times
-// the worker concurrency.
+func WithJobQueue(q ports.JobQueue) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		if q != nil {
+			s.queue = q
+		}
+	}
+}
+
+func WithJobNotifier(n ports.JobNotifier) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.notifier = n }
+}
+
+func WithDrainBudget(d time.Duration) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		if d > 0 {
+			s.drainBudget = d
+		}
+	}
+}
+
+func WithLeaseDuration(d time.Duration) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		if d > 0 {
+			s.leaseDuration = d
+		}
+	}
+}
+
+func WithHeartbeatInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		if d > 0 {
+			s.heartbeatInterval = d
+		}
+	}
+}
+
+func WithPollInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		if d > 0 {
+			s.pollInterval = d
+		}
+	}
+}
+
 func WithQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.queueDepth = depth }
 }
 
-// WithQueueWaitTimeout bounds how long an admitted job waits for a worker slot
-// before it is abandoned as JobCancelled with reason queueWaitTimeoutReason.
-// The job never runs, so nothing it would have done is half-done. A
-// non-positive value falls back to defaultQueueWaitTimeout.
 func WithQueueWaitTimeout(wait time.Duration) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.queueWaitTimeout = wait }
 }
 
-// WithPrincipalQueueDepth caps the number of outstanding acquisition jobs
-// (in-flight + pending) a single principal (userId) may hold at once, so no one
-// user can consume the whole shared admission queue and starve others. Arrivals
-// past a principal's share are rejected with ErrPrincipalQueueFull while slots
-// remain for other principals. A non-positive value disables the per-principal
-// cap (a single principal may then fill the global queue).
 func WithPrincipalQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.principalCap = depth }
 }
@@ -163,269 +211,322 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 	}
 }
 
-// acquisitionRun is the acquirer entry point a scheduled job executes: Execute
-// or ExecuteReplace.
-type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
-
-// jobKind names which entry point a job runs. The in-flight registry is keyed
-// by track alone, so the kind is what tells a duplicate request (already
-// satisfied by the running job) from a different one (which that job would not
-// perform).
-type jobKind string
-
-const (
-	jobAcquire jobKind = "acquire"
-	jobReplace jobKind = "replace"
-)
-
 func (s *BackgroundAcquisitionScheduler) Pause() { s.paused.Store(true) }
 
 func (s *BackgroundAcquisitionScheduler) Resume() { s.paused.Store(false) }
 
-// ScheduleReplace queues a replace acquisition. A nil error means a replace for
-// the track is queued or already in flight; a non-nil error
-// (ErrTrackJobInFlight, ErrAcquisitionQueueFull, ErrSchedulerShutdown) means
-// nothing was queued.
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	return s.admitAndSpawn(ctx, userId, trackId, "", jobReplace, s.svc.ExecuteReplace)
+	return s.enqueue(ctx, userId, trackId, ports.JobKindReplace)
 }
 
-// Schedule queues an acquisition. A nil error means an acquisition for the
-// track is queued or already in flight; a non-nil error (ErrTrackJobInFlight,
-// ErrAcquisitionQueueFull, ErrSchedulerShutdown) means nothing was queued.
-func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
-	return s.admitAndSpawn(ctx, userId, trackId, sourceURL, jobAcquire, s.svc.Execute)
+func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, _ string) error {
+	return s.enqueue(ctx, userId, trackId, ports.JobKindAcquire)
 }
 
-// admitAndSpawn admits a job and registers it under one read-hold of admitMu,
-// so a job that passes the shutdown check is counted on the WaitGroup before
-// Shutdown can close admission and wait. Nothing it covers waits on a job — the
-// admission slot is taken with a non-blocking select and the work runs on a new
-// goroutine — so an arrival delays the drain by a registration at most.
-func (s *BackgroundAcquisitionScheduler) admitAndSpawn(
-	ctx context.Context,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	sourceURL string,
-	kind jobKind,
-	run acquisitionRun,
-) error {
-	s.admitMu.RLock()
-	defer s.admitMu.RUnlock()
-
-	key, admitted, err := s.admitJob(ctx, userId, trackId, kind)
-	if !admitted {
-		return err
-	}
-	s.spawnJob(ctx, userId, trackId, key, sourceURL, kind, run)
-	return nil
-}
-
-// admitJob applies the shutdown, dedup, and backpressure checks. It returns
-// the job's dedup key and whether the job holds an admission slot. When not
-// admitted, err is nil if a job of the same kind is already in flight (the
-// request is already satisfied) and non-nil if the job was refused. Nothing
-// needs releasing in either case.
-func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind jobKind) (key string, admitted bool, err error) {
+func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind ports.JobKind) error {
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
-		return "", false, ErrSchedulerShutdown
+		return ErrSchedulerShutdown
 	}
 
-	// Runtime kill switch: a paused scheduler refuses new jobs before reserving
-	// any dedup key or admission/principal slot, so pausing never leaks a
-	// reservation. In-flight jobs are unaffected; Resume re-admits.
-	if s.paused.Load() {
-		s.rejected.Add(1)
-		slog.WarnContext(ctx, "schedule_while_paused", "track_id", trackId.String())
-		return "", false, ErrAcquisitionPaused
-	}
+	key := trackId.String()
+	alreadyTracked := s.trackPendingWG(key)
+	s.primeEnqueue(ctx, trackId, userId, key)
 
-	key = trackId.String()
-	if reserved, refusal := s.reserveTrack(ctx, key, kind); !reserved {
-		return "", false, refusal
+	if err := s.queue.Enqueue(ctx, trackId, kind, time.Now()); err != nil {
+		return s.handleEnqueueError(ctx, key, trackId, kind, alreadyTracked, err)
 	}
-
-	// Fair-share arrival: a principal past its per-principal share is rejected
-	// while slots remain for others, so one user cannot starve the queue. The
-	// slot is released in runJob (or below if global admission then fails).
-	if !s.principals.admit(userId.String()) {
-		s.inflight.Delete(key)
-		s.rejected.Add(1)
-		slog.WarnContext(ctx, "acquisition.principal_queue_full",
-			"track_id", key, "user_id", userId.String(), "principal_cap", s.principalCap)
-		return "", false, ErrPrincipalQueueFull
-	}
-
-	// Bound arrival: acquire an admission slot synchronously before registering
-	// or spawning anything. When the queue (in-flight + pending) is full, report
-	// the job as rejected and release the dedup key so it can be retried later.
-	select {
-	case s.admit <- struct{}{}:
-	default:
-		s.principals.release(userId.String())
-		s.inflight.Delete(key)
-		s.rejected.Add(1)
-		slog.WarnContext(ctx, "acquisition.queue_full",
-			"track_id", key, "queue_depth", cap(s.admit))
-		return "", false, ErrAcquisitionQueueFull
-	}
-	return key, true, nil
+	return s.finishEnqueue(ctx, trackId, userId, kind)
 }
 
-// reserveTrack takes the track's in-flight slot for kind. A job of the same
-// kind already holding it satisfies this request, so it is deduped with a nil
-// refusal; a job of the other kind does not, and reporting that as queued would
-// drop the request while its caller's cooldown stays burned (#1980), so it is
-// refused instead.
-func (s *BackgroundAcquisitionScheduler) reserveTrack(ctx context.Context, key string, kind jobKind) (reserved bool, refusal error) {
-	running, loaded := s.inflight.LoadOrStore(key, kind)
-	if !loaded {
-		return true, nil
+func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, key string) {
+	if mq, ok := s.queue.(*memJobQueue); ok {
+		mq.rememberUser(trackId, userId)
 	}
-	if running != kind {
+	if corrID := logging.CorrelationIDFromContext(ctx); corrID != "" {
+		s.corrIDs.Store(key, corrID)
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, kind ports.JobKind) error {
+	if s.closed.Load() {
+		s.releasePendingWG(trackId)
+	}
+	slog.InfoContext(ctx, "acquisition.scheduling", "track_id", trackId.String(), "user_id", userId.String(), "kind", string(kind))
+	return nil
+}
+
+func (s *BackgroundAcquisitionScheduler) trackPendingWG(key string) bool {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	_, alreadyTracked := s.pendingSet[key]
+	if !alreadyTracked {
+		s.pendingSet[key] = struct{}{}
+		s.wg.Add(1)
+	}
+	return alreadyTracked
+}
+
+func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId domain.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
+	if !alreadyTracked {
+		s.untrackPendingWG(key)
+	}
+	if errors.Is(err, ports.ErrJobKindConflict) {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.job_in_flight",
-			"track_id", key, "requested_kind", string(kind), "running_kind", running)
-		return false, ErrTrackJobInFlight
+			"track_id", trackId.String(), "requested_kind", string(kind))
+		return ErrTrackJobInFlight
 	}
-	slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key, "kind", string(kind))
-	return false, nil
+	return err
 }
 
-// spawnJob registers an admitted job and runs it on a background goroutine,
-// which owns releasing the admission slot and dedup key.
-func (s *BackgroundAcquisitionScheduler) spawnJob(
-	ctx context.Context,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	key, sourceURL string,
-	kind jobKind,
-	run acquisitionRun,
-) {
-	// Carry the originating request's correlation ID onto the job context so the
-	// slog.*Context calls throughout the acquisition pipeline trace end-to-end.
-	// The job outlives the request, so we derive a fresh context from s.baseCtx
-	// (for shutdown cancellation) and only transplant the corr_id value.
-	corrID := logging.CorrelationIDFromContext(ctx)
-
-	slog.InfoContext(ctx, "acquisition.scheduling", "track_id", key, "user_id", userId.String())
-	s.inflightCount.Add(1)
-	s.log.register(key, sourceURL)
-	s.wg.Add(1)
-	go s.runJob(corrID, userId, trackId, key, kind, run)
-}
-
-func (s *BackgroundAcquisitionScheduler) runJob(
-	corrID string,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	key string,
-	kind jobKind,
-	run acquisitionRun,
-) {
-	defer s.wg.Done()
-	defer s.principals.release(userId.String())
-	defer func() { <-s.admit }()
-	defer s.inflight.Delete(key)
-	defer s.inflightCount.Add(-1)
-	jobCtx := s.baseCtx
-	if corrID != "" {
-		jobCtx = logging.WithCorrelationID(jobCtx, corrID)
-	}
-	// A closure, not a direct deferred call: the panic log must see jobCtx as
-	// reassigned below (with the job reporter), and recover must run in the
-	// deferred function itself.
-	defer func() {
-		if r := recover(); r != nil {
-			s.logJobPanic(jobCtx, key, r)
+func (s *BackgroundAcquisitionScheduler) runWorker() {
+	defer s.runnersWG.Done()
+	for {
+		if s.closed.Load() {
+			return
 		}
-	}()
-
-	if !s.awaitWorkerSlot(jobCtx, userId, trackId, key, kind) {
-		return
+		if s.paused.Load() {
+			if !s.idleWait() {
+				return
+			}
+			continue
+		}
+		job, ok := s.claimJob()
+		if !ok {
+			if !s.idleWait() {
+				return
+			}
+			continue
+		}
+		s.runClaimedJob(job)
 	}
-	defer func() { <-s.sem }()
+}
 
+func (s *BackgroundAcquisitionScheduler) claimJob() (ports.Job, bool) {
+	s.admitMu.RLock()
+	defer s.admitMu.RUnlock()
+	if s.closed.Load() {
+		return ports.Job{}, false
+	}
+	job, ok := s.claimNext()
+	if ok {
+		s.jobsWG.Add(1)
+	}
+	return job, ok
+}
+
+func (s *BackgroundAcquisitionScheduler) claimNext() (ports.Job, bool) {
+	job, err := s.queue.Claim(s.baseCtx, s.leaseDuration)
+	if errors.Is(err, ports.ErrNoJobAvailable) {
+		return ports.Job{}, false
+	}
+	if err != nil {
+		slog.Error("acquisition.claim_failed", "error", err)
+		return ports.Job{}, false
+	}
+	return job, true
+}
+
+func (s *BackgroundAcquisitionScheduler) idleWait() bool {
+	timer := time.NewTimer(s.pollInterval)
+	defer timer.Stop()
+	select {
+	case <-s.wake:
+		return true
+	case <-timer.C:
+		return true
+	case <-s.stop:
+		return false
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
+	defer s.jobsWG.Done()
+
+	key := job.TrackID.String()
+	run := s.acquisitionRunFor(job.Kind)
+
+	jobCtx, cancelJob := s.jobContextFor(key)
+	defer cancelJob()
+
+	heartbeatDone := make(chan struct{})
+	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)
+
+	reportedCtx := s.startClaimedJob(jobCtx, key, job.UserID)
+	s.execClaimedJob(reportedCtx, key, run, job)
+	s.stopClaimedJob(cancelJob, heartbeatDone)
+
+	s.finishJob(job)
+}
+
+func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, userId shared.UserId) context.Context {
+	s.inflightCount.Add(1)
+	s.log.register(key, "")
 	s.log.markRunning(key)
-	jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
+	return withJobReporter(jobCtx, schedulerJobReporter{
 		ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: userId,
 	})
-	if err := run(jobCtx, userId, trackId); err != nil {
+}
+
+func (s *BackgroundAcquisitionScheduler) stopClaimedJob(cancelJob context.CancelFunc, heartbeatDone <-chan struct{}) {
+	cancelJob()
+	<-heartbeatDone
+	s.inflightCount.Add(-1)
+}
+
+func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) acquisitionRun {
+	if kind == ports.JobKindReplace {
+		return s.svc.ExecuteReplace
+	}
+	return s.svc.Execute
+}
+
+func (s *BackgroundAcquisitionScheduler) jobContextFor(key string) (context.Context, context.CancelFunc) {
+	jobCtx, cancelJob := context.WithCancel(s.baseCtx)
+	jobCtx = withSchedulerOwnedJobContext(jobCtx)
+	if corrID, ok := s.corrIDs.LoadAndDelete(key); ok {
+		jobCtx = logging.WithCorrelationID(jobCtx, corrID.(string))
+	}
+	return jobCtx, cancelJob
+}
+
+func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logJobPanic(ctx, key, r)
+		}
+	}()
+	err := run(ctx, job.UserID, job.TrackID)
+	s.completeClaimedJob(ctx, key, err)
+}
+
+func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
+	if err != nil && s.baseCtx.Err() != nil {
+		record := s.log.complete(key, JobCancelled, "shutdown")
+		s.recordOutcome(ctx, record)
+		slog.WarnContext(ctx, "background acquisition cancelled for shutdown", "track_id", key)
+		return
+	}
+	if err != nil {
 		reason := logSafeError(err)
 		record := s.log.complete(key, JobFailed, reason)
-		s.recordOutcome(jobCtx, record)
-		slog.ErrorContext(jobCtx, "background acquisition failed",
-			"track_id", key, "error", reason)
+		s.recordOutcome(ctx, record)
+		slog.ErrorContext(ctx, "background acquisition failed", "track_id", key, "error", reason)
 		return
 	}
 	record := s.log.complete(key, JobSucceeded, "")
-	s.recordOutcome(jobCtx, record)
+	s.recordOutcome(ctx, record)
 }
 
-func (s *BackgroundAcquisitionScheduler) recordOutcome(jobCtx context.Context, record ports.JobRecord) {
-	if s.outcomes == nil || record.TrackID == "" || record.ElapsedMs < 0 {
+func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, record ports.JobRecord) {
+	if s.outcomes == nil || record.TrackID == "" {
 		return
 	}
 	s.outcomeWG.Add(1)
 	go func() {
 		defer s.outcomeWG.Done()
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(jobCtx), outcomeRecordTimeout)
+		recCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), outcomeRecordTimeout)
 		defer cancel()
-		err := s.outcomes.Record(ctx, ports.AcquisitionOutcome{
+		err := s.outcomes.Record(recCtx, ports.AcquisitionOutcome{
 			TrackID:   record.TrackID,
 			Outcome:   record.State,
 			Reason:    record.Reason,
 			ElapsedMs: record.ElapsedMs,
 		})
 		if err != nil {
-			slog.WarnContext(jobCtx, "acquisition.outcome_record_failed",
+			slog.WarnContext(ctx, "acquisition.outcome_record_failed",
 				"track_id", record.TrackID, "error", logSafeError(err))
 		}
 	}()
 }
 
-// awaitWorkerSlot takes a worker slot for the job, reporting false when the job
-// was abandoned instead: the queue-wait deadline expired, or the scheduler shut
-// down. It settles the job log on both abandonment paths; the caller releases
-// the slot it took.
-func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context, userId shared.UserId, trackId domain.TrackId, key string, kind jobKind) bool {
-	queueWait := time.NewTimer(s.queueWaitTimeout)
-	defer queueWait.Stop()
-	select {
-	case s.sem <- struct{}{}:
-		return true
-	case <-queueWait.C:
-		record := s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
-		s.recordOutcome(jobCtx, record)
-		slog.WarnContext(jobCtx, "acquisition.queue_wait_timeout",
-			"track_id", key, "waited", s.queueWaitTimeout.String())
-		if !s.closed.Load() {
-			s.settleAbandonedJob(jobCtx, userId, trackId, kind)
+type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+
+func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job ports.Job, cancelJob context.CancelFunc, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(s.heartbeatInterval)
+	defer ticker.Stop()
+	lastSuccess := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !s.sendHeartbeat(job, &lastSuccess) {
+				cancelJob()
+				return
+			}
 		}
-		return false
-	case <-s.baseCtx.Done():
-		record := s.log.complete(key, JobCancelled, "")
-		s.recordOutcome(jobCtx, record)
-		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
-		return false
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) settleAbandonedJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind jobKind) {
-	if kind == jobReplace {
-		s.publishReplaceQueueTimedOut(ctx, userId, trackId)
+func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSuccess *time.Time) bool {
+	err := s.queue.Heartbeat(context.Background(), job.TrackID, job.Attempts, s.leaseDuration)
+	if err == nil {
+		*lastSuccess = time.Now()
+		return true
+	}
+	if errors.Is(err, ports.ErrLeaseLost) {
+		slog.Warn("acquisition.lease_lost", "track_id", job.TrackID.String())
+		return false
+	}
+	if time.Since(*lastSuccess) >= s.leaseDuration {
+		slog.Error("acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
+		return false
+	}
+	slog.Error("acquisition.heartbeat_failed", "track_id", job.TrackID.String(), "error", err)
+	return true
+}
+
+func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job) {
+	defer s.releasePendingWG(job.TrackID)
+
+	if s.baseCtx.Err() != nil {
+		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, time.Now())
+		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
-	s.svc.RefuseQueued(ctx, userId, trackId)
+	err := s.queue.Settle(context.Background(), job.TrackID, job.Attempts)
+	s.logQueueOutcome("settle", job.TrackID, err)
 }
 
-func (s *BackgroundAcquisitionScheduler) publishReplaceQueueTimedOut(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-	s.events.Publish(ctx, userId, events.TypeTrackReplaceFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   queueWaitTimeoutReason,
-	})
+func (s *BackgroundAcquisitionScheduler) releasePendingWG(trackID domain.TrackId) {
+	s.untrackPendingWG(trackID.String())
+}
+
+func (s *BackgroundAcquisitionScheduler) untrackPendingWG(key string) {
+	s.pendingMu.Lock()
+	_, tracked := s.pendingSet[key]
+	if tracked {
+		delete(s.pendingSet, key)
+	}
+	s.pendingMu.Unlock()
+	if tracked {
+		s.wg.Done()
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) sweepPendingWG() {
+	s.pendingMu.Lock()
+	pending := s.pendingSet
+	s.pendingSet = make(map[string]struct{})
+	s.pendingMu.Unlock()
+	for range pending {
+		s.wg.Done()
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID domain.TrackId, err error) {
+	if err == nil {
+		return
+	}
+	if errors.Is(err, ports.ErrLeaseLost) {
+		slog.Warn("acquisition."+op+"_lease_lost", "track_id", trackID.String())
+		return
+	}
+	slog.Error("acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
@@ -441,44 +542,103 @@ func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key
 func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
+	workers := cap(s.sem)
+	if workers < 1 {
+		workers = 1
+	}
 	return ports.AcquisitionStatus{
 		InFlight:      int(s.inflightCount.Load()),
 		Succeeded:     succeeded,
 		Failed:        failed,
 		Rejected:      s.rejected.Load(),
 		Paused:        s.paused.Load(),
-		QueueDepth:    len(s.admit),
-		QueueCapacity: cap(s.admit),
+		QueueDepth:    int(s.inflightCount.Load()),
+		QueueCapacity: workers,
 		Verification:  s.verification,
 		ActiveJobs:    jobs,
 		Recent:        recent,
 	}
 }
 
-// closeAdmission refuses new jobs and waits out any Schedule already past the
-// shutdown check, so every job the drain must wait for is on the WaitGroup
-// before the drain starts waiting.
 func (s *BackgroundAcquisitionScheduler) closeAdmission() {
 	s.admitMu.Lock()
 	defer s.admitMu.Unlock()
 	s.closed.Store(true)
+	s.closeOnce.Do(func() { close(s.stop) })
 }
 
 func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	s.closeAdmission()
-	s.cancel()
+	defer s.sweepPendingWG()
 
 	done := make(chan struct{})
 	go func() {
-		s.wg.Wait()
-		s.outcomeWG.Wait()
+		s.jobsWG.Wait()
 		close(done)
 	}()
 
+	drained := s.awaitJobsWG(done, s.drainBudget, ctx)
+	if drained {
+		slog.Info("acquisition scheduler drained")
+	} else {
+		slog.Warn("acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
+	}
+
+	s.cancel()
+	if !drained {
+		drained = s.awaitJobsWG(done, 0, ctx)
+		if !drained {
+			slog.Warn("acquisition scheduler drain timed out waiting for cancelled jobs to release")
+		}
+	}
+
+	s.waitRunners(ctx)
+	if !drained {
+		slog.Warn("acquisition scheduler shutdown ended with jobs still in flight, skipping the outcome wait")
+		return
+	}
+	s.waitOutcomes(ctx)
+}
+
+func (s *BackgroundAcquisitionScheduler) awaitJobsWG(done <-chan struct{}, budget time.Duration, ctx context.Context) bool {
+	var timerC <-chan time.Time
+	if budget > 0 {
+		timer := time.NewTimer(budget)
+		defer timer.Stop()
+		timerC = timer.C
+	}
 	select {
 	case <-done:
-		slog.Info("background tasks drained")
+		return true
+	case <-timerC:
+		return false
 	case <-ctx.Done():
-		slog.Warn("background task drain timed out")
+		return false
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) waitRunners(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		s.runnersWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		slog.Warn("acquisition scheduler shutdown context ended before every worker goroutine exited")
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) waitOutcomes(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		s.outcomeWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		slog.Warn("acquisition scheduler shutdown context ended before every outcome was recorded")
 	}
 }

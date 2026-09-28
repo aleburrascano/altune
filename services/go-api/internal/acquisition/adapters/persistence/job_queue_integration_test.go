@@ -398,3 +398,19 @@ func TestPgxJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) 
 		t.Errorf("owner Heartbeat after a re-enqueue = %v, want nil", err)
 	}
 }
+
+func TestPgxJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+
+	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
+	if _, err := queue.Claim(ctx, time.Minute); err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, time.Now()); !errors.Is(err, ports.ErrJobKindConflict) {
+		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
+	}
+}

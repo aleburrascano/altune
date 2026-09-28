@@ -198,7 +198,7 @@ func TestShutdownPlan_TimeoutsPinned(t *testing.T) {
 		"alert monitor":         5 * time.Second,
 		"event feed":            5 * time.Second,
 		"eval meter":            5 * time.Second,
-		"acquisition scheduler": 30 * time.Second,
+		"acquisition scheduler": 70 * time.Second,
 		"background tasks":      30 * time.Second,
 		"leader election":       5 * time.Second,
 		"discovery search":      30 * time.Second,
