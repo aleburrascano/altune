@@ -1,3 +1,7 @@
+const { assertSupportedNode } = require('./jest/requireNode22');
+
+assertSupportedNode(process.versions.node);
+
 const preset = require('jest-expo/jest-preset');
 
 const RATCHET_RAISE_ONLY = {
