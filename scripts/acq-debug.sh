@@ -44,7 +44,7 @@ run_remote() {
     "bash -s -- $(printf '%q ' "$remote_dir" "$tier" "$@")" <<'REMOTE'
 set -uo pipefail
 dir=$1; tier=$2; cmd=$3; shift 3
-cd "$dir/services/go-api" || { echo "acq-debug: no checkout at $dir on the VM"; exit 3; }
+cd "$dir/services/go-api" || { echo "acq-debug: no checkout at $dir on the VM" >&2; exit 3; }
 
 case $tier in
   prod)    prefix=altune-go-api;         envfile=.env.production ;;
@@ -57,7 +57,7 @@ need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* containe
 db() {
   local url
   url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
-  [ -n "$url" ] || { echo "acq-debug: no DATABASE_URL in $envfile"; exit 3; }
+  [ -n "$url" ] || { echo "acq-debug: no DATABASE_URL in $envfile" >&2; exit 3; }
   { echo "SET default_transaction_read_only = on; SET statement_timeout = '30s';"; cat; } |
     psql "$url" -X -q -v ON_ERROR_STOP=1 "$@"
 }
@@ -127,6 +127,8 @@ SQL
 capture)
   need_api
   [ $# -ge 1 ] || { echo "usage: capture <title|uuid>" >&2; exit 3; }
+  db_url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
+  [ -n "$db_url" ] || { echo "acq-debug: no DATABASE_URL in $envfile" >&2; exit 3; }
   id=$(db -A -t -v q="$1" <<'SQL' | grep -E '^[0-9a-f-]{36}$' | head -1
 SELECT id FROM tracks WHERE id::text = :'q' OR title ILIKE '%' || :'q' || '%' OR artist ILIKE '%' || :'q' || '%'
  ORDER BY added_at DESC LIMIT 5;
@@ -216,13 +218,13 @@ logs)
 sql)
   [ $# -ge 1 ] || { echo "usage: sql <select>"; exit 3; }
   q=$(printf '%s' "$*" | sed -E 's/[[:space:];]+$//')
-  case $q in *\;*|*\\*) echo "acq-debug: sql takes one statement, no ';' or backslash"; exit 3 ;; esac
+  case $q in *\;*|*\\*) echo "acq-debug: sql takes one statement, no ';' or backslash" >&2; exit 3 ;; esac
   printf '%s' "$q" | grep -qiE '^[[:space:]]*(select|with|explain|show|table|values)[[:space:](]' ||
-    { echo "acq-debug: sql only runs SELECT / WITH / EXPLAIN / SHOW / TABLE / VALUES"; exit 3; }
+    { echo "acq-debug: sql only runs SELECT / WITH / EXPLAIN / SHOW / TABLE / VALUES" >&2; exit 3; }
   printf '%s;\n' "$q" | db
   ;;
 
-*) echo "acq-debug: unknown command '$cmd' (try: help)"; exit 3 ;;
+*) echo "acq-debug: unknown command '$cmd' (try: help)" >&2; exit 3 ;;
 esac
 REMOTE
 }
