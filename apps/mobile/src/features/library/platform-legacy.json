@@ -1,7 +1,6 @@
 {
   "ui": [],
   "logic": [
-    "src/features/library/goBackOrToLibrary.ts",
     "src/features/library/hooks/dropVanishedTrack.ts",
     "src/features/library/hooks/useDeleteTracks.ts",
     "src/features/library/hooks/useExploreArtist.ts",

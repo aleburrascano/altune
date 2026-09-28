@@ -1,9 +1,9 @@
-import type { useRouter } from 'expo-router';
+import type { Navigator } from '@shared/navigation';
 
-export function goBackOrToLibrary(router: ReturnType<typeof useRouter>): void {
-  if (router.canGoBack()) {
-    router.back();
+export function goBackOrToLibrary(navigator: Navigator): void {
+  if (navigator.canGoBack()) {
+    navigator.back();
     return;
   }
-  router.replace('/library');
+  navigator.replace('/library');
 }

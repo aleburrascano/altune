@@ -1,3 +1,5 @@
+import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
+
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 
 function routerWithHistory(hasHistory: boolean) {
@@ -25,5 +27,23 @@ describe('goBackOrToLibrary', () => {
 
     expect(router.replace).toHaveBeenCalledWith('/library');
     expect(router.back).not.toHaveBeenCalled();
+  });
+
+  it('pops the history entry on a memory navigator that has one', () => {
+    const navigator = createMemoryNavigator('/discover');
+    navigator.push('/library/detail');
+
+    goBackOrToLibrary(navigator);
+
+    expect(navigator.current()).toBe('/discover');
+  });
+
+  it('lands on the library root from a memory navigator with no history', () => {
+    const navigator = createMemoryNavigator('/discover/detail');
+
+    goBackOrToLibrary(navigator);
+
+    expect(navigator.current()).toBe('/library');
+    expect(navigator.canGoBack()).toBe(false);
   });
 });
