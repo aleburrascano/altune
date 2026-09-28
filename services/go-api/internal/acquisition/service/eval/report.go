@@ -22,11 +22,13 @@ func (c ClassResult) Accuracy() float64 {
 }
 
 type Report struct {
-	Total    int           `json:"total"`
-	Passed   int           `json:"passed"`
-	Classes  []ClassResult `json:"classes"`
-	Failures []Outcome     `json:"-"`
-	Pending  []Outcome     `json:"-"`
+	Total                  int           `json:"total"`
+	Passed                 int           `json:"passed"`
+	Classes                []ClassResult `json:"classes"`
+	Failures               []Outcome     `json:"-"`
+	Pending                []Outcome     `json:"-"`
+	MedianSimulatedSeconds float64       `json:"median_simulated_seconds"`
+	MeanAttempts           float64       `json:"mean_attempts"`
 }
 
 func (r Report) Accuracy() float64 {
@@ -39,6 +41,8 @@ func (r Report) Accuracy() float64 {
 func Summarize(outcomes []Outcome) Report {
 	byClass := make(map[string]*ClassResult)
 	var report Report
+	var seconds []float64
+	var attempts []int
 
 	for _, o := range outcomes {
 		if o.Pending {
@@ -46,6 +50,8 @@ func Summarize(outcomes []Outcome) Report {
 			continue
 		}
 		report.Total++
+		seconds = append(seconds, o.SimulatedSeconds)
+		attempts = append(attempts, o.Attempts)
 		cr, ok := byClass[o.Case.Class]
 		if !ok {
 			cr = &ClassResult{Class: o.Case.Class}
@@ -66,14 +72,40 @@ func Summarize(outcomes []Outcome) Report {
 	sort.SliceStable(report.Classes, func(i, j int) bool {
 		return report.Classes[i].Class < report.Classes[j].Class
 	})
+	report.MedianSimulatedSeconds = medianOf(seconds)
+	report.MeanAttempts = meanOf(attempts)
 	return report
+}
+
+func medianOf(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[mid]
+	}
+	return (sorted[mid-1] + sorted[mid]) / 2
+}
+
+func meanOf(values []int) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sum := 0
+	for _, v := range values {
+		sum += v
+	}
+	return float64(sum) / float64(len(values))
 }
 
 func (r Report) Render() string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\nAcquisition selection eval — %d/%d (%.1f%%)\n\n",
-		r.Passed, r.Total, r.Accuracy()*100)
+	fmt.Fprintf(&b, "\nAcquisition selection eval — %d/%d (%.1f%%) · median %.1fs · mean %.1f attempts\n\n",
+		r.Passed, r.Total, r.Accuracy()*100, r.MedianSimulatedSeconds, r.MeanAttempts)
 	fmt.Fprintf(&b, "  %-8s %-8s %s\n", "CLASS", "SCORE", "ACCURACY")
 	fmt.Fprintf(&b, "  %s\n", strings.Repeat("-", 34))
 	for _, c := range r.Classes {
@@ -114,11 +146,16 @@ func pendingVerdict(p Outcome) string {
 }
 
 type Baseline struct {
-	Accuracy float64            `json:"accuracy"`
-	Classes  map[string]float64 `json:"classes"`
+	Accuracy      float64            `json:"accuracy"`
+	Classes       map[string]float64 `json:"classes"`
+	MedianSeconds float64            `json:"median_seconds,omitempty"`
+	MeanAttempts  float64            `json:"mean_attempts,omitempty"`
 }
 
-const baselineMargin = 0.01
+const (
+	baselineMargin  = 0.01
+	timeMarginRatio = 1.05
+)
 
 func LoadBaseline(path string) (Baseline, error) {
 	raw, err := os.ReadFile(path)
@@ -133,7 +170,12 @@ func LoadBaseline(path string) (Baseline, error) {
 }
 
 func (r Report) WriteBaseline(path string) error {
-	b := Baseline{Accuracy: r.Accuracy(), Classes: make(map[string]float64, len(r.Classes))}
+	b := Baseline{
+		Accuracy:      r.Accuracy(),
+		Classes:       make(map[string]float64, len(r.Classes)),
+		MedianSeconds: r.MedianSimulatedSeconds,
+		MeanAttempts:  r.MeanAttempts,
+	}
 	for _, c := range r.Classes {
 		b.Classes[c.Class] = c.Accuracy()
 	}
@@ -159,6 +201,14 @@ func (r Report) Regressions(base Baseline) []string {
 			out = append(out, fmt.Sprintf("class %s accuracy %.0f%% below baseline %.0f%%",
 				c.Class, c.Accuracy()*100, want*100))
 		}
+	}
+	if base.MedianSeconds > 0 && r.MedianSimulatedSeconds > base.MedianSeconds*timeMarginRatio {
+		out = append(out, fmt.Sprintf("median simulated seconds %.1f above baseline %.1f",
+			r.MedianSimulatedSeconds, base.MedianSeconds))
+	}
+	if base.MeanAttempts > 0 && r.MeanAttempts > base.MeanAttempts*timeMarginRatio {
+		out = append(out, fmt.Sprintf("mean attempts %.2f above baseline %.2f",
+			r.MeanAttempts, base.MeanAttempts))
 	}
 	sort.Strings(out)
 	return out

@@ -46,19 +46,61 @@ type ISRCRecording struct {
 }
 
 type Candidate struct {
-	Title          string   `json:"title"`
-	URL            string   `json:"url"`
-	Channel        string   `json:"channel,omitempty"`
-	Categories     []string `json:"categories,omitempty"`
-	Duration       float64  `json:"duration,omitempty"`
-	ViewCount      int64    `json:"view_count,omitempty"`
-	ActualDuration float64  `json:"actual_duration,omitempty"`
-	Undecodable    bool     `json:"undecodable,omitempty"`
-	DownloadFails  bool     `json:"download_fails,omitempty"`
-	RecordingMBIDs []string `json:"recording_mbids,omitempty"`
-	AcoustID       string   `json:"acoustid,omitempty"`
-	Resolved       bool     `json:"resolved,omitempty"`
-	Correct        bool     `json:"correct,omitempty"`
+	Title           string   `json:"title"`
+	URL             string   `json:"url"`
+	Channel         string   `json:"channel,omitempty"`
+	Categories      []string `json:"categories,omitempty"`
+	Duration        float64  `json:"duration,omitempty"`
+	ViewCount       int64    `json:"view_count,omitempty"`
+	ActualDuration  float64  `json:"actual_duration,omitempty"`
+	Undecodable     bool     `json:"undecodable,omitempty"`
+	DownloadFails   bool     `json:"download_fails,omitempty"`
+	RecordingMBIDs  []string `json:"recording_mbids,omitempty"`
+	AcoustID        string   `json:"acoustid,omitempty"`
+	Resolved        bool     `json:"resolved,omitempty"`
+	Correct         bool     `json:"correct,omitempty"`
+	Query           string   `json:"query,omitempty"`
+	DownloadSeconds float64  `json:"download_seconds,omitempty"`
+}
+
+const (
+	QueryISRC             = "isrc"
+	QueryTitleArtist      = "title_artist"
+	QueryTitleArtistAlbum = "title_artist_album"
+	QueryTitleArtistAudio = "title_artist_audio"
+)
+
+var knownQueries = map[string]bool{
+	QueryISRC:             true,
+	QueryTitleArtist:      true,
+	QueryTitleArtistAlbum: true,
+	QueryTitleArtistAudio: true,
+}
+
+const (
+	defaultSearchSeconds   = 5
+	defaultDownloadSeconds = 20
+)
+
+type Source struct {
+	Name          string      `json:"name"`
+	SearchSeconds float64     `json:"search_seconds,omitempty"`
+	Fails         bool        `json:"fails,omitempty"`
+	Candidates    []Candidate `json:"candidates"`
+}
+
+func (s Source) searchSeconds() float64 {
+	if s.SearchSeconds > 0 {
+		return s.SearchSeconds
+	}
+	return defaultSearchSeconds
+}
+
+func (c Candidate) downloadSeconds() float64 {
+	if c.DownloadSeconds > 0 {
+		return c.DownloadSeconds
+	}
+	return defaultDownloadSeconds
 }
 
 func (c Candidate) linksRecording(mbid string) bool {
@@ -79,14 +121,28 @@ type Case struct {
 	Track         Track       `json:"track"`
 	ExcludeURLs   []string    `json:"exclude_urls,omitempty"`
 	SkipTopRanked bool        `json:"skip_top_ranked,omitempty"`
-	Candidates    []Candidate `json:"candidates"`
+	Candidates    []Candidate `json:"candidates,omitempty"`
+	Sources       []Source    `json:"sources,omitempty"`
 	Pending       string      `json:"pending,omitempty"`
 }
 
 func (c Case) isPending() bool { return c.Pending != "" }
 
+func (c Case) usesNamedSources() bool { return len(c.Sources) > 0 }
+
+func (c Case) allCandidates() []Candidate {
+	if !c.usesNamedSources() {
+		return c.Candidates
+	}
+	var all []Candidate
+	for _, src := range c.Sources {
+		all = append(all, src.Candidates...)
+	}
+	return all
+}
+
 func (c Case) hasCorrectCandidate() bool {
-	for _, cand := range c.Candidates {
+	for _, cand := range c.allCandidates() {
 		if cand.Correct {
 			return true
 		}
@@ -95,7 +151,7 @@ func (c Case) hasCorrectCandidate() bool {
 }
 
 func (c Case) candidateByURL(url string) (Candidate, bool) {
-	for _, cand := range c.Candidates {
+	for _, cand := range c.allCandidates() {
 		if cand.URL == url {
 			return cand, true
 		}
@@ -179,23 +235,50 @@ func validateCases(cases []Case) error {
 			return fmt.Errorf("case %q has no failure class", c.ID)
 		case c.Track.Title == "" || c.Track.Artist == "":
 			return fmt.Errorf("case %q needs a track title and artist", c.ID)
-		case len(c.Candidates) == 0:
+		case len(c.Candidates) > 0 && c.usesNamedSources():
+			return fmt.Errorf("case %q sets both candidates and sources; keep one", c.ID)
+		case len(c.allCandidates()) == 0:
 			return fmt.Errorf("case %q has no candidates", c.ID)
 		}
-		urls := make(map[string]bool, len(c.Candidates))
-		for _, cand := range c.Candidates {
-			if cand.URL == "" {
-				return fmt.Errorf("case %q has a candidate with no url", c.ID)
-			}
-			if urls[cand.URL] {
-				return fmt.Errorf("case %q repeats candidate url %q", c.ID, cand.URL)
-			}
-			urls[cand.URL] = true
+		if err := validateSources(c); err != nil {
+			return err
+		}
+		if err := validateCandidates(c); err != nil {
+			return err
 		}
 		if err := validateCaseExtensions(c); err != nil {
 			return err
 		}
 		seen[c.ID] = true
+	}
+	return nil
+}
+
+func validateSources(c Case) error {
+	for _, src := range c.Sources {
+		if src.Name == "" {
+			return fmt.Errorf("case %q has a source with no name", c.ID)
+		}
+		if len(src.Candidates) == 0 && !src.Fails {
+			return fmt.Errorf("case %q source %q has no candidates", c.ID, src.Name)
+		}
+	}
+	return nil
+}
+
+func validateCandidates(c Case) error {
+	urls := make(map[string]bool)
+	for _, cand := range c.allCandidates() {
+		if cand.URL == "" {
+			return fmt.Errorf("case %q has a candidate with no url", c.ID)
+		}
+		if urls[cand.URL] {
+			return fmt.Errorf("case %q repeats candidate url %q", c.ID, cand.URL)
+		}
+		urls[cand.URL] = true
+		if cand.Query != "" && !knownQueries[cand.Query] {
+			return fmt.Errorf("case %q candidate %q has unknown query %q", c.ID, cand.URL, cand.Query)
+		}
 	}
 	return nil
 }

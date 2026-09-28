@@ -13,5 +13,7 @@
     "F9": 1,
     "OK": 1,
     "RW": 1
-  }
+  },
+  "median_seconds": 25,
+  "mean_attempts": 0.9672131147540983
 }

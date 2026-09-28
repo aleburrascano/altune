@@ -1,24 +1,25 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/acquisition/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
+	"context"
 )
 
 const evalUserID = "eval-user"
 
 type Outcome struct {
-	Case      Case
-	TopRanked string
-	Stored    string
-	Failed    bool
-	Err       string
-	Pass      bool
-	Reason    string
-	Pending   bool
+	Case             Case
+	TopRanked        string
+	Stored           string
+	Failed           bool
+	Err              string
+	Pass             bool
+	Reason           string
+	Pending          bool
+	SimulatedSeconds float64
+	Attempts         int
 }
 
 func Run(ctx context.Context, kase Case) Outcome {
@@ -32,10 +33,10 @@ func Run(ctx context.Context, kase Case) Outcome {
 	}
 	resolveIdentity(ctx, kase, p, ac)
 
-	steps := service.CoreSteps(service.NewSourceRegistry(p), nil, p, p, p)
+	steps := service.CoreSteps(service.NewSourceRegistry(p.sources()...), nil, p, p, p)
 	runErr := service.RunPipeline(ctx, steps, ac)
 	service.CleanupTemp(ctx, ac)
-	return outcomeOf(kase, ac, runErr)
+	return outcomeOf(kase, ac, runErr, p.clock)
 }
 
 func resolveIdentity(ctx context.Context, kase Case, p *casePorts, ac *service.AcquisitionContext) {
@@ -69,8 +70,14 @@ func searchHitFor(kase Case) *discoverybridge.RecordedSearchHit {
 	}
 }
 
-func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error) Outcome {
-	out := Outcome{Case: kase, Failed: runErr != nil, Pending: kase.isPending()}
+func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *simClock) Outcome {
+	out := Outcome{
+		Case:             kase,
+		Failed:           runErr != nil,
+		Pending:          kase.isPending(),
+		SimulatedSeconds: clock.total(),
+		Attempts:         clock.attemptCount(),
+	}
 	if runErr != nil {
 		out.Err = runErr.Error()
 	}

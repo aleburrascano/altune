@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"io"
 	"log/slog"
@@ -62,6 +63,18 @@ func TestValidateCases_RejectsMalformed(t *testing.T) {
 		}},
 		{"isrc recording with no mbid", []Case{
 			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", ISRC: "I", Resolution: &Resolution{ISRCRecordings: []ISRCRecording{{Duration: 200}}}}, Candidates: []Candidate{{URL: "u"}}},
+		}},
+		{"candidates and sources both set", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u"}}, Sources: []Source{{Name: "s", Candidates: []Candidate{{URL: "v"}}}}},
+		}},
+		{"source with no name", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Sources: []Source{{Candidates: []Candidate{{URL: "u"}}}}},
+		}},
+		{"source with no candidates and no simulated failure", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Sources: []Source{{Name: "s"}}},
+		}},
+		{"candidate with an unknown query variant", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Query: "bogus"}}},
 		}},
 	}
 	for _, tt := range tests {
@@ -463,5 +476,115 @@ func TestRun_EmptyResolutionStillAcquiresTheTrack(t *testing.T) {
 
 	if out.Stored != "u" {
 		t.Fatalf("stored %q (reason %q, err %q), want the only clean upload", out.Stored, out.Reason, out.Err)
+	}
+}
+
+func TestRun_TwoNamedSourcesMergeThroughTheRealRegistry(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200},
+		Sources: []Source{
+			{Name: "ytmusic", Candidates: []Candidate{
+				{Title: "Solitude (Cover)", URL: "cover", Channel: "Cover Channel", Duration: 200},
+			}},
+			{Name: "ytdlp", Candidates: []Candidate{
+				{Title: "Solitude", URL: "master", Channel: "Nova - Topic", Duration: 200, Correct: true},
+			}},
+		},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass {
+		t.Fatalf("expected pass, got %q (stored %q)", out.Reason, out.Stored)
+	}
+	if out.Stored != "master" {
+		t.Errorf("stored %q, want the ytdlp source's master over ytmusic's cover", out.Stored)
+	}
+}
+
+func TestRun_CandidateBehindAnAbsentQueryVariantNeverBecomesACandidate(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Quiet Static", Artist: "Nova", Duration: 190},
+		Sources: []Source{{Name: "ytdlp", Candidates: []Candidate{
+			{Title: "Quiet Static", URL: "album-edition", Channel: "Nova - Topic", Duration: 190, ViewCount: 900000, Query: QueryTitleArtistAlbum},
+			{Title: "Quiet Static", URL: "master", Channel: "Nova - Topic", Duration: 190, ViewCount: 100, Query: QueryTitleArtist, Correct: true},
+		}}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if !out.Pass {
+		t.Fatalf("expected pass, got %q (stored %q): the title_artist_album candidate must never surface without an album on the track", out.Reason, out.Stored)
+	}
+	if out.Stored != "master" {
+		t.Errorf("stored %q, want master: the higher-view candidate behind an absent query variant must never be found", out.Stored)
+	}
+}
+
+func TestEvalSource_FindsCandidateOnlyForItsQueryVariant(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200},
+		Sources: []Source{{Name: "ytdlp", Candidates: []Candidate{
+			{Title: "Solitude (Deluxe)", URL: "album-edition", Query: QueryTitleArtistAlbum},
+			{Title: "Solitude", URL: "master", Query: QueryTitleArtist, Correct: true},
+		}}},
+	}
+	source := newCasePorts(kase).sources()[0]
+
+	withoutAlbum, err := source.Find(context.Background(), ports.FindRequest{Title: "Solitude", Artist: "Nova"})
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if len(withoutAlbum) != 1 || withoutAlbum[0].URL != "master" {
+		t.Fatalf("Find without an album = %+v, want only the title_artist candidate", withoutAlbum)
+	}
+
+	withAlbum, err := source.Find(context.Background(), ports.FindRequest{Title: "Solitude", Artist: "Nova", Album: "Nightfall"})
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if len(withAlbum) != 2 {
+		t.Fatalf("Find with an album = %+v, want both candidates", withAlbum)
+	}
+}
+
+func TestRun_SimulatedSecondsAndAttemptsAccumulateAlongThePath(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200},
+		Sources: []Source{{Name: "ytdlp", SearchSeconds: 7, Candidates: []Candidate{
+			{Title: "Solitude", URL: "master", Channel: "Nova - Topic", Duration: 200, DownloadSeconds: 30, Correct: true},
+		}}},
+	}
+
+	out := Run(context.Background(), kase)
+
+	if out.Attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", out.Attempts)
+	}
+	if out.SimulatedSeconds != 37 {
+		t.Fatalf("simulated seconds = %.1f, want 37 (7s search + 30s download)", out.SimulatedSeconds)
+	}
+}
+
+func TestRegressions_FlagsSimulatedSecondsAndAttemptsAboveBaseline(t *testing.T) {
+	r := Report{Total: 1, Passed: 1, MedianSimulatedSeconds: 110, MeanAttempts: 2.2}
+	base := Baseline{Accuracy: 1.0, MedianSeconds: 100, MeanAttempts: 2.0}
+
+	got := r.Regressions(base)
+	if len(got) != 2 {
+		t.Fatalf("expected a median-seconds and a mean-attempts regression, got %v", got)
+	}
+}
+
+func TestRegressions_SilentWithinTheFivePercentMargin(t *testing.T) {
+	r := Report{Total: 1, Passed: 1, MedianSimulatedSeconds: 104, MeanAttempts: 2.05}
+	base := Baseline{Accuracy: 1.0, MedianSeconds: 100, MeanAttempts: 2.0}
+
+	if got := r.Regressions(base); len(got) != 0 {
+		t.Fatalf("expected no regression within the 5%% margin, got %v", got)
 	}
 }

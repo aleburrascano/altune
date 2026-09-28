@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "id": "pl-two-sources-registry-merges-the-master-over-a-cover",
+      "class": "OK",
+      "note": "ytmusic and ytdlp both answer through the real SourceRegistry.Find fan-out; the cover from ytmusic loses to the Topic master from ytdlp the same way selection.json's single-source cases do",
+      "track": { "title": "Solitude", "artist": "Nova", "duration": 200 },
+      "sources": [
+        { "name": "ytmusic", "search_seconds": 3, "candidates": [
+          { "title": "Solitude (Cover)", "url": "ytmusic:cover", "channel": "Cover Channel", "duration": 200 }
+        ] },
+        { "name": "ytdlp", "search_seconds": 6, "candidates": [
+          { "title": "Solitude", "url": "ytdlp:master", "channel": "Nova - Topic", "duration": 200, "download_seconds": 22, "correct": true }
+        ] }
+      ]
+    },
+    {
+      "id": "pl-candidate-surfaces-only-through-its-query-variant",
+      "class": "OK",
+      "note": "the album-qualified decoy is tagged for the title_artist_album variant; the track has no album so that query is never issued and the decoy never becomes a candidate, leaving only the title_artist match",
+      "track": { "title": "Quiet Static", "artist": "Nova", "duration": 190 },
+      "sources": [
+        { "name": "ytdlp", "candidates": [
+          { "title": "Quiet Static (Deluxe Edition)", "url": "ytdlp:album-edition", "channel": "Wrong Channel", "duration": 190, "query": "title_artist_album" },
+          { "title": "Quiet Static", "url": "ytdlp:master", "channel": "Nova - Topic", "duration": 190, "download_seconds": 18, "query": "title_artist", "correct": true }
+        ] }
+      ]
+    },
+    {
+      "id": "pl-first-candidate-download-fails-second-source-recovers",
+      "class": "OK",
+      "note": "the top-ranked candidate's download fails, costing an attempt and its download_seconds before the pipeline falls back to the next ranked candidate",
+      "track": { "title": "Low Tide", "artist": "Coastline", "duration": 205 },
+      "sources": [
+        { "name": "ytdlp", "search_seconds": 4, "candidates": [
+          { "title": "Low Tide", "url": "ytdlp:broken-upload", "channel": "Coastline - Topic", "duration": 205, "view_count": 200000, "download_fails": true, "download_seconds": 20 },
+          { "title": "Low Tide", "url": "ytdlp:good-upload", "channel": "Coastline - Topic", "duration": 205, "view_count": 50000, "download_seconds": 20, "correct": true }
+        ] }
+      ]
+    },
+    {
+      "id": "pl-a-source-outage-still-acquires-from-the-source-that-answers",
+      "class": "OK",
+      "note": "ytmusic reports a simulated source failure; the registry still merges what ytdlp found",
+      "track": { "title": "Harbor Light", "artist": "Coastline", "duration": 210 },
+      "sources": [
+        { "name": "ytmusic", "search_seconds": 3, "fails": true, "candidates": [] },
+        { "name": "ytdlp", "search_seconds": 5, "candidates": [
+          { "title": "Harbor Light", "url": "ytdlp:master", "channel": "Coastline - Topic", "duration": 210, "download_seconds": 25, "correct": true }
+        ] }
+      ]
+    }
+  ]
+}
