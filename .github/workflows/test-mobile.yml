@@ -62,7 +62,7 @@ jobs:
       # feature) enforced by import/no-restricted-paths, the mobile counterpart
       # to the backend's depguard rules.
       - name: lint
-        run: npx eslint "src/**/*.{ts,tsx}" --cache --cache-location .eslintcache
+        run: npx eslint . --cache --cache-location .eslintcache
       # Mechanical TS/React style (10-line functions, complexity cap, no
       # else-after-return, banned vague names).
       # A 10-line cap across the whole app fails hundreds of existing files, so
@@ -96,7 +96,7 @@ jobs:
           node scripts/lint-changed-lines.mjs "$BASE"
       - name: script and rule tests
         run: |
-          files=$(git ls-files 'scripts/__tests__/*.test.mjs' 'eslint-rules/__tests__/*.test.js')
+          files=$(git ls-files 'scripts/__tests__/*.test.mjs' 'eslint-rules/__tests__/*.test.js' 'eslint.config.test.js')
           [ -z "$files" ] || node --test $files
 
   architecture:

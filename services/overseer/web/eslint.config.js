@@ -3,6 +3,7 @@ import globals from "globals";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
+import noComments from "../../../apps/mobile/eslint-rules/no-comments.js";
 
 const unsafeHtml = {
   selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
@@ -35,5 +36,11 @@ export default tseslint.config(
     rules: {
       "no-restricted-syntax": ["error", unsafeHtml, inlineStyle],
     },
+  },
+  {
+    files: ["**/*.{ts,tsx,js,mjs,cjs}"],
+    linterOptions: { noInlineConfig: true },
+    plugins: { local: { rules: { "no-comments": noComments } } },
+    rules: { "local/no-comments": "error" },
   },
 );

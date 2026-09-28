@@ -1,9 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { ESLint } from 'eslint';
-import { parse } from '@typescript-eslint/parser';
-
-const SUPPRESSION_DIRECTIVE = /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
 
 const DIFF_DETECT_FLAGS = ['-M', '-C', '--find-copies-harder'];
 
@@ -76,8 +72,6 @@ const files = changedFiles('src').filter(
   (f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'),
 );
 const addedByFile = addedLinesByFile('src');
-const commentFiles = changedFiles('.').filter((f) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f));
-const addedCommentLinesByFile = addedLinesByFile('.');
 
 let total = 0;
 if (files.length === 0) {
@@ -104,32 +98,4 @@ if (files.length === 0) {
   console.log(`new-code mechanical-style violations: ${total}`);
 }
 
-const spansAddedLine = (loc, added) => {
-  for (let n = loc.start.line; n <= loc.end.line; n += 1) if (added.has(n)) return true;
-  return false;
-};
-
-const commentHitsOf = (file) => {
-  const added = addedCommentLinesByFile.get(file) ?? new Set();
-  if (added.size === 0) return [];
-  const ast = parse(readFileSync(file, 'utf8'), {
-    loc: true,
-    comment: true,
-    jsx: /\.(tsx|jsx)$/.test(file),
-  });
-  return ast.comments
-    .filter((comment) => spansAddedLine(comment.loc, added))
-    .map((comment) => ({
-      file,
-      line: comment.loc.start.line,
-      kind: SUPPRESSION_DIRECTIVE.test(comment.value) ? 'suppression' : 'comment',
-    }));
-};
-
-const commentHits = commentFiles.flatMap(commentHitsOf);
-for (const hit of commentHits) {
-  console.log(`  ${hit.file}:${hit.line}  new ${hit.kind} on a changed line — zero-comments rule`);
-}
-console.log(`new-code comment/suppression violations: ${commentHits.length}`);
-
-process.exit(total > 0 || commentHits.length > 0 ? 1 : 0);
+process.exit(total > 0 ? 1 : 0);

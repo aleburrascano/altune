@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "tsc": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint": "eslint .",
     "test": "jest",
     "mutate": "stryker run",
     "fallow": "fallow dead-code --fail-on-issues && fallow dupes --fail-on-issues",

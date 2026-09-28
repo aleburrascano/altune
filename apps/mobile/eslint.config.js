@@ -191,7 +191,27 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
       ]
     : [];
 
-module.exports = [
+const noCommentsAnywhere = {
+  files: ['**/*.{ts,tsx,js,jsx,mjs,cjs}'],
+  linterOptions: { noInlineConfig: true },
+  plugins: { local: { rules: { 'no-comments': require('./eslint-rules/no-comments') } } },
+  languageOptions: {
+    parser: tsParser,
+    parserOptions: { ecmaFeatures: { jsx: true } },
+  },
+  rules: { 'local/no-comments': 'error' },
+};
+
+const SRC_ONLY = 'src/**/*';
+
+const onlyWithinSrc = (block) => {
+  const isGlobalIgnores = Object.keys(block).every((key) => key === 'ignores' || key === 'name');
+  if (isGlobalIgnores) return block;
+  const files = block.files ?? ['**/*'];
+  return { ...block, files: files.map((pattern) => [SRC_ONLY, ...[pattern].flat()]) };
+};
+
+const styleRulesConfig = [
   ...expoConfig,
   ...typedLinting,
   typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig,
@@ -217,6 +237,11 @@ module.exports = [
   relaxationsForJestModuleMockingAndInlineMockComponents,
   relaxationForNativeModulesExpoGoDoesNotBundle,
   ...mechanicalStyleEnforcedOnChangedCodeOnly,
+];
+
+module.exports = [
+  ...styleRulesConfig.map(onlyWithinSrc),
+  noCommentsAnywhere,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },
