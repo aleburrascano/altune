@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -219,7 +220,13 @@ func (a *App) startDiscoveryBackgroundJobs(
 	vocabStore discoveryPorts.VocabularyStore,
 ) {
 	if a.cfg.BehavioralRankingEnabled {
-		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, searchSvc.RefreshBehavioralScores)
+		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, func(ctx context.Context) error {
+			if err := searchSvc.RefreshBehavioralScores(ctx); err != nil {
+				slog.WarnContext(ctx, string(jobBehavioralRankingRefresh)+" failed", "error", err)
+				return err
+			}
+			return nil
+		})
 	}
 	a.startCorpusRefresh(ctx, eventStore)
 	a.startDiscographyPrune(ctx, eventStore)

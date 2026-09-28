@@ -4,15 +4,21 @@ import (
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
+	discoveryPorts "altune/go-api/internal/discovery/ports"
+	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/config"
+	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // countingProviderRT answers every provider request with an empty JSON body and
@@ -200,5 +206,40 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 		t.Errorf("artwork_url = %q, want the bridged Discogs id's real cover — "+
 			"the caller-supplied-mbid path must forward the MB-known ExternalIDs, not resolve on mbid alone",
 			got.ArtworkURL)
+	}
+}
+
+type failingBehavioralStore struct{ err error }
+
+func (s failingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discoveryPorts.BehavioralSignal, error) {
+	return nil, s.err
+}
+
+func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(restore)
+
+	boom := errors.New("boom")
+	consumer := discoveryService.NewSatisfactionConsumer(failingBehavioralStore{err: boom})
+	searchSvc := discoveryService.NewService(nil, nil, discoveryService.WithBehavioralRanking(consumer))
+
+	a := &App{cfg: &config.Config{BehavioralRankingEnabled: true}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); a.wg.Wait() })
+
+	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
+
+	h := waitForHealth(t, a, jobBehavioralRankingRefresh, func(h JobHealth) bool { return h.Failures >= 1 })
+
+	if h.LastFailure.IsZero() {
+		t.Error("a failed run must still update LastFailure through jc.record")
+	}
+
+	logged := buf.String()
+	wantFailed := `level=WARN msg="behavioral ranking refresh failed" error=boom` + "\n"
+	if !strings.Contains(logged, wantFailed) {
+		t.Errorf("failure line drifted: want %q in\n%s", wantFailed, logged)
 	}
 }
