@@ -31,10 +31,7 @@ linters:
           files:
             - "**/internal/catalog/service/**"
             - "**/internal/catalog/ports/**"
-            - "**/internal/catalog/adapters/discoverybridge/**"
-            - "**/internal/catalog/adapters/handler/**"
-            - "**/internal/catalog/adapters/persistence/**"
-            - "**/internal/catalog/adapters/storage/**"
+            - "**/internal/catalog/adapters/**"
           deny:
             - pkg: altune/go-api/internal/discovery
               desc: catalog reaches discovery only through adapters/discoverybridge
@@ -47,12 +44,7 @@ linters:
           files:
             - "**/internal/discovery/service/**"
             - "**/internal/discovery/ports/**"
-            - "**/internal/discovery/adapters/catalogbridge/**"
-            - "**/internal/discovery/adapters/handler/**"
-            - "**/internal/discovery/adapters/persistence/**"
-            - "**/internal/discovery/adapters/cache/**"
-            - "**/internal/discovery/adapters/providers/**"
-            - "**/internal/discovery/adapters/providermetrics/**"
+            - "**/internal/discovery/adapters/**"
           deny:
             - pkg: altune/go-api/internal/catalog
               desc: discovery reaches catalog only through adapters/catalogbridge
@@ -65,13 +57,8 @@ linters:
           files:
             - "**/internal/acquisition/service/**"
             - "**/internal/acquisition/ports/**"
-            - "**/internal/acquisition/adapters/ytdlp/**"
-            - "**/internal/acquisition/adapters/id3/**"
-            - "**/internal/acquisition/adapters/ytmusic/**"
-            - "**/internal/acquisition/adapters/streamrip/**"
-            - "**/internal/acquisition/adapters/chromaprint/**"
-            - "**/internal/acquisition/adapters/handler/**"
-            - "**/internal/acquisition/adapters/persistence/**"
+            - "**/internal/acquisition/adapters/**"
+            - "!**/internal/acquisition/adapters/discoverybridge/**"
           deny:
             - pkg: altune/go-api/internal/discovery
               desc: acquisition reaches discovery only through adapters/discoverybridge
