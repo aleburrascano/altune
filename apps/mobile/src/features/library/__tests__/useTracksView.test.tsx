@@ -9,6 +9,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import type { ActiveView } from '../activeView';
 import { useSelection } from '../hooks/useSelection';
 import { useTracksView } from '../hooks/useTracksView';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const mockGetTracks = jest.fn();
 
@@ -19,8 +20,35 @@ jest.mock('@shared/api-client/tracks', () => ({
 
 const noop = () => undefined;
 
+function WarmUpTracksScreen() {
+  const selection = useSelection();
+  const { view } = useTracksView({
+    query: '',
+    sort: 'recent',
+    isActive: true,
+    selection,
+    queue: {} as never,
+    playback: {} as never,
+    retryMutation: { isInFlight: () => false } as never,
+    onTrackPress: noop,
+    onTrackMore: noop,
+  });
+  return view.error ? <View testID="library-error" /> : <>{view.content}</>;
+}
+
+warmUpFirstRender(async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mockGetTracks.mockResolvedValue({ items: [], total: 0, limit: 0, offset: 0, has_more: false });
+  render(
+    <QueryClientProvider client={client}>
+      <WarmUpTracksScreen />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(mockGetTracks).toHaveBeenCalled());
+});
+
 describe('a library list whose next page fails to load', () => {
-  const PAGE = 50;
+  const PAGE = 5;
   const RETRY = 'library-load-more-retry';
 
   const track = (i: number) =>

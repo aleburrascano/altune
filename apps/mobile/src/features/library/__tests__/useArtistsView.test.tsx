@@ -8,14 +8,44 @@ import type { ArtistGroup, LibraryQuery } from '@shared/api-client/library';
 import type { ActiveView } from '../activeView';
 import { useArtistsView } from '../hooks/useArtistsView';
 import { SortControl } from '../ui/SortControl';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const mockGetLibraryArtists = jest.fn();
+let mockGroupPageSize = 50;
 
 jest.mock('@shared/api-client/library', () => ({
   getLibraryArtists: (query: LibraryQuery) => mockGetLibraryArtists(query),
 }));
 
+jest.mock('../groupPaging', () => {
+  const actual = jest.requireActual('../groupPaging');
+  return {
+    __esModule: true,
+    get GROUP_PAGE_SIZE() {
+      return mockGroupPageSize;
+    },
+    nextGroupPageOffset: (pageLength: number, pageOffset: number) =>
+      actual.nextGroupPageOffset(pageLength, pageOffset, mockGroupPageSize),
+  };
+});
+
 const noop = () => undefined;
+
+function WarmUpArtistsScreen() {
+  const view = useArtistsView({ query: '', sort: 'az', isActive: true, onArtistPress: noop });
+  return view.content;
+}
+
+warmUpFirstRender(async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mockGetLibraryArtists.mockResolvedValue({ items: [], total: 0 });
+  render(
+    <QueryClientProvider client={client}>
+      <WarmUpArtistsScreen />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(mockGetLibraryArtists).toHaveBeenCalled());
+});
 
 describe('a library grid holding more rows than one page', () => {
   const SERVER_DEFAULT_LIMIT = 50;
@@ -90,7 +120,7 @@ describe('a library grid holding more rows than one page', () => {
 });
 
 describe('a library list whose next page fails to load', () => {
-  const PAGE = 50;
+  const PAGE = 5;
   const RETRY = 'library-load-more-retry';
 
   const artist = (i: number) => ({
@@ -120,9 +150,13 @@ describe('a library list whose next page fails to load', () => {
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mockGetLibraryArtists.mockReset();
+    mockGroupPageSize = PAGE;
   });
 
-  afterEach(() => client.clear());
+  afterEach(() => {
+    client.clear();
+    mockGroupPageSize = 50;
+  });
 
   const failure = () => Promise.reject(new Error('page 2 down'));
 

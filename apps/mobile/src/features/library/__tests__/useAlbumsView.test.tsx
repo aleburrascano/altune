@@ -8,14 +8,44 @@ import type { AlbumGroup, LibraryQuery } from '@shared/api-client/library';
 import type { ActiveView } from '../activeView';
 import { useAlbumsView } from '../hooks/useAlbumsView';
 import { SortControl } from '../ui/SortControl';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const mockGetLibraryAlbums = jest.fn();
+let mockGroupPageSize = 50;
 
 jest.mock('@shared/api-client/library', () => ({
   getLibraryAlbums: (query: LibraryQuery) => mockGetLibraryAlbums(query),
 }));
 
+jest.mock('../groupPaging', () => {
+  const actual = jest.requireActual('../groupPaging');
+  return {
+    __esModule: true,
+    get GROUP_PAGE_SIZE() {
+      return mockGroupPageSize;
+    },
+    nextGroupPageOffset: (pageLength: number, pageOffset: number) =>
+      actual.nextGroupPageOffset(pageLength, pageOffset, mockGroupPageSize),
+  };
+});
+
 const noop = () => undefined;
+
+function WarmUpAlbumsScreen() {
+  const view = useAlbumsView({ query: '', sort: 'recent', isActive: true, onAlbumPress: noop });
+  return view.content;
+}
+
+warmUpFirstRender(async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mockGetLibraryAlbums.mockResolvedValue({ items: [], total: 0 });
+  render(
+    <QueryClientProvider client={client}>
+      <WarmUpAlbumsScreen />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(mockGetLibraryAlbums).toHaveBeenCalled());
+});
 
 describe('a library grid holding more rows than one page', () => {
   const SERVER_DEFAULT_LIMIT = 50;
@@ -104,7 +134,7 @@ describe('a library grid holding more rows than one page', () => {
 });
 
 describe('a library list whose next page fails to load', () => {
-  const PAGE = 50;
+  const PAGE = 5;
   const RETRY = 'library-load-more-retry';
 
   const album = (i: number) => ({
@@ -136,9 +166,13 @@ describe('a library list whose next page fails to load', () => {
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     mockGetLibraryAlbums.mockReset();
+    mockGroupPageSize = PAGE;
   });
 
-  afterEach(() => client.clear());
+  afterEach(() => {
+    client.clear();
+    mockGroupPageSize = 50;
+  });
 
   const failure = () => Promise.reject(new Error('page 2 down'));
 
