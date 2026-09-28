@@ -5,6 +5,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -76,6 +78,24 @@ func TestValidateCases_RejectsMalformed(t *testing.T) {
 		{"candidate with an unknown query variant", []Case{
 			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Query: "bogus"}}},
 		}},
+		{"candidate title with a terminal escape", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Title: "Halo \x1b[31m"}}},
+		}},
+		{"candidate channel with a bidi override", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Channel: "Topic ‮"}}},
+		}},
+		{"track title with a bell", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t\x07", Artist: "a"}, Candidates: []Candidate{{URL: "u"}}},
+		}},
+		{"track artist with a C1 control", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a\u009b"}, Candidates: []Candidate{{URL: "u"}}},
+		}},
+		{"track album with a bidi isolate", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a", Album: "⁦b"}, Candidates: []Candidate{{URL: "u"}}},
+		}},
+		{"named-source candidate title with a delete", []Case{
+			{ID: "x", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Sources: []Source{{Name: "s", Candidates: []Candidate{{URL: "u", Title: "c\x7f"}}}}},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,6 +103,47 @@ func TestValidateCases_RejectsMalformed(t *testing.T) {
 				t.Error("expected validation to reject this suite")
 			}
 		})
+	}
+}
+
+func TestValidateCases_NamesTheCaseAndFieldHoldingAnUnsafeRune(t *testing.T) {
+	tests := []struct {
+		name      string
+		kase      Case
+		wantField string
+	}{
+		{"candidate title escape", Case{ID: "halo-esc", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Title: "Halo \x1b[31m"}}}, `candidate "u" title`},
+		{"candidate channel bidi", Case{ID: "halo-bidi", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Channel: "Topic ‮"}}}, `candidate "u" channel`},
+		{"track title bell", Case{ID: "halo-bell", Class: "F1", Track: Track{Title: "t\x07", Artist: "a"}, Candidates: []Candidate{{URL: "u"}}}, "track title"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCases([]Case{tt.kase})
+			if err == nil {
+				t.Fatal("expected validation to reject this suite")
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, `"`+tt.kase.ID+`"`) || !strings.Contains(msg, tt.wantField) {
+				t.Errorf("error %q should name case %q and field %q", msg, tt.kase.ID, tt.wantField)
+			}
+			if strings.ContainsFunc(msg, func(r rune) bool { return r == '\x1b' || r == '‮' || r == '\x07' }) {
+				t.Errorf("error %q echoes the unsafe rune raw", msg)
+			}
+		})
+	}
+}
+
+func TestValidateCases_AcceptsOrdinaryUnicodeText(t *testing.T) {
+	kase := Case{
+		ID: "beyonce-halo", Class: "OK",
+		Track: Track{Title: "Halo", Artist: "Beyoncé", Album: "I Am... Sasha Fierce"},
+		Candidates: []Candidate{
+			{URL: "u", Title: "Beyoncé – Halo (Official Video) 🎵", Channel: "ビヨンセ · Topic"},
+			{URL: "v", Title: "هالو – بيونسيه", Channel: "Beyoncé VEVO"},
+		},
+	}
+	if err := validateCases([]Case{kase}); err != nil {
+		t.Fatalf("expected ordinary unicode to pass, got %v", err)
 	}
 }
 
@@ -586,5 +647,131 @@ func TestRegressions_SilentWithinTheFivePercentMargin(t *testing.T) {
 
 	if got := r.Regressions(base); len(got) != 0 {
 		t.Fatalf("expected no regression within the 5%% margin, got %v", got)
+	}
+}
+
+func TestValidateCases_RejectsEveryBidiControlInACandidateTitle(t *testing.T) {
+	bidi := map[string]rune{
+		"arabic letter mark":         0x061C,
+		"left-to-right mark":         0x200E,
+		"right-to-left mark":         0x200F,
+		"left-to-right embedding":    0x202A,
+		"right-to-left embedding":    0x202B,
+		"pop directional formatting": 0x202C,
+		"left-to-right override":     0x202D,
+		"right-to-left override":     0x202E,
+		"left-to-right isolate":      0x2066,
+		"right-to-left isolate":      0x2067,
+		"first strong isolate":       0x2068,
+		"pop directional isolate":    0x2069,
+	}
+	for name, r := range bidi {
+		t.Run(name, func(t *testing.T) {
+			kase := Case{ID: "bidi-case", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Title: "Halo " + string(r) + "oidoV"}}}
+			if err := validateCases([]Case{kase}); err == nil {
+				t.Errorf("validateCases accepted candidate title %+q, want rejection", kase.Candidates[0].Title)
+			}
+		})
+	}
+}
+
+func TestValidateCases_RejectsWhitespaceAndOtherControlsInTrackAndCandidateText(t *testing.T) {
+	controls := map[string]rune{
+		"nul":             0x00,
+		"tab":             0x09,
+		"newline":         0x0A,
+		"carriage return": 0x0D,
+		"unit separator":  0x1F,
+		"delete":          0x7F,
+		"first c1":        0x80,
+		"c1 csi":          0x9B,
+		"last c1":         0x9F,
+	}
+	for name, r := range controls {
+		t.Run(name+" in track title", func(t *testing.T) {
+			kase := Case{ID: "ctl-case", Class: "F1", Track: Track{Title: "Halo" + string(r), Artist: "a"}, Candidates: []Candidate{{URL: "u"}}}
+			if err := validateCases([]Case{kase}); err == nil {
+				t.Errorf("validateCases accepted track title %+q, want rejection", kase.Track.Title)
+			}
+		})
+		t.Run(name+" in candidate channel", func(t *testing.T) {
+			kase := Case{ID: "ctl-case", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Candidates: []Candidate{{URL: "u", Channel: string(r) + "Topic"}}}
+			if err := validateCases([]Case{kase}); err == nil {
+				t.Errorf("validateCases accepted candidate channel %+q, want rejection", kase.Candidates[0].Channel)
+			}
+		})
+	}
+}
+
+func TestValidateCases_AcceptsEmojiSequencesCombiningMarksAndFullwidthText(t *testing.T) {
+	texts := map[string][]rune{
+		"zwj family emoji":       {'F', 0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467},
+		"variation selector":     {'L', 0x2764, 0xFE0F},
+		"keycap sequence":        {'1', 0xFE0F, 0x20E3},
+		"skin tone modifier":     {'W', 0x1F44B, 0x1F3FD},
+		"combining acute":        {'e', 0x0301},
+		"stacked combining":      {'a', 0x0300, 0x0301, 0x0302},
+		"fullwidth latin":        {0xFF22, 0xFF25, 0xFF39, 0xFF2F, 0xFF2E, 0xFF23, 0xFF25},
+		"hangul and devanagari":  {0xBE44, 0xC5D9, ' ', 0x0939, 0x0947},
+		"no-break and em spaces": {'H', 0x00A0, 'L', 0x2003, 'M'},
+	}
+	for name, runes := range texts {
+		t.Run(name, func(t *testing.T) {
+			text := string(runes)
+			kase := Case{
+				ID: "unicode-case", Class: "OK",
+				Track:      Track{Title: text, Artist: text, Album: text},
+				Candidates: []Candidate{{URL: "u", Title: text, Channel: text}},
+			}
+			if err := validateCases([]Case{kase}); err != nil {
+				t.Errorf("validateCases rejected ordinary text %+q: %v", text, err)
+			}
+		})
+	}
+}
+
+func TestLoadDir_RejectsAGoldenWhoseJSONEscapesAControlIntoATrackOrCandidateField(t *testing.T) {
+	goldens := map[string]string{
+		"escape in candidate title":            `{"cases":[{"id":"json-esc","class":"F1","track":{"title":"t","artist":"a"},"candidates":[{"url":"u","title":"Halo \\u001b[2J"}]}]}`,
+		"override in source candidate channel": `{"cases":[{"id":"json-esc","class":"F1","track":{"title":"t","artist":"a"},"sources":[{"name":"s","candidates":[{"url":"u","channel":"\\u202eTopic"}]}]}]}`,
+		"c1 in track album":                    `{"cases":[{"id":"json-esc","class":"F1","track":{"title":"t","artist":"a","album":"b\\u009b31m"},"candidates":[{"url":"u"}]}]}`,
+	}
+	for name, body := range goldens {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "hostile.json"), []byte(strings.ReplaceAll(body, `\\`, `\`)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := LoadDir(dir)
+			if err == nil {
+				t.Fatalf("LoadDir accepted golden %s, want rejection", body)
+			}
+			if !strings.Contains(err.Error(), `"json-esc"`) {
+				t.Errorf("LoadDir error %q should name case %q", err, "json-esc")
+			}
+		})
+	}
+}
+
+func TestValidateCases_NamesTheCaseAndFieldForArtistAlbumAndSourceCandidates(t *testing.T) {
+	tests := []struct {
+		name      string
+		kase      Case
+		wantField string
+	}{
+		{"track artist", Case{ID: "artist-case", Class: "F1", Track: Track{Title: "t", Artist: "a\x1b"}, Candidates: []Candidate{{URL: "u"}}}, "artist"},
+		{"track album", Case{ID: "album-case", Class: "F1", Track: Track{Title: "t", Artist: "a", Album: string(rune(0x2067)) + "b"}, Candidates: []Candidate{{URL: "u"}}}, "album"},
+		{"source candidate channel", Case{ID: "source-case", Class: "F1", Track: Track{Title: "t", Artist: "a"}, Sources: []Source{{Name: "s", Candidates: []Candidate{{URL: "u", Channel: "c" + string(rune(0x202E))}}}}}, "channel"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCases([]Case{tt.kase})
+			if err == nil {
+				t.Fatal("expected validation to reject this suite")
+			}
+			if msg := err.Error(); !strings.Contains(msg, `"`+tt.kase.ID+`"`) || !strings.Contains(msg, tt.wantField) {
+				t.Errorf("error %q should name case %q and field %q", msg, tt.kase.ID, tt.wantField)
+			}
+		})
 	}
 }

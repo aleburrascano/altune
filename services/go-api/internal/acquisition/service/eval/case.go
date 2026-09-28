@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 //go:embed goldens/*.json
@@ -240,6 +241,13 @@ func validateCases(cases []Case) error {
 		case len(c.allCandidates()) == 0:
 			return fmt.Errorf("case %q has no candidates", c.ID)
 		}
+		if err := rejectUnsafeText(c.ID,
+			textField{"track title", c.Track.Title},
+			textField{"track artist", c.Track.Artist},
+			textField{"track album", c.Track.Album},
+		); err != nil {
+			return err
+		}
 		if err := validateSources(c); err != nil {
 			return err
 		}
@@ -279,8 +287,37 @@ func validateCandidates(c Case) error {
 		if cand.Query != "" && !knownQueries[cand.Query] {
 			return fmt.Errorf("case %q candidate %q has unknown query %q", c.ID, cand.URL, cand.Query)
 		}
+		if err := rejectUnsafeText(c.ID,
+			textField{fmt.Sprintf("candidate %q title", cand.URL), cand.Title},
+			textField{fmt.Sprintf("candidate %q channel", cand.URL), cand.Channel},
+		); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+type textField struct {
+	name  string
+	value string
+}
+
+func rejectUnsafeText(caseID string, fields ...textField) error {
+	for _, f := range fields {
+		if r, found := firstUnsafeRune(f.value); found {
+			return fmt.Errorf("case %q %s holds control or bidi rune %U", caseID, f.name, r)
+		}
+	}
+	return nil
+}
+
+func firstUnsafeRune(s string) (rune, bool) {
+	for _, r := range s {
+		if unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) {
+			return r, true
+		}
+	}
+	return 0, false
 }
 
 func validateCaseExtensions(c Case) error {
