@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type fakeEnricher struct {
@@ -232,6 +233,7 @@ type nameVsIdentityArtwork struct {
 	identityCalls int
 	nameURL       string
 	identityURL   string
+	identityErr   error
 }
 
 func (f *nameVsIdentityArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
@@ -243,6 +245,9 @@ func (f *nameVsIdentityArtwork) ResolveWithIdentityTagged(_ context.Context, _ d
 	f.identityCalls++
 	if id.MBID == "" {
 		return "", "", nil
+	}
+	if f.identityURL == "" && f.identityErr != nil {
+		return "", "", f.identityErr
 	}
 	return f.identityURL, "", nil
 }
@@ -313,5 +318,59 @@ func TestEnrichmentService_ResolvedFromTitle_FallsBackToNameSearchWhenIdentityMi
 	}
 	if art.nameCalls != 1 {
 		t.Errorf("name resolver called %d times, want 1 (the fallback this path is allowed to take)", art.nameCalls)
+	}
+}
+
+func TestEnrichmentService_NameVerifiedMissWithIdentityError_CachesVerifiedMiss(t *testing.T) {
+	enr := &fakeEnricher{resolveID: "mbid-verified-miss", enrichment: sampleEnrichment()}
+	art := &nameVsIdentityArtwork{identityErr: errors.New("identity provider 503")}
+	cache := newMemCache()
+	svc := NewEnrichmentService(enr, art, cache)
+
+	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got.ArtworkURL != "" {
+		t.Errorf("artwork_url = %q, want empty (the name walk verified no art)", got.ArtworkURL)
+	}
+
+	cached, found, _ := cache.Get(context.Background(), domain.ResultKindAlbum, "mbid-verified-miss")
+	if !found {
+		t.Fatalf("a name-verified miss must be cached even though the identity walk errored first")
+	}
+	if cached.ArtworkURL != "" {
+		t.Errorf("cached artwork_url = %q, want empty", cached.ArtworkURL)
+	}
+}
+
+type deadlineCapturingArtwork struct {
+	identityDeadline time.Time
+	nameDeadline     time.Time
+}
+
+func (f *deadlineCapturingArtwork) ResolveWithIdentityTagged(ctx context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
+	f.identityDeadline, _ = ctx.Deadline()
+	return "", "", nil
+}
+
+func (f *deadlineCapturingArtwork) ResolveTagged(ctx context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
+	f.nameDeadline, _ = ctx.Deadline()
+	return "", "", nil
+}
+
+func TestEnrichmentService_TitleResolvedLookup_SharesOneArtworkDeadline(t *testing.T) {
+	enr := &fakeEnricher{resolveID: "mbid-deadline", enrichment: sampleEnrichment()}
+	art := &deadlineCapturingArtwork{}
+	svc := NewEnrichmentService(enr, art, newMemCache())
+
+	if _, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ""); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if art.identityDeadline.IsZero() || art.nameDeadline.IsZero() {
+		t.Fatalf("expected both artwork calls to run under a deadline, got identity=%v name=%v", art.identityDeadline, art.nameDeadline)
+	}
+	if !art.identityDeadline.Equal(art.nameDeadline) {
+		t.Errorf("identity call deadline %v != name-search call deadline %v; a title-resolved lookup must share one artwork budget instead of granting each call its own 20s", art.identityDeadline, art.nameDeadline)
 	}
 }

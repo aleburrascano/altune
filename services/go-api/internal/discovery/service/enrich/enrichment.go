@@ -7,6 +7,16 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
+)
+
+const artworkMergeBudget = 20 * time.Second
+
+type mbidOrigin bool
+
+const (
+	mbidFromCaller          mbidOrigin = false
+	mbidFromTitleResolution mbidOrigin = true
 )
 
 type EnrichmentService struct {
@@ -47,7 +57,7 @@ func (s *EnrichmentService) Execute(
 	// A caller-supplied MBID skips resolution (and its name-keyed negative memo)
 	// and goes straight to the MBID-keyed lookup+cache.
 	if mbidParam != "" {
-		return s.lookup(ctx, kind, title, subtitle, mbidParam, false)
+		return s.lookup(ctx, kind, title, subtitle, mbidParam, mbidFromCaller)
 	}
 
 	// The resolution step reuses the shared CachedLookup for its name-keyed
@@ -73,7 +83,7 @@ func (s *EnrichmentService) Execute(
 			if s.mbidIndex != nil {
 				_ = s.mbidIndex.RememberMBID(ctx, kind, nameKey, mbid)
 			}
-			e, err := s.lookup(ctx, kind, title, subtitle, mbid, true)
+			e, err := s.lookup(ctx, kind, title, subtitle, mbid, mbidFromTitleResolution)
 			if err != nil {
 				return e, false, err
 			}
@@ -91,7 +101,7 @@ func (s *EnrichmentService) lookup(
 	ctx context.Context,
 	kind domain.ResultKind,
 	title, subtitle, mbid string,
-	resolvedFromTitle bool,
+	origin mbidOrigin,
 ) (domain.MBEnrichment, error) {
 	if s.cache != nil {
 		if cached, found, _ := s.cache.Get(ctx, kind, mbid); found {
@@ -106,7 +116,7 @@ func (s *EnrichmentService) lookup(
 		return domain.EmptyEnrichment(), degraded(err)
 	}
 
-	artworkErr := s.mergeArtwork(ctx, &e, kind, title, subtitle, mbid, resolvedFromTitle)
+	artworkErr := s.mergeArtwork(ctx, &e, kind, title, subtitle, mbid, origin)
 	if ports.IsUnverifiedArtworkMiss(e.ArtworkURL, artworkErr) {
 		slog.WarnContext(ctx, "enrichment.not_cached_degraded",
 			"kind", kind.String(), "mbid", mbid, "error", artworkErr)
@@ -126,22 +136,28 @@ func (s *EnrichmentService) mergeArtwork(
 	e *domain.MBEnrichment,
 	kind domain.ResultKind,
 	title, subtitle, mbid string,
-	resolvedFromTitle bool,
+	origin mbidOrigin,
 ) error {
 	if s.artwork == nil {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, artworkMergeBudget)
+	defer cancel()
+
 	id := ports.ArtworkIdentity{MBID: mbid, ExternalIDs: e.ExternalIDs}
 	idURL, _, idErr := s.artwork.ResolveWithIdentityTagged(ctx, kind, title, subtitle, id)
 	if idURL != "" {
 		e.ArtworkURL = idURL
 		return nil
 	}
-	if !resolvedFromTitle {
+	if origin == mbidFromCaller {
 		return idErr
 	}
 	nameURL, _, nameErr := s.artwork.ResolveTagged(ctx, kind, title, subtitle, mbid)
 	if nameURL == "" {
+		if nameErr == nil {
+			return nil
+		}
 		return errors.Join(idErr, nameErr)
 	}
 	e.ArtworkURL = nameURL
