@@ -5,6 +5,8 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
+import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+
 import { downloadUsage } from '../downloadStatsModel';
 import type { RemoveDownloads } from '../hooks/useRemoveDownloads';
 import {
@@ -158,13 +160,7 @@ describe('buildDangerZoneActions', () => {
 
 describe('the danger-zone action key union', () => {
   it('refuses a mistyped key where an action key belongs', () => {
-    const realKeys: DangerZoneActionKey[] = buildDangerZoneActions(makeOpts()).map(
-      ({ key }) => key,
-    );
-    // @ts-expect-error 'donwloads' is a typo, not one of the three action keys
-    const mistypedKey: DangerZoneActionKey = 'donwloads';
-
-    expect(realKeys).not.toContain(mistypedKey);
+    expectType<Not<IsAssignable<'donwloads', DangerZoneActionKey>>>();
   });
 });
 

@@ -3,6 +3,8 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { asPlaylistId } from '@shared/api-client/ids';
 
+import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+
 import {
   detailKeys,
   discoveryKeys,
@@ -150,8 +152,7 @@ describe('playlistKeys — literal shape', () => {
   });
 
   it('refuses a bare string where a PlaylistId belongs', () => {
-    // @ts-expect-error a raw string must go through asPlaylistId / parsePlaylistId first
-    expect(playlistKeys.detail('pl-1')).toEqual(['playlist', 'pl-1']);
+    expectType<Not<IsAssignable<string, Parameters<typeof playlistKeys.detail>[0]>>>();
   });
 });
 

@@ -14,7 +14,9 @@ import {
   type MemoryFileStore,
 } from '@shared/files/__tests__/memoryFileStore';
 import type { StoredDirectory } from '@shared/files/fileStore';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
+
+import { expectType, type IsExactlyAssignable, type Not } from '../../../../jest/typeAssertions';
 
 const INDEX_URI = 'memory://document/offline/pinned.json';
 const TEMP_URI = `${INDEX_URI}.tmp`;
@@ -161,18 +163,13 @@ const AUDIO_URI = 'file:///document/offline-audio/t1.mp3';
 
 describe('a pinned entry carries only the fields its status has', () => {
   it('refuses a ready entry with no uri, and a track with no file that carries one', () => {
-    // @ts-expect-error a ready entry names the file it downloaded, so its uri is not optional
-    const readyWithoutUri: PinnedEntry = { trackId: TRACK_ID, status: 'ready' };
-    // @ts-expect-error a queued entry has not downloaded anything yet, so it names no file
-    const queuedWithUri: PinnedEntry = { trackId: TRACK_ID, status: 'queued', uri: AUDIO_URI };
-    // @ts-expect-error a failed entry's download produced no file either
-    const failedWithUri: PinnedEntry = { trackId: TRACK_ID, status: 'failed', uri: AUDIO_URI };
-
-    expect([readyWithoutUri.status, queuedWithUri.status, failedWithUri.status]).toEqual([
-      'ready',
-      'queued',
-      'failed',
-    ]);
+    expectType<Not<IsExactlyAssignable<{ trackId: TrackId; status: 'ready' }, PinnedEntry>>>();
+    expectType<
+      Not<IsExactlyAssignable<{ trackId: TrackId; status: 'queued'; uri: string }, PinnedEntry>>
+    >();
+    expectType<
+      Not<IsExactlyAssignable<{ trackId: TrackId; status: 'failed'; uri: string }, PinnedEntry>>
+    >();
   });
 
   it('records a downloaded version only when the download reported one', () => {

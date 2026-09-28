@@ -4,6 +4,8 @@ import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
+import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+
 import { classifyNativePlaybackError, classifyPlaybackFailure } from '../classifyPlaybackError';
 import {
   clearPlaybackError,
@@ -152,12 +154,8 @@ describe('reportPlaybackError — secrets in a native error message are redacted
 
 describe('playback error key branding', () => {
   it('refuses a bare string where a TrackKey belongs', () => {
-    // @ts-expect-error a raw string must go through trackKey(track) first
-    reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');
-    // @ts-expect-error the lookup side is branded too
-    const { result } = renderHook(() => usePlaybackErrorFor('library:trk-1'));
-
-    expect(result.current?.message).toBe('Could not load this track');
+    expectType<Not<IsAssignable<string, Parameters<typeof reportPlaybackError>[0]>>>();
+    expectType<Not<IsAssignable<string, Parameters<typeof usePlaybackErrorFor>[0]>>>();
   });
 });
 

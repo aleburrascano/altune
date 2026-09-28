@@ -2,6 +2,8 @@ import * as FileSystem from 'expo-file-system';
 
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
+import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+
 import {
   deleteAllPinned,
   deletePinned,
@@ -326,10 +328,7 @@ describe('track id shape guard (#944)', () => {
   const hostile = ['', '.', '..', '../evil', 'a/b', '../../document/x'];
 
   it('refuses a bare string where a TrackId belongs', () => {
-    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
-
-    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
-    expect(findPinned('t1')?.uri).toBe(pinnedUri('t1.mp3'));
+    expectType<Not<IsAssignable<string, Parameters<typeof findPinned>[0]>>>();
   });
 
   it.each(hostile)('findPinned refuses %p', (trackId) => {
