@@ -12,6 +12,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lestrrat-go/jwx/v2 v2.1.7
 	github.com/minio/minio-go/v7 v7.3.0
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/redis/go-redis/v9 v9.22.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sync v0.23.0
