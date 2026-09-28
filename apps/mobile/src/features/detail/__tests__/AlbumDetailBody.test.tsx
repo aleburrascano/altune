@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -38,6 +39,98 @@ jest.mock('../hooks/useOwnedPlayback', () => ({
 }));
 
 const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';
+
+warmUpFirstRender(async () => {
+  mockUseLibraryTracksForAlbum.mockImplementation(() => {
+    const { asTrackId } = require('@shared/api-client/ids');
+    return [
+      {
+        id: asTrackId('trk-1'),
+        title: 'The Chain',
+        artist: 'Fleetwood Mac',
+        album: 'Rumours',
+        duration_seconds: 271,
+        added_at: '2024-01-01T00:00:00Z',
+        acquisition_status: 'ready',
+        artwork_url: null,
+        failure_reason: null,
+        year: 1977,
+        genre: null,
+        track_number: 1,
+        album_artist: 'Fleetwood Mac',
+        isrc: null,
+        audio_ref: null,
+      },
+    ];
+  });
+  __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
+  __http.reply('GET /v1/discovery/search', {
+    status: 200,
+    json: {
+      query: 'rumours fleetwood mac',
+      query_norm: 'rumours fleetwood mac',
+      results: [
+        {
+          kind: 'album',
+          title: 'Rumours',
+          subtitle: 'Fleetwood Mac',
+          image_url: null,
+          confidence: 'high',
+          sources: [{ provider: 'deezer', external_id: 'd1', url: 'https://deezer.example/d1' }],
+          extras: {},
+        },
+      ],
+      sections: [],
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 1,
+      offset: 0,
+      has_more: false,
+    },
+  });
+  __http.reply(ALBUM_TRACKS, {
+    status: 200,
+    json: {
+      items: [
+        {
+          kind: 'track',
+          title: 'Dreams',
+          subtitle: 'Fleetwood Mac',
+          image_url: null,
+          confidence: 'high',
+          sources: [{ provider: 'deezer', external_id: 'd-dreams', url: 'https://d/dreams' }],
+          extras: {},
+        },
+      ],
+      provider_name: 'deezer',
+      status: 'ok',
+    },
+  });
+
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <AlbumDetailBody
+        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+        result={{
+          kind: 'album',
+          title: 'Rumours',
+          subtitle: 'Fleetwood Mac',
+          image_url: null,
+          confidence: 'high',
+          sources: [],
+          extras: {},
+        }}
+        detailRoute="/library/detail"
+      />
+    </QueryClientProvider>,
+  );
+
+  await screen.findByTestId('detail-more-from-album');
+});
 
 describe('a library album\'s "More from this album" section', () => {
   beforeEach(() => {

@@ -5,6 +5,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -46,6 +47,25 @@ function wrapper({ children }: { children: ReactNode }) {
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
+
+warmUpFirstRender(async () => {
+  mockParams = { id: 'p1' };
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
+
+  __http.reply('GET /v1/playlists/p1', { status: 500, json: { message: 'warm-up failure' } });
+  const failed = render(<PlaylistDetailScreen />, { wrapper });
+  await failed.findByTestId('playlist-detail-retry');
+  failed.unmount();
+  __http.reset();
+
+  __http.reply('GET /v1/playlists/p1', { status: 200, json: playlistBody });
+  const loaded = render(<PlaylistDetailScreen />, { wrapper });
+  await loaded.findByText('Road Trip');
+  loaded.unmount();
+});
 
 describe('PlaylistDetailScreen route param', () => {
   beforeEach(() => {

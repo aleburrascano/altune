@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { ArtistDetailBody } from '../ui/ArtistDetailBody';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 import { within } from '@testing-library/react-native';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
@@ -58,6 +59,12 @@ function renderBody() {
     </QueryClientProvider>,
   );
 }
+
+warmUpFirstRender(async () => {
+  __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+  renderBody();
+  await screen.findByTestId('detail-explore-discography');
+});
 
 describe('ArtistDetailBody: explore-discography Retry after a failed search step', () => {
   let warnSpy: jest.SpyInstance;
