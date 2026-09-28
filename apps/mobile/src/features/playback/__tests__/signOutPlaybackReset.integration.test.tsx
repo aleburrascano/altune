@@ -110,7 +110,6 @@ describe('sign-out resets the previous user playback (#827)', () => {
     expect(queue.tracks).toEqual([]);
     expect(queue.currentIndex).toBe(-1);
     expect(queue.currentTrack()).toBeNull();
-    // The native queue (A's signed URL + auth header) is dropped.
     expect(__player.calls('reset').length).toBeGreaterThanOrEqual(1);
 
     session.unmount();
@@ -173,9 +172,6 @@ describe('sign-out resets the previous user playback (#827)', () => {
   });
 });
 
-// The queue store is cleared before the native reset is even attempted, so a rejected
-// reset is invisible from the JS side: only the calls the native player was handed, and
-// what was logged about them, say whether the outgoing user's queue is really gone.
 describe('a native reset that fails during sign-out (#1728)', () => {
   let warn: jest.SpyInstance;
 
@@ -231,17 +227,12 @@ describe('a native reset that fails during sign-out (#1728)', () => {
         code: 'player_not_initialized',
       }),
     );
-    // Bounded: a stuck native player is reported, not hammered.
     expect(__player.calls('reset')).toHaveLength(2);
 
     session.unmount();
   });
 });
 
-// The queue and the native player are cleared on sign-out, but the prefetched audio is a file
-// on disk: nothing in the sign-out path used to touch it, and `evict` only runs off a *later*
-// prefetch, so A's tracks stayed readable to a forensic dump or a second profile until B's
-// playback happened to trigger an eviction pass (#1722).
 describe("A's prefetched audio leaves the device with A (#1722)", () => {
   const CACHE_DIR_URI = 'file:///cache/audio-prefetch';
   const NEXT_ID = 'trk-of-a-2';

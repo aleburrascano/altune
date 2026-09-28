@@ -4,8 +4,6 @@ import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-// Without this, a control that resolves successfully and changes nothing is
-// indistinguishable from a broken queue UI while developing in Expo Go (#1738).
 function warnControlSkipped(control: string): void {
   if (!__DEV__) return;
   console.warn(

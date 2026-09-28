@@ -98,7 +98,12 @@ describe('PlayerBar — playing controls', () => {
   });
 
   it('seeks through the scrubber', () => {
-    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 30000, durationMs: 200000 });
+    const controls = renderBar({
+      status: 'playing',
+      track: TRACK,
+      positionMs: 30000,
+      durationMs: 200000,
+    });
 
     fireEvent(screen.getByLabelText(/^Playback position/), 'accessibilityAction', {
       nativeEvent: { actionName: 'increment' },
@@ -159,7 +164,12 @@ describe('PlayerBar — queue and lyrics', () => {
 describe('PlayerBar — previous, shuffle and repeat, as on the full player', () => {
   it('restarts the current track when Previous is pressed 30 seconds in', () => {
     useQueueStore.getState().loadQueue([NEXT_TRACK, TRACK], 1, null);
-    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 30000, durationMs: 200000 });
+    const controls = renderBar({
+      status: 'playing',
+      track: TRACK,
+      positionMs: 30000,
+      durationMs: 200000,
+    });
 
     fireEvent.press(screen.getByLabelText('Previous track'));
 
@@ -169,7 +179,12 @@ describe('PlayerBar — previous, shuffle and repeat, as on the full player', ()
 
   it('goes back a track when Previous is pressed in the first second', () => {
     useQueueStore.getState().loadQueue([NEXT_TRACK, TRACK], 1, null);
-    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 1000, durationMs: 200000 });
+    const controls = renderBar({
+      status: 'playing',
+      track: TRACK,
+      positionMs: 1000,
+      durationMs: 200000,
+    });
 
     fireEvent.press(screen.getByLabelText('Previous track'));
 
@@ -221,7 +236,12 @@ describe('PlayerBar — a track still loading or of unknown length', () => {
   });
 
   it('does not seek while the track has no duration yet', () => {
-    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 5000, durationMs: 0 });
+    const controls = renderBar({
+      status: 'playing',
+      track: TRACK,
+      positionMs: 5000,
+      durationMs: 0,
+    });
 
     const scrubber = screen.getByLabelText(/^Playback position/);
     fireEvent(scrubber, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });

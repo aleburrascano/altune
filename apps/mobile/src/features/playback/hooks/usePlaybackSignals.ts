@@ -33,8 +33,6 @@ export function usePlaybackSignals(args: {
   };
   const emitRef = useRef(emit);
 
-  // Keep the latest recorder, queue source and emitter reachable from the
-  // event callbacks below without writing refs during render (react-hooks/refs).
   useEffect(() => {
     recordRef.current = recordEvent;
     queueSourceRef.current = queueSource;

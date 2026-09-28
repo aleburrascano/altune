@@ -1,7 +1,3 @@
-// Regression for issue #825: prefetch and presign fall back to streaming silently, so their
-// outcomes must be tallied into an aggregate `playback_health` event from which a success rate
-// can be computed — one event per batch, never one per track.
-
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
@@ -186,10 +182,6 @@ describe('playback health metric', () => {
   });
 });
 
-// Regression for issue #1744: a failure the user actually sees — a native PlaybackError, or a
-// native queue mutation that permanently diverged — was classified and surfaced, but tallied
-// nowhere, so `playback_health` still read healthy through a codec regression or a batch of
-// bad signed URLs.
 describe('playback health metric — user-visible failures', () => {
   type PlaybackErrorHandler = (data: { code: string; message: string }) => void;
 

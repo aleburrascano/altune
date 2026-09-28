@@ -7,15 +7,11 @@ import { minutesRemaining, useSleepTimerStore } from '../sleepTimerStore';
 const SLEEP_OPTIONS_MIN = [15, 30, 45, 60];
 
 export type SleepOptions = {
-  /** Timer state, shown on the root menu row. */
   valueLabel: string;
   subtitle: string | undefined;
   options: ActionSheetOption[];
 };
 
-// Read the wall clock outside render (react-hooks/purity): capture it in state
-// and refresh while a timer is running — immediately via rAF on change, then
-// once a second to keep the countdown live.
 function useNow(endsAt: number | null): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

@@ -1,10 +1,5 @@
 import { clamp } from './clamp';
 
-// A queue can hold the same track more than once, so an id alone does not say which copy
-// was playing. The saved cursor is resolved to (id, occurrence): the id at the saved index
-// and how many earlier copies of that id precede it. Dropping unavailable tracks removes
-// every copy of an id together, so the occurrence rank survives the rebuild filters.
-
 function savedCursor(savedTrackIds: readonly string[], savedCurrentIndex: number): number {
   return savedTrackIds[savedCurrentIndex] === undefined ? 0 : savedCurrentIndex;
 }
@@ -25,8 +20,6 @@ export function currentOccurrence(
   return savedTrackIds.slice(0, cursor).filter((other) => other === id).length;
 }
 
-// Index of the `occurrence`-th copy of `id` (0-based), the last copy when there are
-// fewer, or -1 when `id` is absent.
 function occurrenceIndex(ids: readonly string[], id: string, occurrence: number): number {
   let found = -1;
   let seen = 0;
@@ -51,9 +44,6 @@ export function resolveResumeStartIndex(
   return clamp(savedCurrentIndex, 0, validTrackIds.length - 1);
 }
 
-// Hands out natural-order positions per id: the n-th play copy of an id takes the n-th
-// natural copy, so duplicates map to distinct tracks (reusing the last copy if the play
-// order holds more copies than the natural order).
 function naturalPositions(naturalIds: readonly string[]): (id: string) => number | undefined {
   const positions = new Map<string, number[]>();
   naturalIds.forEach((id, i) => {

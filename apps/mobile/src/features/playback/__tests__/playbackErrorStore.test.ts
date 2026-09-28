@@ -151,8 +151,6 @@ describe('reportPlaybackError — secrets in a native error message are redacted
 });
 
 describe('playback error key branding', () => {
-  // Compile-time guards: tsc fails if the store starts accepting a bare string key again,
-  // which is what let a telemetry key or a raw native id stand in for a track key.
   it('refuses a bare string where a TrackKey belongs', () => {
     // @ts-expect-error a raw string must go through trackKey(track) first
     reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');

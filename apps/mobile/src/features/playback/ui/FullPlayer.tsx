@@ -57,10 +57,6 @@ function PlayButton({
   );
 }
 
-/**
- * A track that is gone or unplayable fails the same way on every retry, so the only action
- * that moves the user forward is skipping it — and at the end of the queue there is none.
- */
 function ErrorAction({
   errorKind,
   hasNext,

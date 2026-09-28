@@ -7,18 +7,11 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { useIsForeground } from './useIsForeground';
 
 export interface PlaybackPosition {
-  /** Position shown to the UI: live, else the resume point, frozen while backgrounded. */
   positionMs: number;
-  /** Raw native progress, unaffected by the resume point or the background freeze. */
   livePositionMs: number;
-  /** Native duration, falling back to the track's metadata duration. */
   durationMs: number;
 }
 
-/**
- * Derives the playback position and duration from native progress, the queue's
- * persisted resume point, and app foreground state.
- */
 export function usePlaybackPosition(track: PlaybackTrack | null): PlaybackPosition {
   const progress = useProgress(500);
   const isForeground = useIsForeground();
@@ -31,9 +24,6 @@ export function usePlaybackPosition(track: PlaybackTrack | null): PlaybackPositi
       useQueueStore.getState().setResumePosition(0);
     }
   }, [livePositionMs, resumePositionMs]);
-  // Freeze the last foreground position so backgrounding never surfaces a stale
-  // or reset native progress. Captured when foreground flips off by adjusting
-  // state during render, not by writing a ref in render (react-hooks/refs).
   const [frozenPositionMs, setFrozenPositionMs] = useState(0);
   const [wasForeground, setWasForeground] = useState(isForeground);
   if (wasForeground !== isForeground) {

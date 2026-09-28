@@ -7,7 +7,6 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
-/** Full-screen player sheet shell: canvas background padded below the top safe-area inset. */
 export function SheetScreen({
   testID,
   children,
@@ -27,12 +26,6 @@ export function SheetScreen({
   );
 }
 
-/**
- * Sheet header row: a close chevron followed by the `SheetHeaderCenter` and
- * `SheetHeaderTrailing` slots passed as children. The chevron column and the
- * trailing slot share the leftover width equally, so always render a
- * `SheetHeaderTrailing` (empty if there are no actions) to keep the center centered.
- */
 export function SheetHeader({
   onClose,
   closeLabel,
@@ -65,7 +58,6 @@ export function SheetHeaderTrailing({ children }: { children?: ReactNode }): Rea
   return <View style={styles.trailing}>{children}</View>;
 }
 
-// Matches the IconButton hit target so an empty side column still reserves a tap-sized gutter.
 const SIDE_MIN_WIDTH = 44;
 
 const styles = StyleSheet.create({

@@ -40,9 +40,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   },
 }));
 
-// The invalidator registry is typed in `TrackId`, but a cast can still smuggle a raw string
-// through it, so the service re-parses before the prefetch cache sees an id. These pin both
-// halves of that seam.
 describe('the audio cache invalidator the service registers', () => {
   const { __fs } = FileSystem as unknown as {
     __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
@@ -154,9 +151,6 @@ describe('native PlaybackError handling', () => {
     });
   });
 
-  // Regression for issue #1745: `handlePlaybackError` re-hit the recover endpoint on every single
-  // native PlaybackError, so a fleet-wide fault (a batch of bad signed URLs, an OS codec
-  // regression) amplified itself against the very endpoint already in trouble.
   describe('playbackService — recovery is budgeted per track', () => {
     const RECOVER_TRACK_1 = 'POST /v1/tracks/trk-1/audio/recover';
     const RECOVER_TRACK_2 = 'POST /v1/tracks/trk-2/audio/recover';
@@ -286,7 +280,6 @@ describe('RemoteDuck interruption handling', () => {
   }
 
   describe('playbackService — RemoteDuck resumes playback after an interruption', () => {
-    // Resuming needs a signed-in user (#827); these cases model an active session.
     beforeEach(() => {
       setSignedInUser(true);
     });
@@ -343,9 +336,6 @@ describe('RemoteDuck interruption handling', () => {
   });
 });
 
-// Regression for issue #1742: a skip from the lock screen, a car or a headset that the
-// native queue rejects used to be swallowed — a dead button, and nothing in the client
-// logs to explain it. It is now classified, logged and surfaced like an in-app skip.
 describe('remote skip commands', () => {
   const player = TrackPlayer as unknown as { getProgress: jest.Mock };
 
@@ -377,7 +367,6 @@ describe('remote skip commands', () => {
 
   let warn: jest.SpyInstance;
 
-  // Remote commands that move audio are no-ops without a signed-in user (#827).
   beforeEach(() => {
     setSignedInUser(true);
     player.getProgress.mockResolvedValue({ position: 0, duration: 200, buffered: 0 });

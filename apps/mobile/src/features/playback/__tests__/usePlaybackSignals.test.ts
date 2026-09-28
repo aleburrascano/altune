@@ -1,7 +1,3 @@
-// A queue that ends on its last track fires PlaybackActiveTrackChanged and
-// PlaybackQueueEnded for the same track. Only one completion may reach telemetry,
-// so the hook remembers the track it just reported by its canonical trackKey.
-
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useQueueStore } from '@shared/playback/queueStore';

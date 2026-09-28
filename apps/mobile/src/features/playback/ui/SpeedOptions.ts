@@ -4,7 +4,6 @@ import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 import { PLAYBACK_RATES, rateLabel, usePlaybackRateStore } from '../playbackRateStore';
 
 export type SpeedOptions = {
-  /** Current rate, shown on the root menu row. */
   valueLabel: string;
   options: ActionSheetOption[];
 };

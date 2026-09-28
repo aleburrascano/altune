@@ -28,8 +28,6 @@ export function toWireSource(source: QueueSource | null): QueueSourceWire | null
   return { kind: 'library' };
 }
 
-// An unrecognized kind is not a library queue: it is logged and dropped to no source
-// rather than being misreported as the library.
 export function fromWireSource(source: QueueSourceWire | null | undefined): QueueSource | null {
   if (!source) return null;
   if (source.kind === 'playlist') {
@@ -56,8 +54,7 @@ export function asAcquisitionStatus(value: unknown, at: string): AcquisitionStat
 }
 
 export type QueueStateParseResult =
-  | { ok: true; state: QueueStateResponse }
-  | { ok: false; error: ContractError };
+  { ok: true; state: QueueStateResponse } | { ok: false; error: ContractError };
 
 function asIndex(value: unknown, at: string): number {
   const n = asNumber(value, at);
@@ -77,8 +74,6 @@ function asSourceKind(value: unknown): QueueSourceWire['kind'] | null {
   return SOURCE_KINDS.find((kind) => kind === value) ?? null;
 }
 
-// The saved row is written by whichever app version saved it, so a kind a newer version
-// added must cost the reader only its source, not the queue and position beside it.
 function parseSource(value: unknown, at: string): QueueSourceWire | null {
   if (value == null) return null;
   const r = asRecord(value, at);
@@ -98,8 +93,6 @@ function parseSource(value: unknown, at: string): QueueSourceWire | null {
   };
 }
 
-// The current track's id is branded (and so shape-checked) when the queue is rebuilt, so an
-// off-shape id is refused here, where it fails the parse instead of throwing mid-restore.
 function safeId(value: unknown, at: string): string {
   const id = asString(value, at);
   if (!parseTrackId(id).ok) throw new ContractError(at, 'not a valid id shape');
@@ -127,7 +120,6 @@ function buildQueueState(value: unknown, at: string): QueueStateResponse {
     shuffled: asBoolean(r.shuffled, `${at}.shuffled`),
     repeat_mode: asString(r.repeat_mode, `${at}.repeat_mode`),
     source: parseSource(r.source, `${at}.source`),
-    // Rows saved before natural order existed carry no natural_order.
     natural_order:
       r.natural_order == null ? [] : asStringArray(r.natural_order, `${at}.natural_order`),
     ...(r.current_track != null
@@ -136,8 +128,6 @@ function buildQueueState(value: unknown, at: string): QueueStateResponse {
   };
 }
 
-// The one boundary between the untrusted queue-state body and the restore path: every
-// downstream rebuild step reads the returned state, never the raw response.
 export function parseQueueState(value: unknown): QueueStateParseResult {
   try {
     return { ok: true, state: buildQueueState(value, 'QueueStateResponse') };

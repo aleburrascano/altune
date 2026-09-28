@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
+import {
+  ListMusic,
+  Mic2,
+  MoreHorizontal,
+  Pause,
+  Play,
+  RotateCcw,
+  SkipForward,
+} from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/lib/featured';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
@@ -22,7 +30,11 @@ type Theme = ReturnType<typeof useTheme>;
 
 type Flags = { isError: boolean; isEnded: boolean; isPreview: boolean };
 
-function statusLine({ isError, isEnded, isPreview }: Flags, errorMessage: string | null, artistText: string) {
+function statusLine(
+  { isError, isEnded, isPreview }: Flags,
+  errorMessage: string | null,
+  artistText: string,
+) {
   if (isError) return errorMessage ?? 'Playback error';
   if (isEnded) return isPreview ? 'Preview ended' : 'Finished';
   return isPreview ? `${artistText} · Preview` : artistText;
@@ -31,7 +43,11 @@ function statusLine({ isError, isEnded, isPreview }: Flags, errorMessage: string
 function barStatus(transport: Transport) {
   const isPreview = transport.track!.source.kind === 'preview';
   const artistText = withFeaturing(transport.track!.artist, transport.track!.featuredArtists);
-  return statusLine({ isError: transport.isError, isEnded: transport.isEnded, isPreview }, transport.errorMessage, artistText);
+  return statusLine(
+    { isError: transport.isError, isEnded: transport.isEnded, isPreview },
+    transport.errorMessage,
+    artistText,
+  );
 }
 
 function RetryOrSkip({ hasNext, onSkip }: { hasNext: boolean; onSkip: () => void }) {
@@ -39,10 +55,16 @@ function RetryOrSkip({ hasNext, onSkip }: { hasNext: boolean; onSkip: () => void
   return <IconButton icon={SkipForward} onPress={onSkip} accessibilityLabel="Skip track" />;
 }
 
-type ErrorControlProps = { errorKind: Transport['errorKind']; hasNext: boolean; onRetry: () => void; onSkip: () => void };
+type ErrorControlProps = {
+  errorKind: Transport['errorKind'];
+  hasNext: boolean;
+  onRetry: () => void;
+  onSkip: () => void;
+};
 
 function ErrorControl({ errorKind, hasNext, onRetry, onSkip }: ErrorControlProps) {
-  if (canRetryPlaybackError(errorKind)) return <IconButton icon={RotateCcw} onPress={onRetry} accessibilityLabel="Retry" />;
+  if (canRetryPlaybackError(errorKind))
+    return <IconButton icon={RotateCcw} onPress={onRetry} accessibilityLabel="Retry" />;
   return <RetryOrSkip hasNext={hasNext} onSkip={onSkip} />;
 }
 
@@ -59,8 +81,12 @@ function EmptyBar({ barStyle }: { barStyle: unknown }) {
 function BarInfo({ title, status }: { title: string; status: string }) {
   return (
     <View style={styles.info}>
-      <Text variant="label" numberOfLines={1}>{title}</Text>
-      <Text variant="caption" tone="secondary" numberOfLines={1}>{status}</Text>
+      <Text variant="label" numberOfLines={1}>
+        {title}
+      </Text>
+      <Text variant="caption" tone="secondary" numberOfLines={1}>
+        {status}
+      </Text>
     </View>
   );
 }
@@ -82,7 +108,12 @@ function BarHeaderArt({ track, status }: { track: PlaybackTrack; status: string 
 
 function BarHeader({ track, status, onOpenPlayer }: BarHeaderProps) {
   return (
-    <Pressable onPress={onOpenPlayer} style={styles.header} accessibilityRole="button" accessibilityLabel={openPlayerLabel(track)}>
+    <Pressable
+      onPress={onOpenPlayer}
+      style={styles.header}
+      accessibilityRole="button"
+      accessibilityLabel={openPlayerLabel(track)}
+    >
       <BarHeaderArt track={track} status={status} />
     </Pressable>
   );
@@ -116,21 +147,49 @@ function transportHandlers(transport: Transport) {
 }
 
 function transportColors(theme: Theme) {
-  return { dimColor: theme.color.textTertiary, activeColor: theme.color.accent, primaryColor: theme.color.textPrimary };
+  return {
+    dimColor: theme.color.textTertiary,
+    activeColor: theme.color.accent,
+    primaryColor: theme.color.textPrimary,
+  };
 }
 
 function BarTransport({ transport, theme }: { transport: Transport; theme: Theme }) {
-  const center = <PlayPauseControl isPlaying={transport.isPlaying} isEnded={transport.isEnded} onPlayPause={transport.onPlayPause} />;
+  const center = (
+    <PlayPauseControl
+      isPlaying={transport.isPlaying}
+      isEnded={transport.isEnded}
+      onPlayPause={transport.onPlayPause}
+    />
+  );
   return (
-    <TransportControls {...transportFlags(transport)} {...transportHandlers(transport)} {...transportColors(theme)} smallIconSize={18} largeIconSize={20} center={center} />
+    <TransportControls
+      {...transportFlags(transport)}
+      {...transportHandlers(transport)}
+      {...transportColors(theme)}
+      smallIconSize={18}
+      largeIconSize={20}
+      center={center}
+    />
   );
 }
 
 function BarMiddle({ transport, theme }: { transport: Transport; theme: Theme }) {
   if (transport.isError) {
-    return <ErrorControl errorKind={transport.errorKind} hasNext={transport.hasNext} onRetry={transport.retry} onSkip={transport.skipToNext} />;
+    return (
+      <ErrorControl
+        errorKind={transport.errorKind}
+        hasNext={transport.hasNext}
+        onRetry={transport.retry}
+        onSkip={transport.skipToNext}
+      />
+    );
   }
-  return <View style={styles.transport}><BarTransport transport={transport} theme={theme} /></View>;
+  return (
+    <View style={styles.transport}>
+      <BarTransport transport={transport} theme={theme} />
+    </View>
+  );
 }
 
 type ActionsProps = { onLyrics: () => void; onQueue: () => void; onOptions: () => void };
@@ -140,7 +199,12 @@ function BarActions({ onLyrics, onQueue, onOptions }: ActionsProps) {
     <>
       <IconButton icon={Mic2} size={20} onPress={onLyrics} accessibilityLabel="View lyrics" />
       <IconButton icon={ListMusic} size={20} onPress={onQueue} accessibilityLabel="View queue" />
-      <IconButton icon={MoreHorizontal} size={20} onPress={onOptions} accessibilityLabel="Player options" />
+      <IconButton
+        icon={MoreHorizontal}
+        size={20}
+        onPress={onOptions}
+        accessibilityLabel="Player options"
+      />
     </>
   );
 }
@@ -155,8 +219,18 @@ type FooterProps = {
 function BarFooter({ transport, router, optionsOpen, setOptionsOpen }: FooterProps) {
   return (
     <>
-      <View style={styles.scrubber}><Scrubber positionMs={transport.positionMs} durationMs={transport.durationMs} onSeek={transport.seekTo} /></View>
-      <BarActions onLyrics={() => router.push('/player/lyrics')} onQueue={() => router.push('/player/queue')} onOptions={() => setOptionsOpen(true)} />
+      <View style={styles.scrubber}>
+        <Scrubber
+          positionMs={transport.positionMs}
+          durationMs={transport.durationMs}
+          onSeek={transport.seekTo}
+        />
+      </View>
+      <BarActions
+        onLyrics={() => router.push('/player/lyrics')}
+        onQueue={() => router.push('/player/queue')}
+        onOptions={() => setOptionsOpen(true)}
+      />
       <PlayerOptionsSheets open={optionsOpen} onClose={() => setOptionsOpen(false)} />
     </>
   );
@@ -164,7 +238,10 @@ function BarFooter({ transport, router, optionsOpen, setOptionsOpen }: FooterPro
 
 function useBarStyle() {
   const theme = useTheme();
-  return [styles.bar, { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border }];
+  return [
+    styles.bar,
+    { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border },
+  ];
 }
 
 function usePlayerBarState() {
@@ -184,9 +261,18 @@ function BarShell({ state }: { state: ReturnType<typeof usePlayerBarState> }) {
   const { transport, theme, router, optionsOpen, setOptionsOpen, barStyle } = state;
   return (
     <View testID="player-bar" style={barStyle}>
-      <BarHeader track={transport.track!} status={barStatus(transport)} onOpenPlayer={openPlayer(router)} />
+      <BarHeader
+        track={transport.track!}
+        status={barStatus(transport)}
+        onOpenPlayer={openPlayer(router)}
+      />
       <BarMiddle transport={transport} theme={theme} />
-      <BarFooter transport={transport} router={router} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
+      <BarFooter
+        transport={transport}
+        router={router}
+        optionsOpen={optionsOpen}
+        setOptionsOpen={setOptionsOpen}
+      />
     </View>
   );
 }

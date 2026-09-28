@@ -6,10 +6,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 const CACHE_SUBDIR = 'audio-prefetch';
 const KEEP_WINDOW = 4;
 const MB = 1024 * 1024;
-// Total on-disk budget for prefetched audio, however large the individual source files are.
 const MAX_CACHE_BYTES = 300 * MB;
-// A single prefetch download is abandoned past this size, so the current and next tracks always
-// fit within MAX_CACHE_BYTES together.
 export const MAX_PREFETCH_FILE_BYTES = 150 * MB;
 
 export function cacheDir(): Directory {
@@ -63,7 +60,6 @@ function cachedFiles(): File[] {
   return cacheEntries().filter((entry): entry is File => entry instanceof File);
 }
 
-// One failed delete (e.g. a file still being written) must not abort the rest of the pass.
 function deleteEach(entries: readonly (Directory | File)[]): void {
   for (const entry of entries) {
     try {
@@ -76,11 +72,6 @@ export function evictCached(trackId: TrackId): void {
   deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
 }
 
-/**
- * Every entry, not only the ones a track id can be recovered from: an entry this module cannot
- * name is still the audio of whoever was signed in when it was written, so the retention rules
- * that keep the cache useful do not apply to it.
- */
 export function evictAllCached(): void {
   deleteEach(cacheEntries());
 }
@@ -97,7 +88,6 @@ function sizeOf(file: File): number {
   }
 }
 
-// Library track ids in the retention window, nearest (the current track) first.
 function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): string[] {
   const ids = new Set<string>();
   for (let i = currentIndex; i < ordered.length && i <= currentIndex + KEEP_WINDOW; i++) {
@@ -107,16 +97,12 @@ function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): str
   return [...ids];
 }
 
-// Byte bound alongside the KEEP_WINDOW count: drop window files farthest from the current track
-// until the cache fits. The current and next tracks are never dropped for size (either may be
-// playing from its file); MAX_PREFETCH_FILE_BYTES keeps the two of them within the cap.
 function enforceByteCap(
   kept: readonly File[],
   ordered: readonly PlaybackTrack[],
   currentIndex: number,
   maxBytes: number,
 ): void {
-  // Sizes are read up front: a deleted file no longer reports one.
   const sizes = new Map(kept.map((file) => [file, sizeOf(file)]));
   let total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
   const protectedIds = new Set<string>();

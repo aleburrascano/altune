@@ -38,8 +38,7 @@ export function derivePlaybackState(input: DerivePlaybackStateInput): PlaybackSt
     };
   }
   if (isBuffering) return { status: 'loading', track, positionMs, durationMs, ...NO_FAILURE };
-  if (isEnded)
-    return { status: 'ended', track, positionMs: durationMs, durationMs, ...NO_FAILURE };
+  if (isEnded) return { status: 'ended', track, positionMs: durationMs, durationMs, ...NO_FAILURE };
 
   return {
     status: isPlaying ? 'playing' : 'paused',

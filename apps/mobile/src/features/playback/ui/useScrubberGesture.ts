@@ -237,5 +237,11 @@ export function useScrubberGesture(props: UseScrubberGestureProps) {
   const touch = useTouch(ctx);
   const fill = percentOf(ctx.progress);
   const label = displayLabelMs(ctx, isDragging, labelMs, props.positionMs);
-  return { ...touch, isDragging, labelMs: label, fillWidth: fill, thumbLeft: percentOf(ctx.progress) };
+  return {
+    ...touch,
+    isDragging,
+    labelMs: label,
+    fillWidth: fill,
+    thumbLeft: percentOf(ctx.progress),
+  };
 }

@@ -48,7 +48,6 @@ afterEach(() => {
   useQueueStore.getState().clearQueue();
 });
 
-// The full player names its call to action by printing the label on a text button.
 const PLAYERS = [
   { name: 'FullPlayer', Player: FullPlayer, cta: (label: string) => screen.queryByText(label) },
 ];

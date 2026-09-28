@@ -5,8 +5,6 @@ const { __player } = trackPlayerDouble;
 
 type InitPlayerModule = typeof InitPlayer;
 
-// initPlayer caches its setup attempt in module state, so each test loads its own copy.
-// The copy hands back its own timeout class too, the one its rejections are built from.
 function freshInitPlayer(): InitPlayerModule {
   let loaded: InitPlayerModule | undefined;
   jest.isolateModules(() => {
@@ -23,8 +21,6 @@ function hangNextSetupPlayer(): void {
 
 const STILL_PENDING = 'still pending';
 
-// The defect under test is a promise that never settles, so record how it settled
-// instead of awaiting it: an await would hang the run rather than fail an assertion.
 function settlementOf(promise: Promise<void>): () => unknown {
   let settlement: unknown = STILL_PENDING;
   void promise.then(

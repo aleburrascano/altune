@@ -31,10 +31,6 @@ function loadFailureMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Failed to load audio';
 }
 
-/**
- * The one way a failed load is surfaced: classified, keyed to the track that failed.
- * `message` defaults to the rejection's own text, for callers with nothing better to show.
- */
 export function reportLoadFailure(
   track: PlaybackTrack,
   err: unknown,
@@ -47,11 +43,6 @@ export function clearPlaybackError(): void {
   usePlaybackErrorStore.getState().clear();
 }
 
-/**
- * The failure a given track should show, kind included, or null when that track has none.
- * Selects the two fields separately and memoizes the pair: a selector building the object
- * itself returns a new reference on every render, which `useSyncExternalStore` rejects.
- */
 export function usePlaybackErrorFor(key: TrackKey | null): RedactedPlaybackFailure | null {
   const kind = usePlaybackErrorStore((s) => (key != null && s.key === key ? s.kind : null));
   const message = usePlaybackErrorStore((s) => (key != null && s.key === key ? s.message : null));

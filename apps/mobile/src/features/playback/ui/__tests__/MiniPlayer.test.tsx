@@ -48,7 +48,6 @@ afterEach(() => {
   useQueueStore.getState().clearQueue();
 });
 
-// The mini player names its call to action by labelling an icon button.
 const PLAYERS = [
   {
     name: 'MiniPlayer',

@@ -169,9 +169,6 @@ describe('rebuildFromPlayOrderAlone', () => {
   });
 });
 
-// Regression (#1727): every rung of the ladder restores a queue (or nothing) and returns
-// quietly, so a resume that degraded to the play-order rung, or exhausted the ladder, looked
-// exactly like a clean one in telemetry.
 describe('rebuildOnFirstWorkingRung', () => {
   const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
     m.get(id)?.acquisition_status === 'ready';

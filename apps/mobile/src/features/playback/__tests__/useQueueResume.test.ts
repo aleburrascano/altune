@@ -32,9 +32,6 @@ jest.mock('@shared/api-client/audio', () => ({
 
 const { __player } = jest.requireMock('react-native-track-player');
 
-// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
-// with their own implementations. Re-arm each method's default implementation before every test
-// so no block's stubs leak into another, whatever order the blocks run in.
 const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
 const STUBBED_PLAYER_METHODS = [
   'add',
@@ -54,11 +51,7 @@ beforeEach(() => {
   }
 });
 
-// Regression (#818): a malformed queue-state response is rejected at one named parse
-// boundary and logged, instead of crashing mid-restore or silently restoring a queue
-// with an unrecognized source reported as the library.
 describe('restoring the saved queue', () => {
-  // Put the API doubles back to the defaults this block was written against.
   beforeEach(() => {
     (getQueueState as jest.Mock).mockReset();
     (saveQueueState as jest.Mock).mockReset().mockImplementation(async () => undefined);
@@ -151,8 +144,6 @@ describe('restoring the saved queue', () => {
       expect(warn).not.toHaveBeenCalled();
     });
 
-    // Regression (#1736): a source kind a newer app version added must cost the restore only
-    // the source, not the queue and position saved beside it.
     it('restores the saved queue with no source when source.kind is unrecognized', async () => {
       await restore({ ...validWire(), source: { kind: 'album' } });
 
@@ -194,8 +185,6 @@ describe('restoring the saved queue', () => {
     });
   });
 
-  // Regression (#1743): the restore catch logged a bare string over a multi-stage chain, so
-  // "my queue never resumes" could not be told from the logs apart from a dead network.
   describe('useQueueResume restore — a failure names its stage and carries the error', () => {
     function restoreFailureFields(): unknown {
       const call = warn.mock.calls.find(
@@ -241,9 +230,6 @@ describe('restoring the saved queue', () => {
     });
   });
 
-  // Regression (#1726): the rehydration placeholder is a "now playing" card with nothing in the
-  // native player behind it, so a restore that stops before the native load left play, pause and
-  // seek as silent no-ops against a track the store still reported as current.
   describe('useQueueResume restore — an unbacked placeholder is taken back down', () => {
     function savedWithCurrentTrack(): Record<string, unknown> {
       return {
@@ -310,8 +296,6 @@ describe('restoring the saved queue', () => {
     });
   });
 
-  // Regression (#1740): the restore read one fixed 2000-track page of the library, so a saved
-  // queue referencing anything past that page came back short with nothing logged.
   describe('useQueueResume restore — a saved queue larger than one library page', () => {
     const LIBRARY_PAGE = 2000;
     const LIBRARY_SIZE = 2500;
@@ -340,8 +324,6 @@ describe('restoring the saved queue', () => {
     it('restores every saved track when the library spans more than one page', async () => {
       const tracks = libraryTracks(LIBRARY_SIZE);
       mockedGetAllTracks.mockResolvedValue(tracks);
-      // What a single first page would answer — a restore reading only that page rebuilds
-      // without the tail, and the store below says so.
       mockedGetTracks.mockResolvedValue({ items: tracks.slice(0, LIBRARY_PAGE), has_more: true });
 
       await restore(savedWholeLibrary(tracks, LIBRARY_SIZE - 1));
@@ -370,7 +352,6 @@ describe('restoring the saved queue', () => {
 });
 
 describe('a restore whose native load fails', () => {
-  // Put the API doubles back to the defaults this block was written against.
   beforeEach(() => {
     (getQueueState as jest.Mock).mockReset();
     (saveQueueState as jest.Mock).mockReset().mockImplementation(async () => undefined);
@@ -459,12 +440,7 @@ describe('a restore whose native load fails', () => {
   });
 });
 
-// Regression (#814): a queue-state save racing a queue load must never pair the new
-// queue's track_ids/current_index with a position_ms read off the previous track.
-// Drives the real loadNativeQueue + queueStore against a small model of the native
-// player, and triggers saves the way the app does (AppState → background).
 describe('saving the queue state', () => {
-  // Put the API doubles back to the defaults this block was written against.
   beforeEach(() => {
     (getQueueState as jest.Mock).mockReset();
     (saveQueueState as jest.Mock).mockReset();
@@ -476,7 +452,6 @@ describe('saving the queue state', () => {
   const mockedSave = saveQueueState as jest.MockedFunction<typeof saveQueueState>;
   const mockedFetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
-  // Native player model: a queue, an active index and a position (seconds).
   let nativeQueue: NativeItem[];
   let nativeIndex: number;
   let nativePosition: number;
@@ -558,7 +533,6 @@ describe('saving the queue state', () => {
     mockedFetchUrls.mockReset().mockResolvedValue([]);
     useQueueStore.getState().clearQueue();
 
-    // Queue A is loaded and playing a1 at 42s.
     const a = tracks('a', 3);
     useQueueStore.getState().loadQueue(a, 1, null);
     await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 1, { autoplay: false });
@@ -588,7 +562,6 @@ describe('saving the queue state', () => {
       renderHook(() => useQueueResume());
       await flush();
 
-      // User starts queue B at b2; the native load is held on its URL round trip.
       const urls = deferred<ResolvedAudioUrl[]>();
       mockedFetchUrls.mockReturnValueOnce(urls.promise);
       const b = tracks('b', 4);
@@ -597,9 +570,7 @@ describe('saving the queue state', () => {
         autoplay: false,
       });
 
-      // Save fires before the native player has even been reset (still on a1 @ 42s)…
       await backgroundApp();
-      // …and again while the load waits on the network with an empty native queue.
       await backgroundApp();
 
       for (const [body] of mockedSave.mock.calls) {
@@ -608,7 +579,6 @@ describe('saving the queue state', () => {
           position_ms: 42_000,
         });
       }
-      // Neither moment has a consistent (queue, position) pair, so neither saves.
       expect(mockedSave).not.toHaveBeenCalled();
 
       urls.resolve([]);
@@ -631,7 +601,6 @@ describe('saving the queue state', () => {
       renderHook(() => useQueueResume());
       await flush();
 
-      // Resume-style load of B at b0 from 30s; the native add is slow to settle.
       const added = deferred<void>();
       const b = tracks('b', 2);
       useQueueStore.getState().loadQueue(b, 0, null);
@@ -647,7 +616,6 @@ describe('saving the queue state', () => {
       await flush();
       expect(nativeQueue.map((t) => t.id)).toEqual(['library:b0', 'library:b1']);
 
-      // b0 is already active at 0s, but the seek to 30s has not run yet.
       await backgroundApp();
       added.resolve();
       await act(async () => {
@@ -667,7 +635,6 @@ describe('saving the queue state', () => {
       renderHook(() => useQueueResume());
       await flush();
 
-      // Store cursor moved to a2 but the native player is still on a1.
       useQueueStore.getState().syncCurrentIndex(2);
 
       await backgroundApp();
@@ -676,15 +643,12 @@ describe('saving the queue state', () => {
     });
   });
 
-  // Regression (#815): the 15s interval save and the AppState save must not race so
-  // that an older snapshot's PUT lands after a fresher one.
   describe('useQueueResume save — concurrent triggers land in snapshot order', () => {
     let server: { position_ms: number } | null;
     let inFlight: number;
     let maxInFlight: number;
     let pendingPuts: { resolve: () => void }[];
 
-    // Server model: a PUT is applied when its request settles, so the last to settle wins.
     function modelServer(): void {
       server = null;
       inFlight = 0;
@@ -715,23 +679,18 @@ describe('saving the queue state', () => {
       renderHook(() => useQueueResume());
       await flush();
 
-      // Interval save reads a1 @ 42s and its PUT is slow.
       await act(async () => {
         jest.advanceTimersByTime(15_000);
       });
       await flush();
       expect(pendingPuts).toHaveLength(1);
 
-      // Playback moves on; the app backgrounds while that PUT is still in flight.
       nativePosition = 50;
       await backgroundApp();
-      // Any PUT started for the fresher snapshot settles first…
       for (const put of pendingPuts.slice(1)) put.resolve();
       await flush();
-      // …then the stale one.
       pendingPuts[0]!.resolve();
       await flush();
-      // Settle whatever follow-up save the serialization scheduled.
       for (const put of pendingPuts.slice(1)) put.resolve();
       await flush();
 
@@ -763,8 +722,6 @@ describe('saving the queue state', () => {
       expect(server).toEqual({ position_ms: 60_000 });
     });
 
-    // Regression (#1743): the save catch logged a context-free string, so a failed save
-    // was indistinguishable from any other in the logs.
     it('logs the rejection the save PUT threw', async () => {
       renderHook(() => useQueueResume());
       await flush();
@@ -796,8 +753,6 @@ describe('saving the queue state', () => {
     });
   });
 
-  // Regression (#817): with the same track queued twice, save and restore must track the
-  // copy that is actually playing, not the first (save) or last (restore) id match.
   describe('useQueueResume — duplicate track ids round-trip to the playing copy', () => {
     function trackResponse(id: string): TrackResponse {
       return {
@@ -828,7 +783,6 @@ describe('saving the queue state', () => {
       shuffled: boolean,
     ): Promise<SaveQueueStateRequest> {
       useQueueStore.getState().clearQueue();
-      // x is queued twice; with shuffle the play order interleaves the copies differently.
       useQueueStore.getState().loadQueue(queueOf('x', 'y', 'x', 'z'), startIndex, null);
       if (shuffled) {
         useQueueStore.setState({ playOrder: [2, 1, 3, 0], shuffled: true });
@@ -873,7 +827,6 @@ describe('saving the queue state', () => {
     ])(
       'saves and restores the second copy of a duplicated track when it is playing (%s)',
       async (_label, shuffled, wire) => {
-        // Unshuffled: x y [x] z. Shuffled play order [2,1,3,0] is x y z [x] — start at 3.
         const startIndex = shuffled ? 3 : 2;
         const body = await saveWhilePlaying(startIndex, shuffled);
 
@@ -893,7 +846,6 @@ describe('saving the queue state', () => {
 });
 
 describe('a save issued while another drains', () => {
-  // Put the API doubles back to the defaults this block was written against.
   beforeEach(() => {
     (getQueueState as jest.Mock).mockReset().mockImplementation(async () => null);
     (saveQueueState as jest.Mock).mockReset();

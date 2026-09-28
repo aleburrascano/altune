@@ -23,10 +23,6 @@ export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): numbe
   return useQueueStore.getState().generation;
 }
 
-// The ladder degrades in place, and every rung leaves the user with something that looks like
-// an ordinary resume, so a backend change that pushes most resumes down a rung is invisible
-// without the tally (#1727). Each rung is recorded where the ladder is walked rather than
-// inside the rungs, so one resume contributes exactly one outcome.
 export function rebuildOnFirstWorkingRung(
   saved: QueueStateResponse,
   trackMap: Map<string, TrackResponse>,
@@ -38,7 +34,6 @@ export function rebuildOnFirstWorkingRung(
   return recordedRung('exhausted');
 }
 
-// Returns the rung it recorded, so no path down the ladder can return without being counted.
 function recordedRung(rung: QueueRebuildRung): QueueRebuildRung {
   recordQueueRebuildOutcome(rung);
   return rung;

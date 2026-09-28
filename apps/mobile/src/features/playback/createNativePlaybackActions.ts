@@ -26,27 +26,18 @@ export {
 } from './queueFailureReport';
 
 export interface NativePlaybackActions {
-  /** The command half of the playback context value. */
   controls: PlaybackControls;
-  /** Records whether native playback is playing, read later by `seekTo`. */
   syncIsPlaying: (isPlaying: boolean) => void;
-  /** Records the displayed track so `retry` can replay it outside a queue. */
   rememberTrack: (track: PlaybackTrack) => void;
 }
 
 type SetDisplayedTrack = (track: PlaybackTrack | null) => void;
 
-/** The one mutable cell every command family shares; one per created action set. */
 interface PlaybackMemory {
   lastPlayedTrack: PlaybackTrack | null;
   isPlaying: boolean;
 }
 
-/**
- * For native calls whose failure the caller cannot act on (pause, resume, rate, the
- * `stop` reset): the rejection must not crash a UI handler, but it is still logged,
- * never discarded.
- */
 export async function ignoringNativeRejection(op: () => Promise<unknown>): Promise<void> {
   try {
     await op();
@@ -55,7 +46,6 @@ export async function ignoringNativeRejection(op: () => Promise<unknown>): Promi
   }
 }
 
-/** The commands that load audio: each reports its own failure against the failed track. */
 type LoadCommands = Pick<PlaybackControls, 'play' | 'startQueue' | 'retry'>;
 
 const startQueue: PlaybackControls['startQueue'] = async (orderedTracks, startIndex, options) => {
@@ -96,7 +86,6 @@ function createLoadCommands(setTrack: SetDisplayedTrack, memory: PlaybackMemory)
   return { play, startQueue, retry };
 }
 
-/** The commands that move or reshape the native queue the store already mutated. */
 type QueueCommands = Pick<
   PlaybackControls,
   | 'reorderUpcoming'
@@ -120,12 +109,6 @@ function skipToIndexAndPlay(index: number): Promise<void> {
   });
 }
 
-/**
- * Native holds a window of the store queue, so a target the user picked further down it
- * is not drift: rebuild the native queue around that position and play there — the same
- * recovery `retry` performs, without the tap. A rebuild that itself fails still rejects,
- * so a genuinely broken queue is reported rather than retried forever.
- */
 async function playQueueIndex(index: number): Promise<void> {
   try {
     await skipToIndexAndPlay(index);
@@ -139,10 +122,6 @@ async function playQueueIndex(index: number): Promise<void> {
   }
 }
 
-/**
- * A position past the native window holds nothing to remove: the store has already
- * dropped the track and the next window slide rebuilds the tail without it.
- */
 function removeQueuedIndex(index: number): Promise<void> {
   return withNativeQueue(() => TrackPlayer.remove(index)).catch((err: unknown) => {
     if (nativeErrorCode(err) !== 'index_out_of_bounds') throw err;
@@ -173,25 +152,13 @@ function createQueueCommands(memory: PlaybackMemory): QueueCommands {
   };
 }
 
-/** The commands that act on what is already loaded and never await the native call. */
 type TransportCommands = Pick<PlaybackControls, 'pause' | 'resume' | 'seekTo' | 'setRate' | 'stop'>;
 
-/**
- * An unlocked reset can cut into an in-flight load's own add/skip/play, and a queue
- * edit that resolved its URLs before the stop would refill the queue after it.
- * Claiming the reset first makes both bail, the way sign-out's reset does.
- */
 function stopNativePlayback(): Promise<void> {
   claimSessionReset();
   return ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.reset()));
 }
 
-/**
- * Unserialized, two rapid seeks can reach native in either order, so the position the
- * user asked for last is not the one that sticks; the lock also keeps the seek's own
- * seek/play pair out of a concurrent add, skip or reset. Playback state is read when the
- * op runs, so a pause while the seek waited for the lock is honoured.
- */
 function movePlaybackTo(positionMs: number, memory: PlaybackMemory): Promise<void> {
   return withNativeQueue(() => seekPreservingPlayback(positionMs / 1000, memory.isPlaying));
 }
@@ -208,8 +175,10 @@ function createTransportCommands(
       void ignoringNativeRejection(() => TrackPlayer.play());
     },
     seekTo: (ms) => {
-      void reportingQueueFailure(() => displayedKey(memory), 'seekTo', () =>
-        movePlaybackTo(ms, memory),
+      void reportingQueueFailure(
+        () => displayedKey(memory),
+        'seekTo',
+        () => movePlaybackTo(ms, memory),
       );
     },
     setRate: (rate) => {
@@ -223,12 +192,6 @@ function createTransportCommands(
   };
 }
 
-/**
- * Builds the react-native-track-player command set for the playback context.
- * `setTrack` replaces the caller's displayed track; `initialIsPlaying` seeds
- * what `seekTo` assumes until the first `syncIsPlaying`. Each call creates fresh
- * memory, so callers create it once per provider.
- */
 export function createNativePlaybackActions(
   setTrack: SetDisplayedTrack,
   initialIsPlaying = false,

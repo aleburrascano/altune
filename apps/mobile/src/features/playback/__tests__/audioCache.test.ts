@@ -119,8 +119,6 @@ describe('evictCached', () => {
   });
 });
 
-// The cleanup the sign-out path needs (#1722): retention has no say once the user it was
-// prefetched for is gone.
 describe('evictAllCached', () => {
   it('deletes every track and version, including the ones the window would have kept', () => {
     __fs.seedFile(cachedUri('t1.v1.mp3'), 'a');

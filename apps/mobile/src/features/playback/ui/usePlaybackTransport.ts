@@ -10,7 +10,16 @@ function useQueueTransportState() {
   const repeatMode = useQueueStore((s) => s.repeatMode);
   const hasNext = useQueueStore((s) => s.hasNext());
   const hasPrevious = useQueueStore((s) => s.hasPrevious());
-  return { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode, shuffled, repeatMode, hasNext, hasPrevious };
+  return {
+    skipToNext,
+    skipToPrevious,
+    toggleShuffle,
+    cycleRepeatMode,
+    shuffled,
+    repeatMode,
+    hasNext,
+    hasPrevious,
+  };
 }
 
 function statusFlagsOf(playback: PlaybackContextValue) {

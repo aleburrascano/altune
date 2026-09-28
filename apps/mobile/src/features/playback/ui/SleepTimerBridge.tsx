@@ -5,11 +5,6 @@ import { usePlayback } from '@shared/playback/usePlayback';
 import { useAppStateChange } from '../hooks/useAppStateChange';
 import { monotonicNow as defaultMonotonicNow, useSleepTimerStore } from '../sleepTimerStore';
 
-/**
- * Longest single wait before re-checking the monotonic deadline. Well under the
- * 32-bit signed setTimeout limit (~24.8 days) that engines silently clamp, and
- * short enough to correct for timers that drift while the JS thread is throttled.
- */
 const MAX_SLEEP_CHECK_MS = 60_000;
 
 export function SleepTimerBridge({

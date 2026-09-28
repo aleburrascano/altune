@@ -149,7 +149,7 @@ function peekNextQueueTrack(): PlaybackTrack | null {
   const ordered = orderedQueueTracks(state);
   const next = ordered[state.currentIndex + 1];
   if (next) return next;
-  return state.repeatMode === 'all' ? ordered[0] ?? null : null;
+  return state.repeatMode === 'all' ? (ordered[0] ?? null) : null;
 }
 
 function isNextPresignFresh(player: WebAudioPlayer, key: TrackKey): boolean {
@@ -208,7 +208,11 @@ function recoverFromMediaError(player: WebAudioPlayer): Promise<void> {
 
 function reportMediaError(player: WebAudioPlayer): void {
   if (player.awaitingSource) return;
-  if (!player.recoveryAttempted && isRecoverableMediaError(player.audio.error) && isSourceStale(player)) {
+  if (
+    !player.recoveryAttempted &&
+    isRecoverableMediaError(player.audio.error) &&
+    isSourceStale(player)
+  ) {
     player.recoveryAttempted = true;
     void recoverFromMediaError(player);
     return;
@@ -300,12 +304,22 @@ function startSource(player: WebAudioPlayer, url: string, options: LoadOptions):
   else playAudio(player);
 }
 
-function applyResolvedSource(player: WebAudioPlayer, url: string, options: LoadOptions, issuedAt?: number): void {
+function applyResolvedSource(
+  player: WebAudioPlayer,
+  url: string,
+  options: LoadOptions,
+  issuedAt?: number,
+): void {
   player.sourceIssuedAt = issuedAt ?? player.now();
   startSource(player, url, options);
 }
 
-function applySource(player: WebAudioPlayer, outcome: SourceOutcome, options: LoadOptions, issuedAt?: number): void {
+function applySource(
+  player: WebAudioPlayer,
+  outcome: SourceOutcome,
+  options: LoadOptions,
+  issuedAt?: number,
+): void {
   player.awaitingSource = false;
   if ('url' in outcome) applyResolvedSource(player, outcome.url, options, issuedAt);
   else player.update({ failure: outcome.failure });
@@ -358,7 +372,10 @@ function resumeAudio(player: WebAudioPlayer): void {
 
 function seekAudio(player: WebAudioPlayer, positionMs: number): void {
   if (isSourceStale(player)) {
-    void represignAndResume(player, { autoplay: !player.audio.paused, startPositionMs: positionMs });
+    void represignAndResume(player, {
+      autoplay: !player.audio.paused,
+      startPositionMs: positionMs,
+    });
     return;
   }
   player.audio.currentTime = positionMs / 1000;
@@ -424,7 +441,12 @@ function queueEditControls(
   player: WebAudioPlayer,
 ): Pick<PlaybackControls, 'reorderUpcoming' | 'appendToQueue' | 'insertNext' | 'removeQueueIndex'> {
   const onEdit = (): Promise<void> => onQueueEdited(player);
-  return { reorderUpcoming: onEdit, appendToQueue: onEdit, insertNext: onEdit, removeQueueIndex: onEdit };
+  return {
+    reorderUpcoming: onEdit,
+    appendToQueue: onEdit,
+    insertNext: onEdit,
+    removeQueueIndex: onEdit,
+  };
 }
 
 function createWebControls(player: WebAudioPlayer): PlaybackControls {

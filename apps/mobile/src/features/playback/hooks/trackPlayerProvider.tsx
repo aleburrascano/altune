@@ -46,7 +46,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const isBuffering = tpState === State.Buffering || tpState === State.Loading;
   const isEnded = tpState === State.Ended;
 
-  // Created once so the context's callbacks keep their identity across renders.
   const [native] = useState(() => createNativePlaybackActions(setTrack, isPlaying));
   useEffect(() => {
     native.syncIsPlaying(isPlaying);
@@ -82,9 +81,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
-  // Mirror the queue's active track into local state when it changes. Adjusting
-  // state during render (tracking the previous value in state) avoids syncing
-  // state from an effect (react-hooks/set-state-in-effect).
   const [syncedQueueTrack, setSyncedQueueTrack] = useState(currentQueueTrack);
   if (currentQueueTrack && currentQueueTrack !== syncedQueueTrack) {
     setSyncedQueueTrack(currentQueueTrack);
@@ -95,8 +91,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     if (track) native.rememberTrack(track);
   }, [native, track]);
 
-  // A direct account switch keeps this provider mounted; drop the displayed track so
-  // the next user never sees the previous user's title/artwork (#827).
   useEffect(() => onSignOut(() => setTrack(null)), []);
 
   useQueueResume();

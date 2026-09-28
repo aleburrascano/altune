@@ -169,9 +169,6 @@ describe('createNativePlaybackActions', () => {
       );
     });
 
-    // The index-carrying commands no longer read an out-of-bounds rejection as drift:
-    // since #1732 native holds a window of the queue, so a position past its end is the
-    // normal case on a long queue.
     it('removeQueueIndex reports nothing when the position is past the native window', async () => {
       const { controls } = createNativePlaybackActions(jest.fn());
       useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
@@ -242,9 +239,6 @@ describe('createNativePlaybackActions', () => {
     });
   });
 
-  // #1730: pause/resume/seekTo used to be bare `void TrackPlayer.x()` calls, so a native
-  // rejection became an unhandled rejection nobody saw, and an unserialized seek could
-  // land after a seek the user made later.
   describe('transport commands', () => {
     let warn: jest.SpyInstance;
 
@@ -339,8 +333,6 @@ describe('createNativePlaybackActions', () => {
       expect(setTrack).toHaveBeenCalledWith(null);
     });
 
-    // #1724: an unlocked reset used to run while loadNativeQueue was still resolving
-    // URLs, so the load went on to refill the queue the user had just emptied.
     it('leaves the native queue empty when a queue load is still mid-flight', async () => {
       const { controls } = createNativePlaybackActions(jest.fn());
 

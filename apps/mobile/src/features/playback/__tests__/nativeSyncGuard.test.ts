@@ -57,14 +57,6 @@ describe('endNativeLoad — cancelling an in-flight load', () => {
   });
 });
 
-// Regression: rapid / overlapping skip ops must never wedge playback. The store
-// cursor (queueStore.currentIndex) and the native active track are reconciled
-// only through the PlaybackActiveTrackChanged event (service.ts:71-77) gated by
-// nativeSyncGuard. Under a burst of skips racing a queue load, a stale guard slot
-// used to suppress a later legitimate index-0 event, leaving currentTrack()
-// pointing at a track the native player was not on — a wedge that survived until
-// app reload. These tests drive the real loadNativeQueue + real queueStore and
-// model the exact event handler from service.ts.
 describe('the sync guard under rapid skips and overlapping loads', () => {
   function makeTracks(count: number): PlaybackTrack[] {
     return Array.from({ length: count }, (_, i) =>
@@ -75,16 +67,11 @@ describe('the sync guard under rapid skips and overlapping loads', () => {
     );
   }
 
-  // Mirrors service.ts PlaybackActiveTrackChanged handler: gate on the sync guard,
-  // then reconcile the store cursor to whatever the native player reports.
   function fireActiveTrackChanged(index: number, key: string | undefined): void {
     if (!shouldApplyActiveIndex(index)) return;
     useQueueStore.getState().syncCurrentIndex(index, key);
   }
 
-  // A minimal model of the native player's active-track pointer. Skips advance it
-  // and emit the event carrying the id of the track now at that native position,
-  // exactly as react-native-track-player does.
   function nativePlayer(tracks: readonly PlaybackTrack[]) {
     const ordered = orderedQueueTracks({
       tracks,
@@ -133,14 +120,8 @@ describe('the sync guard under rapid skips and overlapping loads', () => {
       const tracks = makeTracks(10);
       useQueueStore.getState().loadQueue(tracks, 5, null);
 
-      // Reconciling reload targeting index 5. In the wedge scenario the burst of
-      // skips supersedes the target-5 native event before it reaches the handler,
-      // so the guard never sees index 5 — modelled here by firing no target event.
       await loadNativeQueue(tracks, 5, { autoplay: false });
 
-      // User hammers skip-previous back to the top; only the resting index-0 event
-      // lands. A leaked guard slot would misread this as the priming transient and
-      // drop it, wedging the store at 5.
       fireActiveTrackChanged(0, trackKey(tracks[0]!));
 
       expect(useQueueStore.getState().currentIndex).toBe(0);

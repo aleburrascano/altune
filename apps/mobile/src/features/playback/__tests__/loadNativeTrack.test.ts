@@ -37,8 +37,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   },
 }));
 
-// fetchAudioUrls is the real presign by default; the reorder and insert-next blocks below
-// stub it per test to hold or skip the URL resolve.
 jest.mock('@shared/api-client/audio', () => {
   const actual = jest.requireActual('@shared/api-client/audio');
   return { ...actual, fetchAudioUrls: jest.fn() };
@@ -49,9 +47,6 @@ const realFetchAudioUrls = jest.requireActual<{ fetchAudioUrls: typeof fetchAudi
   '@shared/api-client/audio',
 ).fetchAudioUrls;
 
-// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
-// with their own implementations. Re-arm each method's default implementation before every test
-// so no block's stubs leak into another, whatever order the blocks run in.
 const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
 const STUBBED_PLAYER_METHODS = [
   'add',
@@ -78,10 +73,6 @@ beforeEach(() => {
   fetchUrls.mockImplementation(realFetchAudioUrls);
 });
 
-// Regression for #812: a multi-track TrackPlayer.add that throws partway can leave
-// a partial native queue out of step with queueStore, so later index-based skips and
-// removes hit the wrong native item. loadNativeQueue must reset the native queue
-// before the add error propagates.
 describe('loadNativeQueue rollback of a failed add', () => {
   function makeTracks(count: number): PlaybackTrack[] {
     return Array.from({ length: count }, (_, i) =>
@@ -112,8 +103,6 @@ describe('loadNativeQueue rollback of a failed add', () => {
 
     it('surfaces the add error even when the rollback reset also fails', async () => {
       const addError = new Error('add failed');
-      // The pre-load reset has already succeeded by the time add runs; arm the
-      // rollback reset to fail from inside add.
       (TrackPlayer.add as jest.Mock).mockImplementationOnce(async () => {
         __player.failNext('reset', new Error('reset failed'));
         throw addError;
@@ -125,8 +114,6 @@ describe('loadNativeQueue rollback of a failed add', () => {
 
     it('skips the rollback when a newer load superseded it before the add rejected', async () => {
       const addError = new Error('late add rejection');
-      // Models an add that outlived the lock deadline: a newer load claims the player
-      // (and would rebuild the queue) before this add finally rejects.
       (TrackPlayer.add as jest.Mock).mockImplementationOnce(async () => {
         claimLoad();
         throw addError;
@@ -219,19 +206,10 @@ describe('native ops superseded by a newer load', () => {
   });
 });
 
-// Regression for #828: POST /v1/audio-urls is the only per-call check that the caller may
-// still stream a track. A failed presign used to fall back to the pinned (downloaded) file
-// whatever the failure, so a 401/403 (access revoked, session rejected) still played the
-// previously downloaded bytes. The distinction the load now draws:
-// - authorization denied (401/403): never serve the pinned file; the track streams, and the
-//   stream endpoint re-checks authorization itself.
-// - network/offline (transport failure, timeout) or a server fault: the pinned file still
-//   plays, so downloads keep working while genuinely offline.
 describe('presign failure and pinned audio', () => {
   const PINNED_URI = 'file:///document/offline-audio/t1.mp3';
   const TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } });
 
-  // Only a ready entry records the version it downloaded, so the read narrows on status first.
   function pinnedVersion(trackId: string): string | undefined {
     const entry = usePinnedStore.getState().entries[trackId];
     return entry?.status === 'ready' ? entry.version : undefined;
@@ -317,16 +295,10 @@ describe('presign failure and pinned audio', () => {
   });
 });
 
-// An append, insert-next or upcoming reorder resolves signed URLs before it takes the
-// native queue lock. Anything that replaces the queue it was computed against while it is
-// in flight must supersede it — a sign-out (#827) or a switch to another queue (#1731) —
-// or it lands the old queue's tracks on the native player.
 describe('native queue ops superseded by a sign-out or queue switch', () => {
   const A_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-of-a') } });
   const B_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-of-b') } });
 
-  // Which tracks the native player was handed, in call order (a multi-track add counts as
-  // its tracks). A call count alone cannot say which queue an add came from.
   function nativeAddedIds(): string[] {
     const addCalls = __player.calls('add') as [{ id: string } | { id: string }[]][];
     return addCalls.flatMap(([added]) => (Array.isArray(added) ? added : [added])).map((t) => t.id);
@@ -367,9 +339,6 @@ describe('native queue ops superseded by a sign-out or queue switch', () => {
     });
   });
 
-  // A full requeue — "Play Now" on another playlist, retry(), play(track) — claims a load
-  // token but bumps no session epoch, which was all these ops watched before #1731, so they
-  // sailed past the switch and mutated the queue that replaced the one they were built for.
   describe('native queue ops in flight at a queue switch (#1731)', () => {
     const loadQueueB = () => loadNativeQueue([B_TRACK], 0, { autoplay: false });
 
@@ -407,11 +376,6 @@ describe('native queue ops superseded by a sign-out or queue switch', () => {
   });
 });
 
-// Regression for issue #30 (secondary "same songs repeat" symptom): the native
-// queue can hold the whole library, but only MAX_PRESIGN (25) upcoming tracks get
-// a fresh signed URL at load time. Left alone, a long shuffle session eventually
-// reaches unsigned tracks. refreshUpcomingPresign slides that window forward as
-// the queue advances so tracks beyond the initial 25 get presigned before playing.
 describe('the presign window', () => {
   function makeLibrary(count: number): PlaybackTrack[] {
     return Array.from({ length: count }, (_, i) =>
@@ -422,7 +386,6 @@ describe('the presign window', () => {
     );
   }
 
-  // Every track id that has been sent to POST /v1/audio-urls so far (i.e. presigned).
   function presignedTrackIds(): Set<string> {
     const ids = new Set<string>();
     for (const req of __http.requests as { path: string; body?: string }[]) {
@@ -433,7 +396,6 @@ describe('the presign window', () => {
     return ids;
   }
 
-  // The track ids each TrackPlayer.add call marshalled across the bridge, in call order.
   function addedTrackKeys(): string[][] {
     return (__player.calls('add') as unknown[][]).map(([arg]) =>
       (Array.isArray(arg) ? arg : [arg]).map((t) => (t as { id: string }).id),
@@ -462,8 +424,6 @@ describe('the presign window', () => {
       const presigned = presignedTrackIds();
       expect(presigned.has('t0')).toBe(true);
       expect(presigned.has('t24')).toBe(true);
-      // A track well past the initial window is NOT presigned yet — this is the cap
-      // that caused the repeats in the car.
       expect(presigned.has('t30')).toBe(false);
     });
 
@@ -473,12 +433,9 @@ describe('the presign window', () => {
       await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
       expect(presignedTrackIds().has('t30')).toBe(false);
 
-      // The player has advanced to position 20 — within the refresh margin of the
-      // initial window edge (position 24).
       useQueueStore.getState().skipToIndex(20);
       await refreshUpcomingPresign(20);
 
-      // The window has slid forward: track 30, previously unsigned, is now presigned.
       expect(presignedTrackIds().has('t30')).toBe(true);
     });
 
@@ -488,7 +445,6 @@ describe('the presign window', () => {
       await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
       const requestsAfterLoad = __http.countFor('POST /v1/audio-urls');
 
-      // Position 5 is far from the window edge (24), so no fresh presign is needed.
       useQueueStore.getState().skipToIndex(5);
       await refreshUpcomingPresign(5);
 
@@ -496,10 +452,6 @@ describe('the presign window', () => {
     });
   });
 
-  // Regression for #1732: MAX_PRESIGN bounded only how many tracks got a signed URL, never
-  // how many track objects crossed the bridge. A saved-queue restore can hold
-  // REHYDRATE_LIMIT (2000) tracks, and every one of them was marshalled into a single
-  // TrackPlayer.add at load and again on every presign refresh.
   const RESTORED_QUEUE_LENGTH = 2000;
 
   function appendedTrack(): PlaybackTrack {
@@ -559,10 +511,6 @@ describe('the presign window', () => {
     });
   });
 
-  // Regression for #1725: the window was marked presigned *before* the native reorder that
-  // installs the signed URLs. A rejected reorder (queue-lock timeout, bridge error) left
-  // `presignedThrough` covering a block whose URLs never arrived, so no later slide fired
-  // and the failure was neither classified nor reported — the service `void`-ed the call.
   const NATIVE_QUEUE_TIMEOUT_MESSAGE = 'Playback command timed out after 15s';
 
   function failNextReorder(): void {
@@ -631,12 +579,6 @@ describe('the presign window', () => {
 });
 
 describe('presign failure trace', () => {
-  // Regression for issue #822: a failed prefetch or presign falls back to live streaming, but it
-  // must leave a diagnostic trace (which track, which stage) instead of being swallowed silently.
-  // Issue #1741 closed the two paths inside nativeTrackSwap that still swallowed theirs: a native
-  // remove that fails mid-swap, and a presign that fails while repairing the active track.
-  // Issue #1720 made the trace carry a redacted, classified failure instead of the raw rejection.
-
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
 
   function track(trackId: string): PlaybackTrack {
@@ -662,9 +604,6 @@ describe('presign failure trace', () => {
     jest.restoreAllMocks();
   });
 
-  // Issue #1720: a failed native download names the URL it could not fetch, so logging the
-  // rejection whole put a live presigned URL — signature and token query params intact — into
-  // Metro/adb output, crash reports and device bug reports.
   describe('failure traces — a presigned URL never reaches the log', () => {
     const SIGNED_URL =
       'https://audio.altune.example/tracks/t1.m4a?X-Amz-Signature=deadbeefcafe&token=s3cr3t-token';
@@ -707,7 +646,6 @@ describe('presign failure trace', () => {
 });
 
 describe('insertNativeTrackNext', () => {
-  // This block ran against a stubbed presign that resolves no URLs.
   beforeEach(() => {
     fetchUrls.mockImplementation(async () => []);
   });
@@ -745,13 +683,7 @@ describe('insertNativeTrackNext', () => {
   });
 });
 
-// Regression (#816): reorderUpcomingNative resolves signed URLs before it takes the
-// native queue lock. Native can auto-advance (PlaybackActiveTrackChanged) while that
-// resolve is in flight; removeUpcomingTracks then trims relative to the NEW active
-// track, and re-adding the stale `upcoming` list duplicated the track that just
-// became active. Drives the real reorder against a small model of the native queue.
 describe('reorderUpcomingNative against native auto-advance and reorder bursts', () => {
-  // This block ran against a stubbed presign that resolves no URLs.
   beforeEach(() => {
     fetchUrls.mockImplementation(async () => []);
   });
@@ -762,7 +694,6 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
 
   let nativeQueue: NativeItem[];
   let nativeIndex: number;
-  // How many times the tail was handed to native: one remove + add per rebuild.
   let tailRebuilds: number;
 
   function modelNativePlayer(items: readonly PlaybackTrack[], active: number): void {
@@ -780,8 +711,6 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
     player.getActiveTrackIndex!.mockImplementation(async () => nativeIndex);
   }
 
-  // Native finishing the active track on its own: the index moves and the service
-  // syncs the store cursor from the PlaybackActiveTrackChanged payload.
   function nativeAutoAdvance(): void {
     nativeIndex += 1;
     const active = nativeQueue[nativeIndex]!;
@@ -827,13 +756,13 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
   describe('reorderUpcomingNative racing a native auto-advance (#816)', () => {
     it('does not duplicate the track native advanced to while URLs were resolving', async () => {
       useQueueStore.getState().loadQueue([A, B, C, D], 0, null);
-      useQueueStore.getState().reorderQueue(2, 1); // store order: A*, C, B, D
+      useQueueStore.getState().reorderQueue(2, 1);
       modelNativePlayer([A, B, C, D], 0);
       const release = deferredUrls();
 
       const reorder = reorderUpcomingNative([C, B, D]);
       await flush();
-      nativeAutoAdvance(); // native: A -> B before the reorder reaches the lock
+      nativeAutoAdvance();
       release();
       await reorder;
 
@@ -841,7 +770,6 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
       expect(new Set(keys).size).toBe(keys.length);
       expect(keys).toEqual([A, B, D].map(trackKey));
       expect(nativeQueue[nativeIndex]!.id).toBe(trackKey(B));
-      // Native's upcoming tracks match the store's view after its cursor synced to B.
       const s = useQueueStore.getState();
       expect(keys.slice(nativeIndex + 1)).toEqual(
         orderedQueueTracks(s)
@@ -880,9 +808,6 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
     });
   });
 
-  // Regression (#1735): every "Move Up" tap and shuffle toggle handed its own upcoming list
-  // to reorderUpcomingNative, so a burst cost one presign round trip and one full tail
-  // rebuild per tap — each pushing an order the next tap had already replaced.
   describe('reorderUpcomingNative coalescing a burst of reorder taps (#1735)', () => {
     function moveInStore(fromIndex: number, toIndex: number): readonly PlaybackTrack[] {
       return useQueueStore.getState().reorderQueue(fromIndex, toIndex);
@@ -943,7 +868,6 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
 });
 
 describe('reorderUpcomingNative against the live store queue', () => {
-  // This block ran against a stubbed presign that resolves no URLs.
   beforeEach(() => {
     fetchUrls.mockImplementation(async () => []);
   });

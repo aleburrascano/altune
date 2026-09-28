@@ -82,8 +82,6 @@ describe('SleepTimerBridge under a controlled clock', () => {
   });
 });
 
-// Real default clocks under fake timers: jest.setSystemTime moves Date.now()
-// without moving performance.now(), which is exactly a system clock jump.
 describe('SleepTimerBridge across a system clock jump', () => {
   const DAY_MS = 24 * 60 * 60_000;
 

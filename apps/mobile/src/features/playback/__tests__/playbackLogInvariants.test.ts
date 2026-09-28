@@ -1,7 +1,3 @@
-// Regression for #2526: a native or presign rejection can carry a signed stream URL or a bearer
-// token, so no playback console.warn may log a raw error. Behaviour is checked at the swap and
-// command sites; a source guard fails on any raw caught error handed to console.warn.
-
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { inspect } from 'util';

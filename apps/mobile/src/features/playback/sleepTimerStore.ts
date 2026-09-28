@@ -1,15 +1,9 @@
 import { create } from 'zustand';
 
-/**
- * Monotonic milliseconds: never jumps when the user, timezone, NTP or DST
- * changes the wall clock, so it is the source of truth for when the timer fires.
- */
 export const monotonicNow = (): number => performance.now();
 
 export type SleepTimerState = {
-  /** Wall-clock deadline, for display only; it drifts if the system clock jumps. */
   endsAt: number | null;
-  /** Deadline on the `monotonicNow` clock; decides when playback pauses. */
   monoDeadline: number | null;
   minutes: number | null;
   start: (minutes: number, now?: number, mono?: number) => void;

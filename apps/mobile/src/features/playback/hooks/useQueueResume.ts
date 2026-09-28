@@ -39,12 +39,6 @@ interface ConsistentSnapshot {
   positionMs: number;
 }
 
-// Reads the native position and the queue snapshot as one consistent pair, or null
-// when they disagree. Runs inside withNativeQueue so no load/skip op is mid-flight
-// between the native reads, and requires the native active item to be the store's
-// current track (nativeTrack ids are trackKey) — a load that has not yet reset, is
-// waiting on its URL round trip, or has not reached its start index fails the check,
-// so a save never pairs the new queue with the previous track's position.
 function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   return withNativeQueue(async () => {
     const [activeKey, positionMs] = await Promise.all([
@@ -62,8 +56,6 @@ function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
   return tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : '')).filter(Boolean);
 }
 
-// The current track's index within the saved library ids, counted by queue position
-// rather than looked up by id: the same track can sit in the queue more than once.
 function savedCurrentIndex(s: QueueStore): number {
   const current = s.currentTrack();
   if (!current || current.source.kind !== 'library') return 0;
@@ -71,8 +63,6 @@ function savedCurrentIndex(s: QueueStore): number {
   return libraryIds(orderedQueueTracks({ tracks: s.tracks, playOrder: before })).length;
 }
 
-// One save: a consistent snapshot, then its PUT. `isSkippable` rejects an empty queue
-// or the rehydration placeholder, checked before and after waiting on the native lock.
 async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
   if (isSkippable(useQueueStore.getState())) return;
 
@@ -95,15 +85,10 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
   }
 }
 
-// Every step of a restore owns the generation it started from: the user can load their
-// own queue mid-restore, and the restore must then leave it alone.
 function userTookOver(owned: number): boolean {
   return useQueueStore.getState().generation !== owned;
 }
 
-// Saved ids the library read never returned are dropped from the rebuilt queue, so the
-// user gets a shorter queue than they left. Past getAllTracks' own cap that truncation is
-// invisible from the queue's side, and this line is where it shows (#1740).
 function warnOnSavedTracksMissingFromLibrary(
   saved: QueueStateResponse,
   trackMap: ReadonlyMap<string, TrackResponse>,
@@ -144,16 +129,8 @@ async function resumeNativeQueue(positionMs: number): Promise<void> {
   });
 }
 
-// The restore chain is several steps deep, so a bare "restore failed" line cannot tell a
-// "my queue never resumes" report apart from a dead network (#1743): the stage names the
-// step that threw.
 type RestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
 
-// The placeholder is a "now playing" card with nothing loaded in the native player, so a
-// restore that never reaches the native load has to take it back down (#1726): play, pause
-// and seek are no-ops against it. Still holding the placeholder's generation means nothing
-// has replaced it — a later generation is a rebuilt queue or the user's own, and that queue
-// is what is on screen.
 function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: RestoreStage): void {
   if (placeholderGeneration == null) return;
   if (useQueueStore.getState().generation !== placeholderGeneration) return;
@@ -168,9 +145,6 @@ function reportUnbackedRebuild(rebuiltGeneration: number | null, err: unknown): 
   if (current) reportLoadFailure(current, err);
 }
 
-// One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
-// the rehydration placeholder's generation to the save path, which skips saving that
-// generation back.
 async function restoreSavedQueue(
   markPlaceholderGeneration: (generation: number) => void,
 ): Promise<void> {

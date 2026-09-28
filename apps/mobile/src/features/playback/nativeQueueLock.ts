@@ -1,8 +1,3 @@
-// Budget for one serialized native op, measured from when it starts running (not
-// when it was queued). A queue op is a handful of bridge calls (reset, add, skip,
-// play) that normally settle well under a second; this is generous enough for a
-// slow device adding a large queue, yet short enough that a stalled bridge call
-// frees skip/reorder/append instead of freezing them for the rest of the session.
 export const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 export class NativeQueueTimeoutError extends Error {

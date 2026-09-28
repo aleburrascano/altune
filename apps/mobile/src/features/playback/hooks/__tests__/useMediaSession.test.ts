@@ -63,9 +63,15 @@ describe('useMediaSession', () => {
 
   it('publishes the current track as media session metadata with artwork', () => {
     const session = new FakeMediaSession();
-    const track = libraryTrack({ title: 'A Song', artist: 'A Band', artworkUrl: 'https://cdn/art.png' });
+    const track = libraryTrack({
+      title: 'A Song',
+      artist: 'A Band',
+      artworkUrl: 'https://cdn/art.png',
+    });
 
-    renderHook(() => useMediaSession(playbackFixture({ track }), session as unknown as MediaSession));
+    renderHook(() =>
+      useMediaSession(playbackFixture({ track }), session as unknown as MediaSession),
+    );
 
     expect(session.metadata).toMatchObject({
       title: 'A Song',
@@ -78,7 +84,9 @@ describe('useMediaSession', () => {
     const session = new FakeMediaSession();
     const track = libraryTrack({ artworkUrl: null });
 
-    renderHook(() => useMediaSession(playbackFixture({ track }), session as unknown as MediaSession));
+    renderHook(() =>
+      useMediaSession(playbackFixture({ track }), session as unknown as MediaSession),
+    );
 
     expect(session.metadata).toMatchObject({ artwork: [] });
   });
@@ -87,18 +95,25 @@ describe('useMediaSession', () => {
     ['playing', 'playing'],
     ['paused', 'paused'],
     ['loading', 'paused'],
-  ] as const)('reports the browser playback state %s for playback status %s', (status, expected) => {
-    const session = new FakeMediaSession();
+  ] as const)(
+    'reports the browser playback state %s for playback status %s',
+    (status, expected) => {
+      const session = new FakeMediaSession();
 
-    renderHook(() => useMediaSession(playbackFixture({ status }), session as unknown as MediaSession));
+      renderHook(() =>
+        useMediaSession(playbackFixture({ status }), session as unknown as MediaSession),
+      );
 
-    expect(session.playbackState).toBe(expected);
-  });
+      expect(session.playbackState).toBe(expected);
+    },
+  );
 
   it('reports no active session once the track clears', () => {
     const session = new FakeMediaSession();
 
-    renderHook(() => useMediaSession(playbackFixture({ track: null }), session as unknown as MediaSession));
+    renderHook(() =>
+      useMediaSession(playbackFixture({ track: null }), session as unknown as MediaSession),
+    );
 
     expect(session.metadata).toBeNull();
     expect(session.playbackState).toBe('none');
@@ -109,17 +124,27 @@ describe('useMediaSession', () => {
     usePlaybackRateStore.getState().setRate(1.5);
 
     renderHook(() =>
-      useMediaSession(playbackFixture({ positionMs: 42_000, durationMs: 200_000 }), session as unknown as MediaSession),
+      useMediaSession(
+        playbackFixture({ positionMs: 42_000, durationMs: 200_000 }),
+        session as unknown as MediaSession,
+      ),
     );
 
-    expect(session.setPositionState).toHaveBeenCalledWith({ duration: 200, position: 42, playbackRate: 1.5 });
+    expect(session.setPositionState).toHaveBeenCalledWith({
+      duration: 200,
+      position: 42,
+      playbackRate: 1.5,
+    });
   });
 
   it('skips setPositionState while the duration is not finite', () => {
     const session = new FakeMediaSession();
 
     renderHook(() =>
-      useMediaSession(playbackFixture({ durationMs: Number.POSITIVE_INFINITY }), session as unknown as MediaSession),
+      useMediaSession(
+        playbackFixture({ durationMs: Number.POSITIVE_INFINITY }),
+        session as unknown as MediaSession,
+      ),
     );
 
     expect(session.setPositionState).not.toHaveBeenCalled();
@@ -183,7 +208,9 @@ describe('useMediaSession', () => {
 
   it('clears its action handlers on unmount', () => {
     const session = new FakeMediaSession();
-    const { unmount } = renderHook(() => useMediaSession(playbackFixture(), session as unknown as MediaSession));
+    const { unmount } = renderHook(() =>
+      useMediaSession(playbackFixture(), session as unknown as MediaSession),
+    );
     expect(session.handlers.get('play')).not.toBeNull();
 
     unmount();
@@ -197,23 +224,35 @@ describe('useMediaSession from the browser media hub', () => {
 
   it('republishes metadata when the track changes', () => {
     const session = new FakeMediaSession();
-    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-      initialProps: playbackFixture({ track: libraryTrack({ title: 'First', artist: 'One' }) }),
-    });
-
-    rerender(
-      playbackFixture({ track: libraryTrack({ title: 'Second', artist: 'Two', artworkUrl: 'https://cdn/b.png' }) }),
+    const { rerender } = renderHook(
+      (p: PlaybackContextValue) => useMediaSession(p, asSession(session)),
+      {
+        initialProps: playbackFixture({ track: libraryTrack({ title: 'First', artist: 'One' }) }),
+      },
     );
 
-    expect(session.metadata).toMatchObject({ title: 'Second', artist: 'Two', artwork: [{ src: 'https://cdn/b.png' }] });
+    rerender(
+      playbackFixture({
+        track: libraryTrack({ title: 'Second', artist: 'Two', artworkUrl: 'https://cdn/b.png' }),
+      }),
+    );
+
+    expect(session.metadata).toMatchObject({
+      title: 'Second',
+      artist: 'Two',
+      artwork: [{ src: 'https://cdn/b.png' }],
+    });
   });
 
   it('seeks forward from the latest position after the position advances', () => {
     const session = new FakeMediaSession();
     const playback = playbackFixture({ positionMs: 0 });
-    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-      initialProps: playback,
-    });
+    const { rerender } = renderHook(
+      (p: PlaybackContextValue) => useMediaSession(p, asSession(session)),
+      {
+        initialProps: playback,
+      },
+    );
 
     rerender({ ...playback, positionMs: 60_000 });
     act(() => session.fire('seekforward', {}));
@@ -225,9 +264,12 @@ describe('useMediaSession from the browser media hub', () => {
     const session = new FakeMediaSession();
     const first = playbackFixture();
     const second = playbackFixture();
-    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-      initialProps: first,
-    });
+    const { rerender } = renderHook(
+      (p: PlaybackContextValue) => useMediaSession(p, asSession(session)),
+      {
+        initialProps: first,
+      },
+    );
 
     rerender(second);
     act(() => session.fire('nexttrack'));
@@ -258,20 +300,28 @@ describe('useMediaSession from the browser media hub', () => {
     expect(playback.seekTo).not.toHaveBeenCalled();
   });
 
-  it.each([0, Number.NaN, Number.NEGATIVE_INFINITY])('skips setPositionState for a duration of %s', (durationMs) => {
-    const session = new FakeMediaSession();
+  it.each([0, Number.NaN, Number.NEGATIVE_INFINITY])(
+    'skips setPositionState for a duration of %s',
+    (durationMs) => {
+      const session = new FakeMediaSession();
 
-    renderHook(() => useMediaSession(playbackFixture({ durationMs, positionMs: 0 }), asSession(session)));
+      renderHook(() =>
+        useMediaSession(playbackFixture({ durationMs, positionMs: 0 }), asSession(session)),
+      );
 
-    expect(session.setPositionState).not.toHaveBeenCalled();
-  });
+      expect(session.setPositionState).not.toHaveBeenCalled();
+    },
+  );
 
   it('clears its action handlers when playback stops and the track clears', () => {
     const session = new FakeMediaSession();
     const playback = playbackFixture();
-    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-      initialProps: playback,
-    });
+    const { rerender } = renderHook(
+      (p: PlaybackContextValue) => useMediaSession(p, asSession(session)),
+      {
+        initialProps: playback,
+      },
+    );
 
     rerender({ ...playback, status: 'idle', track: null });
 
@@ -281,10 +331,12 @@ describe('useMediaSession from the browser media hub', () => {
 
   it('registers the other handlers when the browser rejects one action', () => {
     const session = new FakeMediaSession();
-    session.setActionHandler = jest.fn((action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
-      if (action === 'seekto') throw new TypeError('unsupported action');
-      session.handlers.set(action, handler);
-    });
+    session.setActionHandler = jest.fn(
+      (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+        if (action === 'seekto') throw new TypeError('unsupported action');
+        session.handlers.set(action, handler);
+      },
+    );
     const playback = playbackFixture();
 
     expect(() => renderHook(() => useMediaSession(playback, asSession(session)))).not.toThrow();
@@ -320,9 +372,12 @@ describe('useMediaSession from the browser media hub', () => {
     });
     const playback = playbackFixture({ positionMs: 0, durationMs: 200_000 });
 
-    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-      initialProps: playback,
-    });
+    const { rerender } = renderHook(
+      (p: PlaybackContextValue) => useMediaSession(p, asSession(session)),
+      {
+        initialProps: playback,
+      },
+    );
 
     expect(() => rerender({ ...playback, positionMs: 60_000 })).not.toThrow();
     expect(() => rerender({ ...playback, positionMs: 120_000 })).not.toThrow();
@@ -337,9 +392,12 @@ describe('useMediaSession from the browser media hub', () => {
     try {
       const session = new FakeMediaSession();
       const playback = playbackFixture({ positionMs: 0, durationMs: 200_000 });
-      const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-        initialProps: playback,
-      });
+      const { rerender } = renderHook(
+        (p: PlaybackContextValue) => useMediaSession(p, asSession(session)),
+        {
+          initialProps: playback,
+        },
+      );
 
       for (let ms = 100; ms <= 900; ms += 100) {
         jest.advanceTimersByTime(100);

@@ -30,8 +30,6 @@ jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn(),
 }));
 
-// The kill-switch and cache-path tests drive the real fetchAudioUrls against the fetch double;
-// the rest stub it per test.
 const realFetchAudioUrls: typeof fetchAudioUrls = jest.requireActual(
   '@shared/api-client/audio',
 ).fetchAudioUrls;
@@ -42,9 +40,6 @@ function useRealFetchAudioUrls(): void {
   );
 }
 
-// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
-// with their own implementations. Re-arm each method's default implementation before every test
-// so no block's stubs leak into another, whatever order the blocks run in.
 const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
 const STUBBED_PLAYER_METHODS = ['add', 'getQueue', 'load', 'remove'] as const;
 const defaultPlayerImpls = new Map(
@@ -60,9 +55,6 @@ beforeEach(() => {
 });
 
 describe('bounded downloads', () => {
-  // Regression for issue #821: prefetch downloads are bounded — a stalled download times out, a
-  // superseded one is cancelled, and an oversized one is abandoned — instead of running unchecked.
-
   interface DownloadOptions {
     signal?: AbortSignal;
     onProgress?: (data: { bytesWritten: number; totalBytes: number }) => void;
@@ -102,8 +94,6 @@ describe('bounded downloads', () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
   }
 
-  // A native download that has stalled: it writes a partial file, reports it started, and then
-  // never settles — not even when its abort signal fires.
   function stallForever(started: string[], signals: AbortSignal[] = []) {
     return (_url: string, dest: { uri: string }, options?: DownloadOptions) => {
       __fs.seedFile(dest.uri, 'partial');
@@ -129,7 +119,6 @@ describe('bounded downloads', () => {
   });
 
   afterEach(async () => {
-    // An empty queue has no next track, so this supersedes any download a test left hanging.
     useQueueStore.getState().clearQueue();
     await prefetchNext(0);
     await flushMicrotasks();
@@ -161,7 +150,6 @@ describe('bounded downloads', () => {
       expect(settled()).toBe(true);
       expect(cachedNames()).toEqual([]);
 
-      // The track is no longer pinned in flight: a later prefetch downloads and swaps it.
       download.mockImplementation(realDownload);
       await prefetchNext(0);
       expect(download).toHaveBeenCalledTimes(2);
@@ -221,7 +209,6 @@ describe('bounded downloads', () => {
       await flushMicrotasks();
       expect(started).toEqual([`${CACHE_DIR_URI}/t1.v1.mp3.part`]);
 
-      // The user skips ahead: t2 is next now, so the t1 download is stale.
       useQueueStore.getState().skipToIndex(1);
       await prefetchNext(1);
       await flushMicrotasks();
@@ -278,9 +265,6 @@ describe('bounded downloads', () => {
 });
 
 describe('eviction', () => {
-  // Regression for issue #820: prefetch eviction must use fresh queue state and must not race an
-  // in-flight download of a track that was invalidated meanwhile.
-
   const { __fs, File } = FileSystem as unknown as {
     __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
     File: { downloadFileAsync: (url: string, dest: { uri: string }) => Promise<{ uri: string }> };
@@ -300,8 +284,6 @@ describe('eviction', () => {
     return { trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' };
   }
 
-  // What the player would play for a track: the URL of the last native slot written for it.
-  // Cache eviction deletes files, never native slots, so this outlives the file it points at.
   function nativeUrlOf(track: PlaybackTrack): string | undefined {
     const writes = (player.add.mock.calls as NativeAdd[]).filter(
       ([native]) => native.id === trackKey(track),
@@ -446,11 +428,6 @@ describe('eviction', () => {
   });
 
   describe('the swapped-to-local set against the routine eviction pass', () => {
-    // #1734 asked for the opposite: reclaim the entry when the window pass drops the file. The
-    // slot the swap wrote is still in the native queue pointing at that file, so the entry is
-    // what routes the next error on the track to `repairActiveToStreaming` — the one recovery
-    // that reloads a dangling local slot. `recoverAudio`, the branch without it, only asks the
-    // server to re-derive the audio and leaves playback stopped.
     it('keeps the entry for a track whose file the window pass dropped under its native slot', async () => {
       const queue = ids.map(track);
       useQueueStore.getState().loadQueue(queue, 0, null);
@@ -503,12 +480,6 @@ describe('cache file construction', () => {
 });
 
 describe('failure trace', () => {
-  // Regression for issue #822: a failed prefetch or presign falls back to live streaming, but it
-  // must leave a diagnostic trace (which track, which stage) instead of being swallowed silently.
-  // Issue #1741 closed the two paths inside nativeTrackSwap that still swallowed theirs: a native
-  // remove that fails mid-swap, and a presign that fails while repairing the active track.
-  // Issue #1720 made the trace carry a redacted, classified failure instead of the raw rejection.
-
   type DownloadWithProgress = (
     url: string,
     dest: { uri: string },
@@ -646,9 +617,6 @@ describe('failure trace', () => {
     });
   });
 
-  // Issue #1720: a failed native download names the URL it could not fetch, so logging the
-  // rejection whole put a live presigned URL — signature and token query params intact — into
-  // Metro/adb output, crash reports and device bug reports.
   describe('failure traces — a presigned URL never reaches the log', () => {
     const SIGNED_URL =
       'https://audio.altune.example/tracks/t1.m4a?X-Amz-Signature=deadbeefcafe&token=s3cr3t-token';
@@ -706,14 +674,10 @@ describe('failure trace', () => {
 });
 
 describe('cache path containment', () => {
-  // Regression for issue #826: a trackId (or audio version) carrying path syntax must never let a
-  // prefetch download land outside the audio cache directory.
-
   const { __http } = require('../../../../jest/doubles/fetch.js');
   const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
   function track(trackId: string): PlaybackTrack {
-    // A cast, not asTrackId: the hostile ids below must reach prefetch past the brand (#944).
     return libraryTrack({ source: { kind: 'library', trackId: trackId as TrackId } });
   }
 
@@ -782,10 +746,6 @@ describe('cache path containment', () => {
 });
 
 describe('remote kill switch', () => {
-  // Regression for issue #824: the server can pull audio prefetching remotely (AUDIO_PREFETCH_ENABLED
-  // on the API, surfaced as `prefetch_enabled` on every /v1/audio-urls response). With the switch
-  // off, `prefetchNext` must be a no-op so playback falls back to straight streaming.
-
   const { __http } = require('../../../../jest/doubles/fetch.js');
   const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
@@ -802,7 +762,6 @@ describe('remote kill switch', () => {
     });
   }
 
-  // Plays the resolve a track load does, so the client learns the server's current switch state.
   async function serverSays(prefetchEnabled: boolean | undefined): Promise<void> {
     replyAudioUrls(prefetchEnabled);
     await fetchAudioUrls(['trk-1']);
@@ -816,8 +775,6 @@ describe('remote kill switch', () => {
     useQueueStore.getState().loadQueue([track('trk-1'), track('trk-2')], 0, null);
   });
 
-  // The switch is module state in the api client, shared with every other block in this file:
-  // turn it back on so a test that left it off cannot silence prefetching elsewhere.
   afterEach(async () => {
     __http.reset();
     await serverSays(true);

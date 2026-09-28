@@ -14,12 +14,6 @@ import { redactedPlaybackFailure } from './redactPlaybackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 
-// Library ids whose native queue slot holds a cached file URI, which is how a playback error on
-// them recovers. It mirrors the native queue, not the cache directory: routine cache eviction
-// deletes files without rewriting the slots pointing at them, so an evicted track keeps its entry
-// — that dangling slot is what `repairActiveToStreaming` exists to fix, and reclaiming the entry
-// on eviction (#1734) would route the error to `recoverAudio`, which never reloads the player.
-// An entry is dropped when its slot is rewritten, or with the whole native queue.
 const swappedToLocal = new Set<string>();
 
 export function wasSwappedToLocal(trackId: TrackId): boolean {
@@ -40,9 +34,6 @@ async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
     recordPresignOutcome(true);
     return resolved?.url ?? null;
   } catch (err) {
-    // The track falls back to an authenticated stream URL; this trace is the only record that
-    // the fallback fired, and the only one carrying the track id (the api-client log cannot —
-    // fetchAudioUrls sends ids in the POST body, not the path it logs).
     console.warn('[playback] presign failed', {
       trackIds: [trackId],
       error: redactedPlaybackFailure(err),
@@ -90,11 +81,6 @@ async function upcomingSlotOf(key: string): Promise<UpcomingSlot | null> {
   return entry == null ? null : { index, entry };
 }
 
-/**
- * Rejects when the native remove fails, leaving the slot streaming: the caller owns the
- * trace and the health metric for a failed swap (`tracePrefetchFailure('swap', …)`), so
- * swallowing it here would hide the one prefetch failure mode that never reaches them.
- */
 export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
   await withNativeQueue(async () => {
     const slot = await upcomingSlotOf(trackKey(track));
@@ -129,11 +115,6 @@ async function refilledWithLocalFile(
   return true;
 }
 
-// Nothing took the slot the swap emptied, so the entry native already held goes back at the same
-// index: the queue store still counts the track, and every index-based op after this one (skip,
-// remove, reorder) addresses native by that store position. The original entry, not a rebuilt one,
-// so whatever `swappedToLocal` already says about the slot stays true. A restore that itself fails
-// leaves native one short of the store, and this trace is the only record of it.
 async function restoreSlot({ index, entry }: UpcomingSlot): Promise<void> {
   try {
     await TrackPlayer.add(entry, index);

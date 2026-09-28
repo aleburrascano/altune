@@ -1,7 +1,5 @@
 import type { SyncedLine } from '@shared/api-client/lyrics';
 
-// Returns -1 (no active line) when positionMs is NaN. Lines whose milliseconds is not a
-// finite number (the API payload is untrusted) are skipped rather than coerced.
 export function activeLineIndex(lines: SyncedLine[], positionMs: number): number {
   let active = -1;
   if (Number.isNaN(positionMs)) return active;

@@ -37,15 +37,10 @@ jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn(),
 }));
 
-// Only the presign-failure trace and the sign-out race stub fetchAudioUrls; every other test
-// runs the real one against the fetch double.
 const realFetchAudioUrls: typeof fetchAudioUrls = jest.requireActual(
   '@shared/api-client/audio',
 ).fetchAudioUrls;
 
-// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
-// with their own implementations. Re-arm each method's default implementation before every test
-// so no block's stubs leak into another, whatever order the blocks run in.
 const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
 const STUBBED_PLAYER_METHODS = [
   'add',
@@ -128,8 +123,6 @@ describe('swapping an upcoming slot to a cached file', () => {
     url: string;
   }
 
-  // Drives the swap against a small model of the native queue, so a test can assert what the queue
-  // holds afterwards rather than which calls were made to it.
   function modelNativeQueue(tracks: readonly PlaybackTrack[]): NativeEntry[] {
     const queue: NativeEntry[] = tracks.map((t) => ({
       id: trackKey(t),
@@ -217,9 +210,6 @@ describe('swapping an upcoming slot to a cached file', () => {
     });
   });
 
-  // Regression (#1723): the swap removes the slot before it refills it, so a streaming re-add that
-  // fails after the local one left native one entry shorter than the queue store, and every
-  // index-based op after it addressed the wrong track.
   describe('swapUpcomingToLocal — when both re-adds of the emptied slot fail', () => {
     it('holds the original entry again, leaving native aligned with the queue store', async () => {
       const active = libraryTrack({ title: 'Now Playing' });
@@ -257,12 +247,6 @@ describe('swapping an upcoming slot to a cached file', () => {
 });
 
 describe('presign failure trace', () => {
-  // Regression for issue #822: a failed prefetch or presign falls back to live streaming, but it
-  // must leave a diagnostic trace (which track, which stage) instead of being swallowed silently.
-  // Issue #1741 closed the two paths inside nativeTrackSwap that still swallowed theirs: a native
-  // remove that fails mid-swap, and a presign that fails while repairing the active track.
-  // Issue #1720 made the trace carry a redacted, classified failure instead of the raw rejection.
-
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
   const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
@@ -352,7 +336,6 @@ describe('sign-out racing a streaming repair', () => {
 });
 
 describe('swap-path presign health tally', () => {
-  // Regression for #2526: a swap-path presign failure is counted in the playback health tally.
   const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
   let warn: jest.SpyInstance;
 

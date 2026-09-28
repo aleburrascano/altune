@@ -51,8 +51,6 @@ export function MiniPlayer() {
     outputRange: ['0%', '100%'],
   });
 
-  // A track that is gone or unplayable fails the same way on every retry, so its CTA becomes
-  // the skip — which also makes the secondary skip button a duplicate.
   const mustSkipToRecover = isError && !canRetryPlaybackError(errorKind);
 
   const control = mustSkipToRecover

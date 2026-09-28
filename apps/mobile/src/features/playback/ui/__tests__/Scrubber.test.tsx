@@ -4,8 +4,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import { Scrubber } from '../Scrubber';
 
-// A single active touch at `pageX`, shaped like the responder system's touch history
-// so PanResponder's own grant/move/release bookkeeping runs for real.
 function touchEvent(pageX: number, timeStamp: number) {
   const touch = {
     touchActive: true,
@@ -39,7 +37,6 @@ function dragAndRelease(pageX: number) {
   });
 }
 
-// The fill is the only view whose width is an animated percentage of the track.
 function fillWidthPercent(): number {
   const track = screen.getByLabelText(/^Playback position/);
   const widths = track
@@ -83,7 +80,6 @@ describe('Scrubber drag seeking', () => {
     const onSeek = jest.fn();
     render(<Scrubber positionMs={0} durationMs={200000} onSeek={onSeek} />);
 
-    // The unmeasured track clamps any far-right drag to the end.
     dragAndRelease(9999);
 
     expect(onSeek).toHaveBeenCalledWith(200000);
