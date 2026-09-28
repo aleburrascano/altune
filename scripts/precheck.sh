@@ -98,6 +98,48 @@ if touches '^services/overseer/'; then
   fi
 fi
 
+if touches '^(services/go-api|services/overseer)/.*\.go$'; then
+  m=services/go-api
+  go_pin $m
+  if need go "stripcomments"; then
+    check "stripcomments self-tests" $m "${heavy[@]}" go test -count=1 ./scripts/stripcomments/...
+    strip_dir=$(mktemp -d)
+    strip_bin="$strip_dir/stripcomments"
+    if (cd $m && go build -o "$strip_bin" ./scripts/stripcomments) >"$log" 2>&1; then
+      mismatches=""
+      while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        work=$(mktemp -d)
+        if git show "$base:$f" >"$work/base.go" 2>/dev/null; then
+          cp "$f" "$work/pr.go"
+          cp "$work/pr.go" "$work/pr.orig"
+          if "$strip_bin" "$work/pr.go" >/dev/null 2>&1 && cmp -s "$work/pr.orig" "$work/pr.go"; then
+            cp "$work/base.go" "$work/base.orig"
+            if "$strip_bin" "$work/base.go" >/dev/null 2>&1 && ! cmp -s "$work/base.orig" "$work/base.go" && ! cmp -s "$work/base.go" "$work/pr.orig"; then
+              base_nows=$(tr -d '[:space:]' <"$work/base.go")
+              pr_nows=$(tr -d '[:space:]' <"$work/pr.orig")
+              [ "$base_nows" = "$pr_nows" ] && mismatches="$mismatches $f"
+            fi
+          fi
+        fi
+        rm -rf "$work"
+      done < <(grep -E '^(services/go-api|services/overseer)/.*\.go$' <<<"$changed")
+      rm -rf "$strip_dir"
+      if [ -n "$mismatches" ]; then
+        echo "FAIL  strip PRs match the strip tool   ($mismatches)"
+        failed=1
+      else
+        echo "ok    strip PRs match the strip tool"
+      fi
+    else
+      echo "FAIL  strip PRs match the strip tool   (build stripcomments)"
+      tail -n 40 "$log" | sed 's/^/      /'
+      rm -rf "$strip_dir"
+      failed=1
+    fi
+  fi
+fi
+
 if touches '^apps/mobile/'; then
   m=apps/mobile
   if need npx "mobile" && link_deps $m; then
