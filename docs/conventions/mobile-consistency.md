@@ -13,8 +13,8 @@ comply, old code only has to improve. See epic #2857.
 | MC-4 | Every tappable element goes through a shared primitive with a required `action` name | tap telemetry and a11y stay consistent across features | planned: `apps/mobile/eslint/consistency/mc-4-tappable-action.js` | n/a | #2868, #2869 |
 | MC-4b | No raw `Pressable` or `Touchable*` imports from `react-native` outside `shared/ui/primitives` and `shared/ui/navigation`; lower `baseline` in the same PR that migrates a file onto a primitive | a raw tappable bypasses primitive tap telemetry, so its taps never reach the server | `apps/mobile/eslint/consistency/mc-4b-raw-pressables.js` | 51 | #2869 |
 | MC-5 | Failure UI goes through one failure module that reports `failure_shown` | every failure is visible in telemetry, not just to the user | planned: `apps/mobile/eslint/consistency/mc-5-failure-ui.js` | n/a | #2867 |
-| MC-6 | Every server SSE event type has a mobile handler | a new server event can't silently go unhandled on mobile | enforced by `apps/mobile/src/shared/events/__tests__/eventContract.test.ts` | n/a | #2859 |
-| MC-7 | Server and client agree on telemetry event types | telemetry the server can't parse is telemetry that's lost | enforced by `apps/mobile/src/shared/telemetry/__tests__/eventContract.test.ts` | n/a | #2859 |
+| MC-6 | Every server SSE event type has a mobile handler | a new server event can't silently go unhandled on mobile | enforced (bidirectional) by `apps/mobile/src/shared/events/__tests__/eventContract.test.ts`; precheck runs it when go-api event definitions change | n/a | #2859 |
+| MC-7 | Server and client agree on telemetry event types | telemetry the server can't parse is telemetry that's lost | enforced (bidirectional) by `apps/mobile/src/shared/telemetry/__tests__/eventContract.test.ts`; precheck runs it when go-api event definitions change | n/a | #2859 |
 
 MC-0 (`apps/mobile/eslint/consistency/mc-0-harness.js`, baseline 0, bans `debugger`
 statements) is a self-test of the harness itself, not a checklist rule: it proves the

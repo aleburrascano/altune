@@ -145,6 +145,14 @@ if touches '^(services/go-api|services/overseer)/.*\.go$'; then
   fi
 fi
 
+if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile event contracts"; then
+  if link_deps apps/mobile; then
+    check "mobile event contracts (go-api events changed)" apps/mobile "${heavy[@]}" npx jest --ci --forceExit --watchman=false src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
+  else
+    echo "SKIP  mobile event contracts: no node_modules here or in $main_tree"; missing=1
+  fi
+fi
+
 if touches '^apps/mobile/'; then
   m=apps/mobile
   if need npx "mobile" && link_deps $m; then

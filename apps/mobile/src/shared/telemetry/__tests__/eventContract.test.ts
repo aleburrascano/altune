@@ -211,6 +211,20 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
     }
   });
 
+  it('every type Go.ClientSubmittable() accepts is one the mobile union declares', () => {
+    const eventsSource = readGoFile(EVENTS_GO);
+    const byIdent = deriveGoEventTypeNames(eventsSource);
+    const submittable = deriveGoClientSubmittableNames(eventsSource, byIdent);
+    const mobileNames = deriveMobileDiscoveryEventTypeUnion(
+      fs.readFileSync(RECORD_EVENT_TS, 'utf8'),
+    );
+
+    expect(submittable.size).toBeGreaterThan(0);
+    for (const name of submittable) {
+      expect(mobileNames.has(name)).toBe(true);
+    }
+  });
+
   it('results_shown is client-submittable, because only the device can observe the viewport', () => {
     const eventsSource = readGoFile(EVENTS_GO);
     const byIdent = deriveGoEventTypeNames(eventsSource);
