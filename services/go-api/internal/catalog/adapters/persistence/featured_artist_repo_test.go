@@ -11,11 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestBuildFeaturingQuery_CapsResultSet is the regression guard for #423: the
-// featuring query must carry a LIMIT bound so a match against tens of thousands
-// of rows returns a bounded result instead of the full set. Runs without a DB,
-// so it executes in CI (the integration tests below skip when DATABASE_URL is
-// unset). On the pre-fix code the SQL had no LIMIT clause and this fails.
 func TestBuildFeaturingQuery_CapsResultSet(t *testing.T) {
 	sql, args := buildFeaturingQuery(uuid.New(), []string{"identity-key"})
 
@@ -72,8 +67,6 @@ func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	}
 }
 
-// addTrackForFeaturing inserts a fresh track for userId with no featured
-// artists and registers its cleanup.
 func addTrackForFeaturing(t *testing.T, pool *pgxpool.Pool, userId shared.UserId) *domain.Track {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
@@ -101,9 +94,6 @@ func cleanupFeaturedArtists(t *testing.T, pool *pgxpool.Pool, userId shared.User
 	})
 }
 
-// TestPgxFeaturedArtistRepo_UnicodeEquivalentNamesShareRow is the regression
-// guard for #1065: NFC and NFD spellings of one name must upsert to a single
-// featured_artists row. Before NFKC folding they created two rows.
 func TestPgxFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxFeaturedArtistRepository(pool)
@@ -134,9 +124,6 @@ func TestPgxFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T) {
 	}
 }
 
-// TestPgxFeaturedArtistRepo_LegacyKeyRowStillMatches proves the deploy needs no
-// backfill: a row persisted with the pre-NFKC norm_name is reused by the upsert
-// and still found by ListTracksFeaturing for the same spelling.
 func TestPgxFeaturedArtistRepo_LegacyKeyRowStillMatches(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxFeaturedArtistRepository(pool)

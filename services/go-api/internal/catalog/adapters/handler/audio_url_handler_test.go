@@ -19,8 +19,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// resolvePrefetchFlag posts one audio-url resolve through a handler built with
-// opts and returns the prefetch_enabled flag the response carried.
 func resolvePrefetchFlag(t *testing.T, opts ...func(*AudioURLHandler)) any {
 	t.Helper()
 	repo := catalogtest.NewTrackRepo()
@@ -47,9 +45,6 @@ func resolvePrefetchFlag(t *testing.T, opts ...func(*AudioURLHandler)) any {
 	return resp["prefetch_enabled"]
 }
 
-// TestAudioURLs_ReportPrefetchKillSwitch guards the remote lever behind
-// AUDIO_PREFETCH_ENABLED: clients read prefetch_enabled from every resolve and
-// stop prefetching audio to disk while it is false.
 func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 	if got := resolvePrefetchFlag(t); got != true {
 		t.Errorf("default prefetch_enabled = %v, want true (preserve current behavior)", got)
@@ -62,8 +57,6 @@ func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 	}
 }
 
-// audioURLRouter serves the real /audio-urls route over an empty library: the
-// request-shape rejections below never reach a track.
 func audioURLRouter() chi.Router {
 	svc := service.NewAudioURLService(catalogtest.NewTrackRepo(), catalogtest.NewAudioStore())
 	router := chi.NewRouter()
@@ -72,9 +65,6 @@ func audioURLRouter() chi.Router {
 	return router
 }
 
-// A batch over the cap is a request the worker should split; a malformed id is
-// one it should drop. Both are 400s, so the code is the only thing that tells
-// them apart.
 func TestAudioURLs_RejectsAnOversizedBatchWithItsOwnCode(t *testing.T) {
 	ids := make([]string, maxAudioURLBatch+1)
 	for i := range ids {
@@ -96,9 +86,6 @@ func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
 	assertErrorCode(t, rec, "catalog.invalid_track_id")
 }
 
-// TestAudioURLs_ResponseIsNeverCached pins #2199: the body is a list of
-// presigned bearer URLs to one user's audio, live for up to an hour, so no
-// cache between here and the client may keep it.
 func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
@@ -116,8 +103,6 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	assertPrivateAudioHeaders(t, rec, "private, no-store")
 }
 
-// failingSigner is an audio store that always fails to presign, so the
-// catalog service emits its own audio_url.presign_failed log line.
 type failingSigner struct {
 	*catalogtest.AudioStore
 }
@@ -126,10 +111,6 @@ func (failingSigner) PresignGet(context.Context, string, time.Duration) (string,
 	return "", errors.New("presign boom")
 }
 
-// TestCorrelationID_ReachesCatalogServiceLogs is the bug's acceptance test:
-// the correlation ID echoed in the response header must also appear in
-// catalog's own deep log lines for that request, so a client-reported
-// failure can be found by grepping logs for the ID it was given.
 func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)

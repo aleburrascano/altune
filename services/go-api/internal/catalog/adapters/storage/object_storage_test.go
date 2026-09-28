@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Presigning is a local signature computation when the region is configured,
-// so these run without a live object store.
 func newOfflineObjectStore(t *testing.T) *ObjectStorageAudioStore {
 	t.Helper()
 	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
@@ -67,8 +65,6 @@ func TestObjectStorageAudioStore_PresignGet_TTLCeiling(t *testing.T) {
 	}
 }
 
-// Each config field must reach its own slot: a transposition of same-typed
-// values (bucket/region, access key/endpoint) would show up in the presigned URL.
 func TestNewObjectStorageAudioStore_BindsConfigFieldsByName(t *testing.T) {
 	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
 		Endpoint:  "http://objectstorage.invalid:9000/",

@@ -8,15 +8,11 @@ import (
 	"sort"
 )
 
-// OrphanedAudioQueue is an in-memory ports.OrphanedAudioQueue. AudioUsage reads
-// the tracks of Tracks, so a test can prove the sweep's reference gate against
-// the same fake repository the delete path wrote to.
 type OrphanedAudioQueue struct {
 	Tracks  *TrackRepo
 	Orphans map[string]*ports.OrphanedAudio
-	Errors  map[string]string // last recorded attempt cause per key
+	Errors  map[string]string
 
-	// ErrOnRecord, ErrOnList and ErrOnUsage fail the matching call.
 	ErrOnRecord error
 	ErrOnList   error
 	ErrOnUsage  error

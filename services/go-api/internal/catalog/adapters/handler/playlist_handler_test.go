@@ -133,9 +133,6 @@ func TestHandleListPlaylists(t *testing.T) {
 	}
 }
 
-// #1708: the list served every playlist a user owned in one response, so the
-// payload grew without bound with the collection. It serves a window now, and a
-// caller that names none gets the default page rather than everything.
 func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 	const seeded = 60
 
@@ -773,8 +770,6 @@ func TestHandleReorder(t *testing.T) {
 	}
 }
 
-// Both batch routes reject an empty track_ids, and a client that has to tell
-// this apart from the route's other 400s reads the code, not the detail text.
 func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
 	plRepo := catalogtest.NewPlaylistRepo()
 	playlist := makePlaylist(testUserId, "My List")
@@ -798,8 +793,6 @@ func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
 	}
 }
 
-// End to end through both handlers: whatever the create endpoint accepts must
-// still encode as a playlist detail once summed.
 func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
 	trRepo := catalogtest.NewTrackRepo()
 	_, trackRouter := buildTrackHandler(trRepo, &catalogtest.Scheduler{})
@@ -828,9 +821,6 @@ func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
 	}
 }
 
-// TestPlaylistWrites_ThrottlePerUser holds the three row-creating playlist
-// routes to one shared per-user budget — creating a playlist and both
-// membership adds — while leaving another principal's budget untouched.
 func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
 	clock := newAudioFakeClock()
 	limit := AudioRateLimit{Every: time.Second, Burst: 3}
@@ -857,9 +847,6 @@ func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
 	}
 }
 
-// TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled pins the throttle to the
-// routes that grow the account: a caller whose write budget is spent can still
-// read its playlists and remove tracks, which is the one way back under a cap.
 func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 	clock := newAudioFakeClock()
 	rig := newThrottledWriteRig(AudioRateLimit{Every: time.Hour, Burst: 1}, clock.now)

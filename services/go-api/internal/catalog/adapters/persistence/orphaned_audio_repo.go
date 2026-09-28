@@ -13,15 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// undefinedTableCode is the Postgres SQLSTATE for a missing relation.
 const undefinedTableCode = "42P01"
 
 var _ ports.OrphanedAudioQueue = (*PgxOrphanedAudioRepository)(nil)
 
-// PgxOrphanedAudioRepository persists the orphaned-audio queue (migration 021).
-// Every method maps a missing orphaned_audio table to
-// ports.ErrOrphanedAudioQueueUnavailable, so callers can degrade while the
-// migration is still unapplied.
 type PgxOrphanedAudioRepository struct {
 	pool pgxPool
 }
@@ -30,8 +25,6 @@ func NewPgxOrphanedAudioRepository(pool *pgxpool.Pool) *PgxOrphanedAudioReposito
 	return &PgxOrphanedAudioRepository{pool: pool}
 }
 
-// RecordOrphanedAudio upserts one orphan by storage key. Re-orphaning a key
-// already queued refreshes its owner and track and restarts its attempt count.
 func (r *PgxOrphanedAudioRepository) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -48,8 +41,6 @@ func (r *PgxOrphanedAudioRepository) RecordOrphanedAudio(ctx context.Context, or
 	return orphanQueueErr("record orphaned audio", err)
 }
 
-// ListOrphanedAudio returns up to limit orphans, never-attempted and
-// least-recently-attempted first, so one stuck key cannot starve the rest.
 func (r *PgxOrphanedAudioRepository) ListOrphanedAudio(ctx context.Context, limit int) ([]ports.OrphanedAudio, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -86,9 +77,6 @@ func (r *PgxOrphanedAudioRepository) ListOrphanedAudio(ctx context.Context, limi
 	return out, nil
 }
 
-// AudioUsage classifies audioRef for the sweep: referenced by some track of
-// any user, else blocked by a pending acquisition of the owner, else unused.
-// Both facts are read in one statement so they share a snapshot.
 func (r *PgxOrphanedAudioRepository) AudioUsage(ctx context.Context, audioRef string, owner shared.UserId) (ports.AudioUsage, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -111,7 +99,6 @@ func (r *PgxOrphanedAudioRepository) AudioUsage(ctx context.Context, audioRef st
 	return ports.AudioUnused, nil
 }
 
-// ResolveOrphanedAudio removes the orphan from the queue.
 func (r *PgxOrphanedAudioRepository) ResolveOrphanedAudio(ctx context.Context, audioRef string) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -120,7 +107,6 @@ func (r *PgxOrphanedAudioRepository) ResolveOrphanedAudio(ctx context.Context, a
 	return orphanQueueErr("resolve orphaned audio", err)
 }
 
-// MarkOrphanedAudioAttempt records one failed cleanup attempt and its cause.
 func (r *PgxOrphanedAudioRepository) MarkOrphanedAudioAttempt(ctx context.Context, audioRef, cause string) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -134,7 +120,6 @@ func (r *PgxOrphanedAudioRepository) MarkOrphanedAudioAttempt(ctx context.Contex
 	return orphanQueueErr("mark orphaned audio attempt", err)
 }
 
-// orphanQueueErr wraps err, mapping a missing table to the unavailable sentinel.
 func orphanQueueErr(op string, err error) error {
 	if err == nil {
 		return nil

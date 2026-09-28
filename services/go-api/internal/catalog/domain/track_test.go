@@ -310,17 +310,10 @@ func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
 	}
 }
 
-// TestNewTrack_CanonicalizesAlbumAndArtistForGrouping reproduces issue #432:
-// two tracks whose album/artist differ only by stray whitespace or Unicode form
-// must be stored with identical album/artist so the library-lens grouping (which
-// applies SQL lower()) coalesces them into one group instead of fragmenting,
-// matching dedup's notion of equivalence.
 func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
 
-	// NFC vs NFKD "Beyoncé": precomposed é vs e + combining acute accent. NFKC
-	// folds both to the same form; a raw store would split them into two groups.
 	clean, err := NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce")
 	if err != nil {
 		t.Fatalf("NewTrack(clean): %v", err)
@@ -336,15 +329,11 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 	if clean.Album != variant.Album {
 		t.Errorf("album not coalesced: clean %q vs variant %q", clean.Album, variant.Album)
 	}
-	// Display form is preserved: case and punctuation survive canonicalization.
 	if clean.Album != "I Am... Sasha Fierce" {
 		t.Errorf("album display mangled: %q", clean.Album)
 	}
 }
 
-// TestSetAlbumArtist_Canonicalizes covers the album_artist write path used by
-// AddTrackService: whitespace/Unicode variants canonicalize to one value and an
-// all-whitespace value clears the field.
 func TestSetAlbumArtist_Canonicalizes(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
@@ -638,10 +627,6 @@ func TestSetAlbum_BlankFallsBackToTheTitle(t *testing.T) {
 	}
 }
 
-// TestTrackTextLengthMessages pins the exact "exceeds N characters" wording at
-// the optional-field and source_url call sites (title/artist are pinned in
-// TestNewTrack), so building the message from maxTrackTextLength cannot drift
-// the text callers see.
 func TestTrackTextLengthMessages(t *testing.T) {
 	t.Parallel()
 	overlong := strings.Repeat("x", 301)
@@ -664,12 +649,6 @@ func TestTrackTextLengthMessages(t *testing.T) {
 	}
 }
 
-// TestNulByteRefusedByEveryTextEntryPoint is the regression guard for #2194. A
-// U+0000 used to travel unchecked into a Postgres text column, which refuses it
-// with "invalid byte sequence" — a driver error carrying no HTTP status, so the
-// request answered 500 and logged service.unhandled_error. Each entry point
-// below must instead refuse it as a 400, and must still accept the same text
-// once the NUL is gone.
 func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
@@ -827,9 +806,6 @@ func TestFailureMessage_AcquisitionInterrupted(t *testing.T) {
 	}
 }
 
-// Both codes are persisted in failure_reason and published in the
-// track_acquisition_failed payload, so renaming a value strands every stored
-// row and shipped client that already carries the old one.
 func TestAcquisitionFailureCodes_KeepTheirStoredValues(t *testing.T) {
 	t.Parallel()
 	stored := []struct {
@@ -888,8 +864,6 @@ func TestTrackSetDuration_StoresPositiveAndIgnoresZero(t *testing.T) {
 	}
 }
 
-// With every stored duration at most the cap, a playlist total stays finite
-// and therefore JSON-encodable.
 func TestTotalDurationSeconds_FiniteAtCap(t *testing.T) {
 	t.Parallel()
 	tracks := make([]*Track, 10000)
@@ -932,8 +906,6 @@ func failedTrack(t *testing.T) *Track {
 	return track
 }
 
-// readyWithoutAudioTrack is a ready row missing its audio_ref, the broken
-// state cmd/backfillaudio repairs with MarkReady.
 func readyWithoutAudioTrack(t *testing.T) *Track {
 	t.Helper()
 	track := newTestTrack(t)

@@ -25,9 +25,6 @@ type TrackDTO struct {
 	FailureMessage    *string             `json:"failure_message,omitempty"`
 	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 
-	// AudioRef is the internal object-storage key (it embeds the owner's user
-	// id). It is never serialized: clients resolve playback exclusively through
-	// /audio-urls, which returns a short-lived presigned URL instead (#1046).
 	AudioRef *string `json:"-"`
 }
 

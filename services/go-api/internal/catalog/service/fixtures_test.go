@@ -17,7 +17,6 @@ func testUserId() shared.UserId {
 	return shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 }
 
-// testOtherUserId is a second owner, for owner-scoping tests.
 func testOtherUserId() shared.UserId {
 	return shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 }
@@ -55,7 +54,6 @@ func ptrStatus(s domain.AcquisitionStatus) *domain.AcquisitionStatus {
 	return &s
 }
 
-// auditRecord is one captured log line flattened to string attrs.
 type auditRecord struct {
 	msg   string
 	time  time.Time
@@ -119,8 +117,6 @@ func assertAttrs(t *testing.T, rec auditRecord, want map[string]string) {
 	}
 }
 
-// stuckScheduler stands in for a Schedule call that never returns on its own:
-// it records the deadline it was handed and blocks until its context ends.
 type stuckScheduler struct {
 	deadline    time.Time
 	hasDeadline bool
@@ -137,8 +133,6 @@ func assertScheduleDeadline(t *testing.T, sched *stuckScheduler, start time.Time
 	if !sched.hasDeadline {
 		t.Fatal("Schedule received a context with no deadline")
 	}
-	// The call happened between start and now, so its deadline must land in
-	// (start, now+scheduleTimeout].
 	latest := time.Now().Add(scheduleTimeout)
 	if !sched.deadline.After(start) || sched.deadline.After(latest) {
 		t.Errorf("Schedule deadline = %v, want within (%v, %v]", sched.deadline, start, latest)

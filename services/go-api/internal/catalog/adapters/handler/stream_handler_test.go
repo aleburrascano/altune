@@ -158,9 +158,6 @@ func TestHandleStreamAudio_NoAuth(t *testing.T) {
 	assertStatus(t, rec, http.StatusUnauthorized)
 }
 
-// TestHandleRecover pins #1049 at the HTTP edge: recovery of a nonexistent or
-// foreign track answers 404, while an owned track, even a non-streamable one
-// where recovery is a no-op, still answers 202.
 func TestHandleRecover(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	sched := &catalogtest.Scheduler{}
@@ -197,8 +194,6 @@ func TestHandleRecover(t *testing.T) {
 	}
 }
 
-// mountStreamRoutes serves the real stream route table (audio GET plus
-// recover, both behind their throttle) over store, authenticated as testUserId.
 func mountStreamRoutes(store ports.AudioStore, opts ...func(*StreamHandler)) (*catalogtest.TrackRepo, chi.Router) {
 	repo := catalogtest.NewTrackRepo()
 	router := chi.NewRouter()
@@ -207,8 +202,6 @@ func mountStreamRoutes(store ports.AudioStore, opts ...func(*StreamHandler)) (*c
 	return repo, router
 }
 
-// probeCountingStore counts the storage HEAD that recover performs, so a test
-// can prove a throttled recover never reached object storage.
 type probeCountingStore struct {
 	*catalogtest.AudioStore
 	probes int
@@ -219,9 +212,6 @@ func (s *probeCountingStore) Exists(ctx context.Context, audioRef string) (bool,
 	return s.AudioStore.Exists(ctx, audioRef)
 }
 
-// TestHandleRecover_FloodFromOnePrincipalIsThrottled pins #2199: recover reads
-// the row and HEADs storage on every call and answers 202 whether or not the
-// file is there, so off the audio budget it is a free storage probe.
 func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	clock := newAudioFakeClock()
 	limit := AudioRateLimit{Every: 2 * time.Second, Burst: 3}
@@ -250,9 +240,6 @@ func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 
 var errStorageReadFailed = errors.New("storage read failed")
 
-// truncatingAudioStore hands back a stream that fails partway through the
-// body: the mid-transfer read error an object store produces when a connection
-// dies after the response headers are already out.
 type truncatingAudioStore struct {
 	*catalogtest.AudioStore
 	failAfter int64
@@ -296,9 +283,6 @@ func findLogRecord(t *testing.T, ring *logging.RingBuffer, message string) loggi
 	return logging.CapturedRecord{}
 }
 
-// TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated pins #2199:
-// http.ServeContent reports neither an error nor a byte count, so a stream
-// that died mid-body used to log exactly like a whole one.
 func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -354,9 +338,6 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 	}
 }
 
-// TestHandleStreamAudio_ClientAbortIsNotAServerError keeps the warn level
-// meaningful: a player abandons a Range read on every seek and skip, and those
-// cancellations reach the store as read errors.
 func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -383,9 +364,6 @@ func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	}
 }
 
-// TestHandleStreamAudio_FramesPrivateAudio pins #2199: the bytes are one
-// user's private audio behind a bearer token, and the range arm proves the
-// caching choice keeps seeking (206) working.
 func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 	store := catalogtest.NewAudioStore()
 	repo, router := mountStreamRoutes(store)
@@ -427,9 +405,6 @@ const (
 	audioSize          = 2 << 20
 )
 
-// serveAudioBehindRouteDeadline mounts the audio route behind the router-wide
-// write deadline, as production does, on a real server, and returns a func that
-// requests a seeded 2MB track with a slow-reading client.
 func serveAudioBehindRouteDeadline(t *testing.T, idle time.Duration) (get func() *http.Response) {
 	t.Helper()
 	repo := catalogtest.NewTrackRepo()
@@ -458,9 +433,6 @@ func serveAudioBehindRouteDeadline(t *testing.T, idle time.Duration) (get func()
 	}
 }
 
-// TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline guards #1018: a
-// track that takes far longer than the API write deadline to download over a
-// slow but steady connection must still arrive whole.
 func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 	get := serveAudioBehindRouteDeadline(t, time.Second)
 	resp := get()
@@ -486,9 +458,6 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 	}
 }
 
-// TestHandleStreamAudio_StalledClientIsCutOff proves the audio route is still
-// bounded: a client that stops reading for longer than the idle timeout loses
-// the connection instead of pinning the handler.
 func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	const idle = 150 * time.Millisecond
 	get := serveAudioBehindRouteDeadline(t, idle)

@@ -64,9 +64,6 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	}, nil
 }
 
-// librarySearchTerm trims and bounds the q parameter every list endpoint in
-// this package accepts. The term reaches an ILIKE comparison against Postgres
-// text, so it is held to the same NUL-byte refusal as a stored field.
 func librarySearchTerm(raw string) (string, error) {
 	search := strings.TrimSpace(raw)
 	if err := domain.ValidateText(search, "search term"); err != nil {
@@ -79,9 +76,6 @@ func librarySearchTerm(raw string) (string, error) {
 	return search, nil
 }
 
-// pageBounds reads the limit/offset window every list endpoint in this package
-// accepts. An absent or unparseable bound comes back as zero, which the services
-// read as "the caller named none" and answer with their default page.
 func pageBounds(r *http.Request) (limit, offset int) {
 	limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ = strconv.Atoi(r.URL.Query().Get("offset"))

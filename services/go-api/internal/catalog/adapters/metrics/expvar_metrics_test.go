@@ -45,9 +45,6 @@ func TestExpvarAudioStoreMetrics_PublishesAndIncrements(t *testing.T) {
 	}
 }
 
-// TestReadSnapshot_CarriesOrphanedAudioReconcileFailures pins #2198: the sweep
-// failure counter must reach the operator snapshot (GET /observe/metrics/live),
-// not only the raw expvar registry that endpoint deliberately does not expose.
 func TestReadSnapshot_CarriesOrphanedAudioReconcileFailures(t *testing.T) {
 	before := ReadSnapshot().OrphanedAudioReconcileFailures
 	NewExpvarAudioStoreMetrics().OrphanedAudioReconcileFailed()

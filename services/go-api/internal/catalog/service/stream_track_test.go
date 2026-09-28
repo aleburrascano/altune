@@ -325,9 +325,6 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		}
 	})
 
-	// #1048: scheduling over an unpersisted failed-status would race a new
-	// acquisition job against the stale stored row, so a persist failure must
-	// not schedule.
 	t.Run("persist failure is returned and does not schedule", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		store := catalogtest.NewAudioStore()

@@ -43,9 +43,6 @@ const (
 	AcquisitionFailed
 )
 
-// The stored form of each status, written once so String and
-// ParseAcquisitionStatus cannot drift apart under a rename. Callers that need
-// the string in a query bind AcquisitionX.String() rather than a literal.
 const (
 	acquisitionPendingWire = "pending"
 	acquisitionReadyWire   = "ready"
@@ -89,20 +86,16 @@ type Track struct {
 	ArtworkURL        *string
 	AcquisitionStatus AcquisitionStatus
 	DedupKey          string
-	// IdempotencyKey is an optional client-supplied token, stable across retries
-	// of one logical save. When present it lets two concurrent creates — or a
-	// retry after a dropped response — collapse to a single row, independent of
-	// the content-derived DedupKey. Nil means the client sent no key.
-	IdempotencyKey  *string
-	Year            *int
-	Genre           *string
-	TrackNumber     *int
-	AlbumArtist     *string
-	ISRC            *string
-	AudioRef        *string
-	AudioVersion    string
-	FailureReason   *string
-	FeaturedArtists []FeaturedArtist
+	IdempotencyKey    *string
+	Year              *int
+	Genre             *string
+	TrackNumber       *int
+	AlbumArtist       *string
+	ISRC              *string
+	AudioRef          *string
+	AudioVersion      string
+	FailureReason     *string
+	FeaturedArtists   []FeaturedArtist
 
 	AcquisitionProvenance *string
 	AudioSourceURL        *string
@@ -110,12 +103,6 @@ type Track struct {
 
 	AcquisitionStartedAt *time.Time
 
-	// Version is the monotonic row version behind the optimistic-lock CAS on
-	// writes (#1419). A read carries the version it observed; the matching write
-	// is scoped to that version and bumps it, so two writers that read the same
-	// version cannot both land — the loser gets ports.ErrTrackVersionConflict
-	// rather than silently overwriting the winner. A freshly built track is at
-	// version 0; the persistence adapter advances it on every successful Update.
 	Version int
 }
 
@@ -123,14 +110,8 @@ const maxRejectedSourceKeys = 25
 
 const maxTrackTextLength = 300
 
-// MaxDurationSeconds caps a track's duration at one week. Beyond keeping the
-// value finite, the cap keeps any sum of durations (a playlist's total) finite:
-// encoding/json cannot marshal +Inf, so an unbounded duration would silently
-// truncate every response embedding the total.
 const MaxDurationSeconds = 7 * 24 * 60 * 60
 
-// ValidateDurationSeconds refuses a duration that is non-finite, negative, or
-// above MaxDurationSeconds.
 func ValidateDurationSeconds(seconds float64) error {
 	if math.IsNaN(seconds) || math.IsInf(seconds, 0) {
 		return NewValidationError("duration_seconds must be a finite number")
@@ -144,18 +125,10 @@ func ValidateDurationSeconds(seconds float64) error {
 	return nil
 }
 
-// trackTextTooLongError reports a track field longer than maxTrackTextLength,
-// deriving the stated limit from the constant so the message cannot drift.
 func trackTextTooLongError(field string) error {
 	return NewValidationError(fmt.Sprintf("track %s exceeds %d characters", field, maxTrackTextLength))
 }
 
-// ValidateText refuses U+0000 in a caller-supplied text field. A Postgres text
-// column rejects a NUL byte with "invalid byte sequence", and that driver error
-// carries no HTTP status, so a value reaching the store returns a 500 and logs
-// service.unhandled_error instead of telling the caller its input was bad.
-// Every catalog field that is written to or matched against text goes through
-// here before it can reach a query.
 func ValidateText(value, field string) error {
 	if strings.ContainsRune(value, '\x00') {
 		return NewValidationError(field + " must not contain a NUL byte")
@@ -203,9 +176,6 @@ func validateTrackText(value, field string) error {
 	return nil
 }
 
-// ValidateOptionalTrackText applies the same length cap used for title/artist to
-// an optional free-form field. A nil pointer means the field is absent and is
-// left untouched; a present value must not exceed maxTrackTextLength.
 func ValidateOptionalTrackText(value *string, field string) error {
 	if value == nil {
 		return nil
@@ -232,10 +202,6 @@ func (t *Track) SetAlbum(album string) {
 	t.DedupKey = computeDedupKey(t.Title, t.Artist, t.Album)
 }
 
-// SetAlbumArtist stores the album-artist in the same canonical form as album and
-// artist so the library-lens grouping coalesces values that differ only by stray
-// whitespace or Unicode form. A value that is empty after canonicalization clears
-// the field (it falls back to the track artist in the grouping query).
 func (t *Track) SetAlbumArtist(albumArtist string) {
 	canonical := canonicalizeField(albumArtist)
 	if canonical == "" {
@@ -261,21 +227,12 @@ func (p AcquisitionProvenance) Valid() bool {
 	return false
 }
 
-// ErrIllegalAcquisitionTransition reports an acquisition-status change the
-// track's current state does not allow, such as a duplicate or out-of-order
-// acquisition callback. The track is left unchanged.
 var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
 
 func illegalTransition(op string, from AcquisitionStatus) error {
 	return fmt.Errorf("%w: %s from %s", ErrIllegalAcquisitionTransition, op, from)
 }
 
-// MarkReady records a completed acquisition. It is allowed from pending, and
-// from failed (a late success after the track was swept or failed stays
-// usable). On a ready track it is allowed only for the same audio_ref: a
-// duplicate completion rewrote that object, so only the version moves. A
-// completion under a different ref is refused, since swapping audio is
-// ReplaceAudio's job and taking the new ref would orphan the served object.
 func (t *Track) MarkReady(audioRef string) error {
 	if audioRef == "" {
 		return errors.New("audio_ref required for ready status")
@@ -287,8 +244,6 @@ func (t *Track) MarkReady(audioRef string) error {
 	return nil
 }
 
-// ReplaceAudio swaps the audio of a track that is already ready with audio.
-// Any other state is refused: there is no audio to replace.
 func (t *Track) ReplaceAudio(audioRef string) error {
 	if audioRef == "" {
 		return errors.New("audio_ref required for ready status")
@@ -338,8 +293,6 @@ func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
 	t.AcquisitionProvenance = &value
 }
 
-// SetDuration records a positive duration; zero leaves it unknown. A value
-// ValidateDurationSeconds refuses is returned as an error and not stored.
 func (t *Track) SetDuration(seconds float64) error {
 	if err := ValidateDurationSeconds(seconds); err != nil {
 		return err
@@ -350,9 +303,6 @@ func (t *Track) SetDuration(seconds float64) error {
 	return nil
 }
 
-// MarkFailed fails a pending track, or a ready track whose audio went missing.
-// A track that is already failed is refused, so a duplicate failure cannot
-// overwrite the reason recorded by the first.
 func (t *Track) MarkFailed(reason string) error {
 	if reason == "" {
 		return errors.New("failure_reason required for failed status")
@@ -367,10 +317,6 @@ func (t *Track) MarkFailed(reason string) error {
 	return nil
 }
 
-// FailAcquisition records that an acquisition attempt failed. Only a pending
-// track has an attempt in flight; once it is ready or failed another path has
-// settled it, so a stale failure callback is refused rather than clobbering
-// good audio.
 func (t *Track) FailAcquisition(reason string) error {
 	if t.AcquisitionStatus != AcquisitionPending {
 		return illegalTransition("fail acquisition", t.AcquisitionStatus)
@@ -378,9 +324,6 @@ func (t *Track) FailAcquisition(reason string) error {
 	return t.MarkFailed(reason)
 }
 
-// RevertToPending readies a ready or failed track for a new acquisition. A
-// pending track is refused: refreshing its in-flight marker would hide an
-// orphaned acquisition from the stale-pending sweep.
 func (t *Track) RevertToPending() error {
 	if t.AcquisitionStatus == AcquisitionPending {
 		return illegalTransition("revert to pending", t.AcquisitionStatus)

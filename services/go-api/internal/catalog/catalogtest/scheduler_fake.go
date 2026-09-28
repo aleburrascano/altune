@@ -7,8 +7,6 @@ import (
 	"context"
 )
 
-// Scheduler records every Schedule call. When Err is set, calls are still
-// recorded but report Err, standing in for a scheduler that refused the job.
 type Scheduler struct {
 	TrackIds   []domain.TrackId
 	SourceURLs []string

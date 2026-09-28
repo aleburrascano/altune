@@ -302,9 +302,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 	})
 }
 
-// assertPlaylistFull checks err is the cap refusal itself: the same error, and
-// the same message, so no internal op name has been prefixed onto the detail
-// the client renders.
 func assertPlaylistFull(t *testing.T, err error) {
 	t.Helper()
 	if !errors.Is(err, domain.ErrPlaylistFull) {
@@ -315,10 +312,6 @@ func assertPlaylistFull(t *testing.T, err error) {
 	}
 }
 
-// TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole covers
-// the service half of #2196: only the data layer can tell that an add crosses
-// domain.MaxPlaylistTracks, so its refusal is the answer, and the service
-// hands it on rather than wrapping it as a fault of its own.
 func TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -631,9 +624,6 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 	}
 }
 
-// playlistEditedAfterRead answers GetTrackOrder with the order it read and
-// then applies another request's edit — one track removed, one added — so the
-// plan the service builds is already stale when it reaches the write.
 type playlistEditedAfterRead struct {
 	*catalogtest.PlaylistRepo
 	added domain.TrackId
@@ -653,10 +643,6 @@ func (r *playlistEditedAfterRead) GetTrackOrder(ctx context.Context, playlistId 
 	return ids, true, nil
 }
 
-// Reorder reads the order without a lock, so a concurrent edit can land before
-// the write (issue #2197). The plan is then a stale description of the
-// playlist, and writing it ties two tracks to one position or leaves the
-// removed one's slot empty: the caller gets a 400 it can retry from instead.
 func TestPlaylistMembershipService_Reorder_RefusesAPlanInvalidatedAfterTheRead(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -683,10 +669,6 @@ func TestPlaylistMembershipService_Reorder_RefusesAPlanInvalidatedAfterTheRead(t
 	}
 }
 
-// ownerBlindReadRepo simulates a regressed service-layer ownership check: its
-// Exists and GetTrackOrder answer for any playlist regardless of owner, so the
-// service's reads no longer stop a foreign caller. The embedded fake's writes
-// stay owner-scoped, standing in for the owner-scoped SQL underneath.
 type ownerBlindReadRepo struct {
 	*catalogtest.PlaylistRepo
 }
@@ -714,11 +696,6 @@ func (p *recordingPublisher) Publish(_ context.Context, _ shared.UserId, eventTy
 	p.types = append(p.types, eventType)
 }
 
-// TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck proves the
-// defense in depth from issue #1044: even when the read-side ownership check is
-// bypassed, every membership write passes the caller's userId down, the
-// owner-scoped repository refuses it, and the service answers
-// ErrPlaylistNotFound without persisting anything or publishing an event.
 func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.T) {
 	ctx := context.Background()
 	victim := testUserId()
@@ -777,7 +754,6 @@ func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.
 	}
 }
 
-// TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject pins #1052.
 func TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject(t *testing.T) {
 	logs := captureAuditLogs(t)
 	userId := testUserId()
@@ -800,8 +776,6 @@ func TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject(t *testing.T) 
 	})
 }
 
-// TestPlaylistMembershipService_RemoveTracks_LogsActorAndObject pins #1052:
-// the batch line names every track actually removed, not the ones requested.
 func TestPlaylistMembershipService_RemoveTracks_LogsActorAndObject(t *testing.T) {
 	logs := captureAuditLogs(t)
 	userId := testUserId()
@@ -924,8 +898,6 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		}
 	})
 
-	// The membership events below drive mobile optimistic rollback, so their
-	// payloads must name exactly the tracks the write changed, in request order.
 	t.Run("add tracks names only the inserted tracks in request order", func(t *testing.T) {
 		pub := &recordingPlaylistPublisher{}
 		plRepo := catalogtest.NewPlaylistRepo()

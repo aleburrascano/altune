@@ -34,8 +34,6 @@ func (r *FeaturedResolver) Resolve(ctx context.Context, artist, title string) ([
 		if !ok {
 			continue
 		}
-		// Provider data is not trusted to fit the catalog's field caps: an
-		// oversized credit is dropped so the rest of the track still backfills.
 		if err := catalogdomain.ValidateFeaturedArtist(fa); err != nil {
 			slog.WarnContext(ctx, "featured artist skipped: exceeds field cap",
 				"name_length", len(fa.Name), "mbid_length", len(fa.MBID), "error", err)

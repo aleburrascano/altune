@@ -5,7 +5,6 @@ import (
 	"expvar"
 )
 
-// Published expvar variable names for the catalog degradation counters.
 const (
 	PresignFailuresVar                = "catalog_audio_presign_failures_total"
 	OrphanedDeletesVar                = "catalog_audio_orphaned_deletes_total"
@@ -14,8 +13,6 @@ const (
 	DBCallTimeoutsVar                 = "catalog_db_call_timeouts_total"
 )
 
-// Declared at package scope because expvar.NewInt panics on a duplicate name;
-// registering once keeps the adapter safe to construct any number of times.
 var (
 	presignFailures                = expvar.NewInt(PresignFailuresVar)
 	orphanedDeletes                = expvar.NewInt(OrphanedDeletesVar)
@@ -24,13 +21,10 @@ var (
 	dbCallTimeouts                 = expvar.NewInt(DBCallTimeoutsVar)
 )
 
-// ExpvarAudioStoreMetrics implements ports.AudioStoreMetrics by incrementing
-// process-global expvar counters.
 type ExpvarAudioStoreMetrics struct{}
 
 var _ ports.AudioStoreMetrics = ExpvarAudioStoreMetrics{}
 
-// NewExpvarAudioStoreMetrics returns an ExpvarAudioStoreMetrics.
 func NewExpvarAudioStoreMetrics() ExpvarAudioStoreMetrics { return ExpvarAudioStoreMetrics{} }
 
 func (ExpvarAudioStoreMetrics) PresignFailed()           { presignFailures.Add(1) }
@@ -41,19 +35,14 @@ func (ExpvarAudioStoreMetrics) OrphanedAudioReconcileFailed() {
 	orphanedAudioReconcileFailures.Add(1)
 }
 
-// ExpvarDBCallMetrics implements ports.DBCallMetrics by incrementing
-// process-global expvar counters.
 type ExpvarDBCallMetrics struct{}
 
 var _ ports.DBCallMetrics = ExpvarDBCallMetrics{}
 
-// NewExpvarDBCallMetrics returns an ExpvarDBCallMetrics.
 func NewExpvarDBCallMetrics() ExpvarDBCallMetrics { return ExpvarDBCallMetrics{} }
 
 func (ExpvarDBCallMetrics) DBCallTimedOut() { dbCallTimeouts.Add(1) }
 
-// Snapshot is a point-in-time read of the catalog audio-store and database-call
-// degradation counters, shaped for JSON exposure.
 type Snapshot struct {
 	PresignFailures                int64 `json:"presign_failures_total"`
 	OrphanedDeletes                int64 `json:"orphaned_deletes_total"`
@@ -62,10 +51,6 @@ type Snapshot struct {
 	DBCallTimeouts                 int64 `json:"db_call_timeouts_total"`
 }
 
-// ReadSnapshot returns the current values of the published catalog counters. It
-// is a read-only accessor over the package-scope expvar vars so callers can
-// expose these specific counters without reaching the raw expvar registry (which
-// also publishes process globals like cmdline and memstats).
 func ReadSnapshot() Snapshot {
 	return Snapshot{
 		PresignFailures:                presignFailures.Value(),

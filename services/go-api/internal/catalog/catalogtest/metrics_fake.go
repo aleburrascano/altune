@@ -2,8 +2,6 @@ package catalogtest
 
 import "altune/go-api/internal/catalog/ports"
 
-// Metrics is a recording ports.AudioStoreMetrics for asserting that
-// degradation counters increment on failure paths.
 type Metrics struct {
 	PresignFailures                int
 	OrphanedDeletes                int

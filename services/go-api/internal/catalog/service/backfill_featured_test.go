@@ -51,8 +51,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 			"Track A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 		}}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
-		// Idempotency is about repeated runs, not the throttle: disable the
-		// cooldown so the second run is admitted.
 		svc.admission = newBackfillAdmission(0, time.Now)
 
 		res, err := svc.Execute(ctx, userId, 0)
@@ -135,8 +133,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if res.Failed != 1 {
 			t.Fatalf("result = %+v, want failed 1 (only t2)", res)
 		}
-		// t3 follows the failing t2 in the loop: it must still be persisted,
-		// proving the failure is isolated like the resolver-failure path.
 		if len(t3.FeaturedArtists) != 1 || t3.FeaturedArtists[0].Name != "Guest 3" {
 			t.Errorf("t3 featured = %+v, want it persisted after t2's failure", t3.FeaturedArtists)
 		}
@@ -147,8 +143,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 		for i := range page {
 			page[i] = newTrackFeat(t, userId, "Untagged")
 		}
-		// Always returns a full page and never signals exhaustion, so only the
-		// page cap can stop the loop (an unbounded library would otherwise spin).
 		repo := &unboundedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), page: page}
 		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
 
@@ -172,7 +166,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 		}
 		repo.Seed(t1)
 		repo.Seed(t2)
-		// Cancel while resolving the first page's only track.
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
@@ -210,8 +203,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 			newTrackFeat(t, userId, "Hangs"),
 			newTrackFeat(t, userId, "Fine"),
 		}}
-		// Like the discovery resolver, swallow the ctx error and return an
-		// empty result: the service must still count the item as failed.
 		resolver := &hangingResolver{hangOn: "Hangs"}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
 		svc.itemTimeout = 20 * time.Millisecond
@@ -315,9 +306,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 }
 
-// TestBackfill_LibraryOverCap_ReportsTruncated is the bug's acceptance test. A
-// library past the page cap used to report a capped run as a complete one, and
-// every run restarted at track 1, so the tail beyond the cap was unreachable.
 func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -330,8 +318,6 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 		pastTheCap: {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 	}}
 	svc := NewBackfillFeaturedService(repo, repo, resolver)
-	// Resuming is the behaviour under test, not the throttle: disable the
-	// cooldown so the follow-up run is admitted.
 	svc.admission = newBackfillAdmission(0, time.Now)
 
 	first, err := svc.Execute(ctx, userId, 0)
@@ -387,8 +373,6 @@ func (r *hangingResolver) Resolve(ctx context.Context, _, title string) ([]domai
 	return nil, nil
 }
 
-// blockingResolver parks its first lookup until release is closed, signalling
-// entered once it is parked; later lookups return immediately.
 type blockingResolver struct {
 	once    sync.Once
 	entered chan struct{}
@@ -414,10 +398,6 @@ func (r *unboundedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, _, 
 	return r.page, 1 << 30, nil
 }
 
-// numberedTrackRepo serves a library of total tracks titled "Track 1" upward in
-// a stable order, building each page on demand: the cap spans over 10k tracks,
-// too many to write as a fixture, and catalogtest.TrackRepo pages a map, whose
-// order an offset cannot index.
 type numberedTrackRepo struct {
 	*catalogtest.TrackRepo
 	t       *testing.T
@@ -448,8 +428,6 @@ func (r *numberedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limi
 	return page, r.total, nil
 }
 
-// track keeps one object per title, so a track listed by two runs is the same
-// one the test asserts against afterwards.
 func (r *numberedTrackRepo) track(title string) *domain.Track {
 	if existing, ok := r.byTitle[title]; ok {
 		return existing
@@ -473,7 +451,7 @@ type orderedTrackRepo struct {
 	order          []*domain.Track
 	failReplaceID  domain.TrackId
 	failReplaceErr error
-	pageSize       int // overrides the caller's limit to force multiple pages
+	pageSize       int
 }
 
 func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {

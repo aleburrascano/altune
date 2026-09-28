@@ -21,9 +21,6 @@ type TrackRepo struct {
 	ErrOnDelete    error
 	ErrOnFailStale error
 
-	// EnforceVersionCAS opts this fake into the optimistic-lock predicate so a
-	// unit test can drive the ErrTrackVersionConflict path in memory. Off by
-	// default: most unit tests do not model versions and rely on last-writer-wins.
 	EnforceVersionCAS bool
 
 	LastAlbumsQuery  domain.LibraryQuery
@@ -85,8 +82,6 @@ func (r *TrackRepo) GetByID(_ context.Context, id domain.TrackId, userId shared.
 	return nil, nil
 }
 
-// AudioRefInUse mirrors the adapter's cross-owner reference check: any track
-// but excludeTrackID pointing at the key holds it.
 func (r *TrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
 	if r.ErrOnGetBy != nil {
 		return false, r.ErrOnGetBy
@@ -99,8 +94,6 @@ func (r *TrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTra
 	return false, nil
 }
 
-// CountForUser mirrors the adapter's bounded count: it stops at atMost, so a
-// caller cannot tell a library exactly at the cap from one far past it.
 func (r *TrackRepo) CountForUser(_ context.Context, userId shared.UserId, atMost int) (int, error) {
 	if r.ErrOnCount != nil {
 		return 0, r.ErrOnCount
@@ -232,12 +225,6 @@ func (r *TrackRepo) ListByIDs(_ context.Context, userId shared.UserId, ids []dom
 	return out, nil
 }
 
-// Update matches ports.TrackUpdater's optimistic-lock CAS signature. When
-// EnforceVersionCAS is set it honours the predicate — a stored version past
-// expectedVersion returns ports.ErrTrackVersionConflict — so a test can exercise
-// the conflict path in memory; otherwise it stays last-writer-wins for the many
-// unit tests that do not model versions. Either way it advances the stored
-// version on a successful write, mirroring the real adapter.
 func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersion int) error {
 	if r.ErrOnUpdate != nil {
 		return r.ErrOnUpdate

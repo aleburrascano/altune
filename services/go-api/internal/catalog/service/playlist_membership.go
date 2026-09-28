@@ -14,11 +14,6 @@ import (
 
 const MaxPlaylistBatchSize = 500
 
-// PlaylistMembershipService adds, removes and reorders playlist tracks. Add and
-// remove never load the playlist's track list: membership and position are
-// decided by targeted, owner-scoped repository writes, so their cost does not
-// grow with the playlist. Only Reorder, which must validate the full order,
-// reads the (id-only) track order.
 type PlaylistMembershipService struct {
 	playlistRepo ports.PlaylistMembershipRepository
 	trackRepo    ports.TrackLookup
@@ -39,9 +34,6 @@ func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembership
 	}
 }
 
-// requirePlaylist confirms the playlist exists and is owned by userId, wrapping
-// any repository error with op and translating a missing playlist into
-// ErrPlaylistNotFound. It reads only the playlist row.
 func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, op string) error {
 	exists, err := s.playlistRepo.Exists(ctx, playlistId, userId)
 	if err != nil {
@@ -53,15 +45,6 @@ func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlis
 	return nil
 }
 
-// membershipWriteError wraps a membership-write repository error with op. A
-// write the data layer refused because the playlist is not owned by the caller
-// (missing, or deleted after requirePlaylist) surfaces as ErrPlaylistNotFound,
-// the same answer requirePlaylist gives, so the owner-scoped SQL never leaks as
-// a 500; a write refused because the track itself is gone (deleted after the
-// lookup) surfaces as ErrTrackNotFound, the same answer the lookup gives. A
-// domain error the write reports (ErrTrackAlreadyInPlaylist, ErrPlaylistFull)
-// passes through unwrapped, so its message reaches the client as the whole
-// answer, and a validation error it reports keeps its 400 through the wrap.
 func membershipWriteError(op string, err error) error {
 	if errors.Is(err, ports.ErrPlaylistNotOwned) {
 		return ErrPlaylistNotFound
@@ -75,7 +58,6 @@ func membershipWriteError(op string, err error) error {
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-// trackIdStrings renders a slice of track ids as their string representations.
 func trackIdStrings(ids []domain.TrackId) []string {
 	out := make([]string, len(ids))
 	for i, id := range ids {
@@ -144,8 +126,6 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 	return len(added), nil
 }
 
-// ownedDistinct returns the ids among trackIds that userId owns, in request
-// order and without repeats.
 func (s *PlaylistMembershipService) ownedDistinct(ctx context.Context, userId shared.UserId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
 	if err != nil {

@@ -20,8 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestClassifyDBError pins which failures are flagged ports.ErrDBTransient.
-// Server errors are real *pgconn.PgError values judged by SQLSTATE.
 func TestClassifyDBError(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -64,9 +62,6 @@ func TestClassifyDBError(t *testing.T) {
 	}
 }
 
-// TestTrackGetByID_ClassifiesRealConnectionFailures drives GetByID through a
-// real pgxpool at local listeners that fail the way a sick database does, and
-// asserts the error the hot path receives is (or is not) flagged transient.
 func TestTrackGetByID_ClassifiesRealConnectionFailures(t *testing.T) {
 	restore := dbCallTimeout
 	dbCallTimeout = 300 * time.Millisecond
@@ -114,7 +109,6 @@ func TestTrackGetByID_ClassifiesRealConnectionFailures(t *testing.T) {
 	}
 }
 
-// refusedAddr returns a local address nothing listens on.
 func refusedAddr(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -126,8 +120,6 @@ func refusedAddr(t *testing.T) string {
 	return addr
 }
 
-// hungAddr returns a local address that accepts TCP connections and never
-// writes a byte: a wedged database the per-call deadline must cut off.
 func hungAddr(t *testing.T) string {
 	t.Helper()
 	return fakePGAddr(t, func(conn net.Conn) {
@@ -140,7 +132,6 @@ func hungAddr(t *testing.T) string {
 	})
 }
 
-// fakePGAddr serves every accepted connection with handle, then closes it.
 func fakePGAddr(t *testing.T, handle func(net.Conn)) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -163,7 +154,6 @@ func fakePGAddr(t *testing.T, handle func(net.Conn)) string {
 	return ln.Addr().String()
 }
 
-// rejectStartup answers the startup message with a FATAL ErrorResponse.
 func rejectStartup(code string) func(net.Conn) {
 	return func(conn net.Conn) {
 		be := pgproto3.NewBackend(conn, conn)
@@ -175,9 +165,6 @@ func rejectStartup(code string) func(net.Conn) {
 	}
 }
 
-// terminateOnFirstQuery completes startup, then on the first query message
-// sends a FATAL ErrorResponse with code (none when code is empty) and drops
-// the connection, as pg_terminate_backend or a crashed backend would.
 func terminateOnFirstQuery(code string) func(net.Conn) {
 	return func(conn net.Conn) {
 		be := pgproto3.NewBackend(conn, conn)
@@ -203,9 +190,6 @@ type countingDBCallMetrics struct{ timeouts atomic.Int64 }
 
 func (m *countingDBCallMetrics) DBCallTimedOut() { m.timeouts.Add(1) }
 
-// TestWithDBTimeout_CountsOnlyItsOwnDeadline proves the DB-call timeout counter
-// moves when the persistence per-call deadline cuts off a wedged call, and stays
-// put when the caller gave up first or the call completed in time.
 func TestWithDBTimeout_CountsOnlyItsOwnDeadline(t *testing.T) {
 	restore := dbCallTimeout
 	dbCallTimeout = 50 * time.Millisecond
@@ -262,11 +246,6 @@ func TestWithDBTimeout_CountsOnlyItsOwnDeadline(t *testing.T) {
 	})
 }
 
-// blockingPool is a pgxPool whose every call blocks until its context is done,
-// then returns that context's error. It stands in for a wedged database: a
-// connection the client holds open while the server never answers. With the
-// per-call deadline in place a repository call against it must return in ~the
-// deadline; without the deadline it would block forever.
 type blockingPool struct{}
 
 func (blockingPool) Begin(ctx context.Context) (pgx.Tx, error) {
@@ -293,11 +272,6 @@ type errRow struct{ err error }
 
 func (r errRow) Scan(_ ...any) error { return r.err }
 
-// TestPersistenceAdapters_StuckCallIsBounded proves that a stuck dependency call
-// in each catalog persistence adapter is bounded by the per-call deadline rather
-// than blocking the handler goroutine (and its pooled connection) indefinitely.
-// It exercises every pgxPool entry point (Begin, Query, QueryRow, Exec) across
-// all four adapters against a pool that never answers.
 func TestPersistenceAdapters_StuckCallIsBounded(t *testing.T) {
 	restore := dbCallTimeout
 	dbCallTimeout = 50 * time.Millisecond

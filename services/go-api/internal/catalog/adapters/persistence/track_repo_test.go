@@ -50,9 +50,6 @@ func cleanupTrack(t *testing.T, pool *pgxpool.Pool, id domain.TrackId, userId sh
 	})
 }
 
-// CountForUser feeds the per-user library cap (#2200): it counts only the
-// caller's rows, and stops at atMost so the query cost does not grow with a
-// library that is already far past the cap.
 func TestPgxTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -243,15 +240,6 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit reproduces the
-// lost-update defect (#966): the acquisition path reads a track, mutates it in
-// memory, then persists it. If a second writer (a user metadata edit, a second
-// app instance — the in-process inflight dedup does not span processes) edits
-// the row's user-owned columns in the window between that read and the write, a
-// full-row UPDATE that rewrites every column from the stale snapshot silently
-// reverts the concurrent edit. The persisted write must be scoped to the
-// acquisition-lifecycle columns the settle actually changes, so a disjoint
-// metadata edit survives while the acquisition result still lands.
 func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -264,7 +252,6 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	// The acquisition worker reads the track — its snapshot is now stale.
 	loaded, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID (acquisition read) error = %v", err)
@@ -273,7 +260,6 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 		t.Fatal("GetByID (acquisition read) returned nil")
 	}
 
-	// A concurrent writer edits user-owned metadata directly, after that read.
 	const editedTitle = "Concurrently Retitled"
 	const editedAlbum = "Concurrently Re-albumed"
 	if _, err := pool.Exec(ctx,
@@ -283,7 +269,6 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 		t.Fatalf("concurrent metadata edit failed: %v", err)
 	}
 
-	// The acquisition completes on its stale snapshot and persists the result.
 	audioRef := "s3://bucket/test-" + uuid.New().String() + ".opus"
 	if err := loaded.MarkReady(audioRef); err != nil {
 		t.Fatalf("MarkReady: %v", err)
@@ -296,14 +281,12 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after update: got=%v err=%v", got, err)
 	}
-	// The concurrent metadata edit must survive the acquisition write.
 	if got.Title != editedTitle {
 		t.Errorf("Title = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Title, editedTitle)
 	}
 	if got.Album != editedAlbum {
 		t.Errorf("Album = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Album, editedAlbum)
 	}
-	// The acquisition result must still land.
 	if got.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("AcquisitionStatus = %v, want ready", got.AcquisitionStatus)
 	}
@@ -312,14 +295,6 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_Update_SameColumnCASMiss reproduces the same-column lost
-// update #1419 targets. #966 closed the metadata-vs-acquisition race with a
-// column-scoped write, but two writers that both touch the acquisition columns
-// (two settles racing, or the stale-pending sweeper vs a settle) still resolved
-// last-writer-wins with no miss surfaced. Both writers read the same version,
-// mutate the same column, and write back: the second write must not silently
-// overwrite the first — it must fail the CAS with ports.ErrTrackVersionConflict,
-// and the winner's result must survive.
 func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -332,7 +307,6 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	// Two acquisition writers each read the same row at the same version.
 	writerA, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil || writerA == nil {
 		t.Fatalf("GetByID (writer A) got=%v err=%v", writerA, err)
@@ -345,7 +319,6 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 		t.Fatalf("writers read different versions: A=%d B=%d", writerA.Version, writerB.Version)
 	}
 
-	// Writer A settles the track ready and wins the CAS at the read version.
 	refA := "s3://bucket/winner-" + uuid.New().String() + ".opus"
 	if err := writerA.MarkReady(refA); err != nil {
 		t.Fatalf("writer A MarkReady: %v", err)
@@ -357,8 +330,6 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 		t.Errorf("winning Update did not advance the row version (still %d)", writerA.Version)
 	}
 
-	// Writer B settles the same acquisition column from its now-stale snapshot.
-	// Its write must miss the CAS rather than clobber writer A's result.
 	if err := writerB.MarkFailed("stale settle from a racing writer"); err != nil {
 		t.Fatalf("writer B MarkFailed: %v", err)
 	}
@@ -367,7 +338,6 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 		t.Fatalf("writer B Update() error = %v, want ports.ErrTrackVersionConflict", err)
 	}
 
-	// No silent lost update: the row still holds writer A's result.
 	got, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil || got == nil {
 		t.Fatalf("GetByID after race: got=%v err=%v", got, err)
@@ -380,10 +350,6 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_Update_DeletedRowIsNotAConflict pins the disambiguation: a
-// write whose row was deleted out from under it reports the not-found/deleted
-// error, never ports.ErrTrackVersionConflict, so a caller can tell "someone won
-// the race, reload" apart from "the row is gone".
 func TestPgxTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -507,9 +473,6 @@ func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	}
 }
 
-// rawPlaylistPositions reads the stored playlist_tracks.position values for a
-// playlist ordered by track_id, bypassing GetWithTracks (which reassigns
-// contiguous indices and would therefore mask a renumbering bug).
 func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId) map[uuid.UUID]int {
 	t.Helper()
 	rows, err := pool.Query(context.Background(),
@@ -537,13 +500,6 @@ func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId domain.Pl
 	return positions
 }
 
-// TestPgxTrackRepo_Delete_EvictsFromAllPlaylists pins the cross-aggregate side
-// effect of a track delete: the track is removed from every playlist that
-// references it, while every other membership row is left untouched. Eviction
-// is owned by the playlist_tracks -> tracks ON DELETE CASCADE (migration 001),
-// so the track repository does not renumber surviving positions; this test
-// deliberately asserts the surviving rows keep their original positions to lock
-// the behavior the refactor preserves.
 func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	pool := testPool(t)
 	trackRepo := NewPgxTrackRepository(pool)
@@ -552,7 +508,7 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	trackA := newTestTrackForDB(t, userId)
-	trackB := newTestTrackForDB(t, userId) // the track to delete
+	trackB := newTestTrackForDB(t, userId)
 	trackC := newTestTrackForDB(t, userId)
 	for _, tr := range []*domain.Track{trackA, trackB, trackC} {
 		cleanupTrack(t, pool, tr.ID, userId)
@@ -561,7 +517,6 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 		}
 	}
 
-	// P1: A(0), B(1), C(2) — deleting B cascades B out, leaving A(0), C(2).
 	p1 := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, p1.ID, userId)
 	if err := playlistRepo.Create(ctx, p1); err != nil {
@@ -573,7 +528,6 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 		}
 	}
 
-	// P2: B(0), C(1) — deleting B cascades B out, leaving C(1).
 	p2 := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, p2.ID, userId)
 	if err := playlistRepo.Create(ctx, p2); err != nil {
@@ -594,8 +548,6 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	}
 
 	p1Pos := rawPlaylistPositions(t, pool, p1.ID)
-	// trackA and trackC keep their original positions (0 and 2): the cascade
-	// evicts trackB but does not renumber the survivors.
 	wantP1 := map[uuid.UUID]int{trackA.ID.UUID(): 0, trackC.ID.UUID(): 2}
 	if _, present := p1Pos[trackB.ID.UUID()]; present {
 		t.Error("trackB still present in p1 after delete")
@@ -613,7 +565,6 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 	if _, present := p2Pos[trackB.ID.UUID()]; present {
 		t.Error("trackB still present in p2 after delete")
 	}
-	// trackC keeps its original position (1): the cascade leaves a gap at 0.
 	if got, ok := p2Pos[trackC.ID.UUID()]; !ok || got != 1 {
 		t.Errorf("p2 position for trackC = %d (present=%v), want 1", got, ok)
 	}
@@ -666,9 +617,6 @@ func TestPgxTrackRepo_ListOwnedTrackRefs_BoundedByLimit(t *testing.T) {
 	}
 }
 
-// countingPool is a pgxPool that answers QueryRow with a fixed count (or error)
-// and records every SQL it was asked to run. Only QueryRow is reachable from
-// pageTotal; the rest fail loudly if a change starts calling them.
 type countingPool struct {
 	count   int
 	err     error
@@ -711,10 +659,6 @@ func (r countRow) Scan(dest ...any) error {
 	return nil
 }
 
-// TestPageTotal_SkipsCountOnlyWhenPageProvesTotal pins the count strategy that
-// replaced COUNT(*) OVER (): a short page is the last page, so its total is
-// derived without a second query; any page that cannot prove the total runs one
-// count(*), clamped so a page is never larger than its reported total.
 func TestPageTotal_SkipsCountOnlyWhenPageProvesTotal(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -779,9 +723,6 @@ func TestPgxTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_FailStalePending proves the durable in-flight marker survives a
-// round-trip and that the sweep fails only tracks older than the cutoff, leaving a
-// freshly scheduled (still legitimately in-flight) track pending.
 func TestPgxTrackRepo_FailStalePending(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -800,7 +741,6 @@ func TestPgxTrackRepo_FailStalePending(t *testing.T) {
 		t.Fatalf("Add fresh: %v", err)
 	}
 
-	// The marker must round-trip: a pending track carries its in-flight timestamp.
 	gotStale, err := repo.GetByID(ctx, stale.ID, userId)
 	if err != nil || gotStale == nil {
 		t.Fatalf("GetByID stale: track=%v err=%v", gotStale, err)
@@ -926,12 +866,6 @@ func keyed(t *testing.T, userId shared.UserId, key string) *domain.Track {
 	return track
 }
 
-// TestPgxTrackRepo_ConcurrentAddSameKey asserts that many genuinely concurrent
-// creates carrying the same idempotency key — but distinct content and ids —
-// collapse to exactly one library row, and every caller receives that one row
-// (created reported for exactly one of them). This is the two-concurrent-clients
-// failure mode from #698: without the (user_id, idempotency_key) partial unique
-// index + ON CONFLICT DO NOTHING, each goroutine would insert its own row.
 func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -991,11 +925,6 @@ func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_AddSameKeyAfterCommit asserts that replaying the same
-// idempotency key after the first create has committed returns the stored row
-// instead of creating a second — the dropped-response-retry failure mode from
-// #698. The retry carries a fresh track id and even different content; the
-// stored row (the first one) must win.
 func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -1013,7 +942,7 @@ func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 		t.Fatalf("first Add created = false, want true")
 	}
 
-	retry := keyed(t, userId, key) // fresh id, different title/artist, same key
+	retry := keyed(t, userId, key)
 	cleanupTrack(t, pool, retry.ID, userId)
 	retryStored, created, err := repo.Add(ctx, retry)
 	if err != nil {

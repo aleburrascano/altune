@@ -240,8 +240,6 @@ func TestHandleDeleteTrack(t *testing.T) {
 	}
 }
 
-// TestHandleDeleteTrack_LogsActor pins #1052: the delete-attempt line names
-// the user who triggered it, not just the track.
 func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -266,11 +264,6 @@ func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 	t.Fatal("no track.delete log line")
 }
 
-// TestHandleCreateTrack_NulByteRejected is the reproducing case from #2194: a
-// U+0000 in any text field of POST /tracks used to travel into a Postgres text
-// column, which refuses it with "invalid byte sequence" — an error with no HTTP
-// status, so the caller saw a 500. Each field below is accepted without the NUL
-// elsewhere in this file, so the 400 belongs to the NUL and not to the field.
 func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 	withNul := "a\x00b"
 	tests := []struct {
@@ -310,9 +303,6 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 	}
 }
 
-// TestHandleCreateTrack_NulByteInIdempotencyKeyRejected covers the one #2194
-// field that arrives as a header rather than in the body. The key is persisted
-// on the row, so it is refused before the insert like every other text field.
 func TestHandleCreateTrack_NulByteInIdempotencyKeyRejected(t *testing.T) {
 	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), &catalogtest.Scheduler{})
 	body := CreateTrackRequest{Title: "Title", Artist: "Artist"}
@@ -409,9 +399,6 @@ func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-// TestHandleSetTrackNumber pins the write-once contract at the HTTP edge: both
-// the first fill and the silent no-op answer 204, and the handler uses the
-// service's updated result to log which one happened.
 func TestHandleSetTrackNumber(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -446,10 +433,6 @@ func TestHandleSetTrackNumber(t *testing.T) {
 	}
 }
 
-// TestHandleSetTrackNumber_NotFound pins #1049: a track that does not exist,
-// or exists but is owned by another user, answers 404 rather than the 204 of
-// the write-once no-op, and a foreign track is left untouched. Both cases share
-// one 404 so the endpoint does not reveal that a foreign track id exists.
 func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	foreign := makeTrack(shared.NewUserId(uuid.New()), "Theirs", "Artist", "Album")
@@ -480,9 +463,6 @@ func featuredDTOs(n int) []service.FeaturedArtistDTO {
 	return out
 }
 
-// Each featured artist costs two round trips inside the add transaction, so an
-// oversized list must be refused at the boundary before anything is stored or
-// scheduled.
 func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	sched := &catalogtest.Scheduler{}
@@ -500,8 +480,6 @@ func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
 	}
 }
 
-// The largest real credit lists (a charity single like "We Are The World"
-// carries 40 Deezer contributors) sit well under the cap and must still save.
 func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
@@ -517,9 +495,6 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
 	}
 }
 
-// A featured artist's name is free text like title or genre, and its MBID is a
-// UUID, so both are capped: an oversized value is refused with a 400 before
-// anything is stored or scheduled.
 func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 	longMBID := strings.Repeat("a", 37)
 	cases := map[string]service.FeaturedArtistDTO{
@@ -546,7 +521,6 @@ func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 	}
 }
 
-// A name at the cap and a real MusicBrainz artist MBID must still save.
 func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
@@ -567,8 +541,6 @@ func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
 	}
 }
 
-// An internal-looking source_url must be refused at the HTTP boundary before a
-// track is stored or the acquisition scheduler is asked to fetch it.
 func TestHandleCreateTrack_RejectsInternalSourceURL(t *testing.T) {
 	for _, sourceURL := range []string{
 		"http://169.254.169.254/latest/meta-data/",
@@ -609,12 +581,6 @@ func TestHandleCreateTrack_SchedulesPublicSourceURL(t *testing.T) {
 	}
 }
 
-// JSON cannot spell Infinity or NaN, and encoding/json already refuses a
-// literal that overflows float64 (1e400). The reachable path to a non-finite
-// value is a finite but huge duration: it is stored as-is, and summing two of
-// them in a playlist's total_duration_seconds yields +Inf, which encoding/json
-// cannot marshal, so the detail response is committed as 200 with a truncated
-// body. Every such duration must be refused at the boundary with a 400.
 func TestHandleCreateTrack_RejectsUnencodableDuration(t *testing.T) {
 	for _, raw := range []string{"1e400", "-1e400", "1.7976931348623157e308", "1e300", "604801"} {
 		t.Run(raw, func(t *testing.T) {
@@ -644,10 +610,6 @@ func createTrackWithRawDuration(raw string) *strings.Reader {
 	return strings.NewReader(`{"title":"Dreams","artist":"Fleetwood Mac","duration_seconds":` + raw + `}`)
 }
 
-// TestCreateTrack_ThrottlesPerUser holds POST /tracks to a per-user budget:
-// the creates past the burst are refused with 429 and a Retry-After, and none
-// of them reaches the repository. Every title is distinct, so dedup cannot be
-// what stops the row.
 func TestCreateTrack_ThrottlesPerUser(t *testing.T) {
 	clock := newAudioFakeClock()
 	limit := AudioRateLimit{Every: 2 * time.Second, Burst: 5}

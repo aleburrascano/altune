@@ -24,9 +24,6 @@ type backfillResponse struct {
 	NextOffset int  `json:"next_offset"`
 }
 
-// Back-to-back backfill calls from the same user must be throttled: the second
-// POST lands inside the cooldown and is rejected with 429 instead of starting
-// another run of up to 10k external lookups.
 func TestHandleBackfillFeatured_BackToBackIsThrottled(t *testing.T) {
 	trackRepo := catalogtest.NewTrackRepo()
 	trackRepo.Seed(makeTrack(testUserId, "Song", "Artist", "Album"))
@@ -46,8 +43,6 @@ func TestHandleBackfillFeatured_BackToBackIsThrottled(t *testing.T) {
 	}
 }
 
-// A run truncated by the page cap hands back a next_offset; the follow-up call
-// passes it as ?offset= to continue where that run stopped.
 func TestHandleBackfillFeatured_ResumesFromTheOffsetQuery(t *testing.T) {
 	trackRepo := catalogtest.NewTrackRepo()
 	for _, title := range []string{"One", "Two", "Three"} {
@@ -68,8 +63,6 @@ func TestHandleBackfillFeatured_ResumesFromTheOffsetQuery(t *testing.T) {
 	}
 }
 
-// A negative offset is a client mistake, not a run: it answers 400 and leaves
-// the caller's next real backfill admitted.
 func TestHandleBackfillFeatured_RejectsANegativeOffset(t *testing.T) {
 	trackRepo := catalogtest.NewTrackRepo()
 	trackRepo.Seed(makeTrack(testUserId, "Song", "Artist", "Album"))
@@ -82,8 +75,6 @@ func TestHandleBackfillFeatured_RejectsANegativeOffset(t *testing.T) {
 	assertStatus(t, accepted, http.StatusOK)
 }
 
-// The error response carries no counts, so a run that failed after resolving
-// part of the library must leave that work, and its resume point, in the log.
 func TestHandleBackfillFeatured_LogsPartialWorkWhenTheRunFails(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
@@ -111,9 +102,6 @@ func TestHandleBackfillFeatured_LogsPartialWorkWhenTheRunFails(t *testing.T) {
 	}
 }
 
-// A deezer_id the caller typed wrong used to be dropped: ?name=X&deezer_id=abc
-// answered 200 about a different artist, and ?deezer_id=abc alone fell through
-// to a 400 blaming the parameter the caller did send.
 func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
 	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), nil)
 
@@ -127,8 +115,6 @@ func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
 	}
 }
 
-// A query naming no artist at all is a different client mistake from an
-// unreadable id, and carries its own code to say so.
 func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
 	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), nil)
 
@@ -138,8 +124,6 @@ func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
 	assertErrorCode(t, rec, "catalog.featured_artist_key_required")
 }
 
-// The rejection must not swallow the ids that are fine: a positive deezer_id
-// still reaches the lookup and returns the tracks featuring that artist.
 func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
 	trackRepo := catalogtest.NewTrackRepo()
 	track := makeTrack(testUserId, "Feature", "Artist", "Album")
@@ -170,9 +154,6 @@ func backfillRouter(repo *listFailsAfterFirstPage) chi.Router {
 	return router
 }
 
-// listFailsAfterFirstPage serves one page, reporting one more track than it
-// returned so the run pages again, and fails that call: the run reaches the
-// error having already scanned real tracks.
 type listFailsAfterFirstPage struct {
 	*catalogtest.TrackRepo
 	served bool

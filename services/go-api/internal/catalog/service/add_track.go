@@ -13,34 +13,14 @@ import (
 
 const minPlausibleYear = 1860
 
-// maxTrackNumber is the int4 ceiling of the track_number column (see
-// migrations/001_baseline.sql). Values above it cannot encode into Postgres and
-// would otherwise surface as an opaque 500 instead of a validation error.
 const maxTrackNumber = 2147483647
 
-// MaxFeaturedArtistsPerTrack caps featured_artists on a track add. Each entry
-// costs two round trips inside the add transaction, so the list must not scale
-// with caller input. Neither the mobile save payload nor discovery's
-// MusicBrainz/Deezer extraction trims the list, so the cap sits well above real
-// credits: the largest seen, a charity single like "We Are The World", carries
-// 40 Deezer contributors, and merging MusicBrainz credits at most roughly
-// doubles that.
 const MaxFeaturedArtistsPerTrack = 100
 
-// MaxTracksPerUser is the most tracks one account may create. Distinct titles
-// bypass dedup, so without it an authenticated caller grows the tracks table
-// and its four trigram GIN indexes without limit (#2200). It sits an order of
-// magnitude above the largest personal library anyone has brought here (the
-// catalog pages every read, so nothing but storage bounds a real one).
 const MaxTracksPerUser = 50_000
 
-// maxTracksPerUser is the cap the check actually reads. It is a var so a test
-// can cross it with a handful of rows instead of fifty thousand.
 var maxTracksPerUser = MaxTracksPerUser
 
-// ErrLibraryFull refuses a create once the account already holds
-// MaxTracksPerUser tracks. A library stored over the cap keeps every track it
-// has; only further creates are refused.
 var ErrLibraryFull = &domain.CodedError{
 	Msg:    "library is full",
 	Status: 400,
@@ -85,8 +65,6 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackS
 	return applyOptions(s, opts)
 }
 
-// WithAddTrackClock replaces the clock the year plausibility ceiling is
-// measured from. A nil clock is ignored so the wall clock always holds.
 func WithAddTrackClock(now func() time.Time) func(*AddTrackService) {
 	return func(s *AddTrackService) {
 		if now != nil {
@@ -162,47 +140,26 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	return &AddTrackOutput{Track: track, Created: created}, nil
 }
 
-// requireLibrarySpace refuses the save once the account holds maxTracksPerUser
-// tracks. The count is read before the insert, so saves racing the last slot
-// can all pass it: the cap bounds growth, it is not an exact quota, and the
-// per-user write throttle in front of the route bounds the overshoot to the
-// requests one caller has in flight. At the cap every save is refused,
-// including a retry of one that already landed, which would otherwise have
-// answered with the stored track.
 func (s *AddTrackService) requireLibrarySpace(ctx context.Context, userId shared.UserId) error {
 	held, err := s.trackRepo.CountForUser(ctx, userId, maxTracksPerUser)
 	if err != nil {
 		return wrapRepoError(ctx, "count tracks", err)
 	}
 	if held >= maxTracksPerUser {
-		// The refusal is a coded 400, which the HTTP layer does not log, and an
-		// account that has stopped being able to save is worth seeing without a
-		// client report.
 		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", maxTracksPerUser)
 		return ErrLibraryFull
 	}
 	return nil
 }
 
-// scheduleTimeout bounds a single AcquisitionScheduler.Schedule call. Admission
-// is an in-process queue check, so a call anywhere near this budget is stuck;
-// the bound keeps it from holding the request goroutine indefinitely.
 const scheduleTimeout = 5 * time.Second
 
-// scheduleBounded calls scheduler.Schedule under a child context bounded by
-// scheduleTimeout. Because it derives from ctx, a caller that already carries a
-// shorter deadline keeps it. A timeout surfaces as a non-nil error, which
-// callers treat like any other refused schedule.
 func scheduleBounded(ctx context.Context, scheduler ports.AcquisitionScheduler, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
 	ctx, cancel := context.WithTimeout(ctx, scheduleTimeout)
 	defer cancel()
 	return scheduler.Schedule(ctx, userId, trackId, sourceURL)
 }
 
-// scheduleAcquisition queues the new track's acquisition. When the scheduler
-// refuses the job or times out, nothing will ever move the track off pending,
-// so it is failed at once with a distinct reason: the retry path admits failed
-// tracks. The track returned in AddTrackOutput reflects that degraded outcome.
 func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared.UserId, track *domain.Track, sourceURL string) {
 	slog.InfoContext(ctx, "acquisition.scheduled", "track_id", track.ID.String())
 	schedErr := scheduleBounded(ctx, s.scheduler, userId, track.ID, sourceURL)
@@ -214,11 +171,6 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 	failed := *track
 	expectedVersion := failed.Version
 	_ = failed.MarkFailed(string(domain.FailureAcquisitionRefused))
-	// CAS at the just-created row's version. A conflict here means an acquisition
-	// writer already settled the track between Add and now, so its result stands
-	// and this refusal write is dropped — logged, not swallowed, and the row is
-	// reported as stored (pending); the stale-pending sweep still reclaims a
-	// genuinely stuck pending row after its grace, keeping it retryable.
 	if err := s.trackRepo.Update(ctx, &failed, expectedVersion); err != nil {
 		slog.ErrorContext(ctx, "acquisition.schedule_refused_persist_failed",
 			"track_id", track.ID.String(), "error", err)
@@ -266,9 +218,6 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	return nil
 }
 
-// maxIdempotencyKeyLength bounds the client-supplied key so a hostile client
-// cannot store an unbounded token. A UUID is 36 chars; 200 leaves ample room
-// for other reasonable key schemes.
 const maxIdempotencyKeyLength = 200
 
 func validateIdempotencyKey(key *string) error {

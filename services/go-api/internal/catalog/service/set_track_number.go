@@ -16,14 +16,6 @@ func NewSetTrackNumberService(trackRepo ports.TrackNumberFiller) *SetTrackNumber
 	return &SetTrackNumberService{trackRepo: trackRepo}
 }
 
-// Execute validates trackNumber and fills the track's album position once.
-//
-// The write is write-once (see ports.TrackNumberSetter): a track that already
-// has a number keeps it, and that no-op returns updated=false with a nil error;
-// callers must not treat it as a failure. When the write is a no-op because no
-// track with trackId is owned by userId, Execute returns ErrTrackNotFound. A
-// foreign track is reported the same way as a missing one, so its existence is
-// not revealed.
 func (s *SetTrackNumberService) Execute(
 	ctx context.Context,
 	userId shared.UserId,
@@ -46,9 +38,6 @@ func (s *SetTrackNumberService) Execute(
 	return false, s.requireOwnedTrack(ctx, userId, trackId)
 }
 
-// requireOwnedTrack disambiguates a no-op write: it returns ErrTrackNotFound
-// unless userId owns trackId. The lookup runs after the write, so a track
-// deleted in between is reported as not found, which is what it now is.
 func (s *SetTrackNumberService) requireOwnedTrack(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {

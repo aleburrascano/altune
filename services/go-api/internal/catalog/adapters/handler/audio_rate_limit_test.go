@@ -40,8 +40,6 @@ func (c *audioFakeClock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// countingAudioStore counts GetObject-equivalent Stream calls and presigns so
-// a test can prove a throttled request never reached object storage.
 type countingAudioStore struct {
 	*catalogtest.AudioStore
 	mu       sync.Mutex
@@ -63,8 +61,6 @@ func (s *countingAudioStore) PresignGet(_ context.Context, ref string, _ time.Du
 	return "https://storage.test/" + ref + "?sig=x", nil
 }
 
-// verifyBearerAsUser treats the bearer token as the caller's user id, so one
-// router can serve several principals.
 var verifyBearerAsUser = auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 	id, err := uuid.Parse(token)
 	if err != nil {
@@ -75,8 +71,6 @@ var verifyBearerAsUser = auth.VerifierFunc(func(_ context.Context, token string)
 
 const audioTestBytes = 64 * 1024
 
-// audioRig is the real stream and audio-url route table behind the real auth
-// middleware, over fakes that count every backend call.
 type audioRig struct {
 	router chi.Router
 	store  *countingAudioStore
@@ -96,7 +90,6 @@ func newAudioRig(streamOpts []func(*StreamHandler), urlOpts []func(*AudioURLHand
 	return &audioRig{router: r, store: store, repo: repo}
 }
 
-// seedTracks gives user n ready tracks with real audio bytes.
 func (rig *audioRig) seedTracks(user shared.UserId, n int) []*domain.Track {
 	tracks := make([]*domain.Track, 0, n)
 	for i := range n {
@@ -116,7 +109,6 @@ func (rig *audioRig) do(req *http.Request, user shared.UserId) *httptest.Respons
 	return rec
 }
 
-// stream issues GET /tracks/{id}/audio, with a Range header when rangeHdr is set.
 func (rig *audioRig) stream(user shared.UserId, track *domain.Track, rangeHdr string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
 	if rangeHdr != "" {
@@ -234,19 +226,6 @@ func TestAudioRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 	}
 }
 
-// TestAudioRateLimit_DefaultsAdmitRealClientTraffic replays the mobile
-// client's heaviest legitimate patterns against the default limits on one
-// account; not one request may be throttled.
-//
-//   - Offline pin: the pinned-download worker resolves one track per
-//     /audio-urls call, back to back. A 200-track batch is replayed with zero
-//     time between calls (every download failing instantly), while playback
-//     starts alongside it (a 25-track presign window plus a prefetch).
-//   - Listening: two hours on the streaming fallback (presign unavailable).
-//     A 20-track skip storm in 10 seconds, each skip an AVPlayer bytes=0-1
-//     probe plus two Range reads, then 3-minute tracks each loaded with a probe,
-//     six buffer-refill Range reads and ten seeks, with a prefetch resolve per
-//     track change and a presign-window slide every 20 tracks.
 func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newAudioFakeClock()
 	rig := newAudioRig(
@@ -321,15 +300,6 @@ func TestAudioRateLimiter_EvictsRefilledBuckets(t *testing.T) {
 	}
 }
 
-// TestWriteRateLimits_DefaultsAdmitRealClientTraffic replays the client's
-// heaviest legitimate write patterns against the default budgets on one
-// account, with no time passing between calls; not one request may be
-// throttled.
-//
-//   - "Save all" on a 100-track compilation: one POST /tracks per unowned
-//     track, four in flight, then the same again on a second album.
-//   - Adding a track to every playlist it owns from the add-to-playlist sheet:
-//     one batch call per playlist.
 func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newAudioFakeClock()
 	rig := newWriteRig(

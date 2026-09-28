@@ -50,10 +50,6 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	defer tx.Rollback(ctx)
 
 	var returnedID uuid.UUID
-	// Bare ON CONFLICT DO NOTHING (no target) collapses on either unique
-	// dimension: the content-derived (user_id, dedup_key) or the client-supplied
-	// (user_id, idempotency_key) partial index. A no-rows result therefore means
-	// one of those keys already exists, and the existing row is resolved below.
 	err = tx.QueryRow(ctx,
 		`INSERT INTO tracks (
 			id, user_id, title, artist, album, duration_seconds,
@@ -72,10 +68,6 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		// The insert was a no-op: a conflicting row already exists. Release this
-		// transaction's connection before the follow-up lookup, which draws a
-		// separate connection from the pool — holding both at once would exhaust
-		// a small pool under concurrent conflicting inserts and deadlock.
 		_ = tx.Rollback(ctx)
 		existing, lookupErr := r.resolveConflictingTrack(ctx, track)
 		if lookupErr != nil {
@@ -109,9 +101,6 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 	return track, classifyDBError(err)
 }
 
-// AudioRefInUse asks across every owner, not just the excluded track's: the
-// answer gates a delete, so a reference anywhere must hold the object. Served
-// by idx_tracks_audio_ref (migration 021).
 func (r *PgxTrackRepository) AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -127,10 +116,6 @@ func (r *PgxTrackRepository) AudioRefInUse(ctx context.Context, audioRef string,
 	return inUse, nil
 }
 
-// CountForUser counts the user's tracks, stopping at atMost. The count only
-// gates the per-user cap, so the inner LIMIT keeps it an index-only scan of at
-// most atMost rows of idx_tracks_user_added_at (migration 020) rather than a
-// walk of a library that may be far past the cap.
 func (r *PgxTrackRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -201,31 +186,6 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 	return collectTracks(rows)
 }
 
-// Update persists a track's acquisition lifecycle. Every caller reads a track,
-// drives an acquisition state change on it (mark ready, replace audio, fail,
-// revert to pending), then writes it back through here — a read-modify-write.
-//
-// The write is column-scoped to the acquisition-owned columns and deliberately
-// does NOT rewrite the user-owned metadata columns (title, artist, album,
-// artwork_url, dedup_key, year, genre, track_number, album_artist, isrc). A
-// full-row UPDATE that rewrote every column from the caller's snapshot lost the
-// updates of any writer that changed a metadata column in the window between the
-// read and this write — a concurrent user metadata edit, or a second app
-// instance whose in-process inflight dedup does not span processes (#966). Those
-// columns are owned by their own write paths (create-time Add, the write-once
-// SetTrackNumber), never by an acquisition settle, so scoping the write out of
-// them preserves a concurrent metadata edit while the acquisition result lands.
-//
-// Same-column races (two acquisition writers, the stale-pending sweeper vs a
-// settle) are closed by an optimistic-lock CAS on the monotonic version column
-// (migration 022, #1419): the write matches the owned row only at
-// expectedVersion — the version the caller read before mutating — and bumps it
-// in the same statement, so two writers that read the same version cannot both
-// land. RETURNING version reports the new value back onto the track. A no-rows
-// result is disambiguated below: a still-present row means a concurrent writer
-// advanced the version (ErrTrackVersionConflict), an absent row means the track
-// was deleted; the two are surfaced as distinct errors so a caller never
-// mistakes a lost race for a vanished row, or silently swallows either.
 func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -255,10 +215,6 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, ex
 	return nil
 }
 
-// classifyFailedCAS resolves why an Update matched no row at expectedVersion: a
-// still-present owned row means its version advanced past expectedVersion, so a
-// concurrent writer settled first (ErrTrackVersionConflict); no row means the
-// track was deleted. It runs only on the CAS miss, off the hot path.
 func (r *PgxTrackRepository) classifyFailedCAS(ctx context.Context, track *domain.Track, expectedVersion int) error {
 	var currentVersion int
 	err := r.pool.QueryRow(ctx,
@@ -275,10 +231,6 @@ func (r *PgxTrackRepository) classifyFailedCAS(ctx context.Context, track *domai
 		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)
 }
 
-// SetTrackNumber enforces the write-once precondition of
-// ports.TrackNumberSetter in SQL: the UPDATE matches only an owned row whose
-// track_number IS NULL, so zero affected rows (updated=false) covers both an
-// already-set number and a missing or foreign track.
 func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (bool, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -294,10 +246,6 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 	return tag.RowsAffected() > 0, nil
 }
 
-// FailStalePending transitions every pending track whose in-flight marker predates
-// cutoff to failed, clearing the marker. These are tracks whose acquisition job was
-// lost to a process that died mid-flight; moving them to failed lets the retry path
-// reclaim them instead of leaving them stuck at pending forever.
 func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.Time, reason string) (int, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -319,12 +267,6 @@ func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.T
 	return int(tag.RowsAffected()), nil
 }
 
-// Delete removes the track row. Playlist-membership cleanup is owned by the
-// playlist_tracks -> tracks foreign key (ON DELETE CASCADE, migration 001): the
-// track delete atomically evicts the track from every playlist that references
-// it, so this repository does not touch playlist_tracks or its positions
-// directly. That cascade is the only observable cross-aggregate side effect,
-// and it runs inside this transaction, preserving the delete's atomicity.
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -364,10 +306,6 @@ func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId sh
 	return true, ref, nil
 }
 
-// resolveConflictingTrack finds the row that made an insert a no-op. A supplied
-// idempotency key is authoritative: a retry of one logical save must return the
-// row that first landed under that key, even if the content differs. When no key
-// was sent (or nothing matches it), the content-derived dedup key is the seam.
 func (r *PgxTrackRepository) resolveConflictingTrack(ctx context.Context, track *domain.Track) (*domain.Track, error) {
 	if track.IdempotencyKey != nil {
 		existing, err := r.GetByIdempotencyKey(ctx, track.UserId, *track.IdempotencyKey)
@@ -389,9 +327,6 @@ func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.Us
 	return r.getTrackByUniqueKey(ctx, userId, "dedup_key", dedupKey)
 }
 
-// getTrackByUniqueKey loads the single track a user owns under one of the tracks
-// table's unique keys. column is a fixed identifier chosen by the caller (never
-// user input), so interpolating it into the query is safe; value is parameterized.
 func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId shared.UserId, column, value string) (*domain.Track, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -411,9 +346,6 @@ func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId sha
 	return track, nil
 }
 
-// maxOwnedTrackRefs bounds the rows returned by ListOwnedTrackRefs at the
-// catalog module's read cap (domain.MaxLibraryPageSize). It is a var so tests
-// can exercise the bound without inserting the full cap.
 var maxOwnedTrackRefs = domain.MaxLibraryPageSize
 
 func (r *PgxTrackRepository) ListOwnedTrackRefs(
@@ -560,29 +492,6 @@ func collectTracks(rows pgx.Rows) ([]*domain.Track, error) {
 	return tracks, rows.Err()
 }
 
-// pageTotal resolves the exact total row count for one LIMIT/OFFSET page of a
-// library list, without a COUNT(*) OVER () window on the page query.
-//
-// The window forced Postgres to materialize and sort every one of the user's
-// matching rows (full width, spilling to disk for large libraries) before the
-// LIMIT applied, so a 50-row page cost O(library). Without it the page query
-// can walk a sort-order index (migrations/020_track_library_indexes.sql) and
-// stop after offset+limit rows. The total is then derived in two ways:
-//
-//   - A short page (fewer rows than the limit) is the last page, so the total
-//     is exactly offset+got and no second query runs. An empty page past offset
-//     0 is ambiguous (offset may overshoot), so it falls through to a count.
-//   - Otherwise one narrow count(*) runs over the same filter. Unfiltered, it is
-//     an index-only scan on a user_id-prefixed index; it is still O(matches),
-//     but far cheaper than a full-width window sort, and it keeps the response's
-//     exact Total and HasMore semantics unchanged for clients.
-//
-// Tradeoff: the page and the count are two statements, not one snapshot, so a
-// concurrent add/delete can skew them by a row. A non-empty page clamps the count
-// to at least offset+got so it is never reported as larger than its total (an
-// empty page past the end keeps the true count). Approximate
-// (reltuples) counts were rejected because they are table-wide, not per user;
-// keyset pagination was rejected because it changes the API's response shape.
 func pageTotal(ctx context.Context, pool pgxPool, limit, offset, got int, countSQL string, args ...any) (int, error) {
 	if limit > 0 && got < limit && (got > 0 || offset == 0) {
 		return offset + got, nil

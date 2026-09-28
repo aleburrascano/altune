@@ -67,9 +67,6 @@ func TestValidateSourceURL_RejectsNonPublicHosts(t *testing.T) {
 	}
 }
 
-// Host smuggling that other URL parsers would read as an internal address must
-// not slip past as a public host; Go refuses these as malformed, which is also a
-// rejection.
 func TestValidateSourceURL_RejectsSmuggledHosts(t *testing.T) {
 	for _, raw := range []string{
 		"http://127.0.0.1\\@example.com/",

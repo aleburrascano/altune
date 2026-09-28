@@ -32,13 +32,8 @@ func AudioContentType(audioRef string) string {
 	}
 }
 
-// MaxPresignTTL is the hard ceiling on a presigned audio URL's lifetime. Every
-// AudioURLSigner clamps the requested ttl to it before signing, so no call site
-// (a new option, or a bug) can mint a long-lived bearer link to a user's audio.
 const MaxPresignTTL = time.Hour
 
-// ClampPresignTTL caps ttl at MaxPresignTTL. A non-positive ttl is returned
-// unchanged so the signer can reject it rather than silently widening it.
 func ClampPresignTTL(ttl time.Duration) time.Duration {
 	return min(ttl, MaxPresignTTL)
 }

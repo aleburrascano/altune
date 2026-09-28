@@ -178,11 +178,6 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 		return "$" + strconv.Itoa(len(args))
 	}
 
-	// The ILIKE filters are backed by the pg_trgm GIN indexes and each sort order
-	// by a (user_id, sort key, id) index, both in
-	// migrations/020_track_library_indexes.sql. Neither is required for
-	// correctness: before that migration is applied the same SQL still returns
-	// the same rows, only via a scan.
 	where := ` FROM tracks WHERE user_id = ` + placeholder(userId.UUID())
 	if query.Search != "" {
 		p := placeholder(likePattern(query.Search))

@@ -15,9 +15,6 @@ func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]shared
 	return s.feats, nil
 }
 
-// Provider credits feed the backfill, which persists without the add-track
-// validation, so a credit over the catalog field caps is dropped rather than
-// failing the whole track; real credits pass through.
 func TestFeaturedResolver_SkipsOversizedCredits(t *testing.T) {
 	inner := stubFeaturedResolver{feats: []shared.FeaturedArtist{
 		{Name: "Michael Jackson", MBID: "f27ec8db-af05-4f36-916e-3d57f91ecf5e"},

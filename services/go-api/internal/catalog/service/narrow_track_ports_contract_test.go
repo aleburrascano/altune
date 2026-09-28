@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// Each stub implements only the track methods one service calls, so this file
-// compiles only while every service depends on its narrow track port.
-
 type stubAdder struct{}
 
 func (stubAdder) Add(context.Context, *domain.Track) (*domain.Track, bool, error) {

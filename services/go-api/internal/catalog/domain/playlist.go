@@ -39,15 +39,8 @@ type PlaylistTrack struct {
 
 const PreviewArtworkLimit = 4
 
-// MaxPlaylistTracks is the most tracks a playlist may hold. It equals the
-// catalog's bounded-read size on purpose: tracks past one bounded read can
-// neither be listed nor reordered, so capping growth at that same number is
-// what keeps every playlist readable whole (#2196).
 const MaxPlaylistTracks = MaxLibraryPageSize
 
-// ErrPlaylistFull refuses an add that would take a playlist past
-// MaxPlaylistTracks. A playlist stored over the cap before it existed keeps
-// every track it has; only further adds are refused.
 var ErrPlaylistFull = &CodedError{Msg: "playlist is full", Status: 400, Code: "catalog.playlist_full"}
 
 type Playlist struct {
@@ -69,9 +62,6 @@ type PlaylistWithSummary struct {
 	Summary  PlaylistSummary
 }
 
-// NewPlaylist builds an empty playlist with the trimmed name, stamped at now
-// (stored as UTC). The time source is the caller's so tests can pin
-// CreatedAt/UpdatedAt.
 func NewPlaylist(userId shared.UserId, name string, now time.Time) (*Playlist, error) {
 	name, err := validatePlaylistName(name)
 	if err != nil {
@@ -88,7 +78,6 @@ func NewPlaylist(userId shared.UserId, name string, now time.Time) (*Playlist, e
 	}, nil
 }
 
-// Rename sets the trimmed name and stamps UpdatedAt with now (stored as UTC).
 func (p *Playlist) Rename(name string, now time.Time) error {
 	name, err := validatePlaylistName(name)
 	if err != nil {
@@ -99,7 +88,6 @@ func (p *Playlist) Rename(name string, now time.Time) error {
 	return nil
 }
 
-// AddTrack appends trackId and stamps UpdatedAt with now (stored as UTC).
 func (p *Playlist) AddTrack(trackId TrackId, now time.Time) error {
 	for _, t := range p.Tracks {
 		if t.TrackId == trackId {
@@ -114,8 +102,6 @@ func (p *Playlist) AddTrack(trackId TrackId, now time.Time) error {
 	return nil
 }
 
-// RemoveTrack drops trackId, if present, and stamps UpdatedAt with now
-// (stored as UTC). It reports whether the track was present.
 func (p *Playlist) RemoveTrack(trackId TrackId, now time.Time) bool {
 	idx := -1
 	for i, t := range p.Tracks {
@@ -135,8 +121,6 @@ func (p *Playlist) RemoveTrack(trackId TrackId, now time.Time) bool {
 	return true
 }
 
-// Reorder applies trackIds as the new order and stamps UpdatedAt with now
-// (stored as UTC).
 func (p *Playlist) Reorder(trackIds []TrackId, now time.Time) error {
 	if len(trackIds) != len(p.Tracks) {
 		return NewValidationError("track list length mismatch")
@@ -166,8 +150,6 @@ func (p *Playlist) Reorder(trackIds []TrackId, now time.Time) error {
 	return nil
 }
 
-// validatePlaylistName trims surrounding whitespace before checking, so a
-// whitespace-only name is rejected as empty, and returns the trimmed name.
 func validatePlaylistName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {

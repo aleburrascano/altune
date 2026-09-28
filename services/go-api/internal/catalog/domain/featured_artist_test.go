@@ -38,9 +38,6 @@ func TestFeaturedArtist_IdentityKey(t *testing.T) {
 	}
 }
 
-// TestFeaturedArtist_IdentityKey_NFKC is the regression guard for #1065: names
-// that differ only in Unicode form must share one name identity key, the value
-// the featured_artists upsert conflicts on.
 func TestFeaturedArtist_IdentityKey_NFKC(t *testing.T) {
 	pairs := []struct{ name, a, b string }{
 		{"NFC vs NFD", "Beyoncé", "Beyoncé"},

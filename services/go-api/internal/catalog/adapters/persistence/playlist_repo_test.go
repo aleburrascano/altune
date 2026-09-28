@@ -29,7 +29,6 @@ func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
 	return pl
 }
 
-// seedTrackForDB stores one fresh track owned by userId and returns its id.
 func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
@@ -49,9 +48,6 @@ func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, use
 	})
 }
 
-// CountForUser feeds the per-user playlist cap (#2200): it counts only the
-// caller's rows, and stops at atMost so the query cost does not grow with an
-// account that is already far past the cap.
 func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
@@ -81,7 +77,6 @@ func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testi
 	}
 }
 
-// seedPlaylistForDB stores one fresh playlist owned by userId.
 func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.PlaylistId {
 	t.Helper()
 	pl := newTestPlaylistForDB(t, userId)
@@ -168,8 +163,6 @@ func TestPgxPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// One shared instant: the tiebreak, not created_at, is what keeps the two
-	// pages disjoint here.
 	createdAt := time.Now().UTC()
 	for i := 0; i < 3; i++ {
 		pl := newTestPlaylistForDB(t, userId)
@@ -375,8 +368,6 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	}
 }
 
-// withPlaylistTrackCap lowers the playlist bound for one test, so crossing it
-// costs four rows rather than two thousand.
 func withPlaylistTrackCap(t *testing.T, limit int) {
 	t.Helper()
 	prev := maxPlaylistTracks
@@ -390,9 +381,6 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Seeded before the bound is lowered: the same number now caps adds, so a
-	// playlist can only be over it the way the real ones are — it grew there
-	// while the bound was higher.
 	const inserted = 5
 	pl, _ := seedPlaylistWithTracks(ctx, t, pool, userId, inserted)
 	withPlaylistTrackCap(t, 3)
@@ -407,10 +395,6 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 	}
 }
 
-// TestPgxPlaylistRepo_AddTrack_RefusedPastTheCap reproduces #2196: no total
-// size cap existed, so a playlist could grow past the bound every read stops
-// at and silently lose its tail. The add that would cross the cap is refused
-// under the playlist lock, leaving the playlist exactly as it was.
 func TestPgxPlaylistRepo_AddTrack_RefusedPastTheCap(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -429,9 +413,6 @@ func TestPgxPlaylistRepo_AddTrack_RefusedPastTheCap(t *testing.T) {
 	assertContiguousOrder(ctx, t, pool, pl.ID, ids)
 }
 
-// TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap holds the batch
-// to all-or-nothing: a batch whose new members would cross the cap inserts
-// none of them, rather than filling the remaining slots and dropping the rest.
 func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -453,10 +434,6 @@ func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) 
 	assertContiguousOrder(ctx, t, pool, pl.ID, ids)
 }
 
-// TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing covers the
-// playlists that passed the cap before it existed: the cap may not turn them
-// into an error, and the one way out of the state — removing tracks — has to
-// keep working.
 func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -483,9 +460,6 @@ func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing
 		}
 	})
 
-	// A retried add of tracks the playlist already holds inserts nothing, so it
-	// takes the playlist nowhere: answering it "full" would fail a request that
-	// asks for no room at all.
 	t.Run("re-adding tracks it already holds is not refused", func(t *testing.T) {
 		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, ids[1]); !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
 			t.Errorf("AddTrack(member): err = %v, want domain.ErrTrackAlreadyInPlaylist", err)
@@ -507,11 +481,6 @@ func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing
 	})
 }
 
-// TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner proves the data layer
-// itself owner-scopes every membership write (issue #1044): called directly with
-// another tenant's playlist id — bypassing the service's loadPlaylist check —
-// each write returns ports.ErrPlaylistNotOwned and leaves the victim's playlist
-// exactly as it was.
 func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -597,13 +566,6 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	})
 }
 
-// TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions reproduces the
-// concurrent-add race from issue #420: many requests read the same playlist
-// snapshot, all derive the same "next position", and all write it. The
-// repository now derives the slot itself under the playlist lock (callers no
-// longer pass one, issue #1061); it must assign a unique, contiguous position
-// per row. Against a plain INSERT of a caller-computed position every add
-// lands on the same slot and this fails.
 func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -617,8 +579,6 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 		t.Fatalf("Create playlist: %v", err)
 	}
 
-	// Seed track A at position 0 so the "next position" a concurrent caller
-	// derives from the snapshot [A] is 1 for every one of them.
 	seed := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, seed.ID, userId)
 	if _, _, err := trackRepo.Add(ctx, seed); err != nil {
@@ -660,7 +620,7 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	}
 
 	positions := fetchPositions(ctx, t, pool, pl.ID)
-	want := concurrentAdds + 1 // seed + the concurrent adds
+	want := concurrentAdds + 1
 	if len(positions) != want {
 		t.Fatalf("row count = %d, want %d", len(positions), want)
 	}
@@ -678,12 +638,6 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	}
 }
 
-// TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins attacks the size
-// cap of #2196 the way a double-spend attacks a balance: many callers reach
-// for the one free slot at once. The count is taken inside the same
-// owner-scoped lock as the insert and the refusal aborts the transaction, so
-// exactly one add commits; against a cap checked on an unlocked read they all
-// would.
 func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -730,9 +684,6 @@ func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
 	}
 }
 
-// seedPlaylistWithTracks creates a playlist owned by userId holding n freshly
-// added tracks at positions 0..n-1, and returns the playlist and track ids in
-// position order.
 func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, n int) (*domain.Playlist, []domain.TrackId) {
 	t.Helper()
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -758,7 +709,6 @@ func seedPlaylistWithTracks(ctx context.Context, t *testing.T, pool *pgxpool.Poo
 	return pl, ids
 }
 
-// fetchOrder returns the playlist's track ids in position order.
 func fetchOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId) []uuid.UUID {
 	t.Helper()
 	rows, err := pool.Query(ctx, `SELECT track_id FROM playlist_tracks WHERE playlist_id = $1 ORDER BY position`, playlistId.UUID())
@@ -792,11 +742,6 @@ func sameOrder(a []uuid.UUID, b []domain.TrackId) bool {
 	return true
 }
 
-// TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock proves ReorderTracks
-// takes the same playlist row lock as the other membership writes (issue
-// #1056): while another transaction holds that lock, a reorder must block, and
-// it must complete once the holder commits. A reorder that skips the lock
-// finishes immediately and this fails.
 func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -846,12 +791,6 @@ func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 	}
 }
 
-// TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize races two reorders of
-// the same playlist that write their per-track updates in opposite row order
-// (drag-and-drop retry, or one user on two devices). Without the playlist lock
-// the two transactions lock the rows in opposite order and Postgres aborts one
-// with a deadlock. Under the lock both must succeed, and the final order must be
-// exactly one of the two requested orders, never a blend.
 func TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -861,9 +800,6 @@ func TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
 	const n = 20
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
 
-	// Forward keeps the seeded order, updating rows first-to-last. Reverse
-	// flips it, updating rows last-to-first, so the two lock rows in opposite
-	// order.
 	forward := make([]domain.PlaylistTrack, n)
 	reverse := make([]domain.PlaylistTrack, n)
 	forwardOrder := make([]domain.TrackId, n)
@@ -925,8 +861,6 @@ func fetchPositions(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playl
 	return positions
 }
 
-// positionPlan is the reorder plan a caller builds from an order it has just
-// read: every track at its index.
 func positionPlan(ids []domain.TrackId) []domain.PlaylistTrack {
 	plan := make([]domain.PlaylistTrack, len(ids))
 	for i, id := range ids {
@@ -935,9 +869,6 @@ func positionPlan(ids []domain.TrackId) []domain.PlaylistTrack {
 	return plan
 }
 
-// assertPositionsAreContiguous fails unless the playlist holds want rows at
-// positions 0..want-1, so a refused reorder is shown to have left neither two
-// tracks on one slot nor a hole where a removed one was.
 func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId, want int) {
 	t.Helper()
 	positions := fetchPositions(ctx, t, pool, playlistId)
@@ -951,12 +882,6 @@ func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpo
 	}
 }
 
-// TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd
-// reproduces issue #2197's reorder race: the caller reads the order without a
-// lock, a remove and an add commit, and the plan it then writes moves a
-// survivor onto the slot the new track took. The deferred unique constraint
-// catches that at COMMIT, which reaches the client as a 500; the plan must be
-// refused as stale instead.
 func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
@@ -978,10 +903,6 @@ func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *tes
 	assertPositionsAreContiguous(ctx, t, pool, pl.ID, 3)
 }
 
-// TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove is the same
-// race without the add: writing the stale plan raises no constraint at all,
-// it renumbers the survivors around the slot the removed track left and the
-// playlist keeps a permanent gap while the request reports success.
 func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
@@ -1002,19 +923,12 @@ func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T
 	assertPositionsAreContiguous(ctx, t, pool, pl.ID, 2)
 }
 
-// TestPgxPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist holds the
-// other side of the staleness check: the caller plans from GetTrackOrder, which
-// stops at the read cap, so on a longer playlist the plan names fewer tracks
-// than the playlist holds. That is the read the caller was given, not a stale
-// one, and the reorder must go through.
 func TestPgxPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Seeded first: the same bound caps adds, so the only over-cap playlists
-	// are the ones that grew while it was higher.
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 5)
 	withPlaylistTrackCap(t, 3)
 
@@ -1033,8 +947,6 @@ func TestPgxPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *testi
 	}
 }
 
-// addTrackToPlaylist appends a freshly added track, standing in for the
-// concurrent add of another request.
 func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, playlistId domain.PlaylistId) {
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
@@ -1047,10 +959,6 @@ func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	}
 }
 
-// TestPgxPlaylistRepo_AddsRefuseAVanishedTrack reproduces issue #2197's add
-// race: the service confirms the caller owns the track, the track is deleted,
-// and the insert then breaks playlist_tracks' foreign key. A raw 23503 reaches
-// the client as a 500, so both add paths must report the track as missing.
 func TestPgxPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
@@ -1085,9 +993,6 @@ func TestPgxPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
 	}
 }
 
-// vanishedTrackId returns the id of a track that existed a moment ago, the
-// state the caller's ownership lookup leaves behind when a delete wins the
-// race to the insert.
 func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
 	t.Helper()
 	tr := newTestTrackForDB(t, userId)
@@ -1100,11 +1005,6 @@ func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user
 	return tr.ID
 }
 
-// TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist reproduces issue #2197's
-// rename race: the playlist is deleted between the read and the write, the
-// UPDATE matches no row, and an Update that ignores RowsAffected calls that
-// success — so the request answers 200 and publishes a rename of a playlist
-// nobody can read.
 func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
@@ -1136,9 +1036,6 @@ func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 	}
 }
 
-// TestPgxPlaylistRepo_Update_RefusesAnotherUsersPlaylist holds the other half
-// of the owner-scoped write: a rename aimed at a playlist the caller does not
-// own must be refused by the data layer, not silently write nothing.
 func TestPgxPlaylistRepo_Update_RefusesAnotherUsersPlaylist(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)
@@ -1169,10 +1066,6 @@ func TestPgxPlaylistRepo_Update_RefusesAnotherUsersPlaylist(t *testing.T) {
 	}
 }
 
-// rowCounter is a pgx tracer that tallies, per statement, how many rows each
-// query read (SELECT) or wrote (INSERT/UPDATE/DELETE), including statements
-// sent in a batch. It lets the tests below assert the cost of a membership
-// mutation against a real database instead of trusting the SQL text.
 type rowCounter struct {
 	mu      sync.Mutex
 	maxRead int
@@ -1185,8 +1078,6 @@ func (c *rowCounter) reset() {
 	c.maxRead, c.written = 0, 0
 }
 
-// snapshot returns the most rows any single SELECT returned and the total rows
-// written since the last reset.
 func (c *rowCounter) snapshot() (maxRead, written int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1228,8 +1119,6 @@ func (c *rowCounter) TraceBatchQuery(_ context.Context, _ *pgx.Conn, data pgx.Tr
 
 func (c *rowCounter) TraceBatchEnd(context.Context, *pgx.Conn, pgx.TraceBatchEndData) {}
 
-// rowCountingPool opens a pool on DATABASE_URL whose every statement is tallied by
-// the returned rowCounter.
 func rowCountingPool(t *testing.T) (*pgxpool.Pool, *rowCounter) {
 	t.Helper()
 	dbURL := os.Getenv("DATABASE_URL")
@@ -1250,8 +1139,6 @@ func rowCountingPool(t *testing.T) (*pgxpool.Pool, *rowCounter) {
 	return pool, counter
 }
 
-// assertContiguousOrder checks the playlist holds exactly want, in order, at
-// positions 0..len(want)-1.
 func assertContiguousOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId, want []domain.TrackId) {
 	t.Helper()
 	if got := fetchOrder(ctx, t, pool, playlistId); !sameOrder(got, want) {
@@ -1279,13 +1166,6 @@ func without(ids []domain.TrackId, drop ...domain.TrackId) []domain.TrackId {
 	return out
 }
 
-// TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange drives the
-// real membership service over the real repository on a playlist of n tracks
-// (issue #1061). A single-track add or remove must not read the playlist's
-// track list, a removal must rewrite only the tail behind the removed slot,
-// and a reorder must rewrite only the rows whose position actually changed.
-// Before the fix every call loaded all n rows and removals/reorders rewrote
-// every remaining row, so each of these bounds failed.
 func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *testing.T) {
 	pool := testPool(t)
 	countedPool, counter := rowCountingPool(t)
@@ -1297,9 +1177,6 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 	svc := service.NewPlaylistMembershipService(NewPgxPlaylistRepository(countedPool), NewPgxTrackRepository(pool))
 	trackRepo := NewPgxTrackRepository(pool)
 
-	// newTrack registers its cleanup on the parent test: a subtest-scoped
-	// cleanup would delete the track (and, by cascade, its membership) before
-	// the next subtest runs.
 	parent := t
 	newTrack := func(t *testing.T) domain.TrackId {
 		t.Helper()
@@ -1346,7 +1223,6 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 			t.Fatalf("RemoveTrack: %v", err)
 		}
 		maxRead, written := counter.snapshot()
-		// One DELETE plus the three rows behind it shifting up one slot.
 		if maxRead > 1 || written != 4 {
 			t.Fatalf("RemoveTrack near the end of a %d-track playlist: max rows read = %d (want <= 1), rows written = %d (want 4)", len(order), maxRead, written)
 		}
@@ -1378,7 +1254,6 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 			t.Fatalf("removed = %d, want 2", removed)
 		}
 		maxRead, written := counter.snapshot()
-		// Two DELETEs plus the five surviving rows behind the first removed slot.
 		if maxRead > 2 || written != 7 {
 			t.Fatalf("RemoveTracks near the end of a %d-track playlist: max rows read = %d (want <= 2), rows written = %d (want 7)", len(order), maxRead, written)
 		}
@@ -1420,10 +1295,6 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 	})
 }
 
-// TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins races the same track
-// into a playlist from many callers. Membership is decided inside the locked
-// insert, so exactly one caller adds it and every other gets
-// domain.ErrTrackAlreadyInPlaylist, never a primary-key violation.
 func TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -1467,10 +1338,6 @@ func TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
 	assertContiguousOrder(ctx, t, pool, pl.ID, []domain.TrackId{ids[0], tr.ID})
 }
 
-// TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps removes tracks from a
-// playlist whose positions already have gaps (a library track deletion
-// cascades out of playlist_tracks without renumbering). The tail-only shift must
-// keep the survivors' relative order and never collide on a position.
 func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
@@ -1507,8 +1374,6 @@ func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 	}
 }
 
-// TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped covers the two targeted
-// reads the membership service relies on instead of GetWithTracks.
 func TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)

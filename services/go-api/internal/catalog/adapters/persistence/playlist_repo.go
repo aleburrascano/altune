@@ -44,9 +44,6 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-// ListForUser orders by created_at DESC with the id as a tiebreak: playlists
-// created in the same microsecond would otherwise order arbitrarily, and two
-// pages of an arbitrary order can repeat one row and never serve another.
 func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -108,9 +105,6 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 	return result, rows.Err()
 }
 
-// CountForUser counts the user's playlists, stopping at atMost: the count only
-// gates the per-user cap, so the inner LIMIT bounds the rows it reads rather
-// than scanning an account that is already far past it.
 func (r *PgxPlaylistRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -161,11 +155,6 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
-// maxPlaylistTracks is one number on both sides of the playlist: the rows
-// GetWithTracks and GetTrackOrder return, and the total size every membership
-// insert is checked against under the playlist lock. They must agree — a
-// playlist allowed past the read bound has a tail nothing can read or reorder.
-// It is a var so tests can exercise both without inserting the full cap.
 var maxPlaylistTracks = domain.MaxPlaylistTracks
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
@@ -238,15 +227,6 @@ func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Pla
 	return nil
 }
 
-// withOwnedPlaylistLock runs fn inside a transaction that first takes a row
-// lock on the playlist, scoped to its owner. The lock serializes concurrent
-// membership writes against the same playlist so position assignment reads a
-// committed snapshot, never a stale one. The owner predicate makes the data
-// layer itself refuse a write to a playlist userId does not own: if no row
-// matches (missing playlist, or another tenant's), fn never runs and
-// ports.ErrPlaylistNotOwned is returned. Because the matched row stays locked
-// until commit, ownership cannot change (nor the playlist be deleted) between
-// the check and the write.
 func (r *PgxPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, fn func(pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -271,8 +251,6 @@ func (r *PgxPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, playl
 	return tx.Commit(ctx)
 }
 
-// Exists reports whether the playlist exists and is owned by userId, touching
-// only the playlist row.
 func (r *PgxPlaylistRepository) Exists(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) (bool, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -285,10 +263,6 @@ func (r *PgxPlaylistRepository) Exists(ctx context.Context, playlistId domain.Pl
 	return exists, err
 }
 
-// GetTrackOrder returns the playlist's track ids in position order, reading
-// only playlist_tracks (no track columns) and bounded like GetWithTracks. The
-// LEFT JOIN yields one NULL row for an owned empty playlist and no row at all
-// for a missing or foreign one, so a single statement answers both questions.
 func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) ([]domain.TrackId, bool, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -325,13 +299,6 @@ func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId do
 	return ids, found, nil
 }
 
-// AddTrack appends the track at the authoritative max(position)+1 computed under
-// a playlist lock, so two simultaneous appends can never land on the same
-// position. Membership is decided by the insert itself (ON CONFLICT on the
-// primary key) rather than by loading the playlist: a track that is already a
-// member yields domain.ErrTrackAlreadyInPlaylist with nothing written. An
-// append past maxPlaylistTracks yields domain.ErrPlaylistFull, also with
-// nothing written.
 func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -354,12 +321,6 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.User
 	return missingTrackError(err)
 }
 
-// requireWithinTrackCap re-counts the playlist inside the caller's locked
-// transaction and refuses an insert that took it past maxPlaylistTracks. The
-// refusal aborts the transaction, so the cap binds the rows that commit rather
-// than the rows some earlier, unlocked read saw: two adds racing the last free
-// slot cannot both take it. It runs after the insert because the insert is
-// what decides how many of the requested ids were not already members.
 func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId) error {
 	var total int
 	err := tx.QueryRow(ctx,
@@ -375,14 +336,8 @@ func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.Pla
 	return nil
 }
 
-// foreignKeyViolation is the SQLSTATE playlist_tracks raises when its track_id
-// names a row that is not in tracks.
 const foreignKeyViolation = "23503"
 
-// missingTrackError marks a membership insert the track foreign key refused as
-// ports.ErrTrackMissing: the track was deleted between the caller's lookup and
-// the insert, which is a missing track rather than an internal fault. The
-// original error stays in the chain.
 func missingTrackError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
@@ -391,8 +346,6 @@ func missingTrackError(err error) error {
 	return err
 }
 
-// addTracksSQL appends the requested ids that are not yet members, in first-
-// occurrence request order, at a contiguous run of slots after max(position).
 const addTracksSQL = `WITH requested AS (
 	SELECT t.track_id, MIN(t.ord) AS ord
 	FROM unnest($2::uuid[]) WITH ORDINALITY AS t(track_id, ord)
@@ -414,14 +367,6 @@ CROSS JOIN (
 ) base
 RETURNING track_id`
 
-// AddTracks appends the given tracks in order, each at the authoritative
-// max(position)+1 computed under a playlist lock. A single set-based insert
-// skips ids already in the playlist (or repeated in the request) and assigns
-// the rest a contiguous run of slots from the locked snapshot, so a concurrent
-// add cannot wedge a duplicate position between them. It returns the inserted
-// ids in request order. A batch whose new members would take the playlist past
-// maxPlaylistTracks is refused whole, with domain.ErrPlaylistFull: a partial
-// batch would leave the caller unable to say which half landed.
 func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	if len(trackIds) == 0 {
 		return nil, nil
@@ -452,10 +397,6 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.Use
 	return added, nil
 }
 
-// RemoveTrack deletes the membership row and shifts only the tail behind it
-// (position > the removed slot) up by one, so the cost is bounded by the rows
-// after the track rather than the whole playlist. It reports whether the track
-// was a member.
 func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -486,12 +427,6 @@ func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, userId shared.U
 	return removed, nil
 }
 
-// RemoveTracks deletes every listed membership row and closes the gaps in one
-// statement that touches only rows behind the first removed slot: each survivor
-// moves up by the number of removed slots below it, which width_bucket counts by
-// binary search over the sorted removed positions. It returns the removed ids in
-// request order. An empty list still answers ErrPlaylistNotOwned for a playlist
-// the caller does not own.
 func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -516,8 +451,6 @@ func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, userId shared.
 	return removed, nil
 }
 
-// deleteMemberships deletes the listed tracks from the playlist and returns the
-// set of ids it deleted plus their former positions, sorted ascending.
 func deleteMemberships(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, trackIds []domain.TrackId) (map[uuid.UUID]bool, []int, error) {
 	rows, err := tx.Query(ctx,
 		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = ANY($2) RETURNING track_id, position`,
@@ -548,13 +481,6 @@ func deleteMemberships(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 	return gone, positions, nil
 }
 
-// ReorderTracks writes the new positions in one set-based statement, inside the
-// same owner-scoped playlist lock as the other membership writes, rewriting
-// only the rows whose position actually changes. The plan comes from a read
-// taken before the lock, so the membership is re-read under it: writing a plan
-// an add or remove has since invalidated would tie two tracks at one position
-// (the deferred unique constraint then aborts the commit) or leave the slot of
-// a removed track empty.
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
 	if len(tracks) == 0 {
 		return nil
@@ -583,14 +509,6 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared
 	})
 }
 
-// requirePlanCoversMembership reads the playlist's members inside the caller's
-// locked transaction and refuses a plan that is not exactly that set. It reads
-// the same window GetTrackOrder served the caller — same order, same bound — so
-// a playlist longer than the cap compares its first maxPlaylistTracks rows
-// against the plan built from those same rows, rather than refusing every
-// reorder of an over-cap playlist. FOR UPDATE, because deleting a track
-// cascades into playlist_tracks without taking the playlist lock: locking the
-// rows holds the membership still from this read to the write below.
 func requirePlanCoversMembership(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, planned []uuid.UUID) error {
 	rows, err := tx.Query(ctx,
 		`SELECT track_id FROM playlist_tracks
@@ -629,7 +547,6 @@ func trackIdUUIDs(ids []domain.TrackId) []uuid.UUID {
 	return out
 }
 
-// collectUUIDSet drains rows of a single uuid column into a set.
 func collectUUIDSet(rows pgx.Rows) (map[uuid.UUID]bool, error) {
 	defer rows.Close()
 	set := make(map[uuid.UUID]bool)
@@ -643,8 +560,6 @@ func collectUUIDSet(rows pgx.Rows) (map[uuid.UUID]bool, error) {
 	return set, rows.Err()
 }
 
-// inRequestOrder returns the ids of requested that are in set, in request order
-// and without repeats.
 func inRequestOrder(requested []domain.TrackId, set map[uuid.UUID]bool) []domain.TrackId {
 	out := make([]domain.TrackId, 0, len(set))
 	seen := make(map[uuid.UUID]bool, len(set))

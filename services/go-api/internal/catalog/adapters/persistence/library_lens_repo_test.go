@@ -326,10 +326,6 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants reproduces issue
-// #432: two tracks whose album/artist differ only by stray whitespace or Unicode
-// form (NFC vs NFKD) must land in ONE album group and ONE artist group, matching
-// dedup's notion of equivalence, rather than fragmenting into separate groups.
 func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxCatalogTrackRepository(pool)
@@ -341,10 +337,6 @@ func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 	})
 
 	base := time.Now().UTC().Truncate(time.Second)
-	// Distinct titles -> distinct dedup keys -> two stored rows. The album and
-	// artist differ only by leading/internal whitespace and Unicode form
-	// (precomposed é vs e + combining acute). A raw store would split each into
-	// two groups; canonicalization at write time must coalesce them.
 	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
 		title: "Halo", artist: "Beyoncé", album: "I Am... Sasha Fierce",
 		addedAt: base.Add(-2 * time.Hour),
@@ -454,10 +446,6 @@ func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 	}
 }
 
-// TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage runs the real
-// page + count SQL against Postgres: totals must match the filtered set on a
-// full page (count path), a short page (derived path), and a page past the end.
-// The old COUNT(*) OVER () reported 0 past the end because no row carried it.
 func TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxCatalogTrackRepository(pool)

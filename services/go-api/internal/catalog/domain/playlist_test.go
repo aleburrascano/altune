@@ -64,7 +64,7 @@ func TestNewPlaylist(t *testing.T) {
 	tests := []struct {
 		name     string
 		plName   string
-		wantName string // defaults to plName
+		wantName string
 		wantErr  string
 	}{
 		{
@@ -405,8 +405,6 @@ func TestPlaylist_StampsInjectedTimeAsUTC(t *testing.T) {
 	}
 }
 
-// testPlaylistCreatedAt is the fixed creation time of test playlists; mutator
-// tests stamp later offsets from it so UpdatedAt is asserted exactly.
 var testPlaylistCreatedAt = time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 
 func newTestPlaylist(t *testing.T) *Playlist {

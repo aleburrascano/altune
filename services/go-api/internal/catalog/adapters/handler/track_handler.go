@@ -52,20 +52,14 @@ func NewTrackHandler(
 	return h
 }
 
-// WithTrackWriteRateLimit replaces DefaultTrackWriteRateLimit.
 func WithTrackWriteRateLimit(limit AudioRateLimit) func(*TrackHandler) {
 	return func(h *TrackHandler) { h.writeLimit = limit }
 }
 
-// withTrackWriteClock injects the limiter's clock so tests can refill buckets
-// without sleeping.
 func withTrackWriteClock(now func() time.Time) func(*TrackHandler) {
 	return func(h *TrackHandler) { h.now = now }
 }
 
-// Routes registers the track endpoints. Only the create is throttled per user:
-// it is the one route here that grows the account's rows, and the reads and
-// single-row edits behind it cost nothing an account can accumulate.
 func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
@@ -77,11 +71,6 @@ func (h *TrackHandler) Routes() chi.Router {
 	return r
 }
 
-// handleSetTrackNumber fills a track's album position once. It answers 204
-// whether or not the write-once update applied to an owned track: the client
-// sends the number best-effort on album-context saves, so an already-set number
-// is not an error. The no-op is logged as track.track_number_unchanged so it
-// stays observable. A missing or foreign track answers 404 (ErrTrackNotFound).
 func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -233,10 +222,6 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, status, service.TrackToDTO(result.Track))
 }
 
-// idempotencyKey reads the optional client-supplied Idempotency-Key header. An
-// absent or blank header yields nil, meaning the create falls back to
-// content-based dedup; a present key collapses concurrent creates and retries of
-// the same logical save onto a single row.
 func idempotencyKey(r *http.Request) *string {
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if key == "" {

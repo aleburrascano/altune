@@ -41,8 +41,6 @@ func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioURLService) {
 	}
 }
 
-// WithAudioURLClock replaces the clock the advertised expiry is measured from.
-// A nil clock is ignored so the wall clock always holds.
 func WithAudioURLClock(now func() time.Time) func(*AudioURLService) {
 	return func(s *AudioURLService) {
 		if now != nil {
@@ -67,8 +65,6 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 		byID[t.ID] = t
 	}
 
-	// Clamp here too so the advertised expiry never outlives the signature the
-	// storage boundary actually mints.
 	ttl := ports.ClampPresignTTL(s.ttl)
 	expiresAt := s.now().Add(ttl)
 	out := make([]ResolvedAudioURL, 0, len(trackIds))

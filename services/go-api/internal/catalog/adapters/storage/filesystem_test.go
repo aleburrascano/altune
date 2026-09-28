@@ -371,8 +371,6 @@ func TestFilesystemAudioStore_CancelledContextDoesNotTouchDisk(t *testing.T) {
 	}
 }
 
-// A FIFO with no writer blocks open(2) for reading indefinitely, the same way
-// a stalled network mount does, which makes it a real stand-in for #1064.
 const stallHangGuard = 5 * time.Second
 
 type streamResult struct {

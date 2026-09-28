@@ -19,8 +19,6 @@ import (
 
 func strptr(s string) *string { return &s }
 
-// withTrackCap lowers the per-user library cap for one test, so crossing it
-// costs a handful of rows rather than fifty thousand.
 func withTrackCap(t *testing.T, limit int) {
 	t.Helper()
 	prev := maxTracksPerUser
@@ -28,9 +26,6 @@ func withTrackCap(t *testing.T, limit int) {
 	t.Cleanup(func() { maxTracksPerUser = prev })
 }
 
-// TestAddTrack_RejectsPastUserCap reproduces #2200: distinct titles bypass
-// dedup, so nothing stopped one account from inserting tracks without limit.
-// The save that would cross the cap is refused, and stores nothing.
 func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -54,8 +49,6 @@ func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	}
 }
 
-// The cap counts the caller's own rows: a library full next door may not
-// refuse this account's save.
 func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
 	ctx := context.Background()
 	repo := catalogtest.NewTrackRepo()
@@ -74,9 +67,6 @@ func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
 	}
 }
 
-// A second save carrying the same idempotency key must return the first stored
-// track (created=false), even when its content differs — the key, not the
-// content, decides identity here.
 func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -344,10 +334,6 @@ func canonicalJSON(t *testing.T, raw []byte) string {
 	return string(out)
 }
 
-// TestAddTrackService_RefusedScheduleFailsTrack is the regression for a shed
-// acquisition stranding a new track at pending: nothing would ever run its job,
-// and the retry endpoint only admits failed tracks. A refused schedule must fail
-// the track at once, persist it, and tell the client, so retry can reclaim it.
 func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	ctx := context.Background()
 	repo := catalogtest.NewTrackRepo()
@@ -378,8 +364,6 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	}
 }
 
-// If the failed state cannot be persisted, the response and events must not
-// claim it: the stored row is still pending (the stale sweep reclaims it).
 func TestAddTrackService_RefusedScheduleUnpersistedStaysPending(t *testing.T) {
 	ctx := context.Background()
 	repo := catalogtest.NewTrackRepo()
@@ -507,9 +491,6 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	}
 }
 
-// TestAddTrackService_YearCeilingSitsOneYearPastTheClock pins the ceiling
-// against an injected clock: next year is a legitimate pre-release date, the
-// year after it is not.
 func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -704,16 +685,12 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 	}
 }
 
-// Regression for #1055: a request with no deadline of its own must still hand
-// Schedule a bounded context, or a stuck call holds the handler goroutine forever.
 func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
 	sched := &stuckScheduler{}
 	svc := NewAddTrackService(catalogtest.NewTrackRepo(), WithAcquisitionScheduler(sched))
 
 	start := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
-	// Release the stuck call once its deadline has been observed so the test
-	// does not wait the full production timeout.
 	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
 	if _, err := svc.Execute(ctx, testUserId(), AddTrackInput{Title: "T", Artist: "A", Album: "B"}); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -721,8 +698,6 @@ func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
 	assertScheduleDeadline(t, sched, start)
 }
 
-// A caller that already carries a shorter budget keeps it, and a Schedule that
-// runs out of it degrades the added track to failed rather than reporting success.
 func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	svc := NewAddTrackService(repo, WithAcquisitionScheduler(&stuckScheduler{}))

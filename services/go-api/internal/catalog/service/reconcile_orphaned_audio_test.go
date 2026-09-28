@@ -12,8 +12,6 @@ import (
 
 const orphanRef = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/album/title.mp3"
 
-// orphanFixture is a library whose audio store fails deletes, with the durable
-// orphan queue wired into the delete path and the sweep over the same stores.
 type orphanFixture struct {
 	repo    *catalogtest.TrackRepo
 	store   *catalogtest.AudioStore
@@ -38,8 +36,6 @@ func newOrphanFixture(opts ...func(*ReconcileOrphanedAudioService)) *orphanFixtu
 	}
 }
 
-// orphan deletes a ready track at ref while the storage delete fails, leaving
-// ref orphaned, then lets storage deletes succeed again.
 func (f *orphanFixture) orphan(t *testing.T, ref string) {
 	t.Helper()
 	track := seedReadyTrack(t, f.repo, testUserId(), "Title", "Artist", "Album", ref)
@@ -60,8 +56,6 @@ func (f *orphanFixture) run(t *testing.T) OrphanedAudioSweep {
 	return sweep
 }
 
-// assertReferencedAudioIntact is the sweep's safety invariant: every object
-// that any track still references must survive the sweep.
 func (f *orphanFixture) assertReferencedAudioIntact(t *testing.T) {
 	t.Helper()
 	for _, track := range f.repo.Tracks {
@@ -74,9 +68,6 @@ func (f *orphanFixture) assertReferencedAudioIntact(t *testing.T) {
 	}
 }
 
-// TestDeleteTrack_OrphanedAudioIsRetriedUntilCleanedUp is the #1058 regression:
-// a failed storage delete must leave a durable record that the sweep retries
-// until the object is gone, not only a log line.
 func TestDeleteTrack_OrphanedAudioIsRetriedUntilCleanedUp(t *testing.T) {
 	f := newOrphanFixture()
 	f.orphan(t, orphanRef)
@@ -112,10 +103,6 @@ func TestDeleteTrack_OrphanedAudioIsRetriedUntilCleanedUp(t *testing.T) {
 	}
 }
 
-// TestReconcileOrphanedAudio_NeverDeletesReferencedAudio proves the sweep never
-// deletes an object any track references: keys are shared between tracks with
-// equivalent metadata (and a fresh acquisition rewrites the same canonical key),
-// and replace attempts store beside it under ".replace-<uuid>" keys.
 func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 	replaceRef := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/album/title.replace-0f8e7d6c-1234-4abc-9def-001122334455.mp3"
 
@@ -123,8 +110,8 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 		name    string
 		arrange func(t *testing.T, f *orphanFixture)
 		want    OrphanedAudioSweep
-		present map[string]bool // storage key -> object must still exist
-		queued  map[string]bool // storage key -> orphan must still be queued
+		present map[string]bool
+		queued  map[string]bool
 	}{
 		{
 			name: "sibling track with equivalent metadata shares the key",
@@ -204,8 +191,6 @@ func TestReconcileOrphanedAudio_NeverDeletesReferencedAudio(t *testing.T) {
 	}
 }
 
-// TestReconcileOrphanedAudio_UsageCheckErrorNeverDeletes proves an unanswerable
-// reference check aborts the run instead of deleting on a guess.
 func TestReconcileOrphanedAudio_UsageCheckErrorNeverDeletes(t *testing.T) {
 	f := newOrphanFixture()
 	f.orphan(t, orphanRef)
@@ -235,9 +220,6 @@ func TestReconcileOrphanedAudio_AlreadyAbsentObjectResolves(t *testing.T) {
 	}
 }
 
-// TestOrphanedAudio_DegradesWithoutMigration covers deploy-before-migration:
-// with no orphaned_audio table the delete keeps its prior outcome and the
-// sweep idles without failing the job.
 func TestOrphanedAudio_DegradesWithoutMigration(t *testing.T) {
 	unavailable := fmt.Errorf("record: %w", ports.ErrOrphanedAudioQueueUnavailable)
 	f := newOrphanFixture()
@@ -262,11 +244,6 @@ func TestReconcileOrphanedAudio_ListErrorFailsRun(t *testing.T) {
 	}
 }
 
-// TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan pins #2198: the
-// sweep used to report only an aggregate count, so a key storage kept refusing
-// was retried forever with nothing naming it. Each failure now names the key,
-// its owner and how many attempts preceded this one, and bumps the counter an
-// operator can alert on.
 func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
 	logs := captureAuditLogs(t)
 	f := newOrphanFixture()
@@ -289,10 +266,6 @@ func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
 	}
 }
 
-// TestReconcileOrphanedAudio_SwitchOffDeletesNothing pins #2198: with the kill
-// switch off no storage object may be touched, so an operator can stop a sweep
-// that is deleting live audio without waiting for a deploy. ErrOnDelete makes
-// any attempted delete visible as a failed count rather than a silent success.
 func TestReconcileOrphanedAudio_SwitchOffDeletesNothing(t *testing.T) {
 	f := newOrphanFixture(WithReconcileSwitch(func() bool { return false }))
 	f.orphan(t, orphanRef)
@@ -309,8 +282,6 @@ func TestReconcileOrphanedAudio_SwitchOffDeletesNothing(t *testing.T) {
 	}
 }
 
-// usageUnanswerableFor is a queue whose reference check fails for one key, so a
-// sweep can do real work and then abort partway through its batch.
 type usageUnanswerableFor struct {
 	*catalogtest.OrphanedAudioQueue
 	audioRef string
@@ -323,9 +294,6 @@ func (q usageUnanswerableFor) AudioUsage(ctx context.Context, audioRef string, o
 	return q.OrphanedAudioQueue.AudioUsage(ctx, audioRef, owner)
 }
 
-// TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts pins #2198: the
-// sweep summary used to run only on the success path, so a run that aborted
-// mid-batch lost the counts for the work it had already done.
 func TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts(t *testing.T) {
 	const unanswerableRef = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/album/zz-title.mp3"
 	logs := captureAuditLogs(t)

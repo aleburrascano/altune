@@ -34,21 +34,14 @@ func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership 
 	return h
 }
 
-// WithPlaylistWriteRateLimit replaces DefaultPlaylistWriteRateLimit.
 func WithPlaylistWriteRateLimit(limit AudioRateLimit) func(*PlaylistHandler) {
 	return func(h *PlaylistHandler) { h.writeLimit = limit }
 }
 
-// withPlaylistWriteClock injects the limiter's clock so tests can refill
-// buckets without sleeping.
 func withPlaylistWriteClock(now func() time.Time) func(*PlaylistHandler) {
 	return func(h *PlaylistHandler) { h.now = now }
 }
 
-// Routes registers the playlist endpoints. The three routes that create rows —
-// a playlist, and the two that insert memberships — share one per-user bucket,
-// because they grow the same account the same way; removals, renames and reads
-// are left unthrottled, as none of them can accumulate.
 func (h *PlaylistHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {

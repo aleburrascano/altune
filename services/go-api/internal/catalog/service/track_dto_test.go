@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// The storage key embeds the owner's user id; it must never reach a client in
-// a REST track response or the track_added SSE payload built from the DTO.
 func TestTrackToDTO_DoesNotSerializeAudioRef(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Midnight City", "M83", "Hurry Up, We're Dreaming")

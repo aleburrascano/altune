@@ -31,31 +31,20 @@ func NewAudioURLHandler(svc *service.AudioURLService, opts ...func(*AudioURLHand
 	return h
 }
 
-// WithAudioURLRateLimit replaces DefaultAudioURLRateLimit.
 func WithAudioURLRateLimit(limit AudioRateLimit) func(*AudioURLHandler) {
 	return func(h *AudioURLHandler) { h.rateLimit = limit }
 }
 
-// withAudioURLClock injects the limiter's clock so tests can refill buckets
-// without sleeping.
 func withAudioURLClock(now func() time.Time) func(*AudioURLHandler) {
 	return func(h *AudioURLHandler) { h.now = now }
 }
 
-// WithPrefetchEnabled sets the client prefetch kill switch reported on every
-// response (AUDIO_PREFETCH_ENABLED). While it is false, clients stop
-// prefetching audio to disk and stream instead.
 func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {
 	return func(h *AudioURLHandler) {
 		h.prefetchEnabled = enabled
 	}
 }
 
-// Routes registers the audio-url endpoint on r. It registers directly onto the
-// shared router rather than returning a mountable chi.Router: mounting /audio-urls
-// would add a trailing-slash variant and change the route table, so this keeps
-// the path byte-identical to its previous hand-wiring. The endpoint is
-// throttled per user.
 func (h *AudioURLHandler) Routes(r chi.Router) {
 	r.With(h.limiter.middleware).Post("/audio-urls", h.HandleResolve)
 }
@@ -122,10 +111,6 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		"resolved", len(urls),
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
-	// Each URL is a bearer link to one user's audio, live for up to
-	// ports.MaxPresignTTL, so no cache anywhere may keep this body. These routes
-	// are outside the admin tree's security-header middleware (a global one is
-	// its own change), hence the per-response headers.
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	httputil.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls, PrefetchEnabled: h.prefetchEnabled})

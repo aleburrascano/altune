@@ -75,9 +75,6 @@ func TestLibraryHandler_SearchTermLengthCapped(t *testing.T) {
 	}
 }
 
-// TestSearchTermWithNulByteRejected is the handler half of #2194: ?q=%00 used
-// to reach an ILIKE against Postgres text and answer 500. Every list endpoint
-// that accepts q shares libraryQuery, so all three are pinned here.
 func TestSearchTermWithNulByteRejected(t *testing.T) {
 	for _, path := range []string{"/library/albums", "/library/artists"} {
 		t.Run(path, func(t *testing.T) {

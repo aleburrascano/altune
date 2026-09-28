@@ -25,8 +25,6 @@ func cleanupOrphan(t *testing.T, pool *pgxpool.Pool, audioRef string) {
 	})
 }
 
-// addTrackAt inserts a track for userId, marked ready at audioRef unless it is
-// empty (the track then stays pending).
 func addTrackAt(t *testing.T, pool *pgxpool.Pool, userId shared.UserId, audioRef string) {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)
@@ -80,7 +78,6 @@ func TestPgxOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 		t.Errorf("attempts after one failure = %d, want 1", got.Attempts)
 	}
 
-	// Re-orphaning the same key refreshes the row instead of failing.
 	if err := repo.RecordOrphanedAudio(ctx, orphan); err != nil {
 		t.Fatalf("re-record: %v", err)
 	}
@@ -96,8 +93,6 @@ func TestPgxOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 	}
 }
 
-// TestPgxOrphanedAudioRepo_ListPutsAttemptedLast proves a key that keeps failing
-// cannot starve a newly recorded one out of a bounded batch.
 func TestPgxOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxOrphanedAudioRepository(pool)
@@ -126,9 +121,6 @@ func TestPgxOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 	}
 }
 
-// TestPgxOrphanedAudioRepo_AudioUsage proves the sweep's reference gate against
-// real rows: a key referenced by any user's track is in use, a pending
-// acquisition of the owner blocks deletion, and only otherwise is it unused.
 func TestPgxOrphanedAudioRepo_AudioUsage(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxOrphanedAudioRepository(pool)
@@ -165,16 +157,12 @@ func TestPgxOrphanedAudioRepo_AudioUsage(t *testing.T) {
 		t.Errorf("another user's pending acquisition blocked the key: usage = %v, want unused", got)
 	}
 
-	// A replace key beside the canonical one is a distinct key.
 	replaceRef := strings.TrimSuffix(ref, ".mp3") + ".replace-" + uuid.NewString() + ".mp3"
 	if got := usage(replaceRef, owner); got != ports.AudioUnused {
 		t.Errorf("replace key usage = %v, want unused (only the canonical key is referenced)", got)
 	}
 }
 
-// TestPgxOrphanedAudioRepo_MissingTableIsUnavailable covers deploy-before-
-// migration: against a schema without orphaned_audio every queue write/read
-// reports ErrOrphanedAudioQueueUnavailable rather than an opaque error.
 func TestPgxOrphanedAudioRepo_MissingTableIsUnavailable(t *testing.T) {
 	admin := testPool(t)
 	ctx := context.Background()

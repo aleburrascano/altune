@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-// scopedFakeStore is a minimal AudioStore fake; scopedFakeSigningStore and
-// scopedFakeListingStore additionally implement AudioURLSigner / AudioLister
-// so NewScopedAudioStore's capability forwarding can be exercised against an
-// inner store that does, and one (scopedFakeStore alone) that does not.
 type scopedFakeStore struct {
 	stored      map[string]bool
 	deletedRefs []string
@@ -131,9 +127,6 @@ func TestScopedAudioStore_StoreInsidePrefixPassesThrough(t *testing.T) {
 	}
 }
 
-// TestScopedAudioStore_ForwardsPresignGet pins that service/audio_url.go's
-// store.(ports.AudioURLSigner) type assertion still finds a signer through
-// the decorator when the wrapped store signs (#3090).
 func TestScopedAudioStore_ForwardsPresignGet(t *testing.T) {
 	inner := &scopedFakeSigningStore{scopedFakeStore: newScopedFakeStore()}
 	store := NewScopedAudioStore(inner, "staging/")

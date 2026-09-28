@@ -50,11 +50,6 @@ func writeTrackFeatured(
 	return nil
 }
 
-// upsertFeaturedArtist returns the id of the user's featured_artists row for
-// fa, inserting it if absent. When NFKC changes the name key, a row persisted
-// before NormalizedName applied NFKC may still carry the legacy key; that row
-// is reused (preferring one already on the current key) so upgrading never
-// forks an existing artist into a second row.
 func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa domain.FeaturedArtist) (uuid.UUID, error) {
 	var faID uuid.UUID
 	if keys := featuredIdentityKeys(fa); len(keys) > 1 {
@@ -86,8 +81,6 @@ func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa d
 	return faID, err
 }
 
-// featuredIdentityKeys is the set of identity_key values a stored row for fa
-// may carry: the current key, plus the pre-NFKC legacy key when it differs.
 func featuredIdentityKeys(fa domain.FeaturedArtist) []string {
 	key, legacy := fa.IdentityKey(), fa.LegacyIdentityKey()
 	if key == legacy {
@@ -180,18 +173,8 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	return tx.Commit(ctx)
 }
 
-// featuringResultCap bounds ListTracksFeaturing at the catalog module's read cap
-// (domain.MaxLibraryPageSize), like every other list path. Without it a featured
-// artist (or name) matching tens of thousands of tracks materializes the entire
-// result set in memory and serializes it in one response.
 const featuringResultCap = domain.MaxLibraryPageSize
 
-// buildFeaturingQuery returns the SQL and args for ListTracksFeaturing with the
-// result set bounded by featuringResultCap. Extracted so the cap is testable
-// without a live database.
-// identityKeys holds every key a matching row may carry (see
-// featuredIdentityKeys). DISTINCT keeps a track linked to both a legacy-key and
-// a current-key row from appearing twice.
 func buildFeaturingQuery(userID uuid.UUID, identityKeys []string) (string, []any) {
 	sql := `SELECT ` + trackColumnsPrefixed + `
 		FROM tracks t

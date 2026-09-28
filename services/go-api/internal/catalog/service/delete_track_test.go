@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// sharedAudioRef is one storage object two seeded tracks point at.
 const sharedAudioRef = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/abbey road/come together.mp3"
 
 func TestDeleteTrackService_Execute(t *testing.T) {
@@ -73,10 +72,6 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 	}
 }
 
-// TestDeleteTrack_KeepsAudioSharedWithAnotherTrack is the #2203 regression: the
-// storage key comes from path-normalized metadata and the dedup key does not,
-// so two rows dedup keeps apart can serve one object, and deleting either must
-// leave the object to the one that remains.
 func TestDeleteTrack_KeepsAudioSharedWithAnotherTrack(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	store := catalogtest.NewAudioStore()
@@ -111,9 +106,6 @@ func TestDeleteTrack_DeletesAudioOnTheLastReference(t *testing.T) {
 	}
 }
 
-// TestDeleteTrack_QueuesTheOrphanWhenTheUsageCheckFails pins the unanswerable
-// case: an object that may still be served must not be deleted on a guess, and
-// the one that is truly orphaned must still reach the sweep that re-checks it.
 func TestDeleteTrack_QueuesTheOrphanWhenTheUsageCheckFails(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	store := catalogtest.NewAudioStore()
@@ -137,10 +129,6 @@ func TestDeleteTrack_QueuesTheOrphanWhenTheUsageCheckFails(t *testing.T) {
 	}
 }
 
-// assertCollidesOnOneStorageKey confirms the collision under test is reachable
-// rather than contrived: the two rows survive dedup (their keys differ) yet
-// their metadata normalizes to the same storage path segments, which is how
-// they come to share one audio object.
 func assertCollidesOnOneStorageKey(t *testing.T, a, b *domain.Track) {
 	t.Helper()
 	if a.DedupKey == b.DedupKey {
@@ -169,10 +157,6 @@ func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {
 	metrics := &catalogtest.Metrics{}
 	svc := NewDeleteTrackService(repo, store, WithDeleteTrackMetrics(metrics))
 
-	// The track row is deleted but its audio object is orphaned. This is a
-	// partial deletion: it must NOT be reported as success. The error is surfaced
-	// as ErrAudioOrphaned and the orphaned-delete counter flags the orphan for
-	// reconciliation.
 	err := svc.Execute(ctx, userId, track.ID)
 	if err == nil {
 		t.Fatal("expected ErrAudioOrphaned, got nil (orphan silently swallowed as success)")
@@ -204,8 +188,6 @@ func TestDeleteTrackService_NoOrphanMetricOnCleanDelete(t *testing.T) {
 	}
 }
 
-// TestDeleteTrackService_LogsActorAndObject pins #1052: a successful track
-// delete records who (user_id) deleted what (track_id) and when.
 func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
 	logs := captureAuditLogs(t)
 	userId := testUserId()
@@ -222,9 +204,6 @@ func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
 	})
 }
 
-// TestDeleteTrackService_OrphanLogCarriesActor pins #1052: the orphan-failure
-// line names the user whose delete orphaned the audio, and the partial delete
-// still leaves the deletion trail.
 func TestDeleteTrackService_OrphanLogCarriesActor(t *testing.T) {
 	logs := captureAuditLogs(t)
 	userId := testUserId()

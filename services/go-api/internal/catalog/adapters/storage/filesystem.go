@@ -19,18 +19,8 @@ var (
 	_ ports.AudioCopier    = (*FilesystemAudioStore)(nil)
 )
 
-// FilesystemAudioStore keeps audio under baseDir, which may be a network-backed
-// mount (NFS, SMB, FUSE). A stalled mount blocks stat/open/rename/unlink
-// indefinitely and no Go syscall can be cancelled, so every method runs its
-// filesystem work through boundedFSCall: the caller-visible wait ends at the
-// context deadline (or opTimeout) even though the syscall itself does not (#1064).
 type FilesystemAudioStore struct {
-	baseDir string
-	// opTimeout caps the metadata operations (Exists, Delete, and Stream's
-	// open+stat), mirroring storageOpTimeout in the object-storage adapter so a
-	// caller without its own deadline still cannot hang on a wedged mount. Store
-	// is bounded by the caller's context only: a cross-filesystem copy is
-	// proportional to file size, like the object-storage upload.
+	baseDir   string
 	opTimeout time.Duration
 }
 
@@ -111,15 +101,11 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// openedAudio is the result of Stream's bounded open+stat.
 type openedAudio struct {
 	file *os.File
 	size int64
 }
 
-// Stream bounds only the open+stat. Reads on the returned file are not bounded
-// here: they are driven by the HTTP handler, whose request context and write
-// deadlines (#1277) own the long-lived playback budget.
 func (s *FilesystemAudioStore) Stream(ctx context.Context, audioRef string) (ports.AudioStream, int64, error) {
 	path, err := s.safePath(audioRef)
 	if err != nil {
@@ -150,8 +136,6 @@ func openAudio(path string) (openedAudio, error) {
 	return openedAudio{file: file, size: stat.Size()}, nil
 }
 
-// closeLateAudio releases a descriptor whose open finished after the caller
-// gave up; nobody else holds it, so leaving it open would leak it.
 func closeLateAudio(late openedAudio) {
 	if late.file == nil {
 		return
@@ -161,11 +145,6 @@ func closeLateAudio(late openedAudio) {
 	}
 }
 
-// Delete is idempotent: an audio file that is already gone is the outcome the
-// caller asked for, so it succeeds rather than reporting a failed delete
-// (#2201). Object storage's RemoveObject behaves the same way, which keeps the
-// two AudioStore implementations interchangeable for a retried or concurrent
-// delete, and for a file removed outside the app.
 func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) error {
 	path, err := s.safePath(audioRef)
 	if err != nil {
@@ -275,22 +254,6 @@ type fsCallResult[T any] struct {
 	err   error
 }
 
-// boundedFSCall runs call on its own goroutine and returns when it finishes or
-// ctx is done, whichever is first. A ctx that is already done fails fast without
-// touching the filesystem. On ctx expiry the error wraps ctx.Err(), so
-// errors.Is(err, context.DeadlineExceeded) holds; otherwise call's own result
-// and error are returned unchanged (os.IsNotExist still works on them).
-//
-// Trade-off: a blocking syscall cannot be interrupted in Go, so an abandoned
-// call's goroutine stays parked in the kernel until the mount recovers, or
-// forever if it never does. That is one parked goroutine per timed-out call
-// (bounded by request concurrency) in exchange for never wedging the caller.
-// The result channel is buffered so that goroutine exits without a receiver
-// once the syscall returns, and discard (if non-nil) releases any resource a
-// late successful result owns. Side effects still land after the caller saw a
-// timeout: an abandoned Store may finish moving the file into place (the
-// orphaned-audio reconcile job, #1297, sweeps it) and an abandoned Delete may
-// still remove it.
 func boundedFSCall[T any](ctx context.Context, op string, call func() (T, error), discard func(T)) (T, error) {
 	var zero T
 	if err := ctx.Err(); err != nil {

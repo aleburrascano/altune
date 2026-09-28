@@ -78,8 +78,6 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 	}
 }
 
-// withPlaylistCap lowers the per-user playlist cap for one test, so crossing
-// it costs a handful of rows rather than a thousand.
 func withPlaylistCap(t *testing.T, limit int) {
 	t.Helper()
 	prev := maxPlaylistsPerUser
@@ -87,9 +85,6 @@ func withPlaylistCap(t *testing.T, limit int) {
 	t.Cleanup(func() { maxPlaylistsPerUser = prev })
 }
 
-// Playlist names need not be distinct and the list is paged, so before #2200
-// one account could create playlists without limit. The create that would
-// cross the cap is refused, and stores nothing.
 func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -114,8 +109,6 @@ func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
 	}
 }
 
-// The cap counts the caller's own rows: another owner at the cap may not
-// refuse this account's create.
 func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *testing.T) {
 	ctx := context.Background()
 	plRepo := catalogtest.NewPlaylistRepo()
@@ -356,8 +349,6 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 	}
 }
 
-// playlistDeletedAfterRead answers GetByID with the playlist and then deletes
-// it, so the rename's write arrives after the row is gone.
 type playlistDeletedAfterRead struct {
 	*catalogtest.PlaylistRepo
 }
@@ -373,10 +364,6 @@ func (r *playlistDeletedAfterRead) GetByID(ctx context.Context, id domain.Playli
 	return playlist, summary, nil
 }
 
-// Rename reads the playlist, then writes it, and a delete can commit in
-// between (issue #2197). The write then matches no row, so the rename must
-// answer not-found rather than report success and announce a rename of a
-// playlist nobody can read.
 func TestPlaylistLifecycleService_Rename_RefusesAPlaylistDeletedAfterTheRead(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()

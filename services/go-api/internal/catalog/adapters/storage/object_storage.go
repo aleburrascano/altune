@@ -22,18 +22,6 @@ var (
 	_ ports.AudioCopier    = (*ObjectStorageAudioStore)(nil)
 )
 
-// storageOpTimeout bounds a single control-plane object-storage round-trip
-// (stat, list, delete) — operations whose duration does not depend on payload
-// size. Derived from the caller's context so a shorter caller deadline still
-// wins, it caps the worst case so a wedged S3 endpoint cannot block the handler
-// goroutine indefinitely. Thirty seconds mirrors the transport's existing
-// ResponseHeaderTimeout; it is a deliberate default, not a tuned one (#426).
-//
-// The two bulk-transfer operations are deliberately NOT wrapped: Stream is the
-// long-lived audio-streaming path (a fixed deadline would truncate a legitimate
-// long playback), and Store uploads an arbitrarily large file. Both instead
-// inherit the caller's own request budget plus the transport-level dial, TLS and
-// response-header timeouts configured in NewObjectStorageAudioStore.
 const storageOpTimeout = 30 * time.Second
 
 type ObjectStorageAudioStore struct {
@@ -41,9 +29,6 @@ type ObjectStorageAudioStore struct {
 	bucket string
 }
 
-// ObjectStorageConfig holds the S3-compatible connection settings for
-// NewObjectStorageAudioStore. Fields are bound by name so same-typed values
-// (access/secret key, bucket/region) cannot be silently transposed.
 type ObjectStorageConfig struct {
 	Endpoint  string
 	AccessKey string
@@ -182,9 +167,6 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 	return obj, stat.Size, nil
 }
 
-// PresignGet signs a GET URL for audioRef. The ttl is clamped to
-// ports.MaxPresignTTL at this boundary regardless of what the caller asked for,
-// and a non-positive ttl is rejected (#1046).
 func (s *ObjectStorageAudioStore) PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error) {
 	if ttl <= 0 {
 		return "", fmt.Errorf("presign get %q: ttl must be positive, got %s", audioRef, ttl)

@@ -32,10 +32,6 @@ func TestSentinelErrorCodes(t *testing.T) {
 	}
 }
 
-// TestHotPaths_ClassifyTransientDBFailures proves the stream, recover and status
-// paths turn a GetByID failure the adapter flagged ports.ErrDBTransient into a
-// retryable 503 through the shared HTTP error mapping, while an unclassified
-// repository failure still surfaces as a 500.
 func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 	userId := testUserId()
 	cause := context.DeadlineExceeded

@@ -84,8 +84,6 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 	return p
 }
 
-// fakeResolver finds nothing: the handler tests cover the backfill route's
-// admission and response, never a provider lookup.
 type fakeResolver struct{}
 
 func (fakeResolver) Resolve(_ context.Context, _, _ string) ([]catdomain.FeaturedArtist, error) {
@@ -145,8 +143,6 @@ func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
-// assertErrorCode reads the machine-readable code off an error response: the
-// code is the contract clients branch on, the detail is prose that may change.
 func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want string) {
 	t.Helper()
 	var body struct {
@@ -166,10 +162,6 @@ func assertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// writeRig is the real /tracks and /playlists route tables behind the real
-// auth middleware, over in-memory repositories. Reproduces #2200: before the
-// throttle, one authenticated caller could create rows on these routes as fast
-// as the API answered.
 type writeRig struct {
 	router    chi.Router
 	tracks    *catalogtest.TrackRepo
@@ -205,8 +197,6 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	return &writeRig{router: r, tracks: tracks, playlists: playlists}
 }
 
-// newThrottledWriteRig gives both handlers the same wound-down budget off one
-// fake clock, so a test crosses it in a handful of requests.
 func newThrottledWriteRig(limit AudioRateLimit, now func() time.Time) *writeRig {
 	return newWriteRig(
 		[]func(*TrackHandler){WithTrackWriteRateLimit(limit), withTrackWriteClock(now)},
@@ -241,8 +231,6 @@ func (rig *writeRig) addTracksToPlaylist(user shared.UserId, playlistId catdomai
 		fmt.Sprintf(`{"track_ids":[%q]}`, trackId.String()))
 }
 
-// seedPlaylistAndTrack gives user an owned playlist and an owned track, so a
-// membership add is refused by the throttle alone and never by ownership.
 func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user shared.UserId) (catdomain.PlaylistId, catdomain.TrackId) {
 	t.Helper()
 	playlist, err := catdomain.NewPlaylist(user, "Seeded", time.Now())
