@@ -65,6 +65,7 @@ CLAUDE.local.md
 .claude/projects/
 .claude/tasks/
 .claude/worktrees/
+.claude/survey-deferred/
 
 # ---- Serena (LSP server) ----
 .serena/
