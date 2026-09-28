@@ -5,12 +5,10 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { NavigationBar } from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -25,13 +23,12 @@ import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
 import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
-import { usePlayback } from '../shared/playback/usePlayback';
-import { useKeyboardShortcuts } from '../shared/ui/keyboard/useKeyboardShortcuts';
 import { useWideWebLayout } from '../shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '../shared/ui/theme';
 import { useThemePreference } from '../shared/ui/theme/themePreference';
 import { AppChrome } from '../app-shell/AppChrome';
+import { PlaybackShortcuts, SystemNavigationBar } from '../app-shell/platformExtras';
 
 if (playsThroughTrackPlayer) {
   require('../features/playback/registerPlaybackService').registerPlaybackService();
@@ -50,12 +47,6 @@ function ServerEventsBridge() {
 
 function AuthDeepLinkBridge() {
   useAuthDeepLink();
-  return null;
-}
-
-function WebPlaybackShortcutsBridge() {
-  const playback = usePlayback();
-  useKeyboardShortcuts(playback);
   return null;
 }
 
@@ -110,9 +101,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <SafeAreaProvider>
             <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-            {Platform.OS === 'android' && (
-              <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
-            )}
+            <SystemNavigationBar scheme={scheme} />
             <TestAuthBridge />
             <AuthDeepLinkBridge />
             <AuthGate>
@@ -120,7 +109,7 @@ export default function RootLayout() {
               <PlaybackProvider>
                 <SleepTimerBridge />
                 <OfflineReconcileBridge />
-                {Platform.OS === 'web' && <WebPlaybackShortcutsBridge />}
+                <PlaybackShortcuts />
                 <ScreenBoundary>
                   <AppChrome isWideWeb={isWideWeb}>
                     <Stack

@@ -1,6 +1,3 @@
 {
-  "ui": [
-    "src/app/_layout.tsx",
-    "src/app/(tabs)/_layout.tsx"
-  ]
+  "ui": []
 }
