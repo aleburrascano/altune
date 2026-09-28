@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   precheck:
-    runs-on: host
+    runs-on: precheck
     timeout-minutes: 45
     steps:
       - name: precheck
@@ -18,8 +18,11 @@ jobs:
           BASE: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          repo=/home/ubuntu/projects/altune
+          repo=${ALTUNE_REPO:?the runner sets ALTUNE_REPO to its checkout}
           git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"
+          if [ "${ALTUNE_CI_OWNED:-}" = 1 ]; then
+            bash "$repo/../refresh-deps.sh" "gitea/$BASE"
+          fi
           wt=$(mktemp -d /tmp/ci-precheck.XXXXXX)
           trap 'git -C "$repo" worktree remove --force "$wt"' EXIT
           git -C "$repo" worktree add -q --detach "$wt" "gitea/pr/$PR"
