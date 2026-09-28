@@ -1,5 +1,4 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter, type Href } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { TrackId } from '@shared/api-client/ids';
@@ -16,7 +15,7 @@ import { useOwnedTrack } from './useOwnedTrack';
 import { useReportWrongAlbum } from './useReportWrongAlbum';
 import { useSaveTrack } from './useSaveTrack';
 import { useTrackSave, type TrackSave } from './useTrackSave';
-import { featuringRouteFor, type DetailRoute } from '../navigation';
+import { useOpenFeaturing, type DetailRoute } from '../navigation';
 import { isResultPlaying, resolvePlaySource } from '../play-source';
 import { toCreateTrackRequest } from '../save-cache';
 
@@ -62,7 +61,7 @@ export function useTrackDetailActions({
   deezerFeatured?: FeaturedArtist[] | undefined;
   mbYear?: number | undefined;
 }): TrackDetailActions {
-  const router = useRouter();
+  const onFeaturedPress = useOpenFeaturing(detailRoute);
   const save = useSaveTrack();
   const searchId = useDetailHandoff()?.searchId;
   const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
@@ -112,18 +111,6 @@ export function useTrackDetailActions({
     if (result.subtitle !== null && albumName !== null) {
       void lateralNav.navigateTo(`${albumName} ${result.subtitle}`, 'album');
     }
-  };
-
-  const onFeaturedPress = (f: FeaturedArtist): void => {
-    const href: Href = {
-      pathname: featuringRouteFor(detailRoute),
-      params: {
-        name: f.name,
-        ...(f.mbid ? { mbid: f.mbid } : {}),
-        ...(f.deezer_id != null ? { deezer_id: String(f.deezer_id) } : {}),
-      },
-    };
-    router.push(href);
   };
 
   const playLabel = playing ? 'Pause' : isPreview ? 'Play preview' : 'Play';

@@ -6,10 +6,12 @@ import { clearDetailHandoffs, readDetailHandoff } from '@shared/lib/detail-hando
 
 import {
   detailRouteFor,
+  featuringHref,
   featuringRouteFor,
   openDetail,
   tabRootFromSegments,
   useOpenDetail,
+  useOpenFeaturing,
 } from '../navigation';
 
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
@@ -86,5 +88,36 @@ describe('useOpenDetail', () => {
     const [href] = push.mock.calls[0]!;
     expect(href.pathname).toBe('/library/detail');
     expect(readDetailHandoff(href.params.handoff)?.result).toEqual(result);
+  });
+});
+
+describe('featuringHref', () => {
+  it('carries only the name when the artist has no ids', () => {
+    expect(featuringHref('/discover/detail', { name: 'Kid', mbid: null, deezer_id: null })).toEqual(
+      {
+        pathname: '/discover/featuring',
+        params: { name: 'Kid' },
+      },
+    );
+  });
+
+  it('adds mbid and stringified deezer_id when present', () => {
+    expect(featuringHref('/library/detail', { name: 'Kid', mbid: 'mb-1', deezer_id: 42 })).toEqual({
+      pathname: '/library/featuring',
+      params: { name: 'Kid', mbid: 'mb-1', deezer_id: '42' },
+    });
+  });
+});
+
+describe('useOpenFeaturing', () => {
+  it('pushes the same href featuringHref builds', () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
+    const artist = { name: 'Kid', mbid: 'mb-1', deezer_id: 42 };
+
+    const { result: hook } = renderHook(() => useOpenFeaturing('/library/detail'));
+    hook.current(artist);
+
+    expect(push).toHaveBeenCalledWith(featuringHref('/library/detail', artist));
   });
 });
