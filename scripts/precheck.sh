@@ -75,6 +75,11 @@ if touches '^services/go-api/'; then
   fi
 fi
 
+if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes"; then
+  go_pin services/go-api
+  check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
+fi
+
 if touches '^services/overseer/'; then
   m=services/overseer
   go_pin $m

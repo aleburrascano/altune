@@ -16,6 +16,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -213,5 +216,103 @@ func TestRouter_MountsNoAdminRoute(t *testing.T) {
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/health", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("GET /admin/health = %d, want 404", rec.Code)
+	}
+}
+
+var (
+	backtickSpan   = regexp.MustCompile("`([^`\\n]+)`")
+	httpMethodLead = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE) `)
+)
+
+func namedGoAPIRoutes(note string) []string {
+	var routes []string
+	for _, span := range backtickSpan.FindAllStringSubmatch(note, -1) {
+		path, _, _ := strings.Cut(httpMethodLead.ReplaceAllString(span[1], ""), "?")
+		isGoAPI := strings.HasPrefix(path, "/v1/") || strings.HasPrefix(path, "/observe/") ||
+			strings.HasPrefix(path, "/admin/") || path == "/health"
+		if isGoAPI {
+			routes = append(routes, path)
+		}
+	}
+	return routes
+}
+
+func routeMatchesPattern(route, pattern string) bool {
+	routeSegments := strings.Split(route, "/")
+	patternSegments := strings.Split(pattern, "/")
+	if len(routeSegments) != len(patternSegments) {
+		return false
+	}
+	for i, segment := range patternSegments {
+		isParam := strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}")
+		if !isParam && segment != routeSegments[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func unmountedRoutes(note string, mounted []string) []string {
+	var missing []string
+	for _, route := range namedGoAPIRoutes(note) {
+		found := false
+		for _, pattern := range mounted {
+			found = found || routeMatchesPattern(route, pattern)
+		}
+		if !found {
+			missing = append(missing, route)
+		}
+	}
+	return missing
+}
+
+func TestUnmountedRoutes(t *testing.T) {
+	mounted := []string{"/health", "/v1/discovery/search", "/v1/tracks/{trackId}/retry", "/observe/metrics/live"}
+	cases := []struct {
+		name string
+		note string
+		want []string
+	}{
+		{"mounted route passes", "see `/v1/discovery/search`", nil},
+		{"unmounted admin route is reported", "see `/admin/metrics/live`", []string{"/admin/metrics/live"}},
+		{"concrete id matches a param segment", "`POST /v1/tracks/abc123/retry`", nil},
+		{"query string is dropped", "`GET /observe/metrics/live?window_days=<n>&by=x`", nil},
+		{"method prefix is dropped", "`GET /v1/discovery/gone`", []string{"/v1/discovery/gone"}},
+		{"overseer route is ignored", "`/overseer/api/state`", nil},
+		{"health matches exactly", "`/health` and `/healthz`", nil},
+		{"longer route than pattern is a miss", "`/v1/discovery/search/extra`", []string{"/v1/discovery/search/extra"}},
+		{"span outside backticks is ignored", "/admin/metrics/live", nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := unmountedRoutes(c.note, mounted)
+			if strings.Join(got, ",") != strings.Join(c.want, ",") {
+				t.Errorf("unmountedRoutes(%q) = %v, want %v", c.note, got, c.want)
+			}
+		})
+	}
+}
+
+func TestCapabilityNotes_NameMountedRoutes(t *testing.T) {
+	var mounted []string
+	err := chi.Walk(productionRouter(t), func(_, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		mounted = append(mounted, route)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk production router: %v", err)
+	}
+	notes, err := filepath.Glob("../../../../docs/features/*/notes.md")
+	if err != nil {
+		t.Fatalf("glob capability notes: %v", err)
+	}
+	for _, notePath := range notes {
+		body, err := os.ReadFile(notePath)
+		if err != nil {
+			t.Fatalf("read %s: %v", notePath, err)
+		}
+		for _, route := range unmountedRoutes(string(body), mounted) {
+			t.Errorf("%s: %s is not mounted", notePath, route)
+		}
 	}
 }
