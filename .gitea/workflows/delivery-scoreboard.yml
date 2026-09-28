@@ -1,0 +1,28 @@
+name: delivery-scoreboard
+
+on:
+  schedule:
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Window in days
+        default: "14"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  scoreboard:
+    runs-on: host
+    timeout-minutes: 15
+    steps:
+      - name: build scoreboard
+        env:
+          DAYS: ${{ github.event.inputs.days || '14' }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          git -C /home/ubuntu/projects/altune fetch -q gitea main || { sleep 5; git -C /home/ubuntu/projects/altune fetch -q gitea main; } || { sleep 5; git -C /home/ubuntu/projects/altune fetch -q gitea main; }
+          git -C /home/ubuntu/projects/altune show "${{ github.sha }}:scripts/delivery-scoreboard.sh" \
+            | bash -s aleburrascano/altune "$DAYS"

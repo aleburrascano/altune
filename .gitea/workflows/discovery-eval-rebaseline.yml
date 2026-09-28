@@ -1,0 +1,67 @@
+name: discovery-eval-rebaseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Mode to re-baseline
+        required: true
+        type: choice
+        options:
+          - eval
+          - merge
+          - diversity
+          - artist-intent
+          - signal-a
+          - signal-b
+          - correction
+          - detail
+      noise-runs:
+        description: Runs to measure the margin from (3 recommended; 1 sets margin 0)
+        required: true
+        default: "3"
+      open-pr:
+        description: Open a PR with the new baselines (false only prints the diff)
+        default: "true"
+
+concurrency:
+  group: discovery-eval
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+
+jobs:
+  rebaseline:
+    runs-on: host
+    timeout-minutes: 175
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+      - name: re-baseline ${{ github.event.inputs.mode }}
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          NOISE_RUNS: ${{ github.event.inputs.noise-runs }}
+          REBASELINE: "1"
+        run: bash "$WT/.gitea/workflows/discovery-eval-run.sh"
+      - name: open the re-baseline PR
+        env:
+          OPEN_PR: ${{ github.event.inputs.open-pr }}
+          MODE: ${{ github.event.inputs.mode }}
+          NOISE_RUNS: ${{ github.event.inputs.noise-runs }}
+        run: |
+          bash "$WT/.gitea/workflows/discovery-eval-pr.sh" "rebaseline/$MODE-${{ github.run_id }}" \
+            "chore(tooling): re-baseline discoveryeval $MODE" \
+            "Measured on the host runner over $NOISE_RUNS run(s) against the frozen corpus. Review the value and margin movement before merging; merging makes these numbers the gate. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            services/go-api/cmd/discoveryeval/baselines.json
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

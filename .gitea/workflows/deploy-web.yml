@@ -1,0 +1,103 @@
+name: deploy-web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.gitea/workflows/deploy-web.yml'
+      - '.gitea/workflows/web-*.sh'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+  VM: ubuntu@altune.duckdns.org
+  VM_KEY: /home/ubuntu/.ssh/altune-prod.key
+  STAGING_URL: https://altune-staging.duckdns.org
+  PROD_URL: https://altune.duckdns.org
+
+jobs:
+  deploy:
+    runs-on: host
+    timeout-minutes: 90
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+
+      - name: install dependencies
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+
+      - name: build staging
+        id: staging_build
+        env:
+          EXPO_PUBLIC_API_URL: https://altune-staging.duckdns.org
+          EXPO_PUBLIC_SUPABASE_URL: https://ijyjoyxhwmbmriwzazbx.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_Gy-pQWa3S9wIkmwqOitl_A_KwFCR6TL
+        run: bash "$WT/.gitea/workflows/web-build.sh"
+
+      - name: release staging
+        run: bash "$WT/.gitea/workflows/web-ship.sh" staging ${{ github.sha }}
+
+      - name: smoke staging
+        env:
+          BASE_URL: ${{ env.STAGING_URL }}
+          ENTRY: ${{ steps.staging_build.outputs.entry }}
+          SHA: ${{ github.sha }}
+        run: bash "$WT/.github/workflows/deploy-web-smoke.sh"
+
+      - name: build prod
+        id: prod_build
+        env:
+          EXPO_PUBLIC_API_URL: https://altune.duckdns.org
+          EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
+        run: bash "$WT/.gitea/workflows/web-build.sh"
+
+      - name: record the live prod release
+        id: previous
+        run: |
+          prev=$(ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$VM" 'readlink ~/altune-web/prod/current || true')
+          echo "sha=${prev##*/}" >>"$GITHUB_OUTPUT"
+          echo "prod serves ${prev##*/}"
+
+      - name: release prod
+        run: bash "$WT/.gitea/workflows/web-ship.sh" prod ${{ github.sha }}
+
+      - name: smoke prod
+        id: smoke_prod
+        env:
+          BASE_URL: ${{ env.PROD_URL }}
+          ENTRY: ${{ steps.prod_build.outputs.entry }}
+          SHA: ${{ github.sha }}
+        run: bash "$WT/.github/workflows/deploy-web-smoke.sh"
+
+      - name: roll back prod
+        if: failure() && steps.previous.outputs.sha != '' && steps.previous.outputs.sha != github.sha
+        run: |
+          set -euo pipefail
+          prev=${{ steps.previous.outputs.sha }}
+          ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$VM" \
+            "bash ~/altune/services/go-api/deploy/web-release.sh prod $prev"
+          live=$(ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$VM" 'readlink ~/altune-web/prod/current')
+          [ "${live##*/}" = "$prev" ] || { echo "::error::rollback left prod on ${live##*/}, not $prev"; exit 1; }
+          entry=$(ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$VM" \
+            "grep -oE '_expo/static/js/web/entry-[0-9a-f]+\\.js' ~/altune-web/prod/current/index.html | head -1")
+          [ -n "$entry" ] || { echo "::error::rolled-back release $prev has no entry bundle in index.html"; exit 1; }
+          BASE_URL=$PROD_URL ENTRY=$entry SHA=$prev bash "$WT/.github/workflows/deploy-web-smoke.sh"
+          echo "::warning::prod smoke failed for ${{ github.sha }}; prod is rolled back to $prev and its smoke passed"
+
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

@@ -3,6 +3,10 @@ name: precheck
 on:
   pull_request:
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: precheck-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -19,12 +23,18 @@ jobs:
         run: |
           set -euo pipefail
           repo=${ALTUNE_REPO:?the runner sets ALTUNE_REPO to its checkout}
-          git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"
+          git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR" || { sleep 5; git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; } || { sleep 5; git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
           if [ "${ALTUNE_CI_OWNED:-}" = 1 ]; then
             bash "$repo/../refresh-deps.sh" "gitea/$BASE"
           fi
-          wt=$(mktemp -d /tmp/ci-precheck.XXXXXX)
+          wt=$(mktemp -d /tmp/ci-wf.XXXXXX)
           trap 'git -C "$repo" worktree remove --force "$wt"' EXIT
           git -C "$repo" worktree add -q --detach "$wt" "gitea/pr/$PR"
           cd "$wt"
-          bash scripts/precheck.sh "gitea/$BASE"
+          if [ -x "$HOME/.claude/bin/precheck-cached.sh" ]; then
+            bash "$HOME/.claude/bin/precheck-cached.sh" "$wt" "gitea/$BASE"
+          else
+            bash scripts/precheck.sh "gitea/$BASE"
+          fi
+          bash .gitea/workflows/integration.sh "gitea/$BASE"
+          bash .gitea/workflows/pr-shape.sh "$PR"

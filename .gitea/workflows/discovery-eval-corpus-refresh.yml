@@ -1,0 +1,48 @@
+name: discovery-eval-corpus-refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      open-pr:
+        description: Open a PR with the refreshed corpus (false only prints the diff)
+        default: "true"
+
+concurrency:
+  group: discovery-eval
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+
+jobs:
+  refresh:
+    runs-on: host
+    timeout-minutes: 20
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+      - name: snapshot corpus
+        run: |
+          set -euo pipefail
+          cd "$WT/services/go-api"
+          . "$WT/.gitea/workflows/eval-env.sh" production || exit 0
+          go run ./cmd/discoveryeval -mode corpus-snapshot -corpus-file cmd/discoveryeval/corpus-library.json
+      - name: open the corpus PR
+        env:
+          OPEN_PR: ${{ github.event.inputs.open-pr }}
+        run: |
+          bash "$WT/.gitea/workflows/discovery-eval-pr.sh" "eval-corpus-refresh-${{ github.run_id }}" \
+            "chore(tooling): refresh the frozen discoveryeval corpus" \
+            "Rebuilt from the live tracks table. Merging this moves the denominator for every corpus-derived metric: re-baseline each gated mode with discovery-eval-rebaseline afterwards. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            services/go-api/cmd/discoveryeval/corpus-library.json
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

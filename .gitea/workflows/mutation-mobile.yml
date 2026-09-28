@@ -1,0 +1,50 @@
+name: mutation-mobile
+
+on:
+  schedule:
+    - cron: "20 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      mutate:
+        description: Glob to mutate; empty picks this week's slice of stryker.config.json
+        required: false
+
+concurrency:
+  group: mutation-mobile
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+
+jobs:
+  mutate:
+    runs-on: host
+    timeout-minutes: 90
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+      - name: dependencies
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+      - name: mutation test
+        env:
+          MUTATE: ${{ github.event.inputs.mutate }}
+        run: cd "$WT/apps/mobile" && bash "$WT/.gitea/workflows/mutation-mobile.sh"
+      - name: keep the report
+        if: always()
+        run: |
+          [ -f "$WT/apps/mobile/reports/mutation/mutation.json" ] || exit 0
+          dir="$HOME/.cache/altune-ci/mutation"
+          mkdir -p "$dir"
+          cp "$WT/apps/mobile/reports/mutation/mutation.json" "$dir/mutation-${{ github.run_id }}.json"
+          echo "report: $dir/mutation-${{ github.run_id }}.json"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

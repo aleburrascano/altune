@@ -1,0 +1,189 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/go-api/**"
+      - "services/overseer/**"
+      - "apps/mobile/**"
+      - "scripts/uptime/**"
+      - ".gitea/workflows/ci*"
+      - ".github/workflows/test-*"
+      - ".github/workflows/nilaway*"
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+  SHA: ${{ github.sha }}
+  BEFORE: ${{ github.event.before }}
+
+concurrency:
+  group: ci-main
+  cancel-in-progress: true
+
+jobs:
+  ci-changes:
+    runs-on: host
+    timeout-minutes: 10
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      overseer: ${{ steps.filter.outputs.overseer }}
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+      - name: paths
+        id: filter
+        run: cd "$WT" && bash .gitea/workflows/ci-changes.sh "$BEFORE"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+
+  ci-backend-static:
+    needs: ci-changes
+    if: needs.ci-changes.outputs.backend == 'true'
+    runs-on: host
+    timeout-minutes: 40
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+      - name: govulncheck
+        run: cd "$WT/services/go-api" && govulncheck ./...
+      - name: nilaway ceiling
+        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/nilaway-ceiling.sh" nilaway-baseline.txt
+      - name: shellcheck deploy scripts
+        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/test-backend-shellcheck.sh"
+      - name: deploy script self-tests
+        run: |
+          cd "$WT/services/go-api"
+          for t in deploy/*_test.sh; do echo "== $t"; bash "$t"; done
+          bash deploy/migration-safety.sh
+      - name: uptime probe self-tests
+        run: |
+          cd "$WT"
+          bash scripts/uptime/journey_test.sh
+          bash scripts/uptime/check_test.sh
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+  ci-backend-tests:
+    needs: ci-changes
+    if: needs.ci-changes.outputs.backend == 'true'
+    runs-on: host
+    timeout-minutes: 40
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+      - name: postgres
+        run: bash "$WT/.gitea/workflows/ci-postgres.sh"
+      - name: apply migrations
+        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/test-backend-migrate.sh"
+      - name: go test with integration tests
+        env:
+          INTEGRATION: "1"
+        run: cd "$WT/services/go-api" && go test -count=1 -coverprofile=coverage.out ./...
+      - name: coverage ratchet
+        env:
+          MIN: 65
+        run: cd "$WT/services/go-api" && bash "$WT/.github/workflows/test-backend-coverage.sh"
+      - name: acquisition selection gate
+        run: cd "$WT/services/go-api" && go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+  ci-overseer:
+    needs: ci-changes
+    if: needs.ci-changes.outputs.overseer == 'true'
+    runs-on: host
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+      - name: go test -race
+        env:
+          CGO_ENABLED: "1"
+        run: cd "$WT/services/overseer" && go test -race -count=1 ./...
+      - name: govulncheck
+        run: cd "$WT/services/overseer" && govulncheck ./...
+      - name: nilaway ceiling
+        run: cd "$WT/services/overseer" && bash "$WT/.github/workflows/nilaway-ceiling.sh"
+      - name: web dependencies
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" services/overseer/web
+      - name: web build and bundle budget
+        run: cd "$WT/services/overseer/web" && npm run build && npm run size
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+  ci-mobile-tests:
+    needs: ci-changes
+    if: needs.ci-changes.outputs.mobile == 'true'
+    runs-on: host
+    timeout-minutes: 45
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+      - name: dependencies
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+      - name: jest with coverage ratchet
+        run: cd "$WT/apps/mobile" && npx jest --coverage --ci --maxWorkers=2 --cacheDirectory "$HOME/.cache/altune-ci/jest"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+  ci-mobile-quality:
+    needs: ci-changes
+    if: needs.ci-changes.outputs.mobile == 'true'
+    runs-on: host
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
+      - name: dependencies
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+      - name: react-doctor
+        env:
+          MAX_WARNINGS: 106
+        run: cd "$WT/apps/mobile" && bash "$WT/.github/workflows/test-mobile-react-doctor.sh"
+      - name: architecture, dead code and duplication (fallow)
+        run: cd "$WT/apps/mobile" && npm run fallow
+      - name: complexity ratchet (fallow)
+        continue-on-error: true
+        env:
+          MAX: 137
+        run: cd "$WT/apps/mobile" && bash "$WT/.github/workflows/test-mobile-complexity.sh"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

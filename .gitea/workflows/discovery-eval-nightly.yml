@@ -1,0 +1,95 @@
+name: discovery-eval-nightly
+
+on:
+  workflow_dispatch:
+    inputs:
+      modes:
+        description: Space-separated modes to run, or all
+        default: all
+
+concurrency:
+  group: discovery-eval
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+  MODES: ${{ github.event.inputs.modes || 'all' }}
+  RUN_DIR: /home/ubuntu/.cache/altune-ci/discovery-eval/${{ github.run_id }}
+
+jobs:
+  heavy:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        mode: [eval, merge, diversity, artist-intent, signal-b]
+    runs-on: host
+    timeout-minutes: 175
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+      - name: ${{ matrix.mode }}
+        env:
+          MODE: ${{ matrix.mode }}
+          RETRY_DELAY: 60
+        run: bash "$WT/.gitea/workflows/discovery-eval-run.sh"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+  cheap:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [detail, correction, signal-a]
+    runs-on: host
+    timeout-minutes: 175
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+      - name: ${{ matrix.mode }}
+        env:
+          MODE: ${{ matrix.mode }}
+          RETRY_DELAY: 20
+        run: bash "$WT/.gitea/workflows/discovery-eval-run.sh"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
+
+  report:
+    needs: [heavy, cheap]
+    if: always()
+    runs-on: host
+    timeout-minutes: 15
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+      - name: aggregate
+        run: |
+          set -euo pipefail
+          if ! ls "$RUN_DIR"/metrics-*.json >/dev/null 2>&1; then
+            echo "::notice::no mode produced metrics; nothing to report"
+            exit 0
+          fi
+          cd "$WT/services/go-api"
+          . "$WT/.gitea/workflows/eval-env.sh" production || exit 0
+          go run ./cmd/discoveryeval -mode report -reports "$RUN_DIR"
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

@@ -1,0 +1,45 @@
+name: discovery-eval-gate
+
+on:
+  pull_request:
+    paths:
+      - 'services/go-api/internal/discovery/service/rank*.go'
+      - 'services/go-api/internal/discovery/service/merge*.go'
+      - 'services/go-api/internal/discovery/service/diversity*.go'
+      - 'services/go-api/internal/discovery/service/pipeline*.go'
+      - 'services/go-api/internal/discovery/service/behavioral_signals*.go'
+      - 'services/go-api/internal/discovery/service/eval/**'
+      - 'services/go-api/cmd/discoveryeval/**'
+      - '.gitea/workflows/discovery-eval-gate.yml'
+
+concurrency:
+  group: discovery-eval-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+  PR: ${{ github.event.pull_request.number }}
+  BASE: ${{ github.base_ref }}
+
+jobs:
+  eval-gate:
+    runs-on: host
+    timeout-minutes: 20
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR" || { sleep 5; git -C "$REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; } || { sleep 5; git -C "$REPO" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
+          git -C "$REPO" show "gitea/pr/$PR:.gitea/workflows/ci-checkout.sh" | bash -s "gitea/pr/$PR"
+      - name: harness compiles
+        run: cd "$WT/services/go-api" && go build -o /dev/null ./cmd/discoveryeval
+      - name: deterministic ranking and eval tests
+        run: cd "$WT/services/go-api" && go test -count=1 ./internal/discovery/service/...
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"

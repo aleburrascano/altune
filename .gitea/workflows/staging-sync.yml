@@ -1,0 +1,24 @@
+name: staging-sync
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: staging-sync
+  cancel-in-progress: false
+
+env:
+  VM: ubuntu@altune.duckdns.org
+  VM_KEY: /home/ubuntu/.ssh/altune-prod.key
+
+jobs:
+  sync:
+    runs-on: host
+    timeout-minutes: 40
+    steps:
+      - name: sync staging from prod
+        run: |
+          ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 "$VM" \
+            "flock -w 600 ~/.altune-staging.lock bash ~/altune/services/go-api/deploy/staging-sync.sh"
