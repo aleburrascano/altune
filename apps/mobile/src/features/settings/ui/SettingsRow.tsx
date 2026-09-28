@@ -36,7 +36,9 @@ export function SettingsRow({
     <View
       style={[
         styles.row,
-        first ? null : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.color.border },
+        first
+          ? null
+          : { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.color.border },
         disabled ? styles.disabled : null,
       ]}
     >

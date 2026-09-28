@@ -37,7 +37,6 @@ export type DiscoverLogic = {
   suggestionItems: DiscoverySuggestion[];
   onSuggestionSelect: (text: string) => void;
   view: DiscoverView;
-  /** True when the shown response is `partial` (a provider degraded), so results may be incomplete. */
   resultsIncomplete: boolean;
   searchData: DiscoverySearchResponse | undefined;
   historyItems: SearchHistoryItem[];
@@ -97,8 +96,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const resultsIncomplete = _resultsIncompleteForState(hookState);
   const correction = _correctionForResponse(searchData);
   const trimmedInput = search.inputValue.trim();
-  const isSearchPending =
-    isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
+  const isSearchPending = isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   useEffect(() => {

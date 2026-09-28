@@ -24,7 +24,11 @@ function reportExploreFailure(artist: string, error: unknown): void {
   console.warn('[library] featuring explore search failed', {
     ...failureLogFields(error),
   });
-  alertLibraryFailure('Search failed', `Could not search for ${artist}.`, classifyLibraryError(error));
+  alertLibraryFailure(
+    'Search failed',
+    `Could not search for ${artist}.`,
+    classifyLibraryError(error),
+  );
 }
 
 async function searchTopMatch(artist: string): Promise<DiscoveryResult | undefined> {

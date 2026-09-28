@@ -70,10 +70,6 @@ function AuthDeepLinkBridge() {
   return null;
 }
 
-
-// Mirrors the real `src/app/_layout.tsx`: the bridge sits beside `AuthGate`,
-// never inside its children, so its lifetime does not depend on which branch
-// AuthGate is currently rendering (#2991).
 function RootTestLayout() {
   return (
     <>
@@ -147,11 +143,6 @@ async function settle(times = 4): Promise<void> {
   }
 }
 
-// The bridge that actually completes the exchange (`useAuthDeepLink`) must stay
-// mounted for as long as the app is, not just for as long as AuthGate happens
-// to be showing the auth screen's children — otherwise a redirect chain (native
-// auth screens all redirect to `/` on mount) tears the listener down mid-exchange
-// and a warm `url` event delivered into that window is lost for good (#2991).
 describe('the deep-link bridge survives AuthGate redirecting away mid-exchange (#2991)', () => {
   it('calls the exchange exactly once for a confirm link while signed out, even though the route redirects', async () => {
     signedOut();

@@ -1,6 +1,3 @@
-// Failure paths of useDeleteTracks (#788): the bulk delete keeps each item's cause,
-// and removes only what the server did delete.
-
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { QueryClient } from '@tanstack/react-query';
@@ -31,8 +28,6 @@ import {
   userBLibrary,
 } from './trackMutationFixtures';
 
-// deleteTrack takes no cancellation today. The mock accepts one anyway and records it,
-// so #1701's test can see whether an unmount ever cancels a delete already in flight.
 const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
@@ -47,7 +42,8 @@ const actualForgetTrack = jest.requireActual<typeof ForgetTrackModule>(
 ).forgetTrack;
 const mockForgetTrack = jest.fn<void, [QueryClient, TrackId]>(actualForgetTrack);
 jest.mock('@shared/events/forgetTrack', () => ({
-  forgetTrack: (queryClient: QueryClient, trackId: TrackId) => mockForgetTrack(queryClient, trackId),
+  forgetTrack: (queryClient: QueryClient, trackId: TrackId) =>
+    mockForgetTrack(queryClient, trackId),
 }));
 
 let alertSpy: jest.SpyInstance;
@@ -147,10 +143,7 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
   });
 });
 
-// #789: a bulk delete against a dead dependency paid the full request timeout for
-// every selected track, one after another, with no cap and no way to stop it.
 describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on unmount', () => {
-  // Mirrors REQUEST_TIMEOUT_MS; importing the api-client barrel would pull in the auth client.
   const REQUEST_TIMEOUT_MS = 15_000;
   const ids = (n: number): TrackId[] => Array.from({ length: n }, (_, i) => asTrackId(`t${i}`));
 
@@ -170,7 +163,6 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
     jest.useFakeTimers();
     try {
       const { wrapper } = setup();
-      // Every request hangs for the full per-request timeout, as with a dead dependency.
       mockDeleteTrack.mockImplementation(
         () =>
           new Promise((_, reject) =>
@@ -183,7 +175,6 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
       act(() => {
         run = result.current.mutateAsync(ids(100));
       });
-      // Deadline plus one in-flight request timeout bounds the whole run.
       await act(async () => {
         await jest.advanceTimersByTimeAsync(BULK_DELETE_DEADLINE_MS + REQUEST_TIMEOUT_MS);
       });
@@ -223,16 +214,12 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
     const outcome = (await run) as { deleted: number; skipped: number };
 
     expect(mockDeleteTrack).toHaveBeenCalledTimes(BULK_DELETE_CONCURRENCY);
-    // The in-flight deletes did land server-side, so the caches still reflect them.
     expect(outcome.deleted).toBe(BULK_DELETE_CONCURRENCY);
     expect(outcome.skipped).toBe(10 - BULK_DELETE_CONCURRENCY);
     expect(pagedIds(queryClient)).toEqual(['t9']);
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
-  // #1701: unmount stops the run from sending more, and nothing beyond that. A delete
-  // already sent is never cancelled — cancelling it would not un-delete the track
-  // server-side, and only its result can take that track out of the app-wide caches.
   it('cancels no delete already in flight at unmount, and waits for each to settle', async () => {
     const { wrapper } = setup();
     const pending: (() => void)[] = [];
@@ -259,9 +246,6 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
   });
 });
 
-// #795: every failure used to roll back and show the same "try again" Alert, so a
-// track deleted elsewhere came back as a ghost row and a refused session was told
-// to just retry. The hooks now branch on the failure class.
 describe('track mutation hooks — respond to the failure class, not one generic path', () => {
   it('a bulk delete counts tracks already gone (404) as deleted, not as failures', async () => {
     const { queryClient, wrapper } = setup();

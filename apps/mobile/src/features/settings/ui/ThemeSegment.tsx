@@ -28,10 +28,7 @@ export function ThemeSegment({ scheme, onSelect }: ThemeSegmentProps): ReactElem
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             accessibilityLabel={`${option.label} theme`}
-            style={[
-              styles.option,
-              selected ? { backgroundColor: theme.color.canvas } : null,
-            ]}
+            style={[styles.option, selected ? { backgroundColor: theme.color.canvas } : null]}
           >
             <Text variant="caption" tone={selected ? 'primary' : 'tertiary'}>
               {option.label}

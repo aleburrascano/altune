@@ -3,7 +3,6 @@ import { StyleSheet, type StyleProp, type TextStyle } from 'react-native';
 
 import { Text } from '@shared/ui';
 
-/** Discover's small-caps section header ("TOP RESULT", "ALBUMS"); `style` carries the caller's own spacing, nothing else. */
 export function SectionLabel({
   children,
   style,

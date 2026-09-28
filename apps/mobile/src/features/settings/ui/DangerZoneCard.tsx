@@ -11,7 +11,6 @@ type DangerZoneCardProps = Parameters<typeof buildDangerZoneActions>[0];
 export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
   const [confirming, setConfirming] = useState<DangerZoneActionKey | null>(null);
   const actions = buildDangerZoneActions(props);
-  // `first` is positional among the rows actually shown.
   const visibleRows = actions.filter(({ row }) => !row.hidden);
   const close = (): void => setConfirming(null);
 

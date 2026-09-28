@@ -1,6 +1,3 @@
-// A seam carved out of PlaylistDetailScreen (#781): the playlist offline menu entry. Each test
-// pins the behavior the screen had inline before.
-
 import { Alert } from 'react-native';
 
 import { act, renderHook } from '@testing-library/react-native';

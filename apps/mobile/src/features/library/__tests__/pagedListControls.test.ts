@@ -21,15 +21,14 @@ describe('pagedListControls', () => {
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    { hasNextPage: false },
-    { isFetchingNextPage: true },
-    { isFetchNextPageError: true },
-  ])('does not fetch when %o', (over) => {
-    const { controls, fetchNextPage } = build(over);
-    controls.onEndReached();
-    expect(fetchNextPage).not.toHaveBeenCalled();
-  });
+  it.each([{ hasNextPage: false }, { isFetchingNextPage: true }, { isFetchNextPageError: true }])(
+    'does not fetch when %o',
+    (over) => {
+      const { controls, fetchNextPage } = build(over);
+      controls.onEndReached();
+      expect(fetchNextPage).not.toHaveBeenCalled();
+    },
+  );
 
   it('refetch calls through', () => {
     const { controls, refetch } = build();

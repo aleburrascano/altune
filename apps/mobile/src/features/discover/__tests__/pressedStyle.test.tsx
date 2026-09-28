@@ -12,9 +12,6 @@ jest.mock('../hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
 }));
 
-// Pressable's `pressed` comes from the touch responder, not from a prop, and
-// fireEvent.press() grants and releases in one go — so hold the responder open
-// by hand to observe the held-down style.
 function holdDown(element: Parameters<typeof fireEvent>[0]): void {
   fireEvent(element, 'responderGrant', {
     persist: () => {},

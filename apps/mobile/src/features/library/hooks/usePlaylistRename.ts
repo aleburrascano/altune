@@ -11,15 +11,6 @@ type PlaylistRenameState = {
   confirmRename: () => void;
 };
 
-// Inline rename flow for a playlist: seeds the edit field from the current name and
-// only fires the mutation when the trimmed name is non-empty and actually changed.
-//
-// At most one rename is in flight. Return on the single-line field blurs it, so
-// PlaylistHero's onSubmitEditing and onBlur both confirm in the same tick, and two
-// requests for the same name race: a late failure from the first reverts the name the
-// second just committed, because the shared revert matches on the name's value (#1698).
-// The guard is a ref rather than `renameMut.isPending`, which both calls read before
-// React has re-rendered — the very race a pending flag loses.
 export function usePlaylistRename(
   playlistId: PlaylistId,
   currentName: string | undefined,

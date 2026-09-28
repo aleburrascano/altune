@@ -142,11 +142,6 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
 });
 
 describe('discover clear-history racing an unrelated history invalidation', () => {
-  // #1679: useDiscoverLogic invalidates the history key whenever a search settles,
-  // with no knowledge of an in-flight clear. That refetch reads the pre-clear list
-  // from a server that has not committed the clear yet, so the clear has to be the
-  // last write to the cache once it does commit.
-
   const PRE_CLEAR_HISTORY: DiscoverySearchHistoryResponse = {
     items: [{ query: 'old search', query_norm: 'old search', executed_at: '2026-01-01T00:00:00Z' }],
     total: 1,
@@ -161,7 +156,6 @@ describe('discover clear-history racing an unrelated history invalidation', () =
     return { promise, resolve };
   }
 
-  /** A server whose history only empties once the clear call it handed out commits. */
   function serverHoldingHistory() {
     const commit = deferred<void>();
     let history = PRE_CLEAR_HISTORY;
@@ -261,15 +255,11 @@ describe('discover clear-history racing an unrelated history invalidation', () =
 });
 
 describe('discover clear-history retries transient failures', () => {
-  // #1678: mutations default to zero retries, so a transient blip rolled discover's
-  // history back and surfaced an error while settings' copy of the same DELETE recovered.
-
   const EXISTING_HISTORY = { items: [{ query: 'old' }] };
 
   let queryClient: QueryClient;
 
   function setup() {
-    // retryDelay only keeps the test fast; the retry decision comes from the hook.
     queryClient = new QueryClient({ defaultOptions: { mutations: { retryDelay: 0 } } });
     queryClient.setQueryData(discoveryKeys.history, EXISTING_HISTORY);
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -280,8 +270,6 @@ describe('discover clear-history retries transient failures', () => {
   }
 
   beforeEach(() => {
-    // Reset, not clear: a queued *Once outcome left unconsumed by a failing test
-    // would otherwise decide the next one.
     mockClearSearchHistory.mockReset();
   });
 

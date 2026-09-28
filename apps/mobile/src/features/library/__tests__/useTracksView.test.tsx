@@ -1,6 +1,3 @@
-// A list whose next page fails keeps the rows it already has and offers a retry in the
-// footer; only a failed first page is the whole-list error.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';

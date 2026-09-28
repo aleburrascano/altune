@@ -17,9 +17,6 @@ export type PlaylistsView = {
   playlists: PlaylistResponse[];
 };
 
-// Ordered by parsed instant, not the raw string: Go trims trailing zero fractional
-// digits, so same-second timestamps can differ in precision where string order is
-// wrong. Unparseable timestamps sort last.
 function createdAtMillis(playlist: PlaylistResponse): number {
   const millis = Date.parse(playlist.created_at);
   return Number.isNaN(millis) ? Number.NEGATIVE_INFINITY : millis;

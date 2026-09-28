@@ -1,6 +1,3 @@
-// #1703: this logger sits above `apiFetch`'s redaction boundary, so it must carry
-// the same shape — never the caught error's message or stack, never a query string.
-
 import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 
@@ -20,11 +17,6 @@ afterEach(() => {
   warnSpy.mockRestore();
 });
 
-/**
- * What a console would render. `message` and `stack` are non-enumerable, so a
- * plain `JSON.stringify` of a logged Error yields `{}` and would hide the leak
- * this file exists to catch.
- */
 function loggedText(): string {
   return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
@@ -90,13 +82,11 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
     };
 
     logTrackMutationFailure('delete track', deleteEndpoint, trackId, SECRET);
-    // An impostor: a thrown object wearing the fields of an ApiError.
     logTrackMutationFailure('delete track', deleteEndpoint, trackId, {
       status: 500,
       code: SECRET,
       correlationId: SECRET,
     });
-    // `Promise.reject()` with no reason.
     logTrackMutationFailure('delete track', deleteEndpoint, trackId, undefined);
 
     expect(loggedText()).not.toContain(SECRET);

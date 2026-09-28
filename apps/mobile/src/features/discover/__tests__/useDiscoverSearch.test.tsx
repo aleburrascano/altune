@@ -58,8 +58,6 @@ function resultCount(result: { current: SearchHook }) {
   return result.current.data?.results.length ?? 0;
 }
 
-// fetchNextPage resolves as soon as the page is cached, a tick before the hook
-// re-renders with it, so each round waits for the merged list itself to grow.
 async function fetchWhileOffered(result: { current: SearchHook }, rounds: number) {
   for (let round = 0; round < rounds && result.current.hasNextPage; round += 1) {
     const before = resultCount(result);

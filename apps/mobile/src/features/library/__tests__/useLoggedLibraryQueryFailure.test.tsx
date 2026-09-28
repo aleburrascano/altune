@@ -1,9 +1,3 @@
-// #1704: a failed tracks/albums/artists load is the library screen's primary failure
-// mode, and the screen answers every one of them with the same generic copy. Without a
-// line here the report "my library won't load" reaches triage with no chip, no status
-// and no failure class. Redacted like #1703: the caught error and the search term stay
-// out of the log.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -45,11 +39,6 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-/**
- * What a console would render. `message` and `stack` are non-enumerable, so a plain
- * `JSON.stringify` of a logged Error yields `{}` and would hide the leak this file
- * exists to catch.
- */
 function loggedText(): string {
   return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,

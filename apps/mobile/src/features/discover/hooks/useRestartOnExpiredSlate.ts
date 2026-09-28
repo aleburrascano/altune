@@ -38,5 +38,8 @@ export function useRestartOnExpiredSlate(
 ): DiscoverySearchResponse[] | undefined {
   const expiredAt = firstSlateMismatch(source);
   useRestartWhenExpired(expiredAt, useStableGatedRestart(restart));
-  return useMemo(() => source?.pages.slice(0, expiredAt ?? source.pages.length), [source, expiredAt]);
+  return useMemo(
+    () => source?.pages.slice(0, expiredAt ?? source.pages.length),
+    [source, expiredAt],
+  );
 }

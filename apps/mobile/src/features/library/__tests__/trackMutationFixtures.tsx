@@ -1,8 +1,3 @@
-// Shared setup for the track mutation hook tests (useDeleteTrack, useDeleteTracks,
-// useRetryAcquisition, useReacquireTrack): the track and cache shapes they seed, and
-// the sign-out-then-next-user sequence of #2729. Each test file still mocks
-// @shared/api-client/tracks itself, since jest.mock only applies to the file that calls it.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 

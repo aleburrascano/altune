@@ -4,8 +4,6 @@ import type { SortKey } from './sort';
 
 export type LibraryChip = 'playlists' | 'tracks' | 'albums' | 'artists';
 
-// The contract every chip's view hook satisfies, so the library screen renders one
-// shape whichever chip is selected.
 export type ActiveView = {
   content: ReactElement;
   count: number;

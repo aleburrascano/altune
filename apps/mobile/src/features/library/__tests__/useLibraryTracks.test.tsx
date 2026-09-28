@@ -1,15 +1,3 @@
-// #1697: nothing on the wire promises has_more implies a non-empty slice. A page that
-// reports more tracks and serves none advances the offset by zero, so an unguarded cursor
-// re-requests the identical page for as long as the list is scrolled.
-
-// #790: "shuffle/play whole library" resolves through loadAll. When the full-library
-// fetch fails it falls back to the pages already loaded (playing a subset beats a tap
-// that does nothing), but that degradation must leave a trace instead of being silent.
-
-// #792: infinite-scroll pages are fetched by offset. Deleting a track from an earlier,
-// already-loaded page renumbers the server list; the next fetchNextPage must follow that
-// renumbering instead of trusting the later page's stale offset and skipping a track.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
@@ -32,7 +20,6 @@ jest.mock('@shared/api-client/tracks', () => ({
   getAllTracks: (params: unknown) => mockGetAllTracks(params),
 }));
 
-// Each describe below serves its own fake API; start every test from a blank one.
 beforeEach(() => {
   mockGetTracks.mockReset();
   mockGetAllTracks.mockReset();
@@ -224,7 +211,6 @@ describe('useLibraryTracks loadAll refetch', () => {
 });
 
 describe('useLibraryTracks pagination after a delete', () => {
-  // A fake server: an ordered list served by offset/limit, exactly like GET /tracks.
   let server: TrackResponse[] = [];
   const serveLibraryPage = ({ limit, offset }: { limit: number; offset: number }) =>
     Promise.resolve({
@@ -242,7 +228,6 @@ describe('useLibraryTracks pagination after a delete', () => {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   }
 
-  // Two full pages plus a partial third, so page 3 is still unfetched after two loads.
   const LIBRARY_SIZE = TRACKS_PAGE_SIZE * 2 + 3;
 
   async function loadTwoPages() {

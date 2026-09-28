@@ -54,7 +54,10 @@ function mockDiscoverLogic(): DiscoverLogic {
     setFilter: jest.fn(),
     onHistoryTap: jest.fn(),
     onResultTap: jest.fn(),
-    impression: { onImpression: jest.fn(), onImpressionEnd: jest.fn() } as unknown as DiscoverLogic['impression'],
+    impression: {
+      onImpression: jest.fn(),
+      onImpressionEnd: jest.fn(),
+    } as unknown as DiscoverLogic['impression'],
     onRetry: jest.fn(),
     searchError: null,
     onEndReached: jest.fn(),
@@ -165,8 +168,6 @@ describe('DiscoverScreen registers its search focus only while visible', () => {
       blur = focusEffect();
     });
 
-    // Tab away: expo-router's tab navigator keeps the screen mounted, so only the
-    // focus-effect cleanup (blur), not unmount, can release the registration.
     act(() => {
       blur?.();
     });
@@ -176,11 +177,9 @@ describe('DiscoverScreen registers its search focus only while visible', () => {
 
     win.dispatch('/');
 
-    // A "/" pressed from another tab must navigate, not call the now-stale SearchBar ref.
     expect(mockFocus).not.toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith('/discover');
 
-    // Re-focusing Discover (the navigation landing) registers again and is focused.
     act(() => {
       focusEffect();
     });

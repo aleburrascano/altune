@@ -21,13 +21,6 @@ function sameSource(a: DiscoveryResult, b: DiscoveryResult): boolean {
   );
 }
 
-/**
- * Rank of `result` in the flat `results[]` list, or -1 if it is not there.
- *
- * The blended view renders `top_result` and `sections[].items`, which are parsed as separate
- * objects from `results[]`, so a reference lookup alone misses every blended tap. Fall back to
- * the primary source identity, then the server's result signature.
- */
 function globalRank(results: readonly DiscoveryResult[], result: DiscoveryResult): number {
   const byRef = results.indexOf(result);
   if (byRef >= 0) return byRef;
@@ -37,42 +30,73 @@ function globalRank(results: readonly DiscoveryResult[], result: DiscoveryResult
   return signature ? results.findIndex((r) => r.result_signature === signature) : -1;
 }
 
-/**
- * Records a `result_clicked` event for the tapped result, then opens its detail screen.
- *
- * Only the first tap per visit navigates: RN fires `onPress` for every touch-up, so a fast
- * double-tap (or two rows in quick succession) would otherwise push two detail screens and
- * overwrite the shared handoff the first one reads. The lock clears when the screen refocuses.
- */
-export function useResultTap(
+function resultClickedIdentity(tapped: DiscoveryResult) {
+  return {
+    kind: tapped.kind,
+    title: tapped.title,
+    subtitle: tapped.subtitle ?? null,
+    confidence: tapped.confidence,
+    provider: tapped.sources[0]?.provider ?? null,
+    ...(tapped.result_signature != null ? { result_signature: tapped.result_signature } : {}),
+  };
+}
+
+function resultClickedPayload(
   searchData: DiscoverySearchResponse | undefined,
-): ResultTapHandler {
-  const router = useRouter();
-  const recordEvent = useRecordEvent();
-  const navigationPending = useRef(false);
+  tapped: DiscoveryResult,
+  position: number,
+) {
+  const globalIndex = searchData ? globalRank(searchData.results, tapped) : -1;
+  return { ...resultClickedIdentity(tapped), position: globalIndex >= 0 ? globalIndex : position };
+}
+
+function useResetNavigationPendingOnFocus(navigationPendingRef: { current: boolean }): void {
   useFocusEffect(
     useCallback(() => {
-      navigationPending.current = false;
-    }, []),
+      navigationPendingRef.current = false;
+    }, [navigationPendingRef]),
   );
-  return (result, position) => {
-    if (navigationPending.current) return;
-    navigationPending.current = true;
-    Keyboard.dismiss();
-    const globalIndex = searchData ? globalRank(searchData.results, result) : -1;
-    recordEvent.mutate({
-      type: 'result_clicked',
-      search_id: searchData?.search_id,
-      payload: {
-        kind: result.kind,
-        title: result.title,
-        subtitle: result.subtitle ?? null,
-        position: globalIndex >= 0 ? globalIndex : position,
-        confidence: result.confidence,
-        provider: result.sources[0]?.provider ?? null,
-        ...(result.result_signature != null ? { result_signature: result.result_signature } : {}),
-      },
-    });
-    router.push(stashHandoffForDetail(result, searchData?.search_id));
-  };
+}
+
+type ResultClickArgs = {
+  recordEvent: ReturnType<typeof useRecordEvent>;
+  searchData: DiscoverySearchResponse | undefined;
+  tapped: DiscoveryResult;
+  position: number;
+};
+
+function recordResultClicked({ recordEvent, searchData, tapped, position }: ResultClickArgs): void {
+  recordEvent.mutate({
+    type: 'result_clicked',
+    search_id: searchData?.search_id,
+    payload: resultClickedPayload(searchData, tapped, position),
+  });
+}
+
+type TapDeps = {
+  navigationPendingRef: { current: boolean };
+  recordEvent: ReturnType<typeof useRecordEvent>;
+  router: ReturnType<typeof useRouter>;
+  searchData: DiscoverySearchResponse | undefined;
+};
+
+function tapArgs(deps: TapDeps, tapped: DiscoveryResult, position: number): ResultClickArgs {
+  return { recordEvent: deps.recordEvent, searchData: deps.searchData, tapped, position };
+}
+
+function handleResultTap(deps: TapDeps, tapped: DiscoveryResult, position: number): void {
+  if (deps.navigationPendingRef.current) return;
+  deps.navigationPendingRef.current = true;
+  Keyboard.dismiss();
+  recordResultClicked(tapArgs(deps, tapped, position));
+  deps.router.push(stashHandoffForDetail(tapped, deps.searchData?.search_id));
+}
+
+export function useResultTap(searchData: DiscoverySearchResponse | undefined): ResultTapHandler {
+  const router = useRouter();
+  const recordEvent = useRecordEvent();
+  const navigationPendingRef = useRef(false);
+  useResetNavigationPendingOnFocus(navigationPendingRef);
+  return (tapped, position) =>
+    handleResultTap({ navigationPendingRef, recordEvent, router, searchData }, tapped, position);
 }

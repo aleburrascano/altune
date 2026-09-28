@@ -33,7 +33,6 @@ interface SearchData {
 interface DiscoverBodyProps {
   view: DiscoverView;
   searchData: SearchData | undefined;
-  /** The shown response is partial (a provider degraded), so results may be incomplete. */
   resultsIncomplete?: boolean | undefined;
   historyItems: SearchHistoryItem[];
   filter: ResultsFilter;

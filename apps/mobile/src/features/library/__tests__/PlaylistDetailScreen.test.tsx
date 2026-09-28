@@ -1,12 +1,3 @@
-// #1705: the detail screen answered every failed load with "Playlist not found" and a
-// "Go back" button — a false claim for an offline device or a 5xx, and no way back to
-// the playlist short of leaving the screen. Only a 404/410 means it is really gone;
-// everything else is transient and gets the retry. Nothing was logged either, so a
-// "my playlist won't open" report reached triage with no status and no failure class.
-
-// #786: the playlist id arrives from a deep-link route param, so it is untrusted. A value that
-// isn't a plausible id shape must never reach a request path; the screen treats it as no id.
-
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -33,7 +24,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
-// Playback providers are irrelevant to routing; stub them so the screen can mount on its own.
 jest.mock('@shared/playback/usePlayback', () => ({
   usePlayback: () => ({ status: 'idle', source: null }),
 }));
@@ -106,7 +96,6 @@ const playlistBody = {
 
 let warnSpy: jest.SpyInstance;
 
-/** What a console would render: `message` and `stack` are non-enumerable (#1704). */
 function loggedText(): string {
   return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,

@@ -1,11 +1,3 @@
-// #1707: the albums and artists grids fetched one page and never asked for another, so a
-// library larger than the server's default page ended at row 50 with nothing on screen
-// saying so. The fake server here holds the real one's contract: a caller that sends no
-// limit is served 50 rows, and offset walks the list.
-//
-// The count beside the sort control is what the assertions read: a virtualized grid renders
-// only its window, so the rows on screen count the window, never the library.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
@@ -84,9 +76,6 @@ describe('a library grid holding more rows than one page', () => {
     await waitFor(() => expect(screen.getByText(`${LIBRARY_SIZE} artists`)).toBeTruthy());
   });
 
-  // A virtualized list only reaches its end after every cell has been laid out, which no
-  // test renderer does, so the grid's end-of-list callback is checked where it is handed
-  // over instead: to the list itself, the boundary between this feature and React Native.
   it.each([['artists', () => render(<ArtistsScreen />, { wrapper })]])(
     'hands the %s list its own end-of-list callback',
     async (noun, renderScreen) => {

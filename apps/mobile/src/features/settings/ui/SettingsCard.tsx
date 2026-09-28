@@ -9,34 +9,30 @@ type SettingsCardProps = {
   children: ReactNode;
 };
 
-export function SettingsCard({
-  label,
-  danger = false,
-  children,
-}: SettingsCardProps): ReactElement {
+function SettingsCardLabel({ label, danger }: { label: string; danger: boolean }): ReactElement {
+  return (
+    <Text variant="overline" tone={danger ? 'danger' : 'tertiary'} style={styles.label}>
+      {label}
+    </Text>
+  );
+}
+
+function cardSurfaceStyle(theme: ReturnType<typeof useTheme>, danger: boolean) {
+  return [
+    styles.card,
+    {
+      backgroundColor: theme.color.surface1,
+      borderColor: danger ? theme.color.danger : theme.color.border,
+    },
+  ];
+}
+
+export function SettingsCard({ label, danger = false, children }: SettingsCardProps): ReactElement {
   const theme = useTheme();
   return (
     <View style={styles.group}>
-      {label != null ? (
-        <Text
-          variant="overline"
-          tone={danger ? 'danger' : 'tertiary'}
-          style={styles.label}
-        >
-          {label}
-        </Text>
-      ) : null}
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.color.surface1,
-            borderColor: danger ? theme.color.danger : theme.color.border,
-          },
-        ]}
-      >
-        {children}
-      </View>
+      {label != null ? <SettingsCardLabel label={label} danger={danger} /> : null}
+      <View style={cardSurfaceStyle(theme, danger)}>{children}</View>
     </View>
   );
 }

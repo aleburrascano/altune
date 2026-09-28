@@ -1,6 +1,5 @@
 import { ApiError, NetworkError } from '@shared/api-client';
 
-// Row detail copy for a failed settings action (backfill, clear history).
 export function failureCopyForAction(error: unknown): string {
   if (error instanceof NetworkError) {
     return 'Could not reach the server — check your connection and try again.';

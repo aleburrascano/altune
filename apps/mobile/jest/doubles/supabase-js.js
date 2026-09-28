@@ -1,13 +1,3 @@
-// Test double for @supabase/supabase-js used by testAuth.test.tsx.
-//
-// The real client cannot be constructed under Node 20 in jest (its realtime
-// client needs a global WebSocket), so createClient is faked here. The fake
-// KEEPS the real storage adapter the app configures (the native SecureStore
-// double in tests) and reads it back exactly as GoTrue does: JSON parse, an
-// access/refresh/expires_at shape check, and the same 90s expiry margin. So the
-// injection path is exercised against the real store, and getSession /
-// onAuthStateChange behave like the SDK.
-
 const STORAGE_KEY = 'sb-fixture-auth-token';
 const EXPIRY_MARGIN_MS = 90_000;
 

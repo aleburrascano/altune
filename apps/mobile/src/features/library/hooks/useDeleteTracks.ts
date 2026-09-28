@@ -178,7 +178,11 @@ function recoverFailedBulkRun(queryClient: QueryClient) {
   return (error: Error, trackIds: TrackId[]): void => {
     invalidateLibraryDerived(queryClient);
     logBulkRunFailure(error, trackIds.length);
-    alertLibraryFailure('Delete failed', 'Could not remove these tracks.', classifyLibraryError(error));
+    alertLibraryFailure(
+      'Delete failed',
+      'Could not remove these tracks.',
+      classifyLibraryError(error),
+    );
   };
 }
 

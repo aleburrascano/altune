@@ -1,7 +1,3 @@
-// Regression for issue #1685: discover's search, suggest, history and clear-history calls must be
-// gated by the remote kill switch, so a discovery backend that starts erroring or rate limiting can
-// be stopped without an app-store release.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -71,8 +67,6 @@ function switchDiscoveryFetches(enabled: boolean): void {
   act(() => applyKillSwitches({ discovery_enabled: enabled }));
 }
 
-// A disabled query never resolves a promise, so nothing waits: let React and react-query settle
-// once, then assert that no request was made.
 async function settle(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -89,7 +83,6 @@ beforeEach(() => {
   mockSuggest.mockReset().mockResolvedValue({ suggestions: [] });
   mockHistory.mockReset().mockResolvedValue(HISTORY);
   mockClearHistory.mockReset().mockResolvedValue(undefined);
-  // Restored input long enough to open the suggest query without a committed search.
   setSearchState('', QUERY);
 });
 
@@ -110,8 +103,6 @@ const gatedHooks: { hook: string; useGatedHook: () => unknown; request: jest.Moc
   { hook: 'useSearchHistory', useGatedHook: () => useSearchHistory(), request: mockHistory },
 ];
 
-// react-query's own refetch and fetchNextPage fetch whatever `enabled` says, so each affordance the
-// screen exposes is its own way past the switch.
 type SearchHook = ReturnType<typeof useDiscoverSearch>;
 
 const searchAffordances: { affordance: string; tap: (search: SearchHook) => void }[] = [

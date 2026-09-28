@@ -93,8 +93,6 @@ describe('useResultTap records result_clicked and hands off to the detail screen
         sources: [{ provider: 'deezer', external_id: 'trk-2', url: 'https://x' }],
       }),
     ];
-    // top_result / sections[].items are parsed independently from results[], so the same
-    // logical entry arrives as a structurally equal but distinct object.
     const copy = (r: DiscoveryResult): DiscoveryResult => structuredClone(r);
     const data = responseFixture({
       results,

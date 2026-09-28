@@ -13,7 +13,6 @@ import { rowSurfaceStyle } from './libraryRowSurface';
 
 import type { TrackResponse } from '@shared/api-client/types';
 
-/** The library row outside selection mode: it plays or opens the track and offers its menu. */
 export function LibraryRowPlayback({
   track,
   a11yLabel,

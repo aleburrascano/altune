@@ -6,8 +6,6 @@ import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 
-// Confirm-then-delete flow for a playlist. On success it leaves the detail screen,
-// which is now showing a playlist that no longer exists.
 export function usePlaylistDelete(
   playlistId: PlaylistId,
   router: ReturnType<typeof useRouter>,

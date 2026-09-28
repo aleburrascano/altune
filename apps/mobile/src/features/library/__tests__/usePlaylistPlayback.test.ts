@@ -1,6 +1,3 @@
-// A seam carved out of PlaylistDetailScreen (#781): the playlist playback. Each test
-// pins the behavior the screen had inline before.
-
 import { renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';

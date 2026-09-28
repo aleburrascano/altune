@@ -29,9 +29,6 @@ export function ReportIssueModal({
 
   const diagnostics = reportDiagnostics(screen);
 
-  // One key per draft, so every submit of this draft — a manual "Try again"
-  // after an ambiguous timeout, or a double-tapped Send — is the same
-  // submission to the server and can only ever file one issue.
   const draftIdempotencyKey = (payload: string): string => {
     if (lastPayloadRef.current !== payload) idempotencyKeyRef.current = null;
     lastPayloadRef.current = payload;

@@ -12,10 +12,6 @@ interface PlaylistDetailFailureProps {
   onGoToLibrary: () => void;
 }
 
-/**
- * Only a 404/410 means the playlist is really gone; an offline device or a 5xx is
- * transient, so telling either one "not found" is both a lie and a dead end (#1705).
- */
 export function PlaylistDetailFailure({
   error,
   onRetry,

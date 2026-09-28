@@ -39,7 +39,6 @@ if (playsThroughTrackPlayer) {
 
 void SplashScreen.preventAutoHideAsync();
 
-// App-lifetime poll of the remote kill switches for the SSE, telemetry and offline-download loops.
 startKillSwitchPolling();
 
 installGlobalErrorReporting();
@@ -63,7 +62,11 @@ function WebPlaybackShortcutsBridge() {
 function playerScreenOptions(isWideWeb: boolean) {
   return isWideWeb
     ? { animation: 'none' as const }
-    : { presentation: 'fullScreenModal' as const, animation: 'slide_from_bottom' as const, gestureEnabled: true };
+    : {
+        presentation: 'fullScreenModal' as const,
+        animation: 'slide_from_bottom' as const,
+        gestureEnabled: true,
+      };
 }
 
 export default function RootLayout() {
@@ -76,8 +79,6 @@ export default function RootLayout() {
             staleTime: 30_000,
             ...transientRetryOptions,
           },
-          // No global mutations.retry: many mutations are non-idempotent POSTs, so each
-          // hook that is safe to repeat opts into isRetryable() itself (#841).
         },
       }),
   );

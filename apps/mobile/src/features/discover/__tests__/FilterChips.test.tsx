@@ -16,7 +16,9 @@ describe('the discover filter row offers all and one chip per kind', () => {
   it('marks only the active chip selected', () => {
     render(<FilterChips active="album" onSelect={jest.fn()} />);
 
-    expect(screen.getByTestId('discover-filter-album').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('discover-filter-album').props.accessibilityState.selected).toBe(
+      true,
+    );
     expect(screen.getByTestId('discover-filter-all').props.accessibilityState.selected).toBe(false);
   });
 

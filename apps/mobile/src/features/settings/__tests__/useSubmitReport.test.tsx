@@ -13,11 +13,7 @@ jest.mock('@shared/api-client/feedback', () => ({
 }));
 
 describe('settings mutations retry transient failures', () => {
-  // #841: mutations default to zero retries, so a transient 502 on backfill or
-  // clear-history failed outright. They must retry transient failures via isRetryable().
-
   function makeClient() {
-    // No mutation defaults: each hook owns both the retry decision and its delay.
     return new QueryClient();
   }
 

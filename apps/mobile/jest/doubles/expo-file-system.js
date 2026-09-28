@@ -174,7 +174,9 @@ const __fs = {
 
   failNext(kind, error) {
     if (!(kind in pendingFailures)) {
-      throw new Error(`unknown failure kind "${kind}" — expected one of ${Object.keys(pendingFailures).join(', ')}`);
+      throw new Error(
+        `unknown failure kind "${kind}" — expected one of ${Object.keys(pendingFailures).join(', ')}`,
+      );
     }
     pendingFailures[kind] = error ?? new Error(`injected ${kind} failure`);
   },

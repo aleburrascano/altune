@@ -1,14 +1,3 @@
-// #1708: the playlists grid asked for the collection in one request — no limit sent, and
-// a server that had no default clamp either — so one response grew with the number of
-// playlists a user owned.
-//
-// The fake server below serves everything when the caller names no limit, the way the old
-// one did. That is deliberate: what these assertions hold is the client's own bound, which
-// must not depend on the server having a default page of its own.
-//
-// The count beside the sort control is what the assertions read: a virtualized grid renders
-// only its window, so the cells on screen count the window, never the collection.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
@@ -112,10 +101,7 @@ describe('a library holding far more playlists than one page', () => {
     scrollToEnd();
     await showsPlaylistCount(GROUP_PAGE_SIZE * 2);
 
-    expect(mockGetPlaylists.mock.calls.map(([page]) => page?.offset)).toEqual([
-      0,
-      GROUP_PAGE_SIZE,
-    ]);
+    expect(mockGetPlaylists.mock.calls.map(([page]) => page?.offset)).toEqual([0, GROUP_PAGE_SIZE]);
   });
 });
 

@@ -38,9 +38,7 @@ export function DiscoverScreen(): ReactElement {
   const d = useDiscoverLogic();
   const searchInputRef = useRef<TextInput>(null);
 
-  useFocusEffect(
-    useCallback(() => registerSearchFocus(() => searchInputRef.current?.focus()), []),
-  );
+  useFocusEffect(useCallback(() => registerSearchFocus(() => searchInputRef.current?.focus()), []));
 
   return (
     <Screen>

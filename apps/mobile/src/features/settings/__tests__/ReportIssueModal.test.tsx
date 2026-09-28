@@ -158,12 +158,6 @@ describe('ReportIssueModal(): the form discloses where the message goes', () => 
 });
 
 describe('ReportIssueModal(): one draft files one issue, however often it is sent', () => {
-  // A dropped response leaves the reporter unable to know whether their issue was
-  // filed, and the failed-state UI answers that by relabelling Send as "Try again".
-  // The server collapses two submits onto one issue only when both carry the same
-  // Idempotency-Key, so without a per-draft key the retry files a second issue (#1755).
-
-  // These tests drive the real submitReport over the fetch double.
   beforeEach(() => {
     mockSubmitReport.mockImplementation(
       jest.requireActual('@shared/api-client/feedback').submitReport,
@@ -178,9 +172,6 @@ describe('ReportIssueModal(): one draft files one issue, however often it is sen
     return __http.countFor('POST /v1/feedback/reports');
   }
 
-  // The server files one issue per distinct Idempotency-Key inside its dedup
-  // window, and a fresh issue for every submit that carries none — so a keyless
-  // submit is its own issue, and repeats of one key are a single issue.
   function issuesFiled(): number {
     const keys = __http.requests
       .filter((request: { method: string; path: string }) => {

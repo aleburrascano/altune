@@ -29,18 +29,21 @@ const DEFAULT_GRID_WIDTH = 760;
 
 function useGridColumns(): [number, (event: LayoutChangeEvent) => void] {
   const [gridWidth, setGridWidth] = useState(DEFAULT_GRID_WIDTH);
-  return [gridColumnsFor(gridWidth), (event: LayoutChangeEvent) => setGridWidth(event.nativeEvent.layout.width)];
+  return [
+    gridColumnsFor(gridWidth),
+    (event: LayoutChangeEvent) => setGridWidth(event.nativeEvent.layout.width),
+  ];
 }
 
-/**
- * The client's own bound on rows per section, at twice the server's contract of 10
- * (discovery service `SectionCap`). Every row here mounts unvirtualized, so a server
- * that breaks that contract must truncate the section rather than drop frames.
- */
 export const SECTION_ITEM_CAP = 20;
 
 function buildHighlightProps(setHovered: (v: boolean) => void, setFocused: (v: boolean) => void) {
-  return { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false), onFocus: () => setFocused(true), onBlur: () => setFocused(false) };
+  return {
+    onHoverIn: () => setHovered(true),
+    onHoverOut: () => setHovered(false),
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+  };
 }
 
 function useHighlighted(): [boolean, ReturnType<typeof buildHighlightProps>] {
@@ -51,75 +54,249 @@ function useHighlighted(): [boolean, ReturnType<typeof buildHighlightProps>] {
 
 function GridCardArt({ item }: { item: DiscoveryResult }): ReactElement {
   const isArtist = item.kind === 'artist';
-  return <Artwork uri={item.image_url} size={96} radius={isArtist ? radius.full : radius.md} accessibilityLabel={item.title} />;
+  return (
+    <Artwork
+      uri={item.image_url}
+      size={96}
+      radius={isArtist ? radius.full : radius.md}
+      accessibilityLabel={item.title}
+    />
+  );
 }
 
-function GridCardBody({ item, cardStyle, testID }: { item: DiscoveryResult; cardStyle: (ViewStyle | null)[]; testID: string }): ReactElement {
+type OnResultPress = (target: DiscoveryResult, at: number) => void;
+
+type GridCardBodyProps = { item: DiscoveryResult; cardStyle: (ViewStyle | null)[]; testID: string };
+
+function GridCardBody({ item, cardStyle, testID }: GridCardBodyProps): ReactElement {
   return (
     <Card testID={testID} style={cardStyle}>
       <GridCardArt item={item} />
-      <Text variant="bodyStrong" numberOfLines={1} style={styles.gridTitle}>{item.title}</Text>
+      <Text variant="bodyStrong" numberOfLines={1} style={styles.gridTitle}>
+        {item.title}
+      </Text>
     </Card>
   );
 }
 
-function GridResultCard({ item, position, columns, onPress }: { item: DiscoveryResult; position: number; columns: number; onPress: (target: DiscoveryResult, at: number) => void }): ReactElement {
+type GridContext = { columns: number; onPress: OnResultPress };
+
+function gridCardStyle(theme: ReturnType<typeof useTheme>, highlighted: boolean) {
+  return [styles.gridCard, highlighted ? { borderColor: theme.color.accent } : null];
+}
+
+function gridCardPressableProps(item: DiscoveryResult, position: number, grid: GridContext) {
+  return {
+    testID: `discover-grid-card-${item.kind}-${position}`,
+    onPress: () => grid.onPress(item, position),
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: `${item.title}, ${kindLabel(item.kind)}`,
+    style: [{ flexBasis: `${100 / grid.columns}%` as ViewStyle['flexBasis'] }, styles.gridCardSlot],
+  };
+}
+
+type GridResultCardProps = { item: DiscoveryResult; position: number; grid: GridContext };
+
+function GridResultCard({ item, position, grid }: GridResultCardProps): ReactElement {
   const theme = useTheme();
-  const highlight = useHighlighted();
-  const cardStyle = [styles.gridCard, highlight[0] ? { borderColor: theme.color.accent } : null];
+  const [highlighted, highlightProps] = useHighlighted();
+  const testID = `discover-grid-card-body-${item.kind}-${position}`;
   return (
-    <Pressable testID={`discover-grid-card-${item.kind}-${position}`} onPress={() => onPress(item, position)} accessibilityRole="button" accessibilityLabel={`${item.title}, ${kindLabel(item.kind)}`} onHoverIn={highlight[1].onHoverIn} onHoverOut={highlight[1].onHoverOut} onFocus={highlight[1].onFocus} onBlur={highlight[1].onBlur} style={[{ flexBasis: `${100 / columns}%` }, styles.gridCardSlot]}>
-      <GridCardBody item={item} cardStyle={cardStyle} testID={`discover-grid-card-body-${item.kind}-${position}`} />
+    <Pressable {...gridCardPressableProps(item, position, grid)} {...highlightProps}>
+      <GridCardBody item={item} cardStyle={gridCardStyle(theme, highlighted)} testID={testID} />
     </Pressable>
   );
 }
 
-function SectionGrid({ items, columns, onPress }: { items: DiscoveryResult[]; columns: number; onPress: (target: DiscoveryResult, at: number) => void }): ReactElement {
+type SectionGridProps = { items: DiscoveryResult[] } & GridContext;
+
+function GridResultCards({ items, columns, onPress }: SectionGridProps): ReactElement[] {
+  const grid = { columns, onPress };
+  return items.map((item, position) => (
+    <GridResultCard key={resultKey(item, position)} item={item} position={position} grid={grid} />
+  ));
+}
+
+function SectionGrid({ items, columns, onPress }: SectionGridProps): ReactElement {
   return (
     <View style={styles.grid} testID={`discover-grid-${items[0]?.kind ?? ''}`}>
-      {items.map((item, index) => (
-        <GridResultCard key={resultKey(item, index)} item={item} position={index} columns={columns} onPress={onPress} />
-      ))}
+      <GridResultCards items={items} columns={columns} onPress={onPress} />
     </View>
   );
 }
 
-function SectionRows({ items, onPress }: { items: DiscoveryResult[]; onPress: (target: DiscoveryResult, at: number) => void }): ReactElement {
+type SectionRowsProps = { items: DiscoveryResult[]; onPress: OnResultPress };
+
+function SectionRows({ items, onPress }: SectionRowsProps): ReactElement {
   return (
     <>
-      {items.map((item, index) => <DiscoverRow key={resultKey(item, index)} result={item} position={index} onPress={onPress} />)}
+      {items.map((item, i) => (
+        <DiscoverRow key={resultKey(item, i)} result={item} position={i} onPress={onPress} />
+      ))}
     </>
   );
 }
 
-function SeeAllLink({ kind, title, onSeeAll }: { kind: DiscoveryKind; title: string; onSeeAll: (kind: DiscoveryKind) => void }): ReactElement {
+type SeeAllLinkProps = {
+  kind: DiscoveryKind;
+  title: string;
+  onSeeAll: (kind: DiscoveryKind) => void;
+};
+
+function seeAllPressableProps({ kind, title, onSeeAll }: SeeAllLinkProps) {
+  return {
+    testID: `discover-see-all-${kind}`,
+    onPress: () => onSeeAll(kind),
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: `See all ${title.toLowerCase()}`,
+    hitSlop: 8,
+    style: ({ pressed }: { pressed: boolean }) => [styles.seeAll, pressedStyle(pressed)],
+  };
+}
+
+function SeeAllChevron(): ReactElement {
   const theme = useTheme();
+  return <ChevronRight size={16} color={theme.color.accent} />;
+}
+
+function SeeAllLabel({ title }: { title: string }): ReactElement {
   return (
-    <Pressable testID={`discover-see-all-${kind}`} onPress={() => onSeeAll(kind)} accessibilityRole="button" accessibilityLabel={`See all ${title.toLowerCase()}`} hitSlop={8} style={({ pressed }) => [styles.seeAll, pressedStyle(pressed)]}>
-      <Text variant="label" tone="accent">See all {title.toLowerCase()}</Text>
-      <ChevronRight size={16} color={theme.color.accent} />
+    <>
+      <Text variant="label" tone="accent">
+        See all {title.toLowerCase()}
+      </Text>
+      <SeeAllChevron />
+    </>
+  );
+}
+
+function SeeAllLink(props: SeeAllLinkProps): ReactElement {
+  return (
+    <Pressable {...seeAllPressableProps(props)}>
+      <SeeAllLabel title={props.title} />
     </Pressable>
   );
 }
 
-function SectionBlock({ section, asGrid, columns, onSeeAll, onPress }: { section: ResultSection; asGrid: boolean; columns: number; onSeeAll: (kind: DiscoveryKind) => void; onPress: (target: DiscoveryResult, at: number) => void }): ReactElement {
-  const title = kindLabel(section.kind, { plural: true }); const renderedItems = section.items.slice(0, SECTION_ITEM_CAP);
+type SectionActions = {
+  columns: number;
+  onSeeAll: (kind: DiscoveryKind) => void;
+  onPress: OnResultPress;
+};
+
+type SectionBlockProps = { section: ResultSection; asGrid: boolean; actions: SectionActions };
+
+type SectionItemsProps = {
+  asGrid: boolean;
+  renderedItems: DiscoveryResult[];
+  actions: SectionActions;
+};
+
+function SectionItemsView({ asGrid, renderedItems, actions }: SectionItemsProps): ReactElement {
+  return asGrid ? (
+    <SectionGrid items={renderedItems} columns={actions.columns} onPress={actions.onPress} />
+  ) : (
+    <SectionRows items={renderedItems} onPress={actions.onPress} />
+  );
+}
+
+function sectionBlockFacts(section: ResultSection) {
+  const title = kindLabel(section.kind, { plural: true });
+  const renderedItems = section.items.slice(0, SECTION_ITEM_CAP);
   const hasMoreThanRendered = section.has_more || section.items.length > renderedItems.length;
+  return { title, renderedItems, hasMoreThanRendered };
+}
+
+function seeAllOrNull(
+  hasMoreThanRendered: boolean,
+  section: ResultSection,
+  title: string,
+  actions: SectionActions,
+) {
+  return hasMoreThanRendered ? (
+    <SeeAllLink kind={section.kind} title={title} onSeeAll={actions.onSeeAll} />
+  ) : null;
+}
+
+function SectionBlock({ section, asGrid, actions }: SectionBlockProps): ReactElement {
+  const { title, renderedItems, hasMoreThanRendered } = sectionBlockFacts(section);
   return (
-    <View style={styles.section}><SectionLabel style={styles.sectionHeaderSpacing}>{title.toUpperCase()}</SectionLabel>
-      {asGrid ? <SectionGrid items={renderedItems} columns={columns} onPress={onPress} /> : <SectionRows items={renderedItems} onPress={onPress} />}
-      {hasMoreThanRendered ? <SeeAllLink kind={section.kind} title={title} onSeeAll={onSeeAll} /> : null}
+    <View style={styles.section}>
+      <SectionLabel style={styles.sectionHeaderSpacing}>{title.toUpperCase()}</SectionLabel>
+      <SectionItemsView asGrid={asGrid} renderedItems={renderedItems} actions={actions} />
+      {seeAllOrNull(hasMoreThanRendered, section, title, actions)}
     </View>
   );
 }
 
-export function BlendedSection({ sections, topResult, onSeeAll, common }: { sections: ResultSection[]; topResult: DiscoveryResult | undefined; onSeeAll: (filter: DiscoveryKind) => void; common: ResultsCommonProps }): ReactElement {
+type BlendedSectionProps = {
+  sections: ResultSection[];
+  topResult: DiscoveryResult | undefined;
+  onSeeAll: (filter: DiscoveryKind) => void;
+  common: ResultsCommonProps;
+};
+
+function blendedHeaderExtra(topResult: DiscoveryResult | undefined, common: ResultsCommonProps) {
+  return topResult !== undefined ? (
+    <TopResultCard result={topResult} onPress={common.onResultTap} />
+  ) : null;
+}
+
+type BlendedRenderContext = { isWide: boolean; actions: SectionActions };
+
+type BlendedSectionItemProps = { section: ResultSection; ctx: BlendedRenderContext };
+
+function BlendedSectionItem({ section, ctx }: BlendedSectionItemProps): ReactElement {
+  const asGrid = ctx.isWide && isGridKind(section.kind);
+  return <SectionBlock section={section} asGrid={asGrid} actions={ctx.actions} />;
+}
+
+function blendedSectionRenderItem(ctx: BlendedRenderContext) {
+  function renderBlendedItem({ item: section }: { item: ResultSection }): ReactElement {
+    return <BlendedSectionItem section={section} ctx={ctx} />;
+  }
+  return renderBlendedItem;
+}
+
+function useVisibleSections(sections: ResultSection[]): ResultSection[] {
+  return sections.filter((section) => section.items.length > 0);
+}
+
+function useBlendedRenderContext(
+  onSeeAll: (kind: DiscoveryKind) => void,
+  common: ResultsCommonProps,
+) {
   const isWide = useWideWebLayout();
   const [columns, onLayout] = useGridColumns();
-  const visible = sections.filter((section) => section.items.length > 0);
-  const headerExtra = topResult !== undefined ? <TopResultCard result={topResult} onPress={common.onResultTap} /> : null;
+  const actions = { columns, onSeeAll, onPress: common.onResultTap };
+  return { ctx: { isWide, actions }, columns, onLayout };
+}
+
+type ResultsListArgs = {
+  props: BlendedSectionProps;
+  ctx: BlendedRenderContext;
+  visible: ResultSection[];
+};
+
+function blendedResultsListProps({ props, ctx, visible }: ResultsListArgs) {
+  const { topResult, common } = props;
+  return {
+    keyExtractor: (section: ResultSection) => section.kind,
+    pairFirstItemWithHeader: visible[0]?.kind === 'track',
+    headerExtra: blendedHeaderExtra(topResult, common),
+    common,
+    renderItem: blendedSectionRenderItem(ctx),
+  };
+}
+
+export function BlendedSection(props: BlendedSectionProps): ReactElement {
+  const { ctx, onLayout } = useBlendedRenderContext(props.onSeeAll, props.common);
+  const visible = useVisibleSections(props.sections);
+  const rest = blendedResultsListProps({ props, ctx, visible });
   return (
-    <View style={styles.measure} onLayout={onLayout} testID="discover-blended-section"><ResultsList data={visible} keyExtractor={(section) => section.kind} pairFirstItemWithHeader={visible[0]?.kind === 'track'} headerExtra={headerExtra} common={common} renderItem={({ item: section }) => <SectionBlock section={section} asGrid={isWide && isGridKind(section.kind)} columns={columns} onSeeAll={onSeeAll} onPress={common.onResultTap} />} /></View>
+    <View style={styles.measure} onLayout={onLayout} testID="discover-blended-section">
+      <ResultsList data={visible} {...rest} />
+    </View>
   );
 }
 

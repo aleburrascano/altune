@@ -52,14 +52,10 @@ const albumlessTrack = { ...readyTrack, album: null } as TrackResponse;
 
 const rowLabel = () => screen.getByTestId(`library-row-${ID}`).props.accessibilityLabel as string;
 const rowRole = () => screen.getByTestId(`library-row-${ID}`).props.accessibilityRole as string;
-// Pressable always forwards an accessibilityState object, so `checked` — not the
-// object — is what says whether the row is a checkbox.
 const rowChecked = () =>
   (screen.getByTestId(`library-row-${ID}`).props.accessibilityState as { checked?: boolean })
     .checked;
 
-// The offline pin indicator tests write pins into the store; start every test
-// with none so a pin never leaks into another group's label.
 beforeEach(() => {
   usePinnedStore.setState({ entries: {} });
 });
@@ -296,7 +292,6 @@ const OFFLINE_IDS = [
   `library-row-offline-failed-${ID}`,
 ];
 
-// Lucide icons forward testID as `data-testid` onto the (mocked) svg root.
 function shownOfflineIds(): string[] {
   return OFFLINE_IDS.filter(
     (id) => screen.UNSAFE_queryAllByProps({ 'data-testid': id }).length > 0,
@@ -348,7 +343,9 @@ describe('LibraryRow — wide web layout', () => {
 
   it('plays a ready track when the row is pressed, same as the compact row', () => {
     const onPlay = jest.fn();
-    render(<LibraryRow track={readyTrack} onPlay={onPlay} onPress={jest.fn()} onMore={jest.fn()} />);
+    render(
+      <LibraryRow track={readyTrack} onPlay={onPlay} onPress={jest.fn()} onMore={jest.fn()} />,
+    );
 
     fireEvent.press(screen.getByTestId(`library-row-${ID}`));
 
@@ -392,7 +389,9 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
   it('opens a track that is not ready instead of playing it', () => {
     const onPlay = jest.fn();
     const onPress = jest.fn();
-    render(<LibraryRow track={pendingTrack} onPlay={onPlay} onPress={onPress} onMore={jest.fn()} />);
+    render(
+      <LibraryRow track={pendingTrack} onPlay={onPlay} onPress={onPress} onMore={jest.fn()} />,
+    );
 
     fireEvent.press(screen.getByTestId(`library-row-${ID}`));
 
@@ -402,7 +401,9 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
 
   it('offers the retry on a failed track in its status cell', () => {
     const onRetry = jest.fn();
-    render(<LibraryRow track={failedTrack} onPress={jest.fn()} onMore={jest.fn()} onRetry={onRetry} />);
+    render(
+      <LibraryRow track={failedTrack} onPress={jest.fn()} onMore={jest.fn()} onRetry={onRetry} />,
+    );
 
     fireEvent.press(screen.getByTestId(`library-row-retry-${ID}`));
 
@@ -426,7 +427,12 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
   it('long-presses into selection when the caller supplies a handler', () => {
     const onLongPress = jest.fn();
     render(
-      <LibraryRow track={readyTrack} onPress={jest.fn()} onMore={jest.fn()} onLongPress={onLongPress} />,
+      <LibraryRow
+        track={readyTrack}
+        onPress={jest.fn()}
+        onMore={jest.fn()}
+        onLongPress={onLongPress}
+      />,
     );
 
     fireEvent(screen.getByTestId(`library-row-${ID}`), 'longPress');

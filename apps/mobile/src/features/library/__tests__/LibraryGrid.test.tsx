@@ -161,7 +161,9 @@ describe('library grids — wide web layout', () => {
     );
 
     const grid = screen.UNSAFE_getByType(FlatList);
-    expect(grid.props.columnWrapperStyle).toEqual(expect.objectContaining({ gap: expect.any(Number) }));
+    expect(grid.props.columnWrapperStyle).toEqual(
+      expect.objectContaining({ gap: expect.any(Number) }),
+    );
     const compactGap = (grid.props.columnWrapperStyle as { gap: number }).gap;
 
     Platform.OS = 'ios';
@@ -207,7 +209,12 @@ function probeAlbums(paging?: unknown) {
 
 function probeArtists() {
   return render(
-    <ArtistsGrid artists={[]} emptyLabel="No artists yet" refresh={idleRefresh()} onArtistPress={jest.fn()} />,
+    <ArtistsGrid
+      artists={[]}
+      emptyLabel="No artists yet"
+      refresh={idleRefresh()}
+      onArtistPress={jest.fn()}
+    />,
   );
 }
 
@@ -232,7 +239,9 @@ function measureGrid(width: number) {
 const gridColumnCount = () => screen.UNSAFE_getByType(FlatList).props.numColumns as number;
 const playlistCoverSize = () => screen.UNSAFE_getByType(ProbePlaylistCover).props.size as number;
 
-function probePaging(overrides: Partial<{ isFetchingNextPage: boolean; nextPageFailed: boolean }> = {}) {
+function probePaging(
+  overrides: Partial<{ isFetchingNextPage: boolean; nextPageFailed: boolean }> = {},
+) {
   return {
     onEndReached: jest.fn(),
     isFetchingNextPage: false,
@@ -244,7 +253,6 @@ function probePaging(overrides: Partial<{ isFetchingNextPage: boolean; nextPageF
 
 describe('library grids — wide web, measured inside the app shell (#2842)', () => {
   const originalOS = Platform.OS;
-  // 1440 window - 240 sidebar - 2 x 16 screen padding.
   const MEASURED_AT_1440 = 1168;
 
   beforeEach(() => {
@@ -267,13 +275,16 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
     ['albums', probeAlbums],
     ['artists', probeArtists],
     ['playlists', probePlaylists],
-  ])('keeps the %s grid at 5 or more columns once it measures its real width beside the sidebar', (_name, renderGrid) => {
-    renderGrid();
+  ])(
+    'keeps the %s grid at 5 or more columns once it measures its real width beside the sidebar',
+    (_name, renderGrid) => {
+      renderGrid();
 
-    measureGrid(MEASURED_AT_1440);
+      measureGrid(MEASURED_AT_1440);
 
-    expect(gridColumnCount()).toBeGreaterThanOrEqual(5);
-  });
+      expect(gridColumnCount()).toBeGreaterThanOrEqual(5);
+    },
+  );
 
   it('fits every playlist cover of a row inside the measured width', () => {
     probePlaylists();
@@ -424,4 +435,3 @@ describe('library grids — playlist cover size at a tiny measured width', () =>
     expect(playlistCoverSize()).toBe(fallbackSize);
   });
 });
-

@@ -19,8 +19,6 @@ export function useImpressionLogger(
   const dataRef = useRef(searchData);
   const emittedFor = useRef<string | null>(null);
 
-  // Keep the latest event recorder and search data reachable from the
-  // viewability callback without reading them during render (react-hooks/refs).
   useEffect(() => {
     recordRef.current = recordEvent;
     dataRef.current = searchData;

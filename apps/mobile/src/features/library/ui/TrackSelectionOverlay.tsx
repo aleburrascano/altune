@@ -15,12 +15,6 @@ type TrackSelectionOverlayProps = {
   barVisible: boolean;
 };
 
-/**
- * Presenter for the shared track-selection surface: the SelectionBar (with
- * select-all), the bulk AddToPlaylistSheet, and the track-action ContextMenu.
- * All state lives in the `controller` (useTrackSelection); this renders it
- * against the live `tracks` and keeps the selection reconciled to that list.
- */
 export function TrackSelectionOverlay({
   controller,
   tracks,

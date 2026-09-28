@@ -57,8 +57,6 @@ describe('next page failure', () => {
 });
 
 describe('pairing the header with the first item on a wide screen', () => {
-  // The wide pairing layout only applies on web (see useWideWebLayout), so
-  // these tests run under Platform.OS = 'web', restored after each one.
   beforeEach(() => {
     Platform.OS = 'web';
   });

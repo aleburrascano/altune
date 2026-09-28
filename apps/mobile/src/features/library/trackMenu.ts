@@ -31,7 +31,6 @@ export function buildTrackMenuItems(
     queue: QueueActions;
     onViewDetails: () => void;
     onReacquire?: () => void;
-    /** True while this track's re-acquire request is in flight. */
     reacquiring?: boolean;
     onAddToPlaylist?: () => void;
     danger: { label: string; onPress: () => void };

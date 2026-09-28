@@ -3,7 +3,6 @@ import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-nat
 
 import { spacing, type Theme } from '@shared/ui';
 
-/** The row surface both library-row modes press on; `highlight` is the selected tint. */
 export function rowSurfaceStyle(
   theme: Theme,
   highlight: ViewStyle | null,

@@ -40,7 +40,11 @@ function SidebarPlaylistRow({ playlist }: { playlist: PlaylistResponse }) {
 function SidebarPlaylistsEmptyHint() {
   const theme = useTheme();
   return (
-    <Text testID="sidebar-playlists-empty" variant="caption" style={{ color: theme.color.textTertiary }}>
+    <Text
+      testID="sidebar-playlists-empty"
+      variant="caption"
+      style={{ color: theme.color.textTertiary }}
+    >
       No playlists yet
     </Text>
   );
@@ -49,7 +53,11 @@ function SidebarPlaylistsEmptyHint() {
 function SidebarPlaylistsLoadingHint() {
   const theme = useTheme();
   return (
-    <Text testID="sidebar-playlists-loading" variant="caption" style={{ color: theme.color.textTertiary }}>
+    <Text
+      testID="sidebar-playlists-loading"
+      variant="caption"
+      style={{ color: theme.color.textTertiary }}
+    >
       Loading…
     </Text>
   );
@@ -103,7 +111,11 @@ function SidebarPlaylistRows({ playlists }: { playlists: PlaylistResponse[] }) {
   );
 }
 
-function sidebarPlaylistsView(playlists: PlaylistResponse[], isLoading: boolean, error: Error | null) {
+function sidebarPlaylistsView(
+  playlists: PlaylistResponse[],
+  isLoading: boolean,
+  error: Error | null,
+) {
   return asyncView({ isLoading, isError: error != null, isEmpty: playlists.length === 0 });
 }
 

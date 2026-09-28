@@ -28,7 +28,6 @@ export function libraryRowAccessibilityLabel({
   return `${track.title} by ${track.artist}${albumSuffix(track.album)}${pendingLabel}${failedLabel}${retryLabel}${offlineLabel}`;
 }
 
-/** The live download phase wins over the track's own status while one is running. */
 export function acquisitionProgressLabel(
   phase: DownloadPhase | undefined,
   status: AcquisitionStatus,

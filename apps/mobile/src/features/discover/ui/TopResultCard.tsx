@@ -9,7 +9,12 @@ import { kindLabel } from '../kindLabel';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 function buildHighlightProps(setHovered: (v: boolean) => void, setFocused: (v: boolean) => void) {
-  return { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false), onFocus: () => setFocused(true), onBlur: () => setFocused(false) };
+  return {
+    onHoverIn: () => setHovered(true),
+    onHoverOut: () => setHovered(false),
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+  };
 }
 
 function useHighlighted(): [boolean, ReturnType<typeof buildHighlightProps>] {

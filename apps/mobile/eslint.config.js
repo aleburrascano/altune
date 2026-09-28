@@ -4,22 +4,6 @@ const { sync: globSync } = require('glob');
 const expoConfig = require('eslint-config-expo/flat');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
-// Typed (type-aware) linting. These rules use the TypeScript type-checker, so
-// they catch what plain lint cannot: promises that are never awaited, promises
-// passed where a sync value is expected, and other type-level footguns.
-//
-// This is a CURATED slice of typescript-eslint's strict-type-checked, not the
-// whole thing: the full set flags ~2300 pre-existing issues, ~1400 of them
-// no-unsafe-* from `any` crossing untyped boundaries — a real but separate
-// typing project. The rules enabled here are the high-signal bug-catchers whose
-// backlog was small enough to fix outright, so the gate stays meaningful and
-// blocking rather than a wall of warnings. Grow this list as the codebase is
-// hardened. `projectService` finds the nearest tsconfig per file automatically.
-// Scoped to production src, not tests: type-aware linting needs each file in the
-// tsconfig project (a stray test file errors otherwise), and an un-awaited
-// promise in a test fails the test loudly anyway — production is where a floating
-// promise silently drops work. require-await is deliberately absent: it fights
-// async methods that exist only to satisfy a Promise-returning interface.
 const typedLinting = [
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -110,12 +94,6 @@ const noInlinePlatformBranchesInFeatureUi = {
   },
 };
 
-// SDK 57's eslint-config-expo bundles eslint-plugin-react-hooks v6, whose React
-// Compiler ruleset (refs / purity / set-state-in-effect) gates these three
-// rules. Their offending sites were fixed in #217 (refs read in effects and
-// handlers rather than during render, pure helpers kept pure, no set-state in
-// effects), so they are restored to errors here alongside the historical hook
-// gates: rules-of-hooks (from expo config) and exhaustive-deps (set above).
 const reactCompilerRulesRestoredToErrors = {
   rules: {
     'react-hooks/refs': 'error',
@@ -140,13 +118,6 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
-// Mechanical TS/React style as blocking eslint rules, so agents can't miss
-// them and review need not police them. A 10-line function cap across the
-// whole app would fail hundreds of existing files, so these enforce
-// DIFF-SCOPED: off by default, on only when
-// ESLINT_DIFF_SCOPED=1, which the mobile gate sets while linting just the files a
-// PR changed (see test-mobile.yml). Tests are exempt: a describe/it callback is
-// legitimately long, and `data` in a fixture is not the smell this targets.
 const mechanicalStyleEnforcedOnChangedCodeOnly =
   process.env.ESLINT_DIFF_SCOPED === '1'
     ? [

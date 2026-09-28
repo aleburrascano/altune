@@ -19,16 +19,10 @@ jest.mock('@shared/api-client/tracks', () => ({
 }));
 
 describe('settings mutations retry transient failures', () => {
-  // #841: mutations default to zero retries, so a transient 502 on backfill or
-  // clear-history failed outright. They must retry transient failures via isRetryable().
-
   function makeClient() {
-    // No mutation defaults: each hook owns both the retry decision and its delay.
     return new QueryClient();
   }
 
-  // The hooks' own jittered backoff (#1756) puts the reattempt somewhere below this
-  // ceiling rather than at once, so the clock has to run before a retry can land.
   const FIRST_RETRY_CEILING_MS = RETRY_BACKOFF_BASE_MS;
 
   async function elapsePastTheFirstRetry() {
@@ -72,9 +66,6 @@ describe('settings mutations retry transient failures', () => {
 });
 
 describe('the jittered retry backoff', () => {
-  // #1756: these mutations set no retryDelay, so they inherited react-query's fixed
-  // 1000ms first backoff and every client failing on one outage retried together.
-
   const retryingMutations = [
     {
       name: 'backfill',
@@ -83,8 +74,6 @@ describe('the jittered retry backoff', () => {
     },
   ];
 
-  // Equal jitter puts the first retry at half the base ceiling plus the sample's
-  // share of the other half; un-jittered every sample would land on the ceiling.
   const jitterSamples = [
     { sample: 0, dueMs: RETRY_BACKOFF_BASE_MS / 2 },
     { sample: 0.5, dueMs: (RETRY_BACKOFF_BASE_MS * 3) / 4 },
@@ -143,9 +132,6 @@ describe('the jittered retry backoff', () => {
 });
 
 describe('settings mutations racing a sign-out', () => {
-  // #836: a settings mutation A starts, then A signs out and B signs in before it
-  // settles. The late response must not invalidate or repopulate B's query cache.
-
   type AuthCallback = (event: string, session: Session | null) => void;
 
   const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
@@ -199,7 +185,6 @@ describe('settings mutations racing a sign-out', () => {
     });
     signOut.unmount();
     const sessionOfB = sessionFor(USER_B, 'token-b');
-    // B's is now the session `authorization()` reads, as it would be on the device.
     jest
       .spyOn(supabase.auth, 'getSession')
       .mockResolvedValue({ data: { session: sessionOfB }, error: null } as never);
@@ -215,7 +200,6 @@ describe('settings mutations racing a sign-out', () => {
   beforeEach(() => {
     authCallbacks = [];
     jest.restoreAllMocks();
-    // Earlier tests in this file leave calls on the module mocks.
     jest.mocked(backfillFeaturedArtists).mockReset();
   });
 
@@ -236,7 +220,6 @@ describe('settings mutations racing a sign-out', () => {
       backfill.result.current.mutate();
     });
     await waitFor(() => expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1));
-    // Settings unmounts with the signed-in tree, as it does in the app.
     backfill.unmount();
 
     await signOutThenSignInAsUserB(queryClient);

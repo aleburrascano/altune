@@ -44,8 +44,6 @@ export function useTracksView({
 }: TracksViewDeps): TracksView {
   const tracksState = useLibraryTracks(query, sort, isActive);
 
-  // loadAll, not the rendered pages: the queue must span the whole library, which
-  // paginates beyond what is on screen (#30).
   const playWholeLibraryFrom = async (track: TrackResponse): Promise<void> => {
     const all = await tracksState.loadAll();
     const { playable, startIndex } = buildPlayableQueue(all, track.id);

@@ -10,7 +10,6 @@ import { rowSurfaceStyle } from './libraryRowSurface';
 
 import type { TrackResponse } from '@shared/api-client/types';
 
-/** The library row in selection mode: pressing it checks the track rather than playing it. */
 export function LibraryRowSelection({
   track,
   a11yLabel,

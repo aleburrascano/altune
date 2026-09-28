@@ -2,11 +2,6 @@ import { Alert } from 'react-native';
 
 import type { PinBatchResult, UnpinBatchResult } from '@shared/offline/pinnedStore';
 
-/**
- * Tells the user when a bulk download finished with failures. A clean batch stays
- * quiet: each row's offline indicator already shows it landed. Failed rows keep
- * their failed indicator and offer "Retry download" from the track menu.
- */
 export function reportPinBatch({ requested, failed, refused }: PinBatchResult): void {
   if (refused === 'storage-full') {
     reportStorageFull();
@@ -19,10 +14,6 @@ export function reportPinBatch({ requested, failed, refused }: PinBatchResult): 
   );
 }
 
-/**
- * Tells the user when a bulk removal left downloads in place — a file the OS would not release, or
- * a batch that ran past its deadline. A clean removal stays quiet: the rows already show it.
- */
 export function reportUnpinBatch({ requested, failed }: UnpinBatchResult): void {
   if (failed === 0) return;
   Alert.alert(
@@ -31,7 +22,6 @@ export function reportUnpinBatch({ requested, failed }: UnpinBatchResult): void 
   );
 }
 
-/** Tells the user a download was refused because pinned storage is full. */
 export function reportStorageFull(): void {
   Alert.alert(
     'Not enough storage',

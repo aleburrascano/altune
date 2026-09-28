@@ -9,21 +9,32 @@ export type WideRowPressableState = {
   focused?: boolean;
 };
 
-function wideRowState(theme: Theme, isPlaying: boolean, state: WideRowPressableState): StyleProp<ViewStyle> {
+function wideRowBaseStyle(theme: Theme, state: WideRowPressableState) {
+  return {
+    borderBottomColor: theme.color.border,
+    borderColor: state.focused ? theme.color.accent : 'transparent',
+  };
+}
+
+type WideRowArgs = { theme: Theme; isPlaying: boolean; state: WideRowPressableState };
+
+function wideRowHoverStyle({ theme, isPlaying, state }: WideRowArgs) {
   return [
-    styles.row,
-    { borderBottomColor: theme.color.border, borderColor: state.focused ? theme.color.accent : 'transparent' },
     state.hovered ? { backgroundColor: theme.color.surface2 } : null,
     isPlaying ? { backgroundColor: theme.color.accentTint } : null,
     state.pressed ? styles.pressed : null,
   ];
 }
 
+function wideRowState(args: WideRowArgs): StyleProp<ViewStyle> {
+  return [styles.row, wideRowBaseStyle(args.theme, args.state), ...wideRowHoverStyle(args)];
+}
+
 export function libraryRowWideStyle(
   theme: Theme,
   isPlaying: boolean,
 ): (state: WideRowPressableState) => StyleProp<ViewStyle> {
-  return (state) => wideRowState(theme, isPlaying, state);
+  return (state) => wideRowState({ theme, isPlaying, state });
 }
 
 const styles = StyleSheet.create({

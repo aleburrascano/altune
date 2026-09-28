@@ -120,17 +120,12 @@ function idleWrapper({ children }: { children: ReactNode }) {
   );
 }
 
-// A stand-in for the real root layout's web-only shortcuts bridge (`WebPlaybackShortcutsBridge`
-// in `src/app/_layout.tsx`), which mounts `useKeyboardShortcuts(usePlayback())` once at the root.
 function WebPlaybackShortcutsBridgeStandIn() {
   const playback = usePlayback();
   useKeyboardShortcuts(playback);
   return null;
 }
 
-// A stand-in for the real root layout: the web-only shortcuts bridge and the actual
-// `AppChrome`, both mounted once around a Stack that holds `(tabs)` and `player`, exactly
-// as `src/app/_layout.tsx` composes them.
 function RootTestLayout() {
   const isWideWeb = useWideWebLayout();
   return (
@@ -175,8 +170,6 @@ const LATE_NIGHT = {
   updated_at: '2024-01-01T00:00:00Z',
 };
 
-// The sidebar's highlighting and its click-to-navigate wiring live in `AppChrome`/`WideChrome`
-// at the root (moved from `(tabs)/_layout`; see `tabsLayout.integration.test.tsx`).
 describe('app chrome: the sidebar highlights the active route and navigates on press', () => {
   it('highlights Library in the sidebar on a playlist opened under Library', async () => {
     RN.Platform.OS = 'web';
@@ -333,9 +326,6 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
   });
 });
 
-// `PlayerBar.test.tsx` covers the next-track control against the real queue store directly;
-// this confirms the same wiring holds through the root chrome (moved from `(tabs)/_layout`;
-// see `tabsLayout.integration.test.tsx`).
 describe('app chrome: the player bar reflects the live queue', () => {
   it('offers a next-track control once a second track is queued', async () => {
     RN.Platform.OS = 'web';
@@ -379,7 +369,9 @@ describe('app chrome: the idle player bar stays on every screen in wide web layo
       renderRouter(ROUTES, { initialUrl: url, wrapper: idleWrapper });
       await act(async () => {});
 
-      expect(within(screen.getByTestId('player-bar')).getByText('Pick something to play')).toBeTruthy();
+      expect(
+        within(screen.getByTestId('player-bar')).getByText('Pick something to play'),
+      ).toBeTruthy();
     },
   );
 
@@ -395,13 +387,8 @@ describe('app chrome: the idle player bar stays on every screen in wide web layo
   });
 });
 
-
 type KeyListener = { type: string; listener: (event: unknown) => void };
 
-// The test environment has no native `addEventListener`/`removeEventListener` (jest's
-// react-native preset runs under plain Node, not jsdom), so this stub stands in for the
-// one the browser provides in production, letting `useKeyboardShortcuts`'s real
-// `window.addEventListener('keydown', ...)` wiring be exercised end to end.
 let keyListeners: KeyListener[] = [];
 (globalThis as { addEventListener?: unknown }).addEventListener = (
   type: string,
@@ -475,19 +462,22 @@ describe('app chrome: the web keyboard shortcuts bridge mounts once at the root'
   it.each([
     ['a 1440px', 1440],
     ['a 999px', 999],
-  ])('registers exactly one keydown listener and pauses once on Space after opening the player from Library on %s web window', async (_label, width) => {
-    const { playback } = await openApp('/library', { os: 'web', width });
+  ])(
+    'registers exactly one keydown listener and pauses once on Space after opening the player from Library on %s web window',
+    async (_label, width) => {
+      const { playback } = await openApp('/library', { os: 'web', width });
 
-    act(() => require('expo-router').router.push('/player'));
-    await act(async () => {});
+      act(() => require('expo-router').router.push('/player'));
+      await act(async () => {});
 
-    expect(keyListeners.filter((l) => l.type === 'keydown')).toHaveLength(1);
+      expect(keyListeners.filter((l) => l.type === 'keydown')).toHaveLength(1);
 
-    pressSpace();
+      pressSpace();
 
-    expect(screen.getByText('player-screen')).toBeTruthy();
-    expect(playback.pause).toHaveBeenCalledTimes(1);
-  });
+      expect(screen.getByText('player-screen')).toBeTruthy();
+      expect(playback.pause).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('registers exactly one keydown listener and pauses once on Space on a directly loaded /player route', async () => {
     const { playback } = await openApp('/player', { os: 'web', width: 1440 });

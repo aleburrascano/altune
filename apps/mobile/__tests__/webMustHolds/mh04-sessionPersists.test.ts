@@ -30,7 +30,10 @@ describe('mh04: the web session survives a reload and sign-out clears it', () =>
   it('keeps a signed-in user signed in across a reload, and leaves no Supabase session in localStorage after sign-out', async () => {
     const sameBrowserProfile = new Map<string, string>();
 
-    let storage: { getItem: (key: string) => Promise<string | null>; setItem: (key: string, value: string) => Promise<void> };
+    let storage: {
+      getItem: (key: string) => Promise<string | null>;
+      setItem: (key: string, value: string) => Promise<void>;
+    };
     let clearPersistedAuthSession: () => Promise<void>;
 
     jest.isolateModules(() => {

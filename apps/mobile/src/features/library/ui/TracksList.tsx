@@ -15,9 +15,14 @@ import { listContent } from './listContentStyles';
 import { WideTrackHeader } from './WideTrackHeader';
 import type { ListPaging, ListRefresh } from '../refresh';
 
-type TracksListHeaderProps = { isWide: boolean; showShuffle: boolean; onShuffleAll: (() => void) | undefined };
+type TracksListHeaderProps = {
+  isWide: boolean;
+  showShuffle: boolean;
+  onShuffleAll: (() => void) | undefined;
+};
 
-function TracksListHeader({ isWide, showShuffle, onShuffleAll }: TracksListHeaderProps): ReactElement {
+function TracksListHeader(props: TracksListHeaderProps): ReactElement {
+  const { isWide, showShuffle, onShuffleAll } = props;
   return (
     <>
       {showShuffle && onShuffleAll != null ? <ShuffleAllButton onPress={onShuffleAll} /> : null}
@@ -88,7 +93,11 @@ export function TracksList({
       onEndReached={paging?.onEndReached}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={
-        <TracksListHeader isWide={isWide} showShuffle={tracks.length > 0} onShuffleAll={onShuffleAll} />
+        <TracksListHeader
+          isWide={isWide}
+          showShuffle={tracks.length > 0}
+          onShuffleAll={onShuffleAll}
+        />
       }
       ListFooterComponent={
         <ListLoadingMoreFooter

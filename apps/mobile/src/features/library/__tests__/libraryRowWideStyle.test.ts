@@ -7,7 +7,9 @@ describe('libraryRowWideStyle', () => {
     const style = libraryRowWideStyle(lightTheme, false)({ hovered: true, pressed: false });
 
     expect(style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ backgroundColor: lightTheme.color.surface2 })]),
+      expect.arrayContaining([
+        expect.objectContaining({ backgroundColor: lightTheme.color.surface2 }),
+      ]),
     );
   });
 
@@ -26,7 +28,9 @@ describe('libraryRowWideStyle', () => {
       expect.arrayContaining([expect.objectContaining({ borderColor: 'transparent' })]),
     );
     expect(style).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ backgroundColor: lightTheme.color.surface2 })]),
+      expect.arrayContaining([
+        expect.objectContaining({ backgroundColor: lightTheme.color.surface2 }),
+      ]),
     );
   });
 });

@@ -1,8 +1,3 @@
-// #794: a library search superseded by a new query must abort its in-flight request
-// instead of running to its own deadline. TanStack aborts the old query's signal on key
-// change only when the queryFn forwards it, so this drives the real api-client against
-// the fetch double and checks the superseded request's signal.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';

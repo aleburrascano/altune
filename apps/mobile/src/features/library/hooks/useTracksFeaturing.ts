@@ -9,20 +9,12 @@ import { failureLogFields } from '../failureLogFields';
 
 const DIGITS = /^[0-9]+$/;
 
-// Route params arrive as strings from deep links, so anything that is not a plain
-// non-negative integer (the only shape `String(deezer_id)` produces in-app) is null.
 export function parseDeezerIdParam(raw: string | undefined): number | null {
   if (raw === undefined || !DIGITS.test(raw)) return null;
   const id = Number(raw);
   return Number.isSafeInteger(id) ? id : null;
 }
 
-/**
- * A failed featuring load renders the same generic copy whatever broke it, so without
- * this line the screen's main failure mode reaches production logs as nothing (#1706).
- * Redacted like #1703/#1704: `failureLogFields` keeps the caught error out, and `key`
- * carries only what the query was keyed by.
- */
 function useLoggedFeaturingQueryFailure(error: Error | null, key: string): void {
   useEffect(() => {
     if (error === null) {
@@ -43,7 +35,10 @@ export function useTracksFeaturing(input: FeaturedArtist) {
     staleTime: 60_000,
   });
 
-  useLoggedFeaturingQueryFailure(error, fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : 'name'));
+  useLoggedFeaturingQueryFailure(
+    error,
+    fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : 'name'),
+  );
 
   return { data, isLoading, isError, isRefetching, refetch };
 }

@@ -24,9 +24,7 @@ type LibraryGridProps<TItem> = {
   refresh: ListRefresh;
   renderItem: ListRenderItem<TItem>;
   columnWrapperStyle?: StyleProp<ViewStyle>;
-  /** Omit to render nothing when the grid is empty. */
   emptyLabel?: string;
-  /** Omit on a grid that holds every row it will ever hold. */
   paging?: ListPaging | undefined;
   onLayout?: (event: LayoutChangeEvent) => void;
 };
@@ -54,7 +52,6 @@ export function LibraryGrid<TItem>({
       testID={testID}
       data={data}
       keyExtractor={keyExtractor}
-      // FlatList cannot change numColumns in place, so a column count change remounts it.
       key={`cols-${columns}`}
       numColumns={columns}
       onLayout={onLayout}

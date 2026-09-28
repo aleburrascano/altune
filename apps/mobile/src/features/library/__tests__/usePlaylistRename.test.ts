@@ -1,6 +1,3 @@
-// A seam carved out of PlaylistDetailScreen (#781): the playlist rename. Each test
-// pins the behavior the screen had inline before.
-
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';
@@ -61,9 +58,6 @@ describe('usePlaylistRename', () => {
   });
 });
 
-// Return on a single-line TextInput blurs it, so PlaylistHero's onSubmitEditing and
-// onBlur both call confirmRename in one tick (#1698). Two requests for the same name
-// race, and a late failure from the first reverts the name the second just committed.
 describe('usePlaylistRename — one rename per gesture', () => {
   it('sends a single rename when Return and the blur it triggers confirm in the same tick', () => {
     const result = editingWith('New');

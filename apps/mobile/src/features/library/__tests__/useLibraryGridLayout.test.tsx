@@ -1,8 +1,3 @@
-// #2820: before the three grids share one layout seam, this pins today's behaviour —
-// the column count each grid hands its FlatList, and the cover size PlaylistsGrid hands
-// PlaylistCover — at three widths spanning every breakpoint in gridColumns.ts. It must stay
-// green, unchanged, once the seam lands.
-
 import { render, screen } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
 
@@ -49,7 +44,12 @@ describe.each([
 
   it('gives AlbumsGrid the same numColumns as coverColumns(width)', () => {
     render(
-      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(width));
@@ -119,7 +119,12 @@ describe('a measured content width narrower than the window overrides the window
 
   it("sizes AlbumsGrid's columns from the grid's own measured width, not the window width", () => {
     render(
-      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     const grid = screen.UNSAFE_getByType(FlatList);
@@ -157,7 +162,12 @@ describe('a native tablet just under the wide breakpoint keeps its column count'
 
   it('gives AlbumsGrid 3 cover columns at a 999pt-wide window', () => {
     render(
-      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(3);
@@ -181,7 +191,12 @@ describe('narrow web keeps its pre-#2842 grid once the grid measures itself', ()
 
   it('gives AlbumsGrid 2 columns at 360px on web before any layout', () => {
     render(
-      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
@@ -216,7 +231,12 @@ describe.each([
 
   it('gives AlbumsGrid 4 columns, same as coverColumns(width) on main', () => {
     render(
-      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(4);
@@ -253,7 +273,12 @@ describe('web below the wide-web threshold behaves like main, uncapped and uncro
 
   it('gives AlbumsGrid coverColumns(900), not the wide-web 5-column tier', () => {
     render(
-      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
     );
 
     expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(900));

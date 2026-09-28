@@ -53,7 +53,6 @@ function makeProps(
   };
 }
 
-// A closed RN Modal renders nothing, so presence in the tree is visibility.
 const isVisible = (testID: string): boolean => screen.queryByTestId(testID) !== null;
 
 const CONFIRMS = [
@@ -152,7 +151,10 @@ describe('DangerZoneCard', () => {
     rerender(
       <DangerZoneCard
         {...props}
-        downloads={{ ...props.downloads, stats: { ...props.downloads.stats, downloadCount: 0, downloadBytes: 0, usage: 'none' } }}
+        downloads={{
+          ...props.downloads,
+          stats: { ...props.downloads.stats, downloadCount: 0, downloadBytes: 0, usage: 'none' },
+        }}
       />,
     );
 
@@ -179,10 +181,6 @@ describe('DangerZoneCard', () => {
 });
 
 describe('DangerZoneCard sign-out failure', () => {
-  // #840: a failed sign-out must be visible on the row, not look like nothing happened.
-  // #1753: it must also name the cause and leave one redacted line in the log.
-
-  // The shapes supabase-js hands back from signOut(), one per cause.
   const unreachableAuthServer = {
     name: 'AuthRetryableFetchError',
     message: 'Network request failed',
@@ -363,10 +361,7 @@ describe('DangerZoneCard probe: rows across download usage, outcomes and mutatio
   it('shows no status on the downloads row after every file was removed', () => {
     const props = makeProps();
     render(
-      <DangerZoneCard
-        {...props}
-        downloads={{ ...props.downloads, lastUnpinAll: 'all-removed' }}
-      />,
+      <DangerZoneCard {...props} downloads={{ ...props.downloads, lastUnpinAll: 'all-removed' }} />,
     );
 
     expect(screen.queryByText('Failed')).toBeNull();

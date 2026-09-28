@@ -1,6 +1,3 @@
-// A seam carved out of PlaylistDetailScreen (#781): the playlist delete. Each test
-// pins the behavior the screen had inline before.
-
 import { renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';

@@ -17,6 +17,4 @@ export function resetSearchState(): void {
   _lastInputValue = '';
 }
 
-// Process-lifetime state: without this, the next account to sign in would be
-// seeded with (and immediately search for) the previous account's query.
 onSignOut(resetSearchState);

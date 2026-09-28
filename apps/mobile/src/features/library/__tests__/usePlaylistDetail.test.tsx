@@ -1,6 +1,3 @@
-// #782: the playlist detail query lives behind a hook. It must keep the same query key,
-// fetch, and skip-on-empty-id behavior the screen had inline.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';

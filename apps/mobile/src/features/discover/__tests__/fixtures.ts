@@ -1,7 +1,5 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-// The one complete DiscoveryResult fixture for discover specs. Add new required
-// fields here so every spec picks them up; tests vary fields via overrides.
 export function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {
     kind: 'track',

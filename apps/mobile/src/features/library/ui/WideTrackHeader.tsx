@@ -34,7 +34,9 @@ function HeaderLabels(): ReactElement {
   return (
     <>
       {COLUMNS.map((column) => (
-        <Text key={column.key} variant="label" tone="secondary" style={column.style}>{column.label}</Text>
+        <Text key={column.key} variant="label" tone="secondary" style={column.style}>
+          {column.label}
+        </Text>
       ))}
     </>
   );
@@ -43,7 +45,10 @@ function HeaderLabels(): ReactElement {
 export function WideTrackHeader(): ReactElement {
   const theme = useTheme();
   return (
-    <View testID="library-wide-track-header" style={[styles.row, { borderBottomColor: theme.color.border }]}>
+    <View
+      testID="library-wide-track-header"
+      style={[styles.row, { borderBottomColor: theme.color.border }]}
+    >
       <View style={{ width: WIDE_TRACK_COLUMNS.artwork }} />
       <HeaderLabels />
       <View style={{ width: WIDE_TRACK_COLUMNS.status }} />

@@ -21,8 +21,6 @@ export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boo
   } = useInfiniteQuery({
     queryKey: libraryKeys.artists(query, sort),
     initialPageParam: 0,
-    // Forwarding the signal lets TanStack abort a superseded search's in-flight page when
-    // the key changes, instead of it running to its own deadline (#794).
     queryFn: ({ pageParam, signal }) =>
       getLibraryArtists({ q: query, sort, limit: GROUP_PAGE_SIZE, offset: pageParam }, signal),
     getNextPageParam: (lastPage, _pages, lastOffset) =>

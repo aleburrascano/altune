@@ -110,9 +110,6 @@ function bottomBarButtons(label: string) {
   return screen.queryAllByRole('button', { name: label }).filter((b) => !inSidebar.includes(b));
 }
 
-// The sidebar itself, its highlighting and its click-to-navigate wiring now live in the
-// root-level `AppChrome`/`WideChrome` (see `rootLayout.integration.test.tsx`), not in
-// `TabsLayout`. `TabsLayout` still owns hiding its own bottom tab bar in wide web layout.
 describe('tabs layout: hides its own bottom tab bar in a wide web window, shows it otherwise', () => {
   it('hides its own bottom tab bar on a 1440px web window', async () => {
     await openTabs('/library', { os: 'web', width: 1440 });
@@ -221,9 +218,6 @@ async function openTabsPlaying(
   return result;
 }
 
-// `MiniPlayer` hides itself in wide web layout on its own (`useWideWebLayout()`), unaffected
-// by where the sidebar/player bar chrome now mounts. The player bar itself, alongside the
-// hidden mini player, is asserted in `rootLayout.integration.test.tsx`.
 describe('tabs layout: hides its own mini player in wide web layout, shows it otherwise', () => {
   it('hides the mini player on a 1440px web window', async () => {
     await openTabsPlaying('/library', { os: 'web', width: 1440, playback: playingFixture() });
@@ -252,8 +246,6 @@ jest.mock('../src/shared/ui/keyboard/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: (...args: unknown[]) => mockUseKeyboardShortcuts(...args),
 }));
 
-// The web keyboard shortcuts now mount once at the root (`WebPlaybackShortcutsBridge` in
-// `src/app/_layout.tsx`; see `rootLayout.integration.test.tsx`), not from `TabsLayout`.
 describe('tabs layout: does not mount the web keyboard shortcuts on its own', () => {
   beforeEach(() => {
     mockUseKeyboardShortcuts.mockClear();
@@ -274,9 +266,6 @@ describe('tabs layout: does not mount the web keyboard shortcuts on its own', ()
   });
 });
 
-// The player bar itself, and its live-queue wiring, now render only from the root chrome
-// (see `rootLayout.integration.test.tsx`); `PlayerBar.test.tsx` covers the next-track
-// control against the real queue store directly. `TabsLayout` alone never renders it.
 describe('tabs layout: renders no player bar of its own even with a queued second track', () => {
   it('renders no player bar on a 1440px web window', async () => {
     const { useQueueStore } = require('@shared/playback/queueStore');
@@ -307,8 +296,6 @@ describe('tabs layout: renders no player bar of its own even with a queued secon
   });
 });
 
-// The idle player bar itself now renders only from the root chrome (see
-// `rootLayout.integration.test.tsx`); `TabsLayout` alone never renders it.
 describe('tabs layout: renders no idle player bar of its own', () => {
   it.each(['/discover', '/settings', '/library/playlist/42'])(
     'renders no player bar on %s on a 1440px web window',

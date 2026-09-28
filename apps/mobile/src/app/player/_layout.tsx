@@ -4,7 +4,13 @@ import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
 
 function modalOptions(isWideWeb: boolean) {
-  return isWideWeb ? {} : { presentation: 'modal' as const, animation: 'slide_from_bottom' as const, gestureEnabled: true };
+  return isWideWeb
+    ? {}
+    : {
+        presentation: 'modal' as const,
+        animation: 'slide_from_bottom' as const,
+        gestureEnabled: true,
+      };
 }
 
 export default function PlayerLayout() {

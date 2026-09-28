@@ -20,7 +20,6 @@ type ReportFormViewProps = {
   message: string;
   onMessageChange: (message: string) => void;
   diagnostics: ReportDiagnostics;
-  /** Why the last submit failed, or null when it has not failed. */
   failure: string | null;
   ready: boolean;
   sending: boolean;

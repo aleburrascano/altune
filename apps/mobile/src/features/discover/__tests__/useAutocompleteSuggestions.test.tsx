@@ -36,8 +36,6 @@ function renderSuggestions() {
 
 type Rendered = ReturnType<typeof renderSuggestions>;
 
-// Each keystroke lands well inside the debounce window, so the burst is the
-// ticket's scenario: a pasted or fast-typed query, not a pause between letters.
 function typeBurst(rendered: Rendered, text: string): void {
   for (let length = 1; length <= text.length; length += 1) {
     act(() => {
@@ -114,7 +112,6 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
       .filter((event) => event.type === 'search_failed');
   }
 
-  // This file runs on fake timers; the failure-reporting tests wait on real ones.
   beforeEach(() => {
     jest.useRealTimers();
   });

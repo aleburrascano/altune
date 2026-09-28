@@ -110,11 +110,16 @@ function heroHeader(props: TrackListProps, includeHero: boolean) {
   return includeHero ? { ListHeaderComponent: <PlaylistHeroSection {...props} /> } : {};
 }
 
-function listProps(props: TrackListProps, includeHero: boolean): Omit<FlatListProps<TrackResponse>, 'data'> {
+type ListPropsResult = Omit<FlatListProps<TrackResponse>, 'data'>;
+
+function refreshProps(props: TrackListProps) {
+  return { onRefresh: props.onRefresh, refreshing: props.refreshing };
+}
+
+function listProps(props: TrackListProps, includeHero: boolean): ListPropsResult {
   return {
     ...TRACK_LIST,
-    onRefresh: props.onRefresh,
-    refreshing: props.refreshing,
+    ...refreshProps(props),
     ...heroHeader(props, includeHero),
     ListEmptyComponent: <EmptyTracks onAdd={props.onAddTracks} />,
     renderItem: renderTrack(props.ctx),

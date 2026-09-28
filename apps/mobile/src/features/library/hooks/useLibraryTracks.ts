@@ -26,9 +26,7 @@ const hasPending = (page: ListTracksResponse) =>
   page.items.some((t) => t.acquisition_status === 'pending');
 
 const mergePage = (old: TracksData | undefined, fresh: ListTracksResponse) =>
-  old
-    ? { ...old, pages: old.pages.map((p) => (p.offset === fresh.offset ? fresh : p)) }
-    : old;
+  old ? { ...old, pages: old.pages.map((p) => (p.offset === fresh.offset ? fresh : p)) } : old;
 
 const logPollFailure = (offset: number, cause: unknown) => {
   console.warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
@@ -85,13 +83,8 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
   } = useInfiniteQuery({
     queryKey: libraryKeys.tracks(query, sort),
     initialPageParam: 0,
-    // Forwarding the signal lets TanStack abort a superseded search's in-flight page when
-    // the key changes, instead of it running to its own deadline (#794).
     queryFn: ({ pageParam, signal }) =>
       getTracks({ limit: TRACKS_PAGE_SIZE, offset: pageParam, q: query, sort }, signal),
-    // A page can report has_more while serving no items (its total disagreeing with the
-    // slice it built). The cursor would then advance by zero and re-request the identical
-    // offset forever, so an empty page ends the scroll (#1697).
     getNextPageParam: (lastPage) =>
       lastPage.has_more && lastPage.items.length > 0
         ? lastPage.offset + lastPage.items.length
@@ -135,8 +128,6 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           staleTime: 0,
           gcTime: 0,
         })
-        // Playing the pages already loaded beats a shuffle/play tap that does nothing,
-        // but the degradation to a subset is recorded rather than silent.
         .catch((error: unknown) => {
           console.warn('[library] whole-library fetch failed; using loaded pages', {
             loaded: tracks.length,

@@ -20,9 +20,63 @@ type SearchPageParam = { offset: number; searchId: string | undefined };
 
 const firstPageParam: SearchPageParam = { offset: 0, searchId: undefined };
 
+function searchPageRequest(trimmed: string, saveHistory: boolean, pageParam: SearchPageParam) {
+  return {
+    q: trimmed,
+    limit: SEARCH_PAGE_SIZE,
+    offset: pageParam.offset,
+    saveHistory: pageParam.offset === 0 ? saveHistory : false,
+    ...(pageParam.searchId !== undefined ? { searchId: pageParam.searchId } : {}),
+  };
+}
+
+function cancelStaleSearches(queryClient: ReturnType<typeof useQueryClient>, trimmed: string) {
+  void queryClient.cancelQueries({
+    queryKey: discoveryKeys.searchPrefix,
+    predicate: (q) => !isSearchKeyFor(q.queryKey, trimmed),
+  });
+}
+
+function searchQueryFn(
+  queryClient: ReturnType<typeof useQueryClient>,
+  trimmed: string,
+  saveHistory: boolean,
+) {
+  return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
+    cancelStaleSearches(queryClient, trimmed);
+    return searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
+  };
+}
+
+function nextSearchPageParam(
+  lastPage: DiscoverySearchResponse,
+  pages: DiscoverySearchResponse[],
+): SearchPageParam | undefined {
+  if (pages.length >= MAX_SEARCH_PAGES) return undefined;
+  if (!lastPage.has_more) return undefined;
+  return { offset: lastPage.offset + lastPage.results.length, searchId: pages[0]?.search_id };
+}
+
+type SearchQueryArgs = {
+  queryKey: readonly unknown[];
+  queryClient: ReturnType<typeof useQueryClient>;
+  trimmed: string;
+  saveHistory: boolean;
+  isSearchEnabled: boolean;
+};
+
+function useSearchInfiniteQuery(args: SearchQueryArgs) {
+  return useInfiniteQuery({
+    queryKey: args.queryKey,
+    initialPageParam: firstPageParam,
+    queryFn: searchQueryFn(args.queryClient, args.trimmed, args.saveHistory),
+    getNextPageParam: nextSearchPageParam,
+    enabled: args.trimmed.length > 0 && args.isSearchEnabled,
+  });
+}
+
 export function useDiscoverSearch(
   query: string,
-  /** Callers owe this: only an explicit submit or suggestion pick counts toward search history. */
   saveHistory: boolean = true,
 ) {
   const trimmed = query.trim();
@@ -43,35 +97,7 @@ export function useDiscoverSearch(
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey,
-    initialPageParam: firstPageParam,
-    queryFn: ({ pageParam, signal }) => {
-      void queryClient.cancelQueries({
-        queryKey: discoveryKeys.searchPrefix,
-        predicate: (q) => !isSearchKeyFor(q.queryKey, trimmed),
-      });
-      return searchDiscovery(
-        {
-          q: trimmed,
-          limit: SEARCH_PAGE_SIZE,
-          offset: pageParam.offset,
-          saveHistory: pageParam.offset === 0 ? saveHistory : false,
-          ...(pageParam.searchId !== undefined ? { searchId: pageParam.searchId } : {}),
-        },
-        signal,
-      );
-    },
-    getNextPageParam: (lastPage, pages) => {
-      if (pages.length >= MAX_SEARCH_PAGES) return undefined;
-      if (!lastPage.has_more) return undefined;
-      return {
-        offset: lastPage.offset + lastPage.results.length,
-        searchId: pages[0]?.search_id,
-      };
-    },
-    enabled: trimmed.length > 0 && isSearchEnabled,
-  });
+  } = useSearchInfiniteQuery({ queryKey, queryClient, trimmed, saveHistory, isSearchEnabled });
 
   useReportQueryFailure(error, 'search');
 
@@ -85,7 +111,6 @@ export function useDiscoverSearch(
     isLoading,
     isRefreshing: isRefetching && !isFetchingNextPage,
     error,
-    /** The operator switched discovery off, so no query of ours will run. */
     isUnavailable: !isSearchEnabled,
     refetch: retrySearch,
     fetchNextPage: isSearchEnabled ? fetchNextPage : noPageToFetch,
@@ -102,7 +127,6 @@ function mergePages(pages: DiscoverySearchResponse[] = []): DiscoverySearchRespo
   return {
     ...first,
     results: pages.flatMap((page) => page.results),
-    // Any degraded page leaves the merged list incomplete, not just the first.
     partial: pages.some((page) => page.partial),
     providers: mergeProviders(pages),
   };
@@ -119,8 +143,6 @@ function mergeProviders(pages: DiscoverySearchResponse[]): DiscoveryProviderInfo
   return [...byProvider.values()];
 }
 
-// A provider that degraded on any page degraded the merged results, the rule the
-// merged `partial` flag already follows; the counts describe every fetched page.
 function acrossPages(
   earlier: DiscoveryProviderInfo,
   later: DiscoveryProviderInfo,

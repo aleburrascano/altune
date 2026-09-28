@@ -17,7 +17,14 @@ const clearHistory: ClearHistoryState = {
 function removeDownloadsRow(count: number, bytes: number, size: string) {
   const [downloads] = buildDangerZoneActions({
     downloads: {
-      stats: { downloadCount: count, downloadBytes: bytes, downloadSize: size, usage: downloadUsage(count, bytes), usageLabel: '', usageDetail: undefined },
+      stats: {
+        downloadCount: count,
+        downloadBytes: bytes,
+        downloadSize: size,
+        usage: downloadUsage(count, bytes),
+        usageLabel: '',
+        usageDetail: undefined,
+      },
       unpinAll: jest.fn(),
     },
     signOutState: { status: 'idle' },
@@ -41,7 +48,7 @@ describe('downloadUsage', () => {
   });
 });
 
-describe('downloadStatsModel pins today\'s downloadStats and dangerZoneActions behaviour', () => {
+describe("downloadStatsModel pins today's downloadStats and dangerZoneActions behaviour", () => {
   it('none: hides the size detail and the remove row', () => {
     const stats = downloadStats({ a: entry('a', 'queued') }, 0);
     expect(stats.usage).toBe('none');
@@ -56,7 +63,9 @@ describe('downloadStatsModel pins today\'s downloadStats and dangerZoneActions b
     const stats = downloadStats({ a: entry('a', 'queued') }, 0);
     const row = removeDownloadsRow(stats.downloadCount, stats.downloadBytes, stats.downloadSize);
 
-    expect(row?.confirm.body).toBe('Leftover download files (0 B) will be deleted from this device.');
+    expect(row?.confirm.body).toBe(
+      'Leftover download files (0 B) will be deleted from this device.',
+    );
   });
 
   it('leftover: shows the leftover label and keeps the remove row with the leftover confirm body', () => {
@@ -137,7 +146,9 @@ describe('download usage at the count and byte boundaries', () => {
     expect(stats.usageDetail).toBe('1 B');
     const row = removeDownloadsRow(stats.downloadCount, stats.downloadBytes, stats.downloadSize);
     expect(row?.row.hidden).toBe(false);
-    expect(row?.confirm.body).toBe('Leftover download files (1 B) will be deleted from this device.');
+    expect(row?.confirm.body).toBe(
+      'Leftover download files (1 B) will be deleted from this device.',
+    );
   });
 
   it('bytes left by entries that never became ready read as leftover, not tracks', () => {

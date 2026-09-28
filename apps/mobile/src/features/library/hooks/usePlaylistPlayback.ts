@@ -11,8 +11,6 @@ type PlaylistPlayback = {
   playFrom: (trackId: string) => void;
 };
 
-// Builds the playable queue for a playlist and starts it, tagging the queue source
-// with the playlist so the player can show where playback came from.
 export function usePlaylistPlayback(
   playlistId: PlaylistId,
   playlist: PlaylistDetailResponse | undefined,

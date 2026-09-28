@@ -1,6 +1,3 @@
-// #1689: the one owner of "leave this library screen". The two arms must stay distinct —
-// a fallback that also fired back(), or a back that also replaced, would double-navigate.
-
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 
 function routerWithHistory(hasHistory: boolean) {

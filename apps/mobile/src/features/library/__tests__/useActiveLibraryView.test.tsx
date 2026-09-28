@@ -1,19 +1,3 @@
-// The four chip views are built by four separate hooks and picked by chip (#1691).
-// A mis-wired pick is invisible to the type-checker — every view is an ActiveView —
-// so each chip is pinned to its own grid, noun, sort options, count, and to its own
-// loading/error state rather than a neighbour's.
-
-// Regression for issue #793: the playlists 'recent' sort must order by the parsed
-// `created_at` instant, not by comparing the raw timestamp strings. Go's JSON time
-// marshaling trims trailing zero fractional digits, so two same-second timestamps
-// can differ only in precision ("...:00Z" vs "...:00.5Z"), where string order and
-// instant order disagree.
-
-// Regression for issue #30: shuffling the library must draw from the WHOLE
-// library (via loadAll's full pagination), not just the pages already rendered on
-// screen. The on-screen list is capped at TRACKS_PAGE_SIZE-driven pages; a naive
-// shuffle over that would loop the same first ~200 tracks in the car.
-
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
@@ -33,8 +17,6 @@ import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 import { TracksList } from '../ui/TracksList';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
-// Each describe below stubs the three collection hooks its own way; jest.mock is
-// file-wide, so the mocks read these and each describe's beforeEach fills them in.
 let mockUseLibraryTracks: () => unknown;
 let mockUseLibraryAlbums: () => unknown;
 let mockUseLibraryArtists: () => unknown;
@@ -55,8 +37,6 @@ const mockAlbumsError = new Error('albums request failed');
 const mockLoadedAlbums = [{ key: 'a1' }, { key: 'a2' }, { key: 'a3' }];
 let mockAlbums: { key: string }[] = mockLoadedAlbums;
 
-// Each collection gets a distinct size, so a chip reading a neighbour's state shows
-// up as the wrong count rather than coincidentally matching.
 function stubChipCollections() {
   mockUseLibraryTracks = () => ({
     tracks: [{ id: 't1' }],
@@ -198,9 +178,6 @@ function playlist(id: string, name: string, createdAt: string): PlaylistResponse
   };
 }
 
-// Every chip's view hook runs on every render, so the composer reads the navigation
-// and retry deps whichever chip is selected — they are here to satisfy that, not
-// because playlist sorting uses them.
 function sortedIds(playlists: PlaylistResponse[], sort: 'recent' | 'az'): string[] {
   const deps = {
     pl: { playlists, isRefetchingPlaylists: false, refetchPlaylists: jest.fn() },
@@ -271,7 +248,6 @@ function trackResponse(id: string): TrackResponse {
   };
 }
 
-// Full library is 250 tracks; only the first 200 are "loaded" on screen.
 const mockFullLibrary = Array.from({ length: 250 }, (_, i) => trackResponse(`t${i}`));
 const mockLoadedPages = mockFullLibrary.slice(0, 200);
 const mockLoadAll = jest.fn(() => Promise.resolve(mockFullLibrary));
@@ -346,12 +322,9 @@ describe('useActiveLibraryView — shuffleWholeLibrary', () => {
     expect(mockLoadAll).toHaveBeenCalledTimes(1);
     expect(shuffleFromList).toHaveBeenCalledTimes(1);
     const [playable, source] = shuffleFromList.mock.calls[0]!;
-    // The queue is seeded with all 250 tracks — the whole library — not the 200
-    // pages rendered on screen.
     expect(playable).toHaveLength(mockFullLibrary.length);
     expect(playable.length).toBeGreaterThan(mockLoadedPages.length);
     expect(source).toEqual({ kind: 'library' });
-    // The last track, absent from the loaded pages, is present in the queue.
     const seededIds = (playable as { source: { trackId: string } }[]).map((t) => t.source.trackId);
     expect(seededIds).toContain(mockFullLibrary[249]!.id);
   });

@@ -6,8 +6,6 @@ import { tracksLabel, LEFTOVER_FILES_LABEL } from './downloadStatsModel';
 import { failureCopyForAction } from './failureCopyForAction';
 import type { RemoveDownloads } from './hooks/useRemoveDownloads';
 
-// Closed on purpose: the open confirm is chosen by comparing against this key,
-// so a value outside the set would match no confirm and open nothing.
 export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
 
 export type ClearHistoryState = {
@@ -18,8 +16,6 @@ export type ClearHistoryState = {
   mutate: () => void;
 };
 
-// One destructive action: the row that opens it and the confirm that runs it.
-// The row and its confirm share the icon.
 type DangerZoneAction = {
   key: DangerZoneActionKey;
   icon: LucideIcon;
@@ -28,10 +24,7 @@ type DangerZoneAction = {
     label: string;
     detail?: string;
     disabled?: boolean;
-    // Short outcome label shown on the row's right edge.
     status?: { label: string; tone: Extract<TextTone, 'success' | 'danger'> };
-    // Hides only the row; the confirm stays mounted so an open one is not
-    // torn down (and later resurrected) when the row disappears.
     hidden?: boolean;
   };
   confirm: {
@@ -54,7 +47,6 @@ function failedOutcome(detail: string): Pick<DangerZoneAction['row'], 'detail' |
   return { detail, status: { label: 'Failed', tone: 'danger' } };
 }
 
-// A remove-all that cleared everything hides the row, so only the partial pass has a state to show.
 function removeDownloadsOutcome(
   lastUnpinAll: RemoveDownloads['lastUnpinAll'],
 ): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
@@ -128,7 +120,9 @@ function clearSearchHistoryAction(clearHistory: ClearHistoryState): DangerZoneAc
   };
 }
 
-function signOutOutcome(signOutState: SignOutResult): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
+function signOutOutcome(
+  signOutState: SignOutResult,
+): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
   return signOutState.status === 'error'
     ? failedOutcome(failureCopyForAction(signOutState.error))
     : {};

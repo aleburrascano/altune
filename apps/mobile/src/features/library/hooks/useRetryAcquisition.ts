@@ -83,7 +83,14 @@ function skipReason(trackId: TrackId, isInFlight: InFlightCheck): RetrySkipReaso
   return undefined;
 }
 
-function guardedTap(trackId: TrackId, entryPoint: EntryPoint, isInFlight: InFlightCheck, mutate: MutateFn): void {
+type GuardedTapArgs = {
+  trackId: TrackId;
+  entryPoint: EntryPoint;
+  isInFlight: InFlightCheck;
+  mutate: MutateFn;
+};
+
+function guardedTap({ trackId, entryPoint, isInFlight, mutate }: GuardedTapArgs): void {
   recordRetryTapped(trackId, entryPoint);
   const reason = skipReason(trackId, isInFlight);
   if (reason) return recordRetryRequest(trackId, entryPoint, { kind: 'skipped', reason });
@@ -91,7 +98,8 @@ function guardedTap(trackId: TrackId, entryPoint: EntryPoint, isInFlight: InFlig
 }
 
 function guardedMutate(entryPoint: EntryPoint, run: TrackMutation<void, RetryContext>) {
-  return (trackId: TrackId) => guardedTap(trackId, entryPoint, run.isInFlight, run.mutate);
+  return (trackId: TrackId) =>
+    guardedTap({ trackId, entryPoint, isInFlight: run.isInFlight, mutate: run.mutate });
 }
 
 function useRetryRun(entryPoint: EntryPoint) {
@@ -103,7 +111,9 @@ function useRetryRun(entryPoint: EntryPoint) {
   return useOneRunPerTrack(mutation, trackMutationKeys.retryAcquisition);
 }
 
-export function useRetryAcquisition(entryPoint?: RetryEntryPoint): TrackMutation<void, RetryContext> {
+export function useRetryAcquisition(
+  entryPoint?: RetryEntryPoint,
+): TrackMutation<void, RetryContext> {
   const run = useRetryRun(entryPoint);
   return { ...run, mutate: guardedMutate(entryPoint, run) };
 }

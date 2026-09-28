@@ -28,8 +28,6 @@ describe('AppearanceCard', () => {
     fireEvent.press(screen.getByTestId('settings-theme-light'));
 
     expect(screen.getByText('Light mode has no design pass yet (ADR-0008)')).toBeTruthy();
-    expect(screen.getByTestId('settings-theme-light').props.accessibilityState.selected).toBe(
-      true,
-    );
+    expect(screen.getByTestId('settings-theme-light').props.accessibilityState.selected).toBe(true);
   });
 });

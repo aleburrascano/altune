@@ -18,11 +18,6 @@ type SuggestionVisibility = {
   onSuggestionSelect: (text: string) => void;
 };
 
-/**
- * Decides when the autocomplete dropdown shows: the input is focused, holds a
- * searchable query, has suggestions, and the user has not just submitted or
- * picked one. Typing again re-opens it.
- */
 export function useSuggestionVisibility(
   search: SearchInput,
   suggestionCount: number,
@@ -30,10 +25,7 @@ export function useSuggestionVisibility(
   const [isFocused, setIsFocused] = useState(false);
   const [suggestionsHidden, setSuggestionsHidden] = useState(false);
   const showSuggestions =
-    isFocused &&
-    !suggestionsHidden &&
-    isSearchableQuery(search.inputValue) &&
-    suggestionCount > 0;
+    isFocused && !suggestionsHidden && isSearchableQuery(search.inputValue) && suggestionCount > 0;
   return {
     isFocused,
     setIsFocused,

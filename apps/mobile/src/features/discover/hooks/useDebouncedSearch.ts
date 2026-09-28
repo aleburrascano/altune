@@ -36,7 +36,6 @@ export function useDebouncedSearch({
     }
   };
 
-  // A keystroke just before unmount must not commit into a detached instance.
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -55,15 +54,11 @@ export function useDebouncedSearch({
     [],
   );
 
-  // Below the commit threshold (including empty): drop the stale committed
-  // query so results never outlive the text that produced them.
   const dropCommittedQuery = (): void => {
     setIsExplicitSubmit(false);
     setCommittedQuery('');
   };
 
-  // The keyboard's return key reaches the same threshold as a keystroke: a
-  // query too short to search is also too short to save into history.
   const onSubmit = (): void => {
     clearDebounce();
     const trimmed = inputValue.trim();

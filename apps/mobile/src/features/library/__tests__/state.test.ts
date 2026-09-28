@@ -38,8 +38,6 @@ describe('_viewForState — precedence and the ready→list remap', () => {
   });
 });
 
-// #795: the error state was only ever `Boolean(error)`, so an offline load and an
-// expired session produced the identical 'error' state and no caller could tell them apart.
 describe('_viewForState — the error state carries why the load failed', () => {
   it('two different causes for the same failed load produce distinguishable states', () => {
     const offline = _viewForState(inputs({ error: new NetworkError('transport', 'x'), items: [] }));

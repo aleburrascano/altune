@@ -3,8 +3,7 @@ import { readFileSync } from 'node:fs';
 import { ESLint } from 'eslint';
 import { parse } from '@typescript-eslint/parser';
 
-const SUPPRESSION_DIRECTIVE =
-  /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
+const SUPPRESSION_DIRECTIVE = /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
 
 const DIFF_DETECT_FLAGS = ['-M', '-C', '--find-copies-harder'];
 
@@ -14,7 +13,8 @@ if (!rawBase || rawBase.startsWith('-')) {
   process.exit(2);
 }
 
-const git = (args) => execFileSync('git', ['-c', 'core.quotePath=false', ...args], { encoding: 'utf8' });
+const git = (args) =>
+  execFileSync('git', ['-c', 'core.quotePath=false', ...args], { encoding: 'utf8' });
 
 let base;
 try {
@@ -25,7 +25,18 @@ try {
 }
 
 const changedFiles = (pathspec) =>
-  git(['diff', '--text', '--name-only', '-z', '--diff-filter=ACMR', ...DIFF_DETECT_FLAGS, '--relative', base, '--', pathspec])
+  git([
+    'diff',
+    '--text',
+    '--name-only',
+    '-z',
+    '--diff-filter=ACMR',
+    ...DIFF_DETECT_FLAGS,
+    '--relative',
+    base,
+    '--',
+    pathspec,
+  ])
     .split('\0')
     .filter(Boolean);
 
@@ -44,14 +55,26 @@ const addedLinesByFile = (pathspec) => {
     }
     return added;
   };
-  const patch = git(['diff', '--text', '--diff-filter=ACMR', ...DIFF_DETECT_FLAGS, '-U0', '--relative', base, '--', pathspec]);
+  const patch = git([
+    'diff',
+    '--text',
+    '--diff-filter=ACMR',
+    ...DIFF_DETECT_FLAGS,
+    '-U0',
+    '--relative',
+    base,
+    '--',
+    pathspec,
+  ]);
   const blocks = patch.split(/^diff --git .*$/m).slice(1);
   const byFile = new Map();
   files.forEach((file, i) => byFile.set(file, hunksOf(blocks[i] ?? '')));
   return byFile;
 };
 
-const files = changedFiles('src').filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'));
+const files = changedFiles('src').filter(
+  (f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'),
+);
 const addedByFile = addedLinesByFile('src');
 const commentFiles = changedFiles('.').filter((f) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f));
 const addedCommentLinesByFile = addedLinesByFile('.');

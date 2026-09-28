@@ -120,10 +120,13 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
 
 describe('mh09: an acquisition completing never restarts a stale pin on web', () => {
   function statusAfterCompletion(offlineDownloadsSupported: boolean): string | undefined {
-    const { usePinnedStore, applyServerEvent } = withOfflineSupport(offlineDownloadsSupported, () => ({
-      usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
-      applyServerEvent: require('@shared/events/applyServerEvent').applyServerEvent,
-    }));
+    const { usePinnedStore, applyServerEvent } = withOfflineSupport(
+      offlineDownloadsSupported,
+      () => ({
+        usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
+        applyServerEvent: require('@shared/events/applyServerEvent').applyServerEvent,
+      }),
+    );
     usePinnedStore.setState({
       entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///stale.mp3' } },
       queue: [],
@@ -159,7 +162,8 @@ describe('mh09: the reconcile bridge does nothing on web', () => {
       usePinnedStore: (selector: (s: { reconcile: () => void }) => unknown) =>
         selector({ reconcile }),
     }));
-    OfflineReconcileBridge = require('@shared/offline/OfflineReconcileBridge').OfflineReconcileBridge;
+    OfflineReconcileBridge =
+      require('@shared/offline/OfflineReconcileBridge').OfflineReconcileBridge;
   });
 
   beforeEach(() => {

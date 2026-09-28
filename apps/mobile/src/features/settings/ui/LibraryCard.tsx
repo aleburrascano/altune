@@ -20,10 +20,15 @@ export function LibraryCard(): ReactElement {
 
 function libraryRowProps(backfill: Backfill) {
   return {
-    testID: 'settings-backfill-featured', first: true, icon: Sparkles,
-    tone: 'warning' as const, label: 'Resolve featured artists',
-    detail: backfillDetail(backfill), onPress: () => backfill.mutate(),
-    disabled: backfill.isPending, right: <BackfillStatusLabel backfill={backfill} />,
+    testID: 'settings-backfill-featured',
+    first: true,
+    icon: Sparkles,
+    tone: 'warning' as const,
+    label: 'Resolve featured artists',
+    detail: backfillDetail(backfill),
+    onPress: () => backfill.mutate(),
+    disabled: backfill.isPending,
+    right: <BackfillStatusLabel backfill={backfill} />,
   };
 }
 

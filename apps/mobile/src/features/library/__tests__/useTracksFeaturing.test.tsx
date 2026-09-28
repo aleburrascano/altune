@@ -1,7 +1,3 @@
-// #787: a malformed deep link (`/library/featuring?deezer_id=abc`) must not turn into a
-// `deezer_id=NaN` query. The route param is parsed to a number or null before it reaches
-// the API client.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';

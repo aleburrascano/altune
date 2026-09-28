@@ -39,7 +39,11 @@ function wideDuration(track: TrackResponse): string {
   return formatDuration(track.duration_seconds);
 }
 
-function playTrackHandler(track: TrackResponse, onPlay: (() => void) | undefined, onPress: () => void) {
+function playTrackHandler(
+  track: TrackResponse,
+  onPlay: (() => void) | undefined,
+  onPress: () => void,
+) {
   return () => {
     if (track.acquisition_status === 'ready' && onPlay) onPlay();
     else onPress();
@@ -48,7 +52,12 @@ function playTrackHandler(track: TrackResponse, onPlay: (() => void) | undefined
 
 function WideTitle({ text, playing }: { text: string; playing: boolean }): ReactElement {
   return (
-    <Text variant="bodyStrong" tone={playing ? 'accent' : 'primary'} numberOfLines={1} style={wideStyles.title}>
+    <Text
+      variant="bodyStrong"
+      tone={playing ? 'accent' : 'primary'}
+      numberOfLines={1}
+      style={wideStyles.title}
+    >
       {text}
     </Text>
   );
@@ -70,7 +79,9 @@ function WideDuration({ track }: { track: TrackResponse }): ReactElement {
   );
 }
 
-function WideRowIdentity({ track, isPlaying }: { track: TrackResponse; isPlaying: boolean }): ReactElement {
+type WideRowIdentityProps = { track: TrackResponse; isPlaying: boolean };
+
+function WideRowIdentity({ track, isPlaying }: WideRowIdentityProps): ReactElement {
   return (
     <>
       <Artwork uri={track.artwork_url} size={48} radius={6} accessibilityLabel="Album art" />
@@ -81,9 +92,15 @@ function WideRowIdentity({ track, isPlaying }: { track: TrackResponse; isPlaying
   );
 }
 
-function WideRowFailure(props: { track: TrackResponse; retrying: boolean; onRetry: (() => void) | undefined }): ReactElement | null {
+function WideRowFailure(props: {
+  track: TrackResponse;
+  retrying: boolean;
+  onRetry: (() => void) | undefined;
+}): ReactElement | null {
   if (props.track.acquisition_status !== 'failed') return null;
-  return <LibraryRowFailure track={props.track} retrying={props.retrying} onRetry={props.onRetry} />;
+  return (
+    <LibraryRowFailure track={props.track} retrying={props.retrying} onRetry={props.onRetry} />
+  );
 }
 
 type WideStatusProps = {
@@ -94,7 +111,8 @@ type WideStatusProps = {
   onMore: (anchor: MenuAnchor) => void;
 };
 
-function WideRowStatus({ track, pinned, retrying, onRetry, onMore }: WideStatusProps): ReactElement {
+function WideRowStatus(props: WideStatusProps): ReactElement {
+  const { track, pinned, retrying, onRetry, onMore } = props;
   return (
     <View style={wideStyles.status}>
       <LibraryRowPinnedIcon trackId={track.id} status={pinned} />

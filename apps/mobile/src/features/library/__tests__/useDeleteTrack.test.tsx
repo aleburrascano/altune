@@ -1,6 +1,3 @@
-// Failure paths of useDeleteTrack (#788): a failed delete restores the cache it
-// optimistically patched and logs a redacted line with track id and endpoint.
-
 import { Alert } from 'react-native';
 import type { InfiniteData } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
@@ -31,8 +28,6 @@ import {
   userBLibrary,
 } from './trackMutationFixtures';
 
-// deleteTrack takes no cancellation today. The mock accepts one anyway and records it,
-// so #1701's test can see whether an unmount ever cancels a delete already in flight.
 const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
@@ -160,9 +155,6 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
   });
 });
 
-// #795: every failure used to roll back and show the same "try again" Alert, so a
-// track deleted elsewhere came back as a ghost row and a refused session was told
-// to just retry. The hooks now branch on the failure class.
 describe('track mutation hooks — respond to the failure class, not one generic path', () => {
   it('a delete answered 404 keeps the track removed and shows no failure', async () => {
     const { queryClient, wrapper } = setup();

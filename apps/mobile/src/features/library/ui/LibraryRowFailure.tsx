@@ -8,8 +8,6 @@ import { LibraryRowRetryAction } from './LibraryRowRetryAction';
 
 import type { FailedAcquisition, TrackFields } from '@shared/api-client/types';
 
-// Only a failed track carries failure text, so this block cannot be rendered for
-// a track that has not failed.
 type FailedTrack = TrackFields & FailedAcquisition;
 
 export function LibraryRowFailure({

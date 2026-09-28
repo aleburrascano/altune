@@ -84,7 +84,6 @@ function seedReadyDownload(trackId: string): void {
 
 type DangerZoneRow = ReturnType<typeof buildDangerZoneActions>[number]['row'];
 
-// Built from the recorded outcome, which is the one the settings screen selects.
 function removeDownloadsRow(): DangerZoneRow | undefined {
   const { lastUnpinAll } = usePinnedStore.getState();
   return buildDangerZoneActions(makeOpts({ downloads: { lastUnpinAll } }))[0]?.row;
@@ -98,9 +97,7 @@ describe('buildDangerZoneActions', () => {
   });
 
   it('hides only the downloads row when nothing is downloaded', () => {
-    const actions = buildDangerZoneActions(
-      makeOpts({ downloads: { count: 0, bytes: 0 } }),
-    );
+    const actions = buildDangerZoneActions(makeOpts({ downloads: { count: 0, bytes: 0 } }));
     expect(actions.map((a) => a.key)).toEqual(['downloads', 'history', 'sign-out']);
     expect(actions.filter((a) => a.row.hidden).map((a) => a.key)).toEqual(['downloads']);
   });
@@ -160,8 +157,6 @@ describe('buildDangerZoneActions', () => {
 });
 
 describe('the danger-zone action key union', () => {
-  // Compile-time guard: tsc fails if `key` widens back to a bare string, which is what
-  // let a typo like 'donwloads' type-check and then silently open no confirm at all.
   it('refuses a mistyped key where an action key belongs', () => {
     const realKeys: DangerZoneActionKey[] = buildDangerZoneActions(makeOpts()).map(
       ({ key }) => key,

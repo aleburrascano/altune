@@ -39,13 +39,24 @@ function readyCount(entries: Record<string, PinnedEntry>): number {
   return Object.values(entries).filter((e) => e.status === 'ready').length;
 }
 
-function usageFields(usage: DownloadUsage, count: number, size: string): Pick<DownloadStats, 'usage' | 'usageLabel' | 'usageDetail'> {
-  return { usage, usageLabel: usageLabelFor(usage, count), usageDetail: usage === 'none' ? undefined : size };
+type UsageFields = Pick<DownloadStats, 'usage' | 'usageLabel' | 'usageDetail'>;
+
+function usageFields(usage: DownloadUsage, count: number, size: string): UsageFields {
+  return {
+    usage,
+    usageLabel: usageLabelFor(usage, count),
+    usageDetail: usage === 'none' ? undefined : size,
+  };
 }
 
 export function downloadStats(entries: Record<string, PinnedEntry>, bytes: number): DownloadStats {
   const downloadCount = readyCount(entries);
   const downloadSize = formatBytes(bytes);
   const usage = downloadUsage(downloadCount, bytes);
-  return { downloadCount, downloadBytes: bytes, downloadSize, ...usageFields(usage, downloadCount, downloadSize) };
+  return {
+    downloadCount,
+    downloadBytes: bytes,
+    downloadSize,
+    ...usageFields(usage, downloadCount, downloadSize),
+  };
 }

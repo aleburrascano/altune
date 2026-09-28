@@ -26,21 +26,6 @@ export type TrackSelectionController = TrackMenuController & {
   toggleSelectAll: (tracks: TrackResponse[]) => void;
 };
 
-/**
- * Owns the shared track-selection wiring — selection state, the track-action
- * menu, the bulk-add sheet, and the built selection/menu actions — so a screen
- * supplies only its data source and its danger actions. The action/select-all
- * builders take `tracks` as a parameter (rather than the hook) so callers whose
- * track list is derived after selection is created — e.g. LibraryScreen, where
- * useActiveLibraryView consumes `selection` — keep a stable, unconditional hook
- * order. TrackSelectionOverlay drives them at render.
- *
- * Every count, select-all check and bulk action is derived from the selection
- * intersected with the live `tracks`, so a selection made against an earlier
- * list (before a search edit, a chip switch, or a removal) never leaks stale
- * ids into what the bar shows or acts on. useReconcileSelection then prunes the
- * stored state to match.
- */
 export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionController {
   const selection = useSelection();
   const menu = useTrackMenu(opts);

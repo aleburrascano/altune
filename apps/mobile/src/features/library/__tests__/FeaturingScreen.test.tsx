@@ -1,8 +1,3 @@
-// #1706: both of this screen's failures were swallowed. The explore search's rejection
-// was discarded by a catch-less try/finally — no log, and a tap that read as a dead
-// button — and the featuring query answered every failure with the same generic copy and
-// no line at all. Redacted like #1703/#1704: the caught error stays out of the log.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
@@ -33,7 +28,6 @@ jest.mock('expo-router', () => ({
   useSegments: () => ['(tabs)', 'library', 'featuring'],
 }));
 
-// Playback providers are irrelevant to a failed load; stub them so the screen mounts alone.
 jest.mock('@shared/playback/usePlayback', () => ({
   usePlayback: () => ({ status: 'idle', source: null }),
 }));
@@ -51,11 +45,6 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-/**
- * What a console would render. `message` and `stack` are non-enumerable, so a plain
- * `JSON.stringify` of a logged Error yields `{}` and would hide the leak this file
- * exists to catch.
- */
 function loggedText(): string {
   return JSON.stringify(warnSpy.mock.calls, (_key, value: unknown) =>
     value instanceof Error ? `${value.name}: ${value.message} ${value.stack ?? ''}` : value,
@@ -77,8 +66,6 @@ afterEach(() => {
   client.clear();
 });
 
-// The search settles in the same turn as the tap, so the press runs inside `act` to keep
-// the button's own "searching" state out of React's unwrapped-update warning.
 async function tapExplore(): Promise<void> {
   const button = await screen.findByTestId('featuring-explore');
   await act(async () => {

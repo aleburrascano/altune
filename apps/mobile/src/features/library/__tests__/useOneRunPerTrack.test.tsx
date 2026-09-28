@@ -1,7 +1,3 @@
-// #1702: a list shares one retry/re-acquire mutation, whose pending state named only the
-// last tapped row. Tapping Retry on a second row put the first row's button back while its
-// request was still in flight, so the same track could be retried twice concurrently.
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
@@ -78,8 +74,6 @@ function tapRetry(id: string): void {
   fireEvent.press(button);
 }
 
-// The mutation cache notifies its subscribers on a timer, so the rows that show a
-// spinner instead of a button are one turn of the event loop behind the tap.
 const rowsCatchUp = async (): Promise<void> => {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));

@@ -6,21 +6,14 @@ import { failureLogFields } from '../failureLogFields';
 import type { LibraryChip } from '../activeView';
 import type { SortKey } from '../sort';
 
-/** The library chips whose contents come from a query that can fail. */
 export type LibraryQueryChip = LibraryChip;
 
-/** What a failed library query was asking for, minus the search term itself. */
 export type LibraryQueryContext = {
   chip: LibraryQueryChip;
   sort?: LibrarySort | SortKey;
   isSearching: boolean;
 };
 
-/**
- * A failed library load renders one generic "Something went wrong" whichever chip
- * and whichever failure produced it, so without this line the screen's primary
- * failure mode reaches production logs as nothing at all (#1704).
- */
 export function useLoggedLibraryQueryFailure(
   error: Error | null,
   { chip, sort, isSearching }: LibraryQueryContext,

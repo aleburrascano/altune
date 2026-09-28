@@ -11,9 +11,6 @@ import type { ResultSection } from '@shared/api-client/discovery';
 
 const NATIVE_OS = Platform.OS;
 
-// The wide Discover layout only ever applies on web (see useWideWebLayout);
-// these describe blocks exercise that layout and so need Platform.OS = 'web'
-// for the duration of their tests, restored immediately after each one.
 function useWebPlatform() {
   beforeEach(() => {
     Platform.OS = 'web';
@@ -40,7 +37,6 @@ function renderBody(view: DiscoverView, resultsIncomplete: boolean) {
   render(
     <DiscoverBody
       view={view}
-      // Rows need a PlaybackProvider; the banner does not depend on them, so no sections.
       searchData={{ results, sections: [] }}
       resultsIncomplete={resultsIncomplete}
       historyItems={[]}
@@ -159,9 +155,7 @@ function sectionsWithArtistAndEmptySection(): ResultSection[] {
 }
 
 function noTrackFirstSections(): ResultSection[] {
-  return [
-    { kind: 'album', items: [albumResult(0)], has_more: false },
-  ];
+  return [{ kind: 'album', items: [albumResult(0)], has_more: false }];
 }
 
 function renderSearchBody(sections: ResultSection[], topResult: ReturnType<typeof resultFixture>) {
@@ -219,7 +213,9 @@ function cardBorderColor(): unknown {
 }
 
 function gridCardBorderColor(kind: string, position: number): unknown {
-  return lastMatchingBorderColor(screen.getByTestId(`discover-grid-card-body-${kind}-${position}`).props.style);
+  return lastMatchingBorderColor(
+    screen.getByTestId(`discover-grid-card-body-${kind}-${position}`).props.style,
+  );
 }
 
 describe('wide layout pairs the top result with tracks and grids albums', () => {
@@ -289,8 +285,6 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
   });
 
   it('sizes grid cards for five columns between 920 and 1080px of content width', () => {
-    // Window width stays wide throughout; only the measured grid content
-    // width (from the layout event) should decide the column count.
     mockWindowWidth = 1440;
     renderArtistGridBody();
 
@@ -397,7 +391,11 @@ describe('wide layout grid column exactness and card taps', () => {
     render(
       <DiscoverBody
         view="results"
-        searchData={{ results: [topResult], sections: sectionsWithArtistAndEmptySection(), top_result: topResult }}
+        searchData={{
+          results: [topResult],
+          sections: sectionsWithArtistAndEmptySection(),
+          top_result: topResult,
+        }}
         historyItems={[]}
         filter="all"
         onFilterChange={jest.fn()}
@@ -418,7 +416,9 @@ describe('wide layout grid column exactness and card taps', () => {
       />,
     );
 
-    const artistArtwork = screen.getAllByTestId('artwork').find((node) => node.props.accessibilityLabel === 'Artist 0');
+    const artistArtwork = screen
+      .getAllByTestId('artwork')
+      .find((node) => node.props.accessibilityLabel === 'Artist 0');
     expect(artistArtwork).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('discover-grid-card-artist-0'));
@@ -437,8 +437,16 @@ function probeItem(kind: 'track' | 'album' | 'artist', index: number): ProbeResu
   });
 }
 
-function probeSection(kind: 'track' | 'album' | 'artist', count: number, hasMore = false): ResultSection {
-  return { kind, items: Array.from({ length: count }, (_, i) => probeItem(kind, i)), has_more: hasMore };
+function probeSection(
+  kind: 'track' | 'album' | 'artist',
+  count: number,
+  hasMore = false,
+): ResultSection {
+  return {
+    kind,
+    items: Array.from({ length: count }, (_, i) => probeItem(kind, i)),
+    has_more: hasMore,
+  };
 }
 
 function probeStandardSections(): ResultSection[] {
@@ -596,7 +604,9 @@ describe('wide grids hold one card, cap many, and give way to filters', () => {
 
   it('keeps the twenty-item section cap and see-all in a wide grid', () => {
     mockWindowWidth = 1440;
-    render(probeBody([probeSection('track', 1), probeSection('album', 45, true)], probeItem('track', 9)));
+    render(
+      probeBody([probeSection('track', 1), probeSection('album', 45, true)], probeItem('track', 9)),
+    );
 
     expect(screen.getAllByTestId(/^discover-grid-card-album-\d+$/)).toHaveLength(20);
     expect(screen.getByText('Album 19')).toBeTruthy();
@@ -607,7 +617,10 @@ describe('wide grids hold one card, cap many, and give way to filters', () => {
   it('drops an empty artist section while gridding the albums after it', () => {
     mockWindowWidth = 1440;
     render(
-      probeBody([probeSection('track', 1), probeSection('artist', 0), probeSection('album', 3)], probeItem('track', 9)),
+      probeBody(
+        [probeSection('track', 1), probeSection('artist', 0), probeSection('album', 3)],
+        probeItem('track', 9),
+      ),
     );
 
     expect(screen.queryByTestId('discover-grid-artist')).toBeNull();
@@ -685,13 +698,18 @@ describe('wide cards keep focus and hover visible and still open on press', () =
 
     fireEvent.press(screen.getByTestId('discover-top-result'));
     expect(onResultTap).toHaveBeenCalledTimes(1);
-    expect(onResultTap).toHaveBeenCalledWith(expect.objectContaining({ title: 'Track 9' }), expect.any(Number));
+    expect(onResultTap).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Track 9' }),
+      expect.any(Number),
+    );
   });
 
   it('reports the same result and position for a press at 1440px as for the same item at 390px', () => {
     const narrowTap = jest.fn();
     mockWindowWidth = 390;
-    const { unmount } = render(probeBody(probeStandardSections(), probeItem('track', 9), narrowTap));
+    const { unmount } = render(
+      probeBody(probeStandardSections(), probeItem('track', 9), narrowTap),
+    );
     fireEvent.press(screen.getByTestId('discover-row-album-2'));
     fireEvent.press(screen.getByTestId('discover-row-artist-1'));
     fireEvent.press(screen.getByTestId('discover-top-result'));
@@ -747,18 +765,13 @@ describe('wide Discover is web only', () => {
   });
 });
 
-describe('wide layout grid columns follow the grid\'s own measured width, not the window', () => {
+describe("wide layout grid columns follow the grid's own measured width, not the window", () => {
   useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
 
   it('sizes columns from a layout event reporting a narrower content width than the window', () => {
-    // The grid renders beside a 240px sidebar inside Screen's capped content
-    // column, so a wide 1440px window can still measure a much narrower grid.
-    // 900px of content is below the five-column breakpoint even though 1440px
-    // of window is not, so this only passes if columns follow the layout
-    // event, not useWindowDimensions.
     mockWindowWidth = 1440;
     renderArtistGridBody();
 

@@ -62,8 +62,6 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 beforeEach(() => {
   queryClient = new QueryClient({
-    // A mutation carrying its own retry policy (clear-history) ignores the
-    // default below, so the delay is pinned to keep its exhaustion instant.
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false, retryDelay: 0 },
@@ -73,7 +71,6 @@ beforeEach(() => {
   mockSuggest.mockReset();
   mockHistory.mockReset();
   mockClearHistory.mockReset();
-  // Restored input long enough to enable the suggest query without a committed search.
   setSearchState('', 'rad');
 });
 

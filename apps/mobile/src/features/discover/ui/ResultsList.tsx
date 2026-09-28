@@ -42,7 +42,9 @@ function pairedHeaderInfo<T>(item: T): ListRenderItemInfo<T> {
   return { item, index: 0, separators: noopSeparators };
 }
 
-function PairedHeader<T>({ headerExtra, item, renderItem }: { headerExtra: ReactNode; item: T; renderItem: ListRenderItem<T> }): ReactElement {
+type PairedHeaderProps<T> = { headerExtra: ReactNode; item: T; renderItem: ListRenderItem<T> };
+
+function PairedHeader<T>({ headerExtra, item, renderItem }: PairedHeaderProps<T>): ReactElement {
   return (
     <View style={styles.pairedRow} testID="discover-top-pair">
       <View style={styles.pairedSide}>{headerExtra}</View>
@@ -54,36 +56,113 @@ function PairedHeader<T>({ headerExtra, item, renderItem }: { headerExtra: React
 function CorrectionHeader({ common }: { common: ResultsCommonProps }): ReactElement | null {
   if (common.correction == null) return null;
   const { corrected, original } = common.correction;
-  return <CorrectionBanner correctedQuery={corrected} originalQuery={original} onSearchOriginal={common.onSearchOriginal} />;
+  return (
+    <CorrectionBanner
+      correctedQuery={corrected}
+      originalQuery={original}
+      onSearchOriginal={common.onSearchOriginal}
+    />
+  );
 }
 
-function ResultsHeader<T>({ common, paired, headerExtra, firstItem, renderItem }: { common: ResultsCommonProps; paired: boolean; headerExtra: ReactNode; firstItem: T; renderItem: ListRenderItem<T> }): ReactElement {
+type ResultsHeaderProps<T> = {
+  common: ResultsCommonProps;
+  paired: boolean;
+  headerExtra: ReactNode;
+  firstItem: T;
+  renderItem: ListRenderItem<T>;
+};
+
+function pairedOrExtra<T>(props: ResultsHeaderProps<T>): ReactNode {
+  const { paired, headerExtra, firstItem, renderItem } = props;
+  if (!paired) return headerExtra;
+  return <PairedHeader headerExtra={headerExtra} item={firstItem} renderItem={renderItem} />;
+}
+
+function ResultsHeader<T>(props: ResultsHeaderProps<T>): ReactElement {
   return (
     <>
-      <CorrectionHeader common={common} />
-      {paired ? <PairedHeader headerExtra={headerExtra} item={firstItem} renderItem={renderItem} /> : headerExtra}
+      <CorrectionHeader common={props.common} />
+      {pairedOrExtra(props)}
     </>
   );
 }
 
-function ResultsFlatList<T>({ items, header, keyExtractor, renderItem, common }: { items: T[]; header: ReactElement; keyExtractor: (item: T, index: number) => string; renderItem: ListRenderItem<T>; common: ResultsCommonProps }): ReactElement {
-  return (
-    <FlatList data={items} keyExtractor={keyExtractor} renderItem={renderItem} ListHeaderComponent={header}
-      ListFooterComponent={<ResultsFooter common={common} />} style={styles.list} contentContainerStyle={styles.listContent}
-      showsVerticalScrollIndicator={false} onRefresh={common.onRefresh} refreshing={common.isRefreshing}
-      onViewableItemsChanged={common.impression.onViewableItemsChanged} viewabilityConfig={common.impression.viewabilityConfig}
-      onEndReached={common.onEndReached} onEndReachedThreshold={0.5} />
-  );
+type ResultsFlatListProps<T> = {
+  items: T[];
+  header: ReactElement;
+  keyExtractor: (item: T, index: number) => string;
+  renderItem: ListRenderItem<T>;
+  common: ResultsCommonProps;
+};
+
+function flatListImpressionProps(common: ResultsCommonProps) {
+  return {
+    onViewableItemsChanged: common.impression.onViewableItemsChanged,
+    viewabilityConfig: common.impression.viewabilityConfig,
+  };
 }
 
-export function ResultsList<T>({ data: items, keyExtractor, renderItem, headerExtra, common, pairFirstItemWithHeader }: ResultsListProps<T>): ReactElement {
+function flatListChromeProps(header: ReactElement, common: ResultsCommonProps) {
+  return {
+    ListHeaderComponent: header,
+    ListFooterComponent: <ResultsFooter common={common} />,
+    style: styles.list,
+    contentContainerStyle: styles.listContent,
+    showsVerticalScrollIndicator: false,
+  };
+}
+
+function flatListRefreshProps(common: ResultsCommonProps) {
+  return {
+    onRefresh: common.onRefresh,
+    refreshing: common.isRefreshing,
+    ...flatListImpressionProps(common),
+    onEndReached: common.onEndReached,
+    onEndReachedThreshold: 0.5,
+  };
+}
+
+function flatListProps<T>(props: ResultsFlatListProps<T>) {
+  const { header, keyExtractor, renderItem, common } = props;
+  return {
+    keyExtractor,
+    renderItem,
+    ...flatListChromeProps(header, common),
+    ...flatListRefreshProps(common),
+  };
+}
+
+function ResultsFlatList<T>(props: ResultsFlatListProps<T>): ReactElement {
+  return <FlatList data={props.items} {...flatListProps(props)} />;
+}
+
+function usePairedFirstItem<T>(
+  items: T[],
+  pairFirstItemWithHeader: boolean | undefined,
+  headerExtra: ReactNode,
+) {
   const isWide = useWideWebLayout();
-  const paired = isWide && pairFirstItemWithHeader === true && items.length > 0 && headerExtra != null;
-  const listItems = paired ? items.slice(1) : items;
-  const header = (
-    <ResultsHeader common={common} paired={paired} headerExtra={headerExtra} firstItem={items[0] as T} renderItem={renderItem} />
-  );
-  return <ResultsFlatList items={listItems} header={header} keyExtractor={keyExtractor} renderItem={renderItem} common={common} />;
+  const paired =
+    isWide && pairFirstItemWithHeader === true && items.length > 0 && headerExtra != null;
+  return { paired, listItems: paired ? items.slice(1) : items };
+}
+
+function resultsHeaderProps<T>(props: ResultsListProps<T>, paired: boolean): ResultsHeaderProps<T> {
+  const { common, headerExtra, renderItem } = props;
+  return { common, paired, headerExtra, firstItem: props.data[0] as T, renderItem };
+}
+
+function resultsFlatListProps<T>(props: ResultsListProps<T>, listItems: T[], header: ReactElement) {
+  const { keyExtractor, renderItem, common } = props;
+  return { items: listItems, header, keyExtractor, renderItem, common };
+}
+
+export function ResultsList<T>(props: ResultsListProps<T>): ReactElement {
+  const { data: items, pairFirstItemWithHeader, headerExtra } = props;
+  const { paired, listItems } = usePairedFirstItem(items, pairFirstItemWithHeader, headerExtra);
+  const header = <ResultsHeader {...resultsHeaderProps(props, paired)} />;
+  return <ResultsFlatList {...resultsFlatListProps(props, listItems, header)} />;
 }
 
 function ResultsFooter({ common }: { common: ResultsCommonProps }): ReactElement | null {

@@ -72,9 +72,9 @@ describe('artistToDiscoveryResult — server-grouped artist row to a discovery c
   });
 
   it('passes the artist artwork through as image_url', () => {
-    expect(artistToDiscoveryResult(makeArtist({ artwork_url: 'https://a.example/x.jpg' })).image_url).toBe(
-      'https://a.example/x.jpg',
-    );
+    expect(
+      artistToDiscoveryResult(makeArtist({ artwork_url: 'https://a.example/x.jpg' })).image_url,
+    ).toBe('https://a.example/x.jpg');
   });
 
   it('never borrows track_count into an artist card, unlike an album card', () => {

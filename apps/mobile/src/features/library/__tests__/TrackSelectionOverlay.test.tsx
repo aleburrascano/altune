@@ -1,8 +1,3 @@
-// Regression for issue #791: the track selection outlived the list it was made
-// against. Selecting tracks, then editing the search query (a new visible list)
-// left stale ids in the selection, so the header count, "select all" and the
-// bulk actions disagreed with what was actually on screen.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useEffect, type ReactElement } from 'react';
@@ -108,7 +103,6 @@ describe('track selection reconciles against the live track list (#791)', () => 
     selectAllOf(oldResults);
     expect(screen.getByTestId('selection-count')).toHaveTextContent('3 selected');
 
-    // New query: only "b" survives, plus a track that was never selected.
     rerenderWith([track('b'), track('d')]);
 
     expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected');
@@ -120,7 +114,6 @@ describe('track selection reconciles against the live track list (#791)', () => 
     const { rerenderWith } = renderWith(oldResults);
     selectAllOf(oldResults);
 
-    // Three different tracks: raw count 3 === length 3, but none are selected.
     const unrelated = [track('x'), track('y'), track('z')];
     rerenderWith(unrelated);
 
@@ -145,7 +138,6 @@ describe('track selection reconciles against the live track list (#791)', () => 
 
   it('select all then deselect all toggles against the live list, not the stale count', () => {
     const { rerenderWith } = renderWith(oldResults);
-    // Two selected; the new list also has two tracks but only "a" is one of them.
     selectAllOf([track('a'), track('b')]);
     const next = [track('a'), track('d')];
     rerenderWith(next);
