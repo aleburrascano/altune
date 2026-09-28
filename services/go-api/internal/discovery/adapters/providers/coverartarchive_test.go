@@ -117,6 +117,57 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 	})
 }
 
+func TestCoverArtArchiveIdentityResolver_ResolveByIdentity(t *testing.T) {
+	t.Run("title-blind: an unrelated title/subtitle never changes the answer", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.URL.Path, "/release-group/rg-1/front-1200") {
+				t.Errorf("path = %q, want the mbid-keyed front-1200 endpoint", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveIdentityResolver(NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindAlbum,
+			ports.ArtworkIdentity{MBID: "rg-1"})
+		if err != nil {
+			t.Fatalf("ResolveByIdentity: %v", err)
+		}
+		if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
+			t.Errorf("url = %q, want the canonical front-1200 URL from the mbid alone", url)
+		}
+	})
+
+	t.Run("empty mbid is a silent miss with no request", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected without an mbid")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveIdentityResolver(NewCoverArtArchiveResolver(newTestClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindAlbum, ports.ArtworkIdentity{})
+		if err != nil || url != "" {
+			t.Errorf("ResolveByIdentity = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+
+	t.Run("artist kind never resolves (CAA is release art)", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected for an artist kind")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		r := NewCoverArtArchiveIdentityResolver(NewCoverArtArchiveResolver(newTestClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
+			ports.ArtworkIdentity{MBID: "mbid-1"})
+		if err != nil || url != "" {
+			t.Errorf("ResolveByIdentity = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+}
+
 func TestCoverArtArchiveResolver_ArtworkSource(t *testing.T) {
 	if (&CoverArtArchiveResolver{}).ArtworkSource() != "coverartarchive" {
 		t.Error("ArtworkSource mismatch")

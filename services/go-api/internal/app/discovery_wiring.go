@@ -390,7 +390,9 @@ func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
-	artworkResolvers = append(artworkResolvers, providers.NewCoverArtArchiveResolver(cf.discovery()))
+	coverArtArchive := providers.NewCoverArtArchiveResolver(cf.discovery())
+	artworkResolvers = append(artworkResolvers, coverArtArchive,
+		providers.NewCoverArtArchiveIdentityResolver(coverArtArchive))
 	if cfg.HasSpotify() {
 		artworkResolvers = append(artworkResolvers, providers.NewSpotifyArtworkResolver(cf.discovery()))
 	}

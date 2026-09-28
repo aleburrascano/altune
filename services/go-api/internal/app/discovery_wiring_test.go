@@ -2,6 +2,9 @@ package app
 
 import (
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
+	"altune/go-api/internal/discovery/adapters/providers"
+	discoveryDomain "altune/go-api/internal/discovery/domain"
+	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"io"
@@ -75,5 +78,127 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 				t.Errorf("provider counters moved by %d over %d provider calls, want one count per call", counted, rt.roundTrips())
 			}
 		})
+	}
+}
+
+type enrichRealChainFakeEnricher struct {
+	enrichment discoveryDomain.MBEnrichment
+}
+
+func (f *enrichRealChainFakeEnricher) ResolveMBID(_ context.Context, _ discoveryDomain.ResultKind, _, _ string) (string, error) {
+	return "", nil
+}
+
+func (f *enrichRealChainFakeEnricher) Lookup(_ context.Context, _ discoveryDomain.ResultKind, _ string) (discoveryDomain.MBEnrichment, error) {
+	return f.enrichment, nil
+}
+
+type enrichRealChainMemCache struct {
+	pos map[string]discoveryDomain.MBEnrichment
+	neg map[string]bool
+}
+
+func newEnrichRealChainMemCache() *enrichRealChainMemCache {
+	return &enrichRealChainMemCache{pos: map[string]discoveryDomain.MBEnrichment{}, neg: map[string]bool{}}
+}
+
+func (c *enrichRealChainMemCache) Get(_ context.Context, kind discoveryDomain.ResultKind, mbid string) (discoveryDomain.MBEnrichment, bool, error) {
+	e, ok := c.pos[kind.String()+"|"+mbid]
+	return e, ok, nil
+}
+
+func (c *enrichRealChainMemCache) Set(_ context.Context, kind discoveryDomain.ResultKind, mbid string, e discoveryDomain.MBEnrichment) error {
+	c.pos[kind.String()+"|"+mbid] = e
+	return nil
+}
+
+func (c *enrichRealChainMemCache) GetNegative(_ context.Context, kind discoveryDomain.ResultKind, nameKey string) (bool, error) {
+	return c.neg[kind.String()+"|"+nameKey], nil
+}
+
+func (c *enrichRealChainMemCache) SetNegative(_ context.Context, kind discoveryDomain.ResultKind, nameKey string) error {
+	c.neg[kind.String()+"|"+nameKey] = true
+	return nil
+}
+
+func enrichRealChainSampleEnrichment() discoveryDomain.MBEnrichment {
+	e := discoveryDomain.EmptyEnrichment()
+	e.MBID = "mbid-1"
+	e.Genres = []string{"hip hop"}
+	e.Year = 2017
+	return e
+}
+
+type enrichTestHostRewriteTransport struct {
+	targetURL string
+}
+
+func (t *enrichTestHostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.URL.Scheme = "http"
+	req.URL.Host = strings.TrimPrefix(t.targetURL, "http://")
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func rewrittenClient(targetURL string) *http.Client {
+	return &http.Client{Transport: &enrichTestHostRewriteTransport{targetURL: targetURL}}
+}
+
+func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t *testing.T) {
+	caaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodHead {
+			t.Errorf("method = %q, want HEAD", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer caaServer.Close()
+
+	caa := providers.NewCoverArtArchiveResolver(rewrittenClient(caaServer.URL))
+	chain := providers.NewChainedArtworkResolver(caa, providers.NewCoverArtArchiveIdentityResolver(caa))
+
+	enr := &enrichRealChainFakeEnricher{enrichment: enrichRealChainSampleEnrichment()}
+	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
+
+	got, err := svc.Execute(context.Background(), discoveryDomain.ResultKindAlbum,
+		"Some Other Album", "Other Artist", "mbid-1")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	want := "https://coverartarchive.org/release-group/mbid-1/front-1200"
+	if got.ArtworkURL != want {
+		t.Errorf("artwork_url = %q, want the real chain's mbid-native CoverArtArchive answer %q — "+
+			"the caller-supplied-mbid path must still reach a title-blind provider instead of a "+
+			"verified-empty miss that would poison the shared cache with a blank cover", got.ArtworkURL, want)
+	}
+}
+
+func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalIDs(t *testing.T) {
+	discogsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/artists/38" {
+			t.Errorf("path = %q, want the exact bridged discogs id, no name search", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id": 38, "images": [{"type": "primary", "uri": "https://img/real-cover.jpg"}]}`))
+	}))
+	defer discogsServer.Close()
+
+	discogs := providers.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
+	chain := providers.NewChainedArtworkResolver(discogs)
+
+	e := discoveryDomain.EmptyEnrichment()
+	e.MBID = "mbid-artist-1"
+	e.ExternalIDs = map[string]string{"discogs": "38"}
+	enr := &enrichRealChainFakeEnricher{enrichment: e}
+	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
+
+	got, err := svc.Execute(context.Background(), discoveryDomain.ResultKindArtist,
+		"Some Other Artist Name", "", "mbid-artist-1")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got.ArtworkURL != "https://img/real-cover.jpg" {
+		t.Errorf("artwork_url = %q, want the bridged Discogs id's real cover — "+
+			"the caller-supplied-mbid path must forward the MB-known ExternalIDs, not resolve on mbid alone",
+			got.ArtworkURL)
 	}
 }

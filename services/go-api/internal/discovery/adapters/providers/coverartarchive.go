@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"fmt"
 	"net/http"
@@ -57,3 +58,17 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 func (*CoverArtArchiveResolver) ArtworkSource() domain.ProviderKey {
 	return domain.ProviderKeyCoverArtArchive
 }
+
+type CoverArtArchiveIdentityResolver struct {
+	*CoverArtArchiveResolver
+}
+
+func NewCoverArtArchiveIdentityResolver(r *CoverArtArchiveResolver) CoverArtArchiveIdentityResolver {
+	return CoverArtArchiveIdentityResolver{CoverArtArchiveResolver: r}
+}
+
+func (r CoverArtArchiveIdentityResolver) ResolveByIdentity(ctx context.Context, kind domain.ResultKind, id ports.ArtworkIdentity) (string, error) {
+	return r.Resolve(ctx, kind, "", "", id.MBID)
+}
+
+var _ ports.IdentityArtworkResolver = CoverArtArchiveIdentityResolver{}

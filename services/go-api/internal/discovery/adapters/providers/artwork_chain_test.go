@@ -328,6 +328,49 @@ func TestChainedArtworkResolver_CoverArtArchive404IsAVerifiedMiss(t *testing.T) 
 	}
 }
 
+func TestChainedArtworkResolver_CoverArtArchiveAnswersIdentityWalkOnMBIDAlone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	caa := NewCoverArtArchiveResolver(newNoFollowTestClient(srv.URL))
+	chain := NewChainedArtworkResolver(caa, NewCoverArtArchiveIdentityResolver(caa))
+	url, source, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindAlbum,
+		"An unrelated title", "An unrelated subtitle", ports.ArtworkIdentity{MBID: "rg-1"})
+
+	if err != nil {
+		t.Fatalf("ResolveWithIdentityTagged: %v", err)
+	}
+	if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
+		t.Errorf("url = %q, want CoverArtArchive's mbid-native answer reached from the identity walk", url)
+	}
+	if source != domain.ProviderKeyCoverArtArchive {
+		t.Errorf("source = %q, want %q", source, domain.ProviderKeyCoverArtArchive)
+	}
+}
+
+func TestChainedArtworkResolver_CoverArtArchiveStillAnswersResolveTaggedAlongsideItsIdentityWrapper(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	caa := NewCoverArtArchiveResolver(newNoFollowTestClient(srv.URL))
+	chain := NewChainedArtworkResolver(caa, NewCoverArtArchiveIdentityResolver(caa))
+	url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindAlbum, "Album", "Artist", "rg-1")
+
+	if err != nil {
+		t.Fatalf("ResolveTagged: %v", err)
+	}
+	if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
+		t.Errorf("url = %q, want CoverArtArchive still reachable from the name walk", url)
+	}
+	if source != domain.ProviderKeyCoverArtArchive {
+		t.Errorf("source = %q, want %q", source, domain.ProviderKeyCoverArtArchive)
+	}
+}
+
 func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

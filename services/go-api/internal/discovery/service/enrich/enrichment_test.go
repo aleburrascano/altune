@@ -41,6 +41,10 @@ func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _
 }
 
 func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
+	f.calls++
+	if f.url != "" || f.err != nil {
+		return f.url, "", f.err
+	}
 	return "", "", nil
 }
 
@@ -220,5 +224,94 @@ func TestEnrichmentService_Unresolved_NegativeCached(t *testing.T) {
 	}
 	if enr.lookups != 0 {
 		t.Errorf("lookups = %d, want 0 (never resolved an mbid)", enr.lookups)
+	}
+}
+
+type nameVsIdentityArtwork struct {
+	nameCalls     int
+	identityCalls int
+	nameURL       string
+	identityURL   string
+}
+
+func (f *nameVsIdentityArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
+	f.nameCalls++
+	return f.nameURL, "", nil
+}
+
+func (f *nameVsIdentityArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
+	f.identityCalls++
+	if id.MBID == "" {
+		return "", "", nil
+	}
+	return f.identityURL, "", nil
+}
+
+func TestEnrichmentService_CallerSuppliedMBID_DoesNotMergeNameDerivedArtwork(t *testing.T) {
+	enr := &fakeEnricher{enrichment: sampleEnrichment()}
+	art := &nameVsIdentityArtwork{nameURL: "https://poisoned/from-unrelated-title.jpg"}
+	cache := newMemCache()
+	svc := NewEnrichmentService(enr, art, cache)
+
+	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum,
+		"Some Other Album", "Other Artist", "mbid-1")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got.ArtworkURL == art.nameURL {
+		t.Errorf("artwork_url = %q, a caller-supplied mbid must not pick up name-derived art from an unverified title/subtitle", got.ArtworkURL)
+	}
+	if art.nameCalls != 0 {
+		t.Errorf("name-based artwork resolver called %d times, want 0 on the caller-supplied mbid path", art.nameCalls)
+	}
+	if art.identityCalls != 1 {
+		t.Errorf("identity-based artwork resolver called %d times, want 1", art.identityCalls)
+	}
+
+	cached, found, _ := cache.Get(context.Background(), domain.ResultKindAlbum, "mbid-1")
+	if !found {
+		t.Fatalf("expected the mbid-keyed entry to be cached")
+	}
+	if cached.ArtworkURL == art.nameURL {
+		t.Errorf("cached artwork_url = %q, the poisoned cover must not reach the shared cache entry", cached.ArtworkURL)
+	}
+}
+
+func TestEnrichmentService_CallerSuppliedMBID_UsesIdentityArtworkWhenAvailable(t *testing.T) {
+	enr := &fakeEnricher{enrichment: sampleEnrichment()}
+	art := &nameVsIdentityArtwork{
+		nameURL:     "https://poisoned/from-unrelated-title.jpg",
+		identityURL: "https://caa/real-cover.jpg",
+	}
+	svc := NewEnrichmentService(enr, art, newMemCache())
+
+	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum,
+		"Some Other Album", "Other Artist", "mbid-1")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got.ArtworkURL != art.identityURL {
+		t.Errorf("artwork_url = %q, want the identity-resolved cover %q", got.ArtworkURL, art.identityURL)
+	}
+}
+
+func TestEnrichmentService_ResolvedFromTitle_FallsBackToNameSearchWhenIdentityMisses(t *testing.T) {
+	enr := &fakeEnricher{resolveID: "mbid-title-1", enrichment: sampleEnrichment()}
+	art := &nameVsIdentityArtwork{nameURL: "https://caa/name-derived.jpg"}
+	cache := newMemCache()
+	svc := NewEnrichmentService(enr, art, cache)
+
+	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got.ArtworkURL != art.nameURL {
+		t.Errorf("artwork_url = %q, want the name search's cover %q once the identity walk missed", got.ArtworkURL, art.nameURL)
+	}
+	if art.identityCalls != 1 {
+		t.Errorf("identity resolver called %d times, want 1 (tried first even on the trusted, title-resolved path)", art.identityCalls)
+	}
+	if art.nameCalls != 1 {
+		t.Errorf("name resolver called %d times, want 1 (the fallback this path is allowed to take)", art.nameCalls)
 	}
 }

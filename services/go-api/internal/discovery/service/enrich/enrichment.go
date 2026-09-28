@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"log/slog"
 )
 
@@ -46,7 +47,7 @@ func (s *EnrichmentService) Execute(
 	// A caller-supplied MBID skips resolution (and its name-keyed negative memo)
 	// and goes straight to the MBID-keyed lookup+cache.
 	if mbidParam != "" {
-		return s.lookup(ctx, kind, title, subtitle, mbidParam)
+		return s.lookup(ctx, kind, title, subtitle, mbidParam, false)
 	}
 
 	// The resolution step reuses the shared CachedLookup for its name-keyed
@@ -72,7 +73,7 @@ func (s *EnrichmentService) Execute(
 			if s.mbidIndex != nil {
 				_ = s.mbidIndex.RememberMBID(ctx, kind, nameKey, mbid)
 			}
-			e, err := s.lookup(ctx, kind, title, subtitle, mbid)
+			e, err := s.lookup(ctx, kind, title, subtitle, mbid, true)
 			if err != nil {
 				return e, false, err
 			}
@@ -90,6 +91,7 @@ func (s *EnrichmentService) lookup(
 	ctx context.Context,
 	kind domain.ResultKind,
 	title, subtitle, mbid string,
+	resolvedFromTitle bool,
 ) (domain.MBEnrichment, error) {
 	if s.cache != nil {
 		if cached, found, _ := s.cache.Get(ctx, kind, mbid); found {
@@ -104,7 +106,7 @@ func (s *EnrichmentService) lookup(
 		return domain.EmptyEnrichment(), degraded(err)
 	}
 
-	artworkErr := s.mergeArtwork(ctx, &e, kind, title, subtitle, mbid)
+	artworkErr := s.mergeArtwork(ctx, &e, kind, title, subtitle, mbid, resolvedFromTitle)
 	if ports.IsUnverifiedArtworkMiss(e.ArtworkURL, artworkErr) {
 		slog.WarnContext(ctx, "enrichment.not_cached_degraded",
 			"kind", kind.String(), "mbid", mbid, "error", artworkErr)
@@ -124,15 +126,25 @@ func (s *EnrichmentService) mergeArtwork(
 	e *domain.MBEnrichment,
 	kind domain.ResultKind,
 	title, subtitle, mbid string,
+	resolvedFromTitle bool,
 ) error {
 	if s.artwork == nil {
 		return nil
 	}
-	url, _, err := s.artwork.ResolveTagged(ctx, kind, title, subtitle, mbid)
-	if url == "" {
-		return err
+	id := ports.ArtworkIdentity{MBID: mbid, ExternalIDs: e.ExternalIDs}
+	idURL, _, idErr := s.artwork.ResolveWithIdentityTagged(ctx, kind, title, subtitle, id)
+	if idURL != "" {
+		e.ArtworkURL = idURL
+		return nil
 	}
-	e.ArtworkURL = url
+	if !resolvedFromTitle {
+		return idErr
+	}
+	nameURL, _, nameErr := s.artwork.ResolveTagged(ctx, kind, title, subtitle, mbid)
+	if nameURL == "" {
+		return errors.Join(idErr, nameErr)
+	}
+	e.ArtworkURL = nameURL
 	return nil
 }
 
