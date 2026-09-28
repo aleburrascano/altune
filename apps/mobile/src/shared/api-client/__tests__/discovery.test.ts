@@ -827,7 +827,6 @@ describe('search_id', () => {
 });
 
 describe('wire parsing', () => {
-
   function fullResult(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       kind: 'track',
@@ -860,7 +859,11 @@ describe('wire parsing', () => {
       corrected_query: 'radiohead',
       original_query: 'radiohed',
       related: [
-        { relationship: 'similar', related_to: 'Radiohead', items: [fullResult({ kind: 'artist' })] },
+        {
+          relationship: 'similar',
+          related_to: 'Radiohead',
+          items: [fullResult({ kind: 'artist' })],
+        },
       ],
     });
 
@@ -930,7 +933,10 @@ describe('wire parsing', () => {
 
     it('rejects an off-contract result confidence', () => {
       expect(() =>
-        parseDiscoverySearchResponse({ ...base(), results: [fullResult({ confidence: 'extreme' })] }),
+        parseDiscoverySearchResponse({
+          ...base(),
+          results: [fullResult({ confidence: 'extreme' })],
+        }),
       ).toThrow(ContractError);
     });
 

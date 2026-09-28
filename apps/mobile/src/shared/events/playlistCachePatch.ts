@@ -9,11 +9,6 @@ import type {
 } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 
-/**
- * Applies revise to the playlist wherever the collection is cached: the sheet's single
- * response and the library grid's pages hold the same playlists under two keys, and a
- * patched event never reaches the one it was not written for.
- */
 function revisePlaylistEverywhere(
   queryClient: QueryClient,
   playlistId: PlaylistId,
@@ -71,11 +66,6 @@ function dropTracksFromDetail(
   });
 }
 
-/**
- * One read and one write for the whole batch, so a bulk removal from a long playlist stays
- * linear in its length. A cached detail is the authority on what is left; without one the
- * summary caches can only assume every named track really was on the playlist.
- */
 export function removeTracksFromPlaylistCache(
   queryClient: QueryClient,
   playlistId: PlaylistId,

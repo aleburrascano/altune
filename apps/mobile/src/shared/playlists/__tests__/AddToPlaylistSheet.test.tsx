@@ -76,12 +76,6 @@ afterEach(() => {
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
   it('a resolveTrackIds rejection, from a Track that failed to save, closes the sheet without ever calling the batch-add endpoint', async () => {
-    // Seed the picker's list into the query cache instead of stubbing the GET.
-    // On CI, when this ran first in its jest worker, waiting on the network-backed
-    // GET to render the row starved to a 5000ms timeout (green wherever the worker
-    // ordering differed). A cache-seeded query resolves synchronously with
-    // staleTime Infinity, so the row is present without any request or timer —
-    // the same technique the liveness test below relies on.
     const queryClient = freshClient();
     queryClient.setQueryData(playlistKeys.list, {
       items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })],
@@ -93,11 +87,6 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
     const row = await screen.findByTestId('add-to-playlist-p1');
     fireEvent.press(row);
 
-    // The rejection settles through microtasks: await resolveTrackIds() throws ->
-    // catch -> close() (-> onClose) -> finally setResolving(false). Flush those
-    // microtasks rather than wrapping in act(...), which under React 19.2 (Expo
-    // 57) never settles on a rejected in-flight resolve. These assertions read
-    // mock counters, not rendered output, so a microtask drain is deterministic.
     for (let i = 0; i < 5; i++) {
       await Promise.resolve();
     }
@@ -120,8 +109,6 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
     });
 
     fireEvent.press(await screen.findByTestId('add-to-playlist-p1'));
-    // Same microtask drain as the test above: act(...) never settles a rejected
-    // in-flight resolve under React 19.2.
     for (let i = 0; i < 5; i++) {
       await Promise.resolve();
     }
@@ -141,8 +128,6 @@ describe("AddToPlaylistSheet(): withTrackIds's trackIds.length > 0 guard (:62)",
     const { onClose } = renderSheet({ resolveTrackIds });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    // React 19.2: settle the empty-resolve continuation inside act so busy
-    // clears deterministically instead of racing a floating promise.
     await act(async () => {
       fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
     });
@@ -162,8 +147,6 @@ describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-
       status: 200,
       json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
-    // Empty resolve → no mutation keeps the row disabled, so busy clears the
-    // instant the resolve settles: the case the SDK-57 double dispatch bit.
     const resolveTrackIds = jest.fn().mockResolvedValue([]);
     const { onClose } = renderSheet({ resolveTrackIds });
 
@@ -175,8 +158,6 @@ describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-
     expect(resolveTrackIds).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull();
 
-    // The row is enabled again, but the single-flight lock must still swallow a
-    // replayed press so resolveTrackIds does not run a second time.
     await act(async () => {
       fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
     });
@@ -193,8 +174,6 @@ describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-
       within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' });
     await waitFor(() => closeButton());
 
-    // A re-run rejected continuation / re-dispatched close must not call onClose
-    // twice; the idempotent guard drops the repeat.
     fireEvent.press(closeButton());
     fireEvent.press(closeButton());
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -403,9 +382,6 @@ describe('AddToPlaylistSheet(): the playlist query is enabled only while visible
         </QueryClientProvider>,
       );
 
-      // Let the whole async chain a wrongly-enabled query would run through
-      // (supabase.auth.getSession() -> apiFetch -> fetch) actually settle,
-      // instead of only checking the instant before any of it could resolve.
       await act(async () => {
         await jest.advanceTimersByTimeAsync(0);
       });
@@ -852,7 +828,13 @@ describe('AddToPlaylistSheet(): pressed rows dim', () => {
         fireEvent(row, 'responderGrant', {
           persist: () => {},
           currentTarget: { measure: () => {} },
-          nativeEvent: { timestamp: Date.now(), pageX: 0, pageY: 0, touches: [], changedTouches: [] },
+          nativeEvent: {
+            timestamp: Date.now(),
+            pageX: 0,
+            pageY: 0,
+            touches: [],
+            changedTouches: [],
+          },
         });
       });
 

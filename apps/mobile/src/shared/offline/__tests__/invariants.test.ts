@@ -7,7 +7,6 @@ import { asTrackId } from '@shared/api-client/ids';
 import { downloadPinned, pinnedDir } from '../pinnedFiles';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');
-// The FileStore adapter the offline modules write through picks the root directory.
 const FILE_STORE_DIR = path.resolve(__dirname, '..', '..', 'files');
 const DOCUMENT_ROOT = 'file:///document';
 const CACHE_ROOT = 'file:///cache';

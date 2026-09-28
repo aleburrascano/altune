@@ -10,8 +10,6 @@ import { playlistKeys } from '@shared/lib/query-keys';
 import { PLAYLIST_HANDLERS } from '../playlistEvents';
 import type { ServerEvent } from '../sse-client';
 
-// The detail, the list and the library grid's pages: the three caches a removal patches, and
-// the ceiling a whole batch must stay under however many tracks it names.
 const PATCHED_CACHES = 3;
 
 const BATCH_PLAYLIST = 3000;

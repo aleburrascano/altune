@@ -41,11 +41,17 @@ function importSpecifiers(source: string, includeTypeOnly: boolean): string[] {
 
 function namedValueImportsFrom(source: string, moduleSpecifier: string): string[] {
   const names: string[] = [];
-  const re = new RegExp(`import\\s+(type\\s+)?\\{([^}]*)\\}\\s+from\\s+['"]${moduleSpecifier}['"]`, 'g');
+  const re = new RegExp(
+    `import\\s+(type\\s+)?\\{([^}]*)\\}\\s+from\\s+['"]${moduleSpecifier}['"]`,
+    'g',
+  );
   for (const match of source.matchAll(re)) {
     if (match[1]) continue;
     for (const raw of match[2]!.split(',')) {
-      const name = raw.trim().split(/\s+as\s+/)[0]!.trim();
+      const name = raw
+        .trim()
+        .split(/\s+as\s+/)[0]!
+        .trim();
       if (name) names.push(name);
     }
   }
@@ -180,7 +186,9 @@ describe('rule 3 — no feature imports from shared/playlists', () => {
   });
 
   it('the feature-import detector fires on the alias form, the relative form, and even a type-only import', () => {
-    expect(featureImportViolations("import { X } from '@features/library';")).toEqual(['@features/library']);
+    expect(featureImportViolations("import { X } from '@features/library';")).toEqual([
+      '@features/library',
+    ]);
     expect(featureImportViolations("import { X } from '../../features/library/hooks';")).toEqual([
       '../../features/library/hooks',
     ]);
@@ -223,11 +231,14 @@ describe('rule 4 — components never call playlist write functions directly; on
 
   it('AddToPlaylistSheet is allowed to call the read function getPlaylists, and only that one', () => {
     const sheetSource = fs.readFileSync(path.join(SLICE_DIR, 'AddToPlaylistSheet.tsx'), 'utf8');
-    expect(namedValueImportsFrom(sheetSource, '@shared/api-client/playlists')).toEqual(['getPlaylists']);
+    expect(namedValueImportsFrom(sheetSource, '@shared/api-client/playlists')).toEqual([
+      'getPlaylists',
+    ]);
   });
 
   it('the writer-import detector fires when a component imports createPlaylist directly', () => {
-    const violating = "import { createPlaylist, getPlaylists } from '@shared/api-client/playlists';";
+    const violating =
+      "import { createPlaylist, getPlaylists } from '@shared/api-client/playlists';";
     expect(
       namedValueImportsFrom(violating, '@shared/api-client/playlists').filter((name) =>
         WRITE_FUNCTIONS.includes(name),
@@ -238,7 +249,9 @@ describe('rule 4 — components never call playlist write functions directly; on
 
 describe('rule 5 — the barrel is the public surface', () => {
   const indexSource = fs.readFileSync(path.join(SLICE_DIR, 'index.ts'), 'utf8');
-  const otherSliceFiles = listSourceFiles(SLICE_DIR).filter((file) => path.basename(file) !== 'index.ts');
+  const otherSliceFiles = listSourceFiles(SLICE_DIR).filter(
+    (file) => path.basename(file) !== 'index.ts',
+  );
 
   it('found source files besides the barrel to check against it (sanity)', () => {
     expect(otherSliceFiles.length).toBeGreaterThan(0);
@@ -249,7 +262,8 @@ describe('rule 5 — the barrel is the public surface', () => {
     for (const file of otherSliceFiles) {
       const names = exportedFunctionNames(fs.readFileSync(file, 'utf8'));
       for (const name of names) {
-        if (!new RegExp(`\\b${name}\\b`).test(indexSource)) missing.push(`${path.basename(file)}:${name}`);
+        if (!new RegExp(`\\b${name}\\b`).test(indexSource))
+          missing.push(`${path.basename(file)}:${name}`);
       }
     }
     expect(missing).toEqual([]);
@@ -262,7 +276,8 @@ describe('rule 5 — the barrel is the public surface', () => {
 
   function deepImportViolations(source: string): string[] {
     return importSpecifiers(source, true).filter(
-      (spec) => spec.startsWith('@shared/playlists/') || /(^|\/)shared\/playlists\/[^'"]+$/.test(spec),
+      (spec) =>
+        spec.startsWith('@shared/playlists/') || /(^|\/)shared\/playlists\/[^'"]+$/.test(spec),
     );
   }
 
@@ -284,20 +299,24 @@ describe('rule 5 — the barrel is the public surface', () => {
   });
 
   it('the deep-import detector fires on @shared/playlists/mutations and a relative equivalent, not on the bare barrel specifier', () => {
-    expect(deepImportViolations("import { useCreatePlaylist } from '@shared/playlists/mutations';")).toEqual([
-      '@shared/playlists/mutations',
-    ]);
     expect(
-      deepImportViolations("import { useCreatePlaylist } from '../../../shared/playlists/mutations';"),
+      deepImportViolations("import { useCreatePlaylist } from '@shared/playlists/mutations';"),
+    ).toEqual(['@shared/playlists/mutations']);
+    expect(
+      deepImportViolations(
+        "import { useCreatePlaylist } from '../../../shared/playlists/mutations';",
+      ),
     ).toEqual(['../../../shared/playlists/mutations']);
-    expect(deepImportViolations("import { AddToPlaylistSheet } from '@shared/playlists';")).toEqual([]);
+    expect(deepImportViolations("import { AddToPlaylistSheet } from '@shared/playlists';")).toEqual(
+      [],
+    );
   });
 });
 
 describe('rule 6 — the banned noun never appears in this slice', () => {
   const sliceFiles = readAll(listSourceFiles(SLICE_DIR));
 
-  it('scanned exactly the slice\'s five source modules (sanity)', () => {
+  it("scanned exactly the slice's five source modules (sanity)", () => {
     expect(sliceFiles.map(({ file }) => path.basename(file)).sort()).toEqual([
       'AddToPlaylistSheet.tsx',
       'CreatePlaylistModal.tsx',

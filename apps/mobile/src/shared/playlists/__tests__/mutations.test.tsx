@@ -1223,8 +1223,6 @@ describe('useRemoveTracksFromPlaylist(): law — the remove patch is the order-p
 });
 
 describe('create', () => {
-  // A full PlaylistResponse: the api-client now contract-parses the create body,
-  // so a thin { id, name } payload would be rejected before the hook sees it.
   function created(id: string, name: string) {
     return {
       id,
@@ -1772,7 +1770,6 @@ describe('after sign-out', () => {
     jest.restoreAllMocks();
   });
 
-  // Regression test for #2729.
   describe('playlist mutations that settle after sign-out leave the next user untouched', () => {
     it('useCreatePlaylist: a create failing after sign-out neither alerts nor refetches user B playlists', async () => {
       const { queryClient, wrapper, invalidateSpy } = setup();

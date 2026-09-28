@@ -11,7 +11,6 @@ export type ContextMenuItem = {
   label: string;
   onPress: () => void;
   tone?: 'default' | 'danger';
-  /** Shown but not pressable, e.g. while the item's action is already in flight. */
   disabled?: boolean;
 };
 

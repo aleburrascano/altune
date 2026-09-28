@@ -239,7 +239,10 @@ describe('the machine-readable error code (ADR-0021) surfaces on ApiError', () =
 
   it('leaves code undefined when the error body omits it, still yielding a usable ApiError', async () => {
     withSession();
-    __http.reply('POST /v1/feedback/reports', { status: 400, json: { detail: 'message required' } });
+    __http.reply('POST /v1/feedback/reports', {
+      status: 400,
+      json: { detail: 'message required' },
+    });
 
     const error = await apiFetch('/v1/feedback/reports', { method: 'POST' }).catch(
       (e: unknown) => e,
@@ -473,7 +476,6 @@ describe('token lookup deadline', () => {
 });
 
 describe('correlation id', () => {
-  // Mirrors the Go API's accepted shape (httputil.CorrelationID): <=64 chars of [A-Za-z0-9_-].
   const SERVER_ACCEPTED_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
   let warn: jest.SpyInstance;
@@ -720,9 +722,6 @@ describe('failure logging', () => {
     });
   });
 
-  // The session lookup is the one collaborator inside apiFetch that can throw an
-  // arbitrary value: send() and readBody() convert whatever they catch into a
-  // NetworkError first. So it is where an unrecognized throw is injected here.
   describe('apiFetch logs a failure whose class it does not recognize', () => {
     it('logs the class and the schema path of a ContractError', async () => {
       getSession.mockRejectedValue(new ContractError('Session.access_token', 'expected a string'));

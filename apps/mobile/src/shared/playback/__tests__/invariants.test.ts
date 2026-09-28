@@ -62,7 +62,7 @@ describe('canPlay.ts is the only place playability is checked', () => {
     ['double quotes', 'export const gate = (s: string) => s === "ready";\n'],
     [
       'a renamed destructured binding',
-      "export const gate = (t: { acquisition_status: string }) => {\n" +
+      'export const gate = (t: { acquisition_status: string }) => {\n' +
         '  const { acquisition_status: s } = t;\n' +
         "  return s === 'ready';\n" +
         '};\n',

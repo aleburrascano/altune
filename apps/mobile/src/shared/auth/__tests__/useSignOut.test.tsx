@@ -35,8 +35,6 @@ let warn: jest.SpyInstance;
 
 beforeEach(() => {
   mockSignOut.mockReset();
-  // A failed sign-out logs one line; the assertions on it live in
-  // features/settings/__tests__/DangerZoneCard.signOutFailure.test.tsx.
   warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -57,23 +55,26 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
       { status: 'error', error: new Error('network request failed') },
       () => mockSignOut.mockRejectedValue(new Error('network request failed')),
     ],
-  ] as const)('%s -> state becomes %s, and the query cache is cleared regardless', async (_label, expectedState, arrange) => {
-    arrange();
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
+  ] as const)(
+    '%s -> state becomes %s, and the query cache is cleared regardless',
+    async (_label, expectedState, arrange) => {
+      arrange();
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
 
-    const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
+      const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
 
-    await act(async () => {
-      await result.current.signOut();
-    });
+      await act(async () => {
+        await result.current.signOut();
+      });
 
-    expect(result.current.state).toEqual(expectedState);
-    expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
-    if (expectedState.status === 'error') {
-      expect(mockClearPersistedAuthSession).toHaveBeenCalled();
-    }
-  });
+      expect(result.current.state).toEqual(expectedState);
+      expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+      if (expectedState.status === 'error') {
+        expect(mockClearPersistedAuthSession).toHaveBeenCalled();
+      }
+    },
+  );
 });
 
 describe('useSignOut(): idle -> loading -> ok, with loading actually observable mid-flight', () => {

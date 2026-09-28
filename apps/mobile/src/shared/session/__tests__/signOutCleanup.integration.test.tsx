@@ -27,7 +27,9 @@ function bootFreshApp() {
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const client = new ReactQuery.QueryClient();
-  return <ReactQuery.QueryClientProvider client={client}>{children}</ReactQuery.QueryClientProvider>;
+  return (
+    <ReactQuery.QueryClientProvider client={client}>{children}</ReactQuery.QueryClientProvider>
+  );
 }
 
 async function signInAfterBootAsSignedOut(app: ReturnType<typeof bootFreshApp>) {

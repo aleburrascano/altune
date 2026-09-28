@@ -19,11 +19,15 @@ describe('featuredArtistsFromExtras — Array.isArray guard', () => {
 
 describe('featuredArtistsFromExtras — the string arm (no known live producer, still constrained)', () => {
   it('drops an empty string exactly at the length > 0 boundary', () => {
-    expect(featuredArtistsFromExtras(['SZA', ''])).toEqual([{ name: 'SZA', mbid: null, deezer_id: null }]);
+    expect(featuredArtistsFromExtras(['SZA', ''])).toEqual([
+      { name: 'SZA', mbid: null, deezer_id: null },
+    ]);
   });
 
   it('accepts a non-empty bare string as a name-only FeaturedArtist', () => {
-    expect(featuredArtistsFromExtras(['SZA'])).toEqual([{ name: 'SZA', mbid: null, deezer_id: null }]);
+    expect(featuredArtistsFromExtras(['SZA'])).toEqual([
+      { name: 'SZA', mbid: null, deezer_id: null },
+    ]);
   });
 });
 
@@ -107,7 +111,9 @@ describe('featuredArtistsFromExtras — adversarial: malformed, tampered and thi
   it('does not throw on an array mixing null, numbers, booleans, nested arrays and functions', () => {
     const raw: unknown[] = [null, 1, false, ['nested'], () => {}, { name: 'Rihanna' }];
     expect(() => featuredArtistsFromExtras(raw)).not.toThrow();
-    expect(featuredArtistsFromExtras(raw)).toEqual([{ name: 'Rihanna', mbid: null, deezer_id: null }]);
+    expect(featuredArtistsFromExtras(raw)).toEqual([
+      { name: 'Rihanna', mbid: null, deezer_id: null },
+    ]);
   });
 
   it('skips a nested-array entry rather than reading it as a named credit', () => {
@@ -151,7 +157,9 @@ describe('featuredArtistsFromExtras — legacy/compat: historical shapes still i
 
   it('an entry missing deezer_id entirely nulls deezer_id', () => {
     const raw = JSON.parse('[{"name":"SZA","role":"featured","mbid":"mb-1"}]');
-    expect(featuredArtistsFromExtras(raw)).toEqual([{ name: 'SZA', mbid: 'mb-1', deezer_id: null }]);
+    expect(featuredArtistsFromExtras(raw)).toEqual([
+      { name: 'SZA', mbid: 'mb-1', deezer_id: null },
+    ]);
   });
 
   it('an entry carrying the "role" key the TS FeaturedArtist type has no field for is parsed without it', () => {

@@ -5,7 +5,9 @@ import type { ReactTestRendererJSON } from 'react-test-renderer';
 import { CONTENT_MAX_WIDTH } from '../../layout/useLayoutMode';
 import { Screen } from '../Screen';
 
-function singleChild(tree: ReactTestRendererJSON | ReactTestRendererJSON[] | null): ReactTestRendererJSON {
+function singleChild(
+  tree: ReactTestRendererJSON | ReactTestRendererJSON[] | null,
+): ReactTestRendererJSON {
   if (!tree || Array.isArray(tree) || !tree.children || tree.children.length !== 1) {
     throw new Error('expected exactly one child in the rendered tree');
   }

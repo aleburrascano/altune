@@ -5,8 +5,6 @@ import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
 import type { TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-// Every acquisition phase except the stage-less 'working' fallback, which the
-// downloads bar never shows. Derived so a new AcquisitionPhase lands here too.
 export type DownloadPhase = Exclude<AcquisitionPhase, 'working'>;
 
 export interface DownloadEntry {
@@ -147,7 +145,13 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
     set((s) => ({
       entries: {
         ...s.entries,
-        [trackId]: makeEntry(trackId, 'finishing', s.entries[trackId], undefined, s.remembered[trackId]),
+        [trackId]: makeEntry(
+          trackId,
+          'finishing',
+          s.entries[trackId],
+          undefined,
+          s.remembered[trackId],
+        ),
       },
       remembered: withoutKey(s.remembered, trackId),
     }));
@@ -166,8 +170,6 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
       remembered: withoutKey(s.remembered, trackId),
     }));
     const removeOnceSettled = (): void => {
-      // Hold the failure while the rest of its batch is still in flight, so
-      // the bar can still count it when the batch lands instead of "Done".
       timers.delete(trackId);
       if (Object.values(get().entries).some(isInFlight)) {
         schedule(trackId, removeOnceSettled, FAILED_HOLD_MS);
@@ -195,11 +197,8 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   },
 }));
 
-// The downloads bar and the timers still holding its entries belong to the
-// account that started them, so the next identity inherits neither.
 onSignOut(() => useDownloadStore.getState().reset());
 
-/** Moves an existing entry to `phase`; a no-op when the track has no entry. */
 function updatePhaseIfPresent(
   s: DownloadState,
   trackId: TrackId,
@@ -209,7 +208,6 @@ function updatePhaseIfPresent(
   return withPhase(s, trackId, phase);
 }
 
-/** Sets `phase` on the track's entry, creating the entry if it does not exist. */
 function forceSetPhase(
   s: DownloadState,
   trackId: TrackId,
@@ -239,7 +237,6 @@ export function rememberDownloadMeta(trackId: TrackId, meta: DownloadMeta): void
   useDownloadStore.getState().rememberMeta(trackId, meta);
 }
 
-/** True when `phase` sits behind the phase this track's download has already reached. */
 export function isStaleDownloadPhase(trackId: TrackId, phase: DownloadPhase): boolean {
   return isStalePhase(useDownloadStore.getState().entries[trackId], phase);
 }
@@ -264,12 +261,10 @@ export function useDownloadPhase(trackId: TrackId): DownloadPhase | undefined {
   return useDownloadStore((s) => s.entries[trackId]?.phase);
 }
 
-/** True while the track has not reached a terminal (done or failed) phase. */
 export function isInFlight(entry: DownloadEntry): boolean {
   return entry.phase !== 'done' && entry.phase !== 'failed';
 }
 
-/** The batch's download entries, failed ones included, sorted by trackId. */
 export function useActiveDownloadItems(): DownloadEntry[] {
   const entries = useDownloadStore((s) => s.entries);
   return useMemo(
@@ -278,10 +273,6 @@ export function useActiveDownloadItems(): DownloadEntry[] {
   );
 }
 
-/**
- * The batch phase: the least-advanced in-flight phase while anything is in
- * flight; once settled, 'failed' if any item failed, else 'done'.
- */
 export function aggregatePhase(items: DownloadEntry[]): DownloadPhase | undefined {
   if (items.length === 0) return undefined;
   const active = items.filter((e) => e.phase !== 'done');

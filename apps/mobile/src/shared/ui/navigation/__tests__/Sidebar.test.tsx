@@ -21,8 +21,11 @@ describe('Sidebar', () => {
         .selected,
     ).toBe(true);
     expect(
-      (screen.getByTestId('sidebar-item-discover').props.accessibilityState as { selected: boolean })
-        .selected,
+      (
+        screen.getByTestId('sidebar-item-discover').props.accessibilityState as {
+          selected: boolean;
+        }
+      ).selected,
     ).toBe(false);
   });
 

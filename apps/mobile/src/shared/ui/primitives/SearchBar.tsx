@@ -30,22 +30,46 @@ export interface SearchBarProps {
   theme: SearchBarTheme;
 }
 
-function inputStyle(theme: SearchBarTheme, focused: boolean, suggestionsOpen: boolean): TextInputProps['style'] {
-  return [
-    styles.input,
-    { backgroundColor: theme.color.surface1, color: theme.color.textPrimary },
-    { borderWidth: 1, borderColor: focused ? theme.color.accent : 'transparent' },
-    suggestionsOpen ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : null,
-  ];
+function surfaceStyle(theme: SearchBarTheme, focused: boolean, suggestionsOpen: boolean) {
+  return {
+    backgroundColor: theme.color.surface1,
+    color: theme.color.textPrimary,
+    borderWidth: 1,
+    borderColor: focused ? theme.color.accent : 'transparent',
+    ...(suggestionsOpen ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : null),
+  };
+}
+
+function inputStyle(
+  theme: SearchBarTheme,
+  focused: boolean,
+  suggestionsOpen: boolean,
+): TextInputProps['style'] {
+  return [styles.input, surfaceStyle(theme, focused, suggestionsOpen)];
 }
 
 function fieldProps(props: SearchBarProps): TextInputProps {
   const placeholder = props.placeholder ?? 'Search music';
   const testID = props.testID ?? 'search-input';
   const shared = { value: props.value, onChangeText: props.onChangeText, testID, placeholder };
-  const editing = { onSubmitEditing: props.onSubmitEditing, onFocus: props.onFocus, onBlur: props.onBlur };
-  const fixed = { returnKeyType: 'search' as const, autoCapitalize: 'none' as const, autoCorrect: false };
-  return { ...shared, ...editing, ...fixed, maxLength: props.maxLength, placeholderTextColor: props.theme.color.textTertiary, accessibilityLabel: placeholder };
+  const editing = {
+    onSubmitEditing: props.onSubmitEditing,
+    onFocus: props.onFocus,
+    onBlur: props.onBlur,
+  };
+  const fixed = {
+    returnKeyType: 'search' as const,
+    autoCapitalize: 'none' as const,
+    autoCorrect: false,
+  };
+  return {
+    ...shared,
+    ...editing,
+    ...fixed,
+    maxLength: props.maxLength,
+    placeholderTextColor: props.theme.color.textTertiary,
+    accessibilityLabel: placeholder,
+  };
 }
 
 interface ClearButtonProps {
@@ -72,8 +96,18 @@ function SearchField({ props, ref }: SearchFieldProps): ReactElement {
   return (
     <View style={styles.inputWrapper}>
       <Search size={16} color={props.theme.color.textTertiary} style={styles.searchIcon} />
-      <TextInput ref={ref} style={inputStyle(props.theme, !!props.focused, !!props.suggestionsOpen)} {...fieldProps(props)} />
-      {props.value.length > 0 ? <ClearButton testID={testID} tertiary={props.theme.color.textTertiary} onClear={props.onClear} /> : null}
+      <TextInput
+        ref={ref}
+        style={inputStyle(props.theme, !!props.focused, !!props.suggestionsOpen)}
+        {...fieldProps(props)}
+      />
+      {props.value.length > 0 ? (
+        <ClearButton
+          testID={testID}
+          tertiary={props.theme.color.textTertiary}
+          onClear={props.onClear}
+        />
+      ) : null}
     </View>
   );
 }
@@ -84,9 +118,12 @@ function searchBarWithRef(props: SearchBarProps, ref: ForwardedRef<TextInput>): 
   return (
     <View style={styles.wrapper}>
       <View style={styles.inputAnchor}>
-        <SearchField props={props} ref={ref} />{props.children}
+        <SearchField props={props} ref={ref} />
+        {props.children}
       </View>
-      {props.pending ? <View style={[styles.pendingBar, { backgroundColor: props.theme.color.accent }]} /> : null}
+      {props.pending ? (
+        <View style={[styles.pendingBar, { backgroundColor: props.theme.color.accent }]} />
+      ) : null}
     </View>
   );
 }
@@ -95,7 +132,10 @@ const CLEAR_BUTTON_PROPS = {
   accessibilityRole: 'button' as const,
   accessibilityLabel: 'Clear search',
   hitSlop: 8,
-  style: ({ pressed }: { pressed: boolean }) => [styles.clearButton, pressed ? { opacity: 0.5 } : null],
+  style: ({ pressed }: { pressed: boolean }) => [
+    styles.clearButton,
+    pressed ? { opacity: 0.5 } : null,
+  ],
 };
 
 const styles = StyleSheet.create({

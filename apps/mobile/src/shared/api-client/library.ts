@@ -14,9 +14,7 @@ export type LibrarySort = 'recent' | 'az' | 'year';
 export type LibraryQuery = {
   q?: string;
   sort?: LibrarySort;
-  /** Rows to ask for. Omitted, the server picks its own page size. */
   limit?: number;
-  /** Rows to skip before the page starts. Omitted, the server starts at the first row. */
   offset?: number;
 };
 

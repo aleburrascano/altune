@@ -28,11 +28,6 @@ type AlertContent = { title: string; message: string };
 type StartedIn = { epoch: number } | undefined;
 type CreatedInSession = { playlist: PlaylistResponse; trackIds: TrackId[]; epoch: number };
 
-/**
- * Create-with-tracks is a two-step saga with no shared transaction, so a failed add rolls
- * the new playlist back. `playlist` survives exactly where the playlist itself does: absent,
- * the rollback landed and the server holds nothing the user has to clean up (#1787).
- */
 type CreateWithTracksResult =
   | { playlist: PlaylistResponse; added: number; addFailed: false }
   | { playlist?: PlaylistResponse; added: 0; addFailed: true };
@@ -48,11 +43,6 @@ function orphanedPlaylistMessage(requested: number): string {
     : 'Playlist created, but the tracks could not be added. Try adding them manually.';
 }
 
-/**
- * A timed-out add may still have landed server-side, so the rollback can take tracks that
- * did arrive with it. That is the deliberate trade: the user is told nothing was created and
- * can repeat the whole request, rather than being left a playlist of unknown contents.
- */
 async function rollBackCreatedPlaylist(
   playlist: PlaylistResponse,
 ): Promise<CreateWithTracksResult> {
@@ -125,10 +115,6 @@ function createWithTracksAlert(
   return { title: 'Note', message: alreadyThereMessage(skipped, result.playlist.name) };
 }
 
-/**
- * Puts the optimistically removed tracks back at their pre-mutation positions, skipping any a
- * mid-flight update already restored, and keeping every track that update added.
- */
 function reinsertTracks<T extends { id: TrackId }>(
   current: T[],
   previous: T[],

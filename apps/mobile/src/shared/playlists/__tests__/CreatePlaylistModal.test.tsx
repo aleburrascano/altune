@@ -83,18 +83,15 @@ describe('CreatePlaylistModal(): onSubmitEditing reaches handleCreate without pa
     expect(onCreate).not.toHaveBeenCalled();
   });
 
-  it(
-    'the keyboard submit path is gated by loading too, so it cannot fire a second onCreate while the button is disabled and spinning',
-    () => {
-      const { onCreate } = renderModal({ loading: true });
-      const input = screen.getByTestId('create-playlist-input');
-      fireEvent.changeText(input, 'Road Trip Mix');
+  it('the keyboard submit path is gated by loading too, so it cannot fire a second onCreate while the button is disabled and spinning', () => {
+    const { onCreate } = renderModal({ loading: true });
+    const input = screen.getByTestId('create-playlist-input');
+    fireEvent.changeText(input, 'Road Trip Mix');
 
-      fireEvent(input, 'submitEditing');
+    fireEvent(input, 'submitEditing');
 
-      expect(onCreate).not.toHaveBeenCalled();
-    },
-  );
+    expect(onCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe('CreatePlaylistModal(): handleClose resets the field and calls onClose, from every close affordance', () => {

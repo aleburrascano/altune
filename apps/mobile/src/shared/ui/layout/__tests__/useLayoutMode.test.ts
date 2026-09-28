@@ -1,6 +1,11 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { CONTENT_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH, layoutModeFor, useLayoutMode } from '../useLayoutMode';
+import {
+  CONTENT_MAX_WIDTH,
+  WIDE_LAYOUT_MIN_WIDTH,
+  layoutModeFor,
+  useLayoutMode,
+} from '../useLayoutMode';
 
 let mockWindowWidth = 390;
 
@@ -42,4 +47,3 @@ describe('CONTENT_MAX_WIDTH', () => {
     expect(CONTENT_MAX_WIDTH).toBe(1200);
   });
 });
-

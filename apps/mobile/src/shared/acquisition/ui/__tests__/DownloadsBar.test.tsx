@@ -221,10 +221,8 @@ describe('DownloadsBar over the live download store', () => {
     const { result } = renderHook(() => useActiveDownloadItems());
     act(() => {
       ids.forEach((id) => useDownloadStore.getState().start(id, { title: id }));
-      // One track fails server-side right away...
       useDownloadStore.getState().fail(ids[2]!);
     });
-    // ...while the other four take longer than the failed hold window to finish.
     act(() => {
       jest.advanceTimersByTime(FAILED_HOLD_MS * 2);
     });

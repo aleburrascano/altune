@@ -53,8 +53,6 @@ function configureSession(): void {
   });
 }
 
-// Every booted instance, so afterEach can disarm the retry timer a failed send
-// arms; otherwise it fires into a later test's HTTP double.
 const booted: OutboxModule[] = [];
 
 function bootApp(): OutboxModule {
@@ -244,7 +242,9 @@ describe('failure injection', () => {
     __http.reply(EVENTS_PATH, { status: 202 });
     currentFs().failNext('delete', new Error('disk busy'));
 
-    await expect(outbox1.enqueueCritical(libraryAdd('trk-stale-after-delete'))).resolves.toBeUndefined();
+    await expect(
+      outbox1.enqueueCritical(libraryAdd('trk-stale-after-delete')),
+    ).resolves.toBeUndefined();
 
     expect(__http.countFor(EVENTS_PATH)).toBe(1);
     const staleEntry = readOutboxFile();
@@ -299,7 +299,6 @@ describe('idempotence / replay across restarts', () => {
     const outbox1 = bootApp();
     __http.replyOnce(EVENTS_PATH, { status: 503 });
     await outbox1.enqueueCritical(libraryAdd('trk-first'));
-    // The failed send armed the flush backoff, so this enqueue queues without sending.
     await outbox1.enqueueCritical(libraryAdd('trk-second'));
 
     const queuedBeforeRestart = readOutboxFile();

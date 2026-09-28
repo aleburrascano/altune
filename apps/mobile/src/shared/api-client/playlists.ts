@@ -80,9 +80,7 @@ function parseRemoveTracksFromPlaylistResponse(
 }
 
 export type PlaylistPage = {
-  /** Playlists to ask for. Omitted, the server picks its own page size. */
   limit?: number;
-  /** Playlists to skip before the page starts. Omitted, the server starts at the first. */
   offset?: number;
 };
 

@@ -25,8 +25,6 @@ export function isServerEventType(value: string): value is ServerEventType {
   return KNOWN.has(value);
 }
 
-// The warning is the whole diagnostic: nothing in the app reads a kept tally, so
-// keeping one only grows memory for the lifetime of the process.
 export function recordUnhandledEvent(type: string): void {
   console.warn('[sse] unrecognized event type', { type });
 }

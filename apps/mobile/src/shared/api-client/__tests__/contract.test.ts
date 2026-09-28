@@ -33,8 +33,6 @@ function findMatchingBrace(text: string, openIndex: number): number {
   throw new Error(`unbalanced braces starting at ${openIndex}`);
 }
 
-// Matches both a method (`func (h *T) Name(...)`) and a plain package function
-// (`func Name(...)`), so route helpers like app.mountFeedback resolve too.
 function extractGoMethodBody(source: string, methodName: string): string {
   const re = new RegExp(`func (?:\\([^)]*\\) )?${methodName}\\([^)]*\\)[^{]*\\{`);
   const m = re.exec(source);
@@ -109,9 +107,6 @@ function extractTsTypeLines(source: string, typeName: string): Map<string, strin
   const statement = extractTsTypeStatement(source, typeName);
   const braceStart = statement.indexOf('{');
   const lines = new Map<string, string>();
-  // Follow referenced local types, so a type composed purely from others
-  // (`A & (B | C)`, e.g. TrackResponse = TrackFields & TrackAcquisition)
-  // still yields the union of their fields.
   if (braceStart !== -1) {
     const braceEnd = findMatchingBrace(statement, braceStart);
     for (const [k, v] of extractTsObjectLines(statement.slice(braceStart + 1, braceEnd)))
@@ -129,14 +124,8 @@ function isOptionalOrNullable(line: string): boolean {
   return /\w\?:/.test(line) || /\bnull\b/.test(line);
 }
 
-// List endpoints no longer have per-endpoint named response structs; they all
-// serialize the generic httputil.List[T] envelope ({items, total}). We read that
-// one struct from list.go and assert each mobile list type matches its wire shape.
 function listEnvelopeGoFields(): Map<string, GoField> {
-  const listSource = fs.readFileSync(
-    goPath('internal', 'shared', 'httputil', 'list.go'),
-    'utf8',
-  );
+  const listSource = fs.readFileSync(goPath('internal', 'shared', 'httputil', 'list.go'), 'utf8');
   return deriveGoFields(listSource, extractGoStruct(listSource, 'List[T any]'));
 }
 
@@ -146,9 +135,7 @@ function expectListEnvelope(tsLines: Map<string, string>, itemType: string): voi
   expect(goFields.size).toBeGreaterThan(0);
   expect(tsLines.size).toBeGreaterThan(0);
 
-  // same envelope field set as httputil.List[T]: {items, total}
   expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
-  // items carries the endpoint's item DTO (validated separately), as an array
   expect(tsLines.get('items')).toContain(`${itemType}[]`);
 }
 
@@ -161,23 +148,12 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
   feedbackH: ['internal', 'feedback', 'adapters', 'handler', 'feedback_handler.go'],
 };
 
-// Handlers that register onto a shared router via `<recv>.Routes(r)` instead of
-// being mounted via `r.Mount(prefix, X.Routes())`. Keyed by the receiver's final
-// field segment (cat.streamHandler -> streamHandler, h.featuredArtist ->
-// featuredArtist). Their paths interleave with an existing prefix, so we recurse
-// into each handler's Routes method body with the current prefix.
 const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
   streamHandler: ['internal', 'catalog', 'adapters', 'handler', 'stream_handler.go'],
   audioURLHandler: ['internal', 'catalog', 'adapters', 'handler', 'audio_url_handler.go'],
   featuredArtist: ['internal', 'catalog', 'adapters', 'handler', 'featured_artist_handler.go'],
 };
 
-// Some handlers are mounted through a small wiring helper `helper(r, handler)`
-// instead of a direct `r.Mount(...)` in mountRoutes. Feedback's mountFeedback
-// (app/feedback_wiring.go) picks between the live routes and coded-503
-// DisabledRoutes behind FEEDBACK_ENABLED, so its real r.Mount lives in the
-// helper body, not in mountRoutes. Keyed by helper name; the helper's own body
-// carries the mount prefix + `<handler>.Routes()` we recurse into.
 const MOUNT_HELPER_FILES: Record<string, string[]> = {
   mountFeedback: ['internal', 'app', 'feedback_wiring.go'],
 };
@@ -209,13 +185,11 @@ function extractRouteEntries(body: string, prefix: string, source: string): Rout
     masked = masked.slice(0, s) + ' '.repeat(e - s) + masked.slice(e);
   }
 
-  // A route may be registered through an inline middleware chain, e.g.
-  // `r.With(h.limiter.middleware).Get("/queue-state", ...)`. `.With(...)` only
-  // wraps the handler; it registers the same method+path on the same router,
-  // so zero or more chained With(...) calls are accepted before the verb. Their
-  // arguments may nest one level of parentheses (`r.With(mw(cfg))`).
   const withChain = String.raw`(?:\s*\.With\((?:[^()]|\([^()]*\))*\))*`;
-  const verbRe = new RegExp(String.raw`\br${withChain}\s*\.(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"`, 'g');
+  const verbRe = new RegExp(
+    String.raw`\br${withChain}\s*\.(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"`,
+    'g',
+  );
   for (const m of masked.matchAll(verbRe)) {
     entries.push({ method: m[1]!.toUpperCase(), path: joinPath(prefix, m[2]!) });
   }
@@ -239,20 +213,11 @@ function extractRouteEntries(body: string, prefix: string, source: string): Rout
     entries.push(...extractRouteEntries(subBody, prefix, handlerSource));
   }
 
-  // A middleware group registers routes on the same path prefix via a method
-  // value: `r.Group(h.contentRoutes)`. The grouped routes live in that method's
-  // body in the same source (inline `r.Group(func(...) {...})` bodies are read
-  // in place by the verb scan above), so read the method and recurse under the
-  // same prefix.
   for (const m of masked.matchAll(/r\.Group\(\s*[\w.]+\.(\w+)\s*\)/g)) {
     const groupBody = extractGoMethodBody(source, m[1]!);
     entries.push(...extractRouteEntries(groupBody, prefix, source));
   }
 
-  // Mount-helper calls: `helper(r, handlerVar)`. The helper's body holds the
-  // real `r.Mount("<prefix>", handlerVar.Routes())`, so we read the helper,
-  // take that live mount prefix (ignoring the coded-503 DisabledRoutes branch),
-  // and recurse into the handler's own Routes under it.
   for (const m of masked.matchAll(/\b(\w+)\(\s*r\s*,\s*([\w.]+)\s*\)/g)) {
     const helperFile = MOUNT_HELPER_FILES[m[1]!];
     const handlerFile = MOUNT_HANDLER_FILES[m[2]!];
@@ -263,7 +228,9 @@ function extractRouteEntries(body: string, prefix: string, source: string): Rout
     if (!liveMount) continue;
     const handlerSource = fs.readFileSync(goPath(...handlerFile), 'utf8');
     const routesBody = extractGoMethodBody(handlerSource, 'Routes');
-    entries.push(...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!), handlerSource));
+    entries.push(
+      ...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!), handlerSource),
+    );
   }
 
   return entries;
@@ -501,13 +468,9 @@ describe('TrackResponse (types.ts) <-> service.TrackDTO (aliased TrackResponse i
   const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
   const tsLines = extractTsTypeLines(typesSource, 'TrackResponse');
 
-  // Go fields tagged json:"-" exist on TrackDTO but never reach the wire. The
-  // mobile type may still carry them as client-only cache fields (audio_ref is
-  // the storage key hidden by #1046; the client learns it only from the
-  // track_acquisition_completed SSE event), so they are modelled explicitly.
-  const hiddenGoFields = [...extractGoStruct(trackDtoSource, 'TrackDTO').matchAll(
-    /^\s*(\w+)\s+\S+\s+`json:"-"`/gm,
-  )].map((m) => m[1]!.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase());
+  const hiddenGoFields = [
+    ...extractGoStruct(trackDtoSource, 'TrackDTO').matchAll(/^\s*(\w+)\s+\S+\s+`json:"-"`/gm),
+  ].map((m) => m[1]!.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase());
   const CLIENT_ONLY_FIELDS = ['audio_ref'];
 
   it('has the same wire field set on both sides, apart from the documented client-only fields', () => {
@@ -619,10 +582,11 @@ describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
     expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
   });
 
-  // handleList now emits httputil.NewList(...) -> httputil.List[PlaylistResponse],
-  // so the mobile ListPlaylistsResponse must match the {items, total} envelope.
   it('ListPlaylistsResponse matches the httputil.List envelope of PlaylistResponse', () => {
-    expectListEnvelope(extractTsTypeLines(typesSource, 'ListPlaylistsResponse'), 'PlaylistResponse');
+    expectListEnvelope(
+      extractTsTypeLines(typesSource, 'ListPlaylistsResponse'),
+      'PlaylistResponse',
+    );
   });
 });
 
@@ -648,8 +612,6 @@ describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
     expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
   });
 
-  // handleAlbums/handleArtists now emit httputil.NewList(...) -> httputil.List[T],
-  // so the mobile list types must match the {items, total} envelope of their DTO.
   it.each([
     ['ListAlbumsResponse', 'AlbumGroup'],
     ['ListArtistsResponse', 'ArtistGroup'],

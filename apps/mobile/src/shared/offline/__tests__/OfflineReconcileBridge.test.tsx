@@ -64,17 +64,26 @@ describe('OfflineReconcileBridge', () => {
   });
 
   it('reconciles once on mount and does not pick up a later disk change without a remount', () => {
-    resetStore({ entries: { flaky: { trackId: asTrackId('flaky'), status: 'queued' } }, isWorking: true });
+    resetStore({
+      entries: { flaky: { trackId: asTrackId('flaky'), status: 'queued' } },
+      isWorking: true,
+    });
 
     render(<OfflineReconcileBridge />);
-    expect(usePinnedStore.getState().entries['flaky']).toEqual({ trackId: 'flaky', status: 'queued' });
+    expect(usePinnedStore.getState().entries['flaky']).toEqual({
+      trackId: 'flaky',
+      status: 'queued',
+    });
 
     __fs.seedFile(audioUri('flaky'), 'audio-bytes');
     act(() => {
       usePinnedStore.setState({ isWorking: false });
     });
 
-    expect(usePinnedStore.getState().entries['flaky']).toEqual({ trackId: 'flaky', status: 'queued' });
+    expect(usePinnedStore.getState().entries['flaky']).toEqual({
+      trackId: 'flaky',
+      status: 'queued',
+    });
   });
 
   it('reconciles exactly once per launch: a forced re-render of the mounted bridge does not call it again', () => {
@@ -94,7 +103,9 @@ describe('OfflineReconcileBridge', () => {
   it('remounting reconciles again without corrupting a still-healthy entry', () => {
     __fs.seedFile(audioUri('healthy'), 'audio-bytes');
     resetStore({
-      entries: { healthy: { trackId: asTrackId('healthy'), status: 'ready', uri: 'stale-but-real' } },
+      entries: {
+        healthy: { trackId: asTrackId('healthy'), status: 'ready', uri: 'stale-but-real' },
+      },
       isWorking: true,
     });
 

@@ -25,8 +25,6 @@ const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueu
 
 type StatusFields = { acquisitionStatus: AcquisitionStatus; failureMessage: string | null };
 
-// Through the app's own constructors, so a pairing no transition can produce is
-// one no fixture can arrange either.
 function status({
   acquisitionStatus = 'pending',
   failureMessage = null,
@@ -64,7 +62,9 @@ describe('sign-out', () => {
 
 describe('patch', () => {
   it('patching a second trackId leaves the first trackId status intact', () => {
-    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
+    useTrackStatusStore
+      .getState()
+      .patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
     useTrackStatusStore.getState().patch(asTrackId('t-2'), status({ acquisitionStatus: 'ready' }));
 
     expect(useTrackStatusStore.getState().statuses).toEqual({
@@ -75,7 +75,9 @@ describe('patch', () => {
 
   it('patching two distinct trackIds in the reverse order still leaves both intact', () => {
     useTrackStatusStore.getState().patch(asTrackId('t-2'), status({ acquisitionStatus: 'ready' }));
-    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
+    useTrackStatusStore
+      .getState()
+      .patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
 
     expect(useTrackStatusStore.getState().statuses).toEqual({
       't-1': status({ acquisitionStatus: 'pending' }),
@@ -95,10 +97,15 @@ describe('patch', () => {
   });
 
   it('overwrites an existing status for the same trackId', () => {
-    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
     useTrackStatusStore
       .getState()
-      .patch(asTrackId('t-1'), status({ acquisitionStatus: 'failed', failureMessage: 'no_source' }));
+      .patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
+    useTrackStatusStore
+      .getState()
+      .patch(
+        asTrackId('t-1'),
+        status({ acquisitionStatus: 'failed', failureMessage: 'no_source' }),
+      );
 
     expect(useTrackStatusStore.getState().statuses['t-1']).toEqual(
       status({ acquisitionStatus: 'failed', failureMessage: 'no_source' }),
@@ -178,8 +185,6 @@ describe('reset', () => {
 
 type SavedTrack = { trackId: TrackId; identity: string };
 
-// One track of a long session, in the order the app writes it: an optimistic
-// pending status, its (title, artist) identity link, then the completion event.
 function completeSavedTrack(n: number): SavedTrack {
   const trackId = asTrackId(`t-${n}`);
   const identity = `identity-${n}`;
@@ -257,9 +262,6 @@ function foldingBy(locale: string): (this: string, locales?: Intl.LocalesArgumen
   };
 }
 
-// Stands in for a device whose engine folds by the host locale whenever no locale
-// is named — the Turkish `İ`/`I` case (#1778). Only a fold that names its own
-// locale reads the same here as it does on any other device.
 function onDeviceWithLocale<T>(locale: string, read: () => T): T {
   const fold = foldingBy(locale);
   const unnamedFold = jest.spyOn(String.prototype, 'toLowerCase').mockImplementation(fold);
@@ -292,8 +294,6 @@ describe('trackIdentityKey', () => {
   });
 
   it('does not collide when distinct (title, artist) pairs share a space-joined string', () => {
-    // Both pairs canonicalize to "encore jay z interlude" under a plain-space
-    // join, but they are different tracks and must not share a key.
     const a = trackIdentityKey('Encore', 'Jay Z Interlude');
     const b = trackIdentityKey('Encore Jay Z', 'Interlude');
 
@@ -394,8 +394,6 @@ describe('patchTrackStatus / removeTrackStatus', () => {
 });
 
 describe('track id branding', () => {
-  // Compile-time guards: tsc fails if the store starts accepting a bare string as a track id
-  // again, which is what let an identity key and a track id be swapped silently.
   it('refuses a bare string where a TrackId belongs', () => {
     expectType<Not<IsAssignable<string, Parameters<typeof linkTrackIdentity>[1]>>>();
     expectType<Not<IsAssignable<string, Parameters<typeof patchTrackStatus>[0]>>>();

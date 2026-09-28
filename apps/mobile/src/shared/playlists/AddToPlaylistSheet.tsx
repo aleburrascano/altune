@@ -21,15 +21,8 @@ import { CreatePlaylistModal } from './CreatePlaylistModal';
 import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations';
 import { useSingleFlightAction } from './useSingleFlightAction';
 
-// The sheet picks one playlist out of a single scroll, so it asks for the server's
-// whole row cap rather than the short default page a caller naming no limit is
-// served (#1708). A user past the cap cannot reach their oldest playlists here.
 const SHEET_PLAYLIST_CAP = 2000;
 
-// The sheet closes on a rejected resolve, which on screen is indistinguishable
-// from the user dismissing it. Whoever owns `resolveTrackIds` owns the copy for
-// its failure (the detail screen already banners a failed save), so the sheet
-// owes the log rather than a second notice (#1783).
 function reportUnresolvedTracks(error: unknown): void {
   console.warn('[playlists] could not resolve the tracks to add; closing the sheet', error);
 }

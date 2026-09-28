@@ -67,7 +67,10 @@ describe('listFavorites', () => {
   ])(
     'rejects %s with a ContractError naming the field, rather than seeding the saved set from it',
     async (_label, item, field) => {
-      __http.reply('GET /v1/discovery/favorites', { status: 200, json: { items: [item], total: 1 } });
+      __http.reply('GET /v1/discovery/favorites', {
+        status: 200,
+        json: { items: [item], total: 1 },
+      });
 
       await expect(listFavorites()).rejects.toMatchObject({
         name: 'ContractError',
@@ -90,7 +93,12 @@ describe('addFavorite', () => {
   it('PUTs the entity by kind/title/subtitle and lets the server derive the key it answers with', async () => {
     __http.reply('PUT /v1/discovery/favorites', {
       status: 200,
-      json: { kind: 'track', key: 'don toliver|no idea', title: 'No Idea', subtitle: 'Don Toliver' },
+      json: {
+        kind: 'track',
+        key: 'don toliver|no idea',
+        title: 'No Idea',
+        subtitle: 'Don Toliver',
+      },
     });
 
     const added = await addFavorite({
@@ -128,9 +136,9 @@ describe('addFavorite', () => {
       json: { kind: 'artist', title: 'Don Toliver' },
     });
 
-    await expect(addFavorite({ kind: 'artist', title: 'Don Toliver', subtitle: '' })).rejects.toMatchObject(
-      { name: 'ContractError', at: 'Favorite.key' },
-    );
+    await expect(
+      addFavorite({ kind: 'artist', title: 'Don Toliver', subtitle: '' }),
+    ).rejects.toMatchObject({ name: 'ContractError', at: 'Favorite.key' });
   });
 });
 

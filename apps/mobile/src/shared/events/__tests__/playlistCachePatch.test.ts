@@ -442,9 +442,6 @@ describe('reorderPlaylistCache', () => {
   });
 });
 
-// The library grid walks the collection a page at a time under its own key (#1708), so a
-// patch reaching only the single-response cache would leave the grid showing a stale name
-// or count until something else invalidated it.
 describe('the library grid pages', () => {
   it('carries the new name after a rename, whichever page the playlist landed on', () => {
     const client = newClient();
@@ -480,22 +477,15 @@ describe('the library grid pages', () => {
 });
 
 describe('playlist id branding', () => {
-  // Compile-time guard: tsc fails if these cache writers start accepting a bare string again,
-  // which is what let an unparsed SSE id choose the detail key a rename wrote to.
   it('refuses a bare string where a PlaylistId belongs', () => {
     expectType<Not<IsAssignable<string, Parameters<typeof patchPlaylistName>[1]>>>();
   });
 });
 
 describe('scale', () => {
-  // The two playlist sizes a reorder is timed at: a short one and an "everything" playlist,
-  // sixteen times longer. A patch that scans the named ids once per cached track measures five
-  // to ten times more per track on the long one; one that looks them up measures about the same.
   const SHORT_PLAYLIST = 1000;
   const LONG_PLAYLIST = 16000;
 
-  // Allocation and the runner's scheduler add noise on top of the per-track work; three times
-  // leaves room for both while still failing anything that walks the id list per track.
   const TOLERATED_GROWTH = 3;
 
   function makeTrack(id: string): TrackResponse {
@@ -549,17 +539,15 @@ describe('scale', () => {
   }
 
   function cachedDetail(queryClient: QueryClient): PlaylistDetailResponse {
-    return queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!;
+    return queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
   }
 
-  // jsdom rounds performance.now() to whole milliseconds, which is coarser than a reorder of a
-  // short playlist takes; the process clock is what can tell one from sixteen.
   function nowMs(): number {
     return Number(process.hrtime.bigint()) / 1e6;
   }
 
-  // Milliseconds per track to reverse a playlist of `size` tracks, the reorder a drag from the
-  // top to the bottom of the list produces.
   function msPerTrack(size: number): number {
     const queryClient = new QueryClient();
     const tracks = makeTracks(size);
@@ -572,9 +560,6 @@ describe('scale', () => {
     return (nowMs() - startedAt) / size;
   }
 
-  // The fastest of three runs: a slow run can only come from noise, never from the patch being
-  // cheaper than it is, so the minimum is the measurement least able to flake. The discarded
-  // first run is what stops a cold JIT from inflating whichever size is measured first.
   function fastestMsPerTrack(size: number): number {
     msPerTrack(size);
     return Math.min(msPerTrack(size), msPerTrack(size), msPerTrack(size));

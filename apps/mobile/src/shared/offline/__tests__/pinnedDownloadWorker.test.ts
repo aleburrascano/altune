@@ -39,8 +39,6 @@ describe('runDownloadQueue', () => {
     };
     const get = (): State => state;
     let updaters = 0;
-    // Simulates an unpin landing after the worker checked the entry but before its
-    // 'downloading' mark (the second functional update, after the dequeue) applies.
     const set = (update: Update): void => {
       if (typeof update !== 'function') {
         state = { ...state, ...update };
@@ -61,7 +59,6 @@ describe('runDownloadQueue', () => {
   });
 });
 
-// One queued track and the setter/getter pair the store would hand the worker.
 function queuedTrack(trackId: TrackId) {
   let state: State = {
     entries: { [trackId]: { trackId, status: 'queued' } },
@@ -118,7 +115,6 @@ describe('a transient pinned-download failure is retried before the track is fai
     await settleMicrotasks();
     expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
 
-    // random 0 => each wait is exactly half its ceiling: 1x then 2x base / 2.
     for (const [attempt, wait] of [
       [2, DOWNLOAD_RETRY_BASE_MS / 2],
       [3, DOWNLOAD_RETRY_BASE_MS],

@@ -74,7 +74,13 @@ describe('law: every id present in queue also has an entry in entries', () => {
   });
 
   it.each<[string, Action[]]>([
-    ['pin then unpin the same id', [{ type: 'pin', id: 'a' }, { type: 'unpin', id: 'a' }]],
+    [
+      'pin then unpin the same id',
+      [
+        { type: 'pin', id: 'a' },
+        { type: 'unpin', id: 'a' },
+      ],
+    ],
     [
       'pinMany over several ids, only the first synchronously advances',
       [{ type: 'pinMany', ids: ['a', 'b', 'c'] }],
@@ -83,10 +89,7 @@ describe('law: every id present in queue also has an entry in entries', () => {
       'pin one id while another is already mid-download, then unpinAll',
       [{ type: 'pin', id: 'a' }, { type: 'pin', id: 'b' }, { type: 'unpinAll' }],
     ],
-    [
-      'unpin an id that was never pinned',
-      [{ type: 'unpin', id: 'ghost' }],
-    ],
+    ['unpin an id that was never pinned', [{ type: 'unpin', id: 'ghost' }]],
     [
       'pinMany twice over overlapping ids while the worker is busy',
       [

@@ -57,7 +57,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
     expect(GO_API_ROOT).not.toBeNull();
   });
 
-  it("toPlaybackTrack reads only fields the catalog TrackDTO actually sends", () => {
+  it('toPlaybackTrack reads only fields the catalog TrackDTO actually sends', () => {
     const trackDtoSource = fs.readFileSync(
       path.join(GO_API_ROOT!, 'internal', 'catalog', 'service', 'track_dto.go'),
       'utf8',
@@ -93,7 +93,9 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
       path.join(GO_API_ROOT!, 'internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
       'utf8',
     );
-    const goFields = deriveGoFieldTypes(extractGoStruct(queueHandlerSource, 'currentTrackResponse'));
+    const goFields = deriveGoFieldTypes(
+      extractGoStruct(queueHandlerSource, 'currentTrackResponse'),
+    );
 
     const toPlaybackTrackSource = fs.readFileSync(
       path.join(__dirname, '..', 'toPlaybackTrack.ts'),
@@ -113,7 +115,9 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
       path.join(GO_API_ROOT!, 'internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
       'utf8',
     );
-    const goFields = deriveGoFieldTypes(extractGoStruct(queueHandlerSource, 'currentTrackResponse'));
+    const goFields = deriveGoFieldTypes(
+      extractGoStruct(queueHandlerSource, 'currentTrackResponse'),
+    );
 
     expect(goFields.get('artwork_url')).toMatch(/^\*/);
     expect(goFields.get('duration_seconds')).toMatch(/^\*/);

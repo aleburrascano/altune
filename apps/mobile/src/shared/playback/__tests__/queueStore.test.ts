@@ -562,11 +562,14 @@ describe('mutators return the post-mutation slice the native player needs', () =
     ['same index', 2, 2],
     ['from out of range', 9, 1],
     ['to out of range', 1, 9],
-  ])('reorderQueue returns the unchanged upcoming Tracks on a rejected move (%s)', (_, from, to) => {
-    loadFive();
+  ])(
+    'reorderQueue returns the unchanged upcoming Tracks on a rejected move (%s)',
+    (_, from, to) => {
+      loadFive();
 
-    expect(useQueueStore.getState().reorderQueue(from, to)).toEqual([track('d'), track('e')]);
-  });
+      expect(useQueueStore.getState().reorderQueue(from, to)).toEqual([track('d'), track('e')]);
+    },
+  );
 
   it('toggleShuffle returns the upcoming Tracks after reshuffling', () => {
     loadFive();
@@ -654,8 +657,6 @@ describe('lifecycle', () => {
       useQueueStore.getState().loadShuffled(tracks, null);
 
       const state = useQueueStore.getState();
-      // Every one of the 250 tracks is reachable: the order is a full permutation
-      // of all indices, so shuffle spans the whole library rather than a page of it.
       expect(state.playOrder).toHaveLength(250);
       expect([...state.playOrder].sort((a, b) => a - b)).toEqual(
         Array.from({ length: 250 }, (_, i) => i),
@@ -671,8 +672,6 @@ describe('lifecycle', () => {
 
       useQueueStore.getState().loadShuffled(tracks, PLAYLIST_SOURCE);
 
-      // With Math.random pinned to 0, Fisher-Yates rotates the tail deterministically
-      // away from identity, proving the order was shuffled.
       expect(useQueueStore.getState().playOrder).not.toEqual([0, 1, 2, 3]);
       expect(useQueueStore.getState().source).toEqual(PLAYLIST_SOURCE);
       randomSpy.mockRestore();
@@ -687,7 +686,6 @@ describe('lifecycle', () => {
 
       const state = useQueueStore.getState();
       expect(state.shuffled).toBe(false);
-      // The head stays fixed (currentIndex 0); the tail returns to ascending order.
       expect(state.playOrder.slice(1)).toEqual([...state.playOrder.slice(1)].sort((a, b) => a - b));
       randomSpy.mockRestore();
     });
@@ -710,15 +708,13 @@ describe('lifecycle', () => {
     it('takes the given playOrder permutation and shuffled flag verbatim instead of forcing identity order', () => {
       const tracks = [track('a'), track('b'), track('c')];
 
-      useQueueStore
-        .getState()
-        .restoreQueue({
-          tracks,
-          playOrder: [2, 0, 1],
-          currentIndex: 1,
-          source: PLAYLIST_SOURCE,
-          shuffled: true,
-        });
+      useQueueStore.getState().restoreQueue({
+        tracks,
+        playOrder: [2, 0, 1],
+        currentIndex: 1,
+        source: PLAYLIST_SOURCE,
+        shuffled: true,
+      });
 
       const state = useQueueStore.getState();
       expect(state.playOrder).toEqual([2, 0, 1]);
@@ -731,15 +727,13 @@ describe('lifecycle', () => {
     it('clamps a currentIndex past the end of playOrder to the last valid position', () => {
       const tracks = [track('a'), track('b'), track('c')];
 
-      useQueueStore
-        .getState()
-        .restoreQueue({
-          tracks,
-          playOrder: [0, 1, 2],
-          currentIndex: 99,
-          source: null,
-          shuffled: false,
-        });
+      useQueueStore.getState().restoreQueue({
+        tracks,
+        playOrder: [0, 1, 2],
+        currentIndex: 99,
+        source: null,
+        shuffled: false,
+      });
 
       expect(useQueueStore.getState().currentIndex).toBe(2);
     });
@@ -747,15 +741,13 @@ describe('lifecycle', () => {
     it('clamps a negative currentIndex to 0', () => {
       const tracks = [track('a'), track('b'), track('c')];
 
-      useQueueStore
-        .getState()
-        .restoreQueue({
-          tracks,
-          playOrder: [0, 1, 2],
-          currentIndex: -4,
-          source: null,
-          shuffled: false,
-        });
+      useQueueStore.getState().restoreQueue({
+        tracks,
+        playOrder: [0, 1, 2],
+        currentIndex: -4,
+        source: null,
+        shuffled: false,
+      });
 
       expect(useQueueStore.getState().currentIndex).toBe(0);
     });
@@ -775,15 +767,13 @@ describe('lifecycle', () => {
     it('keeps a playOrder entry pointing at a track deleted between save and restore, and resolves it to no current track', () => {
       const tracks = [track('a'), track('b'), track('c')];
 
-      useQueueStore
-        .getState()
-        .restoreQueue({
-          tracks,
-          playOrder: [0, 3, 1, 2],
-          currentIndex: 1,
-          source: null,
-          shuffled: false,
-        });
+      useQueueStore.getState().restoreQueue({
+        tracks,
+        playOrder: [0, 3, 1, 2],
+        currentIndex: 1,
+        source: null,
+        shuffled: false,
+      });
 
       const state = useQueueStore.getState();
       expect(state.playOrder).toEqual([0, 3, 1, 2]);
@@ -798,15 +788,13 @@ describe('lifecycle', () => {
       [
         'restoreQueue',
         () =>
-          useQueueStore
-            .getState()
-            .restoreQueue({
-              tracks: [track('a')],
-              playOrder: [0],
-              currentIndex: 0,
-              source: null,
-              shuffled: false,
-            }),
+          useQueueStore.getState().restoreQueue({
+            tracks: [track('a')],
+            playOrder: [0],
+            currentIndex: 0,
+            source: null,
+            shuffled: false,
+          }),
       ],
       ['clearQueue', () => useQueueStore.getState().clearQueue()],
     ])('%s bumps generation when it replaces the queue', (_name, replaceQueue) => {
@@ -854,15 +842,13 @@ describe('lifecycle', () => {
       useQueueStore.getState().clearQueue();
       generations.push(useQueueStore.getState().generation);
 
-      useQueueStore
-        .getState()
-        .restoreQueue({
-          tracks: [track('a'), track('b')],
-          playOrder: [1, 0],
-          currentIndex: 0,
-          source: null,
-          shuffled: true,
-        });
+      useQueueStore.getState().restoreQueue({
+        tracks: [track('a'), track('b')],
+        playOrder: [1, 0],
+        currentIndex: 0,
+        source: null,
+        shuffled: true,
+      });
       generations.push(useQueueStore.getState().generation);
 
       for (let i = 1; i < generations.length; i++) {
@@ -878,15 +864,13 @@ describe('lifecycle', () => {
       [
         'a multi-track shuffled queue',
         () =>
-          useQueueStore
-            .getState()
-            .restoreQueue({
-              tracks: [track('a'), track('b'), track('c')],
-              playOrder: [2, 0, 1],
-              currentIndex: 1,
-              source: null,
-              shuffled: true,
-            }),
+          useQueueStore.getState().restoreQueue({
+            tracks: [track('a'), track('b'), track('c')],
+            playOrder: [2, 0, 1],
+            currentIndex: 1,
+            source: null,
+            shuffled: true,
+          }),
       ],
     ];
 
@@ -917,19 +901,21 @@ describe('lifecycle', () => {
   describe('setShuffled', () => {
     const seeds: [string, () => void, readonly number[]][] = [
       ['an empty queue', () => {}, []],
-      ['a single-track queue', () => useQueueStore.getState().loadQueue([track('a')], 0, null), [0]],
+      [
+        'a single-track queue',
+        () => useQueueStore.getState().loadQueue([track('a')], 0, null),
+        [0],
+      ],
       [
         'a multi-track shuffled queue',
         () =>
-          useQueueStore
-            .getState()
-            .restoreQueue({
-              tracks: [track('a'), track('b'), track('c')],
-              playOrder: [2, 0, 1],
-              currentIndex: 1,
-              source: null,
-              shuffled: true,
-            }),
+          useQueueStore.getState().restoreQueue({
+            tracks: [track('a'), track('b'), track('c')],
+            playOrder: [2, 0, 1],
+            currentIndex: 1,
+            source: null,
+            shuffled: true,
+          }),
         [2, 0, 1],
       ],
     ];
@@ -948,15 +934,13 @@ describe('lifecycle', () => {
     );
 
     it('setting the same value twice is idempotent', () => {
-      useQueueStore
-        .getState()
-        .restoreQueue({
-          tracks: [track('a'), track('b'), track('c')],
-          playOrder: [2, 0, 1],
-          currentIndex: 1,
-          source: null,
-          shuffled: false,
-        });
+      useQueueStore.getState().restoreQueue({
+        tracks: [track('a'), track('b'), track('c')],
+        playOrder: [2, 0, 1],
+        currentIndex: 1,
+        source: null,
+        shuffled: false,
+      });
 
       useQueueStore.getState().setShuffled(true);
       const once = useQueueStore.getState();
@@ -983,15 +967,13 @@ describe('lifecycle', () => {
       [
         'a multi-track shuffled queue',
         () => {
-          useQueueStore
-            .getState()
-            .restoreQueue({
-              tracks: [track('a'), track('b'), track('c')],
-              playOrder: [2, 0, 1],
-              currentIndex: 1,
-              source: PLAYLIST_SOURCE,
-              shuffled: true,
-            });
+          useQueueStore.getState().restoreQueue({
+            tracks: [track('a'), track('b'), track('c')],
+            playOrder: [2, 0, 1],
+            currentIndex: 1,
+            source: PLAYLIST_SOURCE,
+            shuffled: true,
+          });
           useQueueStore.getState().setResumePosition(3000);
         },
       ],

@@ -4,7 +4,10 @@ import { StyleSheet } from 'react-native';
 import { spacing } from '../theme/tokens';
 import type { Theme } from '../theme/theme';
 
-export type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
+export type PressableWebState = PressableStateCallbackType & {
+  hovered?: boolean;
+  focused?: boolean;
+};
 
 const styles = StyleSheet.create({
   item: {

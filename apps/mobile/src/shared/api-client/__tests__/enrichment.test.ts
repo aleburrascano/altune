@@ -21,8 +21,6 @@ const emptyContent: ContentFetchResponse = {
   status: 'ok',
 };
 
-// What each enrichment endpoint answers for an entity it found nothing for: a
-// fully-populated payload flagged has_content:false, never a partial body.
 const emptyEnrichment = {
   has_content: false,
   mbid: '',
@@ -261,7 +259,11 @@ describe('getArtistContent', () => {
 
   it('returns the top_tracks and albums sections as received', async () => {
     const topTracks: ContentFetchResponse = { ...emptyContent, provider_name: 'deezer' };
-    const albums: ContentFetchResponse = { ...emptyContent, provider_name: 'deezer', status: 'timeout' };
+    const albums: ContentFetchResponse = {
+      ...emptyContent,
+      provider_name: 'deezer',
+      status: 'timeout',
+    };
     __http.reply('GET /v1/discovery/artists/deezer/art-1/content', {
       status: 200,
       json: { top_tracks: topTracks, albums },

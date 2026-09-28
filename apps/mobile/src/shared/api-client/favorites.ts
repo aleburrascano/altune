@@ -27,9 +27,6 @@ export type FavoriteRef = {
 
 export type FavoriteTarget = FavoriteRef & { favorite_key: FavoriteKey };
 
-// `kind` and `key` together are the identity the saved set is keyed by, so a
-// drifted kind would silently un-star every entry of that kind rather than fail.
-// The wire omits subtitle and image_url when empty (FavoriteDTO json omitempty).
 function parseFavorite(value: unknown, at = 'Favorite'): Favorite {
   const r = asRecord(value, at);
   return {

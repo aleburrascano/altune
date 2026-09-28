@@ -1,10 +1,6 @@
 import { ContractError } from '@shared/errors';
 import type { ApiErrorBody } from './types';
 
-// Shared primitive wire decoders. Each domain's response parsers live beside the
-// domain's endpoints (tracks.ts, playlists.ts, library.ts, discovery.ts) and build
-// on these narrowers.
-
 export function asRecord(value: unknown, at: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new ContractError(at, 'expected an object');

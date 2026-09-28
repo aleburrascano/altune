@@ -109,7 +109,9 @@ function seedLocalData(queryClient: QueryClient, trackId = 't1'): void {
   markSessionExpired();
   __fs.seedFile(pinnedUri(trackId), 'audio-bytes');
   usePinnedStore.setState({
-    entries: { [trackId]: { trackId: asTrackId(trackId), status: 'ready', uri: pinnedUri(trackId) } },
+    entries: {
+      [trackId]: { trackId: asTrackId(trackId), status: 'ready', uri: pinnedUri(trackId) },
+    },
     queue: [],
     isWorking: false,
   });
@@ -178,7 +180,6 @@ describe('Table: the identity-change branch across (seeded, previous, next)', ()
     expect(result.current.status).toBe('signed-in');
   });
 
-  // Regression test for #835.
   it('unseeded -> B (downloads on disk were left by A): clears the downloads before B sees them', () => {
     const auth = installAuth();
     const queryClient = new QueryClient();
@@ -540,7 +541,11 @@ describe('Adversarial: thin and malformed session payloads at the keychain/serve
     const queryClient = new QueryClient();
     const { result } = renderSession(queryClient);
     act(() => auth.emit('SIGNED_IN', makeSession('user-a')));
-    const malformed = { access_token: 't', refresh_token: 'r', expires_at: 1 } as unknown as Session;
+    const malformed = {
+      access_token: 't',
+      refresh_token: 'r',
+      expires_at: 1,
+    } as unknown as Session;
 
     act(() => auth.emit('TOKEN_REFRESHED', malformed));
 
@@ -584,27 +589,24 @@ describe('Adversarial: thin and malformed session payloads at the keychain/serve
     expect(result.current).toEqual({ status: 'signed-in', session: expired });
   });
 
-  it(
-    'a transient getSession() rejection must not wipe a session the listener already confirmed for the same user',
-    async () => {
-      const auth = installAuth();
-      let rejectGetSession!: (error: unknown) => void;
-      auth.getSession.mockReturnValue(
-        new Promise((_resolve, reject) => {
-          rejectGetSession = reject;
-        }),
-      );
-      const queryClient = new QueryClient();
-      renderSession(queryClient);
-      act(() => auth.emit('INITIAL_SESSION', makeSession('user-a')));
-      seedLocalData(queryClient);
+  it('a transient getSession() rejection must not wipe a session the listener already confirmed for the same user', async () => {
+    const auth = installAuth();
+    let rejectGetSession!: (error: unknown) => void;
+    auth.getSession.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectGetSession = reject;
+      }),
+    );
+    const queryClient = new QueryClient();
+    renderSession(queryClient);
+    act(() => auth.emit('INITIAL_SESSION', makeSession('user-a')));
+    seedLocalData(queryClient);
 
-      rejectGetSession(new Error('transient keychain read failure'));
-      await flush();
+    rejectGetSession(new Error('transient keychain read failure'));
+    await flush();
 
-      assertLocalDataIntact(queryClient);
-    },
-  );
+    assertLocalDataIntact(queryClient);
+  });
 });
 
 describe('Invalidation: an identity change clears the exact cache entries and empties the pinned index, on disk too', () => {

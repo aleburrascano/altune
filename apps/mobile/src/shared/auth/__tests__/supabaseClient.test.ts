@@ -41,7 +41,11 @@ jest.mock('@supabase/supabase-js', () => ({
   },
 }));
 
-type Recorded = { getItemAsync: unknown[][]; setItemAsync: unknown[][]; deleteItemAsync: unknown[][] };
+type Recorded = {
+  getItemAsync: unknown[][];
+  setItemAsync: unknown[][];
+  deleteItemAsync: unknown[][];
+};
 
 function freshModules(): {
   storage: StorageAdapter;
@@ -163,7 +167,9 @@ describe('secureStoreAdapter — legacy shapes an older app version could have l
     const { storage, SecureStore } = freshModules();
     SecureStore.__secureStore.seed('sb-auth-token', 'not-json-at-all-from-an-older-build');
 
-    await expect(storage.getItem('sb-auth-token')).resolves.toBe('not-json-at-all-from-an-older-build');
+    await expect(storage.getItem('sb-auth-token')).resolves.toBe(
+      'not-json-at-all-from-an-older-build',
+    );
   });
 
   it('an item written under a different keychain accessibility option throws on read and degrades to null, not a crash', async () => {
@@ -212,7 +218,10 @@ describe('secureStoreAdapter — security: the keychain accessibility option', (
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    const tokenShaped = JSON.stringify({ access_token: 'ey.jwt.token', refresh_token: 'refresh-abc' });
+    const tokenShaped = JSON.stringify({
+      access_token: 'ey.jwt.token',
+      refresh_token: 'refresh-abc',
+    });
 
     await storage.setItem('sb-auth-token', tokenShaped);
     await storage.getItem('sb-auth-token');
@@ -284,7 +293,8 @@ function webStorageUnder(
   });
 
   const options = capturedOptions as CapturedAuthOptions | undefined;
-  if (!options || !SecureStore) throw new Error('createClient was never called — construction did not happen');
+  if (!options || !SecureStore)
+    throw new Error('createClient was never called — construction did not happen');
   return { storage: options.auth.storage, backing, SecureStore };
 }
 
@@ -373,16 +383,19 @@ describe('webStorage — a static web prerender in Node has no window.localStora
   it.each([
     ['window itself is absent, as in a Node prerender with no DOM shim at all', 'no-window'],
     ['window exists but its localStorage is unavailable', 'no-local-storage'],
-  ] as const)('%s: installs the in-memory adapter and persists nothing to disk', async (_label, scenario) => {
-    const { storage, backing, SecureStore } = webStorageUnder(scenario);
+  ] as const)(
+    '%s: installs the in-memory adapter and persists nothing to disk',
+    async (_label, scenario) => {
+      const { storage, backing, SecureStore } = webStorageUnder(scenario);
 
-    await expect(storage.setItem('sb-auth-token', 'value')).resolves.toBeUndefined();
-    await expect(storage.getItem('sb-auth-token')).resolves.toBe('value');
-    await expect(storage.removeItem('sb-auth-token')).resolves.toBeUndefined();
-    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
-    expect(backing.size).toBe(0);
-    expect(SecureStore.__secureStore.keys()).toEqual([]);
-  });
+      await expect(storage.setItem('sb-auth-token', 'value')).resolves.toBeUndefined();
+      await expect(storage.getItem('sb-auth-token')).resolves.toBe('value');
+      await expect(storage.removeItem('sb-auth-token')).resolves.toBeUndefined();
+      await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+      expect(backing.size).toBe(0);
+      expect(SecureStore.__secureStore.keys()).toEqual([]);
+    },
+  );
 });
 
 describe('webStorage adapter — the session survives a page reload (localStorage-backed)', () => {
@@ -408,7 +421,10 @@ describe('webStorage adapter — the session survives a page reload (localStorag
 
     await expect(storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION)).resolves.toBeUndefined();
 
-    Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
+    Object.defineProperty(window.localStorage, 'setItem', {
+      value: realSetItem,
+      configurable: true,
+    });
     expect(backing.size).toBe(0);
   });
 
@@ -423,7 +439,10 @@ describe('webStorage adapter — the session survives a page reload (localStorag
     });
 
     await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
-    Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
+    Object.defineProperty(window.localStorage, 'setItem', {
+      value: realSetItem,
+      configurable: true,
+    });
 
     await expect(storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
   });
@@ -431,7 +450,9 @@ describe('webStorage adapter — the session survives a page reload (localStorag
 
 describe('clearPersistedAuthSession() — the sign-out guarantee independent of the network call', () => {
   it('removes the persisted auth session key from localStorage on web', async () => {
-    const sameBrowserProfile = new Map<string, string>([['sb-fixture-auth-token', TOKEN_SHAPED_SESSION]]);
+    const sameBrowserProfile = new Map<string, string>([
+      ['sb-fixture-auth-token', TOKEN_SHAPED_SESSION],
+    ]);
     let clearPersistedAuthSession: (() => Promise<void>) | undefined;
 
     jest.isolateModules(() => {
@@ -484,9 +505,10 @@ describe('the wired real client — a session written by sign-in is readable aft
       const RN = require('react-native') as { Platform: { OS: string } };
       RN.Platform.OS = 'web';
       installWorkingLocalStorage(sameBrowserProfile);
-      ({ supabase: realSupabase } = require('../supabaseClient') as typeof realSupabase extends never
-        ? never
-        : { supabase: typeof realSupabase });
+      ({ supabase: realSupabase } =
+        require('../supabaseClient') as typeof realSupabase extends never
+          ? never
+          : { supabase: typeof realSupabase });
       ({ useSession: useRealSession } = require('../useSession') as {
         useSession: typeof useRealSession;
       });
@@ -515,7 +537,8 @@ describe('the wired real client — a session written by sign-in is readable aft
 
     const queryClient = new QueryClient();
     const { result } = renderHook(() => useRealSession(), {
-      wrapper: ({ children }) => createElement(QueryClientProvider, { client: queryClient }, children),
+      wrapper: ({ children }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children),
     });
 
     await waitFor(() => {
@@ -523,7 +546,11 @@ describe('the wired real client — a session written by sign-in is readable aft
     });
 
     jest.mock('@supabase/supabase-js', () => ({
-      createClient: (_url: string, _key: string, options: CapturedAuthOptions): { __fake: true } => {
+      createClient: (
+        _url: string,
+        _key: string,
+        options: CapturedAuthOptions,
+      ): { __fake: true } => {
         capturedOptions = options;
         return { __fake: true };
       },
@@ -565,7 +592,10 @@ describe('webStorage adapter — a localStorage method that throws (not the loca
       configurable: true,
     });
     await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
-    Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
+    Object.defineProperty(window.localStorage, 'setItem', {
+      value: realSetItem,
+      configurable: true,
+    });
     expect(backing.size).toBe(0);
 
     Object.defineProperty(window.localStorage, 'removeItem', {
@@ -616,7 +646,10 @@ describe('required configuration', () => {
 
     it.each([
       ['EXPO_PUBLIC_SUPABASE_URL', (): void => void (process.env.EXPO_PUBLIC_SUPABASE_URL = '')],
-      ['EXPO_PUBLIC_SUPABASE_ANON_KEY', (): void => void (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = '')],
+      [
+        'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+        (): void => void (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = ''),
+      ],
     ])('throws at import naming %s when it is the empty string', (name, blank) => {
       jest.resetModules();
       blank();

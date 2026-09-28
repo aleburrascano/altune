@@ -52,7 +52,6 @@ function isPersistedEntry(e: unknown): e is OutboxEntry {
 
 const fileStore = createFileStoreSlot(defaultFileStore);
 
-/** Points the persisted outbox at `store`; with no argument, back at the device filesystem. */
 export function setOutboxFileStore(store?: FileStore): void {
   fileStore.set(store);
 }
@@ -61,10 +60,8 @@ function outboxDir(): StoredDirectory {
   return fileStore.ensureDir(OUTBOX_DIR);
 }
 
-/** The schema version `persistOutbox` stamps on the outbox file. */
 export const OUTBOX_SCHEMA_VERSION = 1;
 
-// Version 0 is the bare array of entries written before the outbox carried a version.
 const OUTBOX_SCHEMA: SchemaSpec = {
   current: OUTBOX_SCHEMA_VERSION,
   migrations: [(bareArray) => ({ schemaVersion: 1, entries: bareArray })],

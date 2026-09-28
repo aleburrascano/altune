@@ -34,9 +34,6 @@ import {
   claimPinnedDownloads,
 } from '../pinnedStore';
 
-// One shared mock for the whole file: jest hoists jest.mock per file, so every group below sees
-// this same fetchAudioUrls. The default resolves no urls; a group that needs another behaviour
-// resets and configures it in its own beforeEach.
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
 }));
@@ -693,8 +690,6 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
       expect(importFreshEntries()).toEqual({});
     });
 
-    // #1766: a ready entry names the file it downloaded, so one with no uri names nothing playable
-    // and is as malformed as one whose uri is the wrong type.
     it('a ready entry with no uri field is dropped rather than seeded as a download naming no file', () => {
       __fs.seedFile(
         INDEX_URI,
@@ -779,9 +774,6 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
       expect(importFreshEntries()).toEqual({ good: { trackId: 'good', status: 'queued' } });
     });
 
-    // #1770: bracket-assigning the loaded index under this key runs Object.prototype's accessor
-    // instead of defining an own property, so the entry disappears from Object.keys and the index
-    // object carries a replaced prototype from launch on.
     it('an entry keyed by __proto__ is dropped, leaving the index prototype intact and a valid sibling loaded', () => {
       __fs.seedFile(
         INDEX_URI,
@@ -1093,8 +1085,6 @@ describe('reconcile squares the index with the files on disk', () => {
     ['failed', false, 'dropped'],
   ];
 
-  // A ready cell names its file whether or not the file is still there — that is the stale-ready
-  // state reconcile exists to settle; the other statuses name none.
   function entryOfStatus(trackId: string, status: PinnedStatus): PinnedEntry {
     const id = asTrackId(trackId);
     if (status === 'ready') return { trackId: id, status, uri: audioUri(trackId) };
@@ -1608,7 +1598,6 @@ describe('the download worker', () => {
     return `${PINNED_DIR_URI}/${name}`;
   }
 
-  // Only a ready entry carries a uri, so every read of one narrows on status first.
   function readyUri(trackId: string): string | undefined {
     const entry = usePinnedStore.getState().entries[trackId];
     return entry?.status === 'ready' ? entry.uri : undefined;
@@ -2295,8 +2284,6 @@ describe('pinned audio is served only at the version the server currently serves
 
     it('stays gated on status: a version match does not resurrect a failed entry', () => {
       usePinnedStore.setState({
-        // #1766 made a failed entry carrying a uri and a version unrepresentable, so the fixture is
-        // forced past the type: the status check stays as defence in depth for state planted that way.
         entries: {
           A: { trackId: asTrackId('A'), status: 'failed', uri: PINNED_A, version: 'v1' },
         } as unknown as Record<string, PinnedEntry>,
@@ -2384,8 +2371,6 @@ describe('resolvePinnedUri serves only ready local copies', () => {
       ],
       [
         'ready without a uri — degrades to undefined (falls back to network) instead of crashing',
-        // #1766 made this state unrepresentable, so it can only be forced past the type. The
-        // status check stays as defence in depth for state a cast or an older build could plant.
         { trackId: asTrackId('t1'), status: 'ready' } as unknown as PinnedEntry,
         undefined,
       ],
@@ -2540,8 +2525,6 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
     }
   }
 
-  // Reports every pinned file as `size` bytes, so a cap in the gigabytes can be reached without
-  // holding gigabytes of test data.
   function withFileSize(store: MemoryFileStore, size: number): MemoryFileStore {
     const sized = (file: StoredFile): StoredFile => ({
       uri: file.uri,
@@ -2590,8 +2573,6 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
     warn.mockRestore();
   });
 
-  // A stalled transfer times out as a transient failure, so it is attempted three times: each
-  // spends the deadline, and the two backoffs in between wait at most 2s then 4s.
   async function advanceThroughAttempts(): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS);
@@ -2893,7 +2874,6 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
       let elapsedMs = 0;
       jest.spyOn(performance, 'now').mockImplementation(() => elapsedMs);
       const deleteFile = memory.files.delete.bind(memory.files);
-      // A filesystem taking a second per delete: the batch cannot finish inside its deadline.
       memory.files.delete = (uri) => {
         elapsedMs += 1_000;
         return deleteFile(uri);
@@ -2910,14 +2890,10 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
 });
 
 describe('work stays bounded on a large pinned library', () => {
-  // A launch-sized library: large enough that per-entry directory listings or per-transition
-  // index writes show up as thousands of operations rather than a handful.
   const LIBRARY_SIZE = 1200;
 
   type Counts = { audioLists: number; indexWrites: number };
 
-  // Counts the filesystem operations that dominate launch and batch-pin cost: listing the pinned
-  // audio directory and rewriting the whole pinned index.
   function counting(store: MemoryFileStore): { store: MemoryFileStore; counts: Counts } {
     const counts: Counts = { audioLists: 0, indexWrites: 0 };
     const openDirectory = store.openDirectory;
@@ -2932,7 +2908,6 @@ describe('work stays bounded on a large pinned library', () => {
       textSync: () => file.textSync(),
       write: (contents) => file.write(contents),
       delete: () => file.delete(),
-      // The index is written to a temp file and renamed into place: each rename is one rewrite.
       moveTo: (dest) => {
         if (dest.uri.endsWith('/pinned.json')) counts.indexWrites += 1;
         file.moveTo(dest);
@@ -3000,7 +2975,6 @@ describe('work stays bounded on a large pinned library', () => {
       const entries: Record<string, PinnedEntry> = {};
       memory.directories.add('memory://document/offline-audio');
       trackIds.forEach((trackId, i) => {
-        // Two in three entries have their file; the rest are gone and resolve to queued or dropped.
         if (i % 3 !== 0)
           memory.files.set(`memory://document/offline-audio/${trackId}.mp3`, 'audio');
         entries[trackId] =
@@ -3101,18 +3075,12 @@ describe('work stays bounded on a large pinned library', () => {
 
       expect(result).toEqual({ requested: LIBRARY_SIZE, failed: 0 });
       expect(usePinnedStore.getState().entries).toEqual({});
-      // One listing and one index write per batch, so the cost stays linear in the tracks removed
-      // rather than quadratic in them (#1699).
       expect(counts.audioLists).toBeLessThanOrEqual(LIBRARY_SIZE / 16);
       expect(counts.indexWrites).toBeLessThanOrEqual(3);
     });
   });
 
   describe('batch pin of a large library', () => {
-    // Every status transition copies the whole entries map, so a batch pin costs time quadratic in
-    // its size: at LIBRARY_SIZE each of these took seconds of CPU and timed out under a loaded
-    // runner. The bounds below are constants, so a per-track or per-chunk regression still shows
-    // at this size as tens to hundreds of operations against a bound of three.
     const BATCH_SIZE = 200;
 
     it('writes the index a bounded number of times while every track moves through downloading to ready', async () => {
@@ -3151,9 +3119,6 @@ describe('work stays bounded on a large pinned library', () => {
 });
 
 describe('the remote kill switch stops pinned downloads', () => {
-  // Regression for issue #955: the pinned-download worker must stop while its remote kill switch is
-  // off, so a download loop thrashing disk can be stopped without an app release.
-
   function resolved(trackId: string): ResolvedAudioUrl {
     return { trackId, url: `https://cdn.example.com/audio/${trackId}.mp3`, version: 'v1' };
   }

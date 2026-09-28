@@ -11,35 +11,20 @@ import { currentSessionEpoch, isSameSession } from '@shared/session/signOutClean
 type ErrorAlert = { title: string; message: string };
 
 type BaseOptions<TData, TVariables> = {
-  /** The cache entry that is snapshotted, optimistically written and rolled back. */
   queryKey: QueryKey;
   mutationFn: (variables: TVariables) => Promise<TData>;
-  /** Keys refetched once the mutation settles. Defaults to `[queryKey]`. */
   invalidate?: (variables: TVariables) => readonly QueryKey[];
-  /** Alert shown after a failed mutation has been rolled back. Omit for a silent failure. */
   alertOnError?: (variables: TVariables) => ErrorAlert;
   onSuccess?: (data: TData, variables: TVariables) => void;
 };
 
 type GuardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> & {
   unguarded?: false;
-  /** Called only when the cache holds a snapshot; a cold cache is left untouched. */
   applyOptimistic: (previous: TCache, variables: TVariables) => TCache;
-  /**
-   * Undoes only this mutation's own delta on a failed request. It receives the cache as it is
-   * now, which may carry writes (SSE patches, refetches) that landed while the request was in
-   * flight, so it must keep those rather than restoring `previous` wholesale.
-   */
   revertOptimistic: (current: TCache, variables: TVariables, previous: TCache) => TCache;
 };
 
 type UnguardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> & {
-  /**
-   * Keeps the pre-helper `useFavorites` behavior: no cancelQueries, an optimistic write even
-   * against a cold cache, a rollback that restores the snapshot wholesale, and fire-and-forget
-   * invalidation. Exists only so the extraction stays behavior-preserving; do not use it for
-   * new mutations.
-   */
   unguarded: true;
   applyOptimistic: (previous: TCache | undefined, variables: TVariables) => TCache;
 };
@@ -47,7 +32,6 @@ type UnguardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables
 type OptimisticMutationOptions<TData, TVariables, TCache> =
   GuardedOptions<TData, TVariables, TCache> | UnguardedOptions<TData, TVariables, TCache>;
 
-/** `epoch` is the session the mutation started under; see the late-callback fence below. */
 type Snapshot<TCache> = { previous: TCache | undefined; epoch: number };
 
 const startingSession = new WeakMap<MutationFunctionContext, number>();
@@ -98,13 +82,6 @@ function alertAfterRollback<TVariables>(
   Alert.alert(title, message);
 }
 
-/**
- * One react-query mutation with an optimistic cache write: cancel in-flight fetches ->
- * snapshot -> optimistic write -> revert own delta on error -> optional alert -> invalidate.
- *
- * Rollback and settle are fenced by the session epoch: a request that finishes after its
- * user is gone would otherwise write their snapshot into the next user's cache.
- */
 export function useOptimisticMutation<TData, TVariables, TCache>(
   options: OptimisticMutationOptions<TData, TVariables, TCache>,
 ) {

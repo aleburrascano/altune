@@ -1,14 +1,8 @@
 import type { FileStore, StoredDirectory, StoredFile } from '../fileStore';
 
-/**
- * An in-memory FileStore scoped to whoever creates it, so a test can give one module its own
- * filesystem without touching the suite-wide expo-file-system mock. `files`/`directories` are
- * exposed for seeding and assertions.
- */
 export type MemoryFileStore = FileStore & {
   readonly files: Map<string, string>;
   readonly directories: Set<string>;
-  /** What availableBytes() reports; defaults to plenty of room. */
   freeBytes: number;
 };
 

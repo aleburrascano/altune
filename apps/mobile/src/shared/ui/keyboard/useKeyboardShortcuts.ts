@@ -86,26 +86,36 @@ function shiftedBinding(event: KeyboardEvent, playback: ShortcutPlayback): (() =
 
 type Binding = (() => void) | null;
 
-function unshiftedBinding(event: KeyboardEvent, playback: ShortcutPlayback, focusSearch: () => void): Binding {
+function unshiftedBinding(
+  event: KeyboardEvent,
+  playback: ShortcutPlayback,
+  focusSearch: () => void,
+): Binding {
   if (event.key === ' ') return () => togglePlayback(playback);
   if (event.key === 'ArrowLeft') return () => seekBy(playback, -SEEK_STEP_MS);
   if (event.key === 'ArrowRight') return () => seekBy(playback, SEEK_STEP_MS);
-  if (event.key === '/') return focusSearch;
-  return null;
+  return event.key === '/' ? focusSearch : null;
 }
 
-function bindingFor(event: KeyboardEvent, playback: ShortcutPlayback, focusSearch: () => void): Binding {
+function bindingFor(
+  event: KeyboardEvent,
+  playback: ShortcutPlayback,
+  focusSearch: () => void,
+): Binding {
   return event.shiftKey
     ? shiftedBinding(event, playback)
     : unshiftedBinding(event, playback, focusSearch);
 }
 
-function handleKeyboardEvent(event: KeyboardEvent, playback: ShortcutPlayback, focusSearch: () => void): void {
+function handleKeyboardEvent(
+  event: KeyboardEvent,
+  playback: ShortcutPlayback,
+  focusSearch: () => void,
+): void {
   if (isTypingTarget(event.target) || hasBrowserModifier(event)) return;
   const action = bindingFor(event, playback, focusSearch);
-  if (!action) return;
-  event.preventDefault();
-  action();
+  if (action) event.preventDefault();
+  action?.();
 }
 
 function hasAddEventListener(win: Window): boolean {

@@ -61,13 +61,12 @@ describe('the per-track status the store keeps (#1758)', () => {
     });
   });
 
-  // Compile-time guard: tsc fails if TrackStatus goes back to a flat struct where
-  // any status pairs with any failure text, which is what let a store entry keep
-  // stale failure text after the track went ready.
   it('refuses failure text on a status that cannot carry one', () => {
     const settled = { acquisitionStatus: 'ready', failureMessage: 'No source found' };
 
-    expectType<Not<IsExactlyAssignable<{ acquisitionStatus: 'ready'; failureMessage: string }, TrackStatus>>>();
+    expectType<
+      Not<IsExactlyAssignable<{ acquisitionStatus: 'ready'; failureMessage: string }, TrackStatus>>
+    >();
     expect(toTrackStatus(toReady())).not.toEqual(settled);
   });
 });

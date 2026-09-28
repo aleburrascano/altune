@@ -8,7 +8,12 @@ describe('dialog (native)', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const onConfirm = jest.fn();
 
-    confirm({ title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm });
+    confirm({
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    });
 
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     const [title, message, buttons] = jest.mocked(Alert.alert).mock.calls[0]!;
@@ -43,7 +48,12 @@ describe('dialog.web', () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
     const onConfirm = jest.fn();
 
-    webDialog.confirm({ title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm });
+    webDialog.confirm({
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    });
 
     expect(confirmSpy).toHaveBeenCalledWith('Delete playlist\n\nAre you sure?');
     expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -53,7 +63,12 @@ describe('dialog.web', () => {
     jest.spyOn(window, 'confirm').mockReturnValue(false);
     const onConfirm = jest.fn();
 
-    webDialog.confirm({ title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm });
+    webDialog.confirm({
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    });
 
     expect(onConfirm).not.toHaveBeenCalled();
   });
@@ -72,7 +87,12 @@ describe('dialog (native) edge cases', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const onConfirm = jest.fn();
 
-    confirm({ title: 'Remove track', message: 'Remove from playlist?', confirmLabel: 'Remove', onConfirm });
+    confirm({
+      title: 'Remove track',
+      message: 'Remove from playlist?',
+      confirmLabel: 'Remove',
+      onConfirm,
+    });
 
     const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)![2]!;
     expect(buttons).toHaveLength(2);
@@ -95,7 +115,12 @@ describe('dialog.web edge cases', () => {
       return true;
     });
 
-    webDialog.confirm({ title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm });
+    webDialog.confirm({
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    });
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -104,7 +129,12 @@ describe('dialog.web edge cases', () => {
   it('confirm() runs onConfirm once per accepted prompt when called twice', () => {
     jest.spyOn(window, 'confirm').mockReturnValueOnce(true).mockReturnValueOnce(false);
     const onConfirm = jest.fn();
-    const options = { title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm };
+    const options = {
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    };
 
     webDialog.confirm(options);
     webDialog.confirm(options);

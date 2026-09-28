@@ -5,8 +5,6 @@ import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import type { ServerEventHandlers } from './eventPayload';
 import { TRACK_CACHE_FAMILIES } from './trackCachePatch';
 
-// The Track-bearing entries come from the one TRACK_CACHE_FAMILIES declaration;
-// albums/artists/summary/list are the non-Track library families resync also drops.
 const RESYNC_KEYS: readonly (readonly string[])[] = [
   TRACK_CACHE_FAMILIES.pagedLibrary.prefix,
   TRACK_CACHE_FAMILIES.lookup.prefix,

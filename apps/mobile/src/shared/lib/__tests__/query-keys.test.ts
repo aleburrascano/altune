@@ -21,8 +21,18 @@ describe('detailKeys — literal shape', () => {
   });
 
   it('albumTracks appends provider, externalId, then mbExternalId (empty when absent)', () => {
-    expect(detailKeys.albumTracks('spotify', 'x1', 'mb1')).toEqual(['album-tracks', 'spotify', 'x1', 'mb1']);
-    expect(detailKeys.albumTracks('spotify', 'x1', undefined)).toEqual(['album-tracks', 'spotify', 'x1', '']);
+    expect(detailKeys.albumTracks('spotify', 'x1', 'mb1')).toEqual([
+      'album-tracks',
+      'spotify',
+      'x1',
+      'mb1',
+    ]);
+    expect(detailKeys.albumTracks('spotify', 'x1', undefined)).toEqual([
+      'album-tracks',
+      'spotify',
+      'x1',
+      '',
+    ]);
   });
 });
 
@@ -139,8 +149,6 @@ describe('playlistKeys — literal shape', () => {
     expect(playlistKeys.detail(asPlaylistId('pl-1'))).toEqual(['playlist', 'pl-1']);
   });
 
-  // Compile-time guard: tsc fails if the factory starts accepting a bare string again, which is
-  // what let an id nobody had parsed become a cache key.
   it('refuses a bare string where a PlaylistId belongs', () => {
     // @ts-expect-error a raw string must go through asPlaylistId / parsePlaylistId first
     expect(playlistKeys.detail('pl-1')).toEqual(['playlist', 'pl-1']);
@@ -282,8 +290,6 @@ describe('invalidation — the real QueryClient prefix matcher, and no others', 
     expect(client.getQueryState(playlistKeys.list)?.isInvalidated).toBe(false);
   });
 
-  // Every playlist mutation and server event invalidates playlistKeys.list. The grid caches
-  // its pages elsewhere, so it refetches only while that key stays under this one (#1708).
   it('playlistKeys.list reaches playlistKeys.paged, and not playlistKeys.detail(id)', async () => {
     const client = makeClient();
     client.setQueryData(playlistKeys.paged, { pages: [], pageParams: [] });

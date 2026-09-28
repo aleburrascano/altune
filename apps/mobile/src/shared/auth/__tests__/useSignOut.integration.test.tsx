@@ -14,7 +14,6 @@ function makeWrapper(queryClient: QueryClient) {
   };
 }
 
-// Acceptance criterion AC#5(b).
 describe('sign-out invalidates the React Query cache, verified by an authenticated query firing a fresh network fetch', () => {
   function useAuthenticatedLibraryQuery() {
     return useQuery({

@@ -60,7 +60,9 @@ function scanEnqueueCriticalCallSites(files: string[]): CallSite[] {
       const arg = extractParenArg(source, parenIndex);
       const types = [...arg.matchAll(/type:\s*'([a-zA-Z_]+)'/g)].map((x) => x[1]!);
       if (types.length === 0) {
-        throw new Error(`enqueueCritical call in ${file} has no literal type: field this scanner can read`);
+        throw new Error(
+          `enqueueCritical call in ${file} has no literal type: field this scanner can read`,
+        );
       }
       sites.push({ file, types });
     }
@@ -95,7 +97,9 @@ function scanFireAndForgetCallSites(files: string[]): CallSite[] {
       if (/\{\s*type\s*[,}]/.test(arg)) {
         const shorthandTypes = resolveShorthandTypeLiterals(source, m.index);
         if (shorthandTypes.length === 0) {
-          throw new Error(`.mutate call in ${file} passes a shorthand 'type' this scanner cannot resolve`);
+          throw new Error(
+            `.mutate call in ${file} passes a shorthand 'type' this scanner cannot resolve`,
+          );
         }
         sites.push({ file, types: shorthandTypes });
       }
@@ -131,7 +135,8 @@ describe('dependency direction is one-way', () => {
     const offenders: string[] = [];
     for (const file of listSourceFiles(TELEMETRY_DIR)) {
       const source = fs.readFileSync(file, 'utf8');
-      if (/from\s+['"][^'"]*\bfeatures\/[^'"]*['"]/.test(source)) offenders.push(path.basename(file));
+      if (/from\s+['"][^'"]*\bfeatures\/[^'"]*['"]/.test(source))
+        offenders.push(path.basename(file));
     }
     expect(offenders).toEqual([]);
   });
@@ -140,7 +145,8 @@ describe('dependency direction is one-way', () => {
     const offenders: string[] = [];
     for (const file of listSourceFiles(API_CLIENT_DIR)) {
       const source = fs.readFileSync(file, 'utf8');
-      if (/from\s+['"][^'"]*\btelemetry\/[^'"]*['"]/.test(source)) offenders.push(path.basename(file));
+      if (/from\s+['"][^'"]*\btelemetry\/[^'"]*['"]/.test(source))
+        offenders.push(path.basename(file));
     }
     expect(offenders).toEqual([]);
   });
@@ -187,7 +193,8 @@ describe('security: no auth material reaches this slice or the disk it writes to
       const importsSecureStore = /expo-secure-store/.test(source);
       const importsSupabase = /supabase/i.test(source);
       const readsAccessToken = /access_token|accessToken/.test(source);
-      if (importsSecureStore || importsSupabase || readsAccessToken) offenders.push(path.basename(file));
+      if (importsSecureStore || importsSupabase || readsAccessToken)
+        offenders.push(path.basename(file));
     }
     expect(offenders).toEqual([]);
   });
@@ -197,7 +204,12 @@ describe('security: no auth material reaches this slice or the disk it writes to
 
     const entry = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
 
-    expect(Object.keys(entry).sort()).toEqual(['client_occurred_at', 'event_id', 'payload', 'type']);
+    expect(Object.keys(entry).sort()).toEqual([
+      'client_occurred_at',
+      'event_id',
+      'payload',
+      'type',
+    ]);
   });
 
   it('the persisted entry never carries a key that looks like a token, header, or authorization field', () => {

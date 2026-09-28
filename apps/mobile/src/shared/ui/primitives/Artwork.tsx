@@ -21,8 +21,6 @@ export function Artwork({
   const theme = useTheme();
   return (
     <Image
-      // Remount on uri change so a recycled instance never keeps the prior
-      // track's bitmap when switching to a coverless track (source={null}).
       key={uri ?? 'placeholder'}
       testID="artwork"
       source={uri != null ? { uri } : ARTWORK_PLACEHOLDER}

@@ -7,7 +7,12 @@ describe('confirmDestructive (native)', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const onConfirm = jest.fn();
 
-    confirmDestructive({ title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm });
+    confirmDestructive({
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    });
 
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     const [title, message, buttons] = jest.mocked(Alert.alert).mock.calls[0]!;

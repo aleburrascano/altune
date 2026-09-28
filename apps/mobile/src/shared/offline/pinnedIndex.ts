@@ -11,14 +11,6 @@ import {
   type StoredFile,
 } from '@shared/files/fileStore';
 
-// Persistence of the pinned-download index and its owner marker: the on-disk
-// shape, how a loaded file is narrowed back into entries, and best-effort writes.
-
-/**
- * One pinned track, carrying only the fields its status has: a ready download names the file it
- * wrote, and a track that is not ready cannot name one, so no reader can serve a stale or absent
- * uri. Build these with the constructors below rather than by hand.
- */
 export type PinnedEntry =
   | { trackId: TrackId; status: 'ready'; uri: string; version?: string }
   | { trackId: TrackId; status: 'failed' }
@@ -49,7 +41,6 @@ const OWNER_FILE = 'pinned-owner';
 
 const fileStore = createFileStoreSlot();
 
-/** Points the index and owner marker at `store`; with no argument, back at the device filesystem. */
 export function setPinnedIndexFileStore(store?: FileStore): void {
   fileStore.set(store);
 }
@@ -62,10 +53,8 @@ function offlineFile(name: string): StoredFile {
   return offlineDir().openFile(name);
 }
 
-/** The schema version `saveIndex` stamps on pinned.json. */
 export const INDEX_SCHEMA_VERSION = 1;
 
-// Version 0 is the bare trackId -> entry map written before the index carried a version.
 const INDEX_SCHEMA: SchemaSpec = {
   current: INDEX_SCHEMA_VERSION,
   migrations: [(bareMap) => ({ schemaVersion: 1, entries: bareMap })],
@@ -86,9 +75,6 @@ function isPinnedStatus(value: unknown): value is PinnedStatus {
   return typeof value === 'string' && PINNED_STATUSES[value as PinnedStatus] === true;
 }
 
-// A ready record with no uri names no file, so it is as malformed as one whose uri is not a
-// string: nothing downstream could play it, and reconcile re-queues the track from disk anyway.
-// The fields a status does not carry are dropped here, so a stale uri cannot survive off disk.
 function entryOfStatus(
   trackId: TrackId,
   status: PinnedStatus,
@@ -107,8 +93,6 @@ function entryOfStatus(
   }
 }
 
-// The index file is where a raw track id comes back off disk, so it is re-branded here: an entry
-// whose id is not a valid TrackId is malformed, like one with an unknown status.
 function narrowEntry(value: unknown): PinnedEntry | null {
   if (typeof value !== 'object' || value === null) return null;
   const { trackId: rawTrackId, status, uri, version } = value as Record<string, unknown>;
@@ -124,8 +108,6 @@ function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntr
   const entries: Record<string, PinnedEntry> = {};
   let dropped = 0;
   for (const [trackId, value] of Object.entries(parsed)) {
-    // The map key, not the entry's own field, is what every later lookup and write uses, and it
-    // arrives from disk unparsed. A key outside the id shape is as malformed as an unknown status.
     const entry = isSafeId(trackId) ? narrowEntry(value) : null;
     if (entry === null) dropped += 1;
     else entries[trackId] = entry;
@@ -144,7 +126,6 @@ export function loadIndex(): Record<string, PinnedEntry> {
   return narrowIndex(read.entries);
 }
 
-/** How long a download's status transitions may coalesce before the index is rewritten. */
 export const INDEX_WRITE_DELAY_MS = 2_000;
 
 let pendingEntries: Record<string, PinnedEntry> | null = null;
@@ -156,22 +137,15 @@ function cancelPendingSave(): void {
   pendingEntries = null;
 }
 
-/**
- * Records `entries` as the index to persist, writing at most once per INDEX_WRITE_DELAY_MS however
- * many transitions arrive, so a batch of n downloads does not rewrite the whole index 2n times.
- * Losing an unflushed transition to a kill is safe: launch reconcile rebuilds status from disk.
- */
 export function scheduleSaveIndex(entries: Record<string, PinnedEntry>): void {
   pendingEntries = entries;
   pendingTimer ??= setTimeout(flushIndex, INDEX_WRITE_DELAY_MS);
 }
 
-/** Writes a scheduled index now, if one is waiting. */
 export function flushIndex(): void {
   if (pendingEntries !== null) saveIndex(pendingEntries);
 }
 
-/** Writes `entries` immediately, superseding any scheduled write (which holds older state). */
 export function saveIndex(entries: Record<string, PinnedEntry>): void {
   cancelPendingSave();
   try {
@@ -182,9 +156,6 @@ export function saveIndex(entries: Record<string, PinnedEntry>): void {
   }
 }
 
-// The index and audio files are keyed by trackId only, so ownership is recorded
-// beside them. It is written only after a claim has emptied the store, which makes
-// a missing or unreadable owner mean "unknown", and unknown is treated as foreign.
 export function readOwner(): string | null {
   try {
     const file = offlineFile(OWNER_FILE);

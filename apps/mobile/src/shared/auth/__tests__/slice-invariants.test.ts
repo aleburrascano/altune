@@ -64,10 +64,16 @@ describe('architecture: @supabase/supabase-js is value-imported from exactly one
 
   it('a type-only import of @supabase/supabase-js does not count as a value import, a bare import does', () => {
     expect(
-      valueImportsOf("import type { Session } from '@supabase/supabase-js';", '@supabase/supabase-js'),
+      valueImportsOf(
+        "import type { Session } from '@supabase/supabase-js';",
+        '@supabase/supabase-js',
+      ),
     ).toBe(false);
     expect(
-      valueImportsOf("import { createClient } from '@supabase/supabase-js';", '@supabase/supabase-js'),
+      valueImportsOf(
+        "import { createClient } from '@supabase/supabase-js';",
+        '@supabase/supabase-js',
+      ),
     ).toBe(true);
   });
 });
@@ -86,9 +92,6 @@ describe('architecture: exactly one createClient( call exists in the app', () =>
 });
 
 describe('architecture: shared/auth clears other slices through the sign-out registry, never by hand', () => {
-  // Each slice that holds one user's data registers its own reset with onSignOut.
-  // A direct call from auth is the duplication this replaced: it re-appears the
-  // moment the reset is spelled out here as well as in the slice that owns it.
   const SLICE_OWNED_RESETS = ['useDownloadStore', 'useTrackStatusStore', 'clearOutbox'];
 
   it('no file in shared/auth names a reset another slice registers for itself', () => {
@@ -150,7 +153,9 @@ describe('security: no file in shared/auth reaches for AsyncStorage', () => {
 describe('security: the slice never decodes or inspects the access token', () => {
   it('no file calls atob, a jwt-decode helper, or slices a token on its dot separators', () => {
     const offenders = listSourceFiles(AUTH_DIR)
-      .filter((file) => /atob\(|jwt-decode|jwtDecode|\.split\(['"]\.['"]\)/.test(fs.readFileSync(file, 'utf8')))
+      .filter((file) =>
+        /atob\(|jwt-decode|jwtDecode|\.split\(['"]\.['"]\)/.test(fs.readFileSync(file, 'utf8')),
+      )
       .map((file) => path.basename(file));
 
     expect(offenders).toEqual([]);

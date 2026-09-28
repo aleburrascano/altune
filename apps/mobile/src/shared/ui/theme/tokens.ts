@@ -28,14 +28,7 @@ export const fontFamily = {
 } as const;
 
 export type TypographyVariant =
-  | 'displayL'
-  | 'editorial'
-  | 'title'
-  | 'body'
-  | 'bodyStrong'
-  | 'label'
-  | 'caption'
-  | 'overline';
+  'displayL' | 'editorial' | 'title' | 'body' | 'bodyStrong' | 'label' | 'caption' | 'overline';
 
 export const typography: Record<
   TypographyVariant,

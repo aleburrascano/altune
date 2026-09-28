@@ -1,10 +1,5 @@
 export type AcquisitionPhase =
-  | 'finding'
-  | 'downloading'
-  | 'finishing'
-  | 'done'
-  | 'failed'
-  | 'working';
+  'finding' | 'downloading' | 'finishing' | 'done' | 'failed' | 'working';
 
 export const STAGE_TO_PHASE: Record<string, AcquisitionPhase> = {
   search: 'finding',

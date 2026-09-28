@@ -51,8 +51,6 @@ type AcquisitionEventType =
   | 'track_acquisition_failed'
   | 'track_replace_failed';
 
-// The SSE `track_added_to_library` payload carries the id under `id`, or `track_id`
-// on older servers; normalise before handing it to the shared TrackResponse parser.
 function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   const payload = typeof data.id === 'string' ? data : { ...data, id: data.track_id };
   return tryParseTrackResponse(payload);
@@ -63,8 +61,6 @@ function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
   return { title: track.title, artist: track.artist, artworkUrl: track.artwork_url };
 }
 
-// No default branch on purpose: the switch is exhaustive, so a new AcquisitionPhase
-// leaves the end reachable and fails compilation (TS2366) until it is mapped here.
 function progressPhase(stage: string | null): DownloadPhase | null {
   const phase = stageToPhase(stage);
   switch (phase) {
@@ -103,11 +99,6 @@ function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void 
   void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
 }
 
-// A `started` replayed after the acquisition it announced already finished — an SSE reconnect,
-// or a duplicate racing a real retry — would revert a ready track to "downloading" with no
-// download behind it, and nothing short of another terminal event would put it back (#1784).
-// A `failed` track is deliberately absent: a `started` is how a retry surfaces, and the
-// download entry's own rank already absorbs a duplicate for as long as that attempt is shown.
 function isStaleStart(trackId: TrackId): boolean {
   return isTrackStatusReady(trackId) || isStaleDownloadPhase(trackId, 'finding');
 }
@@ -158,8 +149,6 @@ function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEve
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   const failure = toFailed(asString(event.data.reason), asString(event.data.failure_message));
-  // In the caches, an event without a message keeps the one already cached rather
-  // than blanking it; the store keeps only what this event itself carried.
   const cachedMessage = getTrackFromCaches(queryClient, trackId)?.failure_message ?? null;
   scheduleTrackPatch(queryClient, trackId, {
     ...toFailed(failure.failure_reason, failure.failure_message ?? cachedMessage),

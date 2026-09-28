@@ -27,7 +27,6 @@ afterEach(() => {
   warn.mockRestore();
 });
 
-// Simulates a cold start: the in-memory switches are forgotten, the persisted file is kept.
 function relaunch(): void {
   setKillSwitchFileStore(store);
 }

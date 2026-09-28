@@ -25,9 +25,6 @@ export interface QueueStateResponse {
   source: QueueSourceWire | null;
   natural_order: string[];
   current_track?: QueueStateCurrentTrack;
-  // Present (true) only when the server's now-playing lookup failed; an absent
-  // current_track without it means there simply is no current track. Mirrors
-  // the Go queueStateResponse.current_track_unavailable (json omitempty).
   current_track_unavailable?: boolean;
 }
 
@@ -41,11 +38,6 @@ export interface SaveQueueStateRequest {
   natural_order: string[];
 }
 
-// The one queue-state body is parsed by features/playback/queueStateWire.ts
-// before any restore step reads it, and that parser answers with a typed result
-// rather than a throw so a row a newer client wrote costs the user their
-// position, not their queue. A second parse here would re-narrow the same bytes
-// and turn those recoverable rows into a failed resume (#1777).
 export async function getQueueState(): Promise<QueueStateResponse> {
   return apiFetch<QueueStateResponse>('/v1/playback/queue-state');
 }

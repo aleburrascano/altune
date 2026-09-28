@@ -2,12 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { AcquisitionPhase } from '../stagePhase';
-import {
-  ACQUISITION_PHASES,
-  STAGE_TO_PHASE,
-  phaseLabel,
-  stageToPhase,
-} from '../stagePhase';
+import { ACQUISITION_PHASES, STAGE_TO_PHASE, phaseLabel, stageToPhase } from '../stagePhase';
 
 function findGoApiRoot(): string | null {
   let dir = __dirname;
@@ -23,9 +18,6 @@ function findGoApiRoot(): string | null {
 
 type GoSource = { fileName: string; text: string };
 
-// A step's Name() may return either a literal or a package-level constant —
-// pipeline.go's stepName* block since #2094 — so the contract is only derivable
-// by resolving the returned identifier the way the compiler does.
 const STEP_NAME_RETURN = /func \(\w+ \*\w+Step\) Name\(\) string\s*\{\s*return\s+("[^"]*"|\w+)/g;
 const CONST_BLOCK_BODY = /^const \(\n([\s\S]*?)\n\)/gm;
 const CONST_SINGLE_LINE = /^const (.+)$/gm;
@@ -51,7 +43,8 @@ function goStringConstants(sources: GoSource[]): Map<string, string> {
   const constants = new Map<string, string>();
   for (const { text } of sources) {
     for (const declaration of constDeclarations(text)) {
-      for (const [, name, value] of declaration.matchAll(STRING_CONST)) constants.set(name!, value!);
+      for (const [, name, value] of declaration.matchAll(STRING_CONST))
+        constants.set(name!, value!);
     }
   }
   return constants;

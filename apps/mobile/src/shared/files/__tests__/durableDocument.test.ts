@@ -48,7 +48,12 @@ describe('writeDocumentAtomically', () => {
       ...dir,
       openFile: (name) => {
         const file = dir.openFile(name);
-        return { ...file, moveTo: () => { throw new Error('killed'); } };
+        return {
+          ...file,
+          moveTo: () => {
+            throw new Error('killed');
+          },
+        };
       },
     };
 
@@ -97,7 +102,9 @@ describe('readDocument', () => {
     store.files.set(TEMP_URI, '{"a":3}');
 
     expect(read()).toEqual({ status: 'read', document: { a: 3 } });
-    expect(warn).toHaveBeenCalledWith('[test] doc.json is corrupt (SyntaxError); trying doc.json.tmp');
+    expect(warn).toHaveBeenCalledWith(
+      '[test] doc.json is corrupt (SyntaxError); trying doc.json.tmp',
+    );
   });
 
   it('warns for each damaged candidate when neither the committed nor the temp file parses', () => {
@@ -123,7 +130,9 @@ describe('readDocument', () => {
       }),
     };
 
-    expect(readDocument('[test]', 'doc.json', () => unreadableDir)).toEqual({ status: 'unreadable' });
+    expect(readDocument('[test]', 'doc.json', () => unreadableDir)).toEqual({
+      status: 'unreadable',
+    });
     expect(warn).toHaveBeenLastCalledWith(
       '[test] doc.json.tmp could not be read (RangeError); treating it as empty',
     );
@@ -134,7 +143,9 @@ describe('readDocument', () => {
 
     expect(read()).toEqual({ status: 'unreadable' });
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith('[test] doc.json is corrupt (SyntaxError); treating it as empty');
+    expect(warn).toHaveBeenCalledWith(
+      '[test] doc.json is corrupt (SyntaxError); treating it as empty',
+    );
   });
 
   it('warns naming the file and the error for a file that cannot be read', () => {
@@ -143,7 +154,9 @@ describe('readDocument', () => {
     };
 
     expect(readDocument('[test]', 'doc.json', failing)).toEqual({ status: 'unreadable' });
-    expect(warn).toHaveBeenCalledWith('[test] could not read doc.json (TypeError); treating it as empty');
+    expect(warn).toHaveBeenCalledWith(
+      '[test] could not read doc.json (TypeError); treating it as empty',
+    );
   });
 
   it('names a non-Error throw by its type', () => {
@@ -153,7 +166,9 @@ describe('readDocument', () => {
 
     readDocument('[test]', 'doc.json', failing);
 
-    expect(warn).toHaveBeenCalledWith('[test] could not read doc.json (string); treating it as empty');
+    expect(warn).toHaveBeenCalledWith(
+      '[test] could not read doc.json (string); treating it as empty',
+    );
   });
 });
 
@@ -215,7 +230,10 @@ describe('migrateDocument', () => {
 });
 
 describe('readVersionedEntries', () => {
-  const spec: SchemaSpec = { current: 1, migrations: [(bare) => ({ schemaVersion: 1, entries: bare })] };
+  const spec: SchemaSpec = {
+    current: 1,
+    migrations: [(bare) => ({ schemaVersion: 1, entries: bare })],
+  };
 
   function readEntries() {
     return readVersionedEntries('[test]', 'doc.json', () => dir, spec);

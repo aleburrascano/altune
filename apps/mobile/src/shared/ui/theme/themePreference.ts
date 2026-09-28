@@ -56,10 +56,6 @@ export const useThemePreference = create<ThemePreferenceState>((set, get) => ({
   },
 }));
 
-/**
- * Points the persisted preference at `store` (default: the device) and re-reads the scheme the way
- * a cold start does, since a scheme loaded from one filesystem says nothing about the next one's.
- */
 export function setThemePreferenceFileStore(store: FileStore = defaultFileStore): void {
   fileStore = store;
   useThemePreference.setState({ scheme: loadScheme() });

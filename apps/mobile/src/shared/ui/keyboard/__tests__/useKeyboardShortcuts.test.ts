@@ -5,7 +5,11 @@ import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-import { FOCUS_REQUEST_TTL_MS, registerSearchFocus, useKeyboardShortcuts } from '../useKeyboardShortcuts';
+import {
+  FOCUS_REQUEST_TTL_MS,
+  registerSearchFocus,
+  useKeyboardShortcuts,
+} from '../useKeyboardShortcuts';
 
 const mockPush = jest.fn();
 
@@ -293,7 +297,11 @@ describe('useKeyboardShortcuts caller edges', () => {
     setup(win, controls);
 
     const left = win.dispatch({ key: 'ArrowLeft', target: { tagName: 'INPUT' } });
-    const shiftRight = win.dispatch({ key: 'ArrowRight', shiftKey: true, target: { tagName: 'INPUT' } });
+    const shiftRight = win.dispatch({
+      key: 'ArrowRight',
+      shiftKey: true,
+      target: { tagName: 'INPUT' },
+    });
 
     expect(left).not.toHaveBeenCalled();
     expect(shiftRight).not.toHaveBeenCalled();
@@ -381,7 +389,9 @@ describe('useKeyboardShortcuts caller edges', () => {
       rerender({});
     }
 
-    expect(win.addEventListener.mock.calls.length - win.removeEventListener.mock.calls.length).toBe(1);
+    expect(win.addEventListener.mock.calls.length - win.removeEventListener.mock.calls.length).toBe(
+      1,
+    );
   });
 
   it('navigates to Discover again once the Discover search has unregistered', () => {

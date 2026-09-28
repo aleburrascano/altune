@@ -325,8 +325,6 @@ describe('downloadPinned', () => {
 describe('track id shape guard (#944)', () => {
   const hostile = ['', '.', '..', '../evil', 'a/b', '../../document/x'];
 
-  // The shape guard above runs on ids cast past the brand; this pins the brand that makes such a
-  // cast the only way in. tsc fails if these start accepting a bare string again.
   it('refuses a bare string where a TrackId belongs', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
 
@@ -394,8 +392,6 @@ describe('an injected FileStore scopes the pinned files to it', () => {
   });
 });
 
-// A handle that cannot report its size, as a platform that fails to stat a file it has just
-// written would.
 function unsized(file: StoredFile): StoredFile {
   return {
     uri: file.uri,

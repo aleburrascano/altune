@@ -14,12 +14,6 @@ import {
 
 import type { DiscoveryKind, DiscoveryProviderStatus, DiscoveryResult } from './discovery';
 
-/**
- * The fields ContentFetchResponseDTO (content_endpoints.go) actually sends. The
- * type previously also declared `provider` and `latency_ms`: the DTO calls the
- * first `provider_name` and has never carried the second, so both were always
- * undefined at runtime (#1777).
- */
 export type ContentFetchResponse = {
   items: DiscoveryResult[];
   provider_name: string;
@@ -45,8 +39,6 @@ function parseContentFetchResponse(
   return {
     items: parseArray(r.items, `${at}.items`, parseDiscoveryResult),
     provider_name: asString(r.provider_name, `${at}.provider_name`),
-    // A 200 can still carry a degraded half (artist content), and the caller
-    // shows results only for 'ok', so an unrecognized status must not read as one.
     status: member(r.status, PROVIDER_STATUSES, `${at}.status`),
   };
 }
@@ -106,9 +98,6 @@ export type EnrichmentResponse = {
   artwork_url: string;
 };
 
-// An entity with nothing to show still answers 200 with a fully-populated empty
-// payload (has_content:false), so every field is required on the wire whether or
-// not the lookup found anything.
 function parseEnrichmentResponse(value: unknown, at = 'EnrichmentResponse'): EnrichmentResponse {
   const r = asRecord(value, at);
   return {
@@ -210,8 +199,6 @@ export type DeezerEnrichmentResponse = {
   featured_artists?: unknown[];
 };
 
-// featured_artists is the one optional field: the DTO omits it when empty, and
-// its members stay unknown here because only the detail screen names their shape.
 function parseDeezerEnrichmentResponse(
   value: unknown,
   at = 'DeezerEnrichmentResponse',

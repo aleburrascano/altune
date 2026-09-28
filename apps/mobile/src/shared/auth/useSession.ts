@@ -11,9 +11,7 @@ import { renewSessionCredentials } from './sessionExpired';
 import { supabase } from './supabaseClient';
 
 export type SessionState =
-  | { status: 'loading' }
-  | { status: 'signed-in'; session: Session }
-  | { status: 'signed-out' };
+  { status: 'loading' } | { status: 'signed-in'; session: Session } | { status: 'signed-out' };
 
 function renewsTheSignedInUser(
   event: AuthChangeEvent,
@@ -55,10 +53,6 @@ export function useSession(): SessionState {
       })
       .catch((error: unknown) => {
         console.warn('[auth] getSession failed at boot', error);
-        // A blip reaching the auth server is not evidence of signed-out, so the
-        // same split `apiFetch`'s authorization() makes applies here: leave the
-        // state unknown for the listener's INITIAL_SESSION to settle, rather than
-        // bouncing a user with a valid cached session to the sign-in screen.
         if (isSessionFetchFailure(error)) return;
         if (!seededRef.current) apply(null);
       });

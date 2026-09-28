@@ -19,19 +19,10 @@ export type SubmitReportResponse = {
   issue_url: string;
 };
 
-// makeReportIdempotencyKey mints a fresh UUID v4 to tag one report draft. The
-// server files one issue per distinct key within a 30-minute window and a fresh
-// issue for every keyless submit (feedback/adapters/handler/feedback_handler.go),
-// so a draft that keeps its key across a retry cannot file a second issue. The
-// v4 comes from expo-crypto rather than Math.random for the same reason the
-// track minter does (#1774): Math.random's state is recoverable from earlier
-// keys, and two drafts colliding would hand one reporter the other's issue.
 export function makeReportIdempotencyKey(): string {
   return Crypto.randomUUID();
 }
 
-// Both fields are shown to the reporter as the filed issue's confirmation, so an
-// off-contract body fails here rather than rendering "Filed issue #undefined".
 function parseSubmitReportResponse(
   value: unknown,
   at = 'SubmitReportResponse',

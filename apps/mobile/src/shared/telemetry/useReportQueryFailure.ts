@@ -7,9 +7,6 @@ import { useRecordEvent } from './useRecordEvent';
 
 export type QueryFailureSource = 'search' | 'suggest' | 'history' | 'clear_history';
 
-// A query's error object lives in the shared query cache, so every observer of
-// the same failed query sees the same instance. Remembering reported instances
-// keeps one failure to one event across re-renders, remounts and sibling observers.
 const reported = new WeakSet<Error>();
 
 export function useReportQueryFailure(error: Error | null, source: QueryFailureSource): void {

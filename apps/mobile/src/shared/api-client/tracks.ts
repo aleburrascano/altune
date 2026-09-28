@@ -37,11 +37,6 @@ function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
   };
 }
 
-// Only a failed track carries failure text. The Go DTO already sends
-// failure_message solely for `failed` and nulls failure_reason on every other
-// transition, so dropping them here for pending/ready loses nothing real; it
-// keeps the decoded value inside the TrackAcquisition union. failure_message
-// stays absent when the wire omits it.
 function decodeAcquisition(
   r: Record<string, unknown>,
   at: string,
@@ -58,9 +53,6 @@ function decodeAcquisition(
   };
 }
 
-// The single TrackResponse field list, shared by the strict REST parser and the
-// lenient SSE parser. The two differ only in how a wire field is narrowed: strict
-// throws on a wrong type, lenient coerces an off-type nullable field to null.
 interface TrackNarrowers {
   nullableString: (value: unknown, at: string) => string | null;
   nullableNumber: (value: unknown, at: string) => number | null;
@@ -114,9 +106,6 @@ export function parseTrackResponse(value: unknown, at = 'TrackResponse'): TrackR
   return buildTrackResponse(asRecord(value, at), at, STRICT_NARROWERS);
 }
 
-// Lenient sibling for the SSE path: a required field with the wrong type (or an
-// off-contract acquisition_status) yields null so the caller skips the upsert,
-// while an off-type nullable field is coerced to null rather than rejected.
 export function tryParseTrackResponse(value: unknown, at = 'TrackResponse'): TrackResponse | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   try {
@@ -161,9 +150,6 @@ export async function getTracks(
 
 const MAX_PAGE = 2000;
 
-// Upper bound on a whole-library fetch (shuffle/play all), so a huge library — or a
-// server that never clears has_more — costs at most MAX_ALL_TRACKS / MAX_PAGE requests
-// instead of paging without end. Past it the queue is seeded from the first slice.
 export const MAX_ALL_TRACKS = 10_000;
 
 export async function getAllTracks(params: {
@@ -180,15 +166,6 @@ export async function getAllTracks(params: {
   return items.slice(0, MAX_ALL_TRACKS);
 }
 
-// makeIdempotencyKey mints a fresh UUID v4 to tag one logical save. The server
-// collapses two creates carrying the same key — concurrent double-saves or a
-// retry after a dropped response — onto a single library row (see #698), so a
-// repeat here silently discards a genuinely distinct save. That safety is the
-// v4's 122 bits of collision resistance, which only hold for independent draws:
-// Math.random's state is recoverable from earlier keys, so the draws were never
-// independent (#1774). Kept local to api-client rather than reusing telemetry's
-// makeEventId, which would invert the dependency direction (telemetry imports
-// api-client, not vice versa).
 export function makeIdempotencyKey(): string {
   return Crypto.randomUUID();
 }
@@ -222,8 +199,6 @@ export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTrack
 
 export type BackfillFeaturedResult = { scanned: number; updated: number };
 
-// The counts are interpolated into settings copy ("Updated X of Y tracks"), so an
-// off-contract body fails here as a ContractError instead of rendering garbage (#843).
 function parseBackfillFeaturedResult(
   value: unknown,
   at = 'BackfillFeaturedResult',

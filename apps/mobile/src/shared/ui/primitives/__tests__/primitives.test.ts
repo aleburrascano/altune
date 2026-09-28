@@ -11,7 +11,6 @@ import type {
   TextFieldProps,
 } from '../index';
 
-// Type-level check: these compile only if the barrel re-exports the types.
 type BarrelTypes = [ActionSheetOption, ArtworkProps, MenuAnchor, SearchBarProps, TextFieldProps];
 const typesReachable: BarrelTypes | null = null;
 

@@ -70,7 +70,10 @@ function deriveGoEventTypeNames(eventsSource: string): Map<string, string> {
   return names;
 }
 
-function deriveGoClientSubmittableNames(eventsSource: string, byIdent: Map<string, string>): Set<string> {
+function deriveGoClientSubmittableNames(
+  eventsSource: string,
+  byIdent: Map<string, string>,
+): Set<string> {
   const body = extractBlock(eventsSource, 'func (e EventType) ClientSubmittable() bool {');
   const submittable = new Set<string>();
   for (const m of body.matchAll(/case\s+([^:]+):/g)) {
@@ -104,7 +107,10 @@ function deriveMobileEnvelopeFieldNames(recordEventSource: string): Set<string> 
   const start = recordEventSource.indexOf('export type DiscoveryEvent = {');
   if (start === -1) throw new Error('DiscoveryEvent type not found');
   const braceStart = recordEventSource.indexOf('{', start);
-  const body = recordEventSource.slice(braceStart + 1, findMatchingBrace(recordEventSource, braceStart));
+  const body = recordEventSource.slice(
+    braceStart + 1,
+    findMatchingBrace(recordEventSource, braceStart),
+  );
   const names = new Set<string>();
   for (const m of body.matchAll(/^\s*(\w+)\??:/gm)) names.add(m[1]!);
   return names;
@@ -116,9 +122,6 @@ type PayloadTypeConstraints = {
   stringKeys: Set<string>;
 };
 
-// validatePayloadTypes names its keys through domain.PayloadKey* constants
-// (#2252) rather than string literals, so resolve each constant to its wire
-// value from events.go, where the value lives and events_test.go pins it.
 function derivePayloadKeyValues(eventsSource: string): Map<string, string> {
   const values = new Map<string, string>();
   for (const m of eventsSource.matchAll(/(PayloadKey\w+)\s*=\s*"([a-z0-9_]+)"/g)) {
@@ -131,12 +134,17 @@ function deriveGoPayloadTypeConstraints(
   recordEventServiceSource: string,
   eventsSource: string,
 ): PayloadTypeConstraints {
-  const body = extractBlock(recordEventServiceSource, 'func validatePayloadTypes(payload map[string]any) error {');
+  const body = extractBlock(
+    recordEventServiceSource,
+    'func validatePayloadTypes(payload map[string]any) error {',
+  );
 
   const numberMatch = body.match(
     /\[\.\.\.\]string\{([^}]*)\}\s*\{\s*if v, ok := payload\[key\]; ok \{\s*if _, isNum := v\.\(float64\)/,
   );
-  const booleanMatch = body.match(/payload\[domain\.(PayloadKey\w+)\]; ok \{\s*if _, isBool := v\.\(bool\)/);
+  const booleanMatch = body.match(
+    /payload\[domain\.(PayloadKey\w+)\]; ok \{\s*if _, isBool := v\.\(bool\)/,
+  );
   const stringMatch = body.match(
     /\[\.\.\.\]string\{([^}]*)\}\s*\{\s*if v, ok := payload\[key\]; ok \{\s*if _, isStr := v\.\(string\)/,
   );
@@ -176,7 +184,9 @@ describe('finds the Go source tree to derive every contract from', () => {
 describe('event-name set: every DiscoveryEventType the mobile client declares is a name Go knows', () => {
   it('is a subset of the names in eventTypeNames, since search_performed is legitimately server-only', () => {
     const goNames = new Set(deriveGoEventTypeNames(readGoFile(EVENTS_GO)).values());
-    const mobileNames = deriveMobileDiscoveryEventTypeUnion(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
+    const mobileNames = deriveMobileDiscoveryEventTypeUnion(
+      fs.readFileSync(RECORD_EVENT_TS, 'utf8'),
+    );
 
     expect(goNames.size).toBeGreaterThan(0);
     expect(mobileNames.size).toBeGreaterThan(0);
@@ -191,7 +201,9 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
     const eventsSource = readGoFile(EVENTS_GO);
     const byIdent = deriveGoEventTypeNames(eventsSource);
     const submittable = deriveGoClientSubmittableNames(eventsSource, byIdent);
-    const mobileNames = deriveMobileDiscoveryEventTypeUnion(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
+    const mobileNames = deriveMobileDiscoveryEventTypeUnion(
+      fs.readFileSync(RECORD_EVENT_TS, 'utf8'),
+    );
 
     expect(submittable.size).toBeGreaterThan(0);
     for (const name of mobileNames) {
@@ -212,8 +224,6 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
 describe('envelope field names: every field the mobile client sends is one search_endpoints.go decodes', () => {
   it('DiscoveryEvent field names are a subset of DiscoveryEventRequest json tags', () => {
     const goFields = deriveGoEnvelopeFieldNames(
-      // DiscoveryEventRequest was extracted from search_endpoints.go into
-      // search_dto.go; the endpoint still decodes into it.
       readGoFile('internal/discovery/adapters/handler/search_dto.go'),
     );
     const mobileFields = deriveMobileEnvelopeFieldNames(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));

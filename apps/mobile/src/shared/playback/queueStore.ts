@@ -16,12 +16,6 @@ interface QueueState {
   generation: number;
 }
 
-/**
- * The ordered queue as the native player needs it, returned by the mutators that
- * rebuild or reorder the queue. Returning it from the mutation itself replaces the
- * old mutate-then-`getState()` pair at each call site, whose order nothing enforced:
- * reading before mutating compiled fine and sent the native player stale tracks.
- */
 export interface QueueView {
   ordered: PlaybackTrack[];
   currentIndex: number;
@@ -44,7 +38,6 @@ interface QueueActions {
   loadShuffled: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => QueueView;
   restoreQueue: (options: RestoreQueueOptions) => void;
   enqueue: (track: PlaybackTrack) => void;
-  /** Appends every track in one mutation; returns the upcoming tracks native must hold after it. */
   enqueueMany: (tracks: readonly PlaybackTrack[]) => PlaybackTrack[];
   playNext: (track: PlaybackTrack) => void;
   skipToNext: () => PlaybackTrack | null;
@@ -58,7 +51,6 @@ interface QueueActions {
   setRepeatMode: (mode: RepeatMode) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => PlaybackTrack[];
   removeFromQueue: (index: number) => void;
-  /** Drops every upcoming Track in one mutation, whatever the queue's length. */
   clearUpcoming: () => void;
   clearQueue: () => void;
   currentTrack: () => PlaybackTrack | null;
@@ -119,8 +111,6 @@ function ascending(items: number[]): void {
   items.sort((a, b) => a - b);
 }
 
-// One copy of each queue array however many tracks arrive, so appending a whole selection
-// costs a single mutation rather than one per track (and O(n) copying rather than O(n²)).
 function withAppended(state: QueueState, tracks: readonly PlaybackTrack[]): Partial<QueueState> {
   const added = tracks.map((_, i) => state.tracks.length + i);
   return {
@@ -144,9 +134,6 @@ function survivingPositions(
   });
 }
 
-// Costs one pass over the Tracks that stay, however many are dropped. Dropping them from
-// `tracks` without renumbering would leave playOrder pointing past the end — the store's
-// standing law is that playOrder is an index permutation over tracks.
 function withoutUpcoming(state: QueueState, kept: readonly number[]): Partial<QueueState> {
   const renumbered = new Map(kept.map((trackIdx, position) => [trackIdx, position]));
   return {
@@ -158,8 +145,6 @@ function withoutUpcoming(state: QueueState, kept: readonly number[]): Partial<Qu
   };
 }
 
-// Range checks alone let NaN through (every comparison with NaN is false) and
-// let fractions through that splice silently truncates, so require an integer.
 function isPositionIn(length: number, index: number): boolean {
   return Number.isInteger(index) && index >= 0 && index < length;
 }

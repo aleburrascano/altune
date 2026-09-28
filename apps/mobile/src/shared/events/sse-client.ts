@@ -20,10 +20,6 @@ function reconnectDelayMs(attempt: number, minimumDelayMs: number): number {
   return Math.max(base + Math.random() * base, minimumDelayMs);
 }
 
-/**
- * A block whose `data:` payload is not valid JSON. Carries only the event's id, type and payload
- * length: the payload itself (and the parser's SyntaxError, which quotes it) may hold user data.
- */
 export class MalformedSSEEventError extends Error {
   readonly eventId: string;
   readonly eventType: string;
@@ -40,10 +36,6 @@ export class MalformedSSEEventError extends Error {
   }
 }
 
-/**
- * A handler threw while applying an event. Carries the thrown error as `cause`: it comes from the
- * app's own dispatch table, not from a parser quoting the wire payload.
- */
 export class ServerEventHandlerError extends Error {
   readonly eventId: string;
   readonly eventType: string;
@@ -56,7 +48,6 @@ export class ServerEventHandlerError extends Error {
   }
 }
 
-/** The stream failed at the transport; carries the id the request was sent with. */
 export class SSEConnectionError extends Error {
   readonly correlationId: string | null;
 
@@ -113,7 +104,6 @@ function fieldOf(line: string): WireField | null {
   return { name, value: raw.startsWith(' ') ? raw.substring(1) : raw };
 }
 
-/** A block either carries an event or explains why it could not; both keep their place in the chunk. */
 type ParsedBlock = ServerEvent | MalformedSSEEventError;
 
 interface ParsedChunk {
@@ -130,7 +120,6 @@ function withUnixLineEndings(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-/** Null when the block carries no `data:` line: heartbeat padding, a comment, or a bare `retry:`. */
 function parseBlock(block: string): ParsedBlock | null {
   let id = '';
   let type = 'message';
@@ -162,10 +151,6 @@ function latestEventId(blocks: ParsedBlock[], fallback: string): string {
   return latest;
 }
 
-/**
- * Splits `buffer + chunk` on the SSE block separator; `remainder` is the trailing partial block the
- * caller must feed back in, since a block can arrive across any number of chunks.
- */
 function parseChunk(buffer: string, chunk: string, lastEventId: string): ParsedChunk {
   const rawBlocks = (buffer + withUnixLineEndings(chunk)).split('\n\n');
   const remainder = rawBlocks.pop() ?? '';
@@ -189,7 +174,6 @@ export class SSEClient {
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private connecting = false;
-  /** Cleared by disconnect(), so a connect() still awaiting its token abandons instead of opening. */
   private connectionRequested = false;
 
   private url: string;
@@ -378,7 +362,6 @@ export class SSEClient {
     }
   }
 
-  /** Contained per event: one throwing handler must not cost the rest of the chunk's batch. */
   private dispatchEvent(event: ServerEvent): void {
     try {
       this.onEvent(event);

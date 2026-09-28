@@ -7,14 +7,7 @@ import type { TypographyVariant } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
 export type TextTone =
-  | 'primary'
-  | 'secondary'
-  | 'tertiary'
-  | 'accent'
-  | 'onAccent'
-  | 'danger'
-  | 'success'
-  | 'warning';
+  'primary' | 'secondary' | 'tertiary' | 'accent' | 'onAccent' | 'danger' | 'success' | 'warning';
 
 export type TextProps = RNTextProps & {
   variant?: TypographyVariant;

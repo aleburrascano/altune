@@ -501,7 +501,6 @@ describe('track_acquisition_started', () => {
     expect(useTrackStatusStore.getState().statuses).toEqual({});
   });
 
-  // Regression test for #1784.
   it('leaves the track ready when a started event is replayed after its completion', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
@@ -620,7 +619,6 @@ describe('track_acquisition_completed', () => {
     expect(useDownloadStore.getState().entries.t1?.phase).toBe('finishing');
   });
 
-  // Regression test for #933.
   it('clears the failure text of a track that completes without a started event first', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
@@ -1263,8 +1261,6 @@ describe('downloads bar title', () => {
 });
 
 describe('acquisition event bursts at scale', () => {
-  // A library the size a real one reaches, all of it cached with staleTime: Infinity, so a
-  // pass over it is the 5,000-element scan a bulk import used to pay for on every event.
   const PAGE_COUNT = 25;
   const PAGE_SIZE = 200;
   const LIBRARY_SIZE = PAGE_COUNT * PAGE_SIZE;
@@ -1296,8 +1292,6 @@ describe('acquisition event bursts at scale', () => {
     } as TrackResponse;
   }
 
-  // Every pass over a cached list reads each row's id once to decide whether the row is the
-  // patched one, so an id getter counts array-element visits without touching the subject.
   function countedTrack(id: string, reads: RowReads): TrackResponse {
     return Object.defineProperty(trackFixture(id), 'id', {
       enumerable: true,
@@ -1350,7 +1344,6 @@ describe('acquisition event bursts at scale', () => {
     });
   }
 
-  // The ids the import touches, spread across the cached pages rather than bunched in one.
   const importedIds = Array.from({ length: IMPORTED_TRACKS }, (_, i) => `row${i * 83}`);
 
   function completedEvent(trackId: string, index: number): ServerEvent {
@@ -1420,9 +1413,6 @@ describe('acquisition event bursts at scale', () => {
     });
   });
 
-  // The burst above is all completions because those are the events that only patch. The
-  // started, progress and failed handlers also read the cache through getTrackFromCaches,
-  // which is its own per-event scan and outside this ticket.
   describe('a mixed burst of acquisition events', () => {
     const t1 = 'row1';
     const t2 = 'row2';
@@ -1437,12 +1427,13 @@ describe('acquisition event bursts at scale', () => {
           type: 'track_acquisition_failed',
           data: { track_id: t1, reason: 'no_candidates', failure_message: 'nothing matched' },
         },
-        // Carries no message of its own, so it keeps the one the event before it cached —
-        // a read of a patch that, batched, has not reached the cache yet.
         { id: 'e', type: 'track_acquisition_failed', data: { track_id: t1, reason: 'no_source' } },
         { id: 'f', type: 'track_acquisition_started', data: { track_id: t2 } },
-        { id: 'g', type: 'track_acquisition_completed', data: { track_id: t2, audio_ref: 'ref-2' } },
-        // A patch for a track no cache holds yet, ahead of the event that adds it.
+        {
+          id: 'g',
+          type: 'track_acquisition_completed',
+          data: { track_id: t2, audio_ref: 'ref-2' },
+        },
         {
           id: 'h',
           type: 'track_acquisition_completed',

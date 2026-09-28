@@ -125,7 +125,6 @@ describe('getLibraryAlbums / getLibraryArtists default argument', () => {
   });
 });
 
-// Regression test for #794.
 describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal', () => {
   it.each([
     ['getLibraryAlbums', 'GET /v1/library/albums', getLibraryAlbums],
@@ -144,7 +143,6 @@ describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal', (
 });
 
 describe('wire parsing', () => {
-
   describe('parseListAlbumsResponse and parseListArtistsResponse', () => {
     it('parses an album group lens', () => {
       const albums = parseListAlbumsResponse({

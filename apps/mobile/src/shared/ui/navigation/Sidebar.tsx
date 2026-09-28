@@ -22,7 +22,10 @@ export type SidebarProps = {
 };
 
 function sidebarStyle(theme: Theme): StyleProp<ViewStyle> {
-  return [styles.sidebar, { backgroundColor: theme.color.canvas, borderRightColor: theme.color.border }];
+  return [
+    styles.sidebar,
+    { backgroundColor: theme.color.canvas, borderRightColor: theme.color.border },
+  ];
 }
 
 type SidebarItemPropsInput = {
@@ -112,7 +115,15 @@ type RenderSidebarRouteArgs = {
 function renderSidebarRoute({ route, activeRoute, onNavigate, playlists }: RenderSidebarRouteArgs) {
   const onPress = () => onNavigate(route);
   const info = TAB_ROUTE_INFO_BY_ROUTE[route];
-  return <SidebarRoute key={route} info={info} active={activeRoute === route} onPress={onPress} playlists={playlists} />;
+  return (
+    <SidebarRoute
+      key={route}
+      info={info}
+      active={activeRoute === route}
+      onPress={onPress}
+      playlists={playlists}
+    />
+  );
 }
 
 export function Sidebar({ activeRoute, onNavigate, playlists }: SidebarProps) {

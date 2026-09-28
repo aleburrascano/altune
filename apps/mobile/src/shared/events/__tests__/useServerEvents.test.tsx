@@ -347,8 +347,6 @@ describe('token lookup deadline', () => {
 });
 
 describe('remote kill switch', () => {
-  // Regression for issue #955: the SSE connection must be gated by its remote kill switch, so a
-  // reconnect storm can be stopped without an app release.
   type AppStateChangeHandler = (state: string) => void;
 
   const appStateMock = jest.requireMock('react-native/Libraries/AppState/AppState') as {

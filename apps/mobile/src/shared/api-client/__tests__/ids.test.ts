@@ -1,6 +1,3 @@
-// #944: a branded TrackId/PlaylistId must actually have the safe id shape, and every id reaches a
-// URL path segment through the one always-encoding, shape-checking helper.
-
 import { ContractError } from '@shared/errors';
 import {
   asPlaylistId,
@@ -13,8 +10,6 @@ import {
 
 const UUID = '0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a';
 const HOSTILE = ['', '.', '..', '../x', 'a/b', 'a?b=1', 'a#frag', 'a%2Fb', 'a b', 'x'.repeat(129)];
-// #1770: these pass the character format but name properties a plain object already inherits, so
-// `record[id] = entry` under one of them hijacks the record's prototype and loses the entry.
 const RESERVED_OBJECT_KEYS = ['__proto__', 'constructor', 'prototype'];
 
 describe.each([
@@ -31,9 +26,12 @@ describe.each([
     expect(() => brand(value)).toThrow(ContractError);
   });
 
-  it.each(RESERVED_OBJECT_KEYS)('refuses the inherited property name %p at construction', (value) => {
-    expect(() => brand(value)).toThrow(ContractError);
-  });
+  it.each(RESERVED_OBJECT_KEYS)(
+    'refuses the inherited property name %p at construction',
+    (value) => {
+      expect(() => brand(value)).toThrow(ContractError);
+    },
+  );
 
   it('still accepts an id that merely contains a reserved name', () => {
     expect(brand('__proto__x')).toBe('__proto__x');

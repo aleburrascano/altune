@@ -6,7 +6,10 @@ import {
   setOutboxFileStore,
   OUTBOX_SCHEMA_VERSION,
 } from '../outboxStore';
-import { createMemoryFileStore, type MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@shared/files/__tests__/memoryFileStore';
 import type { OutboxEntry } from '../outbox';
 import type { StoredDirectory } from '@shared/files/fileStore';
 
@@ -121,7 +124,11 @@ describe('loadPersistedOutbox — legacy shapes still in the wild', () => {
   });
 
   it('a missing payload field loads intact, since payload is optional', () => {
-    const withoutPayload = { type: 'play', event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' };
+    const withoutPayload = {
+      type: 'play',
+      event_id: 'e1',
+      client_occurred_at: '2026-07-31T00:00:00.000Z',
+    };
     seed([withoutPayload]);
 
     expect(loadPersistedOutbox()).toEqual([withoutPayload]);
@@ -182,7 +189,9 @@ describe('loadPersistedOutbox — adversarial: the on-disk file is a trust bound
   });
 
   it('an entry whose type is not a known discovery event is dropped rather than replayed to the server', () => {
-    seed([{ type: 'not-a-real-type', event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' }]);
+    seed([
+      { type: 'not-a-real-type', event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' },
+    ]);
 
     expect(loadPersistedOutbox()).toEqual([]);
   });
@@ -220,7 +229,10 @@ describe('loadPersistedOutbox — adversarial: the on-disk file is a trust bound
   });
 
   it('two entries with an empty-string event_id are both rejected rather than collapsing into one', () => {
-    seed([entry({ event_id: '', type: 'library_add' }), entry({ event_id: '', type: 'wrong_album' })]);
+    seed([
+      entry({ event_id: '', type: 'library_add' }),
+      entry({ event_id: '', type: 'wrong_album' }),
+    ]);
 
     expect(loadPersistedOutbox()).toEqual([]);
   });
@@ -243,7 +255,11 @@ describe('loadPersistedOutbox — every early-return arm and filter conjunct as 
   const validEntry = entry({ event_id: 'e1' });
   const withoutEventId = { type: 'play', client_occurred_at: '2026-07-31T00:00:00.000Z' };
   const withoutType = { event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' };
-  const unknownType = { type: 'archived', event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' };
+  const unknownType = {
+    type: 'archived',
+    event_id: 'e1',
+    client_occurred_at: '2026-07-31T00:00:00.000Z',
+  };
   const withoutOccurredAt = { type: 'play', event_id: 'e1' };
 
   it.each<[string, string | undefined, OutboxEntry[]]>([
@@ -256,7 +272,11 @@ describe('loadPersistedOutbox — every early-return arm and filter conjunct as 
     ['conjunct 3 — an element whose event_id is absent', JSON.stringify([withoutEventId]), []],
     ['conjunct 4 — an element whose type is absent', JSON.stringify([withoutType]), []],
     ['conjunct 5 — an element whose type is unknown', JSON.stringify([unknownType]), []],
-    ['conjunct 6 — an element whose client_occurred_at is absent', JSON.stringify([withoutOccurredAt]), []],
+    [
+      'conjunct 6 — an element whose client_occurred_at is absent',
+      JSON.stringify([withoutOccurredAt]),
+      [],
+    ],
   ])('%s', (_label, seeded, expected) => {
     if (seeded !== undefined) __fs.seedFile(OUTBOX_FILE_URI, seeded);
 
@@ -342,7 +362,9 @@ describe('failure injection — a disk failure degrades to in-memory-only, never
 
     persistOutbox([entry({ event_id: 'e1' })]);
 
-    expect(warn).toHaveBeenCalledWith('[telemetry] failed to persist outbox; keeping in-memory only');
+    expect(warn).toHaveBeenCalledWith(
+      '[telemetry] failed to persist outbox; keeping in-memory only',
+    );
     warn.mockRestore();
   });
 });
@@ -410,13 +432,15 @@ describe('an injected FileStore scopes the persisted outbox to it', () => {
 });
 
 describe('durability', () => {
-  // #951: a corrupt, truncated or older-shaped outbox must not silently lose unsent critical events.
-
   const OUTBOX_URI = 'memory://document/telemetry/critical-outbox.json';
   const TEMP_URI = `${OUTBOX_URI}.tmp`;
 
   function entry(eventId: string): OutboxEntry {
-    return { type: 'library_add', event_id: eventId, client_occurred_at: '2026-09-15T00:00:00.000Z' };
+    return {
+      type: 'library_add',
+      event_id: eventId,
+      client_occurred_at: '2026-09-15T00:00:00.000Z',
+    };
   }
 
   let store: MemoryFileStore;
@@ -469,7 +493,9 @@ describe('durability', () => {
 
       expect(loadPersistedOutbox()).toEqual([]);
 
-      expect(warnings()).toEqual(['[telemetry] critical-outbox.json is not an outbox; treating it as empty']);
+      expect(warnings()).toEqual([
+        '[telemetry] critical-outbox.json is not an outbox; treating it as empty',
+      ]);
     });
 
     it('a missing outbox is a legitimate empty queue and logs nothing', () => {
@@ -560,9 +586,18 @@ describe('loadPersistedOutbox — the user_action and failure_shown types (#2860
 
   it('drops near-miss spellings of the new types rather than replaying them to the server', () => {
     seed(
-      ['User_Action', 'user-action', 'userAction', 'user_action ', 'failure_show', 'failure_shown_'].map(
-        (type, i) => ({ type, event_id: `e${i}`, client_occurred_at: '2026-07-31T00:00:00.000Z' }),
-      ),
+      [
+        'User_Action',
+        'user-action',
+        'userAction',
+        'user_action ',
+        'failure_show',
+        'failure_shown_',
+      ].map((type, i) => ({
+        type,
+        event_id: `e${i}`,
+        client_occurred_at: '2026-07-31T00:00:00.000Z',
+      })),
     );
 
     expect(loadPersistedOutbox()).toEqual([]);

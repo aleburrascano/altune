@@ -5,7 +5,13 @@ import { markSessionExpired, stampCredentials, type CredentialStamp } from '../a
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { startDeadline } from '@shared/deadline/deadline';
 import type { Deadline } from '@shared/deadline/deadline';
-import { ApiError, ContractError, NetworkError, isAbort, isSessionFetchFailure } from '@shared/errors';
+import {
+  ApiError,
+  ContractError,
+  NetworkError,
+  isAbort,
+  isSessionFetchFailure,
+} from '@shared/errors';
 import { parseErrorBody } from './wireDecoders';
 
 export { ApiError, NetworkError, ContractError, isRetryable } from '@shared/errors';
@@ -17,15 +23,10 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 
 const API_URL_VAR = 'EXPO_PUBLIC_API_URL';
 
-// Scheme and host, optional port and path prefix; no trailing slash (paths
-// start with `/`), whitespace, query or fragment.
 const API_BASE_SHAPE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*[^\s/?#])?$/;
 
 const INSECURE_SCHEME = 'http://';
 
-// The whole authority, anchored at both ends, so a lookalike that merely
-// begins with a loopback host (`127.0.0.1.example.org`, `127.0.0.1@evil.org`)
-// is read as the remote host it really is. Anything else fails closed.
 const ON_DEVICE_AUTHORITY = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/;
 
 function sendsPlaintextOffDevice(value: string): boolean {
@@ -33,17 +34,6 @@ function sendsPlaintextOffDevice(value: string): boolean {
   return !ON_DEVICE_AUTHORITY.test(value.slice(INSECURE_SCHEME.length));
 }
 
-/**
- * Validated once at module load, like the Supabase env vars, so a build that
- * was never given an API URL fails loudly at startup instead of surfacing as a
- * generic network error on every screen. Only a development build may fall
- * back to the loopback default or talk plaintext to a remote host; a malformed
- * value is rejected in every build.
- *
- * Every request built from the result carries the session's bearer token, so a
- * release build reaching a remote host over `http://` would put that token and
- * the event stream on the wire in the clear.
- */
 function resolveApiBase(value: string | undefined, isDev: boolean): string {
   if (value == null || value === '') {
     if (isDev) return DEFAULT_BASE;
@@ -62,12 +52,6 @@ function resolveApiBase(value: string | undefined, isDev: boolean): string {
 
 export const apiBase = resolveApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 
-/**
- * Refuses rather than returning an empty header, so no request ever leaves
- * unauthenticated. A caller outside `apiFetch` must keep the two refusals
- * apart: `ApiError(401)` is a session that is gone or rejected, `NetworkError`
- * is the auth server itself being unreachable, which must not expire a session.
- */
 export async function authorization(
   path: string,
   correlationId: string | undefined,
@@ -141,18 +125,6 @@ async function readBody<T>(
   }
 }
 
-/**
- * The most a failed request may carry into a log, so redaction lives here
- * rather than at each branch (#1703). Never the caught error's own message: it
- * can hold a server message or a search term, and its stack the local paths.
- * `ContractError.at` is exempt because the decoders build it from literal
- * schema paths, and it is the one field that says which part of the response
- * broke the contract.
- *
- * The last two arms are the catch-all (#1791): before it, an unrecognized
- * throw produced no line at all, so a schema violation was silent in
- * production.
- */
 function failureFields(error: unknown): Record<string, string | number> {
   if (error instanceof ApiError) {
     return { status: error.status, ...(error.code === undefined ? {} : { code: error.code }) };
@@ -163,19 +135,6 @@ function failureFields(error: unknown): Record<string, string | number> {
   return { error: typeof error };
 }
 
-/**
- * Leaves a trace of a failed request where it is thrown, so a caller that
- * turns the error into a flag or a closed sheet still leaves evidence. The
- * line carries the pathname without its query string (search terms), never the
- * caller's headers (the bearer token) or the request body; `failureFields`
- * keeps the error itself redacted. An abort is the caller cancelling, not a
- * failure, so it stays unlogged. The correlation id matches the server's log
- * lines.
- *
- * Exported for the one request this client builds but does not send: the native
- * player streams audio over its own HTTP client, and a failure there would
- * otherwise leave no line at all.
- */
 export function logFailure(
   method: string,
   path: string,
@@ -196,11 +155,6 @@ function tunnelWarningHeader(): Record<string, string> {
   return { 'ngrok-skip-browser-warning': '1' };
 }
 
-/**
- * `Authorization` is spread last, after the caller's headers, so a call site
- * that forwards a header set from another context cannot replace or strip the
- * session's own bearer token. Every other header here stays caller-overridable.
- */
 async function requestHeaders(
   path: string,
   correlationId: string | undefined,
@@ -209,8 +163,6 @@ async function requestHeaders(
   return {
     ...tunnelWarningHeader(),
     ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
-    // Callers always pass record-shaped headers; the RequestInit type also
-    // permits Headers/[][], neither of which is meaningful to spread here.
     ...((init?.headers ?? {}) as Record<string, string>),
     Authorization: await authorization(path, correlationId),
   };
@@ -262,21 +214,11 @@ export function signalInit(signal: AbortSignal | undefined): RequestInit | undef
 
 type MutationMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-// Everything a JSON mutation varies beyond its path, method and body: an
-// `Idempotency-Key` where the caller mints one, an abort signal where the call
-// carries a deadline of its own.
 type MutationInit = {
   headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
-/**
- * The one way to send a JSON body, so a new endpoint cannot ship with a
- * mistyped content type or a body that was never serialized. `Content-Type` is
- * spread last for the reason `Authorization` is in `requestHeaders`: this is
- * the call that serialized the body, so a caller's header set cannot re-label
- * it as something the payload is not.
- */
 export function apiSend<T>(
   path: string,
   method: MutationMethod,

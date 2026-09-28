@@ -12,7 +12,6 @@ import { recordEvent, type DiscoveryEvent } from './recordEvent';
 export type OutboxEntry = DiscoveryEvent & {
   event_id: string;
   client_occurred_at: string;
-  /** Local-only: the signed-in user who queued the entry. Never sent over the wire. */
   owner_user_id?: string;
 };
 
@@ -23,9 +22,7 @@ const DIAGNOSTIC_TYPES: ReadonlySet<DiscoveryEvent['type']> = new Set([
   'client_error',
 ]);
 
-/** First retry after a failed flush pass waits between half of this and this. */
 export const FLUSH_BACKOFF_BASE_MS = 2_000;
-/** No retry ever waits longer than this, however many passes have failed. */
 export const FLUSH_BACKOFF_CAP_MS = 5 * 60 * 1000;
 
 export function makeEventId(): string {
@@ -78,16 +75,9 @@ let _flushing = false;
 let _listening = false;
 let _restored = false;
 let _droppedCritical = 0;
-// The flush loop's own retry schedule. A pass that leaves a retryable failure in
-// the queue bumps the counter and arms a timer; until it fires, the enqueue and
-// foreground triggers do not start a pass, so a chronically failing entry is
-// retried on a capped, jittered schedule rather than on every trigger.
 let _failedPasses = 0;
 let _retryAt = 0;
 let _retryTimer: ReturnType<typeof setTimeout> | null = null;
-// The signed-in user the outbox currently sends for (set by useSession). Entries
-// are tagged with it at enqueue and only ever flushed while it still matches, so
-// a queued event can never ride on another account's bearer token.
 let _owner: string | null = null;
 
 export function droppedCriticalCount(): number {
@@ -139,11 +129,6 @@ function toWire(entry: OutboxEntry): DiscoveryEvent {
   return wire;
 }
 
-/**
- * Sets the user the outbox sends for. When a user is signed in, entries that do
- * not belong to them (another account's, or untagged ones queued with nobody
- * signed in) are dropped before any flush can send them under this user's token.
- */
 export function setOutboxOwner(userId: string | null): void {
   ensureRestored();
   _owner = userId;
@@ -160,11 +145,6 @@ export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
   await requestFlush();
 }
 
-/**
- * Delay before retry number `failedPasses` (1-based): exponential from
- * FLUSH_BACKOFF_BASE_MS, capped at FLUSH_BACKOFF_CAP_MS, with equal jitter so the
- * wait lands in [ceiling/2, ceiling]. `random` is a sample in [0, 1).
- */
 export function flushBackoffMs(failedPasses: number, random: number): number {
   const exponent = Math.min(Math.max(failedPasses, 1) - 1, 30);
   return equalJitterMs(FLUSH_BACKOFF_BASE_MS, FLUSH_BACKOFF_CAP_MS, exponent, random);
@@ -196,8 +176,6 @@ function scheduleRetry(): void {
   );
 }
 
-// The trigger path (enqueue, foreground). It honours the backoff window, so no
-// trigger can shortcut the retry schedule the flush loop owns.
 function requestFlush(): Promise<void> {
   if (_retryAt > Date.now()) return Promise.resolve();
   return flushOutbox();
@@ -207,9 +185,6 @@ function isPermanentlyRejected(error: unknown): boolean {
   return error instanceof ApiError && error.status === 400;
 }
 
-// sent/dropped leave the queue; retry stays queued and the pass moves on; offline
-// means the transport itself is down, so every other entry would fail the same
-// way and the pass stops instead of burning one request per queued entry.
 type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline' | 'gated';
 
 function classifyFailure(entry: OutboxEntry, error: unknown): SendOutcome {
@@ -232,24 +207,12 @@ async function send(entry: OutboxEntry): Promise<SendOutcome> {
   }
 }
 
-// The queue may have been cleared or re-owned by an account switch while a
-// previous send was in flight; never send an entry that is no longer ours.
 function stillOurs(entry: OutboxEntry): boolean {
   return _queue.some((e) => e.event_id === entry.event_id) && ownedByCurrentUser(entry);
 }
 
 const flushEnabled = (): boolean => isLoopEnabled('telemetryFlush');
 
-/**
- * Runs one send pass over the queue now. A failure on one entry is logged and the
- * pass moves on to the entries behind it (unless the transport is down), so one
- * persistently failing entry never starves the rest. A pass that leaves anything
- * retryable queued arms the backoff timer; a clean pass resets it.
- *
- * With the telemetry kill switch off nothing is sent: a pass does not start, a
- * running one stops before its next entry, and no retry is armed. Entries stay
- * queued (and persisted) until the switch is turned back on.
- */
 export async function flushOutbox(): Promise<void> {
   ensureRestored();
   if (_flushing || _queue.length === 0) return;
@@ -289,8 +252,6 @@ export function clearOutbox(): void {
   commit([]);
 }
 
-// Queued entries carry the previous account's activity and would be persisted
-// across the switch; setOutboxOwner only filters what a later flush may send.
 onSignOut(clearOutbox);
 
 export function _resetOutboxForTest({ restored = true }: { restored?: boolean } = {}): void {

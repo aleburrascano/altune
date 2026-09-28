@@ -109,8 +109,6 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
 });
 
 describe('track id branding', () => {
-  // Compile-time guard: tsc fails if the registry starts accepting a bare string again, which is
-  // what let an unparsed id reach a cache file name.
   it('refuses a bare string where a TrackId belongs', () => {
     expectType<Not<IsAssignable<string, Parameters<typeof invalidateAudioCaches>[0]>>>();
   });

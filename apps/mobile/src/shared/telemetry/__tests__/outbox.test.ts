@@ -73,9 +73,6 @@ function lastPersisted(): readonly OutboxEntry[] | undefined {
 }
 
 beforeEach(() => {
-  // A failed pass arms the outbox's retry timer. Fake timers keep every module
-  // instance's timer (including the isolateModules ones) from firing into a later
-  // test; the backoff tests advance them explicitly.
   jest.useFakeTimers();
   _resetOutboxForTest();
   loadPersistedOutboxMock.mockReset().mockReturnValue([]);
@@ -88,11 +85,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-// Kept ahead of the tests below: the isolated outbox instances they boot stay subscribed
-// to the AppState mock, and a foreground event fired here would flush their queues too.
 describe('remote kill switch', () => {
-  // Regression for issue #955: the telemetry outbox must not send while its remote kill switch is
-  // off, so repeated failing POSTs can be stopped without an app release.
   type AppStateChangeHandler = (state: string) => void;
 
   const { __listeners: appStateListeners } = jest.requireMock(
@@ -279,8 +272,6 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
         flushOutbox: typeof flushOutbox;
         droppedCriticalCount: typeof droppedCriticalCount;
       };
-      // ensureRestored fires synchronously inside flushOutbox, capping the 52
-      // restored entries to 50 and shedding 2 in a single call — the plural path.
       void outbox.flushOutbox();
       dropped = outbox.droppedCriticalCount();
     });
@@ -501,7 +492,6 @@ describe('Idempotence: a foreground transition arriving twice', () => {
     await freshEnqueue(event({ search_id: 'q' }));
     expect(freshRecordEvent).toHaveBeenCalledTimes(1);
 
-    // The failed send armed the flush backoff; the user returns after it elapsed.
     const realNow = Date.now();
     const clock = jest.spyOn(Date, 'now').mockReturnValue(realNow + FLUSH_BACKOFF_CAP_MS);
     freshRecordEvent.mockResolvedValue(undefined);
@@ -680,7 +670,6 @@ describe('Regression: a permanently rejected entry must not block the queue behi
   });
 });
 
-// Regression test for #960.
 describe('Security: entries are owned by the user who queued them', () => {
   it('tags an entry with the current owner on disk but strips the tag from what is sent', async () => {
     setOutboxOwner('user-a');
@@ -761,7 +750,6 @@ function failFor(eventId: string, error: unknown): void {
   });
 }
 
-// Regression test for #948.
 describe('Regression: a persistently failing entry never starves the entries queued behind it', () => {
   it.each([
     ['a 5xx', new ApiError(503, 'unavailable')],
@@ -808,7 +796,6 @@ describe('Regression: a persistently failing entry never starves the entries que
     warn.mockRestore();
   });
 
-  // Regression test for #960.
   it('moving past a failed entry still never sends an entry owned by another user', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     restoreFromDisk([
@@ -838,7 +825,6 @@ describe('Regression: a persistently failing entry never starves the entries que
   });
 });
 
-// Regression test for #948.
 describe('Backoff: the flush loop retries on its own capped, jittered schedule', () => {
   let warn: jest.SpyInstance;
 
@@ -889,7 +875,6 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
     await enqueueCritical(event({ search_id: 'a' }));
     expect(recordEventMock).toHaveBeenCalledTimes(1);
 
-    // random 0 => each wait is exactly half its ceiling: 1x, 2x, 4x base / 2.
     for (const [attempt, wait] of [
       [2, FLUSH_BACKOFF_BASE_MS / 2],
       [3, FLUSH_BACKOFF_BASE_MS],
@@ -929,7 +914,6 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
   it('a retry timer that fires into an already-drained queue sends nothing', async () => {
     recordEventMock.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
     await enqueueCritical(event({ search_id: 'a' }));
-    // An explicit drain empties the queue while the retry timer is still armed.
     await flushOutbox();
     recordEventMock.mockClear();
 
@@ -1076,7 +1060,6 @@ describe('pure helpers', () => {
 });
 
 describe('recordEvent gated after the switch check', () => {
-  // This file mocks ../recordEvent wholesale; the gated error is the real class.
   const { TelemetryGatedError } = jest.requireActual<{
     TelemetryGatedError: typeof TelemetryGatedErrorClass;
   }>('../recordEvent');

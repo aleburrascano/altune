@@ -4,8 +4,6 @@ import { Artwork } from '../Artwork';
 
 const COVER = 'https://cdn.altune.test/cover.jpg';
 
-// expo-image normalizes `source` into an array of sources; flatten to the uris
-// it points at so the assertions do not depend on that wrapping shape.
 function sourceUris(source: unknown): (string | undefined)[] {
   const entries = Array.isArray(source) ? source : [source];
   return entries.map((entry) =>
@@ -32,7 +30,6 @@ describe('Artwork(): a null uri never retains the previously shown cover', () =>
 
     rerender(<Artwork uri={null} />);
 
-    // The recycled image must not keep the prior track's cover uri.
     expect(sourceUris(artworkSource())).not.toContain(COVER);
   });
 
@@ -42,7 +39,6 @@ describe('Artwork(): a null uri never retains the previously shown cover', () =>
 
     rerender(<Artwork uri={null} />);
 
-    // A different key yields a fresh element with a different source than before.
     expect(artworkSource()).not.toEqual(coveredKey);
   });
 });

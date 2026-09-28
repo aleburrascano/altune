@@ -15,7 +15,6 @@ function setup(
   onResolveError?: (error: unknown) => void,
 ) {
   const onClose = jest.fn();
-  // exactOptionalPropertyTypes: the key is absent, never present-and-undefined.
   const initialProps: Props = onResolveError
     ? { open, resolve, onResolveError, onClose }
     : { open, resolve, onClose };

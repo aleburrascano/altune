@@ -20,9 +20,9 @@ const entryArb: fc.Arbitrary<OutboxEntry> = fc.record(
   {
     type: eventTypeArb,
     event_id: fc.uuid(),
-    client_occurred_at: fc.integer({ min: 0, max: 4102444800000 }).map((ms) =>
-      new Date(ms).toISOString(),
-    ),
+    client_occurred_at: fc
+      .integer({ min: 0, max: 4102444800000 })
+      .map((ms) => new Date(ms).toISOString()),
     search_id: fc.string({ maxLength: 20 }),
     payload: fc.dictionary(fc.string({ maxLength: 10 }), fc.string({ maxLength: 10 })),
   },
@@ -153,11 +153,16 @@ describe('law: dedupeById is idempotent', () => {
 describe('law: withEnvelope always stamps the given id and timestamp, whatever the event already carried', () => {
   it('the result carries exactly the given event_id and client_occurred_at', () => {
     fc.assert(
-      fc.property(entryArb, fc.string({ maxLength: 30 }), fc.string({ maxLength: 30 }), (event, id, at) => {
-        const result = withEnvelope(event, id, at);
-        expect(result.event_id).toBe(id);
-        expect(result.client_occurred_at).toBe(at);
-      }),
+      fc.property(
+        entryArb,
+        fc.string({ maxLength: 30 }),
+        fc.string({ maxLength: 30 }),
+        (event, id, at) => {
+          const result = withEnvelope(event, id, at);
+          expect(result.event_id).toBe(id);
+          expect(result.client_occurred_at).toBe(at);
+        },
+      ),
       { numRuns: 200 },
     );
   });
@@ -166,11 +171,16 @@ describe('law: withEnvelope always stamps the given id and timestamp, whatever t
 describe('law: withEnvelope is idempotent for a fixed id and timestamp', () => {
   it('re-enveloping an already-enveloped entry with the same id and timestamp changes nothing', () => {
     fc.assert(
-      fc.property(entryArb, fc.string({ maxLength: 30 }), fc.string({ maxLength: 30 }), (event, id, at) => {
-        const once = withEnvelope(event, id, at);
-        const twice = withEnvelope(once, id, at);
-        expect(twice).toEqual(once);
-      }),
+      fc.property(
+        entryArb,
+        fc.string({ maxLength: 30 }),
+        fc.string({ maxLength: 30 }),
+        (event, id, at) => {
+          const once = withEnvelope(event, id, at);
+          const twice = withEnvelope(once, id, at);
+          expect(twice).toEqual(once);
+        },
+      ),
       { numRuns: 200 },
     );
   });
@@ -183,7 +193,9 @@ describe('law: makeEventId always produces an RFC4122 v4 shaped id, and does not
         const ids = Array.from({ length: n }, () => makeEventId());
 
         for (const id of ids) {
-          expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+          expect(id).toMatch(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+          );
         }
         expect(new Set(ids).size).toBe(n);
       }),

@@ -27,9 +27,6 @@ type MockAppStateModule = {
   __listeners: AppStateChangeHandler[];
 };
 
-// `set` moves real time forward: the wall clock and the monotonic tick advance
-// together. `jumpWall` moves only the wall clock, as an NTP resync or a manual
-// clock change does, while `tick` keeps measuring real elapsed time.
 function fakeClock(initialNow: number) {
   let wall = initialNow;
   let tick = initialNow;
@@ -45,8 +42,6 @@ function fakeClock(initialNow: number) {
   return { now, monotonic, set, jumpWall };
 }
 
-// resetModules only buys a fresh singleton (_state, _listening, the tick
-// anchor); time comes from the injected clocks, never from patching globals.
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
   const rawSession: typeof SessionNamespace = require('../session');
@@ -55,12 +50,10 @@ function loadFreshSession(initialNow: number) {
 
   const appState: MockAppStateModule = require('react-native/Libraries/AppState/AppState');
   appState.default.currentState = 'active';
-  // The module-load id is seeded from the real clock; one read re-anchors it to the fake one.
   session.getSessionId();
   return { session, appState, clock };
 }
 
-// Mirrors react-native, which updates AppState.currentState before notifying listeners.
 function emit(appState: MockAppStateModule, status: string): void {
   appState.default.currentState = status;
   [...appState.__listeners].forEach((handler) => handler(status));
@@ -180,7 +173,10 @@ describe('law: repeated application within the window is stable', () => {
       fc.property(
         fc.string({ minLength: 1 }),
         fc.integer({ min: 0, max: 1e9 }),
-        fc.array(fc.integer({ min: 0, max: SESSION_INACTIVITY_MS }), { minLength: 1, maxLength: 20 }),
+        fc.array(fc.integer({ min: 0, max: SESSION_INACTIVITY_MS }), {
+          minLength: 1,
+          maxLength: 20,
+        }),
         (sessionId, startLastActivity, deltas) => {
           let state: SessionState = { sessionId, lastActivity: startLastActivity };
           for (const delta of deltas) {

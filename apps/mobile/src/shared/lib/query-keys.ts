@@ -8,8 +8,6 @@ export const libraryKeys = {
   lookupPrefix: ['library', 'lookup'] as const,
   lookup: (query: string) => ['library', 'lookup', query] as const,
   albumsPrefix: ['library', 'albums'] as const,
-  // A capped read is a different response from an uncapped one, so it caches under
-  // its own key instead of being served the shorter default page (#1668).
   albums: (query: string, sort: string, limit?: number) =>
     limit === undefined
       ? (['library', 'albums', query, sort] as const)
@@ -41,9 +39,6 @@ export const detailKeys = {
 
 export const playlistKeys = {
   list: ['playlists'] as const,
-  // The library grid walks the collection a page at a time, so its cache entry holds
-  // pages where list holds one response. It sits *under* list so that every existing
-  // invalidation of list reaches the grid too (#1708).
   paged: ['playlists', 'paged'] as const,
   details: ['playlist'] as const,
   detail: (playlistId: PlaylistId) => ['playlist', playlistId] as const,

@@ -156,15 +156,11 @@ describe('shuffleFromList', () => {
     const state = useQueueStore.getState();
     expect(state.shuffled).toBe(true);
     expect(state.currentIndex).toBe(0);
-    // The whole library is present in the queue, just reordered — nothing dropped.
     expect([...state.tracks]).toEqual(expect.arrayContaining(library));
     expect(state.tracks).toHaveLength(4);
     expect(capturedAtCall.currentIndex).toBe(0);
-    // Native is handed the shuffled order, which differs from the input order.
     expect(capturedAtCall.tracks).not.toEqual(library);
-    expect(capturedAtCall.tracks).toEqual(
-      state.playOrder.map((i) => state.tracks[i]),
-    );
+    expect(capturedAtCall.tracks).toEqual(state.playOrder.map((i) => state.tracks[i]));
     randomSpy.mockRestore();
   });
 
@@ -245,9 +241,6 @@ describe('addToQueue', () => {
   });
 });
 
-// A library "select all" hands this thousands of tracks at once. Before #1699 the selection bar
-// looped addToQueue over them, copying the queue once per track and firing that many un-awaited
-// native calls — each resolving its own signed url — in a single tick.
 describe('addToQueueMany', () => {
   const SELECT_ALL_SIZE = 3_000;
 
@@ -520,9 +513,6 @@ describe('skipToIndex / removeFromQueue / moveQueueItem', () => {
   });
 });
 
-// A restored queue can hold thousands of upcoming tracks. Before #1739 "Clear" removed them
-// one row at a time, copying both queue arrays per row — O(n²) on the JS thread — behind one
-// serialized native remove per row.
 describe('clearUpcoming', () => {
   const RESTORED_QUEUE_SIZE = 3_000;
 

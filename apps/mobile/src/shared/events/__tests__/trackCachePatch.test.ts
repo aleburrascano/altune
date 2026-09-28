@@ -84,9 +84,6 @@ function newClient(): QueryClient {
   return new QueryClient();
 }
 
-// Registers a query in the cache without ever populating it — the state a screen
-// is in between mounting a query and its first fetch resolving (state.data is
-// undefined). An SSE cache patch can land in exactly this window.
 function registerUnfetchedQuery(client: QueryClient, queryKey: readonly unknown[]): void {
   client.getQueryCache().build(client, { queryKey });
 }
@@ -184,7 +181,6 @@ describe('upsertTrackInCaches', () => {
     )!;
     expect(result.pages[0]!.items.map((t) => t.id)).toEqual(['new', 'a']);
     expect(result.pages[0]!.total).toBe(6);
-    // The prepended row renumbers the list: page 2 now starts one position later (#792).
     expect(result.pages[1]).toEqual({ ...page2, offset: page2.offset + 1 });
   });
 
@@ -206,7 +202,6 @@ describe('upsertTrackInCaches', () => {
     expect(result.pages[1]!.total).toBe(3);
   });
 
-  // Regression test for #933.
   it('does not carry a cached failure_message onto an incoming track that omits it', () => {
     const client = newClient();
     seedTracksPrefix(client, [
@@ -671,7 +666,6 @@ describe('scheduleTrackPatch', () => {
   });
 });
 
-// Regression test for #792.
 describe('paged offsets stay consistent with the rows the cache holds', () => {
   const ids = (prefix: string, n: number) =>
     Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`${prefix}${i}`) }));
@@ -832,7 +826,6 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
 });
 
 describe('invalidateLibraryDerived', () => {
-  // Regression test for #938.
   it('invalidates every cache derived from library membership, once each', () => {
     const queryClient = new QueryClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -848,15 +841,11 @@ describe('invalidateLibraryDerived', () => {
   });
 });
 
-// Regression test for #961.
 describe('a late REST response cannot regress a patch that landed mid-fetch', () => {
   const key = libraryKeys.tracks('q', 'sort');
   const trackX = (transition: ReturnType<typeof toReady | typeof toPending | typeof toFailed>) =>
     makePage([makeTrack({ id: asTrackId('x'), ...transition })]);
 
-  // GET /tracks: the first request is held open until release() and then answers
-  // with the server's view from when it was sent (X pending); any later request
-  // sees the current view (X ready), as the server has finished acquiring X.
   function slowStaleServer() {
     let release: () => void = () => undefined;
     const queryFn = jest.fn(() => {
@@ -868,8 +857,6 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
     return { queryFn, release: () => release() };
   }
 
-  // Mounts the library's infinite query the way useLibraryTracks does; every status of
-  // X the screen would render is pushed onto `rendered`. Returns unmount.
   function mountLibrary(queryFn: () => Promise<ListTracksResponse>, rendered: string[] = []) {
     const observer = new InfiniteQueryObserver(client, {
       queryKey: key,
@@ -878,8 +865,6 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
       getNextPageParam: () => undefined,
       retry: false,
     });
-    // Subscribe and read exactly as useBaseQuery does: a batched store-change callback,
-    // then useSyncExternalStore's snapshot, observer.getCurrentResult().
     return observer.subscribe(
       notifyManager.batchCalls(() => {
         const { data } = observer.getCurrentResult();
@@ -897,10 +882,8 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
   beforeEach(() => {
     client = newClient();
   });
-  // Drops the queries, and with them their gc timers, so jest can exit.
   afterEach(() => client.clear());
 
-  // Returns every status of X the screen rendered from the SSE patch onwards.
   async function raceSseAgainstSlowFetch(): Promise<string[]> {
     const server = slowStaleServer();
     const rendered: string[] = [];
@@ -908,7 +891,6 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
     await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('fetching'));
     rendered.length = 0;
 
-    // SSE track_acquisition_completed lands while GET /tracks is still in flight.
     patchTrackInCaches(client, asTrackId('x'), toReady());
     server.release();
 
@@ -963,8 +945,6 @@ describe('a late REST response cannot regress a patch that landed mid-fetch', ()
 });
 
 describe('track id branding', () => {
-  // Compile-time guard: tsc fails if these cache writers start accepting a bare string again,
-  // which is what let an id nobody had parsed select which rows a patch rewrote.
   it('refuses a bare string where a TrackId belongs', () => {
     expectType<Not<IsAssignable<string, Parameters<typeof removeTrackFromCaches>[1]>>>();
   });

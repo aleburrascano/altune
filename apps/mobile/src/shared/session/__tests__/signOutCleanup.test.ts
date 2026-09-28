@@ -76,7 +76,6 @@ describe('signOutCleanup registry', () => {
 });
 
 describe('guardedMutationOptions', () => {
-  /** Stands in for the object react-query builds per run and hands to every attempt. */
   const runContext = () => ({ client: new QueryClient(), meta: undefined });
 
   it('settles a mutation of the current session, with the context its onMutate returned', async () => {
@@ -102,8 +101,6 @@ describe('guardedMutationOptions', () => {
     await expect(options.mutationFn!(undefined, run)).resolves.toBe('cleared');
   });
 
-  // #1752: react-query re-invokes mutationFn on every retry, and each attempt
-  // re-derives its bearer token, so one firing after the switch would act as B.
   it('refuses a reattempt of a mutation whose session has since ended', async () => {
     const send = jest.fn(() => Promise.resolve('cleared'));
     const options = guardedMutationOptions({ mutationFn: send });

@@ -96,7 +96,11 @@ describe('recordFailureShown()', () => {
   it('POSTs a failure_shown event carrying the surface, message and track id', async () => {
     __http.reply('POST /v1/discovery/events', { status: 202 });
 
-    recordFailureShown({ surface: 'alert.delete_track', message: 'could not delete', track_id: 't-2' });
+    recordFailureShown({
+      surface: 'alert.delete_track',
+      message: 'could not delete',
+      track_id: 't-2',
+    });
     await settle();
 
     const body = sentBody();
@@ -236,7 +240,9 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
 
     const sent = sentBody().payload.message as string;
     expect(sent).toBe('a'.repeat(299));
-    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent)).toBe(false);
+    expect(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent),
+    ).toBe(false);
   });
 
   it('never cuts an emoji in half when a long message is trimmed', async () => {
@@ -247,18 +253,26 @@ describe('user telemetry: trim boundaries (message / error trimmed to 300 chars)
 
     const sent = sentBody().payload.message as string;
     expect(sent.startsWith('a'.repeat(299))).toBe(true);
-    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent)).toBe(false);
+    expect(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent),
+    ).toBe(false);
   });
 
   it('never cuts an emoji in half when a long error is trimmed', async () => {
     __http.reply('POST /v1/discovery/events', { status: 202 });
 
-    recordUserAction({ action: 'detail.save', outcome: 'failed', error: 'a'.repeat(299) + '🎵🎵🎵' });
+    recordUserAction({
+      action: 'detail.save',
+      outcome: 'failed',
+      error: 'a'.repeat(299) + '🎵🎵🎵',
+    });
     await settle();
 
     const sent = sentBody().payload.error as string;
     expect(sent.startsWith('a'.repeat(299))).toBe(true);
-    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent)).toBe(false);
+    expect(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(sent),
+    ).toBe(false);
   });
 });
 
@@ -338,7 +352,9 @@ describe('user telemetry: errors are swallowed (fire-and-forget, never throws)',
     const unhandled = collectUnhandled();
 
     expect(() => recordUserAction({ action: 'library.retry', outcome: 'tapped' })).not.toThrow();
-    expect(() => recordFailureShown({ surface: 'banner.track_status', message: 'boom' })).not.toThrow();
+    expect(() =>
+      recordFailureShown({ surface: 'banner.track_status', message: 'boom' }),
+    ).not.toThrow();
     await flushMacrotasks();
 
     unhandled.stop();
@@ -388,7 +404,12 @@ describe('user telemetry: telemetryFlush kill switch', () => {
   it('sends nothing for a failed action with a long error while the switch is off', async () => {
     applyKillSwitches({ telemetry_enabled: false });
 
-    recordUserAction({ action: 'detail.save', outcome: 'failed', status: 500, error: 'x'.repeat(1000) });
+    recordUserAction({
+      action: 'detail.save',
+      outcome: 'failed',
+      status: 500,
+      error: 'x'.repeat(1000),
+    });
     await settle();
     await new Promise((resolve) => setImmediate(resolve));
 

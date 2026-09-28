@@ -22,7 +22,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 const getSession = supabase.auth.getSession as jest.Mock;
-// Mirrors the Go API's accepted shape (httputil.CorrelationID): <=64 chars of [A-Za-z0-9_-].
 const SERVER_ACCEPTED_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function withSession(accessToken: string | null | undefined = 'tok') {

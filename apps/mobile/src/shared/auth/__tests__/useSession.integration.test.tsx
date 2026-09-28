@@ -33,8 +33,6 @@ import type * as SupabaseClientModule from '../supabaseClient';
 import type * as UseSessionModule from '../useSession';
 import { asTrackId } from '@shared/api-client/ids';
 
-// The server-event tests need the app foregrounded across the switch: that is when the
-// stream opened for the previous account is still live.
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
   default: {
     currentState: 'active',
@@ -105,10 +103,8 @@ beforeEach(() => {
   });
 });
 
-// Disarm the outbox retry timer a failed send arms, so it cannot fire after the test.
 afterEach(() => _resetOutboxForTest());
 
-// Regression test for #676.
 describe('cross-account acquisition-status leak on a shared device', () => {
   it('after A saves a track and B signs in, useOwnedTrack no longer resolves A save status for a shared identity', async () => {
     bootSignedIn(sessionFor(USER_A, 'token-a'));
@@ -116,21 +112,21 @@ describe('cross-account acquisition-status leak on a shared device', () => {
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
 
-    // User A saves a track: the identity store links the normalized key to A's trackId.
     const identity = trackIdentityKey('Song Title', 'The Artist');
-    patchTrackStatus(asTrackId('track-owned-by-a'), { acquisitionStatus: 'ready', failureMessage: null });
+    patchTrackStatus(asTrackId('track-owned-by-a'), {
+      acquisitionStatus: 'ready',
+      failureMessage: null,
+    });
     linkTrackIdentity(identity, asTrackId('track-owned-by-a'));
 
     const owned = renderHook(() =>
       useOwnedTrack(stampedElsewhere(), { title: 'Song Title', artist: 'The Artist' }),
     );
-    // Sanity: while A is signed in, the shared identity resolves to A's saved track.
     expect(owned.result.current).toEqual({
       trackId: 'track-owned-by-a',
       acquisitionStatus: 'ready',
     });
 
-    // A signs out; B signs in on the same device.
     switchAccountTo(sessionFor(USER_B, 'token-b'));
 
     expect(owned.result.current).toBeNull();
@@ -146,18 +142,15 @@ describe('cross-account acquisition-status leak on a shared device', () => {
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
 
-    patchTrackStatus(asTrackId('track-owned-by-a'), { acquisitionStatus: 'ready', failureMessage: null });
+    patchTrackStatus(asTrackId('track-owned-by-a'), {
+      acquisitionStatus: 'ready',
+      failureMessage: null,
+    });
     linkTrackIdentity(trackIdentityKey('Song Title', 'The Artist'), asTrackId('track-owned-by-a'));
 
     render(
-      <TrackSaveControl
-        owned={null}
-        onPress={jest.fn()}
-        title="Song Title"
-        artist="The Artist"
-      />,
+      <TrackSaveControl owned={null} onPress={jest.fn()} title="Song Title" artist="The Artist" />,
     );
-    // Before the switch, the control reflects A's saved track for B's shared identity.
     expect(screen.getByLabelText('Song Title in library')).toBeTruthy();
 
     switchAccountTo(sessionFor(USER_B, 'token-b'));
@@ -169,7 +162,6 @@ describe('cross-account acquisition-status leak on a shared device', () => {
   });
 });
 
-// Regression test for #676.
 describe('cross-account queued-telemetry leak on a shared device', () => {
   it("a critical entry A queued while offline is dropped on account switch, never sent under B's session", async () => {
     bootSignedIn(sessionFor(USER_A, 'token-a'));
@@ -177,7 +169,6 @@ describe('cross-account queued-telemetry leak on a shared device', () => {
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
 
-    // A files a wrong_album report while the network is down: it lands in the outbox.
     __http.fail(EVENTS);
     await act(async () => {
       await enqueueCritical({ type: 'wrong_album', payload: { title: 'Song', artist: 'Artist' } });
@@ -185,16 +176,13 @@ describe('cross-account queued-telemetry leak on a shared device', () => {
     const attemptsAsA = __http.countFor(EVENTS);
     expect(attemptsAsA).toBeGreaterThanOrEqual(1);
 
-    // A signs out; B signs in on the same device.
     switchAccountTo(sessionFor(USER_B, 'token-b'));
 
-    // The network is back; a foreground flush would send anything still queued.
     __http.reply(EVENTS, { status: 202 });
     await act(async () => {
       await flushOutbox();
     });
 
-    // Nothing new was sent — A's report was dropped, not misattributed to B.
     expect(__http.countFor(EVENTS)).toBe(attemptsAsA);
 
     session.unmount();
@@ -202,7 +190,6 @@ describe('cross-account queued-telemetry leak on a shared device', () => {
 });
 
 describe('session restore across process death', () => {
-  // Acceptance criterion AC#4.
   describe('a session survives process death (in-process half: real storage adapter, module registry discarded, session restored)', () => {
     const FIXTURE_USER_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -296,10 +283,6 @@ describe('server event stream across an account switch', () => {
     return { id: `evt-${trackId}`, type: 'track_acquisition_started', data: { track_id: trackId } };
   }
 
-  /**
-   * A stream the test can push events down. Delivery follows SSEClient's own rules: only while a
-   * connection is open, and never again once disposed, since disposal is terminal there.
-   */
   interface FakeStream extends ServerEventsClient {
     deliver: (event: ServerEvent) => void;
   }
@@ -362,7 +345,6 @@ describe('server event stream across an account switch', () => {
     return useTrackStatusStore.getState().statuses;
   }
 
-  /** The app root's pairing: the SSE connection runs beside the session, not under it. */
   async function renderAppSignedInAs(user: Session['user']) {
     bootSignedInAs(user);
     const rendered = renderHook(
@@ -385,7 +367,6 @@ describe('server event stream across an account switch', () => {
     });
   });
 
-  // Regression test for #1772.
   describe("a server event on the previous account's stream does not reach the next one", () => {
     it.each([
       ['user A signs out', 'SIGNED_OUT', null],
@@ -500,16 +481,13 @@ describe('acquisition and telemetry state across an account switch', () => {
     });
   });
 
-  // Disarm the outbox retry timer a failed send arms, so it cannot fire after the test.
   afterEach(() => _resetOutboxForTest());
 
-  // Regression test for #960.
   describe('account switch clears acquisition and telemetry state', () => {
     it("drops A's in-progress download and A's in-flight critical telemetry before B's session", async () => {
       const session = bootWith(sessionFor(USER_A, 'token-a'));
       await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
 
-      // A starts an acquisition: the downloading banner would show A's track.
       act(() => {
         startDownload(asTrackId('track-a'), {
           title: 'A Song',
@@ -519,15 +497,12 @@ describe('acquisition and telemetry state across an account switch', () => {
       });
       expect(useDownloadStore.getState().entries['track-a']).toBeDefined();
 
-      // A queues two label-critical events while offline.
       __http.fail(EVENTS);
       await act(async () => {
         await enqueueCritical({ type: 'library_add', payload: { track_id: 'a-first' } });
         await enqueueCritical({ type: 'library_add', payload: { track_id: 'a-second' } });
       });
 
-      // Network returns; a foreground flush starts sending A's queue and the first
-      // request is still in flight when A signs out and B signs in.
       __http.reset();
       __http.reply(EVENTS, { status: 202 });
       const gate = deferred();
@@ -552,7 +527,6 @@ describe('acquisition and telemetry state across an account switch', () => {
         await flushOutbox();
       });
 
-      // Neither A's download nor any of A's telemetry survives into B's session.
       expect(useDownloadStore.getState().entries).toEqual({});
       expect(sentEvents().filter((e) => e.token === 'token-b')).toEqual([]);
       expect(fsDouble().readFile(OUTBOX_URI)).toBeUndefined();
@@ -580,7 +554,6 @@ describe('acquisition and telemetry state across an account switch', () => {
           },
         ]),
       );
-      // Simulate a cold start: the outbox has not yet restored from disk.
       _resetOutboxForTest({ restored: false });
 
       __http.reply(EVENTS, { status: 202 });
@@ -595,7 +568,6 @@ describe('acquisition and telemetry state across an account switch', () => {
       expect(sent.map((e) => (e.body['payload'] as Record<string, unknown>)['track_id'])).toEqual([
         'b-track',
       ]);
-      // The owner tag is local bookkeeping, never sent over the wire.
       expect(sent[0]?.body).not.toHaveProperty('owner_user_id');
 
       session.unmount();
@@ -691,23 +663,25 @@ describe('search state across an identity change', () => {
     clearDetailHandoffs();
   });
 
-  // Regression test for #772.
   describe('search text and last-tapped result do not survive an identity change', () => {
     it.each([
       ['user A signs out', 'SIGNED_OUT', null],
       ['the device switches straight to user B', 'SIGNED_IN', sessionFor(USER_B)],
-    ] as const)('%s -> search-state and detail-handoff are cleared', async (_label, event, next) => {
-      bootSignedInAs(USER_A);
-      const { result } = renderHook(() => useSession(), {
-        wrapper: makeWrapper(new QueryClient()),
-      });
-      await waitFor(() => expect(result.current.status).toBe('signed-in'));
+    ] as const)(
+      '%s -> search-state and detail-handoff are cleared',
+      async (_label, event, next) => {
+        bootSignedInAs(USER_A);
+        const { result } = renderHook(() => useSession(), {
+          wrapper: makeWrapper(new QueryClient()),
+        });
+        await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
-      userASearchedAndTapped();
-      emitAuth(event, next);
+        userASearchedAndTapped();
+        emitAuth(event, next);
 
-      expectNothingOfUserALeft();
-    });
+        expectNothingOfUserALeft();
+      },
+    );
 
     it('a token refresh for the same user keeps the search the user is in the middle of', async () => {
       bootSignedInAs(USER_A);
@@ -755,10 +729,6 @@ describe('search state across an identity change', () => {
 });
 
 describe('pinned downloads across a killed sign-out', () => {
-  // #835: pinned downloads are keyed by trackId only. When the app dies before the
-  // sign-out cleanup finishes, pinned.json and the audio survive, and the next
-  // account to sign in on the device must not be able to see or play them.
-
   type FsDouble = {
     seedFile(uri: string, contents: string): void;
     readFile(uri: string): string | undefined;
@@ -791,8 +761,6 @@ describe('pinned downloads across a killed sign-out', () => {
     } as unknown as Session;
   }
 
-  // A relaunch gets fresh app modules, but React and react-query stay the
-  // renderer's instances so hooks from the fresh modules still render.
   function bootApp(): App {
     jest.doMock('react', () => React);
     jest.doMock('@tanstack/react-query', () => ReactQuery);
@@ -804,7 +772,6 @@ describe('pinned downloads across a killed sign-out', () => {
     };
   }
 
-  // Process death: memory is gone, only what was written to disk survives.
   function killAndRelaunch(): App {
     const snapshot = currentFs().allFiles();
     jest.resetModules();
@@ -842,18 +809,15 @@ describe('pinned downloads across a killed sign-out', () => {
     jest.resetModules();
   });
 
-  // Regression test for #835.
   describe('pinned downloads never cross accounts after a killed sign-out', () => {
     it('B signing in after A was killed mid sign-out sees and plays none of A downloads', async () => {
       const first = bootApp();
       const unmountA = await signIn(first, USER_A);
       await pinAsReady(first, 't1');
       unmountA();
-      // A's sign-out resolved but the app died before any cleanup ran.
       expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
 
       const second = killAndRelaunch();
-      // What a fresh launch reads before anyone signs in is still A's index.
       expect(second.pinned.usePinnedStore.getState().entries['t1']).toBeDefined();
 
       const unmountB = await signIn(second, USER_B);
@@ -862,10 +826,12 @@ describe('pinned downloads across a killed sign-out', () => {
       expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
       expect(second.pinned.pinnedByteTotal()).toBe(0);
       expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
-      expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({ schemaVersion: 1, entries: {} });
+      expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({
+        schemaVersion: 1,
+        entries: {},
+      });
       unmountB();
 
-      // And B's own relaunch does not inherit A's downloads back from disk.
       const third = killAndRelaunch();
       expect(third.pinned.usePinnedStore.getState().entries).toEqual({});
     });

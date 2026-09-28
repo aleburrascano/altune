@@ -304,7 +304,6 @@ describe('useOptimisticMutation(): unguarded', () => {
   });
 });
 
-/** Sign-out plus another sign-in: the epoch moves on and the key now holds the new user's data. */
 function switchUser(queryClient: QueryClient, theirCache: Counter): void {
   runSignOutCleanups();
   queryClient.setQueryData(KEY, theirCache);
@@ -419,7 +418,6 @@ describe('session fencing of the request and its callbacks', () => {
     alertSpy.mockRestore();
   });
 
-  // Regression test for #2729.
   describe('useOptimisticMutation(): fencing the request and its callbacks by session', () => {
     it('shows no error alert to the next user when the request fails after a sign-out', async () => {
       const queryClient = newClient();

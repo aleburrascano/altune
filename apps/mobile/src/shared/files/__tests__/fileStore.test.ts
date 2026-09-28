@@ -20,8 +20,6 @@ function fakeLocalStorage(): Storage {
   };
 }
 
-// The contract any FileStore must satisfy. The device store runs here against the suite-wide
-// expo-file-system double; the in-memory store is the scoped fake tests inject into consumers.
 describe.each<[string, () => FileStore]>([
   ['deviceFileStore', () => deviceFileStore],
   ['createMemoryFileStore', createMemoryFileStore],
@@ -177,8 +175,6 @@ describe('createWebFileStore download() is unsupported', () => {
 });
 
 describe('createFileStoreSlot', () => {
-  // The seam every persisted store binds through: killSwitch, pinnedFiles, pinnedIndex and
-  // outboxStore each hold one slot, and their test suites swap and restore it around every case.
   describe('a file store slot', () => {
     it('starts bound to the device filesystem when created with no default', () => {
       const slot = createFileStoreSlot();

@@ -7,19 +7,8 @@ export interface ErrorCopy {
   readonly body: string;
 }
 
-/**
- * The shared "…try again" tail. Rendered error bodies and the mutation Alerts
- * compose their own verb sentence in front of it so the retry ask reads the
- * same everywhere.
- */
 export const RETRY_TAIL = 'Please try again.';
 
-/**
- * A 5xx from the API. Detected structurally by the `status` field `ApiError`
- * carries (see `@shared/errors`): this module lives in `shared/lib`,
- * whose purity invariant forbids a runtime import of `@shared/api-client`, so it
- * reads the same contract without pulling the class in.
- */
 function isServerError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const status = (err as Error & { status?: unknown }).status;

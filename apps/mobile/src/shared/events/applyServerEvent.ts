@@ -7,8 +7,6 @@ import { PLAYLIST_HANDLERS } from './playlistEvents';
 import { RESYNC_HANDLERS } from './resyncEvents';
 import type { ServerEvent } from './sse-client';
 
-// Thin router: each domain module owns its slice; the full Record type makes the
-// compiler reject a SERVER_EVENT_TYPES entry that no slice handles.
 const HANDLERS: ServerEventHandlers<ServerEventType> = {
   ...RESYNC_HANDLERS,
   ...ACQUISITION_HANDLERS,

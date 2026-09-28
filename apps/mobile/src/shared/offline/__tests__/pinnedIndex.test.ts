@@ -9,11 +9,12 @@ import {
   setPinnedIndexFileStore,
   type PinnedEntry,
 } from '../pinnedIndex';
-import { createMemoryFileStore, type MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@shared/files/__tests__/memoryFileStore';
 import type { StoredDirectory } from '@shared/files/fileStore';
 import { asTrackId } from '@shared/api-client/ids';
-
-// #951: a corrupt, truncated or older-shaped pinned.json must not silently become "nothing pinned".
 
 const INDEX_URI = 'memory://document/offline/pinned.json';
 const TEMP_URI = `${INDEX_URI}.tmp`;
@@ -41,11 +42,16 @@ function warnings(): string[] {
 
 describe('a corrupt or unreadable index is reported, not silently emptied', () => {
   it('a truncated pinned.json logs a warning naming the file and the parse error, without its contents', () => {
-    store.files.set(INDEX_URI, '{"schemaVersion":1,"entries":{"secret-track":{"trackId":"secret-track","sta');
+    store.files.set(
+      INDEX_URI,
+      '{"schemaVersion":1,"entries":{"secret-track":{"trackId":"secret-track","sta',
+    );
 
     expect(loadIndex()).toEqual({});
 
-    expect(warnings()).toEqual(['[offline] pinned.json is corrupt (SyntaxError); treating it as empty']);
+    expect(warnings()).toEqual([
+      '[offline] pinned.json is corrupt (SyntaxError); treating it as empty',
+    ]);
     expect(warnings().join()).not.toContain('secret-track');
   });
 
@@ -57,7 +63,9 @@ describe('a corrupt or unreadable index is reported, not silently emptied', () =
 
     expect(loadIndex()).toEqual({});
 
-    expect(warnings()).toEqual(['[offline] could not read pinned.json (Error); treating it as empty']);
+    expect(warnings()).toEqual([
+      '[offline] could not read pinned.json (Error); treating it as empty',
+    ]);
   });
 
   it('valid JSON that is not an index logs a warning rather than passing for an empty library', () => {
@@ -65,7 +73,9 @@ describe('a corrupt or unreadable index is reported, not silently emptied', () =
 
     expect(loadIndex()).toEqual({});
 
-    expect(warnings()).toEqual(['[offline] pinned.json is not a pinned index; treating it as empty']);
+    expect(warnings()).toEqual([
+      '[offline] pinned.json is not a pinned index; treating it as empty',
+    ]);
   });
 
   it('a missing index is a legitimate empty library and logs nothing', () => {
@@ -150,8 +160,6 @@ const TRACK_ID = asTrackId('t1');
 const AUDIO_URI = 'file:///document/offline-audio/t1.mp3';
 
 describe('a pinned entry carries only the fields its status has', () => {
-  // Compile-time guards: tsc fails if uri goes back to being optional for every status, which is
-  // what let a ready entry name no file and a track with no file name a stale one (#1766).
   it('refuses a ready entry with no uri, and a track with no file that carries one', () => {
     // @ts-expect-error a ready entry names the file it downloaded, so its uri is not optional
     const readyWithoutUri: PinnedEntry = { trackId: TRACK_ID, status: 'ready' };

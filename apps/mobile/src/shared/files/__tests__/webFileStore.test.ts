@@ -148,7 +148,9 @@ describe('createWebFileStore', () => {
 });
 
 describe('the webFileStore singleton', () => {
-  async function withThrowingLocalStorage<T>(run: (getter: jest.Mock) => Promise<T> | T): Promise<T> {
+  async function withThrowingLocalStorage<T>(
+    run: (getter: jest.Mock) => Promise<T> | T,
+  ): Promise<T> {
     const getter = jest.fn(() => {
       throw new DOMException('blocked', 'SecurityError');
     });

@@ -9,7 +9,6 @@ const PREF_URI = 'memory://document/preferences/theme.json';
 const LIGHT_ON_DISK = '"light"';
 const DISK_FULL = new Error('ENOSPC: no space left on device');
 
-/** A store that reads like any other but refuses every write, the shape a full disk takes. */
 function storeThatRefusesWrites(): MemoryFileStore {
   const store = createMemoryFileStore();
   return {

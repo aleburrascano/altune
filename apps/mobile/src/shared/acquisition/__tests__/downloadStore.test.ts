@@ -159,13 +159,11 @@ describe('complete', () => {
   });
 
   it('preserves title, artist and artworkUrl through the done transition', () => {
-    useDownloadStore
-      .getState()
-      .start(asTrackId('t1'), {
-        title: 'Discovery',
-        artist: 'Daft Punk',
-        artworkUrl: 'discovery.png',
-      });
+    useDownloadStore.getState().start(asTrackId('t1'), {
+      title: 'Discovery',
+      artist: 'Daft Punk',
+      artworkUrl: 'discovery.png',
+    });
 
     useDownloadStore.getState().complete(asTrackId('t1'));
     expect(useDownloadStore.getState().entries['t1']?.artworkUrl).toBe('discovery.png');
@@ -198,13 +196,9 @@ describe('complete', () => {
     jest.advanceTimersByTime(100);
     useDownloadStore.getState().complete(asTrackId('t1'));
 
-    // One tick PAST the FIRST call's removal timer (scheduled from t=0), but well before
-    // the SECOND call's own removal timer (scheduled from t=100). If complete() failed to
-    // cancel the first call's timers, the stale removal fires here and the entry is gone.
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS - 100 + 1);
     expect(useDownloadStore.getState().entries['t1']).toBeDefined();
 
-    // Past the SECOND call's own removal timer.
     jest.advanceTimersByTime(100);
     expect(useDownloadStore.getState().entries['t1']).toBeUndefined();
   });
@@ -226,13 +220,11 @@ describe('complete', () => {
 
 describe('fail', () => {
   it('preserves title, artist and artworkUrl through the failed transition', () => {
-    useDownloadStore
-      .getState()
-      .start(asTrackId('t1'), {
-        title: 'Homework',
-        artist: 'Daft Punk',
-        artworkUrl: 'homework.png',
-      });
+    useDownloadStore.getState().start(asTrackId('t1'), {
+      title: 'Homework',
+      artist: 'Daft Punk',
+      artworkUrl: 'homework.png',
+    });
 
     useDownloadStore.getState().fail(asTrackId('t1'));
 
@@ -245,20 +237,17 @@ describe('fail', () => {
 
   it("cancels a pending complete() done timer, so a track that fails mid-finishing doesn't flip back to done", () => {
     useDownloadStore.getState().start(asTrackId('t1'));
-    useDownloadStore.getState().complete(asTrackId('t1')); // schedules done@+FINISHING_DWELL_MS, remove@+that+DONE_HOLD_MS
+    useDownloadStore.getState().complete(asTrackId('t1'));
 
     jest.advanceTimersByTime(100);
     useDownloadStore.getState().fail(asTrackId('t1'));
 
-    // Reach the exact instant complete()'s stale "done" timer would have fired.
     jest.advanceTimersByTime(FINISHING_DWELL_MS - 100);
     expect(useDownloadStore.getState().entries['t1']?.phase).toBe('failed');
 
-    // Reach the exact instant complete()'s stale "remove" timer would have fired.
     jest.advanceTimersByTime(DONE_HOLD_MS);
     expect(useDownloadStore.getState().entries['t1']?.phase).toBe('failed');
 
-    // fail()'s own removal timer, scheduled FAILED_HOLD_MS after the fail() call.
     jest.advanceTimersByTime(FAILED_HOLD_MS);
     expect(useDownloadStore.getState().entries['t1']).toBeUndefined();
   });
@@ -303,7 +292,7 @@ describe('fail within a batch', () => {
 describe('reset', () => {
   it("cancels pending timers, so a stale done/remove callback can't corrupt a track restarted after reset", () => {
     useDownloadStore.getState().start(asTrackId('t1'));
-    useDownloadStore.getState().complete(asTrackId('t1')); // schedules done@+FINISHING_DWELL_MS, remove@+that+DONE_HOLD_MS
+    useDownloadStore.getState().complete(asTrackId('t1'));
 
     jest.advanceTimersByTime(100);
     useDownloadStore.getState().reset();
@@ -424,11 +413,6 @@ describe('aggregatePhase', () => {
 });
 
 describe('rememberMeta', () => {
-  // `rememberMeta` stashes a title/artist/artwork for a track that has no download
-  // entry yet (or ever will) — e.g. `track_added_to_library`, which always carries
-  // the real metadata ahead of any acquisition event. It must never surface as a
-  // visible entry on its own, only get merged into one once start/progress/fail
-  // creates it (#downloads-bar-title).
   beforeEach(() => {
     useDownloadStore.getState().reset();
   });
@@ -538,8 +522,6 @@ describe('rememberMeta', () => {
 
       useDownloadStore.getState().remove(asTrackId('never-seen'));
 
-      // Same object, not an equal-but-new one: nothing subscribed to this store
-      // should re-render over a remove() that had nothing to remove.
       expect(useDownloadStore.getState()).toBe(before);
     });
 

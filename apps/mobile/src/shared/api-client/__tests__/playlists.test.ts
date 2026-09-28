@@ -362,11 +362,6 @@ describe('removeTracksFromPlaylist', () => {
 });
 
 describe('playlist id path safety (#786)', () => {
-  // Before #786 four of the six call sites interpolated the id raw and two escaped it. Escaping
-  // is not enough on its own either: URL resolution collapses a `..` segment (even `%2e%2e`), so
-  // `removeTracksFromPlaylist('..')` would have hit `DELETE /v1/tracks`. Every endpoint must
-  // refuse such an id before sending anything. asPlaylistId itself now refuses them (#944), so
-  // they are cast in here to prove idPathSegment still refuses an id smuggled past the brand.
   const track = [asTrackId('t1')];
   const endpoints = [
     ['getPlaylist', (id: PlaylistId) => getPlaylist(id)],

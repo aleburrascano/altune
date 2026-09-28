@@ -12,9 +12,6 @@ import {
   nullableString,
 } from './wireDecoders';
 
-// Exported for the sibling endpoints that answer with the same discovery
-// vocabulary (favorites' kind, enrichment's items), so one list stays the source
-// of truth for what a kind may be.
 export const DISCOVERY_KINDS = ['artist', 'album', 'track'] as const;
 const DISCOVERY_CONFIDENCES = ['high', 'medium', 'low'] as const;
 export const PROVIDER_STATUSES = [

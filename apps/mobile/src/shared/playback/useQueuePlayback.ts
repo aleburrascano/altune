@@ -77,9 +77,6 @@ export function useQueuePlayback(): QueuePlaybackControls {
     [playTrack, appendToQueue],
   );
 
-  // A bulk add costs one store mutation and one native queue call however many tracks arrive.
-  // Per-track appends copied the queue once per track and fired that many un-awaited native
-  // calls — each resolving its own signed url — in a single tick (#1699).
   const addToQueueMany = useCallback(
     (tracks: readonly PlaybackTrack[]) => {
       if (tracks.length === 0) return;
@@ -143,10 +140,6 @@ export function useQueuePlayback(): QueuePlaybackControls {
     [reorderUpcoming],
   );
 
-  // Clearing costs one store mutation and one native truncate however long the queue is.
-  // Removing row by row copied both queue arrays once per track — O(n²) on the JS thread —
-  // behind that many serialized native removes (#1739). An empty upcoming list is exactly
-  // what `reorderUpcoming` truncates the native queue to.
   const clearUpcoming = useCallback(() => {
     useQueueStore.getState().clearUpcoming();
     void reorderUpcoming([]);

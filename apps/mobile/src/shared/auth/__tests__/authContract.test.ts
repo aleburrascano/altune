@@ -53,9 +53,6 @@ function findMatchingBrace(text: string, openIndex: number): number {
   throw new Error(`unbalanced braces starting at ${openIndex}`);
 }
 
-// Prefers a plain func and falls back to a method (`func (rej rejecter) name(`):
-// the counting `rejecter.rejectToken` method delegates to the plain
-// `rejectToken`, which is the one that writes the response.
 function extractGoFuncBody(source: string, funcName: string): string {
   const plain = new RegExp(`\\nfunc ${funcName}\\([^)]*\\)[^{]*\\{`);
   const method = new RegExp(`\\nfunc \\([^)]*\\) ${funcName}\\([^)]*\\)[^{]*\\{`);
@@ -164,7 +161,9 @@ describe('runtime: apiFetch agrees with the derived contract', () => {
       json: { detail: 'invalid token', reason: 'expired' },
     });
 
-    await expect(apiFetch('/v1/library/tracks')).rejects.toMatchObject({ status: rejectTokenStatus });
+    await expect(apiFetch('/v1/library/tracks')).rejects.toMatchObject({
+      status: rejectTokenStatus,
+    });
     expect(getSessionExpired()).toBe(true);
   });
 

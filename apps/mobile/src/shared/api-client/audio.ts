@@ -6,8 +6,6 @@ import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
 import { asArray, asHttpsUrl, asRecord, asString, nullableString } from './wireDecoders';
 import { startDeadline } from '@shared/deadline/deadline';
 
-// One header set serves every track of a queue load, so the route stands in for the
-// track id `audioStreamUrl` would substitute.
 const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';
 
 const SESSION_REJECTED = 401;
@@ -20,12 +18,6 @@ export function audioStreamUrl(trackId: TrackId): string {
   return `${apiBase}/v1/tracks/${idPathSegment(trackId)}/audio`;
 }
 
-/**
- * Headers for the audio stream, which the native player sends over its own HTTP
- * client rather than through `apiFetch`. Resolves without an `Authorization`
- * header instead of rejecting, because a queue load holding preview or pinned
- * tracks must still proceed.
- */
 export async function audioRequestHeaders(): Promise<Record<string, string>> {
   const correlationId = newCorrelationId() ?? undefined;
   return {
@@ -34,13 +26,6 @@ export async function audioRequestHeaders(): Promise<Record<string, string>> {
   };
 }
 
-/**
- * There is no 401 response for `apiFetch` to read here — the player swallows
- * it — so a session the shared auth path refuses trips the shared expiry signal
- * from this side, and playback that would fail unauthenticated raises the same
- * sign-in prompt every other request does. An unreachable auth server is not an
- * expired session: it leaves the stream to try, and the token to return.
- */
 async function authorizationHeaderOrNone(
   correlationId: string | undefined,
 ): Promise<Record<string, string>> {
@@ -66,10 +51,6 @@ export async function recoverAudio(trackId: TrackId): Promise<void> {
   });
 }
 
-// Remote kill switch for audio prefetching (#824). The server reports its AUDIO_PREFETCH_ENABLED
-// setting on every audio-url response; the last value seen wins, so flipping it on the API
-// disables (or restores) prefetching in shipped builds without a release. A server that does not
-// send the flag leaves prefetching enabled.
 let prefetchEnabled = true;
 
 export function isAudioPrefetchEnabled(): boolean {

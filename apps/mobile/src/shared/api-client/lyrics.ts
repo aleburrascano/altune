@@ -26,10 +26,6 @@ function parseSyncedLine(value: unknown, at: string): SyncedLine {
   };
 }
 
-// A track with no lyrics answers with an empty-but-present DTO rather than an
-// error, so an empty `plain` stays a valid response. Both collections are still
-// coerced from absent/null: a row written before they existed omits them, and a
-// nil Go slice arrives as null.
 function parseLyricsResponse(value: unknown, at = 'LyricsResponse'): LyricsResponse {
   const r = asRecord(value, at);
   return {
