@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { AppState } from 'react-native';
 
+import { isAppActive } from './appState';
 import { useAppStateChange } from './useAppStateChange';
 
 export function useIsForeground(): boolean {
-  const [isForeground, setIsForeground] = useState(() => AppState.currentState === 'active');
+  const [isForeground, setIsForeground] = useState(isAppActive);
 
   useAppStateChange((state) => {
     setIsForeground(state === 'active');

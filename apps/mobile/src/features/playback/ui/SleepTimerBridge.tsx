@@ -2,7 +2,7 @@ import { useCallback, useEffect, type ReactElement } from 'react';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 
-import { useAppStateChange } from '../hooks/useAppStateChange';
+import { useAppStateChange } from '@shared/lifecycle';
 import { monotonicNow as defaultMonotonicNow, useSleepTimerStore } from '../sleepTimerStore';
 
 const MAX_SLEEP_CHECK_MS = 60_000;

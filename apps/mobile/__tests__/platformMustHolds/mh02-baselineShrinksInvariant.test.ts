@@ -58,8 +58,6 @@ const FROZEN_BASELINE: Record<string, Baseline> = {
       'src/features/playback/createNativePlaybackActions.ts',
       'src/features/playback/hooks/PlaybackProvider.tsx',
       'src/features/playback/hooks/trackPlayerProvider.tsx',
-      'src/features/playback/hooks/useAppStateChange.ts',
-      'src/features/playback/hooks/useIsForeground.ts',
       'src/features/playback/hooks/usePlaybackPosition.ts',
       'src/features/playback/hooks/usePlaybackSignals.ts',
       'src/features/playback/hooks/useQueueResume.ts',

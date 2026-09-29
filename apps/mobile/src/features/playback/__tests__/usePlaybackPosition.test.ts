@@ -8,7 +8,7 @@ import { usePlaybackPosition } from '../native/usePlaybackPosition';
 const { __player } = jest.requireMock('react-native-track-player');
 
 let mockForeground = true;
-jest.mock('../hooks/useIsForeground', () => ({
+jest.mock('@shared/lifecycle', () => ({
   useIsForeground: () => mockForeground,
 }));
 

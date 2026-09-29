@@ -4,7 +4,7 @@ import { useProgress } from 'react-native-track-player';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { useIsForeground } from '../hooks/useIsForeground';
+import { useIsForeground } from '@shared/lifecycle';
 
 export interface PlaybackPosition {
   positionMs: number;

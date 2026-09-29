@@ -2,8 +2,6 @@
   "ui": [],
   "logic": [
     "src/features/playback/hooks/PlaybackProvider.tsx",
-    "src/features/playback/hooks/useAppStateChange.ts",
-    "src/features/playback/hooks/useIsForeground.ts",
     "src/features/playback/playsThroughTrackPlayer.ts"
   ]
 }

@@ -21,7 +21,7 @@ import {
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
 import { redactedPlaybackFailure } from '../redactPlaybackError';
 
-import { useAppStateChange } from '../hooks/useAppStateChange';
+import { useAppStateChange } from '@shared/lifecycle';
 
 const SAVE_INTERVAL_MS = 15_000;
 
