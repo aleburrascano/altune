@@ -268,6 +268,31 @@ func runRecovered(ctx context.Context, event string, fetch func() error) (err er
 	return fetch()
 }
 
+func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
+	ctx context.Context, pn domain.ProviderName, externalID, name string, tracksLimit, albumsLimit int,
+) (tracksResp, albumsResp *service.ContentFetchResponse, tracksErr, albumsErr error) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		tracksErr = runRecovered(ctx, "artist_content.top_tracks_panic", func() error {
+			var err error
+			tracksResp, err = h.artistSvc.GetTopTracks(ctx, pn, externalID, name, tracksLimit)
+			return err
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		albumsErr = runRecovered(ctx, "artist_content.albums_panic", func() error {
+			var err error
+			albumsResp, err = h.artistSvc.GetAlbums(ctx, pn, externalID, name, albumsLimit)
+			return err
+		})
+	}()
+	wg.Wait()
+	return tracksResp, albumsResp, tracksErr, albumsErr
+}
+
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) {
@@ -291,29 +316,8 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				return
 			}
 
-			var tracksResp, albumsResp *service.ContentFetchResponse
-			var tracksErr, albumsErr error
-			// Both fetches start together, so the shared start clocks each one.
-			var wg sync.WaitGroup
-			wg.Add(2)
-			go func() {
-				defer wg.Done()
-				tracksErr = runRecovered(r.Context(), "artist_content.top_tracks_panic", func() error {
-					var err error
-					tracksResp, err = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
-					return err
-				})
-			}()
-			go func() {
-				defer wg.Done()
-				albumsErr = runRecovered(r.Context(), "artist_content.albums_panic", func() error {
-					var err error
-					albumsResp, err = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
-					return err
-				})
-			}()
-			wg.Wait()
-
+			tracksResp, albumsResp, tracksErr, albumsErr := h.fetchTopTracksAndAlbums(
+				r.Context(), pn, externalID, artistName, tracksLimit, albumsLimit)
 			if tracksErr != nil || albumsErr != nil {
 				slog.ErrorContext(r.Context(), "artist content failed",
 					"tracks_error", tracksErr, "albums_error", albumsErr,
