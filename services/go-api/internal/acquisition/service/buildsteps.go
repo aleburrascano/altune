@@ -12,6 +12,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 		WithStoreOrphanQueue(s.orphans, userId),
 		WithStoreKeyPrefix(s.storeKeyPrefix)).
 		withDownloadLimiter(s.downloadLimiter).
+		withConfidenceFloor(s.confidenceFloor).
 		withVerifySkips(s.verifySkips).
 		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
 }

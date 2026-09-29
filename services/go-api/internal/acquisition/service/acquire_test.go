@@ -1058,3 +1058,64 @@ func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *tes
 		t.Errorf("failure reason = %q, want prefix %q", got, domain.FailureNoMatchFound)
 	}
 }
+
+type unknownTopicSource struct{}
+
+func (unknownTopicSource) Name() string { return "unknown-topic" }
+
+func (unknownTopicSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return []ports.AudioCandidate{{
+		Title:      "Blinding Lights",
+		URL:        "https://www.youtube.com/watch?v=topicAAAAAA",
+		Channel:    "The Weeknd - Topic",
+		Categories: []string{"Music"},
+		Duration:   200,
+	}}, nil
+}
+
+func (unknownTopicSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+	return newAudioSource{}.Fetch(ctx, c, outDir)
+}
+
+func acquireUnknownTopicWithFloor(t *testing.T, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	seconds := 200.0
+	track.DurationSeconds = &seconds
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(unknownTopicSource{}),
+		&bytesAudioStore{objects: map[string]string{}},
+		append([]func(*AcquireTrackAudioService){
+			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
+			WithAudioIdentifier(&stubIdentifier{}),
+		}, opts...)...)
+	err = svc.Execute(context.Background(), userId, track.ID)
+	return storedTrack(t, repo, track), err
+}
+
+func TestExecute_FloorAboveTheCandidatesConfidenceFailsAsNoConfidentMatch(t *testing.T) {
+	track, err := acquireUnknownTopicWithFloor(t, WithAcquireConfidenceFloor(0.9))
+
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
+	}
+	if track.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want failed", track.AcquisitionStatus)
+	}
+}
+
+func TestExecute_DefaultFloorStoresTheSameCandidate(t *testing.T) {
+	track, err := acquireUnknownTopicWithFloor(t)
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if track.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("status = %v, want ready", track.AcquisitionStatus)
+	}
+}

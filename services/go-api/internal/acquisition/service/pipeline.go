@@ -60,6 +60,13 @@ func (p Pipeline) withDownloadLimiter(l *DownloadLimiter) Pipeline {
 	return p
 }
 
+func (p Pipeline) withConfidenceFloor(floor float64) Pipeline {
+	if step, ok := p.download.(*DownloadStep); ok {
+		WithConfidenceFloor(floor)(step)
+	}
+	return p
+}
+
 func (p Pipeline) withVerifySkips(r ports.VerifySkipRecorder) Pipeline {
 	if step, ok := p.download.(*DownloadStep); ok {
 		WithStepVerifySkips(r)(step)

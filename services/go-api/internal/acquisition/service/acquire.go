@@ -27,6 +27,7 @@ type AcquireTrackAudioService struct {
 	rejections      ports.RejectionStore
 	downloadLimiter *DownloadLimiter
 	verifySkips     ports.VerifySkipRecorder
+	confidenceFloor float64
 }
 
 func NewAcquireTrackAudioService(
@@ -50,6 +51,10 @@ func NewAcquireTrackAudioService(
 
 func WithDownloadLimiter(l *DownloadLimiter) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
+}
+
+func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.confidenceFloor = floor }
 }
 
 func WithVerifySkips(r ports.VerifySkipRecorder) func(*AcquireTrackAudioService) {

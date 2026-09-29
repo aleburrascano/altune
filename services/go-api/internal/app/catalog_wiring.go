@@ -160,7 +160,8 @@ func (a *App) buildAcquisitionScheduler(
 		slog.Warn("acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
 	}
 	acquireOpts = append(acquireOpts,
-		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)))
+		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)),
+		acqService.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		trackRepo,
 		acqService.NewSourceRegistry(audioSources...),
