@@ -5,6 +5,7 @@ import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 type SearchPageParam = { offset: number; searchId: string | undefined };
 type SearchPages = InfiniteData<DiscoverySearchResponse, SearchPageParam>;
+type HeldSlate = { key: readonly unknown[]; pages: SearchPages | undefined };
 type RefetchResult = { isError: boolean };
 type Refetch = () => Promise<RefetchResult>;
 
@@ -21,7 +22,7 @@ type RefreshDeps = {
   queryClient: QueryClient;
   queryKey: readonly unknown[];
   refetch: Refetch;
-  setHeld: (held: SearchPages | undefined) => void;
+  setHeld: (held: HeldSlate | undefined) => void;
   setFailedKey: (key: readonly unknown[] | null) => void;
 };
 
@@ -41,10 +42,13 @@ async function refetchFailed(deps: RefreshDeps, snapshot: SearchPages | undefine
 async function refreshOnce(deps: RefreshDeps): Promise<void> {
   if (isInFlight(deps.queryClient, deps.queryKey)) return;
   const snapshot = snapshotAndTrim(deps.queryClient, deps.queryKey);
-  deps.setHeld(snapshot);
-  const failed = await refetchFailed(deps, snapshot);
-  deps.setFailedKey(failed ? deps.queryKey : null);
-  deps.setHeld(undefined);
+  deps.setHeld({ key: deps.queryKey, pages: snapshot });
+  try {
+    const failed = await refetchFailed(deps, snapshot);
+    deps.setFailedKey(failed ? deps.queryKey : null);
+  } finally {
+    deps.setHeld(undefined);
+  }
 }
 
 type Setters = Pick<RefreshDeps, 'setHeld' | 'setFailedKey'>;
@@ -59,8 +63,12 @@ function useRefreshCallback(queryKey: readonly unknown[], refetch: Refetch, sett
 }
 
 export function useRefreshFromFirstPage(queryKey: readonly unknown[], refetch: Refetch) {
-  const [held, setHeld] = useState<SearchPages | undefined>(undefined);
+  const [held, setHeld] = useState<HeldSlate | undefined>(undefined);
   const [failedKey, setFailedKey] = useState<readonly unknown[] | null>(null);
   const refresh = useRefreshCallback(queryKey, refetch, { setHeld, setFailedKey });
-  return { refresh, held, refreshFailed: failedKey === queryKey };
+  return {
+    refresh,
+    held: held?.key === queryKey ? held.pages : undefined,
+    refreshFailed: failedKey === queryKey,
+  };
 }

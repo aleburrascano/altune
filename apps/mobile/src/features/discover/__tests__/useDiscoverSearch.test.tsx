@@ -297,6 +297,47 @@ describe('held-slate paging', () => {
   });
 });
 
+describe('held slate belongs to its query', () => {
+  function pageFor(title: string, searchId: string): DiscoverySearchResponse {
+    return {
+      ...endlessPage(0),
+      search_id: searchId,
+      results: [resultFixture({ title })],
+      has_more: false,
+    };
+  }
+
+  async function startSlowRefresh() {
+    mockSearch.mockResolvedValue(pageFor('old-row', 'old-search'));
+    const rendered = renderHook(({ q }: { q: string }) => useDiscoverSearch(q), {
+      wrapper,
+      initialProps: { q: 'old' },
+    });
+    await waitFor(() => expect(resultCount(rendered.result)).toBe(1));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    mockSearch.mockImplementation(
+      ({ query }: { query: string }) =>
+        new Promise((resolve) => {
+          if (query === 'old') setTimeout(() => resolve(pageFor('old-row', 'old-search')), 50);
+        }),
+    );
+    act(() => {
+      rendered.result.current.refetch();
+    });
+    await waitFor(() => expect(rendered.result.current.isRefreshing).toBe(true));
+    return rendered;
+  }
+
+  it('shows none of the old rows and is loading once a new query commits mid-refresh', async () => {
+    const { result, rerender } = await startSlowRefresh();
+
+    rerender({ q: 'new' });
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isLoading).toBe(true);
+  });
+});
+
 describe('next page failure', () => {
   function page(offset: number): DiscoverySearchResponse {
     return {
