@@ -57,6 +57,7 @@ type SearchOutput struct {
 	Total            int
 	Offset           int
 	HasMore          bool
+	Cached           bool
 	Slate            BlendedSlate
 }
 
@@ -319,6 +320,7 @@ func (s *Service) ExecutePage(
 		CorrectedQuery:   resolution.correctedQuery,
 		OriginalQuery:    resolution.originalQuery,
 		Related:          related,
+		Cached:           resolution.cached,
 	}, nil
 }
 

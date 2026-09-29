@@ -132,7 +132,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		Providers:      providerStatusesToDTOs(result.ProviderStatuses),
 		Partial:        result.Partial,
 		Exploration:    result.Explored,
-		Cache:          CacheDTO{Hit: false, FetchedAt: nil},
+		Cache:          CacheDTO{Hit: result.Cached, FetchedAt: nil},
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
 		Related:        relatedGroupsToDTOs(result.Related),

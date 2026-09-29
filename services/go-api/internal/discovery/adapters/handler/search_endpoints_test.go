@@ -1684,3 +1684,25 @@ func TestHandleRecordEvent_NearMissUserTelemetryTypesAreRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleSearch_CacheHitReflectsTheResultCache(t *testing.T) {
+	provider := &fakeSearchProvider{name: discdomain.ProviderDeezer, results: searchSlate("c-", 3)}
+	searchSvc := service.NewService(
+		[]ports.SearchProvider{provider},
+		service.NewCircuitBreaker(),
+		service.WithResultCache(&mapResultCache{entries: map[string][]discdomain.SearchResult{}}),
+	)
+	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc})
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", h.Routes())
+
+	first := searchPageOverHTTP(t, router, "/discovery/search?q=humble")
+	if first.Cache.Hit {
+		t.Error("first query reported cache.hit = true")
+	}
+	second := searchPageOverHTTP(t, router, "/discovery/search?q=humble")
+	if !second.Cache.Hit {
+		t.Error("repeated query reported cache.hit = false")
+	}
+}

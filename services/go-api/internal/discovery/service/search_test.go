@@ -894,3 +894,32 @@ func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
 		t.Errorf("feed activity = %v, want [search_performed]", got)
 	}
 }
+
+func TestService_ExecutePageReportsWhetherTheSlateCameFromCache(t *testing.T) {
+	p := &countingProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithResultCache(newFakeResultCache()))
+	userId := newUser()
+
+	fresh := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	if fresh.Cached {
+		t.Error("a fresh fan-out reported Cached = true")
+	}
+	repeated := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	if !repeated.Cached {
+		t.Error("a repeat answered from the result cache reported Cached = false")
+	}
+}
+
+func TestService_ExecutePageReportsCachedForAHeldSlate(t *testing.T) {
+	svc, _, _ := expiringSlateService(t, artistRun("Humble", "Alpha", 12))
+	userId := newUser()
+
+	first := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	if first.Cached {
+		t.Error("the first page reported Cached = true")
+	}
+	second := searchPage(t, svc, userId, "humble", 5, 5, searchIdOf(t, first))
+	if !second.Cached {
+		t.Error("a page cut from the held slate reported Cached = false")
+	}
+}
