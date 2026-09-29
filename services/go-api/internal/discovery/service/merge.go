@@ -11,7 +11,18 @@ type Entity struct {
 	BestRank map[domain.ProviderName]int
 }
 
+const maxMergeResultsPerProvider = 100
+
+func capPerProvider(perProvider [][]domain.SearchResult) [][]domain.SearchResult {
+	capped := make([][]domain.SearchResult, len(perProvider))
+	for i, group := range perProvider {
+		capped[i] = group[:min(len(group), maxMergeResultsPerProvider)]
+	}
+	return capped
+}
+
 func Merge(perProvider [][]domain.SearchResult) []Entity {
+	perProvider = capPerProvider(perProvider)
 	ambiguous := ambiguousArtistNames(perProvider)
 	entities := make([]Entity, 0)
 	for _, group := range perProvider {
