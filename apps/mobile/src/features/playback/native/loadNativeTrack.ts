@@ -69,6 +69,15 @@ function signedUrl(track: PlaybackTrack, resolved: ResolvedUrls): string | undef
   return resolvePinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
 
+async function nativeTrackBuilder(
+  signFor: readonly PlaybackTrack[],
+  headersForTracks: readonly PlaybackTrack[] = signFor,
+): Promise<(track: PlaybackTrack) => AddTrack> {
+  const headers = await headersFor(headersForTracks);
+  const resolved = await resolveLibraryUrls(signFor);
+  return (track) => toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers });
+}
+
 export async function loadNativeTrack(
   track: PlaybackTrack,
   options: LoadNativeTrackOptions = {},
@@ -80,13 +89,12 @@ export async function loadNativeTrack(
   if (isStale(token)) return;
   await resetNative();
   if (isStale(token)) return;
-  const headers = await headersFor([track]);
-  const resolved = await resolveLibraryUrls([track]);
+  const build = await nativeTrackBuilder([track]);
   if (isStale(token)) return;
 
   await withNativeQueue(async () => {
     if (isStale(token)) return;
-    await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
+    await TrackPlayer.add(build(track));
     if (isStale(token)) return;
     if (startPositionMs > 0) {
       await TrackPlayer.seekTo(startPositionMs / 1000);
@@ -136,8 +144,7 @@ export async function loadNativeQueue(
   await resetNative();
   if (tracks.length === 0) return;
 
-  const headers = await headersFor(tracks);
-  const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
+  const build = await nativeTrackBuilder(tracks.slice(startIndex), tracks);
   if (isStale(token)) return;
 
   const idx = clamp(startIndex, 0, tracks.length - 1);
@@ -146,12 +153,7 @@ export async function loadNativeQueue(
     if (isStale(token)) return;
     const generation = beginNativeLoad(idx);
     try {
-      await addAllOrRollback(
-        tracksNativeHolds(tracks, idx).map((t) =>
-          toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers }),
-        ),
-        token,
-      );
+      await addAllOrRollback(tracksNativeHolds(tracks, idx).map(build), token);
       if (isStale(token)) return;
       if (idx > 0) {
         await TrackPlayer.skip(idx);
@@ -229,8 +231,10 @@ async function rebuildRequestedTails(): Promise<void> {
 
 async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: number): Promise<void> {
   await ensurePlayerSetup();
-  const [keyAtCall, headers] = await Promise.all([activeNativeTrackId(), headersFor(upcoming)]);
-  const resolved = await resolveLibraryUrls(upcoming);
+  const [keyAtCall, build] = await Promise.all([
+    activeNativeTrackId(),
+    nativeTrackBuilder(upcoming),
+  ]);
   await withNativeQueue(async () => {
     if (isStale(token)) return;
     const keyNow = await activeNativeTrackId();
@@ -240,9 +244,7 @@ async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: numb
     if (isStale(token)) return;
     const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
     if (upcomingWindow.length === 0) return;
-    await TrackPlayer.add(
-      upcomingWindow.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
-    );
+    await TrackPlayer.add(upcomingWindow.map(build));
   });
 }
 
@@ -279,7 +281,6 @@ export async function insertNativeTrackNext(track: PlaybackTrack, position: numb
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {
   await ensurePlayerSetup();
-  const headers = await headersFor([track]);
-  const resolved = await resolveLibraryUrls([track]);
-  return toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers });
+  const build = await nativeTrackBuilder([track]);
+  return build(track);
 }

@@ -988,3 +988,37 @@ describe('reorderUpcomingNative against the live store queue', () => {
     });
   });
 });
+
+describe('loadNativeQueue presign window', () => {
+  function track(trackId: string): PlaybackTrack {
+    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
+  }
+
+  it('presigns only from startIndex while still adding the tracks before it', async () => {
+    const tracks = ['a', 'b', 'c'].map(track);
+    fetchUrls.mockReset();
+    fetchUrls.mockImplementation(async (ids) =>
+      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
+    );
+
+    await loadNativeQueue(tracks, 1, { autoplay: false });
+
+    expect(fetchUrls).toHaveBeenCalledTimes(1);
+    expect(fetchUrls).toHaveBeenCalledWith(['b', 'c']);
+    const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as { id: string }[];
+    expect(added.map((t) => t.id)).toEqual(tracks.map(trackKey));
+  });
+
+  it('keeps auth headers on a library track before startIndex when only previews follow', async () => {
+    const tracks = [track('a'), previewTrack()];
+    fetchUrls.mockReset();
+    fetchUrls.mockResolvedValue([]);
+
+    await loadNativeQueue(tracks, 1, { autoplay: false });
+
+    const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    }[];
+    expect(Object.keys(added[0]?.headers ?? {}).length).toBeGreaterThan(0);
+  });
+});
