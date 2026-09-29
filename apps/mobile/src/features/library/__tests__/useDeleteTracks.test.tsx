@@ -7,6 +7,7 @@ import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
+import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import type * as ForgetTrackModule from '@shared/events/forgetTrack';
 
 import {
@@ -138,7 +139,7 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
     });
     expect(alertSpy).toHaveBeenCalledWith(
       'Delete failed',
-      `2 of 3 tracks could not be removed. ${RETRY_TAIL}`,
+      '2 of 3 tracks could not be removed. Sign in again, then retry.',
     );
   });
 });
@@ -317,8 +318,8 @@ describe('track mutations that settle after sign-out leave the next user untouch
   });
 });
 
-describe('useDeleteTracks — a rejected run is not silent (#2763)', () => {
-  it('alerts, logs, and still invalidates derived caches when onDeleted throws', async () => {
+describe('useDeleteTracks — a cleanup throw is not silent (#2763)', () => {
+  it('logs the cleanup failure and re-syncs instead of rejecting when onDeleted throws', async () => {
     const { queryClient, wrapper } = setup();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockResolvedValue(undefined);
@@ -329,16 +330,182 @@ describe('useDeleteTracks — a rejected run is not silent (#2763)', () => {
 
     const { result } = renderHook(() => useDeleteTracks(), { wrapper });
     act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
+    expect(invalidatedKeys(spy)).toEqual(
+      expect.arrayContaining([
+        ...LIBRARY_DERIVED,
+        ...Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix),
+      ]),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[library] delete cleanup failed',
+      expect.objectContaining({ trackId: 'b' }),
+    );
+    expect(warnSpy).not.toHaveBeenCalledWith('[library] bulk delete failed', expect.anything());
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDeleteTracks — local cleanup failure never loses a deleted track (#218)', () => {
+  const throwForB = () =>
+    mockForgetTrack.mockImplementation((client, trackId) => {
+      if (trackId === 'b') throw new Error('cache patch failed');
+      actualForgetTrack(client, trackId);
+    });
+  const seedPinned = (id: string) =>
+    usePinnedStore.setState((s) => ({
+      entries: {
+        ...s.entries,
+        [id]: { trackId: asTrackId(id), status: 'ready', uri: `file:///${id}.m4a` },
+      },
+    }));
+
+  it('succeeds, cleans the other tracks, and re-syncs every track cache family', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(TRACKS_KEY, {
+      pages: [page([track('a'), track('b'), track('c')])],
+      pageParams: [0],
+    });
+    ['a', 'c'].forEach(seedPinned);
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockResolvedValue(undefined);
+    throwForB();
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate(['a', 'b', 'c'].map(asTrackId)));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({ deleted: 3, failures: [] });
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(pagedIds(queryClient)).toEqual(['b']);
+    expect(Object.keys(usePinnedStore.getState().entries)).toEqual([]);
+    expect(mockForgetTrack.mock.calls.filter(([, id]) => id === 'b')).toHaveLength(1);
+    expect(invalidatedKeys(spy)).toEqual(
+      expect.arrayContaining(Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix)),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[library] delete cleanup failed',
+      expect.objectContaining({ trackId: 'b' }),
+    );
+  });
+
+  it('invalidates only the derived keys when no cleanup threw', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate(['a', 'b'].map(asTrackId)));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[library] bulk delete failed',
-      expect.objectContaining({ requested: 2 }),
+  });
+
+  it('skips cleanup and re-sync for a run whose user signed out before the delete returned', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const request = deferred();
+    mockDeleteTrack.mockImplementation(() => request.promise);
+    mockForgetTrack.mockImplementation(() => {
+      throw new Error('cache patch failed');
+    });
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate([asTrackId('a1')]));
+    await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalledTimes(1));
+
+    signOutThenLoadUserB(queryClient, [track('a1'), track('b1')]);
+    spy.mockClear();
+    await act(async () => request.resolve());
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockForgetTrack).not.toHaveBeenCalled();
+    expect(invalidatedKeys(spy)).toEqual([]);
+    expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
+  });
+});
+
+describe('useDeleteTracks — re-sync gate after a live cleanup throw then sign-out', () => {
+  it('does not re-sync track caches when a cleanup threw and the user then signed out', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    const held = deferred();
+    mockDeleteTrack.mockImplementation((id) => (id === 'a1' ? Promise.resolve() : held.promise));
+    mockForgetTrack.mockImplementation(() => {
+      throw new Error('cache patch failed');
+    });
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate(['a1', 'a2'].map(asTrackId)));
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[library] delete cleanup failed',
+        expect.objectContaining({ trackId: 'a1' }),
+      ),
     );
+
+    signOutThenLoadUserB(queryClient, [track('a1'), track('b1')]);
+    spy.mockClear();
+    await act(async () => held.resolve());
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidatedKeys(spy)).toEqual([]);
+    expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
+  });
+});
+
+describe('useDeleteTracks — partial failure alert uses the classified tail', () => {
+  const runWithFailures = async (errors: Record<string, ApiError>) => {
+    const { wrapper } = setup();
+    mockDeleteTrack.mockImplementation((id) =>
+      errors[id] ? Promise.reject(errors[id]) : Promise.resolve(),
+    );
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate(['a', 'b', 'c'].map(asTrackId)));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  };
+
+  it.each([
+    ['auth last', [409, 401]],
+    ['auth first', [401, 409]],
+  ])('ends with the sign-in tail when a failure is auth (%s)', async (_name, [first, second]) => {
+    await runWithFailures({ a: new ApiError(first!, 'x'), c: new ApiError(second!, 'y') });
     expect(alertSpy).toHaveBeenCalledWith(
       'Delete failed',
-      `Could not remove these tracks. ${RETRY_TAIL}`,
+      '2 of 3 tracks could not be removed. Sign in again, then retry.',
     );
+  });
+
+  it('ends with the retry tail when no failure is auth', async () => {
+    await runWithFailures({ a: new ApiError(409, 'x'), c: new ApiError(500, 'y') });
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Delete failed',
+      `2 of 3 tracks could not be removed. ${RETRY_TAIL}`,
+    );
+  });
+});
+
+describe('useDeleteTracks — a failed run names the affected tracks', () => {
+  it('logs the first 20 ids of 25 and invalidates the tracks list', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockResolvedValue(undefined);
+    alertSpy.mockImplementationOnce(() => {
+      throw new Error('alert failed');
+    });
+    mockDeleteTrack.mockImplementation((id) =>
+      id === 't0' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
+    );
+    const ids = Array.from({ length: 25 }, (_, i) => asTrackId(`t${i}`));
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate(ids));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[library] bulk delete failed',
+      expect.objectContaining({ requested: 25, trackIds: ids.slice(0, 20) }),
+    );
+    expect(invalidatedKeys(spy)).toContainEqual(['library', 'tracks']);
   });
 });

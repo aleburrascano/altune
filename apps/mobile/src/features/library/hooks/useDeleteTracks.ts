@@ -7,9 +7,9 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
 import { forgetTrack } from '@shared/events/forgetTrack';
-import { invalidateLibraryDerived } from '@shared/events/trackCachePatch';
+import { invalidateLibraryDerived, TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { RETRY_TAIL } from '@shared/lib/describeError';
+import { libraryKeys } from '@shared/lib/query-keys';
 import {
   currentSessionEpoch,
   guardedMutationOptions,
@@ -19,7 +19,7 @@ import {
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { failureLogFields } from '../failureLogFields';
 import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../state';
+import { classifyLibraryError, failureTail, type LibraryFailure } from '../state';
 
 const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
 
@@ -95,12 +95,37 @@ function startDeadline(): Deadline {
   return { expired: () => expired, clear: () => clearTimeout(timer) };
 }
 
-function removeTrackEverywhere(queryClient: QueryClient, handle: RunHandle): OnDeleted {
+type CleanupState = { failed: boolean };
+
+function guardCleanup(state: CleanupState, trackId: TrackId, step: () => void): void {
+  try {
+    step();
+  } catch (error) {
+    state.failed = true;
+    console.warn('[library] delete cleanup failed', { trackId, ...failureLogFields(error) });
+  }
+}
+
+function cleanupTrack(queryClient: QueryClient, state: CleanupState, trackId: TrackId): void {
+  guardCleanup(state, trackId, () => forgetTrack(queryClient, trackId));
+  guardCleanup(state, trackId, () => usePinnedStore.getState().unpin(trackId));
+}
+
+function removeTrackEverywhere(
+  queryClient: QueryClient,
+  handle: RunHandle,
+  state: CleanupState,
+): OnDeleted {
   return (trackId) => {
     if (!handle.inStartingSession()) return;
-    forgetTrack(queryClient, trackId);
-    usePinnedStore.getState().unpin(trackId);
+    cleanupTrack(queryClient, state, trackId);
   };
+}
+
+function resyncTrackCaches(queryClient: QueryClient): void {
+  for (const { prefix } of Object.values(TRACK_CACHE_FAMILIES)) {
+    void queryClient.invalidateQueries({ queryKey: prefix });
+  }
 }
 
 function finalizeRun(deadline: Deadline, handle: RunHandle): () => void {
@@ -133,8 +158,10 @@ async function runBulkDelete(
   trackIds: TrackId[],
 ): Promise<DeleteTracksResult> {
   const { run, done } = openTimedRun(handle);
-  const ctx = newContext(trackIds, run, removeTrackEverywhere(queryClient, handle));
+  const cleanup: CleanupState = { failed: false };
+  const ctx = newContext(trackIds, run, removeTrackEverywhere(queryClient, handle, cleanup));
   const outcome = await deleteInBatches(ctx).finally(done);
+  if (cleanup.failed && handle.inStartingSession()) resyncTrackCaches(queryClient);
   return summarizeRun(trackIds, outcome, handle.stopped());
 }
 
@@ -160,8 +187,14 @@ function logBulkFailure({ trackId, error }: DeleteTrackFailure): void {
   logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
 }
 
-function bulkFailureMessage(requested: number, deleted: number): string {
-  return `${requested - deleted} of ${requested} tracks could not be removed. ${RETRY_TAIL}`;
+function dominantFailure(failures: DeleteTrackFailure[]): LibraryFailure {
+  const kinds = failures.map(({ error }) => classifyLibraryError(error));
+  return kinds.includes('auth') ? 'auth' : kinds[0]!;
+}
+
+function bulkFailureMessage(requested: number, deleted: number, failures: DeleteTrackFailure[]) {
+  const tail = failureTail(dominantFailure(failures));
+  return `${requested - deleted} of ${requested} tracks could not be removed. ${tail}`;
 }
 
 function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult): void {
@@ -169,17 +202,24 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
   if (deleted > 0) invalidateLibraryDerived(queryClient);
   failures.forEach(logBulkFailure);
   if (cancelled || deleted === requested) return;
-  showAlert('Delete failed', bulkFailureMessage(requested, deleted));
+  showAlert('Delete failed', bulkFailureMessage(requested, deleted, failures));
 }
 
-function logBulkRunFailure(error: unknown, requested: number): void {
-  console.warn('[library] bulk delete failed', { requested, ...failureLogFields(error) });
+const LOGGED_TRACK_IDS = 20;
+
+function logBulkRunFailure(error: unknown, trackIds: TrackId[]): void {
+  console.warn('[library] bulk delete failed', {
+    requested: trackIds.length,
+    trackIds: trackIds.slice(0, LOGGED_TRACK_IDS),
+    ...failureLogFields(error),
+  });
 }
 
 function recoverFailedBulkRun(queryClient: QueryClient) {
   return (error: Error, trackIds: TrackId[]): void => {
     invalidateLibraryDerived(queryClient);
-    logBulkRunFailure(error, trackIds.length);
+    void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
+    logBulkRunFailure(error, trackIds);
     alertLibraryFailure(
       'Delete failed',
       'Could not remove these tracks.',
