@@ -3,22 +3,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useLateralNav } from '../hooks/useLateralNav';
-import { openDetail } from '../navigation';
+import { readDetailHandoff } from '@shared/lib/detail-handoff';
 
 const mockResolveEntityQuery = jest.fn();
 jest.mock('../resolve-entity-query', () => ({
   resolveEntityQuery: (...args: unknown[]) => mockResolveEntityQuery(...args),
 }));
 
-jest.mock('../navigation', () => ({
-  tabRootFromSegments: () => 'discover',
-  detailRouteFor: () => '/discover/detail',
-  openDetail: jest.fn(),
-}));
-
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  useSegments: () => ['(tabs)', 'discover'],
+  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
 }));
 
 describe('logging a failed lateral navigation', () => {
@@ -50,7 +44,7 @@ describe('logging a failed lateral navigation', () => {
         queryFn: () => Promise.reject(new Error('transport failed')),
       });
 
-      const { result } = renderHook(() => useLateralNav(), {
+      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
         wrapper: createWrapper(freshClient()),
       });
 
@@ -75,7 +69,7 @@ describe('logging a failed lateral navigation', () => {
         queryFn: () => Promise.resolve([]),
       });
 
-      const { result } = renderHook(() => useLateralNav(), {
+      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
         wrapper: createWrapper(freshClient()),
       });
 
@@ -112,7 +106,7 @@ describe('useLateralNav navigateTo on a hit', () => {
       queryFn: () => Promise.resolve([firstResult, secondResult]),
     });
 
-    const { result } = renderHook(() => useLateralNav(), {
+    const { result } = renderHook(() => useLateralNav('/discover/detail'), {
       wrapper: createWrapper(freshClient()),
     });
 
@@ -120,6 +114,8 @@ describe('useLateralNav navigateTo on a hit', () => {
       await result.current.navigateTo('Boom', 'artist');
     });
 
-    expect(openDetail).toHaveBeenCalledWith(expect.anything(), '/discover/detail', firstResult);
+    const href = mockPush.mock.calls[0][0];
+    expect(href.pathname).toBe('/discover/detail');
+    expect(readDetailHandoff(href.params.handoff)?.result).toBe(firstResult);
   });
 });

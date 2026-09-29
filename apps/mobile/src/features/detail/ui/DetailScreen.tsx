@@ -39,7 +39,7 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = handoff.result;
   const { resolved: result } = useResolveMissingSources(rawResult);
-  const lateralNav = useLateralNav();
+  const lateralNav = useLateralNav(detailRoute);
 
   const isArtist = result.kind === 'artist';
   const isLibraryArtist = isArtist && rawResult.sources.length === 0;

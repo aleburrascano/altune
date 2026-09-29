@@ -238,7 +238,7 @@ describe('detail fetches — remote kill switch', () => {
 
     it('useLateralNav shows an unavailable message and sends no search while the switch is off', async () => {
       switchDetailFetches(false);
-      const { result } = renderHook(() => useLateralNav(), {
+      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
         wrapper: createWrapper(freshClient()),
       });
 
@@ -251,7 +251,7 @@ describe('detail fetches — remote kill switch', () => {
 
     it('useLateralNav searches again once the switch is back on, without a remount', async () => {
       switchDetailFetches(false);
-      const { result } = renderHook(() => useLateralNav(), {
+      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
         wrapper: createWrapper(freshClient()),
       });
       switchDetailFetches(true);

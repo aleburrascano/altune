@@ -1,7 +1,6 @@
 {
   "ui": [],
   "logic": [
-    "src/features/detail/hooks/useLateralNav.ts",
     "src/features/detail/navigation.ts"
   ]
 }
