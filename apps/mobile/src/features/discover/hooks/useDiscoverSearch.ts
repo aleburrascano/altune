@@ -57,6 +57,8 @@ function nextSearchPageParam(
   return { offset: lastPage.offset + lastPage.results.length, searchId: pages[0]?.search_id };
 }
 
+const SEARCH_RETRY_COUNT = 1;
+
 type SearchQueryArgs = {
   queryKey: readonly unknown[];
   queryClient: ReturnType<typeof useQueryClient>;
@@ -72,13 +74,11 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
     queryFn: searchQueryFn(args.queryClient, args.trimmed, args.saveHistory),
     getNextPageParam: nextSearchPageParam,
     enabled: args.trimmed.length > 0 && args.isSearchEnabled,
+    retry: SEARCH_RETRY_COUNT,
   });
 }
 
-export function useDiscoverSearch(
-  query: string,
-  saveHistory: boolean = true,
-) {
+export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
   const queryClient = useQueryClient();
   const isSearchEnabled = useDiscoverFetchEnabled();

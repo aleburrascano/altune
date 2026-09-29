@@ -238,16 +238,17 @@ describe('useDiscoverLogic recovers from failures', () => {
     mockSearch
       .mockResolvedValueOnce(page(0))
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
+      .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
       .mockResolvedValueOnce(page(SEARCH_PAGE_SIZE));
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     await waitFor(() => expect(result.current.searchData).toBeDefined());
     await act(async () => result.current.onEndReached());
-    await waitFor(() => expect(result.current.nextPageFailed).toBe(true));
+    await waitFor(() => expect(result.current.nextPageFailed).toBe(true), { timeout: 4000 });
 
     await act(async () => result.current.onRetryNextPage());
 
     await waitFor(() => expect(result.current.nextPageFailed).toBe(false));
-    expect(mockSearch).toHaveBeenCalledTimes(3);
+    expect(mockSearch).toHaveBeenCalledTimes(4);
   });
 });
 
@@ -413,9 +414,11 @@ describe('useDiscoverLogic refresh failure', () => {
 
   it('replaces the list with a fresh first page and clears the flag on a good refresh', async () => {
     const { result } = await loadTwoPages();
-    mockSearch.mockRejectedValueOnce(new NetworkError('transport', 'offline'));
+    mockSearch
+      .mockRejectedValueOnce(new NetworkError('transport', 'offline'))
+      .mockRejectedValueOnce(new NetworkError('transport', 'offline'));
     await act(async () => result.current.onRefresh());
-    await waitFor(() => expect(result.current.refreshFailed).toBe(true));
+    await waitFor(() => expect(result.current.refreshFailed).toBe(true), { timeout: 4000 });
     mockSearch.mockImplementation(({ offset }: { offset: number }) =>
       Promise.resolve(page(offset, 'fresh')),
     );

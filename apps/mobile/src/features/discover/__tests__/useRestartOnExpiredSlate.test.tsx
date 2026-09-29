@@ -81,7 +81,7 @@ describe('held-slate expiry when the restart fails', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
     });
 
-    expect(mockSearch).toHaveBeenCalledTimes(3);
+    expect(mockSearch).toHaveBeenCalledTimes(4);
     expect(result.current.data?.results.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']);
   });
 });

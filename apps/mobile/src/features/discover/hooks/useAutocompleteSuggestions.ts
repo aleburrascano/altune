@@ -23,6 +23,7 @@ export function useAutocompleteSuggestions(inputValue: string) {
       suggestDiscovery({ q: debouncedQuery, limit: SUGGESTION_LIMIT }, signal),
     enabled: isSearchableQuery(debouncedQuery) && isSuggestEnabled,
     staleTime: 60 * 1000,
+    retry: false,
   });
 
   useReportQueryFailure(error, 'suggest');

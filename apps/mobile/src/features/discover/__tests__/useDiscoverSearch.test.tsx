@@ -2,7 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/api-client';
+import { ApiError, NetworkError, REQUEST_TIMEOUT_MS } from '@shared/api-client';
+import { transientRetryOptions } from '@shared/query/retryDelay';
 import {
   listSearchHistory,
   searchDiscovery,
@@ -363,9 +364,7 @@ describe('next page failure', () => {
   afterEach(() => queryClient.clear());
 
   it('flags a rejected page 2 while keeping page 1', async () => {
-    mockSearch
-      .mockResolvedValueOnce(page(0))
-      .mockRejectedValueOnce(new ApiError(502, 'bad gateway'));
+    mockSearch.mockResolvedValueOnce(page(0)).mockRejectedValue(new ApiError(502, 'bad gateway'));
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
     await act(async () => {
@@ -424,5 +423,36 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
       status: 503,
       correlationId: 'a1b2c3d4e5f60718',
     });
+  });
+});
+
+describe('a search backend that never answers reaches the error state quickly', () => {
+  const HUNG_BACKEND_BUDGET_MS = 40_000;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { ...transientRetryOptions }, mutations: { retry: false } },
+    });
+    mockSearch.mockReset().mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, REQUEST_TIMEOUT_MS));
+      throw new NetworkError('timeout', 'API /discovery/search timed out');
+    });
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    jest.useRealTimers();
+  });
+
+  it('sets error once a single retry of a timed-out request has failed', async () => {
+    const { result } = renderHook(() => useDiscoverSearch('ab'), { wrapper });
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(HUNG_BACKEND_BUDGET_MS);
+    });
+
+    expect(result.current.error).toBeInstanceOf(NetworkError);
+    expect(mockSearch).toHaveBeenCalledTimes(2);
   });
 });

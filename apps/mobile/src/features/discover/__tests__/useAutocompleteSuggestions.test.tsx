@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
+import { NetworkError } from '@shared/api-client';
+import { transientRetryOptions } from '@shared/query/retryDelay';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   SUGGEST_DEBOUNCE_MS,
@@ -142,5 +144,27 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
 
     expect(failureEvents()[0]).toEqual({ type: 'search_failed', payload: { source: 'suggest' } });
+  });
+});
+
+describe('useAutocompleteSuggestions does not retry a failed suggest request', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { ...transientRetryOptions }, mutations: { retry: false } },
+    });
+  });
+
+  it('makes one attempt when the request fails with a NetworkError', async () => {
+    mockSuggest.mockRejectedValue(new NetworkError('timeout', 'API /discovery/suggest timed out'));
+    const rendered = renderSuggestions();
+
+    typeBurst(rendered, 'rad');
+    settle();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(rendered.result.current.error).toBeInstanceOf(NetworkError);
+    expect(mockSuggest).toHaveBeenCalledTimes(1);
   });
 });
