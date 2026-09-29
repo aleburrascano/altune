@@ -171,6 +171,14 @@ function scheduleRetry(): void {
     _retryAt = 0;
     void flushOutbox();
   }, delay);
+  recordEvent({
+    type: 'outbox_flush_failed',
+    payload: {
+      failed_passes: _failedPasses,
+      queued: _queue.length,
+      dropped_at_cap: _droppedCritical,
+    },
+  }).catch(() => undefined);
   console.warn(
     `[telemetry] outbox flush left ${_queue.length} queued; retry ${_failedPasses} in ${delay}ms; ${_droppedCritical} dropped at cap since launch`,
   );

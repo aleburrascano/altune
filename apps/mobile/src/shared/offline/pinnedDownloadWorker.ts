@@ -2,6 +2,7 @@ import { fetchAudioUrls } from '@shared/api-client/audio';
 import { equalJitterMs, isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import {
   deletePinned,
@@ -97,6 +98,10 @@ type Attempt = { ok: true; uri: string; version: string } | FailedAttempt;
 
 function warnAttemptFailed(trackId: TrackId, attempt: FailedAttempt, retryIn: number | null): void {
   const retry = retryIn === null ? '' : `, retrying in ${retryIn}ms`;
+  recordEvent({
+    type: 'download_failed',
+    payload: { track_id: trackId, will_retry: retryIn !== null },
+  }).catch(() => undefined);
   console.warn(`[offline] pinned download failed for track ${trackId}${retry}`, {
     url: unsignedUrl(attempt.url),
     error: attempt.error,

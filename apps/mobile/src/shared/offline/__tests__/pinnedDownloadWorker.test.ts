@@ -10,10 +10,15 @@ import {
 import { DOWNLOAD_RETRY_BASE_MS, runDownloadQueue } from '../pinnedDownloadWorker';
 import { MIN_FREE_BYTES, PIN_DOWNLOAD_TIMEOUT_MS, setPinnedFileStore } from '../pinnedFiles';
 import type { PinnedEntry } from '../pinnedIndex';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
+jest.mock('@shared/telemetry/recordEvent', () => ({
+  recordEvent: jest.fn(() => Promise.resolve()),
+}));
 
+const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
 const fetchAudioUrlsMock = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
 const { __fs } = FileSystem as unknown as {
@@ -243,5 +248,58 @@ describe('a failed byte transfer is retried like any other transient failure', (
 
     expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
     expect(track.entry?.status).toBe('failed');
+  });
+});
+
+describe('download_failed telemetry', () => {
+  beforeEach(() => {
+    setPinnedFileStore(createMemoryFileStore());
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.useFakeTimers();
+    recordEventMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    setPinnedFileStore();
+    jest.restoreAllMocks();
+  });
+
+  function eventsFor(trackId: string) {
+    return recordEventMock.mock.calls
+      .map(([e]) => e)
+      .filter((e) => e.type === 'download_failed' && e.payload?.['track_id'] === trackId);
+  }
+
+  it('sends one download_failed per failed attempt, retrying until the last, with no signed URL', async () => {
+    const store = createMemoryFileStore();
+    setPinnedFileStore(store);
+    store.download = () => Promise.reject(new Error('net'));
+    fetchAudioUrlsMock.mockResolvedValue([
+      { trackId: 'tel-1', url: signedUrl('tel-1'), version: 'v1' },
+    ]);
+    const track = queuedTrack(asTrackId('tel-1'));
+
+    const drained = runDownloadQueue(track.set, track.get);
+    await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS * 10);
+    await drained;
+
+    expect(eventsFor('tel-1')).toEqual([
+      { type: 'download_failed', payload: { track_id: 'tel-1', will_retry: true } },
+      { type: 'download_failed', payload: { track_id: 'tel-1', will_retry: true } },
+      { type: 'download_failed', payload: { track_id: 'tel-1', will_retry: false } },
+    ]);
+    expect(JSON.stringify(recordEventMock.mock.calls)).not.toContain('sig=secret');
+  });
+
+  it('swallows a failed telemetry send so the download still fails cleanly', async () => {
+    recordEventMock.mockRejectedValue(new Error('offline'));
+    fetchAudioUrlsMock.mockRejectedValue(new ApiError(404, 'gone'));
+    const track = queuedTrack(asTrackId('tel-2'));
+
+    await runDownloadQueue(track.set, track.get);
+
+    expect(track.entry?.status).toBe('failed');
+    expect(eventsFor('tel-2')).toHaveLength(1);
   });
 });

@@ -1,5 +1,6 @@
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
 import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 
 export const HEARTBEAT_WATCHDOG_MS = 60_000;
 export const MAX_RESPONSE_BYTES = 512 * 1024;
@@ -169,6 +170,7 @@ export class SSEClient {
   private buffer = '';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
+  private episodeReported = false;
   private stalledCaps = 0;
   private lastEventIdAtOpen = '';
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
@@ -248,6 +250,7 @@ export class SSEClient {
       this.processedLength = xhr.responseText.length;
       if (newText.length > 0) {
         this.reconnectAttempt = 0;
+        this.episodeReported = false;
         this.armWatchdog();
       }
       this.applyChunk(newText);
@@ -343,6 +346,10 @@ export class SSEClient {
   private scheduleReconnect(minimumDelayMs = 0): void {
     if (this.disposed || this.reconnectTimer) return;
     this.clearWatchdog();
+    if (!this.episodeReported) {
+      this.episodeReported = true;
+      recordEvent({ type: 'sse_reconnect', payload: {} }).catch(() => undefined);
+    }
     const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs);
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {

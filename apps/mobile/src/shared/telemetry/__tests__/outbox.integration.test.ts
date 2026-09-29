@@ -84,8 +84,16 @@ function readOutboxFile(): OutboxEntry[] | undefined {
   return raw === undefined ? undefined : (JSON.parse(raw) as { entries: OutboxEntry[] }).entries;
 }
 
+function deliveryRequests(): { body: unknown }[] {
+  return (__http.requests as { path: string; body: unknown }[]).filter(
+    (request) =>
+      request.path !== '/v1/discovery/events' ||
+      (JSON.parse(String(request.body)) as OutboxEntry).type !== 'outbox_flush_failed',
+  );
+}
+
 function requestBody(index: number): OutboxEntry {
-  return JSON.parse(String(__http.requests[index].body)) as OutboxEntry;
+  return JSON.parse(String(deliveryRequests()[index]!.body)) as OutboxEntry;
 }
 
 beforeEach(() => {
@@ -118,11 +126,11 @@ describe('cold restart reads the queue from disk, not from memory', () => {
     );
     const outbox2 = bootApp();
     __http.reply(EVENTS_PATH, { status: 202 });
-    const before = __http.requests.length;
+    const before = deliveryRequests().length;
 
     await outbox2.flushOutbox();
 
-    expect(__http.requests.length).toBe(before + 1);
+    expect(deliveryRequests().length).toBe(before + 1);
     expect(requestBody(before).event_id).toBe('proof-event-from-disk');
     expect(requestBody(before).payload).toMatchObject({ track_id: 'from-disk-only' });
   });
@@ -141,11 +149,11 @@ describe('the durability promise: a critical event survives a hard kill and deli
 
     const outbox2 = restartApp();
     __http.reply(EVENTS_PATH, { status: 202 });
-    const before = __http.requests.length;
+    const before = deliveryRequests().length;
 
     await outbox2.flushOutbox();
 
-    expect(__http.requests.length).toBe(before + 1);
+    expect(deliveryRequests().length).toBe(before + 1);
     const delivered = requestBody(before);
     expect(delivered.event_id).toBe(mintedEntry.event_id);
     expect(delivered.client_occurred_at).toBe(mintedEntry.client_occurred_at);
@@ -192,7 +200,7 @@ describe('failure injection', () => {
 
     await expect(outbox.enqueueCritical(libraryAdd('trk-write-fails'))).resolves.toBeUndefined();
 
-    expect(__http.countFor(EVENTS_PATH)).toBe(1);
+    expect(deliveryRequests().length).toBe(1);
     expect(requestBody(0).payload).toMatchObject({ track_id: 'trk-write-fails' });
     expect(currentFs().allFiles()[OUTBOX_URI]).toBeUndefined();
   });
@@ -203,7 +211,7 @@ describe('failure injection', () => {
 
     await expect(outbox.enqueueCritical(libraryAdd('trk-network-fails'))).resolves.toBeUndefined();
 
-    expect(__http.countFor(EVENTS_PATH)).toBe(1);
+    expect(deliveryRequests().length).toBe(1);
     const persisted = readOutboxFile();
     expect(persisted).toHaveLength(1);
     expect(persisted![0]!.payload).toMatchObject({ track_id: 'trk-network-fails' });
@@ -216,7 +224,7 @@ describe('failure injection', () => {
 
     await expect(outbox.enqueueCritical(libraryAdd('trk-both-fail'))).resolves.toBeUndefined();
 
-    expect(__http.countFor(EVENTS_PATH)).toBe(1);
+    expect(deliveryRequests().length).toBe(1);
     expect(currentFs().allFiles()[OUTBOX_URI]).toBeUndefined();
   });
 
@@ -230,11 +238,11 @@ describe('failure injection', () => {
     fs.failNext('read', new Error('disk read error'));
     const outbox2 = bootApp();
     __http.reply(EVENTS_PATH, { status: 202 });
-    const before = __http.requests.length;
+    const before = deliveryRequests().length;
 
     await expect(outbox2.flushOutbox()).resolves.toBeUndefined();
 
-    expect(__http.requests.length).toBe(before);
+    expect(deliveryRequests().length).toBe(before);
   });
 
   it('a delete failure after a successful send leaves the entry on disk, so a later restart redelivers the same event_id', async () => {
@@ -246,18 +254,18 @@ describe('failure injection', () => {
       outbox1.enqueueCritical(libraryAdd('trk-stale-after-delete')),
     ).resolves.toBeUndefined();
 
-    expect(__http.countFor(EVENTS_PATH)).toBe(1);
+    expect(deliveryRequests().length).toBe(1);
     const staleEntry = readOutboxFile();
     expect(staleEntry).toHaveLength(1);
     const firstDeliveryId = requestBody(0).event_id;
 
     const outbox2 = restartApp();
     __http.reply(EVENTS_PATH, { status: 202 });
-    const before = __http.requests.length;
+    const before = deliveryRequests().length;
 
     await outbox2.flushOutbox();
 
-    expect(__http.requests.length).toBe(before + 1);
+    expect(deliveryRequests().length).toBe(before + 1);
     expect(requestBody(before).event_id).toBe(firstDeliveryId);
     expect(readOutboxFile()).toBeUndefined();
   });
@@ -271,12 +279,12 @@ describe('within-session duplicate suppression', () => {
 
     await outbox.enqueueCritical(libraryAdd('trk-not-resent-same-session'));
 
-    expect(__http.countFor(EVENTS_PATH)).toBe(1);
+    expect(deliveryRequests().length).toBe(1);
     expect(readOutboxFile()).toHaveLength(1);
 
     await outbox.flushOutbox();
 
-    expect(__http.countFor(EVENTS_PATH)).toBe(1);
+    expect(deliveryRequests().length).toBe(1);
   });
 });
 
@@ -288,11 +296,11 @@ describe('idempotence / replay across restarts', () => {
     expect(readOutboxFile()).toBeUndefined();
 
     const outbox2 = restartApp();
-    const before = __http.requests.length;
+    const before = deliveryRequests().length;
 
     await outbox2.flushOutbox();
 
-    expect(__http.requests.length).toBe(before);
+    expect(deliveryRequests().length).toBe(before);
   });
 
   it('a restart mid partial-drain delivers exactly the remainder, not what already succeeded', async () => {
@@ -300,6 +308,7 @@ describe('idempotence / replay across restarts', () => {
     __http.replyOnce(EVENTS_PATH, { status: 503 });
     await outbox1.enqueueCritical(libraryAdd('trk-first'));
     await outbox1.enqueueCritical(libraryAdd('trk-second'));
+    await new Promise((resolve) => setImmediate(resolve));
 
     const queuedBeforeRestart = readOutboxFile();
     expect(queuedBeforeRestart).toHaveLength(2);
@@ -309,11 +318,11 @@ describe('idempotence / replay across restarts', () => {
     const outbox2 = restartApp();
     __http.replyOnce(EVENTS_PATH, { status: 202 });
     __http.replyOnce(EVENTS_PATH, { status: 503 });
-    const beforeDrain = __http.requests.length;
+    const beforeDrain = deliveryRequests().length;
 
     await outbox2.flushOutbox();
 
-    expect(__http.requests.length).toBe(beforeDrain + 2);
+    expect(deliveryRequests().length).toBe(beforeDrain + 2);
     expect(requestBody(beforeDrain).event_id).toBe(firstId);
     expect(requestBody(beforeDrain + 1).event_id).toBe(secondId);
     const remaining = readOutboxFile();
@@ -322,11 +331,11 @@ describe('idempotence / replay across restarts', () => {
 
     const outbox3 = restartApp();
     __http.reply(EVENTS_PATH, { status: 202 });
-    const beforeFinal = __http.requests.length;
+    const beforeFinal = deliveryRequests().length;
 
     await outbox3.flushOutbox();
 
-    expect(__http.requests.length).toBe(beforeFinal + 1);
+    expect(deliveryRequests().length).toBe(beforeFinal + 1);
     expect(requestBody(beforeFinal).event_id).toBe(secondId);
     expect(readOutboxFile()).toBeUndefined();
   });
@@ -341,11 +350,11 @@ describe('idempotence / replay across restarts', () => {
 
     const outbox3 = restartApp();
     __http.reply(EVENTS_PATH, { status: 202 });
-    const before = __http.requests.length;
+    const before = deliveryRequests().length;
 
     await outbox3.flushOutbox();
 
-    expect(__http.requests.length).toBe(before + 1);
+    expect(deliveryRequests().length).toBe(before + 1);
     expect(requestBody(before).event_id).toBe(mintedId);
     expect(readOutboxFile()).toBeUndefined();
   });

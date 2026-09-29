@@ -16,6 +16,10 @@ import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/ki
 
 jest.mock('../applyServerEvent', () => ({ applyServerEvent: jest.fn() }));
 
+jest.mock('@shared/telemetry/recordEvent', () => ({
+  recordEvent: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));

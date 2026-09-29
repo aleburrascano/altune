@@ -14,6 +14,14 @@ import {
   renewSessionCredentials,
 } from '@shared/auth/sessionExpired';
 
+import { recordEvent } from '@shared/telemetry/recordEvent';
+
+jest.mock('@shared/telemetry/recordEvent', () => ({
+  recordEvent: jest.fn(() => Promise.resolve()),
+}));
+
+const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+
 type Handler = () => void;
 
 class FakeXHR {
@@ -1059,5 +1067,47 @@ describe('HTTP status handling', () => {
       expect(onEvent).toHaveBeenCalledTimes(1);
       expect(await msUntilNextOpen()).toBe(1_000);
     });
+  });
+});
+
+describe('SSEClient reconnect telemetry', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
+    jest.useFakeTimers();
+    recordEventMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('reports one sse_reconnect per episode and a new one after data resets it', async () => {
+    const { client } = makeClient();
+    await client.connect();
+
+    xhrAt(0).triggerError();
+    await jest.advanceTimersByTimeAsync(30_000);
+    xhrAt(1).triggerError();
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(recordEventMock).toHaveBeenCalledTimes(1);
+    expect(recordEventMock).toHaveBeenCalledWith({ type: 'sse_reconnect', payload: {} });
+
+    xhrAt(2).emit(block({ id: '1', type: 'x', data: {} }));
+    xhrAt(2).triggerError();
+
+    expect(recordEventMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('swallows a failed telemetry send so the reconnect still happens', async () => {
+    recordEventMock.mockRejectedValue(new Error('offline'));
+    const { client } = makeClient();
+    await client.connect();
+
+    xhrAt(0).triggerError();
+    await jest.advanceTimersByTimeAsync(30_000);
+
+    expect(FakeXHR.instances.length).toBe(2);
   });
 });
