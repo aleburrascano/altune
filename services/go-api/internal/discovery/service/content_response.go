@@ -53,20 +53,34 @@ func fetchProviderResults(
 	externalID, logKey string,
 	fetch func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error),
 ) ([]domain.SearchResult, *ContentFetchResponse) {
+	results, _, degraded := fetchProviderContent(ctx, cb, providerName, externalID, logKey, fetch)
+	return results, degraded
+}
+
+func fetchProviderContent(
+	ctx context.Context,
+	cb *CircuitBreaker,
+	providerName domain.ProviderName,
+	externalID, logKey string,
+	fetch func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error),
+) (results []domain.SearchResult, partial bool, degraded *ContentFetchResponse) {
 	results, err := guardedFetch(ctx, cb, providerName, func() ([]domain.SearchResult, error) {
 		return fetch(ctx, providerName, externalID)
 	})
 	if errors.Is(err, errCircuitOpen) {
-		return nil, circuitOpenContentResponse(providerName)
+		return nil, false, circuitOpenContentResponse(providerName)
+	}
+	if isPartialResult(err) {
+		return results, true, nil
 	}
 	if err != nil {
 		status := contentFailureStatus(err)
 		slog.WarnContext(ctx, logKey,
 			"provider", providerName.String(), "external_id", externalID,
 			"status", status.String(), "error", redact.Secrets(err.Error()))
-		return nil, failedContentResponse(providerName, status)
+		return nil, false, failedContentResponse(providerName, status)
 	}
-	return results, nil
+	return results, false, nil
 }
 
 func okContentResponse(providerName domain.ProviderName, results []domain.SearchResult, limit int) *ContentFetchResponse {

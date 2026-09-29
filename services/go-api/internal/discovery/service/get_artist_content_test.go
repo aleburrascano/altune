@@ -621,3 +621,44 @@ func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
 		t.Error("partial = false, want true (the panicking provider failed to answer)")
 	}
 }
+
+func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
+	truncated := &domain.PartialResultError{Page: 2, Err: upstreamDown}
+	for name, fetch := range identityContentFetchers {
+		t.Run("identity fan-out "+name, func(t *testing.T) {
+			svc := identityFanOutWithErr(func(pn domain.ProviderName) error {
+				if pn == domain.ProviderDeezer {
+					return truncated
+				}
+				return nil
+			})
+			resp, err := fetch(svc)
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if resp.Status != domain.ProviderStatusOK || len(resp.Items) == 0 {
+				t.Fatalf("status = %s, items = %d, want ok with the merged items", resp.Status, len(resp.Items))
+			}
+			if !resp.Partial {
+				t.Error("partial = false, want true: a provider's later page failed")
+			}
+		})
+	}
+
+	t.Run("single provider albums", func(t *testing.T) {
+		svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: &fakeArtistContentProvider{
+				getAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{v2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, truncated
+				},
+			},
+		})
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", "", 50)
+		if err != nil {
+			t.Fatalf("error = %v", err)
+		}
+		if resp.Status != domain.ProviderStatusOK || len(resp.Items) != 1 || !resp.Partial {
+			t.Errorf("status = %s, items = %d, partial = %v, want ok, the page-0 item, partial", resp.Status, len(resp.Items), resp.Partial)
+		}
+	})
+}

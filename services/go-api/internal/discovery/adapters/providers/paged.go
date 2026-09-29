@@ -1,5 +1,7 @@
 package providers
 
+import "altune/go-api/internal/discovery/domain"
+
 func fetchPaged[T any](
 	maxPages int,
 	fetch func(page int) ([]T, bool, error),
@@ -11,7 +13,7 @@ func fetchPaged[T any](
 		if err != nil {
 			if page > 0 {
 				onPartial(page, err)
-				return all, nil
+				return all, &domain.PartialResultError{Page: page, Err: err}
 			}
 			return nil, err
 		}

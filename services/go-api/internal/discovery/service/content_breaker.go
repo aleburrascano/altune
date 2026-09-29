@@ -67,8 +67,20 @@ func guardedFetch[T any](
 	defer c.failPanicked(&settled)
 	res, err := call()
 	settled = true
-	c.settle(callerCtx, err)
+	c.settle(callerCtx, breakerOutcome(err))
 	return res, err
+}
+
+func breakerOutcome(err error) error {
+	if isPartialResult(err) {
+		return nil
+	}
+	return err
+}
+
+func isPartialResult(err error) bool {
+	var partial *domain.PartialResultError
+	return errors.As(err, &partial)
 }
 
 type httpStatusCoder interface {

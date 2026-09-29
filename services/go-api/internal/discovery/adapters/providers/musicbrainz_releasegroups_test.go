@@ -90,3 +90,25 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles(t *testing.T) {
 		t.Errorf("titles = %v, want the release-group titles in order", titles)
 	}
 }
+
+func TestMusicBrainzAdapter_ReleaseGroupTitles_laterPageFailureIsNotACompleteAnchor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("offset") != "0" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{
+			"release-group-count": 150,
+			"release-groups": [` + mbReleaseGroupJSON("rg-1", "OK Computer", "Radiohead", "mbid-rh") + `]}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
+	if err == nil {
+		t.Fatalf("ReleaseGroupTitles = %v, nil; want an error so a truncated title set is not taken as the anchor", titles)
+	}
+	if len(titles) != 0 {
+		t.Errorf("titles = %v, want none from a degraded fetch", titles)
+	}
+}

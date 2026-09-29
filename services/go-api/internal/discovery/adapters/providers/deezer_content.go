@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
@@ -40,8 +41,8 @@ func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 			return items, body.NextPageURL != "", nil
 		},
 		func(page int, err error) {
-			slog.DebugContext(ctx, "deezer.artist_albums_page_failed",
-				"artist", externalID, "page", page, "error", err)
+			slog.WarnContext(ctx, "deezer.artist_albums_page_failed",
+				"provider", domain.ProviderDeezer.String(), "artist", externalID, "page", page, "error", redact.Secrets(err.Error()))
 		})
 }
 

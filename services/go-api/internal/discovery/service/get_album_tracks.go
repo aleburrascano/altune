@@ -129,8 +129,9 @@ func (s *GetAlbumTracksService) mergeMusicBrainzFeaturing(ctx context.Context, m
 func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	var results []domain.SearchResult
 	var degraded *ContentFetchResponse
+	partial := false
 	if provider, ok := s.providers[providerName]; ok {
-		results, degraded = fetchProviderResults(ctx, s.breaker, providerName, externalID, "album_tracks.provider_failed",
+		results, partial, degraded = fetchProviderContent(ctx, s.breaker, providerName, externalID, "album_tracks.provider_failed",
 			func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				return provider.GetAlbumTracks(ctx, pn, id)
 			})
@@ -148,6 +149,7 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 	}
 
 	resp := okContentResponse(providerName, results, limit)
+	resp.Partial = partial
 	s.enrichFeatured(ctx, resp.Items)
 	return resp, nil
 }

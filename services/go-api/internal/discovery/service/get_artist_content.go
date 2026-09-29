@@ -74,7 +74,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 	if !ok {
 		return unservedContentResponse(providerName), nil
 	}
-	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "artist_top_tracks.provider_failed",
+	results, partial, degraded := fetchProviderContent(ctx, s.breaker, providerName, externalID, "artist_top_tracks.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetArtistTopTracks(ctx, pn, id)
 		})
@@ -82,7 +82,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 		return degraded, nil
 	}
 	resp := okContentResponse(providerName, results, limit)
-	resp.Partial = resp.Partial || v2Partial
+	resp.Partial = partial || v2Partial
 	return resp, nil
 }
 
@@ -124,6 +124,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 
 	results := make([][]domain.SearchResult, len(jobs))
 	failed := make([]bool, len(jobs))
+	truncated := make([]bool, len(jobs))
 	errs := make([]error, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
@@ -136,7 +137,11 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 			defer j.call.failPanicked(&settled)
 			res, err := fetch(ctx, j.p, j.provider, j.id)
 			settled = true
-			j.call.settle(callerCtx, err)
+			j.call.settle(callerCtx, breakerOutcome(err))
+			if isPartialResult(err) {
+				truncated[i] = true
+				err = nil
+			}
 			if err != nil {
 				errs[i] = err
 				return
@@ -150,7 +155,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	groups = make([][]domain.SearchResult, 0, len(results))
 	var failures []any
 	for i, j := range jobs {
-		if failed[i] {
+		if failed[i] || truncated[i] {
 			partial = true
 		}
 		if attr, ok := fanOutFailureAttr(callerCtx, j.provider, j.id, errs[i]); ok {
@@ -191,7 +196,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	if !ok {
 		return unservedContentResponse(providerName), nil
 	}
-	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "artist_albums.provider_failed",
+	results, partial, degraded := fetchProviderContent(ctx, s.breaker, providerName, externalID, "artist_albums.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetArtistAlbums(ctx, pn, id)
 		})
@@ -219,7 +224,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	sortByReleaseDateDesc(results, albumReleaseSortKey)
 
 	resp := okContentResponse(providerName, results, limit)
-	resp.Partial = resp.Partial || v2Partial
+	resp.Partial = partial || v2Partial
 	return resp, nil
 }
 

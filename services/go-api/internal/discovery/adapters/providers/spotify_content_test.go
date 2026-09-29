@@ -3,6 +3,7 @@ package providers
 import (
 	"altune/go-api/internal/discovery/domain"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -277,8 +278,9 @@ func TestSpotifyAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testi
 
 	a := newContentSpotifyAdapter(srv)
 	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
-	if err != nil {
-		t.Fatalf("expected the partial set on a later-page failure, got error: %v", err)
+	var partial *domain.PartialResultError
+	if !errors.As(err, &partial) || partial.Page != 1 {
+		t.Fatalf("expected a PartialResultError for page 1 alongside the earlier pages, got: %v", err)
 	}
 	if len(albums) != 2 || albums[0].Title != "First" || albums[1].Title != "Second" {
 		t.Fatalf("albums = %+v, want the 2 page-1 albums kept", albums)
@@ -302,8 +304,9 @@ func TestSpotifyAdapter_GetAlbumTracks_laterPageErrorKeepsEarlierPages(t *testin
 
 	a := newContentSpotifyAdapter(srv)
 	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
-	if err != nil {
-		t.Fatalf("expected the partial set on a later-page failure, got error: %v", err)
+	var partial *domain.PartialResultError
+	if !errors.As(err, &partial) || partial.Page != 1 {
+		t.Fatalf("expected a PartialResultError for page 1 alongside the earlier pages, got: %v", err)
 	}
 	if len(tracks) != 2 || tracks[0].Title != "One" || tracks[1].Title != "Two" {
 		t.Fatalf("tracks = %+v, want the 2 page-1 tracks kept", tracks)

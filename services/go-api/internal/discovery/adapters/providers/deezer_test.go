@@ -3,6 +3,7 @@ package providers
 import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -456,8 +457,9 @@ func TestDeezerAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testin
 
 	adapter := NewDeezerAdapter(newTestClient(server.URL))
 	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
-	if err != nil {
-		t.Fatalf("expected the partial set on a later-page failure, got error: %v", err)
+	var partial *domain.PartialResultError
+	if !errors.As(err, &partial) || partial.Page != 1 {
+		t.Fatalf("expected a PartialResultError for page 1 alongside the earlier pages, got: %v", err)
 	}
 	if len(results) != 2 || results[0].Title != "First" || results[1].Title != "Second" {
 		t.Fatalf("results = %+v, want the 2 page-1 albums kept", results)

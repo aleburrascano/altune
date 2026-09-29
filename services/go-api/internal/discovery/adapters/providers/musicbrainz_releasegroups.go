@@ -3,8 +3,10 @@ package providers
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -70,14 +72,15 @@ func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistNa
 		return nil, nil
 	}
 	rgs, err := a.fetchReleaseGroups(ctx, mbid)
-	if err != nil {
+	var partial *domain.PartialResultError
+	if err != nil && !errors.As(err, &partial) {
 		return nil, err
 	}
 	results := make([]domain.SearchResult, 0, len(rgs))
 	for _, rg := range rgs {
 		results = append(results, mapMBReleaseGroup(rg))
 	}
-	return results, nil
+	return results, err
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroupMatches(ctx context.Context, query string) ([]mbReleaseGroup, error) {
@@ -125,16 +128,13 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case res := <-ch:
-		if res.Err != nil {
-			return nil, res.Err
-		}
-		return res.Val.([]mbReleaseGroup), nil
+		rgs, _ := res.Val.([]mbReleaseGroup)
+		return rgs, res.Err
 	}
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
 	fetched := 0
-	degraded := false
 	all, err := fetchPaged(mbMaxReleaseGroupPages,
 		func(page int) ([]mbReleaseGroup, bool, error) {
 			u := fmt.Sprintf(
@@ -150,16 +150,13 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 			return body.ReleaseGroups, more, nil
 		},
 		func(page int, err error) {
-			degraded = true
-			slog.DebugContext(ctx, "mb.release_groups_page_failed",
-				"mbid", mbid, "page", page, "error", err)
+			slog.WarnContext(ctx, "mb.release_groups_page_failed",
+				"provider", domain.ProviderMusicBrainz.String(), "mbid", mbid, "page", page, "error", redact.Secrets(err.Error()))
 		})
 	if err != nil {
-		return nil, err
+		return all, err
 	}
-	if !degraded {
-		a.releaseMemo.put(mbid, all)
-	}
+	a.releaseMemo.put(mbid, all)
 	return all, nil
 }
 
