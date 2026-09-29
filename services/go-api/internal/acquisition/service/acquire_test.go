@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -863,5 +864,127 @@ func TestResolveIdentity_QueryCarriesTheTracksDuration(t *testing.T) {
 
 	if len(stub.queries) != 1 || stub.queries[0].Duration != 215 {
 		t.Errorf("queries = %+v, want one carrying Duration 215", stub.queries)
+	}
+}
+
+type fakeRejectionStore struct {
+	active    []string
+	activeErr error
+	recordErr error
+	recorded  []ports.CandidateRejectionRecord
+	since     time.Time
+}
+
+func (f *fakeRejectionStore) Record(_ context.Context, recs []ports.CandidateRejectionRecord) error {
+	f.recorded = append(f.recorded, recs...)
+	return f.recordErr
+}
+
+func (f *fakeRejectionStore) ActiveKeys(_ context.Context, _ string, since time.Time) ([]string, error) {
+	f.since = since
+	return f.active, f.activeErr
+}
+
+const (
+	drmURL   = "https://soundcloud.com/bran-van-3000/drinking-in-l-a-3"
+	otherURL = "https://youtube.com/watch?v=dQw4w9WgXcQ"
+)
+
+func namedCandidate(url string) ports.AudioCandidate {
+	return ports.AudioCandidate{Title: "Lil Tecca - Fell In Love", URL: url, Source: "fake"}
+}
+
+func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeAudioSearcher, *fakeTrackRepository) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := pendingTrack(t, repo, userId)
+	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
+	for _, u := range urls {
+		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
+	}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore(), WithRejectionStore(store))
+	_ = svc.Execute(context.Background(), userId, track.ID)
+	return searcher, repo
+}
+
+func TestExecute_RetrySkipsAURLRejectedAsDRMTenDaysAgo(t *testing.T) {
+	store := &fakeRejectionStore{active: []string{sourceKey(drmURL)}}
+
+	searcher, _ := retryWith(t, store, drmURL, otherURL)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
+		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, otherURL)
+	}
+	if got := time.Since(store.since); got < 29*24*time.Hour || got > 31*24*time.Hour {
+		t.Errorf("active keys asked since %v ago, want about 30 days", got)
+	}
+}
+
+func TestExecute_RetryAttemptsAPriorRejectionWhenItIsTheOnlyCandidate(t *testing.T) {
+	store := &fakeRejectionStore{active: []string{sourceKey(drmURL)}}
+
+	searcher, _ := retryWith(t, store, drmURL)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != drmURL {
+		t.Errorf("download attempts = %v, want the only candidate %q", searcher.downloadURLs, drmURL)
+	}
+}
+
+func TestExecute_RecordsDurationRejectionsAndNeverDownloadOnes(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := pendingTrack(t, repo, userId)
+	if err := track.SetDuration(200); err != nil {
+		t.Fatalf("set duration: %v", err)
+	}
+	short := namedCandidate("https://youtube.com/watch?v=shortshort1")
+	short.Duration = 30
+	failing := namedCandidate(otherURL)
+	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, failing}, downloadErr: errors.New("boom")}
+	store := &fakeRejectionStore{}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore(), WithRejectionStore(store))
+
+	_ = svc.Execute(context.Background(), userId, track.ID)
+
+	if len(store.recorded) != 1 || store.recorded[0].Reason != "duration" || store.recorded[0].SourceKey != sourceKey(short.URL) {
+		t.Errorf("recorded = %+v, want one duration rejection for %q", store.recorded, short.URL)
+	}
+}
+
+func TestExecute_FailingRejectionStoreNeverChangesTheOutcome(t *testing.T) {
+	store := &fakeRejectionStore{activeErr: errors.New("db down"), recordErr: errors.New("db down")}
+
+	searcher, repo := retryWith(t, store, otherURL)
+
+	if len(searcher.downloadURLs) != 1 {
+		t.Errorf("download attempts = %v, want the candidate still tried", searcher.downloadURLs)
+	}
+	for _, track := range repo.tracks {
+		if track.AcquisitionStatus != domain.AcquisitionFailed {
+			t.Errorf("status = %v, want failed from the download, not the store", track.AcquisitionStatus)
+		}
+	}
+}
+
+func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
+	track.RejectedSourceKeys = []string{sourceKey("https://youtube.com/watch?v=earlier0000")}
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	var results []ports.AudioCandidate
+	for _, u := range []string{"https://youtube.com/watch?v=earlier0000", drmURL, otherURL} {
+		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
+	}
+	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
+	rejections := &fakeRejectionStore{active: []string{sourceKey(drmURL)}}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store, WithRejectionStore(rejections))
+
+	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+
+	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
+		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, otherURL)
 	}
 }

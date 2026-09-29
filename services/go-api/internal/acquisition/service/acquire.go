@@ -24,6 +24,7 @@ type AcquireTrackAudioService struct {
 	events         events.Publisher
 	orphans        catalogports.OrphanedAudioRecorder
 	storeKeyPrefix string
+	rejections     ports.RejectionStore
 }
 
 func NewAcquireTrackAudioService(
@@ -81,6 +82,10 @@ func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.storeKeyPrefix = prefix }
 }
 
+func WithRejectionStore(r ports.RejectionStore) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.rejections = r }
+}
+
 const acquireTimeout = 10 * time.Minute
 
 type schedulerOwnedJobContextKey struct{}
@@ -110,6 +115,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	defer CleanupTemp(ctx, ac)
+	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		if schedulerCancelledJobContext(jobCtx) {
 			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
@@ -132,6 +138,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	ac := s.startAcquisition(ctx, userId, trackId, track)
 	defer CleanupTemp(ctx, ac)
 	configureReplaceExclusion(ctx, ac, track, trackId)
+	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		if schedulerCancelledJobContext(jobCtx) {
 			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
@@ -200,6 +207,7 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 }
 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) error {
+	defer s.recordRejections(ctx, ac)
 	s.resolveIdentity(ctx, ac)
 	if err := RunPipeline(ctx, s.buildSteps(userId, trackId), ac); err != nil {
 		return err

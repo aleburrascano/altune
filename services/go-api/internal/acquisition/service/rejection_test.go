@@ -288,3 +288,16 @@ func TestExecute_AttemptCapLeavesUntriedCandidatesInTheSummary(t *testing.T) {
 		t.Errorf("failure reason = %q, want it to contain %q", reason, want)
 	}
 }
+
+func TestLastingRejectionRecords_KeepsFingerprintAndDropsTransientStages(t *testing.T) {
+	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
+	ac.recordRejection("https://youtube.com/watch?v=a", "", "yt", RejectionFingerprint, "other version")
+	ac.recordRejection("https://youtube.com/watch?v=b", "", "yt", RejectionDownload, "download failed")
+	ac.recordRejection("https://youtube.com/watch?v=c", "", "yt", RejectionNotAttempted, "skipped")
+
+	recs := lastingRejectionRecords(ac)
+
+	if len(recs) != 1 || recs[0].Reason != "fingerprint" || recs[0].TrackID != "t1" || recs[0].SourceKey != sourceKey("https://youtube.com/watch?v=a") {
+		t.Errorf("records = %+v, want only the fingerprint rejection", recs)
+	}
+}

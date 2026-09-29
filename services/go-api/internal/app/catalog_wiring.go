@@ -135,6 +135,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAudioProber(audioProber),
 		acqService.WithAudioTagger(id3.NewTagger()),
 		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
+		acqService.WithRejectionStore(acqPersistence.NewPgxRejectionStore(a.pool)),
 	}
 	if searchSvc != nil {
 		var resolverOpts []func(*acqDiscoveryBridge.RecordingResolver)

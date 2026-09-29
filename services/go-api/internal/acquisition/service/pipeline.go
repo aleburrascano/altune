@@ -172,6 +172,8 @@ type AcquisitionContext struct {
 	Rejections []CandidateRejection
 
 	Replace ReplaceState
+
+	PriorRejectedKeys []string
 }
 
 type ReplaceState struct {
@@ -184,6 +186,16 @@ func (r ReplaceState) excludes(url string) bool {
 	key := sourceKey(url)
 	for _, excluded := range r.ExcludeKeys {
 		if excluded == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (ac *AcquisitionContext) priorRejected(url string) bool {
+	key := sourceKey(url)
+	for _, rejected := range ac.PriorRejectedKeys {
+		if rejected == key {
 			return true
 		}
 	}
