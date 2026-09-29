@@ -1,15 +1,9 @@
-// Update apps.json (the AltStore / SideStore source) with a freshly released
-// build. Run by .github/workflows/release-ios.yml after the IPA is published.
-//
-// Env: VERSION (e.g. 1.0.0), SIZE (ipa bytes), REPO (owner/repo).
-// Effect: prepends/replaces the version in apps[0].versions and mirrors the
-// latest into the legacy top-level fields for older clients.
 
 import { readFileSync, writeFileSync } from "node:fs";
 
 const VERSION = process.env.VERSION;
 const SIZE = Number(process.env.SIZE);
-const REPO = process.env.REPO; // owner/repo
+const REPO = process.env.REPO;
 
 if (!VERSION || !Number.isFinite(SIZE) || !REPO) {
   console.error("Missing VERSION / SIZE / REPO env");
@@ -41,7 +35,6 @@ app.versions = Array.isArray(app.versions) ? app.versions : [];
 app.versions = app.versions.filter((v) => v.version !== VERSION);
 app.versions.unshift(entry);
 
-// Legacy top-level mirror (older AltStore clients read these).
 app.version = VERSION;
 app.versionDate = date;
 app.versionDescription = entry.localizedDescription;

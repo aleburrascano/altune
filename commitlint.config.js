@@ -11,12 +11,10 @@ module.exports = {
       2,
       'always',
       [
-        // Layer scopes (backend hexagonal split)
         'domain',
         'application',
         'adapters',
         'platform',
-        // Cross-cutting
         'mobile',
         'api',
         'docs',
@@ -31,8 +29,6 @@ module.exports = {
         'deploy',
         'ci',
         'release',
-        // Feature scopes — extend as features get created via /feature-spec
-        // (the feature-spec skill appends new scopes here automatically)
         'view-library',
         'auth-integration',
         'discover-music-v1',
@@ -46,10 +42,8 @@ module.exports = {
         'related-tracks',
         'acquire-soundcloud',
         'musicbrainz-enrichment',
-        // Go migration scopes
         'go-api',
         'overseer',
-        // Module scopes (services/go-api/internal, apps/mobile/src/features)
         'acquisition',
         'admin',
         'app',
