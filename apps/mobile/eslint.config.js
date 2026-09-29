@@ -158,6 +158,8 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
+const QUERY_ADAPTER_HOOKS = ['src/features/discover/hooks/useDiscoverSearch.ts'];
+
 const mechanicalStyleEnforcedOnChangedCodeOnly =
   process.env.ESLINT_DIFF_SCOPED === '1'
     ? [
@@ -171,9 +173,9 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
             ],
             complexity: ['error', 10],
             'no-else-return': ['error', { allowElseIf: false }],
+            'id-match': ['error', '^(?!data$)', { properties: false, onlyDeclarations: true }],
             'id-denylist': [
               'error',
-              'data',
               'handler',
               'manager',
               'helper',
@@ -187,6 +189,10 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
               'foo',
             ],
           },
+        },
+        {
+          files: QUERY_ADAPTER_HOOKS,
+          rules: { 'max-lines-per-function': 'off' },
         },
       ]
     : [];

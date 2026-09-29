@@ -31,3 +31,44 @@ describe('mobile eslint config bans comments in every file', () => {
     assert.strictEqual(errors.length, 1);
   });
 });
+
+function diffScopedRuleIds(filePath, code) {
+  const script = `
+    const { ESLint } = require('eslint');
+    let code = '';
+    process.stdin.on('data', (c) => (code += c));
+    process.stdin.on('end', async () => {
+      const [r] = await new ESLint({ cwd: process.argv[1] }).lintText(code, { filePath: process.argv[2] });
+      console.log(JSON.stringify(r.messages.map((m) => m.ruleId)));
+    });`;
+  const out = require('node:child_process').execFileSync(
+    process.execPath,
+    ['-e', script, __dirname, filePath],
+    { input: code, env: { ...process.env, ESLINT_DIFF_SCOPED: '1' }, encoding: 'utf8' },
+  );
+  return JSON.parse(out);
+}
+
+describe('mobile diff-scoped style rules', () => {
+  const path = 'src/shared/errors.ts';
+
+  it('allows a data object key and destructured name', () => {
+    const rules = diffScopedRuleIds(
+      path,
+      'const q = 1;\nexport const a = { data: q };\nexport const c = ({ data: d }: { data: number }) => d;\n',
+    );
+    assert.ok(!rules.includes('id-match') && !rules.includes('id-denylist'));
+  });
+
+  it('still flags a data variable binding', () => {
+    assert.ok(diffScopedRuleIds(path, 'export const data = 1;\n').includes('id-match'));
+  });
+
+  it('exempts useDiscoverSearch from the function line cap only', () => {
+    const body = Array.from({ length: 12 }, (_, i) => `  const v${i} = ${i};`).join('\n');
+    const code = `export function f() {\n${body}\n  return v0;\n}\n`;
+    const hook = 'src/features/discover/hooks/useDiscoverSearch.ts';
+    assert.ok(!diffScopedRuleIds(hook, code).includes('max-lines-per-function'));
+    assert.ok(diffScopedRuleIds(path, code).includes('max-lines-per-function'));
+  });
+});
