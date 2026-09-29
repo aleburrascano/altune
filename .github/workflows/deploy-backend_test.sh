@@ -1,23 +1,5 @@
 #!/usr/bin/env bash
 
-# Self-test for deploy-backend.yml, in the same shape as the deploy/*_test.sh
-# scripts. Two groups of checks, both reading the workflow itself so what is
-# asserted is what Actions runs:
-#
-#   1. The `changes` docs-only filter (deploy-backend-changes.sh, which the
-#      workflow's filter step runs), driven by fixture commits in a scratch repo. Two directions matter and
-#      only one is loud: a false deploy=true costs one needless prod-gate
-#      approval, while a false deploy=false silently swallows a real prod deploy
-#      (#1553 — why the exclusion is *.md and never a directory name like
-#      */docs/*).
-#   2. The concurrency invariants that keep prod promotion reachable (#1807) and
-#      uninterruptible (#1555). These are structural, so the job graph is read out
-#      of the YAML and asserted directly — the deadlock they guard can otherwise
-#      only be observed by wedging a real prod deploy.
-#
-# GitHub only parses *.yml in this directory, so this file sits inert beside the
-# workflow. Run it by hand:
-#   bash .github/workflows/deploy-backend_test.sh
 
 set -uo pipefail
 
@@ -52,7 +34,6 @@ fail() {
     FAILURES=$((FAILURES + 1))
 }
 
-# expect_deploy <true|false> <changed path>...
 expect_deploy() {
     local want=$1 f
     shift
@@ -69,7 +50,6 @@ expect_deploy() {
     [ "$got" = "$want" ] || fail "expected deploy=$want, got deploy=$got"
 }
 
-# run_filter <event> <before> <after> -> the deploy= value the step would output.
 run_filter() {
     local out="$WORK/output"
     : >"$out"
@@ -111,11 +91,6 @@ CASE="a force-pushed-away diff base fails safe"
 got=$(run_filter push 1111111111111111111111111111111111111111 HEAD)
 [ "$got" = true ] || fail "expected deploy=true, got deploy=$got"
 
-# --- concurrency invariants -------------------------------------------------
-# One fact per line, `job<TAB>key<TAB>value`, for every job in the workflow.
-# Comments are skipped: a comment block sits above the job it documents but below
-# the previous job's last line, so keeping them would attribute its text to the
-# wrong job.
 FACTS="$WORK/jobs.tsv"
 awk '
     function value(  v) { v = $0; sub(/^ *[a-z-]+: */, "", v); return v }
@@ -142,9 +117,6 @@ while IFS=$'\t' read -r job key value; do
     esac
 done <"$FACTS"
 
-# approval_gate_for <job> -> the upstream job that waits on the production
-# environment, or empty. The `needs` graph is acyclic (Actions rejects a cycle),
-# so the walk terminates.
 approval_gate_for() {
     local job=$1 dep upstream
     for dep in ${NEEDS[$job]:-}; do
@@ -161,10 +133,6 @@ approval_gate_for() {
 }
 
 CASE="a job that waits for approval holds no uncancellable serialize lock"
-# The #1807 deadlock: `environment:` makes a job wait on a human while it already
-# occupies its concurrency group, and cancel-in-progress:false never hands that
-# group to the successor — whose deployment then never becomes reviewable (the
-# approval POST returns HTTP 422), so the prod gate is unreachable.
 for job in "${!ENVIRONMENT[@]}"; do
     [ "${CANCEL[$job]:-}" = false ] &&
         fail "job '$job' gates on environment ${ENVIRONMENT[$job]} while holding a cancel-in-progress:false group"

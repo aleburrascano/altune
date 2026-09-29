@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Fail the job with one ::error:: naming every required secret that is unset.
-# Usage: bash .github/workflows/require-secrets.sh NAME...   (values come from env)
 
 missing=""
 for name in "$@"; do
