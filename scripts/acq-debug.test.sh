@@ -66,6 +66,36 @@ expect_err "acq-debug: no DATABASE_URL in .env.production"
 expect_no_out
 expect_not_out "no track matches"
 
+CASE="track with no argument exits 3 with the usage on stderr and nothing on stdout"
+new_stub_bin
+run_script track
+expect_rc 3
+expect_err "usage: track <text|uuid>"
+expect_no_out
+
+CASE="probe with no argument exits 3 with the usage on stderr and nothing on stdout"
+new_stub_bin
+run_script probe
+expect_rc 3
+expect_err "usage: probe <artist title>"
+expect_no_out
+
+CASE="track with no DATABASE_URL in the env file exits 3, reports the cause on stderr, prints nothing on stdout, and never falls through to 'no track matches'"
+new_stub_bin
+run_script track foo
+expect_rc 3
+expect_err "acq-debug: no DATABASE_URL in .env.production"
+expect_no_out
+expect_not_out "no track matches"
+
+CASE="track with no matching row exits 1 with 'no track matches' on stderr and nothing on stdout"
+new_stub_bin
+printf 'DATABASE_URL=postgres://stub\n' >"$WORK/checkout/services/go-api/.env.production"
+run_script track foo
+expect_rc 1
+expect_err "no track matches 'foo'"
+expect_no_out
+
 CASE="sql with two statements exits 3 with the guard message on stderr and nothing on stdout"
 new_stub_bin
 run_script sql "select 1; select 2"

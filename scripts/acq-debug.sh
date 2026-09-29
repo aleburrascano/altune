@@ -105,13 +105,15 @@ SQL
   ;;
 
 track)
-  [ $# -ge 1 ] || { echo "usage: track <text|uuid>"; exit 3; }
+  [ $# -ge 1 ] || { echo "usage: track <text|uuid>" >&2; exit 3; }
+  db_url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
+  [ -n "$db_url" ] || { echo "acq-debug: no DATABASE_URL in $envfile" >&2; exit 3; }
   ids=$(db -A -t -v q="$1" <<'SQL' | grep -E '^[0-9a-f-]{36}$'
 SELECT id FROM tracks WHERE id::text = :'q' OR title ILIKE '%' || :'q' || '%' OR artist ILIKE '%' || :'q' || '%'
  ORDER BY added_at DESC LIMIT 5;
 SQL
 )
-  [ -n "$ids" ] || { echo "no track matches '$1'"; exit 1; }
+  [ -n "$ids" ] || { echo "no track matches '$1'" >&2; exit 1; }
   for id in $ids; do
     db -x -v id="$id" <<'SQL'
 SELECT id, title, artist, album, duration_seconds, acquisition_status, failure_reason,
@@ -197,7 +199,7 @@ SQL
 
 probe)
   need_api
-  [ $# -ge 1 ] || { echo "usage: probe <artist title>"; exit 3; }
+  [ $# -ge 1 ] || { echo "usage: probe <artist title>" >&2; exit 3; }
   echo "== $api, yt-dlp $(docker exec "$api" yt-dlp --version)"
   in_api '
 for engine in ytsearch5 scsearch5; do
