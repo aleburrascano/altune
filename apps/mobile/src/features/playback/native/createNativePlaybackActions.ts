@@ -114,6 +114,7 @@ async function playQueueIndex(index: number): Promise<void> {
   try {
     await skipToIndexAndPlay(index);
   } catch (err) {
+    if (nativeErrorCode(err) !== 'index_out_of_bounds') throw err;
     console.warn('[playback] skip target outside the native queue window; rebuilding', {
       index,
       error: redactedPlaybackFailure(err),

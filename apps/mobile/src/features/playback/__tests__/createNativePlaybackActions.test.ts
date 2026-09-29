@@ -197,6 +197,22 @@ describe('createNativePlaybackActions', () => {
       ]);
     });
 
+    it('skipToQueueIndex reports a skip timeout without rebuilding the native queue', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore
+        .getState()
+        .loadQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0, null);
+      __player.failNext('skip', new NativeQueueTimeoutError(15_000));
+
+      await controls.skipToQueueIndex(1);
+
+      expect(usePlaybackErrorStore.getState()).toMatchObject({
+        key: trackKey(numberedPreviewTrack(1)),
+        kind: 'queue_update_failed',
+      });
+      expect(__player.calls('add')).toHaveLength(0);
+    });
+
     it('reports a failed append against the remembered track when no queue is active', async () => {
       const native = createNativePlaybackActions(jest.fn());
       native.rememberTrack(numberedPreviewTrack(9));
