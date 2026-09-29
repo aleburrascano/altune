@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -305,5 +306,37 @@ func TestArtworkEntry_SourceSerializedAsBareString(t *testing.T) {
 	}
 	if got, want := artworkCacheKey(domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1"), "discovery:artwork:v3:track:93e2a80d49992538aa72cde4bca801e2"; got != want {
 		t.Errorf("artworkCacheKey = %q, want %q", got, want)
+	}
+}
+
+func TestRedisArtworkCache_ConcurrentIdentityAndNameKeepsIdentity(t *testing.T) {
+	client := testRedisClient(t)
+	cache := NewRedisArtworkCache(client)
+	ctx := context.Background()
+
+	kind := domain.ResultKindArtist
+	title := fmt.Sprintf("Raced Artist %s", t.Name())
+	mbid := "mbid-race"
+	key := artworkCacheKey(kind, title, "", mbid)
+	cleanKeys(t, client, key)
+
+	identityURL := "https://caa/identity.jpg"
+	var wg sync.WaitGroup
+	for i := range 40 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if i%2 == 0 {
+				_ = cache.Set(ctx, kind, title, "", mbid, identityURL, "discogs", ports.ArtworkConfidenceIdentity)
+				return
+			}
+			_ = cache.Set(ctx, kind, title, "", mbid, fmt.Sprintf("https://name/%d.jpg", i), "deezer", ports.ArtworkConfidenceName)
+		}()
+	}
+	wg.Wait()
+
+	got, source, hit, _ := cache.Get(ctx, kind, title, "", mbid)
+	if !hit || got != identityURL || source != "discogs" {
+		t.Errorf("after racing sets got (%q,%q,%v), want identity entry (%q,discogs)", got, source, hit, identityURL)
 	}
 }

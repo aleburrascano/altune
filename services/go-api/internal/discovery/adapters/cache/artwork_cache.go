@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +19,8 @@ type artworkEntry struct {
 	Source     string `json:"s"`
 	Confidence int    `json:"c,omitempty"`
 }
+
+const artworkSetAttempts = 5
 
 const (
 	artworkPositiveTTL    = 14 * 24 * time.Hour
@@ -64,13 +68,41 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 	}
 
 	key := artworkCacheKey(kind, title, subtitle, mbid)
+	entry := artworkEntry{URL: url, Source: source.String(), Confidence: int(confidence)}
+	blob, err := json.Marshal(entry)
+	if err != nil {
+		c.signal.failure(ctx, kindOf(key), opEncode, err)
+		return err
+	}
+	ttl := artworkTTL(kind, url, confidence)
 
-	if existing, ok := c.read(ctx, key); ok && existing.URL != "" && int(confidence) < existing.Confidence {
+	for range artworkSetAttempts {
+		err = c.client.Watch(ctx, func(tx *goredis.Tx) error {
+			return c.setIfNotDowngrade(ctx, tx, key, blob, int(confidence), ttl)
+		}, key)
+		if !errors.Is(err, goredis.TxFailedErr) {
+			return err
+		}
+	}
+	return fmt.Errorf("artwork set: key kept changing across %d attempts: %w", artworkSetAttempts, goredis.TxFailedErr)
+}
+
+func (c *RedisArtworkCache) setIfNotDowngrade(ctx context.Context, tx *goredis.Tx, key string, blob []byte, confidence int, ttl time.Duration) error {
+	raw, err := tx.Get(ctx, key).Result()
+	if err != nil && !errors.Is(err, goredis.Nil) {
+		return err
+	}
+	var existing artworkEntry
+	if err == nil && json.Unmarshal([]byte(raw), &existing) == nil && existing.URL != "" && confidence < existing.Confidence {
 		return nil
 	}
-
-	entry := artworkEntry{URL: url, Source: source.String(), Confidence: int(confidence)}
-	return c.setJSON(ctx, key, entry, artworkTTL(kind, url, confidence))
+	_, err = tx.TxPipelined(ctx, func(pipe goredis.Pipeliner) error {
+		return pipe.Set(ctx, key, blob, ttl).Err()
+	})
+	if err != nil && !errors.Is(err, goredis.TxFailedErr) {
+		c.signal.failure(ctx, kindOf(key), opSet, err)
+	}
+	return err
 }
 
 func (c *RedisArtworkCache) read(ctx context.Context, key string) (artworkEntry, bool) {

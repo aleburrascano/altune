@@ -270,3 +270,54 @@ func TestRedisIdentityStore_PersistBridges_RedisDelFailureStillReturnsNil(t *tes
 		t.Errorf("durable PersistBridges calls = %d, want 1", inner.persistCalls)
 	}
 }
+
+type midLookupIdentityStore struct {
+	recordingIdentityStore
+	beforeReturn func()
+}
+
+func (f *midLookupIdentityStore) LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+	mbid, xref, ok := f.recordingIdentityStore.LookupByProviderID(ctx, kind, provider, externalID)
+	f.beforeReturn()
+	return mbid, xref, ok
+}
+
+func TestRedisIdentityStore_Lookup_DoesNotBackfillStaleValueAfterConcurrentWrite(t *testing.T) {
+	kind := domain.ResultKindAlbum
+	cases := map[string]func(store *RedisIdentityStore, extID string){
+		"persist_bridges": func(store *RedisIdentityStore, extID string) {
+			_ = store.PersistBridges(context.Background(), kind, "new-mbid", map[string]string{"deezer": extID})
+		},
+		"invalidate": func(store *RedisIdentityStore, extID string) {
+			_ = store.Invalidate(context.Background(), kind, "deezer", extID)
+		},
+	}
+	for name, concurrentWrite := range cases {
+		t.Run(name, func(t *testing.T) {
+			client := testRedisClient(t)
+			extID := fmt.Sprintf("dz-stale-%s", t.Name())
+			key := identityKey(kind, "deezer", extID)
+			cleanKeys(t, client, key, identityGenKey(key))
+			inner := &midLookupIdentityStore{
+				recordingIdentityStore: recordingIdentityStore{mbid: "old-mbid", xref: map[string]string{"deezer": extID}, found: true},
+			}
+			store := NewRedisIdentityStore(inner, client)
+			inner.beforeReturn = func() {
+				concurrentWrite(store, extID)
+				inner.recordingIdentityStore.mbid = "new-mbid"
+			}
+			ctx := context.Background()
+
+			if mbid, _, _ := store.LookupByProviderID(ctx, kind, "deezer", extID); mbid != "old-mbid" {
+				t.Fatalf("racing lookup = %q, want the durable read it started with", mbid)
+			}
+			if n, _ := client.Exists(ctx, key).Result(); n != 0 {
+				t.Fatalf("stale value was back-filled after a concurrent write")
+			}
+			inner.beforeReturn = func() {}
+			if mbid, _, _ := store.LookupByProviderID(ctx, kind, "deezer", extID); mbid != "new-mbid" {
+				t.Errorf("next lookup = %q, want new-mbid", mbid)
+			}
+		})
+	}
+}
