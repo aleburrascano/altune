@@ -42,6 +42,9 @@ const (
 	EventTypeClientError
 	EventTypeUserAction
 	EventTypeFailureShown
+	EventTypeSseReconnect
+	EventTypeOutboxFlushFailed
+	EventTypeDownloadFailed
 )
 
 var eventTypeNames = map[EventType]string{
@@ -62,6 +65,9 @@ var eventTypeNames = map[EventType]string{
 	EventTypeUserAction:          "user_action",
 	EventTypeFailureShown:        "failure_shown",
 	EventTypeDiscographyObserved: "discography_observed",
+	EventTypeSseReconnect:        "sse_reconnect",
+	EventTypeOutboxFlushFailed:   "outbox_flush_failed",
+	EventTypeDownloadFailed:      "download_failed",
 }
 
 func (e EventType) String() string {
@@ -76,7 +82,8 @@ func (e EventType) ClientSubmittable() bool {
 	case EventTypeResultsShown, EventTypeResultClicked, EventTypePlay, EventTypeSkip,
 		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
 		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
-		EventTypeAcquisitionUi, EventTypeClientError, EventTypeUserAction, EventTypeFailureShown:
+		EventTypeAcquisitionUi, EventTypeClientError, EventTypeUserAction, EventTypeFailureShown,
+		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed:
 		return true
 	}
 	return false

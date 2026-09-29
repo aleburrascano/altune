@@ -92,6 +92,7 @@ func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testin
 	now := time.Now().UTC()
 	types := []domain.EventType{
 		domain.EventTypePlaybackHealth, domain.EventTypeUserAction, domain.EventTypeFailureShown,
+		domain.EventTypeSseReconnect, domain.EventTypeOutboxFlushFailed, domain.EventTypeDownloadFailed,
 	}
 	clean := func() {
 		for _, et := range types {

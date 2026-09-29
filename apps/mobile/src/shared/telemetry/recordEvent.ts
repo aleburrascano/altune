@@ -18,7 +18,10 @@ export type DiscoveryEventType =
   | 'acquisition_ui'
   | 'client_error'
   | 'user_action'
-  | 'failure_shown';
+  | 'failure_shown'
+  | 'sse_reconnect'
+  | 'outbox_flush_failed'
+  | 'download_failed';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;

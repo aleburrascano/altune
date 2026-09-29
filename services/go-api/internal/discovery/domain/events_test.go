@@ -26,6 +26,9 @@ func TestEventType_String(t *testing.T) {
 		{EventType(999), "unknown"},
 		{EventTypeUserAction, "user_action"},
 		{EventTypeFailureShown, "failure_shown"},
+		{EventTypeSseReconnect, "sse_reconnect"},
+		{EventTypeOutboxFlushFailed, "outbox_flush_failed"},
+		{EventTypeDownloadFailed, "download_failed"},
 	}
 
 	for _, tt := range tests {
@@ -87,6 +90,9 @@ func TestParseEventType(t *testing.T) {
 		{name: "client_error", input: "client_error", want: EventTypeClientError},
 		{name: "user_action", input: "user_action", want: EventTypeUserAction},
 		{name: "failure_shown", input: "failure_shown", want: EventTypeFailureShown},
+		{name: "sse_reconnect", input: "sse_reconnect", want: EventTypeSseReconnect},
+		{name: "outbox_flush_failed", input: "outbox_flush_failed", want: EventTypeOutboxFlushFailed},
+		{name: "download_failed", input: "download_failed", want: EventTypeDownloadFailed},
 		{name: "discography_observed", input: "discography_observed", want: EventTypeDiscographyObserved},
 		{name: "invalid", input: "page_view", want: EventTypeUnknown},
 		{name: "empty", input: "", want: EventTypeUnknown},
@@ -113,6 +119,7 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
 		EventTypeAcquisitionUi, EventTypeClientError,
 		EventTypeUserAction, EventTypeFailureShown,
+		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
 		EventTypeDiscographyObserved,
 	}
 	for _, et := range types {
@@ -147,6 +154,9 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeClientError, true},
 		{EventTypeUserAction, true},
 		{EventTypeFailureShown, true},
+		{EventTypeSseReconnect, true},
+		{EventTypeOutboxFlushFailed, true},
+		{EventTypeDownloadFailed, true},
 		{EventTypeDiscographyObserved, false},
 		{EventType(999), false},
 	}
