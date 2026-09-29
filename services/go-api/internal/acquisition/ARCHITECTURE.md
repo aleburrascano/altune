@@ -88,7 +88,7 @@ failure taxonomy, because it is also the spec any future verification must satis
 | F10 | **Corrupted by our own pipeline** — ID3 written onto a non-MP3 container | m4a whose `ftyp` got displaced | ✅ tagger skips non-MP3 |
 
 Every class is gated by `cmd/acquisitioneval` against a committed baseline; the
-suite currently scores **54/54**. Four mechanisms cover the table rather than one
+suite currently scores **72/72** (`goldens/` holds 72 cases across four files). Four mechanisms cover the table rather than one
 rule per row:
 
 1. **Resolve identity before fetching** — discovery supplies ISRC/MBID/duration
@@ -261,26 +261,53 @@ flowchart TD
     REC -->|"pending"| GO["proceed"]
     REV --> GO
     GO --> EVS["publish track_acquisition_started"]
-    EVS --> S1["SEARCH · 4 query variants → dedupe by URL"]
-    S1 --> S2["SELECT · rankAndCollect → best"]
-    S2 --> S3["DOWNLOAD · walk ranked list, ≤8 attempts"]
-    S3 --> G1{"duration gate<br/>only if prober AND Track.Duration > 0"}
-    G1 -->|fail| S3
-    G1 --> G2{"decode gate<br/>whenever prober wired"}
-    G2 -->|fail| S3
-    G2 --> S4["TAG · MP3 only · failure swallowed"]
-    S4 --> S5["STORE · re-validate decode → BuildAudioRef → Store"]
-    S5 --> S6["UPDATE_TRACK · MarkReady + SetDuration"]
+    EVS --> S1["SEARCH · 4 query variants → dedupe by URL<br/>drop prior-rejected keys"]
+    S1 --> S2["SELECT · qualifier veto → rank → ranked list"]
+    S2 --> S3["DOWNLOAD · windowed walk, ≤8 attempts"]
+    S3 --> G0{"pre-download duration<br/>candidateDurationPlausible"}
+    G0 -->|fail| S3
+    G0 --> G1["preview fingerprint<br/>first 130s, sources that can"]
+    G1 -->|"other_version / different_song"| S3
+    G1 --> G2["full download"]
+    G2 --> G3{"duration + decode gates"}
+    G3 -->|fail| S3
+    G3 --> G4["ClassifyAudio verdict<br/>when no preview verdict"]
+    G4 -->|"other_version / different_song"| S3
+    G4 --> J{"judgeAttempt"}
+    J -->|"hard / soft"| S4
+    J -->|"unknown or fallback qualifier"| HOLD["hold best by confidence"]
+    HOLD --> S3
+    HOLD -->|"list exhausted, confidence ≥ floor"| S4
+    S4["TAG · MP3 only · failure swallowed"] --> S5["STORE · re-validate decode → BuildAudioRef → Store"]
+    S5 --> S6["UPDATE_TRACK · MarkReady + SetDuration + confidence/evidence"]
     S6 --> OK["publish track_acquisition_completed"]
     S3 -.->|"all candidates rejected"| ERR
+    HOLD -.->|"confidence below floor"| ERR
     S5 -.->|"decode fails"| ERR
     ERR["StepError → failureReason → MarkFailed<br/>+ publish track_acquisition_failed"]
 ```
+
+**Reference set.** Before searching, `RecordingResolver` builds the reference the
+audio is later judged against: `RecordingIdentity.MBIDs`, up to five recordings
+registered to the track's ISRC (through `WithISRCAuthority`), with the resolved MBID
+first. When the saved and resolved lengths disagree, or the searched MBID is not
+among the ISRC's recordings, the identity carries `ReferenceDoubted` and logs
+`acquisition.reference_doubted`; the resolver then anchors to the ISRC recording
+closest in length. A remix MBID from a text search can therefore no longer make the
+original audio look wrong.
 
 **Search** issues up to four query variants (ISRC, title+artist, +album,
 +"audio"), each fanned by the adapter to `ytsearch5:` and `scsearch5:`. Results
 merge and dedupe by URL through the one shared helper. A single engine failing is
 tolerated; the search fails only when *every* engine fails, for *every* query.
+Candidates whose `sourceKey` is in the track's active `acquisition_rejections` rows
+are dropped and logged as `acquisition.candidate_skipped_prior_rejection`; when
+that would leave nothing, they come back (`acquisition.prior_rejections_exhausted`).
+SoundCloud candidates are inspected by the yt-dlp adapter (`inspect.go`, two at a
+time, cached 24h): a track whose audio formats are all encrypted arrives with
+`Unplayable` = `drm`, and one that offers a preview format or a 30s stub under a
+longer listing arrives as `preview`. Select turns both into rejections without a
+download.
 
 **Select** scores each candidate and splits survivors into two buckets:
 
@@ -298,13 +325,83 @@ Other bucket → sort by identity, then featMatch, then metadataRank
 Topic bucket always ranks ahead of Other.
 ```
 
+Before scoring, `UnrequestedQualifiers` reads the raw candidate title against a
+lexicon and splits the markers the track did not ask for into two families. A
+**veto** family (instrumental, karaoke, live, cover, remix, slowed, reverb, sped up,
+nightcore, 8d, reaction, leak, snippet, type beat and similar) rejects the
+candidate at stage `qualifier` before it can rank. A **fallback** family (edit,
+radio edit, extended, version) keeps it but marks it `isFallback`, and a candidate
+that carries one is only ever a held last resort (see Download). A marker the track
+title or artist itself contains is ignored, and benign entries (original, stereo,
+mono, album mix) are ignored outright. Resolved candidates rank first in their own
+bucket, ahead of Topic and Other.
+
 The title-only 0.6 penalty exists because an unqualified title match is ambiguous
 (F7). `featureMatch` reads the **raw** title, not the normalized one, because
 normalization strips `(feat. X)` before the matcher ever sees it — the one place the
 module already works around the normalization blindness that §7.1 is about.
 
-**Download** walks the ranked list (cap 8 — each attempt is a full download) and
-applies two per-candidate gates, falling through to the next candidate on rejection.
+**Download** walks the ranked list (cap 8 attempts, `maxDownloadAttempts`) in
+windows of `WithVerifyWidth(n)` candidates, falling through to the next candidate
+on rejection. Width 1 is the serial walk and is the default: `CoreSteps` does not set
+it, so production is serial until a caller passes a width (§7.11). Every fetch,
+full or preview, takes a slot from the process-wide `DownloadLimiter`
+(`ACQUISITION_DOWNLOAD_CONCURRENCY`, default 6, wired in `catalog_wiring.go`), which
+caps concurrent downloads across all tracks. In a window the first accepted
+candidate cancels the lower-ranked ones, and results merge in rank order so the
+outcome equals the serial walk. Per candidate:
+
+1. `candidateDurationPlausible` skips, before any bytes move, a candidate whose
+   search-time duration is outside the expected window (stage `duration`, log
+   `acquisition.candidate_skipped_duration`). Resolved and duration-less
+   candidates pass.
+2. **Preview fingerprint.** When the source can (`PreviewFetcher`, resolved through
+   the registry), the first 130s is fetched (`--download-sections *0-130` on
+   yt-dlp), fingerprinted and classified; a bad verdict rejects without paying for
+   the full download, a failure falls back to the full-file path
+   (`ports.SkipPreviewFallback`), and every preview logs
+   `acquisition.preview_fingerprint`.
+3. The full download, then the duration and decode gates.
+4. `ClassifyAudio(ref, duration, results)` classifies the fingerprint (skipped when
+   the preview already produced the verdict).
+
+`ClassifyAudio` drops each linked recording whose length disagrees with the audio
+(authoritative tolerance, max(5s, 3%)), then returns one `AudioVerdict`: `hard`
+when a surviving link is in the reference `MBIDs`; `soft` when one names the same
+song by the same artist with no unrequested qualifier and the length agrees;
+`other_version` when the same song survives only with an unrequested qualifier;
+`different_song` otherwise; `unknown` when AcoustID returned nothing. `hard` and
+`soft` set `IdentityVerified`. `other_version` and `different_song` reject at stage
+`fingerprint`. Each verdict logs `acquisition.audio_verdict`, with the surviving
+links and `reference_doubted`.
+
+`unknown` is not a rejection. `judgeAttempt` builds `Evidence` (verdict, AcoustID
+score, ISRC-set hit, duration delta, channel class, fallback qualifiers, whether the
+identity was resolved, source title; `ISRCSetHit` is declared but nothing sets it yet) and scores it with
+`ScoreConfidence(e Evidence, trackSeconds float64)`: `hard` 0.95, `soft` 0.85 (each
+knocked to at least 0.8 when the AcoustID score is under 0.92), and for `unknown`
+0.2 plus 0.3 for a Topic or artist channel, plus 0.2 for a duration within 2s (0.1
+within max(15s, 7%)), plus 0.1 when resolved, minus 0.2 for a qualifier, capped at
+0.8. An `unknown` or fallback candidate is *held*, not accepted; the walk keeps
+trying and `settle` picks the best held candidate (non-fallback first, then highest
+confidence). It is stored, as `best_effort`, only when its confidence reaches
+the confidence floor (`WithConfidenceFloor`, default 0.5; the
+`ACQUISITION_CONFIDENCE_FLOOR` config value is parsed and validated but not yet
+passed to the step, §7.11); otherwise the
+step fails with `ErrNoConfidentMatch`, which `failureReason` maps to
+`no_confident_match`. A fallback candidate must also match the expected length within
+max(5s, 3%). The winning `Evidence` and confidence are logged as
+`acquisition.confidence` and written to the track by UpdateTrack.
+
+Rejections carry a stage: `identity`, `qualifier`, `download`, `drm`, `preview`,
+`duration`, `undecodable`, `fingerprint`, `not_attempted`. Every stage except
+`download` and `not_attempted` is *lasting*: at the end of the run it is written to
+`acquisition_rejections` (migration 029, keyed by track and `sourceKey`), and for
+30 days a plain retry skips that source (§7.11). Log events to watch:
+`acquisition.audio_verdict`, `acquisition.reference_doubted`,
+`acquisition.preview_fingerprint`, `acquisition.candidate_skipped_prior_rejection`,
+`acquisition.confidence`.
+
 **Tag** is a no-op for non-MP3 containers, because ID3v2 prepends a block at byte 0
 and that invalidates an MP4 sample-offset table. **Store** re-runs the decode check
 on the final file — the last gate after download *and* tagging, catching corruption
@@ -382,6 +479,14 @@ A change should preserve all of these; if it can't, that's the discussion.
 - `complete` is the only call site that advances job counters.
 - Acquisition never imports catalog's adapters, observe, or the composition root.
 - Stage `Name()` strings are a public contract (§8) — renaming one is a breaking change.
+- A veto-family qualifier the track didn't ask for rejects at `qualifier`, whatever the fingerprint says.
+- `other_version` and `different_song` verdicts always reject; only `unknown` may be held.
+- An `unknown` or fallback candidate is stored only at or above the confidence floor, and as `best_effort`, never `verified`.
+- Only lasting rejection stages (everything but `download` and `not_attempted`) are remembered in `acquisition_rejections`.
+- Prior-rejected sources are skipped, never dropped for good: when nothing else is left they come back.
+- Every fetch, full or preview, goes through the `DownloadLimiter`.
+- A preview failure falls back to the full-file path; it never rejects a candidate.
+- The pre-download duration check skips only when both the search-time and expected lengths are known.
 
 ---
 
@@ -434,14 +539,15 @@ channels don't exist — the file is still accepted on resemblance alone. There 
 head/tail excess detection either: a container whose *total* length matches but whose
 audio is offset passes.
 
-### 7.5 The source set is two engines wide
+### 7.5 The source set is two engines wide — partially closed
 
-`searchEngines` is a two-element slice. yt-dlp's built-in search prefixes are thin
-beyond `ytsearch`/`scsearch`, so widening means a search step *outside* yt-dlp that
-hands it URLs — which `YtDlpAudioSearcher` already accommodates, since `Search`
-and `Download` are separate methods. Bandcamp and Audiomack are the obvious
-additions for exactly the underground long tail where Topic channels don't exist and
-§7.4 bites hardest.
+`searchEngines` is still a two-element slice, but a search-side URL no longer has to
+come from yt-dlp's own search: the source registry also routes `ytmusic`,
+`streamrip:<service>` and resolved candidates (`Resolved`, from the identity's
+`Sources`), which rank ahead of anything searched. SoundCloud results are now
+inspected before ranking (§4), so a DRM or preview stub costs no download.
+**Still open:** Bandcamp and Audiomack are not sources; the underground long tail
+where Topic channels don't exist still relies on `ytsearch`/`scsearch`.
 
 ### 7.6 Fail-open is broader than it reads — partially closed
 
@@ -454,23 +560,33 @@ no health signal, no counter.
 **Done:** `FfprobeProber.Available()` / `Identifier.Available()` resolve the binaries
 at construction and the composition root folds them into
 `AcquisitionStatus.Verification`, logged loudly at startup when anything is missing.
-**Still open:** the fail-open *behavior* is unchanged — a validator that dies
-mid-run still skips its gate silently for that candidate.
+`DownloadStep` also counts each skipped gate through `ports.VerifySkipRecorder`
+(`SkipPreviewFallback`, `SkipIdentifyFailed`) and logs `acquisition.identify_throttled`
+when AcoustID throttles, so a run of skips is visible. **Still open:** the fail-open
+*behavior* is unchanged — a validator that dies mid-run still skips its gate for that
+candidate, and the resulting `unknown` verdict is now held against the confidence
+floor rather than accepted outright, which bounds the damage but does not remove it.
 
-### 7.7 ISRC is a search hint, never an identity check
+### 7.7 ISRC is a search hint, never an identity check — partially closed
 
-The ISRC query variant is issued first, but `AudioCandidate` carries no ISRC field —
-yt-dlp doesn't expose one — so nothing verifies the returned candidate *is* that
-recording. The strongest identifier the system holds is used only to bias a text
-search.
+`AudioCandidate` still carries no ISRC, so a text search result is never checked
+against the ISRC directly. The identity check moved to the audio: the resolver puts
+every recording registered to the ISRC into `RecordingIdentity.MBIDs`, and a
+candidate whose fingerprint links any of them earns a `hard` verdict (§4), even when
+the resolved MBID is a remix. `ReferenceDoubted` flags the identities where the
+reference itself is suspect. **Still open:** a track with no ISRC has a one-element
+reference set, and `Evidence.ISRCSetHit` is declared but never populated.
 
 ### 7.8 Selection is tested against curated goldens, not live results — partially closed
 
 **Done:** `service/eval/` runs the real `CoreSteps` selection in-process against a
 committed golden set — `goldens/selection.json` (ranking and the audio gates) and
 `goldens/verification.json` (identity, fingerprint corroboration, tolerance edges),
-54 cases spanning every class in §1's table. `report.go` scores per-failure-class
-accuracy and gates the headline number against `cmd/acquisitioneval`'s committed
+72 cases across `goldens/` spanning every class in §1's table, plus `realworld.json`
+(3 cases, real identity resolution including the remix-MBID trap) and `pipeline.json`
+(4 cases, whole-pipeline outcomes). `report.go` scores per-failure-class
+accuracy and simulated time (median simulated seconds, mean attempts, so a change
+that wins accuracy by paying more downloads shows up) and gates both against `cmd/acquisitioneval`'s committed
 baseline, re-baselined explicitly — the same shape discovery uses in
 `cmd/discoveryeval`. "Did that change improve selection?" now has an answer, and a
 selection change that regresses the baseline fails the gate.
@@ -478,7 +594,10 @@ selection change that regresses the baseline fails the gate.
 **Still open:** every golden is a *hand-authored* candidate list, not a recording of
 what yt-dlp actually returned. The gate proves selection is correct on the cases we
 can imagine; it still says nothing about the distribution YouTube serves in the
-wild. Capturing real yt-dlp candidate lists as goldens is the remaining step.
+wild. `acquisitioneval capture` records real candidate lists and
+`acquisitioneval audit-qualifiers` audits the qualifier lexicon against them, but
+committed goldens are still mostly hand-authored; growing `realworld.json` from
+captures is the remaining step.
 
 ### 7.9 Acquisition history is in-memory only
 
@@ -496,14 +615,20 @@ probed. A stored duration is therefore a measurement wherever a prober was wired
 so the feedback loop into the next run's gate carries fact rather than a provider's
 claim.
 
-### 7.11 The attempt cap can starve a good candidate — narrowed
+### 7.11 The attempt cap can starve a good candidate — mostly closed
 
-`maxDownloadAttempts = 8` bounds downloads, not candidates — and rejection only
-happens *at download time*. A query returning eight plausible-but-wrong variants
-ahead of the master exhausts the budget and fails the track, even though the right
-answer was ranked ninth. The wider cap makes that pathological, not routine, but it
-cannot close the gap: rejection is still paid one full download at a time. Better
-ranking (§7.1) reduces the pressure; a cheap pre-download filter would remove it.
+`maxDownloadAttempts = 8` still bounds downloads, but fewer candidates reach it.
+Veto qualifiers, `drm`/`preview` inspection and the pre-download duration check
+(`candidateDurationPlausible`) remove candidates without a download, and the preview
+fingerprint (first 130s) rejects a wrong recording for a fraction of a full fetch.
+Rejection memory (`acquisition_rejections`, 30 days) means a retry no longer spends
+its budget re-downloading last time's losers. Windows (`WithVerifyWidth`) would
+pay the remaining downloads in parallel.
+**Still open:** (a) production runs width 1 because nothing passes `WithVerifyWidth`;
+(b) `ACQUISITION_CONFIDENCE_FLOOR` is not yet passed to `WithConfidenceFloor`, so the
+floor is the 0.5 default; (c) a source with no `PreviewFetcher` still pays the full
+download per candidate; (d) a lasting rejection can be wrong (a source that was
+briefly a preview), and the 30-day window is the only correction.
 
 ### 7.12 ~~Retry admission is untested~~ — closed
 
