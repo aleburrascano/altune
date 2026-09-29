@@ -194,10 +194,16 @@ type AcquisitionContext struct {
 	BestEffort        bool
 
 	Rejections []CandidateRejection
+	Attempted  []AttemptedCandidate
 
 	Replace ReplaceState
 
 	PriorRejectedKeys []string
+}
+
+type AttemptedCandidate struct {
+	URL    string
+	Window int
 }
 
 type ReplaceState struct {

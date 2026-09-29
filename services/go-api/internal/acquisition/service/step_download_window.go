@@ -15,7 +15,7 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 	var holds holdBook
 	defer holds.discard()
 	pending := ac.Ranked
-	used := 0
+	used, windowIndex := 0, 0
 
 	for len(pending) > 0 {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -27,6 +27,8 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 			break
 		}
 		used += len(window)
+		recordWindow(ac, window, windowIndex)
+		windowIndex++
 		results := s.runWindow(ctx, ac, window)
 		if mergeWindow(ctx, ac, results, &holds, &failures) {
 			return afterDownload{}, nil
@@ -53,6 +55,12 @@ func (s *DownloadStep) nextWindow(
 		window = append(window, candidate)
 	}
 	return window, nil
+}
+
+func recordWindow(ac *AcquisitionContext, window []ports.AudioCandidate, index int) {
+	for _, candidate := range window {
+		ac.Attempted = append(ac.Attempted, AttemptedCandidate{URL: candidate.URL, Window: index})
+	}
 }
 
 func remainingAfter(ac *AcquisitionContext, rest []ports.AudioCandidate, started int) []ports.AudioCandidate {

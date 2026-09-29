@@ -121,15 +121,20 @@ type fakeAudioSearcher struct {
 	downloadErr   error
 	searchCalled  bool
 	downloadURLs  []string
+	mu            sync.Mutex
 }
 
 func (s *fakeAudioSearcher) Search(_ context.Context, _ string) ([]acqports.AudioCandidate, error) {
+	s.mu.Lock()
 	s.searchCalled = true
+	s.mu.Unlock()
 	return s.searchResults, s.searchErr
 }
 
 func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (string, error) {
+	s.mu.Lock()
 	s.downloadURLs = append(s.downloadURLs, url)
+	s.mu.Unlock()
 	return s.downloadPath, s.downloadErr
 }
 

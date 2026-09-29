@@ -77,8 +77,8 @@ func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *s
 		Case:             kase,
 		Failed:           runErr != nil,
 		Pending:          kase.isPending(),
-		SimulatedSeconds: clock.total(),
-		Attempts:         clock.attemptCount(),
+		SimulatedSeconds: clock.searchSeconds() + downloadSeconds(kase, ac.Attempted),
+		Attempts:         len(ac.Attempted),
 	}
 	if runErr != nil {
 		out.Err = runErr.Error()
@@ -93,6 +93,22 @@ func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *s
 	}
 	out.Pass, out.Reason = judge(kase, out)
 	return out
+}
+
+func downloadSeconds(kase Case, attempted []service.AttemptedCandidate) float64 {
+	slowest := map[int]float64{}
+	for _, a := range attempted {
+		cand, ok := kase.candidateByURL(a.URL)
+		if !ok {
+			continue
+		}
+		slowest[a.Window] = max(slowest[a.Window], cand.downloadSeconds())
+	}
+	total := 0.0
+	for _, seconds := range slowest {
+		total += seconds
+	}
+	return total
 }
 
 func RunAll(ctx context.Context, cases []Case) []Outcome {

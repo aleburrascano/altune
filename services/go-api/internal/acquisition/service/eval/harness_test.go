@@ -835,3 +835,26 @@ func TestEmbeddedMustHoldCasesCarryTheirExpectations(t *testing.T) {
 		}
 	}
 }
+
+func TestRunAll_OverlappedDownloadsScoreAsTheSlowestOfTheWindow(t *testing.T) {
+	kase := Case{
+		ID: "t", Class: "OK",
+		Track: Track{Title: "Solitude", Artist: "Nova", Duration: 200},
+		Sources: []Source{{Name: "ytdlp", SearchSeconds: 0.5, Candidates: []Candidate{
+			{Title: "Solitude", URL: "master", Channel: "Nova - Topic", Duration: 200, DownloadSeconds: 20, Correct: true},
+			{Title: "Solitude", URL: "second", Channel: "Nova Fan", Duration: 200, DownloadSeconds: 30},
+		}}},
+	}
+
+	out := RunAll(context.Background(), []Case{kase})[0]
+
+	if out.Stored != "master" {
+		t.Fatalf("stored %q, want master", out.Stored)
+	}
+	if out.Attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", out.Attempts)
+	}
+	if out.SimulatedSeconds != 30.5 {
+		t.Fatalf("simulated seconds = %.1f, want 30.5 (0.5s search + the 30s slowest of one window)", out.SimulatedSeconds)
+	}
+}

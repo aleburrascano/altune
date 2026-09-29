@@ -12,10 +12,8 @@ import (
 )
 
 type simClock struct {
-	mu       sync.Mutex
-	search   float64
-	download float64
-	attempts int
+	mu     sync.Mutex
+	search float64
 }
 
 func (c *simClock) recordSearch(seconds float64) {
@@ -26,27 +24,15 @@ func (c *simClock) recordSearch(seconds float64) {
 	}
 }
 
-func (c *simClock) recordDownload(seconds float64) {
+func (c *simClock) searchSeconds() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.download += seconds
-	c.attempts++
-}
-
-func (c *simClock) total() float64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.search + c.download
-}
-
-func (c *simClock) attemptCount() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.attempts
+	return c.search
 }
 
 type casePorts struct {
 	kase       Case
+	pathsMu    sync.Mutex
 	byPath     map[string]Candidate
 	storedRefs []string
 	clock      *simClock
@@ -122,7 +108,6 @@ func (p *casePorts) Download(_ context.Context, url string, outDir string) (stri
 	if !ok {
 		return "", fmt.Errorf("eval: no golden candidate for url %q", url)
 	}
-	p.clock.recordDownload(cand.downloadSeconds())
 	if cand.DownloadFails {
 		return "", fmt.Errorf("eval: simulated download failure for %q", url)
 	}
@@ -130,12 +115,21 @@ func (p *casePorts) Download(_ context.Context, url string, outDir string) (stri
 	if err := os.WriteFile(path, []byte("eval-audio-bytes"), 0o644); err != nil {
 		return "", err
 	}
+	p.pathsMu.Lock()
+	defer p.pathsMu.Unlock()
 	p.byPath[path] = cand
 	return path, nil
 }
 
+func (p *casePorts) candidateAt(path string) (Candidate, bool) {
+	p.pathsMu.Lock()
+	defer p.pathsMu.Unlock()
+	cand, ok := p.byPath[path]
+	return cand, ok
+}
+
 func (p *casePorts) ProbeDuration(_ context.Context, filePath string) (float64, error) {
-	cand, ok := p.byPath[filePath]
+	cand, ok := p.candidateAt(filePath)
 	if !ok {
 		return 0, fmt.Errorf("eval: probe of unknown path %q", filePath)
 	}
@@ -143,7 +137,7 @@ func (p *casePorts) ProbeDuration(_ context.Context, filePath string) (float64, 
 }
 
 func (p *casePorts) ValidateDecodable(_ context.Context, filePath string) error {
-	cand, ok := p.byPath[filePath]
+	cand, ok := p.candidateAt(filePath)
 	if !ok {
 		return nil
 	}
@@ -154,7 +148,7 @@ func (p *casePorts) ValidateDecodable(_ context.Context, filePath string) error 
 }
 
 func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (ports.RecordingMatch, error) {
-	cand, ok := p.byPath[filePath]
+	cand, ok := p.candidateAt(filePath)
 	if !ok || (len(cand.RecordingMBIDs) == 0 && cand.AcoustID == "" && len(cand.AcoustIDResults) == 0) {
 		return ports.RecordingMatch{}, nil
 	}

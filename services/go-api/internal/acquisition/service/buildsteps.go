@@ -28,7 +28,7 @@ func CoreSteps(
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
-		download:   NewDownloadStep(sources, WithDownloadProber(prober), WithDownloadIdentifier(identifier)),
+		download:   NewDownloadStep(sources, WithDownloadProber(prober), WithDownloadIdentifier(identifier), WithVerifyWidth(2)),
 		tag:        NewTagStep(tagger),
 		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober)}, storeOpts...)...),
 	}

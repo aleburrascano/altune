@@ -107,6 +107,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			return afterDownload{}, fmt.Errorf("create temp dir: %w", err)
 		}
 
+		ac.Attempted = append(ac.Attempted, AttemptedCandidate{URL: ac.Ranked[i].URL, Window: attempts})
 		attempts++
 		result := s.runAttempt(ctx, ac, ac.Ranked[i], tmpDir)
 		result.applyTo(ctx, ac)
