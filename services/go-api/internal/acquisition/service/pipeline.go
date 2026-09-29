@@ -184,6 +184,7 @@ type AcquisitionContext struct {
 	Verdict           AudioVerdict
 	Confidence        float64
 	Evidence          Evidence
+	BestEffort        bool
 
 	Rejections []CandidateRejection
 
@@ -220,6 +221,8 @@ func (ac *AcquisitionContext) priorRejected(url string) bool {
 
 func (ac *AcquisitionContext) Provenance() domain.AcquisitionProvenance {
 	switch {
+	case ac.BestEffort:
+		return domain.ProvenanceBestEffort
 	case ac.IdentityVerified:
 		return domain.ProvenanceVerified
 	case ac.DurationVerified && ac.lengthCorroborated():

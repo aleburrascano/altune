@@ -283,7 +283,6 @@
       "id": "mh4-unknown-fingerprint-topic-within-2s-stored-best-effort",
       "expect_provenance": "best_effort",
       "class": "F0",
-      "pending": "compute acquisition confidence from evidence",
       "note": "must-hold 4: AcoustID does not know the audio, but a Topic upload within 2s is enough evidence to reach the confidence floor; stored as best_effort, never verified",
       "track": { "title": "Night Drive", "artist": "Halcyon Ferry", "duration": 204, "authoritative_duration": 204, "mbid": "mh4-expected" },
       "candidates": [
@@ -294,7 +293,6 @@
       "id": "mh4-unknown-fingerprint-non-topic-20s-off-fails",
       "expect_failure_code": "no_confident_match",
       "class": "F0",
-      "pending": "compute acquisition confidence from evidence",
       "note": "must-hold 4: unknown to AcoustID, not a Topic channel and 20s off the track; confidence stays below the floor, so it fails as no_confident_match",
       "track": { "title": "Night Drive", "artist": "Halcyon Ferry", "duration": 204, "authoritative_duration": 204, "mbid": "mh4-expected" },
       "candidates": [

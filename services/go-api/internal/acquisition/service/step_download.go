@@ -30,6 +30,7 @@ type DownloadStep struct {
 	limiter    *DownloadLimiter
 	skips      ports.VerifySkipRecorder
 	width      int
+	floor      float64
 }
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
@@ -66,6 +67,17 @@ func WithVerifyWidth(n int) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.width = max(n, 1) }
 }
 
+func WithConfidenceFloor(floor float64) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.floor = floor }
+}
+
+func (s *DownloadStep) confidenceFloor() float64 {
+	if s.floor <= 0 {
+		return defaultConfidenceFloor
+	}
+	return s.floor
+}
+
 func (s *DownloadStep) Name() string { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
@@ -73,6 +85,8 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		return s.executeWindowed(ctx, ac)
 	}
 	failures := downloadFailures{unavailable: ac.SearchUnavailable}
+	var holds holdBook
+	defer holds.discard()
 	attempts := 0
 
 	for i := range ac.Ranked {
@@ -94,14 +108,68 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		}
 
 		attempts++
-		selected, err := s.tryCandidate(ctx, ac, ac.Ranked[i], tmpDir)
-		if selected {
+		result := s.runAttempt(ctx, ac, ac.Ranked[i], tmpDir)
+		result.applyTo(ctx, ac)
+		if result.accepted {
 			return afterDownload{}, nil
 		}
-		failures.note(err)
+		holds.offer(result)
+		failures.note(result.err())
 	}
 
-	return afterDownload{}, failures.result(ctx)
+	return afterDownload{}, s.settle(ctx, ac, &holds, &failures)
+}
+
+func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds *holdBook, failures *downloadFailures) error {
+	held := holds.take()
+	if held == nil {
+		return failures.noneAccepted(ctx)
+	}
+	if held.confidence < s.confidenceFloor() {
+		_ = os.RemoveAll(held.tmpDir)
+		return fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
+			held.confidence, s.confidenceFloor(), ErrNoConfidentMatch)
+	}
+	held.accepted = true
+	held.applyTo(ctx, ac)
+	ac.BestEffort = true
+	return nil
+}
+
+type holdBook struct {
+	best *attempt
+}
+
+func (h *holdBook) offer(candidate attempt) {
+	if !candidate.held {
+		return
+	}
+	if h.best != nil && !candidate.beats(*h.best) {
+		_ = os.RemoveAll(candidate.tmpDir)
+		return
+	}
+	h.discard()
+	h.best = &candidate
+}
+
+func (h *holdBook) take() *attempt {
+	best := h.best
+	h.best = nil
+	return best
+}
+
+func (h *holdBook) discard() {
+	if h.best != nil {
+		_ = os.RemoveAll(h.best.tmpDir)
+		h.best = nil
+	}
+}
+
+func (a attempt) beats(other attempt) bool {
+	if a.fallback != other.fallback {
+		return !a.fallback
+	}
+	return a.confidence > other.confidence
 }
 
 type downloadFailures struct {
@@ -116,6 +184,13 @@ func (f *downloadFailures) note(err error) {
 	if ports.IsSourceUnavailable(err) {
 		f.unavailable = err
 	}
+}
+
+func (f *downloadFailures) noneAccepted(ctx context.Context) error {
+	if f.last == nil && f.unavailable == nil {
+		return fmt.Errorf("no candidate produced acceptable audio: %w", ErrNoConfidentMatch)
+	}
+	return f.result(ctx)
 }
 
 func (f *downloadFailures) result(ctx context.Context) error {
@@ -151,24 +226,17 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 	)
 }
 
-func (s *DownloadStep) tryCandidate(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	tmpDir string,
-) (selected bool, err error) {
-	result := s.runAttempt(ctx, ac, candidate, tmpDir)
-	result.applyTo(ac)
-	return result.accepted, result.err()
-}
-
 type attempt struct {
-	candidate ports.AudioCandidate
-	filePath  string
-	tmpDir    string
-	verified  verificationResult
-	rejection *downloadRejection
-	accepted  bool
+	candidate  ports.AudioCandidate
+	filePath   string
+	tmpDir     string
+	verified   verificationResult
+	rejection  *downloadRejection
+	accepted   bool
+	held       bool
+	fallback   bool
+	evidence   Evidence
+	confidence float64
 }
 
 func (a attempt) err() error {
@@ -178,7 +246,7 @@ func (a attempt) err() error {
 	return a.rejection.err
 }
 
-func (a attempt) applyTo(ac *AcquisitionContext) {
+func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
 	if a.rejection != nil {
 		ac.recordRejection(a.candidate.URL, a.candidate.Title, a.candidate.Source, a.rejection.stage, a.rejection.reason)
 	}
@@ -193,6 +261,7 @@ func (a attempt) applyTo(ac *AcquisitionContext) {
 	ac.IdentityVerified = a.verified.identity
 	ac.ProbedDuration = a.verified.probed
 	ac.Verdict = a.verified.verdict
+	ac.adopt(ctx, a.evidence)
 }
 
 func (s *DownloadStep) runAttempt(
@@ -202,8 +271,8 @@ func (s *DownloadStep) runAttempt(
 	tmpDir string,
 ) (result attempt) {
 	defer func() {
-		if !result.accepted {
-			os.RemoveAll(tmpDir)
+		if !result.accepted && !result.held {
+			_ = os.RemoveAll(tmpDir)
 		}
 	}()
 	result = s.attemptAudio(ctx, ac, candidate, tmpDir)
@@ -229,7 +298,31 @@ func (s *DownloadStep) attemptAudio(
 	}
 
 	verified, rejection := s.verify(ctx, ac, candidate, filePath, prior)
-	return attempt{filePath: filePath, verified: verified, rejection: rejection, accepted: rejection == nil}
+	if rejection != nil {
+		return attempt{filePath: filePath, verified: verified, rejection: rejection}
+	}
+	return judgeAttempt(ac, candidate, filePath, verified)
+}
+
+func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {
+	evidence := ac.buildEvidence(candidate, verified)
+	result := attempt{
+		filePath:   filePath,
+		verified:   verified,
+		evidence:   evidence,
+		confidence: ScoreConfidence(evidence, ac.Track.Duration),
+		fallback:   len(evidence.Qualifiers) > 0,
+	}
+	if result.fallback && !fallbackLengthMatches(evidence.DurationDeltaSeconds, ac.Track.Duration) {
+		result.rejection = &downloadRejection{
+			stage:  RejectionDuration,
+			reason: fmt.Sprintf("fallback version %.0fs off the expected length", evidence.DurationDeltaSeconds),
+		}
+		return result
+	}
+	result.held = result.fallback || verified.verdict.Kind == VerdictUnknown
+	result.accepted = !result.held
+	return result
 }
 
 func (s *DownloadStep) fetchFull(
@@ -567,9 +660,9 @@ func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downlo
 
 func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {
 	if ac.TempDir != "" {
-		os.RemoveAll(ac.TempDir)
+		_ = os.RemoveAll(ac.TempDir)
 	} else if ac.TempPath != "" {
-		os.RemoveAll(ac.TempPath)
+		_ = os.RemoveAll(ac.TempPath)
 	}
 	return nil
 }

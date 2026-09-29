@@ -10,6 +10,8 @@ import (
 
 func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionContext) (afterDownload, error) {
 	failures := downloadFailures{unavailable: ac.SearchUnavailable}
+	var holds holdBook
+	defer holds.discard()
 	pending := ac.Ranked
 	used := 0
 
@@ -24,11 +26,11 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 		}
 		used += len(window)
 		results := s.runWindow(ctx, ac, window)
-		if mergeWindow(ac, results, &failures) {
+		if mergeWindow(ctx, ac, results, &holds, &failures) {
 			return afterDownload{}, nil
 		}
 	}
-	return afterDownload{}, failures.result(ctx)
+	return afterDownload{}, s.settle(ctx, ac, &holds, &failures)
 }
 
 func (s *DownloadStep) nextWindow(
@@ -107,15 +109,16 @@ func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionCont
 	return s.runAttempt(ctx, ac, candidate, tmpDir)
 }
 
-func mergeWindow(ac *AcquisitionContext, results []attempt, failures *downloadFailures) bool {
+func mergeWindow(ctx context.Context, ac *AcquisitionContext, results []attempt, holds *holdBook, failures *downloadFailures) bool {
 	won := false
 	for _, result := range results {
-		if result.accepted && won {
+		if won && (result.accepted || result.held) {
 			_ = os.RemoveAll(result.tmpDir)
 			continue
 		}
-		result.applyTo(ac)
+		result.applyTo(ctx, ac)
 		failures.note(result.err())
+		holds.offer(result)
 		won = won || result.accepted
 	}
 	return won

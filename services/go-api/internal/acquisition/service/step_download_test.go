@@ -874,6 +874,8 @@ func TestDownloadStep_NeverRejectsWithoutAnExpectedCluster(t *testing.T) {
 	}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", nil)
+	ac.Track.Duration = 236
+	ac.Ranked = []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=first000000", Channel: "Corey Hart", Duration: 236}}
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("with no ground truth there is nothing to reject against; the long tail must stay acquirable: %v", err)
@@ -883,17 +885,26 @@ func TestDownloadStep_NeverRejectsWithoutAnExpectedCluster(t *testing.T) {
 	if ac.IdentityVerified {
 		t.Error("accepting without evidence must not claim verification")
 	}
+	if ac.Provenance() != domain.ProvenanceBestEffort {
+		t.Errorf("provenance = %q, want best_effort", ac.Provenance())
+	}
 }
 
 func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
 	identifier := &stubIdentifier{cluster: []string{"ac-master"}}
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", []string{"ac-master"})
+	ac.Track.Duration = 236
+	ac.Ranked = []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=first000000", Channel: "Corey Hart", Duration: 236}}
 
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("AcoustID coverage is crowd-sourced; unknown audio must be accepted: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if ac.Provenance() != domain.ProvenanceBestEffort {
+		t.Errorf("provenance = %q, want best_effort", ac.Provenance())
+	}
 }
 
 func TestDownloadStep_IdentifierErrorIsFailOpen(t *testing.T) {
@@ -1426,5 +1437,131 @@ func TestDownloadStep_HealthySourcesAllRejected_StaysPermanent(t *testing.T) {
 
 	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a permanent failure", err)
+	}
+}
+
+type urlIdentifier struct {
+	fetcher *gatedFetcher
+	matches map[string]ports.RecordingMatch
+}
+
+func (i *urlIdentifier) Identify(_ context.Context, path string, _ float64) (ports.RecordingMatch, error) {
+	for url, match := range i.matches {
+		if i.fetcher.dirOf(url) == filepath.Dir(path) {
+			return match, nil
+		}
+	}
+	return ports.RecordingMatch{}, nil
+}
+
+func (i *urlIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) { return nil, nil }
+
+func hardMatch() ports.RecordingMatch {
+	return ports.RecordingMatch{
+		AcoustID: "ac-a", MBIDs: []string{"mb-master"}, Score: 0.97,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
+	}
+}
+
+func heldTrackContext(ranked ...ports.AudioCandidate) *AcquisitionContext {
+	return &AcquisitionContext{
+		Track:    TrackRef{Title: "Sunglasses at Night", Artist: "Corey Hart", Duration: 236},
+		Identity: ports.RecordingIdentity{MBID: "mb-master"},
+		Ranked:   ranked,
+	}
+}
+
+func TestDownloadStep_WalksPastUnknownFingerprintToALaterHardMatch(t *testing.T) {
+	for _, width := range []int{1, 2} {
+		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
+			fetcher := newGatedFetcher(nil)
+			identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"hard": hardMatch()}}
+			ac := heldTrackContext(
+				ports.AudioCandidate{URL: "unknown", Channel: "Corey Hart - Topic", Duration: 236},
+				ports.AudioCandidate{URL: "hard", Channel: "someone", Duration: 236},
+			)
+			step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier), WithVerifyWidth(width))
+
+			if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+			if ac.Selected == nil || ac.Selected.URL != "hard" {
+				t.Fatalf("selected = %+v, want the hard match", ac.Selected)
+			}
+			if got := ac.Provenance(); got != domain.ProvenanceVerified {
+				t.Errorf("provenance = %q, want verified", got)
+			}
+			if _, err := os.Stat(fetcher.dirOf("unknown")); !os.IsNotExist(err) {
+				t.Errorf("the held unknown candidate's temp dir should be removed, stat err = %v", err)
+			}
+		})
+	}
+}
+
+func TestDownloadStep_CleanHoldBeatsAHigherRankedFallbackHold(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	identifier := &urlIdentifier{fetcher: fetcher, matches: map[string]ports.RecordingMatch{"edit": hardMatch()}}
+	ac := heldTrackContext(
+		ports.AudioCandidate{URL: "edit", Title: "Sunglasses at Night (Radio Edit)", Channel: "Corey Hart - Topic", Duration: 236},
+		ports.AudioCandidate{URL: "clean", Title: "Sunglasses at Night", Channel: "Corey Hart - Topic", Duration: 236},
+	)
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if ac.Selected == nil || ac.Selected.URL != "clean" {
+		t.Fatalf("selected = %+v, want the clean hold", ac.Selected)
+	}
+	if !ac.BestEffort || ac.Provenance() != domain.ProvenanceBestEffort {
+		t.Errorf("a held selection must be best_effort, got BestEffort=%v provenance=%q", ac.BestEffort, ac.Provenance())
+	}
+	if _, err := os.Stat(fetcher.dirOf("edit")); !os.IsNotExist(err) {
+		t.Errorf("the displaced fallback hold's temp dir should be removed, stat err = %v", err)
+	}
+}
+
+func TestDownloadStep_HeldCandidateBelowTheFloorFailsAsNoConfidentMatch(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	ac := heldTrackContext(ports.AudioCandidate{URL: "reupload", Channel: "chill uploads", Duration: 256})
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(&urlIdentifier{fetcher: fetcher}))
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
+	}
+	if _, statErr := os.Stat(fetcher.dirOf("reupload")); !os.IsNotExist(statErr) {
+		t.Errorf("the refused hold's temp dir should be removed, stat err = %v", statErr)
+	}
+}
+
+func TestDownloadStep_FallbackOfTheWrongLengthIsNeverStored(t *testing.T) {
+	fetcher := newGatedFetcher(nil)
+	ac := heldTrackContext(ports.AudioCandidate{
+		URL: "edit", Title: "Sunglasses at Night (Radio Edit)", Channel: "Corey Hart - Topic", Duration: 236,
+	})
+	prober := scriptedProber{duration: 245}
+	step := NewDownloadStep(fetcher, WithDownloadProber(prober))
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
+	}
+}
+
+func TestDownloadStep_EveryCandidateImplausibleFailsAsNoConfidentMatch(t *testing.T) {
+	ac := heldTrackContext(ports.AudioCandidate{URL: "far", Duration: 100})
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true})
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+
+	if !errors.Is(err, ErrNoConfidentMatch) {
+		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
 	}
 }

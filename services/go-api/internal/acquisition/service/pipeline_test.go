@@ -723,6 +723,11 @@ func TestProvenance(t *testing.T) {
 			ac:   AcquisitionContext{},
 			want: domain.ProvenanceBestEffort,
 		},
+		{
+			name: "a best-effort settlement outranks a fingerprint match",
+			ac:   AcquisitionContext{BestEffort: true, IdentityVerified: true},
+			want: domain.ProvenanceBestEffort,
+		},
 	}
 
 	for _, tt := range tests {

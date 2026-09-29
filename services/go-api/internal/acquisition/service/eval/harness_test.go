@@ -417,31 +417,29 @@ func TestRender_OmitsPendingSectionWhenNothingIsPending(t *testing.T) {
 	}
 }
 
-func TestRunAll_ReportsEmbeddedMustHoldsAsPending(t *testing.T) {
+func TestRunAll_ScoresEmbeddedMustHoldsInsteadOfLeavingThemPending(t *testing.T) {
 	cases, err := LoadEmbedded()
 	if err != nil {
 		t.Fatalf("LoadEmbedded: %v", err)
 	}
-	want := map[string]string{
-		"mh4-unknown-fingerprint-topic-within-2s-stored-best-effort": "compute acquisition confidence from evidence",
-		"mh4-unknown-fingerprint-non-topic-20s-off-fails":            "compute acquisition confidence from evidence",
-		"mh11-radio-edit-loses-to-clean-topic-upload":                "compute acquisition confidence from evidence",
-		"mh11-radio-edit-only-with-wrong-length-fails":               "compute acquisition confidence from evidence",
+	want := map[string]bool{
+		"mh4-unknown-fingerprint-topic-within-2s-stored-best-effort": true,
+		"mh4-unknown-fingerprint-non-topic-20s-off-fails":            true,
+		"mh11-radio-edit-loses-to-clean-topic-upload":                true,
+		"mh11-radio-edit-only-with-wrong-length-fails":               true,
 	}
 
-	report := Summarize(RunAll(context.Background(), cases))
-
-	got := make(map[string]string, len(report.Pending))
-	for _, p := range report.Pending {
-		got[p.Case.ID] = p.Case.Pending
-	}
-	for id, owner := range want {
-		if got[id] != owner {
-			t.Errorf("pending %q owner = %q, want %q", id, got[id], owner)
+	for _, o := range RunAll(context.Background(), cases) {
+		if !want[o.Case.ID] {
+			continue
+		}
+		delete(want, o.Case.ID)
+		if o.Pending || !o.Pass {
+			t.Errorf("%s: pending=%v pass=%v reason=%q", o.Case.ID, o.Pending, o.Pass, o.Reason)
 		}
 	}
-	if scored := len(cases) - len(report.Pending); report.Total != scored {
-		t.Errorf("scored total = %d, want %d with pending cases left out", report.Total, scored)
+	for id := range want {
+		t.Errorf("must-hold case %q was not run", id)
 	}
 }
 
@@ -832,7 +830,7 @@ func TestEmbeddedMustHoldCasesCarryTheirExpectations(t *testing.T) {
 	}
 	for id, exp := range want {
 		kase := embeddedCase(t, id)
-		if kase.ExpectProvenance != exp[0] || kase.ExpectFailureCode != exp[1] || !kase.isPending() {
+		if kase.ExpectProvenance != exp[0] || kase.ExpectFailureCode != exp[1] || kase.isPending() {
 			t.Errorf("%s: got %q/%q pending=%v", id, kase.ExpectProvenance, kase.ExpectFailureCode, kase.isPending())
 		}
 	}
