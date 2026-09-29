@@ -36,11 +36,9 @@ type BackgroundAcquisitionScheduler struct {
 	queue    ports.JobQueue
 	notifier ports.JobNotifier
 
-	wg         *sync.WaitGroup
-	pendingMu  sync.Mutex
-	pendingSet map[string]struct{}
-	jobsWG     sync.WaitGroup
-	runnersWG  sync.WaitGroup
+	pending   *pendingTracker
+	jobsWG    sync.WaitGroup
+	runnersWG sync.WaitGroup
 
 	corrIDs sync.Map
 
@@ -82,13 +80,12 @@ func NewBackgroundAcquisitionScheduler(
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BackgroundAcquisitionScheduler{
 		svc:               svc,
-		wg:                wg,
+		pending:           newPendingTracker(wg),
 		sem:               sem,
 		cancel:            cancel,
 		baseCtx:           ctx,
 		stop:              make(chan struct{}),
 		wake:              make(chan struct{}, 1),
-		pendingSet:        make(map[string]struct{}),
 		log:               newJobLog(),
 		events:            events.NoopPublisher(),
 		leaseDuration:     defaultLeaseDuration,
@@ -239,7 +236,7 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 	}
 
 	key := trackId.String()
-	alreadyTracked := s.trackPendingWG(key)
+	alreadyTracked := s.pending.track(key)
 	s.primeEnqueue(ctx, trackId, userId, key)
 
 	if err := s.queue.Enqueue(ctx, trackId, kind, time.Now()); err != nil {
@@ -259,26 +256,15 @@ func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, track
 
 func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, kind ports.JobKind) error {
 	if s.closed.Load() {
-		s.releasePendingWG(trackId)
+		s.pending.untrack(trackId.String())
 	}
 	slog.InfoContext(ctx, "acquisition.scheduling", "track_id", trackId.String(), "user_id", userId.String(), "kind", string(kind))
 	return nil
 }
 
-func (s *BackgroundAcquisitionScheduler) trackPendingWG(key string) bool {
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	_, alreadyTracked := s.pendingSet[key]
-	if !alreadyTracked {
-		s.pendingSet[key] = struct{}{}
-		s.wg.Add(1)
-	}
-	return alreadyTracked
-}
-
 func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId domain.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
 	if !alreadyTracked {
-		s.untrackPendingWG(key)
+		s.pending.untrack(key)
 	}
 	if errors.Is(err, ports.ErrJobKindConflict) {
 		s.rejected.Add(1)
@@ -493,7 +479,7 @@ func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSucces
 }
 
 func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) {
-	defer s.releasePendingWG(job.TrackID)
+	defer s.pending.untrack(job.TrackID.String())
 
 	if s.baseCtx.Err() != nil {
 		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, time.Now())
@@ -529,32 +515,6 @@ func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
 		}
 	}()
 	s.svc.RefuseQueued(context.Background(), job.UserID, job.TrackID)
-}
-
-func (s *BackgroundAcquisitionScheduler) releasePendingWG(trackID domain.TrackId) {
-	s.untrackPendingWG(trackID.String())
-}
-
-func (s *BackgroundAcquisitionScheduler) untrackPendingWG(key string) {
-	s.pendingMu.Lock()
-	_, tracked := s.pendingSet[key]
-	if tracked {
-		delete(s.pendingSet, key)
-	}
-	s.pendingMu.Unlock()
-	if tracked {
-		s.wg.Done()
-	}
-}
-
-func (s *BackgroundAcquisitionScheduler) sweepPendingWG() {
-	s.pendingMu.Lock()
-	pending := s.pendingSet
-	s.pendingSet = make(map[string]struct{})
-	s.pendingMu.Unlock()
-	for range pending {
-		s.wg.Done()
-	}
 }
 
 func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID domain.TrackId, err error) {
@@ -609,7 +569,7 @@ func (s *BackgroundAcquisitionScheduler) closeAdmission() {
 
 func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	s.closeAdmission()
-	defer s.sweepPendingWG()
+	defer s.pending.sweep()
 
 	done := make(chan struct{})
 	go func() {
