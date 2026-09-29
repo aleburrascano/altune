@@ -12,6 +12,7 @@ import (
 const maxAcquisitionAttempts = 3
 
 var ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")
+var ErrNoConfidentMatch = errors.New("no candidate met the confidence floor")
 
 func retryBackoff(attempts int) time.Duration {
 	return 30 * time.Second << (2 * (max(attempts, 1) - 1))
@@ -31,6 +32,9 @@ func failureCode(err error) domain.FailureCode {
 	}
 	if ports.IsSourceUnavailable(err) {
 		return domain.FailureSourceUnavailable
+	}
+	if errors.Is(err, ErrNoConfidentMatch) {
+		return domain.FailureNoConfidentMatch
 	}
 	var stepErr *StepError
 	if errors.As(err, &stepErr) {

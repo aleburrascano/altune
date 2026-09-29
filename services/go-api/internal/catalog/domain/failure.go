@@ -6,6 +6,7 @@ type FailureCode string
 
 const (
 	FailureNoMatchFound           FailureCode = "no_match_found"
+	FailureNoConfidentMatch       FailureCode = "no_confident_match"
 	FailureSourceUnavailable      FailureCode = "source_unavailable"
 	FailureDownloadFailed         FailureCode = "download_failed"
 	FailureStorageFailed          FailureCode = "storage_failed"
@@ -22,6 +23,7 @@ const genericFailureMessage = "Couldn't get this track"
 
 var failureMessages = map[FailureCode]string{
 	FailureNoMatchFound:           "Couldn't find this track",
+	FailureNoConfidentMatch:       "Couldn't find this track",
 	FailureSourceUnavailable:      "Couldn't reach the music source, try again",
 	FailureDownloadFailed:         "Download failed",
 	FailureStorageFailed:          "Couldn't save this track",

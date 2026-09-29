@@ -1292,3 +1292,42 @@ func TestLoad_MusicBrainzUserAgentOptionalInDevelopment(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestLoad_AcquisitionConfidenceFloor(t *testing.T) {
+	tests := []struct {
+		name    string
+		floor   string
+		want    float64
+		wantErr bool
+	}{
+		{name: "default", floor: "", want: 0.5},
+		{name: "zero", floor: "0", want: 0},
+		{name: "one", floor: "1", want: 1},
+		{name: "negative", floor: "-0.1", wantErr: true},
+		{name: "above one", floor: "1.5", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			overrides := map[string]string{}
+			if tt.floor != "" {
+				overrides["ACQUISITION_CONFIDENCE_FLOOR"] = tt.floor
+			}
+			setEnv(t, validConfigEnv(overrides))
+			t.Cleanup(func() { os.Unsetenv("ACQUISITION_CONFIDENCE_FLOOR") })
+
+			cfg, err := Load()
+			if tt.wantErr {
+				if err == nil || !searchString(err.Error(), "ACQUISITION_CONFIDENCE_FLOOR") {
+					t.Fatalf("expected error naming ACQUISITION_CONFIDENCE_FLOOR, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.AcquisitionConfidenceFloor != tt.want {
+				t.Errorf("AcquisitionConfidenceFloor = %v, want %v", cfg.AcquisitionConfidenceFloor, tt.want)
+			}
+		})
+	}
+}

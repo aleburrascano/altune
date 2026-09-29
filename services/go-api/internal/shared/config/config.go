@@ -91,6 +91,7 @@ type Config struct {
 	BehavioralCorpusPath       string  `env:"BEHAVIORAL_CORPUS_PATH"`
 	ExplorationEnabled         bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
 	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
+	AcquisitionConfidenceFloor float64 `env:"ACQUISITION_CONFIDENCE_FLOOR" envDefault:"0.5"`
 	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
 	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 

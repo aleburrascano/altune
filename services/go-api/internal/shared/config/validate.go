@@ -78,6 +78,9 @@ func (c *Config) validateTuning() error {
 	if !isUnitFraction(c.ExplorationRate) {
 		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
 	}
+	if !isUnitFraction(c.AcquisitionConfidenceFloor) {
+		return fmt.Errorf("ACQUISITION_CONFIDENCE_FLOOR must be between 0 and 1, got %v", c.AcquisitionConfidenceFloor)
+	}
 	return nil
 }
 

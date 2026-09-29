@@ -178,3 +178,19 @@ func TestFailureReason_WrappedContextErrorIsCancellationForEveryStep(t *testing.
 		}
 	}
 }
+
+func TestFailureReason_DownloadStepWrappingNoConfidentMatch(t *testing.T) {
+	err := &StepError{Step: stepNameDownload, Err: fmt.Errorf("select: %w", ErrNoConfidentMatch)}
+
+	got := failureReason(err)
+
+	if got != "no_confident_match" {
+		t.Errorf("failureReason = %q, want no_confident_match", got)
+	}
+	if msg := domain.FailureMessage(&got); msg != "Couldn't find this track" {
+		t.Errorf("FailureMessage = %q, want %q", msg, "Couldn't find this track")
+	}
+	if !domain.FailureNoConfidentMatch.Known() {
+		t.Error("FailureNoConfidentMatch is not Known()")
+	}
+}
