@@ -9,7 +9,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -209,45 +208,26 @@ func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 	}
 }
 
-func worstAllowLatencyReclaiming(idleBuckets int) time.Duration {
-	clock := newFakeClock()
-	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
-	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
-	for i := range idleBuckets {
-		l.allow(strconv.Itoa(i))
-	}
-	clock.advance(limit.Every * time.Duration(limit.Burst))
-
-	const callers, callsEach = 8, 100
-	worst := make([]time.Duration, callers)
-	release := make(chan struct{})
-	var wg sync.WaitGroup
-	for c := range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			key := "caller-" + strconv.Itoa(c)
-			<-release
-			for range callsEach {
-				start := time.Now()
-				l.allow(key)
-				worst[c] = max(worst[c], time.Since(start))
-			}
-		}()
-	}
-	close(release)
-	wg.Wait()
-	return slices.Max(worst)
-}
-
 func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallOtherCallers(t *testing.T) {
-	const growthBudget = 20 * time.Millisecond
+	for _, idleBuckets := range []int{1_000, 250_000} {
+		t.Run(strconv.Itoa(idleBuckets), func(t *testing.T) {
+			clock := newFakeClock()
+			limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
+			l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
+			for i := range idleBuckets {
+				l.allow(strconv.Itoa(i))
+			}
+			clock.advance(l.idleTTL())
 
-	fewUsers := worstAllowLatencyReclaiming(1_000)
-	manyUsers := worstAllowLatencyReclaiming(250_000)
+			l.allow("caller")
 
-	if manyUsers > fewUsers+growthBudget {
-		t.Fatalf("reclaiming stalls callers in proportion to the user count: worst call was %s with 1k idle buckets but %s with 250k", fewUsers, manyUsers)
+			if len(l.active) != 1 {
+				t.Fatalf("rotation must start a fresh active map, got %d entries", len(l.active))
+			}
+			if len(l.cooling) != idleBuckets {
+				t.Fatalf("rotation must hand the old map over untouched, cooling has %d of %d buckets", len(l.cooling), idleBuckets)
+			}
+		})
 	}
 }
 
