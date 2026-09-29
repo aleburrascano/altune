@@ -1,7 +1,7 @@
-import { Alert } from 'react-native';
+import { showAlert } from '@shared/ui/dialog/dialog';
 
 import { failureTail, type LibraryFailure } from './state';
 
 export function alertLibraryFailure(title: string, lead: string, failure: LibraryFailure): void {
-  Alert.alert(title, `${lead} ${failureTail(failure)}`);
+  showAlert(title, `${lead} ${failureTail(failure)}`);
 }

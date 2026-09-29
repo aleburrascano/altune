@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+import { showAlert } from '@shared/ui/dialog/dialog';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
@@ -167,7 +167,7 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
   if (deleted > 0) invalidateLibraryDerived(queryClient);
   failures.forEach(logBulkFailure);
   if (cancelled || deleted === requested) return;
-  Alert.alert('Delete failed', bulkFailureMessage(requested, deleted));
+  showAlert('Delete failed', bulkFailureMessage(requested, deleted));
 }
 
 function logBulkRunFailure(error: unknown, requested: number): void {

@@ -1,12 +1,8 @@
 {
   "ui": [],
   "logic": [
-    "src/features/library/hooks/dropVanishedTrack.ts",
-    "src/features/library/hooks/useDeleteTracks.ts",
     "src/features/library/hooks/useExploreArtist.ts",
     "src/features/library/hooks/useLibraryNavigation.ts",
-    "src/features/library/hooks/usePlaylistDelete.ts",
-    "src/features/library/libraryFailureAlert.ts",
-    "src/features/library/pinBatchSummary.ts"
+    "src/features/library/hooks/usePlaylistDelete.ts"
   ]
 }

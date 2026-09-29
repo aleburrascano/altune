@@ -1,15 +1,13 @@
-import { Alert } from 'react-native';
+import { showAlert } from '@shared/ui/dialog/dialog';
 
 import { alertLibraryFailure } from '../libraryFailureAlert';
 
-let alertSpy: jest.SpyInstance;
+jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
+
+const showAlertMock = jest.mocked(showAlert);
 
 beforeEach(() => {
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  alertSpy.mockRestore();
+  showAlertMock.mockClear();
 });
 
 describe('alertLibraryFailure — one alert, titled as given, the lead then the closing ask', () => {
@@ -22,6 +20,6 @@ describe('alertLibraryFailure — one alert, titled as given, the lead then the 
   ] as const)('a %s failure shows "%s"', (failure, message) => {
     alertLibraryFailure('Delete failed', 'Could not remove the track.', failure);
 
-    expect(alertSpy.mock.calls).toEqual([['Delete failed', message]]);
+    expect(showAlertMock.mock.calls).toEqual([['Delete failed', message]]);
   });
 });
