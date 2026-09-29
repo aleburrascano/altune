@@ -62,7 +62,7 @@ func parseLastFmChartArtists(raw json.RawMessage) []domain.VocabularyEntry {
 	for _, a := range resp.Artists.Artist {
 		entries = append(entries, domain.VocabularyEntry{
 			Term:       a.Name,
-			Kind:       "artist",
+			Kind:       domain.VocabKindArtist,
 			Popularity: parseListeners(a.Listeners),
 		})
 	}
@@ -82,7 +82,7 @@ func parseLastFmChartTracks(raw json.RawMessage) []domain.VocabularyEntry {
 	for _, t := range resp.Tracks.Track {
 		entries = append(entries, domain.VocabularyEntry{
 			Term:       t.Name,
-			Kind:       "track",
+			Kind:       domain.VocabKindTrack,
 			Popularity: parseListeners(t.Listeners),
 		})
 	}

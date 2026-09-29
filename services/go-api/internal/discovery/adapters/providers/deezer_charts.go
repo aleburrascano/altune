@@ -66,19 +66,19 @@ func deezerChartEntry(
 	case "artists":
 		return domain.VocabularyEntry{
 			Term:       item.Name,
-			Kind:       "artist",
+			Kind:       domain.VocabKindArtist,
 			Popularity: popularityOrPosition(item.NbFan, position),
 		}
 	case "albums":
 		return domain.VocabularyEntry{
 			Term:       item.Title,
-			Kind:       "album",
+			Kind:       domain.VocabKindAlbum,
 			Popularity: popularityOrPosition(item.NbFan, position),
 		}
 	default:
 		return domain.VocabularyEntry{
 			Term:       item.Title,
-			Kind:       "track",
+			Kind:       domain.VocabKindTrack,
 			Popularity: popularityOrPosition(item.Rank, position),
 		}
 	}
