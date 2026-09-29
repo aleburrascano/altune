@@ -193,6 +193,25 @@ func TestRecordEventService_Execute_RejectsPayloadOverTheKeyCap(t *testing.T) {
 	assertRejected400(t, store, err)
 }
 
+func TestRecordEventService_Execute_RejectsNULOrInvalidUTF8InPayloadStrings(t *testing.T) {
+	cases := map[string]map[string]any{
+		"top-level value": {"result_signature": "a\x00b"},
+		"key":             {"k\x00": 1.0},
+		"nested value":    {"extra": map[string]any{"deep": []any{"a\x00"}}},
+		"invalid UTF-8":   {"session_id": "a\xffb"},
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeEventStore{}
+			err := NewRecordEventService(store).Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+				Type:    domain.EventTypePlay,
+				Payload: payload,
+			})
+			assertRejected400(t, store, err)
+		})
+	}
+}
+
 func TestRecordEventService_Execute_AcceptsPayloadUnderTheSizeCap(t *testing.T) {
 	store := &fakeEventStore{}
 	svc := NewRecordEventService(store)

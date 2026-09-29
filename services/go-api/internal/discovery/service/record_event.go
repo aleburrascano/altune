@@ -7,7 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -60,7 +62,34 @@ func validatePayloadBounds(payload map[string]any) error {
 	if len(payload) > maxPayloadKeys {
 		return &invalidEventError{msg: fmt.Sprintf("payload must hold at most %d keys", maxPayloadKeys)}
 	}
+	if !payloadStringsAreStorable(payload) {
+		return &invalidEventError{msg: "payload strings must be valid UTF-8 without NUL"}
+	}
 	return validatePayloadSize(payload)
+}
+
+func isStorableText(s string) bool {
+	return utf8.ValidString(s) && !strings.ContainsRune(s, 0)
+}
+
+func payloadStringsAreStorable(v any) bool {
+	switch t := v.(type) {
+	case string:
+		return isStorableText(t)
+	case map[string]any:
+		for k, item := range t {
+			if !isStorableText(k) || !payloadStringsAreStorable(item) {
+				return false
+			}
+		}
+	case []any:
+		for _, item := range t {
+			if !payloadStringsAreStorable(item) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func validatePayloadSize(payload map[string]any) error {

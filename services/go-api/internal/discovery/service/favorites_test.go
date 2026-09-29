@@ -191,6 +191,9 @@ func TestFavoritesAdd_RejectsOversizeOrUnsafeFieldsWithoutWriting(t *testing.T) 
 		"image_url http":       {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "http://img.example/a.jpg"},
 		"image_url script":     {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "javascript:alert(1)"},
 		"image_url no host":    {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "https:///a.jpg"},
+		"title with NUL":       {Kind: domain.ResultKindAlbum, Title: "a\x00", Subtitle: "Kendrick Lamar"},
+		"subtitle with NUL":    {Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "a\x00b"},
+		"title invalid UTF-8":  {Kind: domain.ResultKindAlbum, Title: "a\xffb"},
 		"empty normalized key": {Kind: domain.ResultKindArtist, Title: "!!!"},
 	}
 	for name, fav := range cases {

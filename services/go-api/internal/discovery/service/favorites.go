@@ -35,6 +35,9 @@ func (favoritesFullError) HTTPStatus() int   { return 409 }
 func (favoritesFullError) ErrorCode() string { return "discovery.favorites_full" }
 
 func validateFavoriteText(title, subtitle string) error {
+	if !isStorableText(title) || !isStorableText(subtitle) {
+		return &invalidFavoriteError{msg: "title and subtitle must be valid UTF-8 without NUL"}
+	}
 	if utf8.RuneCountInString(title) > maxFavoriteTextRunes {
 		return &invalidFavoriteError{msg: fmt.Sprintf("title must be at most %d characters", maxFavoriteTextRunes)}
 	}
