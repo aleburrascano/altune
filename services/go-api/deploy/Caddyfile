@@ -1,10 +1,4 @@
 altune.duckdns.org {
-	# Overseer control room, reachable under /overseer. It is a separate
-	# upstream (its own container), not part of the blue-green swap, so this
-	# route keeps working across go-api restarts. The route lives here rather
-	# than in upstream.conf because blue-green.sh rewrites upstream.conf on
-	# every deploy. Owner-only is enforced inside Overseer via the owner token
-	# (Authorization: Bearer or the overseer_token cookie); Caddy only routes.
 	redir /overseer /overseer/
 	handle_path /overseer/* {
 		reverse_proxy altune-overseer:8090
@@ -40,17 +34,11 @@ altune.duckdns.org {
 		file_server
 	}
 
-	# Everything else is the live app, pinned to the active blue/green upstream.
 	handle {
 		import /etc/caddy/upstream.conf
 	}
 }
 
-# Staging tier (epic #1488). A separate origin so staging cookies, CORS, and JWT
-# audience stay isolated from prod. Reverse-proxies the altune-staging-* stack
-# (compose.staging.yml) over the shared Docker network. Staging keeps its OWN
-# upstream file so prod's blue-green upstream.conf rewrites never touch it; a
-# malformed staging edit fails Caddy's reload validation, leaving prod routing up.
 altune-staging.duckdns.org {
 	redir /overseer /overseer/
 	handle_path /overseer/* {
@@ -92,10 +80,6 @@ altune-staging.duckdns.org {
 	}
 }
 
-# Internal-only go-api listeners for overseer (OVERSEER_GOAPI_URL). Plain HTTP on
-# the Docker network, never published to the host (compose.prod.yml maps only
-# 80/443). Each imports the same upstream file as its public site, so a blue/green
-# flip or rollback moves overseer with the public traffic and needs no restart.
 http://:8081 {
 	import /etc/caddy/upstream.conf
 }
