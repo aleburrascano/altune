@@ -11,6 +11,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 		WithStoreAudioRefGuard(s.trackRepo, trackId),
 		WithStoreOrphanQueue(s.orphans, userId),
 		WithStoreKeyPrefix(s.storeKeyPrefix)).
+		withDownloadLimiter(s.downloadLimiter).
 		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
 }
 

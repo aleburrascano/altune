@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -1100,5 +1102,114 @@ func TestDownloadStep_PreviewIdentifyCarriesTheCandidatesFullDuration(t *testing
 
 	if len(identifier.durations) != 1 || identifier.durations[0] != 250 {
 		t.Errorf("identify duration hints = %v, want [250]", identifier.durations)
+	}
+}
+
+type gatedFetcher struct {
+	mu       sync.Mutex
+	dirs     map[string]string
+	gates    map[string]chan struct{}
+	started  chan string
+	inFlight atomic.Int32
+	peak     atomic.Int32
+}
+
+func newGatedFetcher(gates map[string]chan struct{}) *gatedFetcher {
+	return &gatedFetcher{dirs: map[string]string{}, gates: gates, started: make(chan string, 64)}
+}
+
+func (f *gatedFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+	now := f.inFlight.Add(1)
+	defer f.inFlight.Add(-1)
+	for {
+		peak := f.peak.Load()
+		if now <= peak || f.peak.CompareAndSwap(peak, now) {
+			break
+		}
+	}
+	f.mu.Lock()
+	f.dirs[c.URL] = outDir
+	f.mu.Unlock()
+	f.started <- c.URL
+	if gate := f.gates[c.URL]; gate != nil {
+		<-gate
+	}
+	path := filepath.Join(outDir, "track.mp3")
+	return path, os.WriteFile(path, []byte("audio"), 0o644)
+}
+
+func (f *gatedFetcher) dirOf(url string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dirs[url]
+}
+
+func TestDownloadStep_WindowedKeepsBestRankedAcceptedEvenWhenLowerRankFinishesFirst(t *testing.T) {
+	rank1Gate := make(chan struct{})
+	fetcher := newGatedFetcher(map[string]chan struct{}{"rank1": rank1Gate})
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "rank1"}, {URL: "rank2"}}}
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := NewDownloadStep(fetcher, WithVerifyWidth(2)).Execute(context.Background(), ac, afterSelect{})
+		done <- err
+	}()
+	for range 2 {
+		<-fetcher.started
+	}
+	for fetcher.inFlight.Load() != 1 {
+		time.Sleep(time.Millisecond)
+	}
+	close(rank1Gate)
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+	if ac.Selected == nil || ac.Selected.URL != "rank1" {
+		t.Fatalf("selected = %+v, want rank1", ac.Selected)
+	}
+	if _, err := os.Stat(fetcher.dirOf("rank2")); !os.IsNotExist(err) {
+		t.Errorf("losing accepted attempt's temp dir should be removed, stat err = %v", err)
+	}
+}
+
+func TestDownloadStep_SharedLimiterCapsInFlightFetchesAcrossExecutes(t *testing.T) {
+	gate := make(chan struct{})
+	fetcher := newGatedFetcher(map[string]chan struct{}{"a": gate, "b": gate})
+	limiter := NewDownloadLimiter(6)
+	var wg sync.WaitGroup
+	execute := func(step *DownloadStep, urls ...string) {
+		defer wg.Done()
+		ranked := make([]ports.AudioCandidate, 0, len(urls))
+		for _, u := range urls {
+			ranked = append(ranked, ports.AudioCandidate{URL: u})
+		}
+		ac := &AcquisitionContext{Ranked: ranked}
+		if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+			os.RemoveAll(filepath.Dir(ac.TempPath))
+		}
+	}
+
+	wg.Add(3)
+	for range 3 {
+		go execute(NewDownloadStep(fetcher, WithVerifyWidth(2), WithStepDownloadLimiter(limiter)), "a", "b")
+	}
+	for range 6 {
+		<-fetcher.started
+	}
+	wg.Add(1)
+	go execute(NewDownloadStep(fetcher, WithStepDownloadLimiter(limiter)), "seventh")
+
+	select {
+	case <-fetcher.started:
+		t.Fatal("seventh fetch started while six were in flight")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(gate)
+	wg.Wait()
+
+	if peak := fetcher.peak.Load(); peak > 6 {
+		t.Errorf("peak in-flight fetches = %d, want <= 6", peak)
 	}
 }

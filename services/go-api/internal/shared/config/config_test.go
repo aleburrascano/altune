@@ -337,6 +337,23 @@ func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
 	}
 }
 
+func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with default ACQUISITION_DOWNLOAD_CONCURRENCY: %v", err)
+	}
+	if cfg.AcquisitionDownloadConcurrency != 6 {
+		t.Errorf("expected default acquisition_download_concurrency=6, got %d", cfg.AcquisitionDownloadConcurrency)
+	}
+
+	setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_DOWNLOAD_CONCURRENCY": "0"}))
+	_, err = Load()
+	if err == nil || !searchString(err.Error(), "ACQUISITION_DOWNLOAD_CONCURRENCY") {
+		t.Fatalf("expected error naming ACQUISITION_DOWNLOAD_CONCURRENCY for 0, got %v", err)
+	}
+}
+
 func TestLoad_AcquisitionConcurrencyDefaultValid(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 

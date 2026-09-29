@@ -53,6 +53,13 @@ func (p Pipeline) withUpdateTrack(s stage[afterStore, afterUpdate]) Pipeline {
 	return p
 }
 
+func (p Pipeline) withDownloadLimiter(l *DownloadLimiter) Pipeline {
+	if step, ok := p.download.(*DownloadStep); ok {
+		WithStepDownloadLimiter(l)(step)
+	}
+	return p
+}
+
 type StepError struct {
 	Step string
 	Err  error

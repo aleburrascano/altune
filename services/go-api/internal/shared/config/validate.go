@@ -69,6 +69,9 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionConcurrency < 1 {
 		return fmt.Errorf("ACQUISITION_CONCURRENCY must be >= 1, got %d", c.AcquisitionConcurrency)
 	}
+	if c.AcquisitionDownloadConcurrency < 1 {
+		return fmt.Errorf("ACQUISITION_DOWNLOAD_CONCURRENCY must be >= 1, got %d", c.AcquisitionDownloadConcurrency)
+	}
 	if !isUnitFraction(c.ExplorationRate) {
 		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
 	}

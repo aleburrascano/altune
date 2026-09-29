@@ -58,6 +58,8 @@ type Config struct {
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 
+	AcquisitionDownloadConcurrency int `env:"ACQUISITION_DOWNLOAD_CONCURRENCY" envDefault:"6"`
+
 	AcquisitionPrincipalQueueDepth int `env:"ACQUISITION_PRINCIPAL_QUEUE_DEPTH"`
 	AcquisitionDrainBudgetSeconds  int `env:"ACQUISITION_DRAIN_BUDGET_SECONDS" envDefault:"60"`
 

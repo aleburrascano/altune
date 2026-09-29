@@ -151,6 +151,8 @@ func (a *App) buildAcquisitionScheduler(
 		acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(identifier))
 		slog.Info("acquisition: fingerprint verification enabled", "fpcalc", verification.Fpcalc)
 	}
+	acquireOpts = append(acquireOpts,
+		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		trackRepo,
 		acqService.NewSourceRegistry(audioSources...),

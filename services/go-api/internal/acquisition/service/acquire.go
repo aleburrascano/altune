@@ -14,17 +14,18 @@ import (
 )
 
 type AcquireTrackAudioService struct {
-	trackRepo      ports.TrackRepository
-	sources        *SourceRegistry
-	audioStore     ports.AudioWriter
-	audioProber    ports.AudioProber
-	audioTagger    ports.AudioTagger
-	identifier     ports.AudioIdentifier
-	recordings     ports.RecordingResolver
-	events         events.Publisher
-	orphans        catalogports.OrphanedAudioRecorder
-	storeKeyPrefix string
-	rejections     ports.RejectionStore
+	trackRepo       ports.TrackRepository
+	sources         *SourceRegistry
+	audioStore      ports.AudioWriter
+	audioProber     ports.AudioProber
+	audioTagger     ports.AudioTagger
+	identifier      ports.AudioIdentifier
+	recordings      ports.RecordingResolver
+	events          events.Publisher
+	orphans         catalogports.OrphanedAudioRecorder
+	storeKeyPrefix  string
+	rejections      ports.RejectionStore
+	downloadLimiter *DownloadLimiter
 }
 
 func NewAcquireTrackAudioService(
@@ -44,6 +45,10 @@ func NewAcquireTrackAudioService(
 		opt(s)
 	}
 	return s
+}
+
+func WithDownloadLimiter(l *DownloadLimiter) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
 }
 
 func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {

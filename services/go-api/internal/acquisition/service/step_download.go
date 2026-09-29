@@ -26,10 +26,12 @@ type DownloadStep struct {
 	fetcher    candidateFetcher
 	prober     ports.AudioProber
 	identifier ports.AudioIdentifier
+	limiter    *DownloadLimiter
+	width      int
 }
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher}
+	s := &DownloadStep{fetcher: fetcher, width: 1}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -44,10 +46,21 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.identifier = i }
 }
 
+func WithStepDownloadLimiter(l *DownloadLimiter) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.limiter = l }
+}
+
+func WithVerifyWidth(n int) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.width = max(n, 1) }
+}
+
 func (s *DownloadStep) Name() string { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
-	var lastErr, unavailableErr error
+	if s.width > 1 {
+		return s.executeWindowed(ctx, ac)
+	}
+	var failures downloadFailures
 	attempts := 0
 
 	for i := range ac.Ranked {
@@ -73,21 +86,35 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		if selected {
 			return afterDownload{}, nil
 		}
-		if err != nil {
-			lastErr = err
-			if ports.IsSourceUnavailable(err) {
-				unavailableErr = err
-			}
-		}
+		failures.note(err)
 	}
 
-	if lastErr != nil {
-		if unavailableErr != nil && !ports.IsSourceUnavailable(lastErr) {
-			lastErr = fmt.Errorf("%w (last failure: %w)", unavailableErr, lastErr)
-		}
-		return afterDownload{}, withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr))
+	return afterDownload{}, failures.result(ctx)
+}
+
+type downloadFailures struct {
+	last, unavailable error
+}
+
+func (f *downloadFailures) note(err error) {
+	if err == nil {
+		return
 	}
-	return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio")
+	f.last = err
+	if ports.IsSourceUnavailable(err) {
+		f.unavailable = err
+	}
+}
+
+func (f *downloadFailures) result(ctx context.Context) error {
+	if f.last == nil {
+		return fmt.Errorf("no candidate produced acceptable audio")
+	}
+	last := f.last
+	if f.unavailable != nil && !ports.IsSourceUnavailable(last) {
+		last = fmt.Errorf("%w (last failure: %w)", f.unavailable, last)
+	}
+	return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", last))
 }
 
 func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) {
@@ -115,42 +142,99 @@ func (s *DownloadStep) tryCandidate(
 	candidate ports.AudioCandidate,
 	tmpDir string,
 ) (selected bool, err error) {
+	result := s.runAttempt(ctx, ac, candidate, tmpDir)
+	result.applyTo(ac)
+	return result.accepted, result.err()
+}
+
+type attempt struct {
+	candidate ports.AudioCandidate
+	filePath  string
+	tmpDir    string
+	verified  verificationResult
+	rejection *downloadRejection
+	accepted  bool
+}
+
+func (a attempt) err() error {
+	if a.rejection == nil {
+		return nil
+	}
+	return a.rejection.err
+}
+
+func (a attempt) applyTo(ac *AcquisitionContext) {
+	if a.rejection != nil {
+		ac.recordRejection(a.candidate.URL, a.candidate.Title, a.candidate.Source, a.rejection.stage, a.rejection.reason)
+	}
+	if !a.accepted {
+		return
+	}
+	sel := a.candidate
+	ac.Selected = &sel
+	ac.TempPath = a.filePath
+	ac.DurationVerified = a.verified.duration
+	ac.IdentityVerified = a.verified.identity
+	ac.ProbedDuration = a.verified.probed
+	ac.Verdict = a.verified.verdict
+}
+
+func (s *DownloadStep) runAttempt(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	tmpDir string,
+) (result attempt) {
 	defer func() {
-		if !selected {
+		if !result.accepted {
 			os.RemoveAll(tmpDir)
 		}
 	}()
+	result = s.attemptAudio(ctx, ac, candidate, tmpDir)
+	result.candidate = candidate
+	result.tmpDir = tmpDir
+	return result
+}
 
+func (s *DownloadStep) attemptAudio(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	tmpDir string,
+) attempt {
 	prior, rejection := s.previewIdentification(ctx, ac, candidate)
 	if rejection != nil {
-		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, rejection.stage, rejection.reason)
-		return false, rejection.err
+		return attempt{rejection: rejection}
 	}
 
-	filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
-	if err != nil {
-		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDownload, "download failed")
-		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"error", logSafeError(err))
-		return false, err
+	filePath, rejection := s.fetchFull(ctx, ac, candidate, tmpDir)
+	if rejection != nil {
+		return attempt{rejection: rejection}
 	}
 
 	verified, rejection := s.verify(ctx, ac, candidate, filePath, prior)
-	if rejection != nil {
-		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, rejection.stage, rejection.reason)
-		return false, rejection.err
-	}
+	return attempt{filePath: filePath, verified: verified, rejection: rejection, accepted: rejection == nil}
+}
 
-	sel := candidate
-	ac.Selected = &sel
-	ac.TempPath = filePath
-	ac.DurationVerified = verified.duration
-	ac.IdentityVerified = verified.identity
-	ac.ProbedDuration = verified.probed
-	ac.Verdict = verified.verdict
-	selected = true
-	return true, nil
+func (s *DownloadStep) fetchFull(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	tmpDir string,
+) (string, *downloadRejection) {
+	if err := s.limiter.Acquire(ctx); err != nil {
+		return "", &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
+	}
+	defer s.limiter.Release()
+
+	filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
+			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+			"error", logSafeError(err))
+		return "", &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
+	}
+	return filePath, nil
 }
 
 type verificationResult struct {
@@ -293,11 +377,24 @@ func (s *DownloadStep) identifyPreview(
 	}
 	defer os.RemoveAll(previewDir)
 
-	previewPath, err := previewer.FetchPreview(ctx, candidate, previewDir, previewSeconds)
+	previewPath, err := s.fetchPreview(ctx, previewer, candidate, previewDir)
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
 	return s.identifier.Identify(ctx, previewPath, candidate.Duration)
+}
+
+func (s *DownloadStep) fetchPreview(
+	ctx context.Context,
+	previewer ports.PreviewFetcher,
+	candidate ports.AudioCandidate,
+	previewDir string,
+) (string, error) {
+	if err := s.limiter.Acquire(ctx); err != nil {
+		return "", err
+	}
+	defer s.limiter.Release()
+	return previewer.FetchPreview(ctx, candidate, previewDir, previewSeconds)
 }
 
 func (s *DownloadStep) identify(
