@@ -236,7 +236,9 @@ export function useQueueResume() {
   const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
   const save = useCallback((): Promise<void> => {
     const isSkippable = (state: QueueStore): boolean =>
-      state.tracks.length === 0 || placeholderGenerationRef.current === state.generation;
+      state.tracks.length === 0 ||
+      placeholderGenerationRef.current === state.generation ||
+      state.currentTrack()?.source.kind !== 'library';
     singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable));
     return singleFlightRef.current();
   }, []);

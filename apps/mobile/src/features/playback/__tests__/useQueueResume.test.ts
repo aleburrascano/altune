@@ -18,7 +18,7 @@ import { useQueueResume } from '../native/useQueueResume';
 import { loadNativeQueue } from '../native/loadNativeTrack';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
-import { libraryTrack } from './fixtures';
+import { libraryTrack, previewTrack } from './fixtures';
 
 jest.mock('@shared/api-client/playback', () => ({
   getQueueState: jest.fn(),
@@ -542,6 +542,30 @@ describe('saving the queue state', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  describe('useQueueResume save — a preview current track never overwrites the saved queue', () => {
+    async function loadAndBackground(queue: PlaybackTrack[], index: number): Promise<void> {
+      useQueueStore.getState().loadQueue(queue, index, null);
+      await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), index, {
+        autoplay: false,
+      });
+      renderHook(() => useQueueResume());
+      await flush();
+      await backgroundApp();
+    }
+
+    it('makes no save call for a preview-only queue', async () => {
+      await loadAndBackground([previewTrack()], 0);
+
+      expect(mockedSave).not.toHaveBeenCalled();
+    });
+
+    it('makes no save call when the current track is a preview in a library queue', async () => {
+      await loadAndBackground([...tracks('a', 2), previewTrack()], 2);
+
+      expect(mockedSave).not.toHaveBeenCalled();
+    });
   });
 
   describe('useQueueResume save — position and queue snapshot stay consistent', () => {
