@@ -3,8 +3,14 @@ package persistence
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestPgxIdentityStore_EmptyInputGuards(t *testing.T) {
@@ -54,4 +60,70 @@ func TestPgxIdentityStore_EmptyInputGuards(t *testing.T) {
 			t.Errorf("empty external id: %v, want nil no-op", err)
 		}
 	})
+}
+
+type stubIdentityRows struct {
+	pgx.Rows
+	data [][5]any
+	pos  int
+}
+
+func (r *stubIdentityRows) Next() bool { r.pos++; return r.pos <= len(r.data) }
+func (r *stubIdentityRows) Close()     {}
+func (r *stubIdentityRows) Err() error { return nil }
+func (r *stubIdentityRows) Scan(dest ...any) error {
+	for i, d := range r.data[r.pos-1] {
+		switch p := dest[i].(type) {
+		case *string:
+			*p = d.(string)
+		case *[]byte:
+			*p = d.([]byte)
+		}
+	}
+	return nil
+}
+
+func captureWarnings(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestPgxIdentityStore_LookupByProviderID_DBFailureWarnsAndMisses(t *testing.T) {
+	logs := captureWarnings(t)
+	pool, err := pgxpool.New(context.Background(), "postgres://u:p@127.0.0.1:1/db?connect_timeout=1")
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	defer pool.Close()
+
+	_, _, ok := NewPgxIdentityStore(pool).LookupByProviderID(context.Background(), domain.ResultKindArtist, "deezer", "1")
+
+	if ok {
+		t.Error("db failure: got hit, want miss")
+	}
+	if !strings.Contains(logs.String(), "identity.lookup_failed") {
+		t.Errorf("db failure not logged at Warn: %q", logs.String())
+	}
+}
+
+func TestPgxIdentityStore_LookupByProviderIDs_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
+	logs := captureWarnings(t)
+	ref := ports.IdentityRef{Kind: domain.ResultKindArtist, Provider: "deezer", ExternalID: "1"}
+	requested := identityRefsByRow([]ports.IdentityRef{ref})
+	rows := &stubIdentityRows{data: [][5]any{{"deezer", "1", domain.ResultKindArtist.String(), "mbid-1", []byte(`["not","a","map"]`)}}}
+
+	hits, err := scanIdentityHits(context.Background(), rows, requested)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if hit, ok := hits[ref]; !ok || hit.MBID != "mbid-1" || len(hit.Xref) != 0 {
+		t.Errorf("hit = %+v ok=%v, want mbid-1 with empty xref", hit, ok)
+	}
+	if !strings.Contains(logs.String(), "identity.xref_corrupt") {
+		t.Errorf("corrupt xref not logged at Warn: %q", logs.String())
+	}
 }

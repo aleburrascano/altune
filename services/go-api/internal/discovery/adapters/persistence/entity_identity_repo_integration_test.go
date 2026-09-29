@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -201,3 +202,29 @@ func TestPgxIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
 }
 
 const batchTestIDPrefix = "batch-1106-"
+
+func TestPgxIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer pool.Close()
+	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-595'`)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', 'corrupt-xref-595', 'artist', 'mbid-c', '[1]')`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	defer pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-595'`)
+	logs := captureWarnings(t)
+
+	mbid, xref, ok := NewPgxIdentityStore(pool).LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "corrupt-xref-595")
+
+	if !ok || mbid != "mbid-c" || len(xref) != 0 {
+		t.Errorf("got (%q, %v, %v), want hit mbid-c with empty xref", mbid, xref, ok)
+	}
+	if !strings.Contains(logs.String(), "identity.xref_corrupt") {
+		t.Errorf("corrupt xref not logged at Warn: %q", logs.String())
+	}
+}

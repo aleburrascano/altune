@@ -89,16 +89,12 @@ func (s *PgxIdentityStore) LookupByProviderID(
 		return "", nil, false
 	}
 	if err != nil {
-		slog.DebugContext(ctx, "identity.lookup_failed",
+		slog.WarnContext(ctx, "identity.lookup_failed",
 			"kind", kind.String(), "provider", provider.String(), "external_id", externalID, "error", err)
 		return "", nil, false
 	}
 
-	xref := map[string]string{}
-	if len(xrefBlob) > 0 {
-		_ = json.Unmarshal(xrefBlob, &xref)
-	}
-	return mbid, xref, mbid != ""
+	return mbid, decodeXref(ctx, mbid, xrefBlob), mbid != ""
 }
 
 func (s *PgxIdentityStore) LookupByProviderIDs(
@@ -147,10 +143,10 @@ func (s *PgxIdentityStore) queryIdentityHits(
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup identity: %w", err)
 	}
-	return scanIdentityHits(rows, requested)
+	return scanIdentityHits(ctx, rows, requested)
 }
 
-func scanIdentityHits(rows pgx.Rows, requested map[identityRow]ports.IdentityRef) (map[ports.IdentityRef]ports.IdentityHit, error) {
+func scanIdentityHits(ctx context.Context, rows pgx.Rows, requested map[identityRow]ports.IdentityRef) (map[ports.IdentityRef]ports.IdentityHit, error) {
 	defer rows.Close()
 	hits := make(map[ports.IdentityRef]ports.IdentityHit, len(requested))
 	for rows.Next() {
@@ -164,13 +160,21 @@ func scanIdentityHits(rows pgx.Rows, requested map[identityRow]ports.IdentityRef
 		if !ok || mbid == "" {
 			continue
 		}
-		xref := map[string]string{}
-		if len(xrefBlob) > 0 {
-			_ = json.Unmarshal(xrefBlob, &xref)
-		}
-		hits[ref] = ports.IdentityHit{MBID: mbid, Xref: xref}
+		hits[ref] = ports.IdentityHit{MBID: mbid, Xref: decodeXref(ctx, mbid, xrefBlob)}
 	}
 	return hits, rows.Err()
+}
+
+func decodeXref(ctx context.Context, mbid string, blob []byte) map[string]string {
+	xref := map[string]string{}
+	if len(blob) == 0 {
+		return xref
+	}
+	if err := json.Unmarshal(blob, &xref); err != nil {
+		slog.WarnContext(ctx, "identity.xref_corrupt", "mbid", mbid, "error", err)
+		return map[string]string{}
+	}
+	return xref
 }
 
 func (s *PgxIdentityStore) Invalidate(
