@@ -1,7 +1,4 @@
 {
   "ui": [],
-  "logic": [
-    "src/features/playback/hooks/PlaybackProvider.tsx",
-    "src/features/playback/playsThroughTrackPlayer.ts"
-  ]
+  "logic": []
 }

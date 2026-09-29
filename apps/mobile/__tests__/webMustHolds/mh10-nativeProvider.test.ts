@@ -26,9 +26,9 @@ function onPlatform<T>(os: string, load: () => T): T {
   return loaded as T;
 }
 
-function selectedProviderName(os: string): string {
+function selectedProviderName(os: string, module = '@features/playback/hooks/PlaybackProvider'): string {
   return onPlatform(os, () => {
-    const { PlaybackProvider } = require('@features/playback/hooks/PlaybackProvider');
+    const { PlaybackProvider } = require(module);
     const element: ReactElement<unknown, { name: string }> = PlaybackProvider({ children: null });
     return element.type.name;
   });
@@ -40,7 +40,7 @@ describe('mh10: the playback provider and session store each platform selects', 
   });
 
   it('selects the web audio provider on web', () => {
-    expect(selectedProviderName('web')).toBe('WebPlaybackProvider');
+    expect(selectedProviderName('web', '@features/playback/hooks/PlaybackProvider.web')).toBe('WebPlaybackProvider');
   });
 
   it.each(['ios', 'android'])('persists the native session in secure-store on %s', async (os) => {

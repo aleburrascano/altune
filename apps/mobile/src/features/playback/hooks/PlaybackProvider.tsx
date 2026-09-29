@@ -1,5 +1,4 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
-import { Platform } from 'react-native';
 
 import { playsThroughTrackPlayer } from '../playsThroughTrackPlayer';
 
@@ -8,7 +7,6 @@ type ProviderComponent = ComponentType<{ children: ReactNode }>;
 function selectPlaybackProvider(): ProviderComponent {
   if (playsThroughTrackPlayer)
     return require('../native/trackPlayerProvider').TrackPlayerPlaybackProvider;
-  if (Platform.OS === 'web') return require('../web/webPlaybackProvider').WebPlaybackProvider;
   return require('../native/expoGoPlaybackProvider').ExpoGoPlaybackProvider;
 }
 
