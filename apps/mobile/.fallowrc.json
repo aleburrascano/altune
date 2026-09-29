@@ -21,6 +21,7 @@
     "@stryker-mutator/core",
     "@stryker-mutator/jest-runner"
   ],
+  "dynamicallyLoaded": ["eslint/consistency/*.js"],
   "ignoreUnresolvedImports": [
     "@react-navigation/bottom-tabs"
   ],
@@ -31,7 +32,8 @@
       "configPatterns": ["eslint.config.js"],
       "toolingDependencies": [
         "@typescript-eslint/parser",
-        "@typescript-eslint/eslint-plugin"
+        "@typescript-eslint/eslint-plugin",
+        "glob"
       ]
     }
   ],

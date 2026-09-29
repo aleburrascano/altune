@@ -319,7 +319,12 @@ type CardBodyProps = {
   cardWidth: number;
 };
 
-function CardArtwork(props: CardBodyProps): ReactElement {
+type CardArtworkProps = {
+  album: DiscoveryResult;
+  cardWidth: number;
+};
+
+function CardArtwork(props: CardArtworkProps): ReactElement {
   return (
     <Artwork
       uri={props.album.image_url}
@@ -333,7 +338,7 @@ function CardArtwork(props: CardBodyProps): ReactElement {
 function CardBody(props: CardBodyProps): ReactElement {
   return (
     <>
-      <CardArtwork {...props} />
+      <CardArtwork album={props.album} cardWidth={props.cardWidth} />
       <CardTitle title={props.album.title} />
       <CardMeta year={props.year} trackCount={props.trackCount} />
     </>
