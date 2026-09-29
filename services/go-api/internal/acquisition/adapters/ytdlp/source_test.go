@@ -252,3 +252,174 @@ func TestSource_Find_NoQueryFindsAnythingReturnsEmptyNotError(t *testing.T) {
 		t.Fatalf("merged candidates = %d, want 0", len(got))
 	}
 }
+
+const drinkingInLA = "https://soundcloud.com/bran-van-3000/drinking-in-l-a-3"
+
+func soundCloudFindRequest() ports.FindRequest {
+	return ports.FindRequest{Title: "Drinking in L.A.", Artist: "Bran Van 3000"}
+}
+
+func soundCloudSearcher(flat ports.AudioCandidate, inspect inspectRunner) *YtDlpAudioSearcher {
+	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		if strings.HasPrefix(spec, "scsearch5:") {
+			return []ports.AudioCandidate{flat}, nil
+		}
+		return nil, nil
+	})
+	s.inspect = inspect
+	return s
+}
+
+func findUnplayable(t *testing.T, s *YtDlpAudioSearcher) string {
+	t.Helper()
+	got, err := NewSource(s).Find(context.Background(), soundCloudFindRequest())
+	if err != nil {
+		t.Fatalf("Find error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("candidates = %v, want the one soundcloud track", got)
+	}
+	return got[0].Unplayable
+}
+
+func staticInspection(result inspection) inspectRunner {
+	return func(context.Context, string) (inspection, error) { return result, nil }
+}
+
+func TestSource_Find_MustHold8_SoundCloudTrackWithOnlyEncryptedFormatsIsMarkedDRM(t *testing.T) {
+	info := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
+		{FormatID: "hls_aac_160k_encrypted", VCodec: "none", HasDRM: true},
+		{FormatID: "hls_opus_64k", VCodec: "none", Protocol: "m3u8_native_encrypted"},
+	}})
+	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}, staticInspection(info))
+
+	if got := findUnplayable(t, s); got != "drm" {
+		t.Fatalf("Unplayable = %q, want drm", got)
+	}
+}
+
+func TestSource_Find_SoundCloudTrackWithAClearFormatStaysPlayable(t *testing.T) {
+	info := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
+		{FormatID: "hls_aac_160k_encrypted", VCodec: "none", HasDRM: true},
+		{FormatID: "http_mp3_0_0", VCodec: "none", HasDRM: false},
+	}})
+	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}, staticInspection(info))
+
+	if got := findUnplayable(t, s); got != "" {
+		t.Fatalf("Unplayable = %q, want playable", got)
+	}
+}
+
+func TestSource_Find_SoundCloudThirtySecondExtractOfALongerTrackIsMarkedPreview(t *testing.T) {
+	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240},
+		staticInspection(inspection{Duration: 30}))
+
+	if got := findUnplayable(t, s); got != "preview" {
+		t.Fatalf("Unplayable = %q, want preview", got)
+	}
+}
+
+func TestSource_Find_SoundCloudPreviewFormatURLIsMarkedPreview(t *testing.T) {
+	info := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
+		{FormatID: "http_mp3_1_0", VCodec: "none", URL: "https://cf-media.sndcdn.com/preview/abc.mp3"},
+	}})
+	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}, staticInspection(info))
+
+	if got := findUnplayable(t, s); got != "preview" {
+		t.Fatalf("Unplayable = %q, want preview", got)
+	}
+}
+
+func TestSource_Find_TrackThatIsReallyThirtySecondsStaysPlayable(t *testing.T) {
+	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 30},
+		staticInspection(inspection{Duration: 30}))
+
+	if got := findUnplayable(t, s); got != "" {
+		t.Fatalf("Unplayable = %q, want playable", got)
+	}
+}
+
+func TestSource_Find_PreviewDurationBoundaries(t *testing.T) {
+	cases := []struct {
+		name       string
+		extract    float64
+		flat       float64
+		unplayable string
+	}{
+		{"extract at the slack edge is a preview", 30.5, 240, "preview"},
+		{"extract past the slack edge is playable", 30.6, 240, ""},
+		{"flat duration at the margin is playable", 30, 35, ""},
+		{"flat duration past the margin is a preview", 30, 35.1, "preview"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: tc.flat},
+				staticInspection(inspection{Duration: tc.extract}))
+
+			if got := findUnplayable(t, s); got != tc.unplayable {
+				t.Fatalf("Unplayable = %q, want %q", got, tc.unplayable)
+			}
+		})
+	}
+}
+
+func TestSource_Find_InspectionFailureLeavesTheCandidatePlayableAndIsLogged(t *testing.T) {
+	logs := captureLogs(t)
+	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240},
+		func(context.Context, string) (inspection, error) { return inspection{}, errors.New("boom") })
+
+	if got := findUnplayable(t, s); got != "" {
+		t.Fatalf("Unplayable = %q, want fail-open", got)
+	}
+	if !strings.Contains(logs.String(), "acquisition.soundcloud_inspect_failed") {
+		t.Fatalf("inspection failure not logged:\n%s", logs.String())
+	}
+}
+
+func TestSource_Find_InspectsOnlySoundCloudURLsAndOncePerURL(t *testing.T) {
+	var mu sync.Mutex
+	inspected := map[string]int{}
+	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
+		return []ports.AudioCandidate{
+			{Title: "yt", URL: "https://www.youtube.com/watch?v=aaaaaaaaaaa", Duration: 240},
+			{Title: "sc", URL: drinkingInLA, Duration: 240},
+		}, nil
+	})
+	s.inspect = func(_ context.Context, u string) (inspection, error) {
+		mu.Lock()
+		inspected[u]++
+		mu.Unlock()
+		return inspection{Duration: 240}, nil
+	}
+	src := NewSource(s)
+
+	for range 2 {
+		if _, err := src.Find(context.Background(), soundCloudFindRequest()); err != nil {
+			t.Fatalf("Find error: %v", err)
+		}
+	}
+
+	if len(inspected) != 1 || inspected[drinkingInLA] != 1 {
+		t.Fatalf("inspected = %v, want only the soundcloud url, once", inspected)
+	}
+}
+
+func TestInspectionCache_ExpiresAfterADayAndEvictsOldestBeyondTheBound(t *testing.T) {
+	cache := newInspectionCache()
+	now := time.Now()
+	cache.now = func() time.Time { return now }
+
+	for i := range inspectCacheMax + 1 {
+		cache.put(fmt.Sprintf("u%d", i), inspection{Duration: 1})
+	}
+	if _, ok := cache.get("u0"); ok {
+		t.Fatal("oldest entry survived past the bound")
+	}
+	if _, ok := cache.get("u1"); !ok {
+		t.Fatal("entry within the bound was evicted")
+	}
+	now = now.Add(inspectCacheTTL + time.Second)
+	if _, ok := cache.get("u1"); ok {
+		t.Fatal("entry served after its 24h expiry")
+	}
+}

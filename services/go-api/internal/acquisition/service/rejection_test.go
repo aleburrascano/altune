@@ -194,12 +194,14 @@ func TestRejectionStage_LiteralsArePinned(t *testing.T) {
 		RejectionIdentity:     "identity",
 		RejectionQualifier:    "qualifier",
 		RejectionDownload:     "download",
+		RejectionDRM:          "drm",
+		RejectionPreview:      "preview",
 		RejectionDuration:     "duration",
 		RejectionUndecodable:  "undecodable",
 		RejectionFingerprint:  "fingerprint",
 		RejectionNotAttempted: "not_attempted",
 	}
-	if len(want) != 7 {
+	if len(want) != 9 {
 		t.Fatalf("rejection stage constants collide: %v", want)
 	}
 	for stage, literal := range want {

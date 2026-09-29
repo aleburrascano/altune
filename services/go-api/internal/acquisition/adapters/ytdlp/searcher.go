@@ -41,6 +41,8 @@ type YtDlpAudioSearcher struct {
 	jsRuntime       string
 	binary          string
 	runSearch       searchRunner
+	inspect         inspectRunner
+	inspections     *inspectionCache
 	searchTimeout   time.Duration
 	downloadTimeout time.Duration
 	canaryTimeout   time.Duration
@@ -55,8 +57,10 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 		searchTimeout:   searchTimeout,
 		downloadTimeout: downloadTimeout,
 		canaryTimeout:   canaryTimeout,
+		inspections:     newInspectionCache(),
 	}
 	s.runSearch = s.runYtDlpSearch
+	s.inspect = s.runYtDlpInspect
 	return s
 }
 

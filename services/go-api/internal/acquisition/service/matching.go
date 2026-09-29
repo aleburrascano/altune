@@ -429,6 +429,16 @@ func qualifierRejection(c ports.AudioCandidate, veto []string) CandidateRejectio
 	}
 }
 
+func unplayableRejection(c ports.AudioCandidate) CandidateRejection {
+	return CandidateRejection{
+		URL:    c.URL,
+		Title:  c.Title,
+		Source: c.Source,
+		Stage:  RejectionStage(c.Unplayable),
+		Reason: "soundcloud " + c.Unplayable,
+	}
+}
+
 func classifyCandidates(
 	ctx context.Context,
 	track TrackRef,
@@ -436,6 +446,10 @@ func classifyCandidates(
 	maxViews int64,
 ) (resolved, topic, other []candidateEntry, rejected []CandidateRejection) {
 	for _, c := range candidates {
+		if c.Unplayable != "" {
+			rejected = append(rejected, unplayableRejection(c))
+			continue
+		}
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		meta := metadataRank(c, track.Duration, maxViews)
 		artMatch := artistMatchesChannel(track.Artist, c.Channel)

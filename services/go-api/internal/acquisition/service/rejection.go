@@ -18,6 +18,8 @@ const (
 	RejectionIdentity     RejectionStage = "identity"
 	RejectionQualifier    RejectionStage = "qualifier"
 	RejectionDownload     RejectionStage = "download"
+	RejectionDRM          RejectionStage = "drm"
+	RejectionPreview      RejectionStage = "preview"
 	RejectionDuration     RejectionStage = "duration"
 	RejectionUndecodable  RejectionStage = "undecodable"
 	RejectionFingerprint  RejectionStage = "fingerprint"

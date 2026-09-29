@@ -1106,3 +1106,21 @@ func TestRankAndCollect_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
 		t.Fatalf("ranked = %v rejected = %v, want the clean upload first and the edit kept", ranked, rejected)
 	}
 }
+
+func TestRankAndCollect_MustHold8_UnplayableCandidatesAreRejectedBeforeRanking(t *testing.T) {
+	track := TrackRef{Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 240}
+	candidates := []ports.AudioCandidate{
+		{Title: "Drinking in L.A.", URL: "sc:drm", Unplayable: "drm"},
+		{Title: "Drinking in L.A.", URL: "sc:preview", Unplayable: "preview"},
+		{Title: "Drinking in L.A.", URL: "sc:ok"},
+	}
+
+	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+
+	if len(ranked) != 1 || ranked[0].URL != "sc:ok" {
+		t.Fatalf("ranked = %v, want only the playable candidate so the downloader never sees the others", ranked)
+	}
+	if len(rejected) != 2 || rejected[0].Stage != RejectionDRM || rejected[1].Stage != RejectionPreview {
+		t.Fatalf("rejected = %v, want drm then preview", rejected)
+	}
+}

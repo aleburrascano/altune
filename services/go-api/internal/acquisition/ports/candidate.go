@@ -17,6 +17,7 @@ type AudioCandidate struct {
 	ViewCount  int64
 	Source     string
 	Resolved   bool
+	Unplayable string
 }
 
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {

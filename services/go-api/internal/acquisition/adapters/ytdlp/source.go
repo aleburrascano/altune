@@ -20,7 +20,12 @@ func NewSource(searcher *YtDlpAudioSearcher) *Source {
 func (s *Source) Name() string { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	return s.searcher.SearchQueries(ctx, ports.SearchQueries(req))
+	candidates, err := s.searcher.SearchQueries(ctx, ports.SearchQueries(req))
+	if err != nil {
+		return nil, err
+	}
+	s.searcher.MarkUnplayable(ctx, candidates)
+	return candidates, nil
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
