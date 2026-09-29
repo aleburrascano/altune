@@ -12,10 +12,17 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { libraryTrack, previewTrack } from '../../__tests__/fixtures';
+import { recordPlaybackFailure } from '../../playbackHealth';
 import { WebPlaybackProvider } from '../../web/webPlaybackProvider';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
+jest.mock('../../playbackHealth', () => ({
+  ...jest.requireActual('../../playbackHealth'),
+  recordPlaybackFailure: jest.fn(),
+}));
+
+const recorded = recordPlaybackFailure as jest.MockedFunction<typeof recordPlaybackFailure>;
 const presign = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
 const HAVE_ENOUGH_DATA = 4;
@@ -156,6 +163,7 @@ const PRESIGN_TTL_MS = 60 * 60 * 1000;
 
 beforeEach(() => {
   presign.mockReset();
+  recorded.mockClear();
   presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id)));
   useQueueStore.getState().clearQueue();
 });
@@ -1250,5 +1258,77 @@ describe('WebPlaybackProvider repeat-one prefetch suppression for PR #2923', () 
     act(() => audio.bufferEnough());
 
     expect(presignedIds()).not.toContain('trk-2');
+  });
+});
+
+function renderWebQueueForHealth() {
+  const audio = new FakeAudio();
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <WebPlaybackProvider createAudio={() => audio as unknown as HTMLAudioElement}>
+      {children}
+    </WebPlaybackProvider>
+  );
+  const rendered = renderHook(() => useQueuePlayback(), { wrapper });
+  return { audio, queue: () => rendered.result.current };
+}
+
+describe('WebPlaybackProvider failure health', () => {
+  it('counts a surfaced media error once by its kind', async () => {
+    const { audio } = await playing();
+
+    act(() => audio.failWith(3, 'decode broke'));
+
+    expect(recorded.mock.calls).toEqual([['decode']]);
+  });
+
+  it('does not count the automatic re-presign retry, only the failure that finally surfaces', async () => {
+    let clock = 0;
+    const { audio, playback } = renderWebPlaybackWithClock(() => clock);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(2));
+    expect(recorded).not.toHaveBeenCalled();
+
+    act(() => audio.failWith(2));
+    expect(recorded.mock.calls).toEqual([['network']]);
+  });
+
+  it('counts a presign failure surfaced to the UI once', async () => {
+    presign.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+    const view = renderWebPlayback();
+
+    await act(() => view.playback().play(libraryTrack()));
+
+    expect(view.playback().status).toBe('error');
+    expect(recorded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not count a failed next-track prefetch nobody saw', async () => {
+    const { audio, queue } = renderWebQueueForHealth();
+    await act(async () =>
+      queue().playFromList([trackNamed('trk-1'), trackNamed('trk-2')], 0, null),
+    );
+    presign.mockRejectedValue(new ApiError(503, 'unavailable'));
+    act(() => audio.bufferEnough());
+
+    expect(recorded).not.toHaveBeenCalled();
+  });
+
+  it('logs a redacted warning when play() is rejected and still syncs the phase', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const view = renderWebPlayback();
+    view.audio.playRejection = new Error(
+      'blocked https://cdn.example/a.mp3?X-Amz-Signature=deadbeef',
+    );
+
+    await act(() => view.playback().play(libraryTrack()));
+
+    const logged = JSON.stringify(warn.mock.calls);
+    warn.mockRestore();
+    expect(logged).toContain('play() rejected');
+    expect(logged).not.toMatch(/deadbeef|X-Amz|cdn\.example/);
+    expect(view.playback().status).toBe('paused');
   });
 });

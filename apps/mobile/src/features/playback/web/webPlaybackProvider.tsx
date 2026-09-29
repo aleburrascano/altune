@@ -29,6 +29,7 @@ import {
   type RedactedPlaybackFailure,
 } from '../redactPlaybackError';
 import { useMediaSession } from '../hooks/useMediaSession';
+import { recordPlaybackFailure } from '../playbackHealth';
 
 type AudioPhase = 'loading' | 'playing' | 'paused' | 'ended';
 
@@ -206,6 +207,11 @@ function recoverFromMediaError(player: WebAudioPlayer): Promise<void> {
   return represignAndResume(player, { autoplay: true, startPositionMs });
 }
 
+function surfaceFailure(player: WebAudioPlayer, failure: RedactedPlaybackFailure): void {
+  recordPlaybackFailure(failure.kind);
+  player.update({ failure });
+}
+
 function reportMediaError(player: WebAudioPlayer): void {
   if (player.awaitingSource) return;
   if (
@@ -217,7 +223,7 @@ function reportMediaError(player: WebAudioPlayer): void {
     void recoverFromMediaError(player);
     return;
   }
-  player.update({ failure: mediaFailure(player.audio.error) });
+  surfaceFailure(player, mediaFailure(player.audio.error));
 }
 
 function markRecovered(player: WebAudioPlayer): void {
@@ -283,7 +289,10 @@ async function resolveSource(source: PlaybackSource): Promise<SourceOutcome> {
 }
 
 function playAudio(player: WebAudioPlayer): void {
-  void player.audio.play().catch(() => syncPhase(player));
+  void player.audio.play().catch((err: unknown) => {
+    console.warn('[playback] web play() rejected', { error: redactedPlaybackFailure(err) });
+    syncPhase(player);
+  });
 }
 
 function beginLoad(player: WebAudioPlayer, track: PlaybackTrack): number {
@@ -322,7 +331,7 @@ function applySource(
 ): void {
   player.awaitingSource = false;
   if ('url' in outcome) applyResolvedSource(player, outcome.url, options, issuedAt);
-  else player.update({ failure: outcome.failure });
+  else surfaceFailure(player, outcome.failure);
 }
 
 async function loadTrack(
