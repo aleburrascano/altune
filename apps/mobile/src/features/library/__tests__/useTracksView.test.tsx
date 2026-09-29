@@ -12,10 +12,11 @@ import { useTracksView } from '../hooks/useTracksView';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const mockGetTracks = jest.fn();
+const mockGetAllTracks = jest.fn();
 
 jest.mock('@shared/api-client/tracks', () => ({
   getTracks: (params: unknown) => mockGetTracks(params),
-  getAllTracks: jest.fn(),
+  getAllTracks: (params: unknown) => mockGetAllTracks(params),
 }));
 
 const noop = () => undefined;
@@ -138,5 +139,67 @@ describe('a library list whose next page fails to load', () => {
 
     await waitFor(() => expect(screen.queryByTestId(RETRY)).toBeNull());
     expect(screen.queryByTestId('library-error')).toBeNull();
+  });
+});
+
+describe('playing a row from a library larger than the whole-library cap', () => {
+  const CAP = 10_000;
+  const track = (id: string) =>
+    ({
+      id: asTrackId(id),
+      title: `Title ${id}`,
+      artist: 'An Artist',
+      album: null,
+      duration_seconds: 180,
+      added_at: '2026-01-01T00:00:00Z',
+      acquisition_status: 'ready',
+      artwork_url: null,
+    }) as unknown as TrackResponse;
+
+  it('starts the tapped track when the capped whole-library fetch omits it', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const playFromList = jest.fn();
+    const loaded = ['a', 'b', 'tapped'].map(track);
+    mockGetTracks.mockReset().mockResolvedValue({
+      items: loaded,
+      total: CAP + 5,
+      limit: 3,
+      offset: 0,
+      has_more: false,
+    });
+    mockGetAllTracks
+      .mockReset()
+      .mockResolvedValue(Array.from({ length: CAP }, (_, i) => track(`cap${i}`)));
+    function Screen() {
+      const selection = useSelection();
+      const { view } = useTracksView({
+        query: '',
+        sort: 'recent',
+        isActive: true,
+        selection,
+        queue: { playFromList } as never,
+        playback: {} as never,
+        retryMutation: { isInFlight: () => false } as never,
+        onTrackPress: noop,
+        onTrackMore: noop,
+      });
+      return <>{view.content}</>;
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Screen />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('library-row-tapped')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('library-row-tapped'));
+
+    await waitFor(() => expect(playFromList).toHaveBeenCalled());
+    const [playable, startIndex] = playFromList.mock.calls[0] as [
+      { source: { trackId: string } }[],
+      number,
+    ];
+    expect(playable[startIndex]?.source.trackId).toBe('tapped');
+    client.clear();
   });
 });

@@ -45,7 +45,8 @@ export function useTracksView({
   const tracksState = useLibraryTracks(query, sort, isActive);
 
   const playWholeLibraryFrom = async (track: TrackResponse): Promise<void> => {
-    const all = await tracksState.loadAll();
+    const whole = await tracksState.loadAll();
+    const all = whole.some((t) => t.id === track.id) ? whole : tracksState.tracks;
     const { playable, startIndex } = buildPlayableQueue(all, track.id);
     queue.playFromList(playable, startIndex, { kind: 'library' });
   };
