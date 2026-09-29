@@ -110,7 +110,7 @@ function resetNative(): Promise<void> {
   return withNativeQueue(clearNativeQueue);
 }
 
-async function clearNativeQueue(): Promise<void> {
+export async function clearNativeQueue(): Promise<void> {
   await TrackPlayer.reset();
   forgetAllSwaps();
 }

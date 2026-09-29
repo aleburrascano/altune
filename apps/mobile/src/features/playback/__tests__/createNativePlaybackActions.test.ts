@@ -1,5 +1,6 @@
 import TrackPlayer from 'react-native-track-player';
 
+import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -10,6 +11,7 @@ import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
 } from '../native/createNativePlaybackActions';
+import { swapUpcomingToLocal, wasSwappedToLocal } from '../native/nativeTrackSwap';
 import { NativeQueueTimeoutError, withNativeQueue } from '../native/nativeQueueLock';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { reportingQueueFailure } from '../queueFailureReport';
@@ -331,6 +333,19 @@ describe('createNativePlaybackActions', () => {
 
       expect(__player.calls('reset')).toHaveLength(1);
       expect(setTrack).toHaveBeenCalledWith(null);
+    });
+
+    it('forgets tracks swapped to local so the bookkeeping matches the emptied player', async () => {
+      const track = previewTrack({ source: { kind: 'library', trackId: asTrackId('trk-1') } });
+      (TrackPlayer.getQueue as jest.Mock).mockResolvedValueOnce([{ id: trackKey(track) }]);
+      await swapUpcomingToLocal(track, 'file:///cache/trk-1.mp3');
+      expect(wasSwappedToLocal(asTrackId('trk-1'))).toBe(true);
+      const { controls } = createNativePlaybackActions(jest.fn());
+
+      controls.stop();
+      await new Promise(setImmediate);
+
+      expect(wasSwappedToLocal(asTrackId('trk-1'))).toBe(false);
     });
 
     it('leaves the native queue empty when a queue load is still mid-flight', async () => {

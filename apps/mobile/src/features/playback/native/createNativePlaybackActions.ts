@@ -6,6 +6,7 @@ import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
 
 import {
   appendNativeTrack,
+  clearNativeQueue,
   insertNativeTrackNext,
   loadNativeQueue,
   loadNativeTrack,
@@ -156,7 +157,7 @@ type TransportCommands = Pick<PlaybackControls, 'pause' | 'resume' | 'seekTo' | 
 
 function stopNativePlayback(): Promise<void> {
   claimSessionReset();
-  return ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.reset()));
+  return ignoringNativeRejection(() => withNativeQueue(clearNativeQueue));
 }
 
 function movePlaybackTo(positionMs: number, memory: PlaybackMemory): Promise<void> {
