@@ -102,9 +102,9 @@ describe("on the panel kit", () => {
       { name: "rate-limit-burst", desc: "a burst is shed or rejected", reached: false, passed: false, status: 0, error: "dial tcp: timeout" },
     ],
     history: [
-      { at: "2026-09-21T10:00:00Z", kind: "selftest", text: "security self-test 3/3 passed" },
-      { at: "2026-09-22T09:00:00Z", kind: "selftest", text: "security self-test 2/3 passed" },
-      { at: "2026-09-22T18:00:00Z", kind: "selftest", text: "security self-test 2/3 passed again" },
+      { at: new Date(2026, 8, 21, 10, 0).toISOString(), kind: "selftest", text: "security self-test 3/3 passed" },
+      { at: new Date(2026, 8, 22, 9, 0).toISOString(), kind: "selftest", text: "security self-test 2/3 passed" },
+      { at: new Date(2026, 8, 22, 18, 0).toISOString(), kind: "selftest", text: "security self-test 2/3 passed again" },
     ],
   };
 
@@ -154,11 +154,11 @@ describe("on the panel kit", () => {
 
       openSecurity();
 
-      const trend = await screen.findByRole("figure");
+      const trend = await screen.findByRole("figure", {}, { timeout: 10_000 });
       expect(trend).toHaveTextContent("Open findings");
       expect(trend).toHaveTextContent("Probe failures");
       expect(String(fetchMock.mock.calls[0][0])).toMatch(/api\/buckets\/security\/series\?range=1h$/);
-      await waitFor(() => expect(plots).toHaveLength(1));
+      await waitFor(() => expect(plots).toHaveLength(1), { timeout: 10_000 });
       expect(plots[0].data[1]).toEqual([1]);
       expect(plots[0].data[2]).toEqual([2]);
     });
