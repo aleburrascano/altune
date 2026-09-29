@@ -1,4 +1,4 @@
-import { AppState } from 'react-native';
+import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { isAbort } from '@shared/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
@@ -86,7 +86,7 @@ export function flushDetailHealth(): void {
 function ensureFlushOnBackground(): void {
   if (listening) return;
   listening = true;
-  AppState.addEventListener('change', (status) => {
+  subscribeAppState((status) => {
     if (status === 'background') flushDetailHealth();
   });
 }

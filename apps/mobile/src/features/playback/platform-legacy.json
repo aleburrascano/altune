@@ -15,7 +15,6 @@
     "src/features/playback/loadNativeTrack.ts",
     "src/features/playback/nativeTrack.ts",
     "src/features/playback/nativeTrackSwap.ts",
-    "src/features/playback/playbackHealth.ts",
     "src/features/playback/playsThroughTrackPlayer.ts",
     "src/features/playback/registerPlaybackService.ts",
     "src/features/playback/seekControls.ts",
