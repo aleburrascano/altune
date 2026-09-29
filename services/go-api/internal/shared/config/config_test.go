@@ -1386,3 +1386,73 @@ func TestLoad_AcquisitionConfidenceFloor(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_ProductionDatabaseURLRequiresTLS(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     string
+		url     string
+		wantErr bool
+	}{
+		{"disable", "production", "postgres://u:sekret@db.example.com/x?sslmode=disable", true},
+		{"prefer", "production", "postgres://u:sekret@db.example.com/x?sslmode=prefer", true},
+		{"allow", "production", "postgres://u:sekret@db.example.com/x?sslmode=allow", true},
+		{"no sslmode", "production", "postgres://u:sekret@db.example.com/x", true},
+		{"require", "production", "postgres://u:sekret@db.example.com/x?sslmode=require", false},
+		{"verify-full", "production", "postgres://u:sekret@db.example.com/x?sslmode=verify-full", false},
+		{"loopback exempt", "production", "postgres://u:sekret@localhost/x?sslmode=disable", false},
+		{"development unchanged", "development", "postgres://u:sekret@db.example.com/x?sslmode=disable", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"ENV": tt.env, "DATABASE_URL": tt.url, "MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)"}))
+
+			_, err := Load()
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("expected load to succeed, got: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected %q to be rejected", tt.url)
+			}
+			if !strings.Contains(err.Error(), "DATABASE_URL") {
+				t.Errorf("error should name DATABASE_URL, got: %v", err)
+			}
+			if strings.Contains(err.Error(), "sekret") || strings.Contains(err.Error(), "db.example.com") {
+				t.Errorf("error leaks the URL: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_ProductionOCIEndpointRejectsPlaintext(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  bool
+	}{
+		{"http remote", "http://minio.example.com", true},
+		{"http upper-case", "HTTP://minio.example.com", true},
+		{"http loopback", "http://localhost:9000", false},
+		{"bare host", "minio.example.com", false},
+		{"https", "https://minio.example.com", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"ENV": "production", "OCI_S3_ENDPOINT": tt.endpoint, "MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)"}))
+
+			_, err := Load()
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("expected load to succeed, got: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "OCI_S3_ENDPOINT") {
+				t.Fatalf("expected error naming OCI_S3_ENDPOINT, got: %v", err)
+			}
+		})
+	}
+}

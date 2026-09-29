@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (c *Config) validate() error {
@@ -32,7 +33,49 @@ func (c *Config) validate() error {
 	if err := c.validateAudioKeyPrefix(); err != nil {
 		return err
 	}
+	if err := c.validateTransportSecurity(); err != nil {
+		return err
+	}
 	return c.validateRedis()
+}
+
+func (c *Config) validateTransportSecurity() error {
+	if !strings.EqualFold(strings.TrimSpace(c.Env), "production") {
+		return nil
+	}
+	if err := validateDatabaseTLS(c.DatabaseURL); err != nil {
+		return err
+	}
+	return validateObjectStorageEndpoint(c.OCIS3Endpoint)
+}
+
+func validateDatabaseTLS(databaseURL string) error {
+	if databaseURL == "" {
+		return nil
+	}
+	pgCfg, err := pgconn.ParseConfig(databaseURL)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL is malformed: %w", err)
+	}
+	if isLoopbackHost(pgCfg.Host) {
+		return nil
+	}
+	if pgCfg.TLSConfig == nil {
+		return errors.New("DATABASE_URL must require TLS when ENV=production (use sslmode=require, verify-ca or verify-full)")
+	}
+	for _, fb := range pgCfg.Fallbacks {
+		if fb.TLSConfig == nil {
+			return errors.New("DATABASE_URL must not fall back to plaintext when ENV=production (use sslmode=require, verify-ca or verify-full)")
+		}
+	}
+	return nil
+}
+
+func validateObjectStorageEndpoint(endpoint string) error {
+	if !strings.HasPrefix(strings.ToLower(endpoint), "http://") {
+		return nil
+	}
+	return validateSecureURL("OCI_S3_ENDPOINT", endpoint)
 }
 
 var audioKeyPrefixPattern = regexp.MustCompile(`^[a-z0-9-]+/$`)
