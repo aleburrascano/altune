@@ -110,6 +110,7 @@ afterEach(() => {
   RN.Platform.OS = 'ios';
   installWorkingLocalStorage();
   jest.resetModules();
+  remockCreateClient();
 });
 
 describe('secureStoreAdapter — persistence round-trip', () => {

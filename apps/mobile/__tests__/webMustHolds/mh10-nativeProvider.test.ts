@@ -34,6 +34,10 @@ function selectedProviderName(os: string, module = '@features/playback/hooks/Pla
   });
 }
 
+afterEach(() => {
+  jest.dontMock('@shared/playback/isExpoGo');
+});
+
 describe('mh10: the playback provider and session store each platform selects', () => {
   it.each(['ios', 'android'])('selects the track-player provider on %s', (os) => {
     expect(selectedProviderName(os)).toBe('TrackPlayerPlaybackProvider');

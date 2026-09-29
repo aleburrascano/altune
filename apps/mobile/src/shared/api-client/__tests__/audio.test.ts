@@ -194,11 +194,19 @@ describe('recoverAudio', () => {
 });
 
 describe('fetchAudioUrls', () => {
+  it('starts with the prefetch switch on before any server reply', () => {
+    jest.isolateModules(() => {
+      expect(require('../audio').isAudioPrefetchEnabled()).toBe(true);
+    });
+  });
+
   it('tracks the server prefetch kill switch, ignoring a missing or non-boolean flag', async () => {
     withSession();
     const replyWith = (extra: Record<string, unknown>) =>
       __http.replyOnce('POST /v1/audio-urls', { status: 200, json: { urls: [], ...extra } });
 
+    replyWith({ prefetch_enabled: true });
+    await fetchAudioUrls(['t1']);
     expect(isAudioPrefetchEnabled()).toBe(true);
     replyWith({ prefetch_enabled: false });
     await fetchAudioUrls(['t1']);

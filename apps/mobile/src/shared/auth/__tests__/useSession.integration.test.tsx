@@ -44,6 +44,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
 
 type AuthCallback = (event: string, session: Session | null) => void;
 
@@ -469,7 +470,7 @@ describe('acquisition and telemetry state across an account switch', () => {
     seedFile(uri: string, c: string): void;
     readFile(uri: string): string | undefined;
   } {
-    return (require('expo-file-system') as { __fs: never }).__fs;
+    return outboxFs;
   }
 
   beforeEach(() => {

@@ -7,6 +7,7 @@ import { asTrackId } from '@shared/api-client/ids';
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
 let mockOfflineDownloadsSupported = true;
+const mockPinnedStoreDouble: Record<string, unknown> = {};
 jest.mock('@shared/offline/offlineSupport', () => ({
   get offlineDownloadsSupported() {
     return mockOfflineDownloadsSupported;
@@ -38,8 +39,13 @@ afterEach(() => {
 
 function withOfflineSupport<T>(offlineDownloadsSupported: boolean, load: () => T): T {
   let loaded: T | undefined;
+  mockOfflineDownloadsSupported = offlineDownloadsSupported;
   jest.isolateModules(() => {
-    jest.doMock('@shared/offline/offlineSupport', () => ({ offlineDownloadsSupported }));
+    jest.doMock('@shared/offline/offlineSupport', () => ({
+      get offlineDownloadsSupported() {
+        return mockOfflineDownloadsSupported;
+      },
+    }));
     loaded = load();
   });
   return loaded as T;
@@ -96,7 +102,8 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
   function claimForSignedInUser(offlineDownloadsSupported: boolean): jest.Mock {
     return withOfflineSupport(offlineDownloadsSupported, () => {
       const claimPinnedDownloads = jest.fn();
-      jest.doMock('@shared/offline/pinnedStore', () => ({ claimPinnedDownloads }));
+      Object.assign(mockPinnedStoreDouble, { claimPinnedDownloads });
+      jest.doMock('@shared/offline/pinnedStore', () => mockPinnedStoreDouble);
       jest.doMock('@shared/telemetry/outbox', () => ({ setOutboxOwner: jest.fn() }));
       const handlers: Array<(userId: string | null) => void> = [];
       jest.doMock('@shared/session/signOutCleanup', () => ({
@@ -158,10 +165,11 @@ describe('mh09: the reconcile bridge does nothing on web', () => {
 
   beforeAll(() => {
     reconcile = jest.fn();
-    jest.doMock('@shared/offline/pinnedStore', () => ({
+    Object.assign(mockPinnedStoreDouble, {
       usePinnedStore: (selector: (s: { reconcile: () => void }) => unknown) =>
         selector({ reconcile }),
-    }));
+    });
+    jest.doMock('@shared/offline/pinnedStore', () => mockPinnedStoreDouble);
     OfflineReconcileBridge =
       require('@shared/offline/OfflineReconcileBridge').OfflineReconcileBridge;
   });

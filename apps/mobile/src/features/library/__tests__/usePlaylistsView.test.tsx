@@ -71,6 +71,7 @@ function showsPlaylistCount(count: number): Promise<void> {
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   mockGetPlaylists.mockClear();
+  mockGetPlaylists.mockImplementation(servePage);
   servedPlaylistCounts.length = 0;
 });
 
