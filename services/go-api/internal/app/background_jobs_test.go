@@ -261,3 +261,119 @@ func TestBackgroundChartCallsAreCounted(t *testing.T) {
 		t.Errorf("provider counters moved by %d over %d chart calls, want one count per call", counted, rt.roundTrips())
 	}
 }
+
+type failingLabelStore struct{ ran chan struct{} }
+
+func (f failingLabelStore) BehavioralLabels(context.Context, time.Time) ([]discoveryPorts.BehavioralLabel, error) {
+	select {
+	case f.ran <- struct{}{}:
+	default:
+	}
+	return nil, errors.New("boom")
+}
+
+type failingPruner struct {
+	ran                    chan struct{}
+	discographyErr, evtErr error
+}
+
+func (f failingPruner) PruneDiscographyObserved(context.Context, time.Time) (int64, error) {
+	select {
+	case f.ran <- struct{}{}:
+	default:
+	}
+	return 0, f.discographyErr
+}
+
+func (f failingPruner) PruneEvents(context.Context, time.Time) (int64, error) {
+	return 0, f.evtErr
+}
+
+func runStartedJob(t *testing.T, a *App, ran chan struct{}, register func(context.Context)) string {
+	t.Helper()
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(restore)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	register(ctx)
+	for _, job := range a.backgroundStarts {
+		job.start(ctx)
+	}
+	<-ran
+	cancel()
+	a.wg.Wait()
+	return buf.String()
+}
+
+func TestStartCorpusRefresh_LogsTheOldTextAndCountsAFailure(t *testing.T) {
+	a := &App{cfg: &config.Config{BehavioralCorpusPath: "/tmp/corpus.json"}}
+	ran := make(chan struct{}, 1)
+
+	logged := runStartedJob(t, a, ran, func(ctx context.Context) {
+		a.startCorpusRefresh(ctx, failingLabelStore{ran: ran})
+	})
+
+	for _, want := range []string{
+		`level=INFO msg="behavioral corpus refresh started" path=/tmp/corpus.json` + "\n",
+		`level=WARN msg="behavioral corpus materialize failed" error="build behavioral corpus: boom"` + "\n",
+	} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("want %q in\n%s", want, logged)
+		}
+	}
+	if a.job(jobBehavioralCorpusRefresh).failures.Load() == 0 {
+		t.Error("a failing corpus refresh did not count toward its failure signal")
+	}
+}
+
+func TestStartDiscographyPrune_LogsTheOldTextOnEachFailurePath(t *testing.T) {
+	cases := []struct {
+		name       string
+		pruner     func(chan struct{}) failingPruner
+		wantFailed string
+		notWant    string
+	}{
+		{
+			name: "discography prune fails",
+			pruner: func(ran chan struct{}) failingPruner {
+				return failingPruner{ran: ran, discographyErr: errors.New("boom")}
+			},
+			wantFailed: `level=WARN msg="discography event prune failed" error=boom` + "\n",
+			notWant:    "discovery event retention prune failed",
+		},
+		{
+			name:       "event prune fails",
+			pruner:     func(ran chan struct{}) failingPruner { return failingPruner{ran: ran, evtErr: errors.New("boom")} },
+			wantFailed: `level=WARN msg="discovery event retention prune failed" error=boom` + "\n",
+			notWant:    "discography event prune failed",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &App{}
+			ran := make(chan struct{}, 1)
+
+			logged := runStartedJob(t, a, ran, func(ctx context.Context) {
+				a.startDiscographyPrune(ctx, tc.pruner(ran))
+			})
+
+			started := `level=INFO msg="discography event prune started" interval=` + discographyPruneInterval.String() + "\n"
+			if !strings.Contains(logged, started) {
+				t.Errorf("want %q in\n%s", started, logged)
+			}
+			if !strings.Contains(logged, tc.wantFailed) {
+				t.Errorf("want %q in\n%s", tc.wantFailed, logged)
+			}
+			if strings.Contains(logged, tc.notWant) {
+				t.Errorf("unexpected %q in\n%s", tc.notWant, logged)
+			}
+			if a.job(jobDiscographyEventPrune).failures.Load() == 0 {
+				t.Error("a failing prune did not count toward its failure signal")
+			}
+		})
+	}
+}

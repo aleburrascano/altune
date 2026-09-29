@@ -27,13 +27,23 @@ func (a *App) startSimpleJob(
 	run func(context.Context) error,
 	startedAttrs ...any,
 ) {
-	a.startTicker(ctx, name, interval, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, name, interval, func(ctx context.Context) error {
 		if err := run(ctx); err != nil {
 			slog.WarnContext(ctx, string(name)+" failed", "error", err)
 			return err
 		}
 		return nil
-	})
+	}, startedAttrs...)
+}
+
+func (a *App) startLoggedJob(
+	ctx context.Context,
+	name jobName,
+	interval time.Duration,
+	run func(context.Context) error,
+	startedAttrs ...any,
+) {
+	a.startTicker(ctx, name, interval, run)
 	slog.Info(string(name)+" started", startedAttrs...)
 }
 
@@ -113,7 +123,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	a.startTicker(ctx, jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
@@ -121,8 +131,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 		}
 		slog.InfoContext(ctx, "behavioral corpus materialized", "path", a.cfg.BehavioralCorpusPath)
 		return nil
-	})
-	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
+	}, "path", a.cfg.BehavioralCorpusPath)
 }
 
 const discographyPruneInterval = 24 * time.Hour
@@ -133,7 +142,7 @@ type discoveryEventRetentionPruner interface {
 }
 
 func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRetentionPruner) {
-	a.startTicker(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
 		now := time.Now().UTC()
 		discographyPruned, err := pruner.PruneDiscographyObserved(ctx, now)
 		if err != nil {
@@ -150,8 +159,7 @@ func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRe
 				"discography_rows", discographyPruned, "other_rows", otherPruned)
 		}
 		return nil
-	})
-	slog.Info("discography event prune started", "interval", discographyPruneInterval.String())
+	}, "interval", discographyPruneInterval.String())
 }
 
 func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discoveryPorts.VocabularyStore) {
