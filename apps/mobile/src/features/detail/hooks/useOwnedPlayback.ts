@@ -4,7 +4,7 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
 import { trackExtras } from '../extras-accessors';
 import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
-import { ownedRetryTrackId } from '../save-control-state';
+import { ownedRetryTrackId, saveControlInteractive, saveControlState } from '../save-control-state';
 import { toCreateTrackRequest } from '../save-cache';
 import { ownedFromExtras, resolveOwnedTrackAtActionTime, type OwnedTrack } from './useOwnedTrack';
 import { useRetryTrack } from './useRetryTrack';
@@ -45,16 +45,18 @@ export function useOwnedPlayback(
     ownedFromExtras(trackExtras(track.extras));
 
   const onQuickSave = (track: DiscoveryResult): void => {
+    const enriched = context.enrich(track);
     const resolved = resolveOwnedTrackAtActionTime(ownedFor(track), {
-      title: track.title,
-      artist: track.subtitle,
+      title: enriched.title,
+      artist: enriched.subtitle,
     });
+    if (!saveControlInteractive(saveControlState(resolved))) return;
     const retryId = ownedRetryTrackId(resolved);
     if (retryId !== null) {
       retry.mutate(retryId);
       return;
     }
-    save.mutate(toCreateTrackRequest(context.enrich(track)));
+    save.mutate(toCreateTrackRequest(enriched));
   };
 
   return {

@@ -12,6 +12,8 @@ import {
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
 
+import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { useOwnedPlayback, type OwnedPlaybackContext } from '../../hooks/useOwnedPlayback';
 import { useSaveTrack } from '../../hooks/useSaveTrack';
 import {
   useResolvedOwnedTrack,
@@ -30,6 +32,9 @@ const { __http } = require('../../../../../jest/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
+}));
+jest.mock('@shared/playback/useQueuePlayback', () => ({
+  useQueuePlayback: () => ({ playFromList: jest.fn(), shuffleFromList: jest.fn() }),
 }));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
@@ -54,15 +59,35 @@ function request(): CreateTrackRequest {
   };
 }
 
+const quickSaveContext: OwnedPlaybackContext = {
+  title: null,
+  image: null,
+  enrich: (track) => track,
+  retryEntryPoint: 'album_row',
+};
+
+function quickSaveTrack(): DiscoveryResult {
+  return {
+    kind: 'track',
+    title: TITLE,
+    subtitle: ARTIST,
+    image_url: null,
+    confidence: 'high',
+    sources: [],
+    extras: {},
+  };
+}
+
 function QuickSaveRow(): React.ReactElement {
   const save = useSaveTrack();
+  const { onQuickSave } = useOwnedPlayback([], quickSaveContext, save);
   return (
     <TrackSaveControl
       testID="quick-save"
       owned={null}
       title={TITLE}
       artist={ARTIST}
-      onPress={() => save.mutate(request())}
+      onPress={() => onQuickSave(quickSaveTrack())}
     />
   );
 }
@@ -357,5 +382,32 @@ describe('TrackSaveControl tap guard', () => {
 
     expect(onPress).not.toHaveBeenCalled();
     expect(screen.getByLabelText(`${ROW_TITLE} in library`)).toBeTruthy();
+  });
+});
+
+describe('TrackSaveControl after a fast-failing retry', () => {
+  it('lets a failed track be pressed again once a retry patched pending then failed in one act', () => {
+    const trackId = 'failed-again' as TrackId;
+    const failed = { acquisitionStatus: 'failed' as const, failureMessage: 'boom' };
+    patchTrackStatus(trackId, failed);
+    const onPress = jest.fn();
+    render(
+      <TrackSaveControl
+        testID="retry-row"
+        owned={{ trackId, ...failed }}
+        title={TITLE}
+        artist={ARTIST}
+        onPress={onPress}
+      />,
+    );
+
+    fireEvent.press(screen.getByTestId('retry-row'), pressEvent);
+    act(() => {
+      patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
+      patchTrackStatus(trackId, failed);
+    });
+    fireEvent.press(screen.getByTestId('retry-row'), pressEvent);
+
+    expect(onPress).toHaveBeenCalledTimes(2);
   });
 });

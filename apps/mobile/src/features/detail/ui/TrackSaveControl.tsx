@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { radius, useTheme } from '@shared/ui/theme';
@@ -39,18 +39,12 @@ export function TrackSaveControl({
   const effective: SaveControlState = savingInBatch && ownState === 'add' ? 'saving' : ownState;
   const interactive = !savingInBatch && saveControlInteractive(effective);
 
-  const inFlight = useRef(false);
-  useEffect(() => {
-    inFlight.current = false;
-  }, [effective]);
-
   return (
     <Pressable
       testID={testID}
       onPress={(e) => {
         e.stopPropagation();
-        if (!interactive || inFlight.current) return;
-        inFlight.current = true;
+        if (!interactive) return;
         onPress();
       }}
       disabled={!interactive}
