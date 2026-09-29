@@ -526,3 +526,26 @@ func TestFanOutConsensus_PanickingCollectIsContained(t *testing.T) {
 		t.Errorf("panicking provider should be absent, got %v", out["boom"])
 	}
 }
+
+func TestConsensus_PartialProviderResultKeepsAlbumsWithoutBreakerFailure(t *testing.T) {
+	var calls atomic.Int32
+	partial := ConsensusProvider{Name: "musicbrainz", Provider: domain.ProviderMusicBrainz, Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
+		calls.Add(1)
+		albums := []domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "Kept", Subtitle: "Artist"}}
+		return albums, &domain.PartialResultError{Page: 2, Err: statusErr(503)}
+	}}
+	breaker := NewCircuitBreaker()
+	svc := NewConsensusService([]ConsensusProvider{partial}, WithConsensusCircuitBreaker(breaker))
+
+	var got []ConsensusAlbum
+	for range failureThreshold + 1 {
+		got = svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+	}
+
+	if len(got) != 1 || got[0].Album.Title != "Kept" {
+		t.Errorf("results = %+v, want the partial MusicBrainz album kept", got)
+	}
+	if want := int32(failureThreshold + 1); calls.Load() != want {
+		t.Errorf("provider called %d times, want %d: a partial result must not open the breaker", calls.Load(), want)
+	}
+}

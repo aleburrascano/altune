@@ -715,3 +715,19 @@ func TestFindRelated_PanicInOneLookupKeepsTheOthers(t *testing.T) {
 		t.Errorf("groups = %+v, want only the artist_albums group", got)
 	}
 }
+
+func TestFindRelated_PartialArtistAlbumsStillYieldsGroup(t *testing.T) {
+	artistProvider := &fakeArtistProvider{
+		albums: []domain.SearchResult{albumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil)},
+		err:    &domain.PartialResultError{Page: 2, Err: errors.New("deezer 500")},
+	}
+	svc := NewFindRelatedService(nil, nil, artistProvider)
+
+	got := svc.Execute(context.Background(), newUser(), []domain.SearchResult{
+		artistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+	})
+
+	if len(got) != 1 || got[0].Relationship != "artist_albums" || len(got[0].Items) != 1 {
+		t.Errorf("groups = %+v, want one artist_albums group with the partial album", got)
+	}
+}

@@ -104,6 +104,9 @@ func (s *FindRelatedService) dispatchAlbumTracks(fan *relatedFanOut, result doma
 	}
 	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
 		tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
+		if isPartialResult(err) {
+			return truncateRelated(tracks), nil
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -128,6 +131,9 @@ func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result dom
 	}
 	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
 		albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
+		if isPartialResult(err) {
+			return truncateRelated(albums), nil
+		}
 		if err != nil {
 			return nil, err
 		}

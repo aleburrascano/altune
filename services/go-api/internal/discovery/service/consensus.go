@@ -200,7 +200,11 @@ func (s *ConsensusService) fetchProvider(ctx, callerCtx context.Context, p Conse
 	defer call.failPanicked(&settled)
 	albums, err := p.Fetcher(ctx, artistName)
 	settled = true
-	call.settle(callerCtx, budgetOutcome(ctx, err))
+	call.settle(callerCtx, budgetOutcome(ctx, breakerOutcome(err)))
+	if isPartialResult(err) {
+		logProviderFailure(callerCtx, p.Name, err)
+		return providerFetch{albums: albums}
+	}
 	if err != nil {
 		logProviderFailure(callerCtx, p.Name, err)
 		return providerFetch{}
