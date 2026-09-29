@@ -23,7 +23,12 @@ export type StoredDirectory = {
 
 export type FileStore = {
   openDirectory(name: string): StoredDirectory;
-  download(url: string, dest: StoredFile, signal: AbortSignal): Promise<string>;
+  download(
+    url: string,
+    dest: StoredFile,
+    signal: AbortSignal,
+    onProgress?: (progress: { bytesWritten: number; totalBytes: number }) => void,
+  ): Promise<string>;
   availableBytes(): number;
 };
 
@@ -59,15 +64,16 @@ function directoryHandle(dir: Directory): StoredDirectory {
   };
 }
 
+export { fileHandle };
+
 export const deviceFileStore: FileStore = {
   openDirectory: (name) => directoryHandle(new Directory(Paths.document, name)),
-  download: async (url, dest, signal) => {
-    const file = await File.downloadFileAsync(url, new File(dest.uri), {
+  download: (url, dest, signal, onProgress) =>
+    File.downloadFileAsync(url, new File(dest.uri), {
       idempotent: true,
       signal,
-    });
-    return file.uri;
-  },
+      ...(onProgress === undefined ? {} : { onProgress }),
+    }).then((file) => file.uri),
   availableBytes: () => Paths.availableDiskSpace,
 };
 

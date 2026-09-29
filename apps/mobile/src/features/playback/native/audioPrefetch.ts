@@ -6,6 +6,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { fetchAudioUrls, isAudioPrefetchEnabled } from '@shared/api-client/audio';
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
+import { deviceFileStore, fileHandle } from '@shared/files/fileStore';
 import {
   MAX_PREFETCH_FILE_BYTES,
   buildCacheFileName,
@@ -72,15 +73,12 @@ function boundedDownload(url: string, dest: File, controller: AbortController): 
     signal.addEventListener('abort', onAbort, { once: true });
     armStall();
 
-    File.downloadFileAsync(url, dest, {
-      idempotent: true,
-      signal,
-      onProgress: ({ bytesWritten, totalBytes }) => {
+    deviceFileStore
+      .download(url, fileHandle(dest), signal, ({ bytesWritten, totalBytes }) => {
         if (Math.max(bytesWritten, totalBytes) > MAX_PREFETCH_FILE_BYTES) abandon('oversized');
         else armStall();
-      },
-    })
-      .then(resolve, reject)
+      })
+      .then(() => resolve(dest), reject)
       .finally(() => {
         clearTimeout(stallTimer);
         signal.removeEventListener('abort', onAbort);

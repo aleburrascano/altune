@@ -72,16 +72,26 @@ test('running the real script exits 0 on the current src tree, one line per rule
   }
 });
 
-test('running the real script exits 1 and names MC-0 and the file when a debugger statement is added', () => {
+test('running the real script reports MC-1 at its 9 supabaseClient imports and no raw network', () => {
+  const { status, stdout } = runRatchetCli();
+
+  expect(status).toBe(0);
+  expect(stdout).toMatch(/^MC-1: 9 \/ baseline 9$/m);
+});
+
+test('running the real script exits 1 and names MC-1 and the file when a raw fetch is added', () => {
   const relativePath = path.join('src', '__consistency_ratchet_fixture__.ts');
   const fixturePath = path.join(mobileRoot, relativePath);
-  fs.writeFileSync(fixturePath, 'export function f() {\n  debugger;\n  return 1;\n}\n');
+  fs.writeFileSync(
+    fixturePath,
+    "export function f() {\n  return fetch('https://example.com');\n}\n",
+  );
 
   try {
     const { status, stdout } = runRatchetCli();
 
     expect(status).toBe(1);
-    expect(stdout).toContain('MC-0');
+    expect(stdout).toContain('MC-1');
     expect(stdout).toContain(relativePath);
   } finally {
     fs.rmSync(fixturePath, { force: true });

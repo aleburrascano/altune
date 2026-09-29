@@ -91,7 +91,7 @@ describe('bounded downloads', () => {
   }
 
   async function flushMicrotasks(): Promise<void> {
-    for (let i = 0; i < 20; i++) await Promise.resolve();
+    for (let i = 0; i < 50; i++) await Promise.resolve();
   }
 
   function stallForever(started: string[], signals: AbortSignal[] = []) {

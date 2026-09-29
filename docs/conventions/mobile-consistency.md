@@ -7,7 +7,7 @@ comply, old code only has to improve. See epic #2857.
 
 | ID | Rule | Why | Check | Baseline | Ticket |
 |---|---|---|---|---|---|
-| MC-1 | All network calls go through `apiFetch` (`shared/api-client`) | one place to add auth, retries and telemetry to every request | planned: `apps/mobile/eslint/consistency/mc-1-network.js` | n/a | #2861 |
+| MC-1 | All network calls go through `apiFetch` (`shared/api-client`) | one place to add auth, retries and telemetry to every request | `apps/mobile/eslint/consistency/mc-1-network.js`: no raw `fetch`/`XMLHttpRequest`/`EventSource`/`WebSocket`/`File.downloadFileAsync`/`axios` outside the transport seams; `@shared/auth/supabaseClient` imports baselined at 9 | n/a | #2861 |
 | MC-2 | One owning hook per mutating api-client function | prevents divergent retry and error handling for the same mutation | planned: `apps/mobile/eslint/consistency/mc-2-owning-hook.js` | n/a | #2866 |
 | MC-3 | Every mutation goes through `useAppMutation` and names its user action | every user action reaches the server as telemetry | planned: `apps/mobile/eslint/consistency/mc-3-app-mutation.js` | n/a | #2862 |
 | MC-4 | Every tappable element goes through a shared primitive with a required `action` name | tap telemetry and a11y stay consistent across features | planned: `apps/mobile/eslint/consistency/mc-4-tappable-action.js` | n/a | #2868, #2869 |

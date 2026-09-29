@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import { deviceFileStore, type FileStore, createFileStoreSlot } from '../fileStore';
 import { createMemoryFileStore } from './memoryFileStore';
 import { createWebFileStore, WebDownloadUnsupportedError } from '../webFileStore';
@@ -249,5 +251,29 @@ describe('the default file store', () => {
     const { selected, web } = storesOn('web');
 
     expect(selected).toBe(web);
+  });
+});
+
+describe('deviceFileStore download() progress', () => {
+  it('download() relays the platform progress events to the caller', async () => {
+    const download = jest
+      .spyOn(File, 'downloadFileAsync')
+      .mockImplementation(async (_url, dest, options) => {
+        options?.onProgress?.({ bytesWritten: 5, totalBytes: 10 });
+        return dest as File;
+      });
+    const dir = deviceFileStore.openDirectory('progress');
+    dir.create();
+    const seen: { bytesWritten: number; totalBytes: number }[] = [];
+
+    await deviceFileStore.download(
+      'https://cdn.example.com/t1.mp3',
+      dir.openFile('t1.mp3'),
+      new AbortController().signal,
+      (progress) => seen.push(progress),
+    );
+
+    expect(seen).toEqual([{ bytesWritten: 5, totalBytes: 10 }]);
+    download.mockRestore();
   });
 });
