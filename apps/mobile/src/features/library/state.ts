@@ -1,8 +1,6 @@
 import { ApiError, ContractError, NetworkError, isSessionFetchFailure } from '@shared/errors';
-import { asyncView } from '@shared/lib/async-view';
+import { asyncView, type AsyncView } from '@shared/lib/async-view';
 import { RETRY_TAIL } from '@shared/lib/describeError';
-
-type ScreenView = 'loading' | 'error' | 'empty' | 'list';
 
 export type LibraryFailure = 'network' | 'auth' | 'not-found' | 'server' | 'unknown';
 
@@ -20,21 +18,14 @@ export function failureTail(failure: LibraryFailure): string {
   return failure === 'auth' ? 'Sign in again, then retry.' : RETRY_TAIL;
 }
 
-type ScreenState = {
-  view: ScreenView;
-  failure: LibraryFailure | null;
-};
-
-export function _viewForState(state: {
+type LibrarySectionInput = {
   isLoading: boolean;
   error: unknown;
-  items: readonly unknown[];
-}): ScreenState {
-  const view = asyncView({
-    isLoading: state.isLoading,
-    isError: Boolean(state.error),
-    isEmpty: state.items.length === 0,
-  });
-  if (view === 'error') return { view, failure: classifyLibraryError(state.error) };
-  return { view: view === 'ready' ? 'list' : view, failure: null };
+  count: number;
+  showEmpty: boolean;
+};
+
+export function librarySection(input: LibrarySectionInput): AsyncView {
+  const { isLoading, error, count, showEmpty } = input;
+  return asyncView({ isLoading, isError: Boolean(error), isEmpty: count === 0 && showEmpty });
 }

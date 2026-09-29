@@ -2,32 +2,31 @@ import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { TrackResponse } from '@shared/api-client/types';
-import type { AsyncView } from '@shared/lib/async-view';
-import { describeError } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { Screen, useTheme } from '@shared/ui';
 import { AsyncSection } from '@shared/ui/AsyncSection';
-import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 
 import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
-import { useDeleteTrack } from '../hooks/useDeleteTrack';
-import { useDeleteTracks } from '../hooks/useDeleteTracks';
 import { useLibraryIsEmpty } from '../hooks/useLibraryIsEmpty';
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
+import { useLibraryTrackSelection } from '../hooks/useLibraryTrackSelection';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { useTrackSelection } from '../hooks/useTrackSelection';
-import { _viewForState } from '../state';
+import { librarySection } from '../state';
 import { LibraryChips } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
+import {
+  LibraryEmptyScreen,
+  LibraryErrorScreen,
+  LibrarySkeletonScreen,
+} from './LibraryStateScreens';
 import { SortControl } from './SortControl';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import type { LibraryChip } from '../activeView';
@@ -47,8 +46,6 @@ export function LibraryScreen(): ReactElement {
   const pl = usePlaylistActions();
   const search = useLibrarySearch();
   const navigation = useLibraryNavigation(router);
-  const deleteMutation = useDeleteTrack();
-  const deleteManyMutation = useDeleteTracks();
   const retryMutation = useRetryAcquisition('library_row');
   const playback = usePlayback();
   const queue = useQueuePlayback();
@@ -59,37 +56,7 @@ export function LibraryScreen(): ReactElement {
 
   const libraryIsEmpty = useLibraryIsEmpty();
 
-  const confirmRemoveTrack = (track: TrackResponse): void => {
-    confirmDestructive({
-      title: 'Remove from Library',
-      message: `Remove "${track.title}" from your library?`,
-      confirmLabel: 'Remove',
-      onConfirm: () => deleteMutation.mutate(track.id),
-    });
-  };
-
-  const trackSelection = useTrackSelection({
-    queue,
-    onViewDetails: navigation.navigateToTrack,
-    onAddTrackToPlaylist: (track) => pl.setAddToPlaylistTrack(track),
-    trackDanger: (track) => ({
-      label: 'Remove from Library',
-      onPress: () => confirmRemoveTrack(track),
-    }),
-    selectionDanger: {
-      label: 'Remove',
-      onRemove: (ids, clear) =>
-        confirmDestructive({
-          title: 'Remove from Library',
-          message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from your library?`,
-          confirmLabel: 'Remove',
-          onConfirm: () => {
-            deleteManyMutation.mutate(ids);
-            clear();
-          },
-        }),
-    },
-  });
+  const trackSelection = useLibraryTrackSelection({ queue, navigation, pl });
 
   const { active, tracks, playlists } = useActiveLibraryView(chip, sortByChip, search.query, {
     pl,
@@ -106,55 +73,19 @@ export function LibraryScreen(): ReactElement {
 
   useAnnounceChange(search.hasQuery ? `${active.count} ${countLabel(active.count, 'result')}` : '');
 
-  const { view } = _viewForState({
+  const section = librarySection({
     isLoading: active.isLoading,
     error: active.error,
-    items: active.count === 0 ? [] : [active.count],
+    count: active.count,
+    showEmpty: !search.hasQuery && playlists.length === 0 && libraryIsEmpty,
   });
-
-  const { title, body } = describeError(active.error);
-  const showEmpty =
-    view === 'empty' && !search.hasQuery && playlists.length === 0 && libraryIsEmpty;
-  const section: AsyncView =
-    view === 'loading' ? 'loading' : view === 'error' ? 'error' : showEmpty ? 'empty' : 'ready';
 
   return (
     <AsyncSection
       view={section}
-      skeleton={() => (
-        <Screen>
-          <LibraryHeader />
-          <View testID="library-loading" style={styles.skeletonGrid}>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} width="47%" height={140} radius={8} />
-            ))}
-          </View>
-        </Screen>
-      )}
-      error={() => (
-        <Screen>
-          <LibraryHeader />
-          <View testID="library-error" style={styles.center}>
-            <Text variant="title">{title}</Text>
-            <Text variant="label" tone="secondary" style={styles.centerSub}>
-              {body}
-            </Text>
-            <Button testID="library-retry" label="Retry" onPress={active.onRetry} />
-          </View>
-        </Screen>
-      )}
-      empty={() => (
-        <Screen>
-          <LibraryHeader />
-          <View testID="library-empty" style={styles.center}>
-            <Text variant="title">Your library is empty</Text>
-            <Text variant="label" tone="secondary" style={styles.centerSub}>
-              Tracks you add will show up here.
-            </Text>
-            <Button label="Discover Music" onPress={() => router.push('/discover')} />
-          </View>
-        </Screen>
-      )}
+      skeleton={() => <LibrarySkeletonScreen />}
+      error={() => <LibraryErrorScreen error={active.error} onRetry={active.onRetry} />}
+      empty={() => <LibraryEmptyScreen onDiscover={() => router.push('/discover')} />}
     >
       <Screen>
         <LibraryHeader />
@@ -217,12 +148,4 @@ export function LibraryScreen(): ReactElement {
 
 const styles = StyleSheet.create({
   body: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
-  centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg, textAlign: 'center' },
-  skeletonGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    paddingTop: spacing.xl,
-  },
 });
