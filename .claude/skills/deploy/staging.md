@@ -11,7 +11,7 @@ Staging is its own Compose project (`staging`, `deploy/compose.staging.yml`) on 
 
 Keep these `.env.staging` keys pointed away from prod, so staging never writes there:
 
-- `FEEDBACK_ENABLED=false`, or a scratch `GITHUB_ISSUE_REPO` and token.
+- `FEEDBACK_ENABLED=false`, or `GITEA_ISSUE_REPO=aleburrascano/altune-staging-feedback` (private scratch Gitea repo) with its own token.
 - `BEHAVIORAL_CORPUS_PATH` empty.
 - `OCI_S3_*` with `AUDIO_KEY_PREFIX=staging/`: a key whose IAM policy only allows writes under `staging/` in prod's bucket (policy `altune-staging-s3-prefix`).
 - `MUSICBRAINZ_USER_AGENT`: a real staging contact.
