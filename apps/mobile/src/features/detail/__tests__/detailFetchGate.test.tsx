@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
@@ -16,6 +14,7 @@ import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
 import { useEnrichment } from '../hooks/useEnrichment';
 import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -37,16 +36,6 @@ const soundcloudTrack = {
   url: 'https://s.example/t',
 };
 
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
-function freshClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 function switchDetailFetches(enabled: boolean): void {
   act(() => applyKillSwitches({ detail_enrichment_enabled: enabled }));
 }
@@ -58,10 +47,7 @@ async function settle(): Promise<void> {
 }
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
   setKillSwitchFileStore(createMemoryFileStore());
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   __http.replyAll({
@@ -167,7 +153,9 @@ describe('detail fetches — remote kill switch', () => {
     async ({ useGatedHook, emptyResult }) => {
       switchDetailFetches(false);
 
-      const { result } = renderHook(useGatedHook, { wrapper: createWrapper(freshClient()) });
+      const { result } = renderHook(useGatedHook, {
+        wrapper: createWrapper(createTestQueryClient()),
+      });
       await settle();
 
       expect(__http.requests).toHaveLength(0);
@@ -179,7 +167,9 @@ describe('detail fetches — remote kill switch', () => {
     '$hook ignores a retry tapped while the switch is off',
     async ({ useRetryAffordance }) => {
       switchDetailFetches(false);
-      const { result } = renderHook(useRetryAffordance, { wrapper: createWrapper(freshClient()) });
+      const { result } = renderHook(useRetryAffordance, {
+        wrapper: createWrapper(createTestQueryClient()),
+      });
       await settle();
 
       act(() => result.current());
@@ -192,7 +182,7 @@ describe('detail fetches — remote kill switch', () => {
   it('fetches again when the switch is turned back on, without a remount', async () => {
     switchDetailFetches(false);
     renderHook(() => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }), {
-      wrapper: createWrapper(freshClient()),
+      wrapper: createWrapper(createTestQueryClient()),
     });
     await settle();
     expect(__http.requests).toHaveLength(0);
@@ -206,7 +196,7 @@ describe('detail fetches — remote kill switch', () => {
     act(() => applyKillSwitches({ sse_enabled: false, offline_downloads_enabled: false }));
 
     renderHook(() => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }), {
-      wrapper: createWrapper(freshClient()),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     await waitFor(() => expect(__http.countFor(ALBUM_TRACKS_PATH)).toBe(1));
@@ -226,7 +216,7 @@ describe('detail fetches — remote kill switch', () => {
     it('useResolveMissingSources sends no search while the switch is off, then does once it is on', async () => {
       switchDetailFetches(false);
       renderHook(() => useResolveMissingSources(unsourcedTrack), {
-        wrapper: createWrapper(freshClient()),
+        wrapper: createWrapper(createTestQueryClient()),
       });
       await settle();
       expect(__http.requests).toHaveLength(0);
@@ -239,7 +229,7 @@ describe('detail fetches — remote kill switch', () => {
     it('useLateralNav shows an unavailable message and sends no search while the switch is off', async () => {
       switchDetailFetches(false);
       const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(freshClient()),
+        wrapper: createWrapper(createTestQueryClient()),
       });
 
       await act(() => result.current.navigateTo('Radiohead', 'artist'));
@@ -252,7 +242,7 @@ describe('detail fetches — remote kill switch', () => {
     it('useLateralNav searches again once the switch is back on, without a remount', async () => {
       switchDetailFetches(false);
       const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(freshClient()),
+        wrapper: createWrapper(createTestQueryClient()),
       });
       switchDetailFetches(true);
 

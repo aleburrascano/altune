@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
@@ -9,6 +7,7 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys } from '@shared/lib/query-keys';
 
 import { useSaveTrack } from '../hooks/useSaveTrack';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 
@@ -40,13 +39,7 @@ describe('seeding download meta', () => {
   }
 
   function setup() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
-    return { wrapper: Wrapper };
+    return { wrapper: createWrapper(createTestQueryClient({ mutations: true })) };
   }
 
   beforeEach(() => {
@@ -120,14 +113,9 @@ describe('invalidating derived caches', () => {
   }
 
   function setup() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
+    const queryClient = createTestQueryClient({ mutations: true });
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
-    return { spy, wrapper: Wrapper };
+    return { spy, wrapper: createWrapper(queryClient) };
   }
 
   function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
@@ -176,16 +164,6 @@ describe('invalidating derived caches', () => {
 });
 
 describe('logging a failed save', () => {
-  function createWrapper(queryClient: QueryClient) {
-    return function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    };
-  }
-
-  function freshClient() {
-    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  }
-
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -202,7 +180,7 @@ describe('logging a failed save', () => {
       mockCreateTrack.mockRejectedValue(new Error('502 bad gateway'));
 
       const { result } = renderHook(() => useSaveTrack(), {
-        wrapper: createWrapper(freshClient()),
+        wrapper: createWrapper(createTestQueryClient()),
       });
 
       await act(async () => {

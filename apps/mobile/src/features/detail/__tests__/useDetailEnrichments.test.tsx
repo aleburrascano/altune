@@ -1,27 +1,16 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
-
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
-function freshClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
 
 function artistResult(): DiscoveryResult {
   return {
@@ -63,10 +52,7 @@ const emptyLastFm = {
 let warnSpy: jest.SpyInstance;
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
   __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -78,7 +64,7 @@ afterEach(() => {
 describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one', () => {
   it('flags the Last.fm error while still leaving its data null, distinguishing it from no content', async () => {
     __http.fail('GET /v1/discovery/enrichment/lastfm');
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
       wrapper: createWrapper(queryClient),
@@ -93,7 +79,7 @@ describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one
       status: 200,
       json: emptyLastFm,
     });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
       wrapper: createWrapper(queryClient),
@@ -107,7 +93,7 @@ describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one
 describe('useDetailEnrichments: naming the entity and provider behind a failed fetch', () => {
   it('logs the provider, the entity and the reason when Last.fm cannot be reached', async () => {
     __http.fail('GET /v1/discovery/enrichment/lastfm');
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
       wrapper: createWrapper(queryClient),
@@ -131,7 +117,7 @@ describe('useDetailEnrichments: naming the entity and provider behind a failed f
       status: 200,
       json: emptyLastFm,
     });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
       wrapper: createWrapper(queryClient),

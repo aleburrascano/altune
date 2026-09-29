@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
@@ -7,6 +5,7 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useRetryTrack } from '../hooks/useRetryTrack';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 const mockEnqueueCritical = jest.fn();
@@ -17,12 +16,11 @@ jest.mock('@shared/api-client/tracks', () => ({
   retryAcquisition: (trackId: unknown) => mockRetryAcquisition(trackId),
 }));
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-}
+let wrapper: ReturnType<typeof createWrapper>;
+
+beforeEach(() => {
+  wrapper = createWrapper(createTestQueryClient({ mutations: true }));
+});
 
 const TRACK_ID = asTrackId('server-1');
 

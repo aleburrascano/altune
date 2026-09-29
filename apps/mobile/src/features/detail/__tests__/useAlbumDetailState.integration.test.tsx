@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -7,6 +5,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -88,13 +87,8 @@ function renderAlbum(tracks: readonly DiscoveryResult[]) {
     failure: null,
     refetch: jest.fn(),
   });
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   return renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'), {
-    wrapper: ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
+    wrapper: createWrapper(createTestQueryClient({ mutations: true })),
   });
 }
 
@@ -116,10 +110,7 @@ function keysFor(title: string): string[] {
 }
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
   __http.reply('POST /v1/tracks', { status: 201, json: savedTrack() });
   __http.reply('POST /v1/discovery/events', { status: 202 });
   mockUseAlbumTracks.mockReset();

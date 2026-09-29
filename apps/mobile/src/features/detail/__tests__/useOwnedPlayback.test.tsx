@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -8,6 +6,7 @@ import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/track
 
 import { useOwnedPlayback, type OwnedPlaybackContext } from '../hooks/useOwnedPlayback';
 import type { SaveTrack } from '../hooks/useSaveTrack';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 jest.mock('@shared/api-client/tracks', () => ({
@@ -17,12 +16,11 @@ jest.mock('@shared/playback/useQueuePlayback', () => ({
   useQueuePlayback: () => ({ playFromList: jest.fn(), shuffleFromList: jest.fn() }),
 }));
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-}
+let wrapper: ReturnType<typeof createWrapper>;
+
+beforeEach(() => {
+  wrapper = createWrapper(createTestQueryClient({ mutations: true }));
+});
 
 const context: OwnedPlaybackContext = {
   title: null,

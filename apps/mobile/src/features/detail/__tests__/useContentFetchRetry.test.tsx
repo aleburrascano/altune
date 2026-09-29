@@ -1,5 +1,4 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { isRetryable } from '@shared/api-client';
@@ -9,6 +8,7 @@ import type { DiscoverySource } from '@shared/api-client/discovery';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useArtistContent } from '../hooks/useArtistContent';
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
+import { createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -22,12 +22,6 @@ function appQueryClient() {
       queries: { retry: (failureCount, error) => isRetryable(error) && failureCount < 5 },
     },
   });
-}
-
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
 }
 
 const ALBUM_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
@@ -86,10 +80,7 @@ let warn: jest.SpyInstance;
 beforeEach(() => {
   jest.useFakeTimers();
   warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
 });
 
 afterEach(() => {

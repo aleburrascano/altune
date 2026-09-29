@@ -1,11 +1,11 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -18,7 +18,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
     auth: {
       getSession: jest
         .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
+        .mockResolvedValue(require('./support/queryHarness').mockSupabaseSession()),
     },
   },
 }));
@@ -108,25 +108,21 @@ warmUpFirstRender(async () => {
     },
   });
 
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   render(
-    <QueryClientProvider client={queryClient}>
-      <AlbumDetailBody
-        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
-        result={{
-          kind: 'album',
-          title: 'Rumours',
-          subtitle: 'Fleetwood Mac',
-          image_url: null,
-          confidence: 'high',
-          sources: [],
-          extras: {},
-        }}
-        detailRoute="/library/detail"
-      />
-    </QueryClientProvider>,
+    <AlbumDetailBody
+      chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+      result={{
+        kind: 'album',
+        title: 'Rumours',
+        subtitle: 'Fleetwood Mac',
+        image_url: null,
+        confidence: 'high',
+        sources: [],
+        extras: {},
+      }}
+      detailRoute="/library/detail"
+    />,
+    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
   );
 
   await screen.findByTestId('detail-more-from-album');
@@ -199,17 +195,13 @@ describe('a library album\'s "More from this album" section', () => {
   };
 
   function renderBody() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
     return render(
-      <QueryClientProvider client={queryClient}>
-        <AlbumDetailBody
-          chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
-          result={libraryAlbum()}
-          detailRoute="/library/detail"
-        />
-      </QueryClientProvider>,
+      <AlbumDetailBody
+        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+        result={libraryAlbum()}
+        detailRoute="/library/detail"
+      />,
+      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
     );
   }
 
@@ -357,17 +349,13 @@ describe('the tracklist error', () => {
   }
 
   function renderBody() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
     return render(
-      <QueryClientProvider client={queryClient}>
-        <AlbumDetailBody
-          chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
-          result={sourcedAlbum()}
-          detailRoute="/library/detail"
-        />
-      </QueryClientProvider>,
+      <AlbumDetailBody
+        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+        result={sourcedAlbum()}
+        detailRoute="/library/detail"
+      />,
+      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
     );
   }
 
@@ -458,17 +446,13 @@ describe('AlbumDetailBody: the Save N pill', () => {
   }
 
   function renderBody() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
     return render(
-      <QueryClientProvider client={queryClient}>
-        <AlbumDetailBody
-          chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
-          result={sourcedAlbum()}
-          detailRoute="/library/detail"
-        />
-      </QueryClientProvider>,
+      <AlbumDetailBody
+        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+        result={sourcedAlbum()}
+        detailRoute="/library/detail"
+      />,
+      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
     );
   }
 
@@ -589,18 +573,14 @@ describe('AlbumDetailBody: the facts row', () => {
   });
 
   it('shows track count, runtime and the released year from mbYear', async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
     render(
-      <QueryClientProvider client={queryClient}>
-        <AlbumDetailBody
-          chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
-          result={sourcedAlbum()}
-          detailRoute="/library/detail"
-          mbYear={1977}
-        />
-      </QueryClientProvider>,
+      <AlbumDetailBody
+        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+        result={sourcedAlbum()}
+        detailRoute="/library/detail"
+        mbYear={1977}
+      />,
+      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
     );
 
     await screen.findByTestId('detail-tracklist');

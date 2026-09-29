@@ -1,9 +1,8 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useLateralNav } from '../hooks/useLateralNav';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockResolveEntityQuery = jest.fn();
 jest.mock('../resolve-entity-query', () => ({
@@ -16,16 +15,6 @@ jest.mock('expo-router', () => ({
 }));
 
 describe('logging a failed lateral navigation', () => {
-  function createWrapper(queryClient: QueryClient) {
-    return function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    };
-  }
-
-  function freshClient() {
-    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  }
-
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -45,7 +34,7 @@ describe('logging a failed lateral navigation', () => {
       });
 
       const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(freshClient()),
+        wrapper: createWrapper(createTestQueryClient()),
       });
 
       await act(async () => {
@@ -70,7 +59,7 @@ describe('logging a failed lateral navigation', () => {
       });
 
       const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(freshClient()),
+        wrapper: createWrapper(createTestQueryClient()),
       });
 
       await act(async () => {
@@ -84,16 +73,6 @@ describe('logging a failed lateral navigation', () => {
 });
 
 describe('useLateralNav navigateTo on a hit', () => {
-  function createWrapper(queryClient: QueryClient) {
-    return function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    };
-  }
-
-  function freshClient() {
-    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  }
-
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -107,7 +86,7 @@ describe('useLateralNav navigateTo on a hit', () => {
     });
 
     const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-      wrapper: createWrapper(freshClient()),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     await act(async () => {

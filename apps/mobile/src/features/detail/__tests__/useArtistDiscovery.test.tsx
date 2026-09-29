@@ -1,8 +1,7 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockResolveEntityQuery = jest.fn();
 jest.mock('../resolve-entity-query', () => ({
@@ -10,16 +9,6 @@ jest.mock('../resolve-entity-query', () => ({
 }));
 
 describe('logging a failed search', () => {
-  function createWrapper(queryClient: QueryClient) {
-    return function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    };
-  }
-
-  function freshClient() {
-    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  }
-
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -40,7 +29,7 @@ describe('logging a failed search', () => {
 
       const { result } = renderHook(
         () => useArtistDiscovery({ artistName: 'Boards of Canada', enabled: true }),
-        { wrapper: createWrapper(freshClient()) },
+        { wrapper: createWrapper(createTestQueryClient()) },
       );
 
       await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });

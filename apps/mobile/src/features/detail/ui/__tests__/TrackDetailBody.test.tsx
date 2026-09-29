@@ -1,5 +1,4 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -10,6 +9,11 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import type { LateralNavHandle } from '../../hooks/useTrackDetailActions';
 import { TrackDetailBody } from '../TrackDetailBody';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
+import {
+  createTestQueryClient,
+  createWrapper,
+  mockSupabaseSession,
+} from '../../__tests__/support/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
 
@@ -63,18 +67,14 @@ const lateralNav: LateralNavHandle = {
 };
 
 function renderDetail(): void {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   render(
-    <QueryClientProvider client={queryClient}>
-      <TrackDetailBody
-        chrome={{ title: TITLE, artworkUrl: null, onBack: () => {} }}
-        result={trackResult()}
-        lateralNav={lateralNav}
-        detailRoute="/discover/detail"
-      />
-    </QueryClientProvider>,
+    <TrackDetailBody
+      chrome={{ title: TITLE, artworkUrl: null, onBack: () => {} }}
+      result={trackResult()}
+      lateralNav={lateralNav}
+      detailRoute="/discover/detail"
+    />,
+    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -95,10 +95,7 @@ function saveIsInteractive(): boolean {
 let warnSpy: jest.SpyInstance;
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   useTrackStatusStore.getState().reset();
 });
@@ -152,9 +149,6 @@ const OWNED_TITLE = 'Rollacoasta';
 const OWNED_TRACK_ID = asTrackId('owned-track-1');
 
 function renderOwnedFailedDetail(): void {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   const result: DiscoveryResult = {
     ...trackResult(),
     title: OWNED_TITLE,
@@ -162,14 +156,13 @@ function renderOwnedFailedDetail(): void {
     extras: { owned_track_id: OWNED_TRACK_ID, owned_acquisition_status: 'failed' },
   };
   render(
-    <QueryClientProvider client={queryClient}>
-      <TrackDetailBody
-        chrome={{ title: OWNED_TITLE, artworkUrl: null, onBack: () => {} }}
-        result={result}
-        lateralNav={lateralNav}
-        detailRoute="/discover/detail"
-      />
-    </QueryClientProvider>,
+    <TrackDetailBody
+      chrome={{ title: OWNED_TITLE, artworkUrl: null, onBack: () => {} }}
+      result={result}
+      lateralNav={lateralNav}
+      detailRoute="/discover/detail"
+    />,
+    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -195,18 +188,14 @@ describe('TrackDetailBody retry on an owned, failed track (#2852)', () => {
 });
 
 function renderDetailOf(result: DiscoveryResult, title: string = result.title): void {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   render(
-    <QueryClientProvider client={queryClient}>
-      <TrackDetailBody
-        chrome={{ title, artworkUrl: null, onBack: () => {} }}
-        result={result}
-        lateralNav={lateralNav}
-        detailRoute="/discover/detail"
-      />
-    </QueryClientProvider>,
+    <TrackDetailBody
+      chrome={{ title, artworkUrl: null, onBack: () => {} }}
+      result={result}
+      lateralNav={lateralNav}
+      detailRoute="/discover/detail"
+    />,
+    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -306,19 +295,16 @@ describe('TrackDetailBody pins its router calls', () => {
     jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
 
     render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <TrackDetailBody
-          chrome={{ title: TITLE, artworkUrl: null, onBack: () => {} }}
-          result={{
-            ...trackResult(),
-            extras: { featured_artists: [{ name: 'Guest Artist', mbid: 'mb-guest' }] },
-          }}
-          lateralNav={lateralNav}
-          detailRoute="/discover/detail"
-        />
-      </QueryClientProvider>,
+      <TrackDetailBody
+        chrome={{ title: TITLE, artworkUrl: null, onBack: () => {} }}
+        result={{
+          ...trackResult(),
+          extras: { featured_artists: [{ name: 'Guest Artist', mbid: 'mb-guest' }] },
+        }}
+        lateralNav={lateralNav}
+        detailRoute="/discover/detail"
+      />,
+      { wrapper: createWrapper(createTestQueryClient()) },
     );
 
     fireEvent.press(screen.getByLabelText('Tracks featuring Guest Artist'));
@@ -359,13 +345,9 @@ describe('TrackDetailBody pins its router calls', () => {
       sources: [{ provider: 'soundcloud', external_id: 'sc-1', url: 'https://sc/sc-1' }],
     };
 
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <RealRelatedTracksSection result={result} detailRoute="/discover/detail" />
-      </QueryClientProvider>,
-    );
+    render(<RealRelatedTracksSection result={result} detailRoute="/discover/detail" />, {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
 
     fireEvent.press(await screen.findByTestId('detail-related-0'));
 

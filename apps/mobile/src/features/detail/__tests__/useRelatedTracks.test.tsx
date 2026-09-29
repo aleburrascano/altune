@@ -1,6 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import type { DiscoverySource } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -8,6 +7,7 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { _resetDetailHealthForTest } from '../detailHealth';
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -20,18 +20,14 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 describe('aborting on unmount', () => {
   let client: QueryClient;
 
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let wrapper: ReturnType<typeof createWrapper>;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
     _resetDetailHealthForTest();
     (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client = createTestQueryClient();
+    wrapper = createWrapper(client);
   });
 
   afterEach(() => client.clear());
@@ -66,10 +62,7 @@ describe('reopening related tracks against the 30-minute content cache window', 
   const { act } = require('@testing-library/react-native');
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
     _resetDetailHealthForTest();
     (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
   });
@@ -84,10 +77,8 @@ describe('reopening related tracks against the 30-minute content cache window', 
       status: 200,
       json: { items: [], provider_name: 'soundcloud', status: 'ok' },
     });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
+    const client = createTestQueryClient();
+    const wrapper = createWrapper(client);
 
     const first = renderHook(() => useRelatedTracks({ sources }), { wrapper });
     await waitFor(() => expect(first.result.current.isLoading).toBe(false));

@@ -1,6 +1,5 @@
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 
 import type { CreateTrackRequest } from '@shared/api-client/types';
@@ -21,6 +20,11 @@ import {
 } from '../../hooks/useOwnedTrack';
 import { saveControlLabel, saveControlState } from '../../save-control-state';
 import { TrackSaveControl } from '../TrackSaveControl';
+import {
+  createTestQueryClient,
+  createWrapper,
+  mockSupabaseSession,
+} from '../../__tests__/support/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
 
@@ -28,18 +32,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-
-function freshClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-}
-
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
 
 const TITLE = 'Midnight City';
 const ARTIST = 'M83';
@@ -93,10 +85,7 @@ function SaveRow({ title, artist }: { title: string; artist: string }): React.Re
 }
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
   useTrackStatusStore.getState().reset();
 });
 
@@ -107,7 +96,7 @@ afterEach(() => {
 describe('TrackSaveControl quick-save re-entrancy', () => {
   it('fires a single createTrack POST when the save glyph is double-tapped before the mutation settles', async () => {
     __http.reply('POST /v1/tracks', { status: 500 });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient({ mutations: true });
     render(<QuickSaveRow />, { wrapper: createWrapper(queryClient) });
 
     const control = screen.getByTestId('quick-save');
@@ -150,7 +139,7 @@ describe('TrackSaveControl identity collision', () => {
   it('does not show a different, unsaved track as saved when its title/artist space-collides', async () => {
     __http.reply('POST /v1/tracks', { status: 200, json: trackResponse() });
     __http.reply('POST /v1/discovery/events', { status: 202 });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient({ mutations: true });
 
     const saved = render(<SaveRow title={SAVED_TITLE} artist={SAVED_ARTIST} />, {
       wrapper: createWrapper(queryClient),
@@ -187,7 +176,7 @@ describe('TrackSaveControl under a Save all run', () => {
 
   it('does not write the track again when its claimed row is pressed', async () => {
     __http.reply('POST /v1/tracks', { status: 500 });
-    render(<ClaimedRow />, { wrapper: createWrapper(freshClient()) });
+    render(<ClaimedRow />, { wrapper: createWrapper(createTestQueryClient({ mutations: true })) });
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('quick-save'), pressEvent);
@@ -197,7 +186,7 @@ describe('TrackSaveControl under a Save all run', () => {
   });
 
   it('reads as already saving rather than as an untouched track', () => {
-    render(<ClaimedRow />, { wrapper: createWrapper(freshClient()) });
+    render(<ClaimedRow />, { wrapper: createWrapper(createTestQueryClient({ mutations: true })) });
 
     expect(screen.getByLabelText(`${TITLE} downloading`)).toBeTruthy();
     expect(screen.queryByLabelText(`Save ${TITLE}`)).toBeNull();
@@ -207,7 +196,7 @@ describe('TrackSaveControl under a Save all run', () => {
 describe('TrackSaveControl quick-save failure', () => {
   it('surfaces a retry/failure state on the row when the save mutation fails', async () => {
     __http.fail('POST /v1/tracks');
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient({ mutations: true });
     render(<QuickSaveRow />, { wrapper: createWrapper(queryClient) });
 
     await act(async () => {

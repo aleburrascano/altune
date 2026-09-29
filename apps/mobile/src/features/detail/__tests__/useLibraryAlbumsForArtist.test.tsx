@@ -1,12 +1,11 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import { libraryKeys } from '@shared/lib/query-keys';
 
 import { useLibraryAlbumsForArtist } from '../hooks/useLibraryAlbumsForArtist';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -16,27 +15,14 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 const LIBRARY_ALBUMS_PATH = 'GET /v1/library/albums';
 
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
-function freshClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
 });
 
 describe('useLibraryAlbumsForArtist bounds the library albums fetch', () => {
   it('caps the request at the same limit as the sibling detail lists', async () => {
     __http.reply(LIBRARY_ALBUMS_PATH, { status: 200, json: { items: [], total: 0 } });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     renderHook(() => useLibraryAlbumsForArtist('daft punk', true), {
       wrapper: createWrapper(queryClient),
@@ -50,7 +36,7 @@ describe('useLibraryAlbumsForArtist bounds the library albums fetch', () => {
 
   it('caches under a key the library screen’s uncapped albums query cannot satisfy', async () => {
     __http.reply(LIBRARY_ALBUMS_PATH, { status: 200, json: { items: [], total: 0 } });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
     queryClient.setQueryData(libraryKeys.albums('daft punk', 'recent'), { items: [], total: 0 });
 
     renderHook(() => useLibraryAlbumsForArtist('daft punk', true), {
@@ -64,16 +50,12 @@ describe('useLibraryAlbumsForArtist bounds the library albums fetch', () => {
 describe('aborting on unmount', () => {
   let client: QueryClient;
 
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let wrapper: ReturnType<typeof createWrapper>;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    client = createTestQueryClient();
+    wrapper = createWrapper(client);
   });
 
   afterEach(() => client.clear());

@@ -1,7 +1,5 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import type { DiscoverySource } from '@shared/api-client/discovery';
@@ -9,6 +7,7 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { useArtistContent } from '../hooks/useArtistContent';
 import { _resetDetailHealthForTest } from '../detailHealth';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const mockGetArtistContent = jest.fn();
 jest.mock('@shared/api-client/enrichment', () => ({
@@ -33,24 +32,11 @@ const emptyContentFetch = {
   latency_ms: 3,
 };
 
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
-function freshClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 beforeEach(() => {
   mockGetArtistContent.mockImplementation(
     jest.requireActual('@shared/api-client/enrichment').getArtistContent,
   );
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
 });
 
 describe('useArtistContent bounds the artist albums fetch', () => {
@@ -59,7 +45,7 @@ describe('useArtistContent bounds the artist albums fetch', () => {
       status: 200,
       json: { top_tracks: emptyContentFetch, albums: emptyContentFetch },
     });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(
       () =>
@@ -115,7 +101,7 @@ describe('logging degraded content', () => {
             sources: [{ provider: 'spotify', external_id: 'artist-1', url: 'https://x' }],
             artistName: 'Radiohead',
           }),
-        { wrapper: createWrapper(freshClient()) },
+        { wrapper: createWrapper(createTestQueryClient()) },
       );
 
       await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
@@ -139,7 +125,7 @@ describe('logging degraded content', () => {
           useArtistContent({
             sources: [{ provider: 'deezer', external_id: 'artist-2', url: 'https://x' }],
           }),
-        { wrapper: createWrapper(freshClient()) },
+        { wrapper: createWrapper(createTestQueryClient()) },
       );
 
       await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
@@ -162,7 +148,7 @@ describe('logging degraded content', () => {
           useArtistContent({
             sources: [{ provider: 'spotify', external_id: 'artist-3', url: 'https://x' }],
           }),
-        { wrapper: createWrapper(freshClient()) },
+        { wrapper: createWrapper(createTestQueryClient()) },
       );
 
       await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 5000 });
@@ -175,18 +161,14 @@ describe('logging degraded content', () => {
 describe('aborting on unmount', () => {
   let client: QueryClient;
 
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let wrapper: ReturnType<typeof createWrapper>;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
     _resetDetailHealthForTest();
     (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client = createTestQueryClient();
+    wrapper = createWrapper(client);
   });
 
   afterEach(() => client.clear());
@@ -230,7 +212,7 @@ describe('useArtistContent reopened against the 30-minute content cache window',
       status: 200,
       json: { top_tracks: okList, albums: okList },
     });
-    const wrapper = createWrapper(freshClient());
+    const wrapper = createWrapper(createTestQueryClient());
     const useHook = () =>
       useArtistContent({
         sources: [{ provider: 'spotify', external_id: 'artist-cache', url: 'https://s.example/c' }],

@@ -1,14 +1,13 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { ArtistDetailBody } from '../ui/ArtistDetailBody';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
-import { within } from '@testing-library/react-native';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -26,7 +25,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
     auth: {
       getSession: jest
         .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
+        .mockResolvedValue(require('./support/queryHarness').mockSupabaseSession()),
     },
   },
 }));
@@ -46,17 +45,13 @@ function libraryArtist(): DiscoveryResult {
 }
 
 function renderBody() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <ArtistDetailBody
-        chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
-        result={libraryArtist()}
-        detailRoute="/library/detail"
-      />
-    </QueryClientProvider>,
+    <ArtistDetailBody
+      chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
+      result={libraryArtist()}
+      detailRoute="/library/detail"
+    />,
+    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -138,19 +133,15 @@ function renderLibraryArtistBody(
     lastfmError?: boolean;
   } = {},
 ) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <ArtistDetailBody
-        chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
-        result={libraryArtist()}
-        detailRoute="/library/detail"
-        lastfm={options.lastfm}
-        lastfmError={options.lastfmError}
-      />
-    </QueryClientProvider>,
+    <ArtistDetailBody
+      chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
+      result={libraryArtist()}
+      detailRoute="/library/detail"
+      lastfm={options.lastfm}
+      lastfmError={options.lastfmError}
+    />,
+    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -503,22 +494,18 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
   it('places top tracks, explore and about in the right column on a wide web window', async () => {
     Platform.OS = 'web';
     mockProbeWindowWidth = 1440;
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
     render(
-      <QueryClientProvider client={queryClient}>
-        <ArtistDetailBody
-          chrome={{
-            title: 'Boards of Canada',
-            artworkUrl: 'https://cdn.altune.test/boc.jpg',
-            onBack: jest.fn(),
-          }}
-          result={libraryArtist()}
-          detailRoute="/library/detail"
-          lastfmError
-        />
-      </QueryClientProvider>,
+      <ArtistDetailBody
+        chrome={{
+          title: 'Boards of Canada',
+          artworkUrl: 'https://cdn.altune.test/boc.jpg',
+          onBack: jest.fn(),
+        }}
+        result={libraryArtist()}
+        detailRoute="/library/detail"
+        lastfmError
+      />,
+      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
     );
 
     await screen.findByTestId('detail-top-track-0');

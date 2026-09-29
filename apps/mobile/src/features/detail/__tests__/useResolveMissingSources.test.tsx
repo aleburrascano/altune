@@ -1,13 +1,11 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { renderHook, waitFor, act } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { act } from '@testing-library/react-native';
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
 import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockQueryFn = jest.fn<Promise<DiscoveryResult[]>, []>();
 
@@ -17,13 +15,6 @@ jest.mock('../resolve-entity-query', () => ({
     queryFn: () => mockQueryFn(),
   }),
 }));
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
 
 function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {
@@ -58,7 +49,7 @@ describe('useResolveMissingSources', () => {
   it('returns the result untouched without querying when it already has sources', () => {
     const input = track({ sources: [source] });
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     expect(result.current).toEqual({ resolved: input, isResolving: false });
@@ -77,7 +68,7 @@ describe('useResolveMissingSources', () => {
     ]);
     const input = track({ extras: { b: 2 } });
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     expect(result.current.isResolving).toBe(true);
@@ -90,7 +81,7 @@ describe('useResolveMissingSources', () => {
     mockQueryFn.mockResolvedValue([track({ title: 'Paranoid Android', sources: [source] })]);
     const input = track();
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
@@ -100,7 +91,7 @@ describe('useResolveMissingSources', () => {
   it('stays silent when the query succeeds with no match', async () => {
     mockQueryFn.mockResolvedValue([]);
     const { result } = renderHook(() => useResolveMissingSources(track()), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
@@ -111,7 +102,7 @@ describe('useResolveMissingSources', () => {
     mockQueryFn.mockRejectedValue(new Error('network down'));
     const input = track();
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
@@ -120,7 +111,9 @@ describe('useResolveMissingSources', () => {
 
   it('logs the kind, title and artist it was resolving when the query fails', async () => {
     mockQueryFn.mockRejectedValue(new Error('network down'));
-    renderHook(() => useResolveMissingSources(track()), { wrapper: createWrapper() });
+    renderHook(() => useResolveMissingSources(track()), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
 
     await waitFor(() =>
       expect(warnSpy).toHaveBeenCalledWith('[detail] source resolution fetch failed', {
@@ -136,7 +129,7 @@ describe('useResolveMissingSources', () => {
     mockQueryFn.mockResolvedValue([]);
     act(() => applyKillSwitches({ detail_enrichment_enabled: false }));
     const { result } = renderHook(() => useResolveMissingSources(track()), {
-      wrapper: createWrapper(),
+      wrapper: createWrapper(createTestQueryClient()),
     });
 
     expect(mockQueryFn).not.toHaveBeenCalled();

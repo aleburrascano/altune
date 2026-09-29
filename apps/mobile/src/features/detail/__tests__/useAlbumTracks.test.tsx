@@ -1,10 +1,9 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -14,21 +13,8 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
 
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
-function freshClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
 });
 
 const emptyContent = {
@@ -41,7 +27,7 @@ const emptyContent = {
 describe('useAlbumTracks bounds the album track fetch', () => {
   it('caps the request with an explicit limit instead of fetching an unbounded tracklist', async () => {
     __http.reply(ALBUM_TRACKS_PATH, { status: 200, json: emptyContent });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(
       () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
@@ -58,7 +44,7 @@ describe('useAlbumTracks bounds the album track fetch', () => {
 describe('useAlbumTracks cancels in-flight requests when the screen unmounts', () => {
   it('aborts the request on navigate-away instead of letting it run to the timeout', async () => {
     __http.hang(ALBUM_TRACKS_PATH);
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { unmount } = renderHook(
       () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
@@ -85,7 +71,7 @@ describe('useAlbumTracks surfaces transient provider failures as errors', () => 
         status: 200,
         json: { items: [], provider_name: 'spotify', status },
       });
-      const queryClient = freshClient();
+      const queryClient = createTestQueryClient();
 
       const { result } = renderHook(
         () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
@@ -104,7 +90,7 @@ describe('useAlbumTracks surfaces transient provider failures as errors', () => 
       status: 200,
       json: { items: [], provider_name: 'spotify', status: 'ok' },
     });
-    const queryClient = freshClient();
+    const queryClient = createTestQueryClient();
 
     const { result } = renderHook(
       () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
@@ -132,7 +118,7 @@ describe('useAlbumTracks reopened against the 30-minute content cache window', (
       status: 200,
       json: { items: [], provider_name: 'spotify', status: 'ok' },
     });
-    const wrapper = createWrapper(freshClient());
+    const wrapper = createWrapper(createTestQueryClient());
     const useHook = () => useAlbumTracks({ provider: 'spotify', externalId: 'album-cache' });
 
     const first = renderHook(useHook, { wrapper });

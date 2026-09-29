@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
@@ -10,6 +8,7 @@ import { ApiError } from '@shared/errors';
 
 import { ownedTrack } from '../hooks/useOwnedTrack';
 import { useTrackSave } from '../hooks/useTrackSave';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
@@ -20,12 +19,11 @@ jest.mock('@shared/api-client/tracks', () => ({
 }));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-}
+let wrapper: ReturnType<typeof createWrapper>;
+
+beforeEach(() => {
+  wrapper = createWrapper(createTestQueryClient({ mutations: true }));
+});
 
 function track(subtitle: string | null = 'Radiohead'): DiscoveryResult {
   return {

@@ -1,7 +1,5 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -18,6 +16,7 @@ import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
 import { useArtistContent } from '../hooks/useArtistContent';
 import { useEnrichment } from '../hooks/useEnrichment';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -54,16 +53,6 @@ function appStateListeners(): AppStateChangeHandler[] {
       __listeners: AppStateChangeHandler[];
     }
   ).__listeners;
-}
-
-function createWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
-function freshClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
 function artistResult(): DiscoveryResult {
@@ -124,10 +113,7 @@ function emptyEnrichmentResponse(): Record<string, unknown> {
 beforeEach(() => {
   _resetDetailHealthForTest();
   recordEventMock.mockReset().mockResolvedValue(undefined);
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -144,7 +130,7 @@ describe('detail health metric', () => {
     __http.fail('GET /v1/discovery/enrichment/lastfm');
 
     const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
-      wrapper: createWrapper(freshClient()),
+      wrapper: createWrapper(createTestQueryClient()),
     });
     await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
     flushDetailHealth();
@@ -159,7 +145,7 @@ describe('detail health metric', () => {
 
     const { result } = renderHook(
       () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
-      { wrapper: createWrapper(freshClient()) },
+      { wrapper: createWrapper(createTestQueryClient()) },
     );
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     flushDetailHealth();
@@ -174,7 +160,7 @@ describe('detail health metric', () => {
 
     const { result } = renderHook(
       () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
-      { wrapper: createWrapper(freshClient()) },
+      { wrapper: createWrapper(createTestQueryClient()) },
     );
     await waitFor(() => expect(result.current.isError).toBe(true));
     flushDetailHealth();
@@ -232,18 +218,14 @@ describe('detail health metric', () => {
 describe('an aborted fetch', () => {
   let client: QueryClient;
 
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let wrapper: ReturnType<typeof createWrapper>;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
     _resetDetailHealthForTest();
     (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client = createTestQueryClient();
+    wrapper = createWrapper(client);
   });
 
   afterEach(() => client.clear());

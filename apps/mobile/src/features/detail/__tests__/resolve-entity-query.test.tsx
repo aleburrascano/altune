@@ -1,12 +1,13 @@
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { _resetDetailHealthForTest } from '../detailHealth';
 import { resolveEntityQuery } from '../resolve-entity-query';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -19,18 +20,14 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 describe('aborting on unmount', () => {
   let client: QueryClient;
 
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let wrapper: ReturnType<typeof createWrapper>;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
     _resetDetailHealthForTest();
     (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client = createTestQueryClient();
+    wrapper = createWrapper(client);
   });
 
   afterEach(() => client.clear());

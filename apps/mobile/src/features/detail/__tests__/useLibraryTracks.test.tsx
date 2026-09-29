@@ -1,7 +1,5 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -11,6 +9,7 @@ import {
   useLibraryTracksForAlbum,
   useLibraryTracksForArtist,
 } from '../hooks/useLibraryTracks';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -51,17 +50,13 @@ function filler(count: number) {
 
 let client: QueryClient;
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
+let wrapper: ReturnType<typeof createWrapper>;
 
 beforeEach(() => {
   __http.reset();
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  client = createTestQueryClient();
+  wrapper = createWrapper(client);
+  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
 });
 
 describe('useLibraryTracksForAlbum pages the lookup', () => {
@@ -84,16 +79,12 @@ describe('useLibraryTracksForAlbum pages the lookup', () => {
 describe('aborting on unmount', () => {
   let client: QueryClient;
 
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let wrapper: ReturnType<typeof createWrapper>;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    client = createTestQueryClient();
+    wrapper = createWrapper(client);
   });
 
   afterEach(() => client.clear());
