@@ -197,6 +197,15 @@ describe.concurrent("lint-changed-comments on hostile paths and bases", { timeou
     }
   });
 
+  test("rejects a bad base without loading the TypeScript parser", async () => {
+    const { root } = repo({}, { "src/a.ts": "export const a = 1;\n// note\n" });
+    const refuseParser = `export const resolve = (s, c, next) => { if (s === "typescript-eslint") throw new Error("parser loaded"); return next(s, c); };`;
+    const register = `import { register } from "node:module"; register("data:text/javascript,${encodeURIComponent(refuseParser)}");`;
+    const child = spawnSync(process.execPath, ["--import", `data:text/javascript,${encodeURIComponent(register)}`, script, "HEAD..HEAD"], { cwd: root, encoding: "utf8" });
+    expect(child.status, child.stdout + child.stderr).toBe(2);
+    expect(child.stderr).not.toContain("parser loaded");
+  });
+
   test("flags a comment added to a file renamed in the same change", async () => {
     const body = "export const a = 1;\nexport const b = 2;\nexport const c = 3;\nexport const d = 4;\nexport const e = 5;\n";
     const { root, base } = repo({ "src/old name.ts": body }, {});

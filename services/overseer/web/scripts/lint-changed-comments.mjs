@@ -1,7 +1,6 @@
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { parser } from "typescript-eslint";
 
 const SUPPRESSION_DIRECTIVE = /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
 
@@ -59,6 +58,7 @@ if (files.length === 0) {
   process.stdout.write("No changed files to check for new comments.\n");
   process.exit(0);
 }
+const { parser } = await import("typescript-eslint");
 process.stdout.write("Checking added lines for new comments/suppressions in:\n");
 for (const f of files) process.stdout.write(`  ${f}\n`);
 
