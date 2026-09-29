@@ -13,8 +13,6 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	})
 	groups = s.verifyGroupsAgainstMB(ctx, identity, groups)
 	merged := MergeReleases(groups)
-	// The merge is where cross-provider disagreement is already computed;
-	// record the structural-quality signal best-effort, off the response path.
 	s.discographyTelemetry.emit(ctx, artistRef, merged)
 	kept := FilterCohesive(FilterKept(merged))
 	out := make([]domain.SearchResult, 0, len(kept))

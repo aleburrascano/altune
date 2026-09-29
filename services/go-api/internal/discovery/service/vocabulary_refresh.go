@@ -11,10 +11,6 @@ import (
 	"log/slog"
 )
 
-// VocabularyRefreshService refreshes the search vocabulary from chart
-// providers. It does no scheduling of its own: the app's leader ticker job
-// (jobVocabularyRefresh) calls RunOnce and owns the interval, panic recovery
-// and shutdown drain.
 type VocabularyRefreshService struct {
 	charts []ports.ChartProvider
 	vocab  ports.VocabularyWriter
@@ -44,10 +40,6 @@ func (s *VocabularyRefreshService) RunOnce(ctx context.Context) error {
 	return chartOutage(len(s.charts), fetchErrs)
 }
 
-// chartOutage is the refresh's failure signal. With every provider down the
-// stored vocabulary silently goes stale while suggest and correction keep
-// serving it, so the job-health record has to see a failed run rather than an
-// empty success.
 func chartOutage(providerCount int, fetchErrs []error) error {
 	everyProviderFailed := providerCount > 0 && len(fetchErrs) == providerCount
 	if !everyProviderFailed {
@@ -63,10 +55,6 @@ func (s *VocabularyRefreshService) trim(ctx context.Context) {
 	}
 }
 
-// collectEntries returns what the charts yielded and one error per provider
-// that failed. A provider's failure carries its cause as redacted text rather
-// than a wrapped error: a chart URL holds the provider's api_key, and this
-// error is logged by the job runner.
 func (s *VocabularyRefreshService) collectEntries(
 	ctx context.Context,
 ) ([]domain.VocabularyEntry, []error) {

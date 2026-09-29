@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// Regression test for #2244: a detached job's failure line must carry what an
-// operator needs to diagnose it without a reproduction.
 func TestBackgroundLaunch_PanicLogsErrorWithCorrelationIDAndStack(t *testing.T) {
 	ring := captureDetachedLogs(t)
 	const corrID = "corr-bg-2244"

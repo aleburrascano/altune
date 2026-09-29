@@ -18,8 +18,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// timingOutContentProvider fails every content call the way an HTTP adapter
-// does when its client deadline passes: a *url.Error wrapping the deadline.
 type timingOutContentProvider struct{}
 
 func (timingOutContentProvider) fail() ([]discdomain.SearchResult, error) {
@@ -42,9 +40,6 @@ func (p timingOutContentProvider) GetRelatedTracks(context.Context, discdomain.P
 	return p.fail()
 }
 
-// errorContractRouter serves the discovery routes over real content services:
-// itunes times out, soundcloud answers but its circuit is already open, and
-// spotify has no adapter wired at all.
 func errorContractRouter(t *testing.T) chi.Router {
 	t.Helper()
 	breaker := service.NewCircuitBreaker()
@@ -73,7 +68,6 @@ func errorContractRouter(t *testing.T) chi.Router {
 	return router
 }
 
-// contentFailure is everything a caller can observe about a failed fetch.
 type contentFailure struct {
 	HTTP   int
 	Status string
@@ -131,8 +125,6 @@ func decodeContentFailure(t *testing.T, httpCode int, raw json.RawMessage) conte
 	return contentFailure{HTTP: httpCode, Status: body.Status, Code: body.Code}
 }
 
-// The combined artist content response fails only when both halves failed, so
-// a response carrying either half's content stays 200.
 func TestArtistContentOutcome(t *testing.T) {
 	ok := &service.ContentFetchResponse{Status: discdomain.ProviderStatusOK}
 	partial := &service.ContentFetchResponse{Status: discdomain.ProviderStatusOK, Partial: true}
@@ -164,10 +156,6 @@ func TestArtistContentOutcome(t *testing.T) {
 	}
 }
 
-// TestContentFetchEndpoints_DistinguishFailureCauses drives each content-fetch
-// endpoint into a timeout, an open circuit and an unconfigured provider, and
-// requires each cause to be told apart by HTTP status, provider status and
-// error code, instead of collapsing into one 200 {"status":"error"}.
 func TestContentFetchEndpoints_DistinguishFailureCauses(t *testing.T) {
 	for _, ep := range contentErrorEndpoints {
 		t.Run(ep.name, func(t *testing.T) {

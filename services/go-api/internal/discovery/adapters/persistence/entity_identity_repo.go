@@ -101,10 +101,6 @@ func (s *PgxIdentityStore) LookupByProviderID(
 	return mbid, xref, mbid != ""
 }
 
-// LookupByProviderIDs resolves every ref in one query: the refs are unnested
-// into (provider, external_id, kind) tuples matched against the primary key.
-// Blank refs are skipped; a failed query is logged and reported as all misses,
-// mirroring LookupByProviderID.
 func (s *PgxIdentityStore) LookupByProviderIDs(
 	ctx context.Context,
 	refs []ports.IdentityRef,
@@ -121,12 +117,8 @@ func (s *PgxIdentityStore) LookupByProviderIDs(
 	return hits
 }
 
-// identityRow is an entity_identity primary key as stored: provider,
-// external_id, kind.
 type identityRow [3]string
 
-// identityRefsByRow keys each non-blank ref by the row it would match, so a
-// scanned row maps back to the exact ref the caller asked for.
 func identityRefsByRow(refs []ports.IdentityRef) map[identityRow]ports.IdentityRef {
 	requested := make(map[identityRow]ports.IdentityRef, len(refs))
 	for _, ref := range refs {

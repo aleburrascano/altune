@@ -97,8 +97,6 @@ func TestMinIntervalLimiterShedsWithoutReservingSlot(t *testing.T) {
 	}
 }
 
-// A caller whose deadline had already passed before it reached the queue spent
-// its budget elsewhere; that is a plain timeout, not a queue timeout.
 func TestMinIntervalLimiterExpiredOnArrivalIsNotQueueTimeout(t *testing.T) {
 	l := newMinIntervalLimiter(time.Millisecond)
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
@@ -111,8 +109,6 @@ func TestMinIntervalLimiterExpiredOnArrivalIsNotQueueTimeout(t *testing.T) {
 	}
 }
 
-// shortBudgetMB is a real MusicBrainz adapter, real limiter and all, with a
-// per-provider search budget short enough to exercise queueing in a test.
 type shortBudgetMB struct {
 	*MusicBrainzAdapter
 	budget time.Duration
@@ -163,11 +159,6 @@ func searchConcurrently(t *testing.T, svc *service.Service, n int) {
 	wg.Wait()
 }
 
-// A healthy provider answers one search, which takes the limiter's slot; a
-// burst of concurrent searches right behind it finds the next slot beyond its
-// budget. None of the burst ever reaches the provider, so none of it may count
-// against the circuit. (No success follows the burst, so a miscounted failure
-// cannot be masked by a later success resetting the count.)
 func TestRateLimitQueueTimeoutsDoNotOpenCircuit(t *testing.T) {
 	srv := healthyMBServer(t)
 	mb := newShortBudgetMB(srv.URL, 200*time.Millisecond, 50*time.Millisecond)
@@ -182,8 +173,6 @@ func TestRateLimitQueueTimeoutsDoNotOpenCircuit(t *testing.T) {
 	}
 }
 
-// The limiter sheds a call whose slot lands past the caller's deadline at
-// once, instead of holding it in the queue until the deadline fires.
 func TestRateLimitQueueTimeoutIsShedEarly(t *testing.T) {
 	srv := healthyMBServer(t)
 	mb := newShortBudgetMB(srv.URL, time.Hour, time.Second)
@@ -203,10 +192,6 @@ func TestRateLimitQueueTimeoutIsShedEarly(t *testing.T) {
 	}
 }
 
-// A provider whose upstream genuinely hangs past the budget still trips. All
-// kinds are requested: the first kind's hung request spends the whole budget,
-// and the later kinds reaching the limiter already expired must read as that
-// timeout, not as a queue shed.
 func TestRealUpstreamTimeoutStillOpensCircuit(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -233,7 +218,6 @@ func TestRealUpstreamTimeoutStillOpensCircuit(t *testing.T) {
 	}
 }
 
-// A provider answering 5xx still trips.
 func TestUpstream5xxStillOpensCircuit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -252,9 +236,6 @@ func TestUpstream5xxStillOpensCircuit(t *testing.T) {
 	}
 }
 
-// With a search budget far longer than the queue can hold, a burst of
-// concurrent searches is shed by queue depth rather than by deadline. Those
-// sheds come back promptly as timeouts and never count against the circuit.
 func TestRateLimitQueueFullShedsDoNotOpenCircuit(t *testing.T) {
 	srv := healthyMBServer(t)
 	mb := newShortBudgetMB(srv.URL, 100*time.Millisecond, time.Minute)
@@ -302,15 +283,11 @@ func TestRateLimitQueueFullShedsDoNotOpenCircuit(t *testing.T) {
 	}
 }
 
-// burstResult is what one caller in a concurrent burst saw from the limiter.
 type burstResult struct {
 	err     error
 	elapsed time.Duration
 }
 
-// fireBurst sends n concurrent callers at wait, each with a deadline far past
-// any sane queue budget, and returns what the callers that finished within
-// window saw. The rest are cancelled and drained before it returns.
 func fireBurst(t *testing.T, wait func(context.Context) error, n int, window time.Duration) []burstResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -343,11 +320,6 @@ collect:
 	return done
 }
 
-// A burst of concurrent callers into a production-configured provider limiter
-// admits its burst at once, parks at most providerQueueDepth callers for later
-// slots, and sheds every other caller promptly with the queue-timeout sentinel
-// the circuit breaker ignores, instead of parking it for as long as its
-// deadline allows.
 func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
 	const callers = 20
 	cases := []struct {
@@ -385,8 +357,6 @@ func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
 	}
 }
 
-// The depth bound does not loosen politeness: callers admitted out of a burst
-// still get slots at least one interval apart.
 func TestRateLimiterAdmittedCallersStaySpaced(t *testing.T) {
 	const interval = 60 * time.Millisecond
 	l := newRateLimiter(interval, 1, 3)
@@ -410,8 +380,6 @@ func TestRateLimiterAdmittedCallersStaySpaced(t *testing.T) {
 	}
 }
 
-// The queue depth frees up as slots are consumed: once the queue drains, a new
-// caller is admitted rather than shed.
 func TestRateLimiterQueueDrainsAndReadmits(t *testing.T) {
 	const interval = 30 * time.Millisecond
 	l := newRateLimiter(interval, 1, 1)
@@ -426,12 +394,11 @@ func TestRateLimiterQueueDrainsAndReadmits(t *testing.T) {
 	}
 }
 
-// A caller with no deadline at all is still shed once the queue is full.
 func TestRateLimiterShedsNoDeadlineCallerWhenFull(t *testing.T) {
 	l := newRateLimiter(time.Hour, 1, 2)
 	_ = l.wait(context.Background())
 	l.mu.Lock()
-	l.lastReq = l.lastReq.Add(2 * time.Hour) // two callers already queued
+	l.lastReq = l.lastReq.Add(2 * time.Hour)
 	before := l.lastReq
 	l.mu.Unlock()
 
@@ -451,7 +418,6 @@ func TestRateLimiterShedsNoDeadlineCallerWhenFull(t *testing.T) {
 	}
 }
 
-// iTunes keeps its burst: the first itunesBurst calls go straight through.
 func TestITunesLimiterAllowsBurst(t *testing.T) {
 	a := NewITunesAdapter(http.DefaultClient)
 	start := time.Now()

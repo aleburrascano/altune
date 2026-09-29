@@ -2,9 +2,6 @@ package domain
 
 import "testing"
 
-// Providers stamp their raw release type into SearchResult.RecordType, so the
-// parse must stay exactly this lenient: no case folding, no trimming, and an
-// unrecognised type collapsing to the unknown zero value rather than surviving.
 func TestParseRecordType_keepsOnlyTheKnownTypesAndIsCaseSensitive(t *testing.T) {
 	tests := []struct {
 		name string
@@ -29,9 +26,6 @@ func TestParseRecordType_keepsOnlyTheKnownTypesAndIsCaseSensitive(t *testing.T) 
 	}
 }
 
-// Release merge keeps the higher-ranked type of two variants, so a single, an
-// EP and a compilation all have to outrank a plain album, and an unknown type
-// has to lose to every known one.
 func TestRecordType_RankPutsSpecificTypesAboveAlbumAndUnknownLast(t *testing.T) {
 	tests := []struct {
 		name string

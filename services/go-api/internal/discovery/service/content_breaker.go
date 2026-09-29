@@ -7,20 +7,13 @@ import (
 	"errors"
 )
 
-// errCircuitOpen is returned by a guarded content call the circuit breaker
-// short-circuited: the provider was never called.
 var errCircuitOpen = errors.New("provider circuit open")
 
-// breakerCall is one admitted provider call. A nil breaker admits everything
-// and records nothing, so services built without one stay ungated.
 type breakerCall struct {
 	cb       *CircuitBreaker
 	provider domain.ProviderName
 }
 
-// admitProviderCall asks the breaker whether provider may be called. When it
-// admits the call, exactly one of settle, release or failPanicked must follow,
-// or a half-open probe slot stays held until its lease expires.
 func admitProviderCall(cb *CircuitBreaker, provider domain.ProviderName) (breakerCall, bool) {
 	if cb == nil {
 		return breakerCall{provider: provider}, true
@@ -31,17 +24,6 @@ func admitProviderCall(cb *CircuitBreaker, provider domain.ProviderName) (breake
 	return breakerCall{cb: cb, provider: provider}, true
 }
 
-// settle records the call's outcome. callerCtx is the request's own context,
-// not a fan-out or per-call timeout derived from it: a call abandoned because
-// the caller went away says nothing about the provider, so it only hands back
-// the probe slot, while a call cut off by our own timeout counts as a failure.
-//
-// Only errors that speak to the provider's health (transport failures,
-// timeouts, 5xx, 429) count. Content calls take a client-supplied external ID,
-// so counting every error would let a client trip a provider open for every
-// user with a handful of bogus IDs; search shares the same rule. A call shed
-// by the provider's rate-limiter queue never reached the provider, and any
-// other error proves nothing either way: both release.
 func (c breakerCall) settle(callerCtx context.Context, err error) {
 	if c.cb == nil {
 		return
@@ -56,8 +38,6 @@ func (c breakerCall) settle(callerCtx context.Context, err error) {
 	}
 }
 
-// release hands the call back without an outcome, for an admitted call that
-// was never made.
 func (c breakerCall) release() {
 	if c.cb == nil {
 		return
@@ -65,9 +45,6 @@ func (c breakerCall) release() {
 	c.cb.ReleaseProbe(c.provider)
 }
 
-// failPanicked records a failure for a call that panicked before it could be
-// settled. Defer it with a pointer to a flag set once the call returns; it
-// does not recover, so the panic still reaches the goroutine's own handler.
 func (c breakerCall) failPanicked(settled *bool) {
 	if c.cb == nil || *settled {
 		return
@@ -75,9 +52,6 @@ func (c breakerCall) failPanicked(settled *bool) {
 	c.cb.RecordFailure(c.provider)
 }
 
-// guardedFetch runs one provider call through the breaker: it short-circuits
-// with errCircuitOpen when the provider's circuit is open and records the
-// outcome otherwise.
 func guardedFetch[T any](
 	callerCtx context.Context,
 	cb *CircuitBreaker,
@@ -97,14 +71,10 @@ func guardedFetch[T any](
 	return res, err
 }
 
-// httpStatusCoder is implemented by provider errors that carry the upstream
-// HTTP status of a non-200 response.
 type httpStatusCoder interface {
 	HTTPStatus() int
 }
 
-// transportError matches net.Error (and so *url.Error, which wraps every
-// failed round trip) without importing the network stack into this layer.
 type transportError interface {
 	error
 	Timeout() bool
@@ -115,8 +85,6 @@ const (
 	statusServerErrorMin  = 500
 )
 
-// isProviderHealthFailure reports whether err indicates the provider itself is
-// unreachable, slow or failing, as opposed to rejecting this one request.
 func isProviderHealthFailure(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
 		return false
@@ -133,8 +101,6 @@ func isProviderHealthFailure(err error) bool {
 	return errors.As(err, &transport)
 }
 
-// circuitOpenContentResponse is the response for a content call skipped
-// because the provider's circuit is open.
 func circuitOpenContentResponse(providerName domain.ProviderName) *ContentFetchResponse {
 	return &ContentFetchResponse{
 		ProviderName: providerName,

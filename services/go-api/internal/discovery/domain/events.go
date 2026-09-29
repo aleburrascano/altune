@@ -45,28 +45,22 @@ const (
 )
 
 var eventTypeNames = map[EventType]string{
-	EventTypeSearchPerformed: "search_performed",
-	EventTypeResultsShown:    "results_shown",
-	EventTypeResultClicked:   "result_clicked",
-	EventTypePlay:            "play",
-	EventTypeSkip:            "skip",
-	EventTypeCompleted:       "completed",
-	EventTypeLibraryAdd:      "library_add",
-	EventTypeWrongAlbum:      "wrong_album",
-	EventTypeSearchFailed:    "search_failed",
-	EventTypeSearchDegraded:  "search_degraded",
-	EventTypePlaybackHealth:  "playback_health",
-	// detail_health is the enrichment/discovery counterpart of playback_health:
-	// one aggregate per-provider outcome tally per client batch.
-	EventTypeDetailHealth:  "detail_health",
-	EventTypeAcquisitionUi: "acquisition_ui",
-	EventTypeClientError:   "client_error",
-	EventTypeUserAction:    "user_action",
-	EventTypeFailureShown:  "failure_shown",
-	// discography_observed is a server-emitted structural-quality signal (the
-	// per-release cross-provider disagreement computed at the artist-content
-	// merge). It is deliberately absent from ClientSubmittable below so no
-	// client can forge quality data.
+	EventTypeSearchPerformed:     "search_performed",
+	EventTypeResultsShown:        "results_shown",
+	EventTypeResultClicked:       "result_clicked",
+	EventTypePlay:                "play",
+	EventTypeSkip:                "skip",
+	EventTypeCompleted:           "completed",
+	EventTypeLibraryAdd:          "library_add",
+	EventTypeWrongAlbum:          "wrong_album",
+	EventTypeSearchFailed:        "search_failed",
+	EventTypeSearchDegraded:      "search_degraded",
+	EventTypePlaybackHealth:      "playback_health",
+	EventTypeDetailHealth:        "detail_health",
+	EventTypeAcquisitionUi:       "acquisition_ui",
+	EventTypeClientError:         "client_error",
+	EventTypeUserAction:          "user_action",
+	EventTypeFailureShown:        "failure_shown",
 	EventTypeDiscographyObserved: "discography_observed",
 }
 
@@ -97,10 +91,6 @@ func ParseEventType(s string) EventType {
 	return EventTypeUnknown
 }
 
-// The payload keys that cross the Go/SQL seam: written or validated here in Go
-// and read back by the event SQL. Naming each once is what keeps a writer and a
-// reader from drifting apart. The values are the pinned wire shape of rows
-// already persisted — the identifiers may move, the strings may not.
 const (
 	PayloadKeyZeroResult         = "zero_result"
 	PayloadKeyTailNoiseTop5      = "tail_noise_top5"

@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// Regression for #565: distinct keys (normalized artist names from user
-// searches) must not grow the memo without bound.
 func TestMBMemo_CapBoundsDistinctKeys(t *testing.T) {
 	c := newMBMemo[int](time.Hour)
 	for i := 0; i < mbMemoMaxEntries*3; i++ {
@@ -16,7 +14,6 @@ func TestMBMemo_CapBoundsDistinctKeys(t *testing.T) {
 	if got := c.len(); got > mbMemoMaxEntries {
 		t.Fatalf("memo holds %d entries, want <= %d", got, mbMemoMaxEntries)
 	}
-	// The newest key survives; the oldest was evicted.
 	last := mbMemoMaxEntries*3 - 1
 	if v, ok := c.get("artist-" + strconv.Itoa(last)); !ok || v != last {
 		t.Fatalf("newest entry missing: got %d, %v", v, ok)
@@ -30,10 +27,10 @@ func TestMBMemo_EvictsLeastRecentlyUsed(t *testing.T) {
 	c := newMBMemoCap[string](time.Hour, 2)
 	c.put("a", "A")
 	c.put("b", "B")
-	if _, ok := c.get("a"); !ok { // a becomes most recently used
+	if _, ok := c.get("a"); !ok {
 		t.Fatal("a should be present")
 	}
-	c.put("c", "C") // evicts b, not a
+	c.put("c", "C")
 	if _, ok := c.get("b"); ok {
 		t.Fatal("b should have been evicted as least recently used")
 	}
@@ -67,15 +64,12 @@ func TestMBMemo_ExpiredEntriesAreRemoved(t *testing.T) {
 		c.put("old-"+strconv.Itoa(i), i)
 	}
 	time.Sleep(5 * time.Millisecond)
-	// A read of an expired key deletes it rather than just skipping it.
 	if _, ok := c.get("old-0"); ok {
 		t.Fatal("expired entry returned")
 	}
 	if c.len() != 49 {
 		t.Fatalf("len after expired read = %d, want 49", c.len())
 	}
-	// Refill to the cap; the put that finds the memo full sweeps every
-	// expired entry instead of evicting a single one.
 	c.put("old-0", 0)
 	time.Sleep(5 * time.Millisecond)
 	c.put("fresh", 1)

@@ -208,13 +208,8 @@ func TestPostBytesCapped_capsBody(t *testing.T) {
 	}
 }
 
-// providerKeyInQuery stands for the credential Last.fm, fanart.tv and
-// SoundCloud pass in the query string of every call.
 const providerKeyInQuery = "0123456789abcdeflastfmkey"
 
-// closedMidRequestServer accepts the request, then drops the connection without
-// answering — the transport failure that makes net/http return a *url.Error
-// echoing the full request URL.
 func closedMidRequestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -227,9 +222,6 @@ func closedMidRequestServer(t *testing.T) *httptest.Server {
 	}))
 }
 
-// requestHelpers is every helper here that reaches the network, so the credential
-// scrub is proven at each call site rather than at the one a reader happened to
-// open.
 func requestHelpers() map[string]func(context.Context, *http.Client, string) error {
 	return map[string]func(context.Context, *http.Client, string) error{
 		"getJSON": func(ctx context.Context, c *http.Client, u string) error {
@@ -252,10 +244,6 @@ func requestHelpers() map[string]func(context.Context, *http.Client, string) err
 	}
 }
 
-// TestRequestHelpers_TransportErrorDropsQueryCredential pins #2227: net/http
-// embeds the full request URL in the *url.Error a transport failure returns, so
-// every call site logging that error raw put the provider key in the persisted
-// stdout log.
 func TestRequestHelpers_TransportErrorDropsQueryCredential(t *testing.T) {
 	srv := closedMidRequestServer(t)
 	defer srv.Close()
@@ -302,8 +290,6 @@ func TestWithHeader_emptyValueNotSet(t *testing.T) {
 	}
 }
 
-// oversizedJSONServer serves a single well-formed JSON object whose total
-// length exceeds providerBodyCap.
 func oversizedJSONServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	payload := `{"blob":"` + strings.Repeat("x", int(providerBodyCap)+1024) + `"}`

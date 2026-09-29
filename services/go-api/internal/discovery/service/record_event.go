@@ -37,9 +37,6 @@ type noopActivityFeed struct{}
 
 func (noopActivityFeed) EmitActivity(string) {}
 
-// RecordEventInput carries no query_norm: a client-submitted event's query is
-// whatever its search_id's server-emitted search_performed row says, resolved
-// by the EventStore, never a client-chosen value (#1086).
 type RecordEventInput struct {
 	Type             domain.EventType
 	SearchId         string
@@ -54,11 +51,6 @@ func (e *invalidEventError) Error() string     { return e.msg }
 func (e *invalidEventError) HTTPStatus() int   { return 400 }
 func (e *invalidEventError) ErrorCode() string { return "discovery.invalid_event" }
 
-// Bounds on a client event's payload, which is stored whole as jsonb and kept
-// 30 to 90 days: without them one authenticated account bloats the events
-// table and the write pool a row at a time. The largest legitimate payload is
-// a results_shown impression list, one entry per result on a 20-result search
-// page, which 8 KiB fits with room to spare.
 const (
 	maxPayloadBytes = 8 << 10
 	maxPayloadKeys  = 32
@@ -71,8 +63,6 @@ func validatePayloadBounds(payload map[string]any) error {
 	return validatePayloadSize(payload)
 }
 
-// validatePayloadSize measures the payload as the store will write it, so what
-// is accepted here is what a row costs there.
 func validatePayloadSize(payload map[string]any) error {
 	stored, err := json.Marshal(payload)
 	if err != nil {
@@ -107,11 +97,6 @@ func validatePayloadTypes(payload map[string]any) error {
 	return nil
 }
 
-// requiresEventID reports whether a type belongs to the label-critical tier the
-// mobile outbox delivers at least once. Its retries are only safe no-ops if they
-// carry the same event_id, because a NULL event_id never hits the dedup index.
-// play/skip/completed stay fire-and-forget: the client sends them without an
-// event_id, so requiring one would silently drop all playback signals.
 func requiresEventID(t domain.EventType) bool {
 	switch t {
 	case domain.EventTypeLibraryAdd, domain.EventTypeWrongAlbum,
@@ -121,8 +106,6 @@ func requiresEventID(t domain.EventType) bool {
 	return false
 }
 
-// validateEventID rejects an event_id that could not dedup: a present but
-// unparseable or nil UUID for any type, and a missing one for the critical tier.
 func validateEventID(t domain.EventType, eventID string) error {
 	if eventID == "" {
 		if requiresEventID(t) {

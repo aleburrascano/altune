@@ -54,16 +54,10 @@ func (s *EnrichmentService) Execute(
 		return domain.EmptyEnrichment(), nil
 	}
 
-	// A caller-supplied MBID skips resolution (and its name-keyed negative memo)
-	// and goes straight to the MBID-keyed lookup+cache.
 	if mbidParam != "" {
 		return s.lookup(ctx, kind, title, subtitle, mbidParam, mbidFromCaller)
 	}
 
-	// The resolution step reuses the shared CachedLookup for its name-keyed
-	// negative memo and degrade-to-empty (a fetch error surfaces as ErrDegraded). The positive entry is keyed by the
-	// resolved MBID, so it is written inside the fetch (see lookup), not by
-	// CachedLookup; mbResolutionMemo keeps Get/Set inert for that reason.
 	nameKey := textnorm.NameKey(title, subtitle)
 	var memo ports.NameKeyedCache[domain.MBEnrichment]
 	if s.cache != nil {
@@ -91,12 +85,6 @@ func (s *EnrichmentService) Execute(
 		})
 }
 
-// lookup reads the MBID-keyed positive cache, fetches the enrichment on a miss,
-// merges artwork and writes the positive entry. A lookup error degrades to empty
-// without caching and is reported as ErrDegraded; an empty-but-artwork-merged result is cached as-is (the MB
-// enricher never negative-caches a lookup, only an unresolved name). An entry
-// left artwork-less by a failing artwork chain is returned but not cached, so a
-// provider blip cannot pin a coverless entry for the positive TTL.
 func (s *EnrichmentService) lookup(
 	ctx context.Context,
 	kind domain.ResultKind,
@@ -129,8 +117,6 @@ func (s *EnrichmentService) lookup(
 	return e, nil
 }
 
-// mergeArtwork stamps a resolved cover onto e, returning why the chain could
-// not vouch for an empty answer (nil when it could, or when there is no chain).
 func (s *EnrichmentService) mergeArtwork(
 	ctx context.Context,
 	e *domain.MBEnrichment,
@@ -164,11 +150,6 @@ func (s *EnrichmentService) mergeArtwork(
 	return nil
 }
 
-// mbResolutionMemo adapts the kind-partitioned EnrichmentCache negative memo
-// (keyed by name) onto the generic NameKeyedCache so the MusicBrainz enricher
-// can share CachedLookup's negative-cache and degrade logic. The positive entry
-// is keyed by the resolved MBID rather than the name, so Get/Set are inert here
-// and the MBID-keyed write happens in EnrichmentService.lookup.
 type mbResolutionMemo struct {
 	cache ports.EnrichmentCache
 	kind  domain.ResultKind

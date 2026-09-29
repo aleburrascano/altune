@@ -22,37 +22,11 @@ var (
 	_ ports.DeletedIdentityEraser = (*PgxSearchHistoryRepository)(nil)
 )
 
-// Postgres SQLSTATEs that mean the identity store is not readable from here,
-// rather than that an owner's account was deleted. Both are measured against
-// Postgres 16: a read through a missing schema reports the relation undefined
-// (42P01, not 3F000), and a role without the grant reports 42501.
 const (
 	undefinedTableCode   = "42P01"
 	insufficientPrivCode = "42501"
 )
 
-// eraseRowsOfDeletedIdentities runs one discovery table's anti-join delete
-// against the identity store, reporting the rows it removed and classifying a
-// store this deployment cannot read so the sweep idles instead of erasing.
-//
-// Every erase*OfDeletedIdentitiesSQL opens with `EXISTS (SELECT 1 FROM
-// auth.users)`, which is the blast bound on a delete that cannot be undone: a
-// role that reaches auth.users but sees none of its rows (row-level security, a
-// restore still in flight) would otherwise report every owner as deleted and
-// empty the table. It costs one index probe.
-//
-// $1 is the one owner that is absent from auth.users by design rather than by
-// deletion: shared.SystemUserId stamps the server-emitted discography_observed
-// rows and the smoke eval's writes, so to an anti-join the synthetic account
-// looks deleted and an unguarded sweep would evict the discography quality
-// aggregate on its first tick. It is supplied here rather than per table so a
-// table joining the sweep cannot omit it quietly — a delete whose SQL drops the
-// `<> $1` clause takes no parameters and fails on its first run.
-//
-// The deletes carry no LIMIT, matching the retention prunes over the same tables
-// (pruneEventsByTypeSQL): each run re-evaluates the whole tail, so a missed run
-// defers eviction without skipping a row, and after the first run only the
-// accounts deleted since it are left to find.
 func eraseRowsOfDeletedIdentities(ctx context.Context, pool *pgxpool.Pool, op, deleteSQL string) (int64, error) {
 	tag, err := pool.Exec(ctx, deleteSQL, shared.SystemUserId().UUID())
 	if err != nil {
@@ -115,10 +89,6 @@ func (r *PgxSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.
 	return nil
 }
 
-// eraseSearchTextOfUserSQL is every store that keeps what one account searched
-// for, in the order one transaction applies them. A statement joining this list
-// takes the owner as $1 and must be safe to re-run: clearing an already-cleared
-// account is a no-op, not an error.
 var eraseSearchTextOfUserSQL = []string{
 	`DELETE FROM discovery_search_history WHERE user_id = $1`,
 	eraseEventSearchTextOfUserSQL,
@@ -138,13 +108,6 @@ func (r *PgxSearchHistoryRepository) EraseSearchTextForUser(ctx context.Context,
 	return tx.Commit(ctx)
 }
 
-// eraseHistoryOfDeletedIdentitiesSQL drops the search history of accounts whose
-// identity is gone. TrimToN keeps history at 100 rows per user but has no age
-// limit, so without this an account nobody can log into any more keeps its
-// free-text queries forever.
-//
-// Cost: one pass over discovery_search_history per run, each row probing
-// auth.users' primary key.
 const eraseHistoryOfDeletedIdentitiesSQL = `
 	DELETE FROM discovery_search_history h
 	WHERE EXISTS (SELECT 1 FROM auth.users)

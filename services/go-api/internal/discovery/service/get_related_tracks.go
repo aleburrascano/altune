@@ -14,8 +14,6 @@ type GetRelatedTracksService struct {
 
 type RelatedTracksOption func(*GetRelatedTracksService)
 
-// WithRelatedCircuitBreaker gates every provider call the service makes through
-// cb, the breaker shared with the search fan-out. Without it, calls are ungated.
 func WithRelatedCircuitBreaker(cb *CircuitBreaker) RelatedTracksOption {
 	return func(s *GetRelatedTracksService) { s.breaker = cb }
 }

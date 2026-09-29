@@ -460,8 +460,6 @@ func TestVocabularyStore_WithMetaphone_PhoneticOnlyMatch(t *testing.T) {
 	}
 }
 
-// afterReadHook runs fn once, right after the first command named cmdName
-// completes, so a concurrent write lands between Trim's read and its evict.
 type afterReadHook struct {
 	cmdName string
 	once    sync.Once
@@ -484,9 +482,6 @@ func (h *afterReadHook) ProcessPipelineHook(next goredis.ProcessPipelineHook) go
 	return next
 }
 
-// TestVocabularyStore_Trim_ConcurrentReAddSurvives guards #1094: a term
-// re-added with a higher popularity between Trim's overflow read and its
-// evict must survive, and the index must stay within budget and in sync.
 func TestVocabularyStore_Trim_ConcurrentReAddSurvives(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -530,9 +525,6 @@ func testTrimConcurrentReAdd(
 		t.Fatalf("BulkAdd: %v", err)
 	}
 
-	// Overflow is 2 (victim, bumped). While Trim holds that stale read, the
-	// bumped term is re-added above the keeper, so the true overflow becomes
-	// (victim, keeper).
 	reAdded := false
 	trimClient.AddHook(&afterReadHook{cmdName: "zrange", fn: func() {
 		reAdded = true

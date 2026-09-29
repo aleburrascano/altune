@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// TestOutcomeEnumsMarshalJSON pins the exact JSON bytes of every outcome enum
-// value; the eval baselines and the discovery-eval-gate workflow consume them.
 func TestOutcomeEnumsMarshalJSON(t *testing.T) {
 	cases := []struct {
 		name string

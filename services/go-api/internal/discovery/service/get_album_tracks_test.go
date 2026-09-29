@@ -187,15 +187,10 @@ func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 
 const fallbackServedEvent = "album_tracks.deezer_fallback_served"
 
-// albumTracksFallbackRequest asks soundcloud for an album it can name, the
-// shape that lets the deezer search fallback run.
 func albumTracksFallbackRequest() AlbumTracksRequest {
 	return AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"}
 }
 
-// albumTracksWithFailingPrimary wires soundcloud as the requested provider,
-// failing with primaryErr, next to the deezer provider the fallback fetches
-// its candidate tracklists from.
 func albumTracksWithFailingPrimary(primaryErr error, deezer ports.AlbumContentProvider, searcher ports.SearchProvider) *GetAlbumTracksService {
 	return NewGetAlbumTracksService(
 		map[domain.ProviderName]ports.AlbumContentProvider{
@@ -220,8 +215,6 @@ func unfetchableAlbumProvider(t *testing.T) *fakeAlbumContentProvider {
 	}
 }
 
-// fallbackServedRecord is the logged record of the fallback answering, or a
-// failure when production never saw one.
 func fallbackServedRecord(t *testing.T, logs *bytes.Buffer) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
@@ -237,8 +230,6 @@ func fallbackServedRecord(t *testing.T, logs *bytes.Buffer) map[string]any {
 	return nil
 }
 
-// Issue #2238: the fallback answered ok/empty for a primary that was down, so
-// a client saw a healthy empty album and never retried.
 func TestGetAlbumTracks_fallbacklessAnswerCarriesPrimaryStatus(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -267,8 +258,6 @@ func TestGetAlbumTracks_fallbacklessAnswerCarriesPrimaryStatus(t *testing.T) {
 	}
 }
 
-// Every way the fallback can come up empty leaves the primary's failure
-// standing: none of them is evidence the album is empty.
 func TestGetAlbumTracks_everyEmptyFallbackCarriesPrimaryStatus(t *testing.T) {
 	emptyTracklist := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
@@ -300,9 +289,6 @@ func TestGetAlbumTracks_everyEmptyFallbackCarriesPrimaryStatus(t *testing.T) {
 	}
 }
 
-// A served fallback names the provider it stood in for, in the response and in
-// production logs, so neither a client nor an operator reads deezer's
-// tracklist as the answer soundcloud gave.
 func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T) {
 	logs := captureProductionLogs(t)
 	deezer := &fakeAlbumContentProvider{
@@ -333,8 +319,6 @@ func TestGetAlbumTracks_servedFallbackNamesTheProviderItStoodInFor(t *testing.T)
 	}
 }
 
-// A provider that answers for itself is not a fallback, so nothing marks it as
-// one.
 func TestGetAlbumTracks_primaryAnswerIsNotMarkedAsAFallback(t *testing.T) {
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
@@ -576,8 +560,6 @@ func (panickingTrackFeatured) LookupTrackFeatured(context.Context, string) ([]do
 	panic("featured lookup exploded")
 }
 
-// Regression test for #568: a panic in a goroutine spawned around a provider
-// or port call must be contained, not terminate the process.
 func TestEnrichFeatured_PanickingLookupIsContained(t *testing.T) {
 	svc := NewGetAlbumTracksService(nil, WithTrackFeatured(panickingTrackFeatured{}))
 	results := []domain.SearchResult{deezerTrackFeat("1", "Singapore")}

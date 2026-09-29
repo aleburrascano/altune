@@ -117,8 +117,6 @@ func (a *AppleMusicAdapter) fetchAlbumTracks(ctx context.Context, token, albumID
 	return body.Data, status, nil
 }
 
-// getCatalogJSON performs an authenticated Apple Music catalog GET. Decode
-// failures (a non-nil error on a 200) are wrapped as "decode <what>: ...".
 func (a *AppleMusicAdapter) getCatalogJSON(ctx context.Context, token, u string, dst any, what string) (int, error) {
 	status, err := getJSONWithStatus(ctx, a.client, u, dst,
 		withHeader("Authorization", "Bearer "+token),

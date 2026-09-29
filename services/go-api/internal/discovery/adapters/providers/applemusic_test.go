@@ -293,9 +293,6 @@ func TestAppleMusicAdapter_GetAlbumTracks(t *testing.T) {
 	}
 }
 
-// appleMusicCallSites exercises every Apple Music catalog GET so the request
-// contract (headers, status handling, decode-error wrapping) is pinned for all
-// of them at once.
 func appleMusicCallSites() []struct {
 	name       string
 	call       func(ctx context.Context, a *AppleMusicAdapter) error

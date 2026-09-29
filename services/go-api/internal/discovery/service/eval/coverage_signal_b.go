@@ -102,9 +102,6 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 	return report, nil
 }
 
-// tallyArtistCoverage adds one responding artist's counts to the per-provider
-// tallies: union (entities seen while the provider responded), missing (those
-// entities the provider lacked) and unique (entities only that provider has).
 func tallyArtistCoverage(ac artistCoverage, missing, union, unique map[string]int) {
 	for _, prov := range ac.responded {
 		union[prov] += len(ac.entities)

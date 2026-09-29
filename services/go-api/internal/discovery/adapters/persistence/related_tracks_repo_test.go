@@ -62,8 +62,6 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 		}
 	})
 
-	// Regression for #570: the lookup must be scoped to the caller's library in
-	// the query, so user B never sees user A's private tracks.
 	t.Run("never returns another user's library tracks", func(t *testing.T) {
 		seedTrackRow(t, pool, userB, "B Own Song", artist, album)
 		callerB := shared.NewUserId(userB)

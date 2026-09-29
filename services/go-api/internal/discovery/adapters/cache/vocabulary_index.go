@@ -35,8 +35,6 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 	return err
 }
 
-// indexEntry silently skips an oversized term: it is not an error worth
-// surfacing per request, just a write the shared index refuses.
 func (s *RedisVocabularyStore) indexEntry(
 	ctx context.Context,
 	entry domain.VocabularyEntry,
@@ -81,14 +79,8 @@ func addEntryToPipeline(
 	}
 }
 
-// vocabTrimAttempts bounds how often Trim re-reads after a concurrent write
-// to the terms ZSET invalidates its overflow snapshot.
 const vocabTrimAttempts = 5
 
-// Trim evicts the lowest-popularity overflow. The overflow read and the evict
-// run under WATCH on the terms ZSET: Add/BulkAdd write that key first, so a
-// term re-added between the read and the evict aborts the EXEC and Trim
-// re-reads instead of evicting a term the fresh write just kept.
 func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 	if s.disabled() || maxEntries <= 0 {
 		return nil

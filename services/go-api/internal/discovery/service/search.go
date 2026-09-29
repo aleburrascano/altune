@@ -12,19 +12,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service is the discovery search orchestrator. It owns only the fan-out, the
-// rank/merge sequencing, and the order in which the per-responsibility
-// collaborators below run; each responsibility (identity stamping, artist
-// disambiguation, artwork fill, ranking experiments, favorites lift, result
-// caching, correction retry, related aggregation, history persistence,
-// telemetry, vocabulary ingest) lives in its own unit and can change without
-// touching the others.
 type Service struct {
 	providers      []ports.SearchProvider
 	circuitBreaker *CircuitBreaker
 
-	// Per-responsibility collaborators, built by NewService from the
-	// dependencies the With* options capture.
 	identity       *IdentityStamper
 	disambiguator  *artistDisambiguator
 	artwork        *ArtworkFiller
@@ -40,10 +31,6 @@ type Service struct {
 	bg *backgroundRunner
 }
 
-// SearchOutput is the result of one search. QueryNorm is the canonical
-// normalized query (NormalizeForMatch of the cleaned query) the service used
-// for its cache key, history, and telemetry; callers must report it rather
-// than re-normalizing the raw query.
 type SearchOutput struct {
 	SearchId         string
 	QueryNorm        string
@@ -61,9 +48,6 @@ type SearchOutput struct {
 	Slate            BlendedSlate
 }
 
-// serviceConfig collects the dependencies the With* options capture. It exists
-// only during NewService, which threads each dependency into the collaborator
-// that owns it, so the orchestrator itself never holds a raw port.
 type serviceConfig struct {
 	historyRepo    ports.HistoryWriter
 	vocabStore     ports.VocabularyStore
@@ -171,14 +155,10 @@ func WithExploration(rate float64) Option {
 	}
 }
 
-// maybeExplore delegates to the ranking-experiments collaborator.
 func (s *Service) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchResult, bool) {
 	return s.ranking.maybeExplore(ranked)
 }
 
-// CircuitBreaker returns the per-provider breaker the search fan-out uses, so
-// the content-fetch services can share it: a provider tripped open by either
-// path is then skipped by both.
 func (s *Service) CircuitBreaker() *CircuitBreaker {
 	return s.circuitBreaker
 }
@@ -214,9 +194,6 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 	return s
 }
 
-// searchRun is the identity of one Execute call: the values every stage of the
-// search reports itself under. Grouping them keeps searchId and queryNorm from
-// being swapped as adjacent string parameters.
 type searchRun struct {
 	searchId    string
 	userId      shared.UserId
@@ -225,8 +202,6 @@ type searchRun struct {
 	saveHistory bool
 }
 
-// Execute runs a search from scratch: it ranks the query afresh and answers the
-// page it asks for under a new search id.
 func (s *Service) Execute(
 	ctx context.Context,
 	userId shared.UserId,
@@ -236,12 +211,6 @@ func (s *Service) Execute(
 	return s.ExecutePage(ctx, userId, query, saveHistory, uuid.Nil)
 }
 
-// ExecutePage answers one page of a search. continues is the id of the search
-// the caller already holds a page of: while that search's slate is held, every
-// later page is cut from it, so a fan-out that has drifted since cannot repeat
-// or drop a result between pages. Once the slate is gone the page comes from a
-// fresh search and the returned SearchId changes, which is how a caller sees
-// that the ranking under its pages is no longer the one it started with.
 func (s *Service) ExecutePage(
 	ctx context.Context,
 	userId shared.UserId,
@@ -324,10 +293,6 @@ func (s *Service) ExecutePage(
 	}, nil
 }
 
-// rankedResolution is a ranked slate plus how it was arrived at: served from
-// the result cache, or fanned out fresh and possibly re-run against a
-// corrected spelling. A cached slate called no provider, so its statuses are
-// empty and it is never partial.
 type rankedResolution struct {
 	ranked         []domain.SearchResult
 	statuses       []domain.ProviderSearchResponse
@@ -337,16 +302,10 @@ type rankedResolution struct {
 	cached         bool
 }
 
-// isAuthoritative reports whether the slate is the complete, uncorrected answer
-// to the query as asked — the only kind that may be cached under its key.
 func (r rankedResolution) isAuthoritative() bool {
 	return len(r.ranked) > 0 && !r.partial && r.correctedQuery == ""
 }
 
-// slateForPage resolves the ranking this page is cut from, and the id of the
-// search it belongs to: the continued search while its slate is held, a fresh
-// one otherwise. A held slate called no provider, so it reports like any other
-// cache hit.
 func (s *Service) slateForPage(
 	ctx context.Context,
 	query *domain.SearchQuery,
@@ -384,12 +343,6 @@ func (s *Service) resolveRanked(
 	return resolution
 }
 
-// correctedResolution re-runs a query that matched nothing against its
-// corrected spelling. An empty slate behind a total outage is that outage, not
-// a misspelling, so no second fan-out is sent into providers that are already
-// failing. Without a correction the slate stays empty and keeps the original
-// fan-out's statuses, so a zero-result search still reports which providers
-// answered it.
 func (s *Service) correctedResolution(
 	ctx context.Context,
 	query *domain.SearchQuery,
@@ -410,9 +363,6 @@ func (s *Service) correctedResolution(
 	}
 }
 
-// firstPage is the first page as the caller sees it, plus the two views
-// recording it needs distinct: organic is the page before exploration swapped
-// a slot into it, fullSlate the unpaged ranking behind it.
 type firstPage struct {
 	shown     []domain.SearchResult
 	organic   []domain.SearchResult
@@ -421,10 +371,6 @@ type firstPage struct {
 	explored  bool
 }
 
-// recordFirstPageSideEffects persists and reports one search: history, the
-// shown-results event, and vocabulary ingest. Only offset 0 reaches it, so
-// paging through a slate neither re-records the search nor re-ingests its
-// terms.
 func (s *Service) recordFirstPageSideEffects(
 	ctx context.Context,
 	run searchRun,
@@ -465,10 +411,6 @@ func (s *Service) RankVariantsForEval(
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
 }
 
-// InspectSearchWithStatuses runs the inspection fan-out and returns the ranked
-// results alongside each provider's status. The statuses let callers tell a
-// genuine zero-result query apart from a total upstream outage, which both
-// collapse to an empty result set otherwise.
 func (s *Service) InspectSearchWithStatuses(
 	ctx context.Context,
 	query *domain.SearchQuery,

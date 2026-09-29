@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// seedObservation appends one discography_observed row through the real Append.
 func seedObservation(t *testing.T, store *PgxEventStore, at time.Time, artistRef string, releases, single int, counts map[string]int) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
@@ -28,8 +27,6 @@ func seedObservation(t *testing.T, store *PgxEventStore, at time.Time, artistRef
 	}
 }
 
-// seedObservationWithNoID appends a discography_observed row carrying the id-anchor
-// field single_provider_no_id, so the real SQL ranking key can be exercised.
 func seedObservationWithNoID(t *testing.T, store *PgxEventStore, at time.Time, artistRef string, releases, single, noID int, counts map[string]int) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
@@ -56,11 +53,6 @@ func discographyRefs(cases []ports.DiscographyCase) []string {
 	return out
 }
 
-// TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup exercises the real SQL
-// aggregate against Postgres: it seeds several artists (including a stale earlier
-// observation that must be superseded by the latest) and proves the read reduces
-// to one case per artist, ranks worst-first by contamination ratio, and regroups
-// by dominant provider under by=provider. It logs the served cases for inspection.
 func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -74,7 +66,6 @@ func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 	now := time.Now().UTC()
 	seedObservation(t, store, now.Add(-1*time.Hour), "spotify:clean", 10, 0, map[string]int{"spotify": 10, "musicbrainz": 10})
 	seedObservation(t, store, now.Add(-2*time.Hour), "spotify:worst", 10, 9, map[string]int{"spotify": 10, "musicbrainz": 1})
-	// A stale earlier observation of worst that the latest must supersede.
 	seedObservation(t, store, now.Add(-48*time.Hour), "spotify:worst", 4, 0, map[string]int{"spotify": 4})
 	seedObservation(t, store, now.Add(-3*time.Hour), "deezer:mid", 10, 5, map[string]int{"deezer": 8, "musicbrainz": 4})
 
@@ -104,19 +95,11 @@ func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 	if b, _ := json.Marshal(byProvider); true {
 		t.Logf("by=provider -> %s", b)
 	}
-	// dominant providers: worst->spotify, mid->deezer, clean->musicbrainz (10/10
-	// tie, lexicographically smallest). Cluster ratios spotify 0.9 > deezer 0.5 >
-	// musicbrainz 0.0, so the regrouped order is worst, mid, clean.
 	if got, want := discographyRefs(byProvider), []string{"spotify:worst", "deezer:mid", "spotify:clean"}; !sameOrder(got, want) {
 		t.Fatalf("by=provider order = %v, want %v", got, want)
 	}
 }
 
-// TestPgxEventStore_DiscographyQuality_IDAnchoredRanking exercises the real SQL
-// ranking key against Postgres: an artist whose single-provider releases all carry
-// a shared id (high headcount ratio, zero no-id suspects) must NOT out-rank an
-// artist with a lower headcount ratio whose single-provider releases carry no id.
-// The id anchor, not raw headcount, decides worst-first.
 func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -128,9 +111,7 @@ func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
 
 	now := time.Now().UTC()
-	// Every single-provider release is id-backed: headcount ratio 1.0, no suspects.
 	seedObservationWithNoID(t, store, now.Add(-1*time.Hour), "spotify:id-verified", 10, 10, 0, map[string]int{"spotify": 10})
-	// A lower headcount ratio, but the single-provider releases carry no shared id.
 	seedObservationWithNoID(t, store, now.Add(-2*time.Hour), "deezer:no-id", 10, 3, 3, map[string]int{"deezer": 7, "musicbrainz": 3})
 
 	since := now.AddDate(0, 0, -30)
@@ -149,18 +130,12 @@ func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	}
 }
 
-// clearDiscographyObserved removes every discography_observed row so the suspect-rate
-// aggregate reads only what a test seeds.
 func clearDiscographyObserved(t *testing.T, store *PgxEventStore) {
 	t.Helper()
 	_, _ = store.pool.Exec(context.Background(),
 		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
 }
 
-// TestPgxEventStore_SuspectRate_WindowedRealOpens exercises the real suspect-rate
-// aggregate against Postgres: the rate is the share of windowed discography_observed
-// opens whose top release-suspect fired (single_provider_no_id > 0), and LastSample
-// is the most recent open.
 func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -169,8 +144,6 @@ func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 
 	now := time.Now().UTC()
 	newest := now.Add(-1 * time.Hour)
-	// Three real opens: two fired the top suspect (no-id single-provider releases),
-	// one is clean. Suspect rate = 2/3.
 	seedObservationWithNoID(t, store, newest, "a", 10, 3, 3, map[string]int{"deezer": 7, "musicbrainz": 3})
 	seedObservationWithNoID(t, store, now.Add(-2*time.Hour), "b", 8, 2, 1, map[string]int{"spotify": 6, "deezer": 2})
 	seedObservationWithNoID(t, store, now.Add(-3*time.Hour), "c", 5, 5, 0, map[string]int{"spotify": 5})
@@ -187,12 +160,6 @@ func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 	}
 }
 
-// TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt is the core must-hold: the
-// suspect rate counts real production opens only. discography_observed is
-// server-emitted on the live discography path; an eval / synthetic run emits none
-// of it (only search/behavioral traffic), so appending a whole eval run's events
-// leaves the rate exactly where the real opens left it — never diluting or inflating
-// it.
 func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -209,8 +176,6 @@ func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 		t.Fatalf("SuspectRate before: %v", err)
 	}
 
-	// An eval / synthetic run: search and behavioral traffic, never a
-	// discography_observed open. It must not move the rate.
 	for i := 0; i < 20; i++ {
 		at := now.Add(-time.Duration(i) * time.Minute)
 		seedNonDiscographyEvent(t, store, at, domain.EventTypeSearchPerformed)
@@ -227,8 +192,6 @@ func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 	}
 }
 
-// TestPgxEventStore_SuspectRate_EmptyWindowIsZero proves an empty window yields a 0
-// rate and a zero last-sample rather than a divide-by-zero.
 func TestPgxEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -247,8 +210,6 @@ func TestPgxEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
 	}
 }
 
-// seedNonDiscographyEvent appends one non-discography_observed event through the
-// real Append — the kind of traffic an eval / synthetic run generates.
 func seedNonDiscographyEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domain.EventType) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
@@ -273,9 +234,6 @@ func sameOrder(a, b []string) bool {
 	return true
 }
 
-// remainingDiscographyRefs lists the artist_ref of every discography_observed row
-// still in the table, so a retention test can assert exactly which rows survived a
-// prune rather than inferring it from the windowed read.
 func remainingDiscographyRefs(t *testing.T, store *PgxEventStore) map[string]bool {
 	t.Helper()
 	rows, err := store.pool.Query(context.Background(),
@@ -295,12 +253,6 @@ func remainingDiscographyRefs(t *testing.T, store *PgxEventStore) map[string]boo
 	return refs
 }
 
-// TestPgxEventStore_PruneDiscographyObserved proves the retention invariant against
-// real Postgres: the periodic prune evicts discography_observed rows older than the
-// retention window while leaving every in-window row — including one at the widest
-// readable aggregate window (365 days) and one exactly at the retention cutoff —
-// untouched. It then confirms the capped aggregate read never scans the evicted row,
-// so the table and the scan both stay bounded no matter how many opens land.
 func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -314,8 +266,6 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 	now := time.Now().UTC()
 	counts := map[string]int{"spotify": 10, "musicbrainz": 2}
 
-	// fresh + midwindow are inside every readable window; boundary sits exactly at
-	// the retention cutoff (a strict `<` must keep it); ancient is past the window.
 	seedObservation(t, store, now.Add(-1*time.Hour), "spotify:fresh", 10, 8, counts)
 	seedObservation(t, store, now.AddDate(0, 0, -365), "spotify:midwindow", 10, 8, counts)
 	seedObservation(t, store, now.Add(-discographyRetentionWindow), "spotify:boundary", 10, 8, counts)
@@ -339,8 +289,6 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 		}
 	}
 
-	// The capped aggregate read at the widest window (365 days) must never surface
-	// the evicted row — the scan stays within the retained window.
 	since := now.AddDate(0, 0, -365)
 	cases, err := store.DiscographyQuality(context.Background(), since, ports.GroupByArtist, 200)
 	if err != nil {
@@ -353,9 +301,6 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 	}
 }
 
-// TestPgxEventStore_PruneDiscographyObserved_Idempotent proves a second prune with
-// no new rows removes nothing and cannot drop an in-window row: the guard against a
-// prune that widens its reach on repeat, and against a clock edge deleting live data.
 func TestPgxEventStore_PruneDiscographyObserved_Idempotent(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)

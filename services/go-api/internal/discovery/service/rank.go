@@ -181,8 +181,6 @@ func rrfScore(bestRank map[domain.ProviderName]int) float64 {
 	return s
 }
 
-// entityHaystack builds the normalized match haystack for a result, combining
-// its subtitle and title. Pure: no side effects, deterministic.
 func entityHaystack(r domain.SearchResult) string {
 	return textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
 }

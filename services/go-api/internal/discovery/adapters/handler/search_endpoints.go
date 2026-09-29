@@ -15,8 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Error codes a rejected discovery request answers with, one per cause, so a
-// client branches on the code instead of matching the detail text.
 const (
 	requestCodeQRequired         = "discovery.q_required"
 	requestCodeInvalidKind       = "discovery.invalid_kind"
@@ -234,9 +232,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// searchOutcome maps a scatter's provider statuses onto the response's HTTP
-// status and error code. One provider answering is enough for a 200, so the
-// 503 and its code mean every provider in the fan-out failed.
 func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {
 	if len(statuses) == 0 {
 		return http.StatusOK, ""
@@ -249,9 +244,6 @@ func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {
 	return http.StatusServiceUnavailable, searchCodeAllProvidersFailed
 }
 
-// parseContinuedSearchId reads the search_id a caller echoes back from the page
-// it already has, which keeps later pages cut from that search's ranking. No
-// search_id means a new search, so old clients page exactly as before.
 func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("search_id"))
 	if raw == "" {

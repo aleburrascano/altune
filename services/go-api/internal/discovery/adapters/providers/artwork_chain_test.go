@@ -24,8 +24,6 @@ func (f *fakeArtworkResolver) Resolve(_ context.Context, _ domain.ResultKind, _,
 	return f.url, f.err
 }
 
-// slowArtworkResolver blocks for perCallDelay unless the context fires first,
-// simulating a provider that sits at its per-provider timeout on every call.
 type slowArtworkResolver struct {
 	perCallDelay time.Duration
 }

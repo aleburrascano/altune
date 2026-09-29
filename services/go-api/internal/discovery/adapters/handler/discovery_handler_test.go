@@ -780,8 +780,6 @@ func TestHandleRelatedTracks(t *testing.T) {
 	})
 }
 
-// statusCodedError carries its own HTTP status and machine-readable code
-// through the httputil StatusError/ErrorCoder contract.
 type statusCodedError struct {
 	status int
 	code   string
@@ -804,8 +802,6 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	}
 }
 
-// rejectionCode is the code a caller branches on, taken off a rejected
-// request. An empty one is the failure this file exists to prevent.
 func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body httputil.ErrorResponse

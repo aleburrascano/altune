@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// tripToHalfOpenWindow opens the breaker for provider and ages its last failure
-// past openDuration, so the next AllowRequest admits the half-open probe.
 func tripToHalfOpenWindow(cb *CircuitBreaker, provider domain.ProviderName) {
 	for i := 0; i < failureThreshold; i++ {
 		cb.RecordFailure(provider)
@@ -21,8 +19,6 @@ func tripToHalfOpenWindow(cb *CircuitBreaker, provider domain.ProviderName) {
 	cb.mu.Unlock()
 }
 
-// A half-open probe whose caller's context is canceled mid-flight must not
-// leave the provider blackholed: the breaker has to admit a new probe.
 func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 	cb := NewCircuitBreaker()
 	tripToHalfOpenWindow(cb, domain.ProviderDeezer)
@@ -41,7 +37,6 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 		svc.fanOut(ctx, "humble", nil)
 	}()
 
-	// Wait until the probe has been admitted and is in flight, then cancel it.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		cb.mu.Lock()
@@ -61,8 +56,6 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 	if !cb.AllowRequest(domain.ProviderDeezer) {
 		t.Fatal("provider blackholed: AllowRequest = false after the half-open probe was canceled, want a new probe admitted")
 	}
-	// The client cancellation is not evidence of provider failure: the breaker
-	// must not have re-opened on it.
 	if got := cb.GetStatus(domain.ProviderDeezer); got != domain.ProviderStatusOK {
 		t.Errorf("status after canceled probe = %v, want ok (half-open, not re-opened)", got)
 	}
@@ -273,9 +266,6 @@ func TestCircuitBreaker_ReleaseProbeIsNoOpOutsideHalfOpen(t *testing.T) {
 	}
 }
 
-// Backstop: a probe never resolved by any Record*/ReleaseProbe call (e.g. a
-// provider that ignores its context and hangs) expires after probeLease, so
-// the breaker cannot stay half-open-and-probing forever.
 func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
 	cb := NewCircuitBreaker()
 	tripToHalfOpenWindow(cb, domain.ProviderDeezer)

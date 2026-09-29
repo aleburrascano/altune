@@ -59,13 +59,6 @@ func (r *PgxFavoritesRepository) Remove(ctx context.Context, userId shared.UserI
 	return nil
 }
 
-// eraseFavoritesOfDeletedIdentitiesSQL drops the favorites of accounts whose
-// identity is gone. Favorites have no retention at all — Remove is the only
-// delete, and it needs the owner to ask — so this is the single path by which a
-// deleted account's saved artists and albums ever leave the table.
-//
-// Cost: one pass over discovery_favorites per run, each row probing auth.users'
-// primary key.
 const eraseFavoritesOfDeletedIdentitiesSQL = `
 	DELETE FROM discovery_favorites f
 	WHERE EXISTS (SELECT 1 FROM auth.users)

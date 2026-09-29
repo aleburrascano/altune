@@ -38,8 +38,6 @@ func TestEventType_String(t *testing.T) {
 	}
 }
 
-// Every key below is already written into persisted rows and read back by the
-// event SQL, so a changed value strands that history rather than renaming it.
 func TestPayloadKeysStayPinned(t *testing.T) {
 	tests := []struct {
 		key  string
@@ -149,8 +147,6 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeClientError, true},
 		{EventTypeUserAction, true},
 		{EventTypeFailureShown, true},
-		// discography_observed is server-emitted only: a client must never be
-		// able to forge structural-quality data.
 		{EventTypeDiscographyObserved, false},
 		{EventType(999), false},
 	}

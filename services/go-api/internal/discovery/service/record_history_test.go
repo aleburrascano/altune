@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// Regression test for #2244: a detached job's failure line must carry what an
-// operator needs to diagnose it without a reproduction.
 func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	repo := &fakeHistoryWriter{
 		insertFn: func(context.Context, *domain.SearchHistoryEntry) error {
@@ -29,7 +27,6 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	if rec.Attrs["search_text.fp"] == "" {
 		t.Errorf("no search_text fingerprint to join the failure to the search, attrs = %v", rec.Attrs)
 	}
-	// The fingerprint stands in for text clear-history promises to erase (#1097).
 	for _, form := range []string{raw, "diagnosis"} {
 		if strings.Contains(rec.Attrs["search_text.fp"]+rec.Attrs["error"], form) {
 			t.Errorf("failure line leaks search text %q: %v", form, rec.Attrs)

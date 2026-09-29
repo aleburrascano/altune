@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// upstreamDown is the transport error a dead provider produces.
 var upstreamDown = &url.Error{Op: "Get", URL: "https://provider.test", Err: errors.New("connection refused")}
 
 type statusErr int
@@ -19,8 +18,6 @@ type statusErr int
 func (e statusErr) Error() string   { return fmt.Sprintf("http status %d", int(e)) }
 func (e statusErr) HTTPStatus() int { return int(e) }
 
-// tripViaSearch opens provider's circuit the way production does: repeated
-// failures of the search fan-out.
 func tripViaSearch(t *testing.T, cb *CircuitBreaker, provider domain.ProviderName) {
 	t.Helper()
 	svc := NewService([]ports.SearchProvider{&fakeProvider{name: provider, err: upstreamDown}}, cb)
@@ -36,8 +33,6 @@ func breakerTrack(provider domain.ProviderName, id string) domain.SearchResult {
 	return trackFrom(provider, id, "Humble", "Kendrick Lamar")
 }
 
-// A provider the search path has tripped open must be skipped by every content
-// endpoint instead of being called directly.
 func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -148,8 +143,6 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 	}
 }
 
-// Content-path failures count toward the same breaker, so a provider that dies
-// on content calls is also skipped by the search fan-out.
 func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 	cb := NewCircuitBreaker()
 	var contentCalls atomic.Int32
@@ -206,8 +199,6 @@ func TestContentBreaker_OnlyHealthFailuresCount(t *testing.T) {
 	}
 }
 
-// A half-open probe made by a content call must resolve the slot on every
-// outcome, or the provider stays blackholed for search too.
 func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 	cases := []struct {
 		name      string

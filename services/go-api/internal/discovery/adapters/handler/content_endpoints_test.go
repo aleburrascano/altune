@@ -160,8 +160,6 @@ func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	}
 }
 
-// stubIdentityStore resolves every artist to the same cross-provider bridge,
-// so the artist content endpoints take the identity fan-out path.
 type stubIdentityStore struct{ xref map[string]string }
 
 func (s stubIdentityStore) PersistBridges(context.Context, discdomain.ResultKind, string, map[string]string) error {
@@ -176,7 +174,6 @@ func (s stubIdentityStore) Invalidate(context.Context, discdomain.ResultKind, di
 	return nil
 }
 
-// partialContentProvider answers as provider, or fails when down.
 type partialContentProvider struct {
 	provider discdomain.ProviderName
 	down     bool
@@ -203,8 +200,6 @@ func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ discdomain.
 	return p.result(discdomain.ResultKindAlbum, id)
 }
 
-// identityContentRouter serves the discovery routes over an identity fan-out
-// across every provider, with the ones in down failing.
 func identityContentRouter(down map[discdomain.ProviderName]bool) chi.Router {
 	all := []discdomain.ProviderName{
 		discdomain.ProviderDeezer, discdomain.ProviderMusicBrainz, discdomain.ProviderSoundCloud,
@@ -236,8 +231,6 @@ func allButDeezerDown() map[discdomain.ProviderName]bool {
 	}
 }
 
-// decodeContentWire decodes a content fetch body as raw JSON, so a missing
-// "partial" key is distinguishable from false.
 func decodeContentWire(t *testing.T, raw json.RawMessage) (status string, items int, partial *bool) {
 	t.Helper()
 	var body struct {
@@ -290,9 +283,6 @@ func TestArtistContentEndpoints_IdentityFanOutReportsPartial(t *testing.T) {
 		})
 	}
 }
-
-// These tests guard issue #568: a panic inside a goroutine the handler spawns
-// must be contained. Without recovery each one crashes the test binary.
 
 type panickingArtistContentProvider struct{}
 

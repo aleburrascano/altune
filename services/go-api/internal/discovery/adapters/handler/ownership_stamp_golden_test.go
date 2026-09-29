@@ -18,11 +18,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// These goldens pin the wire bytes of every response ownership enrichment
-// touches, captured before the enrichment moved out of the handler (#1075):
-// which items get owned_track_id/owned_acquisition_status, and which album
-// tracks get a track number filled.
-
 type goldenOwnershipReader struct{ owned map[string]ports.OwnedTrack }
 
 func (r goldenOwnershipReader) OwnedByTitleArtist(context.Context, shared.UserId) (map[string]ports.OwnedTrack, error) {
@@ -92,7 +87,6 @@ func goldenRouter(svcs DiscoveryServices, filler ports.TrackNumberFiller) chi.Ro
 	return r
 }
 
-// wireGoldenOwnership attaches ownership enrichment the way app wiring does.
 func wireGoldenOwnership(h *DiscoveryHandler, reader ports.OwnershipReader, filler ports.TrackNumberFiller) *DiscoveryHandler {
 	return h.WithOwnershipEnrichment(service.NewOwnershipEnrichmentService(reader, filler))
 }
@@ -102,7 +96,6 @@ var searchIDPattern = regexp.MustCompile(`"search_id":"[^"]*"`)
 func assertGoldenBody(t *testing.T, got, want string) {
 	t.Helper()
 	got = searchIDPattern.ReplaceAllString(got, `"search_id":"<id>"`)
-	// WriteJSON's encoder terminates the body with a newline.
 	if got != want+"\n" {
 		t.Errorf("response JSON drifted.\n got: %s\nwant: %s", got, want)
 	}
@@ -144,7 +137,6 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("track number fill never ran")
 	}
-	// Let any unexpected extra fill land before asserting the exact set.
 	time.Sleep(50 * time.Millisecond)
 	filler.mu.Lock()
 	defer filler.mu.Unlock()

@@ -347,8 +347,6 @@ func albumTitles(items []domain.SearchResult) []string {
 
 const fanOutFailedEvent = "artist_content.fanout.provider_failed"
 
-// captureProductionLogs routes slog to a JSON buffer at Info, the default
-// production level, so anything logged below it is dropped as in production.
 func captureProductionLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -358,7 +356,6 @@ func captureProductionLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// fanOutFailureRecords returns every logged fan-out failure record.
 func fanOutFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	t.Helper()
 	var out []map[string]any
@@ -377,9 +374,6 @@ func fanOutFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	return out
 }
 
-// Issue #1100: a provider failing inside the identity fan-out was logged at
-// Debug, so production (Info) never saw which provider dropped out for which
-// artist while the merge quietly served the rest.
 func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) {
 	const secret = "0123456789abcdef0123456789abcdef"
 	leaky := &url.Error{Op: "Get", URL: "https://ws.audioscrobbler.com/2.0/?api_key=" + secret, Err: errors.New("connection refused")}
@@ -437,9 +431,6 @@ func TestIdentityFanOut_NoFailureWarnWhenAllAnswer(t *testing.T) {
 	}
 }
 
-// A client that hangs up cancels every in-flight provider call; that says
-// nothing about provider health and would otherwise warn once per abandoned
-// request.
 func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -460,8 +451,6 @@ func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 	}
 }
 
-// An open circuit skips the provider without calling it; the breaker already
-// reported the trip, so repeating it on every request would be spam.
 func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
 	cb := NewCircuitBreaker()
 	tripViaSearch(t, cb, domain.ProviderSpotify)
@@ -476,8 +465,6 @@ func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
 	}
 }
 
-// identityFanOutWithErr is identityFanOut with the failure error chosen per
-// provider; nil means the provider answers.
 func identityFanOutWithErr(errFor func(domain.ProviderName) error, opts ...ArtistContentOption) *GetArtistContentService {
 	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
 	xref := make(map[string]string, len(everyContentProvider))
@@ -502,8 +489,6 @@ func identityFanOutWithErr(errFor func(domain.ProviderName) error, opts ...Artis
 	return NewGetArtistContentService(providers, append(opts, WithContentIdentityStore(store))...)
 }
 
-// everyContentProvider lists each real provider, so a fan-out test covers the
-// widest identity fan-out production can run.
 var everyContentProvider = []domain.ProviderName{
 	domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud,
 	domain.ProviderLastFM, domain.ProviderITunes, domain.ProviderTheAudioDB,
@@ -511,8 +496,6 @@ var everyContentProvider = []domain.ProviderName{
 	domain.ProviderAppleMusic, domain.ProviderSpotify,
 }
 
-// identityFanOut builds a content service over every provider, each with a
-// stored ID, whose fetch outcome is decided by fail.
 func identityFanOut(fail func(domain.ProviderName) bool, opts ...ArtistContentOption) *GetArtistContentService {
 	return identityFanOutWithErr(func(pn domain.ProviderName) error {
 		if fail(pn) {
@@ -566,8 +549,6 @@ func TestIdentityFanOut_AllProvidersAnsweredIsNotPartial(t *testing.T) {
 	}
 }
 
-// A provider the breaker short-circuits never answered, so the merged answer
-// is missing its contribution just as if it had errored.
 func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
 	cb := NewCircuitBreaker()
 	tripViaSearch(t, cb, domain.ProviderSpotify)
@@ -582,8 +563,6 @@ func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
 	}
 }
 
-// Providers with no stored ID are never asked, so their absence (open circuit
-// or not) is not a degradation.
 func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 	answer := &fakeArtistContentProvider{
 		getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
@@ -617,8 +596,6 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 	}
 }
 
-// Regression test for #568: a panic in a goroutine spawned around a provider
-// or port call must be contained, not terminate the process.
 func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
 	svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
 		domain.ProviderDeezer: &fakeArtistContentProvider{},

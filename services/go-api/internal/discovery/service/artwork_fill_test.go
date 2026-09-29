@@ -221,9 +221,6 @@ func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
 	}
 }
 
-// A provider outage must not be recorded as "this track has no art": the
-// negative entry would short-circuit every later fill for the whole negative
-// TTL, long after the providers came back.
 func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
 	cache := &fakeArtworkCache{store: map[string]string{}}
@@ -267,8 +264,6 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	}
 }
 
-// countingIdentityStore counts every store call so the fill's round-trip cost
-// is measurable. It knows an identity for every even external id.
 type countingIdentityStore struct {
 	mu          sync.Mutex
 	singleCalls int
@@ -298,7 +293,6 @@ func knownIdentity(ref ports.IdentityRef) (ports.IdentityHit, bool) {
 	return ports.IdentityHit{MBID: "mbid-" + ref.ExternalID, Xref: map[string]string{"discogs": "d" + ref.ExternalID}}, true
 }
 
-// batchingIdentityStore also offers the one-round-trip batch lookup.
 type batchingIdentityStore struct {
 	countingIdentityStore
 	batchCalls int
@@ -390,8 +384,6 @@ func TestArtworkFiller_FallsBackToPerResultLookupWithoutBatch(t *testing.T) {
 	assertDurableXrefApplied(t, got)
 }
 
-// stageLog records every port call the artwork cascade makes, in order, so the
-// table test below pins stage order and fallthrough, not just the final label.
 type stageLog struct{ calls []string }
 
 func (l *stageLog) add(s string) { l.calls = append(l.calls, s) }
@@ -452,7 +444,7 @@ type scriptedResolver struct {
 	log         *stageLog
 	identityURL string
 	nameURL     string
-	outage      error // every leg reports this instead of a clean miss
+	outage      error
 }
 
 func (r *scriptedResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
@@ -756,8 +748,6 @@ func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind
 	panic("artwork resolver exploded")
 }
 
-// Regression test for #568: a panic in a goroutine spawned around a provider
-// or port call must be contained, not terminate the process.
 func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(&panickingArtworkResolver{}))

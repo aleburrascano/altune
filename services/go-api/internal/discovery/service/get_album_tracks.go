@@ -37,8 +37,6 @@ func WithTrackFeatured(f deezerFeaturedLookup) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.featured = f }
 }
 
-// WithAlbumCircuitBreaker gates every provider call the service makes through
-// cb, the breaker shared with the search fan-out. Without it, calls are ungated.
 func WithAlbumCircuitBreaker(cb *CircuitBreaker) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.breaker = cb }
 }
@@ -154,10 +152,6 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 	return resp, nil
 }
 
-// fallbackAlbumTracks is the substitute tracklist for a requested provider that
-// had no answer, or nil when none is wired or none was found. Nil leaves the
-// caller holding the requested provider's own failure, so an outage is never
-// reported as a healthy empty album.
 func (s *GetAlbumTracksService) fallbackAlbumTracks(ctx context.Context, requested domain.ProviderName, albumTitle, albumArtist string, limit int) *ContentFetchResponse {
 	if albumTitle == "" || s.fallbackSearcher == nil {
 		return nil
@@ -182,8 +176,6 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		return s.fallbackSearcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 	})
 	if err != nil {
-		// A transport failure's *url.Error embeds the request URL, which for
-		// LastFM and SoundCloud carries api_key / client_id.
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
 			"requested_provider", requested.String(), "query", query, "error", redact.Secrets(err.Error()))
 		return nil
@@ -200,8 +192,6 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 	return resp
 }
 
-// firstMatchingTracklist is the tracklist of the first candidate album that is
-// albumArtist's and has tracks, or nil when no candidate is.
 func (s *GetAlbumTracksService) firstMatchingTracklist(ctx context.Context, deezer ports.AlbumContentProvider, candidates []domain.SearchResult, albumArtist string) []domain.SearchResult {
 	wantArtist := textnorm.NormalizeForMatch(albumArtist)
 	for _, candidate := range candidates {

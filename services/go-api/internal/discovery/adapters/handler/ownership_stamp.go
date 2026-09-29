@@ -21,16 +21,11 @@ func (h *DiscoveryHandler) writeContentFetch(
 	httputil.WriteJSON(w, status, dto)
 }
 
-// WithOwnershipEnrichment attaches the service that stamps owned tracks onto
-// responses and backfills album positions. Without it responses carry no
-// ownership.
 func (h *DiscoveryHandler) WithOwnershipEnrichment(svc *service.OwnershipEnrichmentService) *DiscoveryHandler {
 	h.ownership = svc
 	return h
 }
 
-// ownableItems exposes each item of the given slates to ownership enrichment,
-// pointing into the slates so stamps land on the response.
 func ownableItems(slates ...[]SearchResultDTO) []service.OwnableItem {
 	var out []service.OwnableItem
 	for _, items := range slates {
@@ -45,8 +40,6 @@ func ownableItem(dto *SearchResultDTO) service.OwnableItem {
 	return service.OwnableItem{Kind: dto.Kind, Title: dto.Title, Artist: dto.Subtitle, Extras: &dto.Extras}
 }
 
-// ownershipTargets lists every item of a search response ownership enrichment
-// stamps: the flat results, the top result and each section's items.
 func ownershipTargets(
 	results []SearchResultDTO,
 	topResult *SearchResultDTO,

@@ -12,20 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Every identifier and name below is interpolated into a provider URL, so the
-// handler is the last place that can refuse one addressing a path the caller
-// was never given, or one long enough to spend MusicBrainz's shared 1 req/s
-// budget for every other caller.
-
-// oversizedParam is past every free-text cap, at the size the enrichment
-// routes were driven with before they had one.
 var oversizedParam = strings.Repeat("a", 5000)
 
 const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 
-// paramValidationRouter serves the content and enrichment routes over
-// providers that answer, so a rejected request is rejected by validation and
-// not by a missing service.
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
@@ -116,9 +106,6 @@ func TestEnrichment_CanonicalMBIDAndBoundedNamesStillServe(t *testing.T) {
 	}
 }
 
-// realProviderIDs carries one id per provider in the shape that provider
-// actually issues. An id a user can reach today must keep serving, so this is
-// the other arm of the rejections above.
 var realProviderIDs = []struct {
 	name       string
 	provider   discdomain.ProviderName

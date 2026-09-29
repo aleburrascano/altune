@@ -11,8 +11,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// pipelineRecorder is a go-redis hook that captures every pipelined command
-// and answers without a server, so index writes can be asserted offline.
 type pipelineRecorder struct {
 	mu   sync.Mutex
 	cmds []goredis.Cmder
@@ -52,9 +50,6 @@ func newRecordingVocabStore(t *testing.T) (*RedisVocabularyStore, *pipelineRecor
 	return NewVocabularyStore(client, lowercaseNorm), rec
 }
 
-// TestVocabularyStore_OversizedTerm_NotIndexed guards #1087: the shared
-// vocabulary index must refuse a term past MaxVocabularyTermRunes from any
-// writer (search ingest or chart refresh), while normal terms still index.
 func TestVocabularyStore_OversizedTerm_NotIndexed(t *testing.T) {
 	ctx := context.Background()
 	oversized := strings.Repeat("a", domain.MaxVocabularyTermRunes+1)

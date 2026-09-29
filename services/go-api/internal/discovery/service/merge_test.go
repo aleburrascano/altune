@@ -545,11 +545,6 @@ func TestMergeInto_TitleTierDoesNotCarryBeyondThreePercentDurationTolerance(t *t
 }
 
 func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T) {
-	// The Don Toliver bug: a same-name look-alike (no identity) carries a wrong
-	// cover, while the real, identity-pinned track has none bound yet. A name-only
-	// merge must never paste the look-alike's art onto the identity entity — a
-	// clean placeholder (empty ImageURL, resolved later by identity-first
-	// fillArtwork) beats wrong art.
 	identity := withMBID(track("No Idea", "Don Toliver", domain.ProviderMusicBrainz, nil), "mbid-dontoliver")
 	lookalike := track("No Idea", "Don Toliver", domain.ProviderDeezer, nil)
 	lookalike.ImageURL = "https://wrong/lookalike.jpg"
@@ -575,9 +570,6 @@ func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T
 }
 
 func TestMergeInto_StrongIDMergeAdoptsSiblingArtwork(t *testing.T) {
-	// Proven the same track by ISRC: either provider's cover is the entity's own,
-	// so a missing cover on one side is still filled from the other (coverage must
-	// not regress for genuine same-entity merges).
 	a := withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderMusicBrainz, nil), "USUM71703089")
 	b := withISRC(track("Humble", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
 	b.ImageURL = "https://cover/humble.jpg"

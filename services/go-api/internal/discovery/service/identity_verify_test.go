@@ -307,8 +307,6 @@ func TestIdentityVerifier_nonArtistKindUntouched(t *testing.T) {
 	}
 }
 
-// Pins which xref keys the verifier checks and which content provider serves
-// each: an "itunes" xref edge is verified through the Apple Music provider.
 func TestVerifiableEdge(t *testing.T) {
 	tests := []struct {
 		key    string

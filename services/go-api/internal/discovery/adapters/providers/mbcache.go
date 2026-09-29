@@ -8,20 +8,14 @@ import (
 
 const mbMemoTTL = 6 * time.Hour
 
-// mbMemoMaxEntries caps each memo. Keys are normalized artist names taken
-// from user search results, so without a cap every distinct name ever
-// searched would stay in memory for the life of the process.
 const mbMemoMaxEntries = 2048
 
-// mbMemo is a TTL + LRU memo. Expired entries are deleted when read, and a
-// put into a full memo first sweeps expired entries (at most once per TTL)
-// and then evicts the least recently used entry if still full.
 type mbMemo[V any] struct {
 	mu        sync.Mutex
 	ttl       time.Duration
 	max       int
 	m         map[string]*list.Element
-	order     *list.List // front = most recently used
+	order     *list.List
 	lastSweep time.Time
 }
 
@@ -95,7 +89,6 @@ func (c *mbMemo[V]) len() int {
 	return len(c.m)
 }
 
-// sweepExpired must be called with c.mu held.
 func (c *mbMemo[V]) sweepExpired(now time.Time) {
 	c.lastSweep = now
 	for el := c.order.Back(); el != nil; {
@@ -107,7 +100,6 @@ func (c *mbMemo[V]) sweepExpired(now time.Time) {
 	}
 }
 
-// remove must be called with c.mu held.
 func (c *mbMemo[V]) remove(el *list.Element) {
 	c.order.Remove(el)
 	delete(c.m, el.Value.(*mbMemoEntry[V]).key)

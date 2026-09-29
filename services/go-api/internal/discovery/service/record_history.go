@@ -14,11 +14,6 @@ import (
 
 const historyRingSize = 100
 
-// RecordSearchHistoryService persists a user's executed searches as a capped
-// ring. It is the write-side sibling of ListSearchHistoryService and
-// ClearSearchHistoryService, pulled off Service so history persistence can
-// change without touching the search orchestrator. Persistence failures are
-// tolerated: a search must never fail because its history write did.
 type RecordSearchHistoryService struct {
 	historyRepo ports.HistoryWriter
 }
@@ -48,9 +43,6 @@ func (s *RecordSearchHistoryService) Record(
 		ExecutedAt: time.Now().UTC(),
 	}
 	if err := s.historyRepo.Insert(ctx, entry); err != nil {
-		// The search text is erasable (#1097), so the dropped write is named by
-		// its fingerprint, which still joins this line to the search.v2.start
-		// it belongs to (#2244).
 		slog.WarnContext(ctx, "search.v2.history_persist_failed",
 			"user_id", userId.String(),
 			logging.SearchTextAttr(query.Raw),

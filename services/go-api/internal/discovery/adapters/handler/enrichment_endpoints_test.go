@@ -17,11 +17,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// These tests pin the enrichment contract that a transient provider failure is
-// distinguishable from a genuine "no data" result: both answer 200 with an
-// empty payload, but only the failure sets degraded=true, and only the genuine
-// miss is negative-cached (so the failure is retried on the next request).
-
 var errProviderDown = errors.New("provider returned 503")
 
 type memNameCache[T any] struct {
@@ -145,14 +140,10 @@ func (f *scriptedLyricsProvider) Lookup(context.Context, string) (discdomain.Dee
 }
 
 type degradedCase struct {
-	name string
-	// build wires a fresh router and returns the provider call counter.
-	build        func() (chi.Router, *int)
-	path         string
-	wantDegraded bool
-	// wantSecondCalls is the cumulative provider call count after the same
-	// request is served twice: a genuine miss is negative-cached (no new
-	// calls), a transient failure is not (the provider is asked again).
+	name            string
+	build           func() (chi.Router, *int)
+	path            string
+	wantDegraded    bool
 	wantSecondCalls int
 }
 
@@ -528,8 +519,6 @@ func TestNonNilStrings(t *testing.T) {
 	}
 }
 
-// No enrichment service currently returns a non-degraded error, so the hard
-// error path of the shared withEnricher helper is pinned directly.
 func TestWithEnricher_HardErrorsUseTypedContract(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -569,8 +558,6 @@ func TestWithEnricher_HardErrorsUseTypedContract(t *testing.T) {
 	}
 }
 
-// A typed upstream status (e.g. a provider 404 or 503) must stay a degraded
-// 200 through the real enrichment handlers, never leak as the endpoint status.
 func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
 	upstream := statusCodedError{status: http.StatusNotFound, code: "upstream"}
 	svc := enrich.NewLastFmEnrichmentService(&scriptedLastFmEnricher{err: upstream},

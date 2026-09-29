@@ -138,10 +138,6 @@ func (f favoriteSet) covers(r domain.SearchResult) bool {
 	return f.byKind[r.Kind.String()+"|"+domain.FavoriteKeyOf(r)]
 }
 
-// favoritesLifter stably lifts the user's favorites to the front of the top
-// ranked window. It replaces the favoritesRepo port that used to sit on the
-// Service god object. A nil repository, the system user, or fewer than two
-// results leave the ranking untouched.
 type favoritesLifter struct {
 	repo ports.FavoritesRepository
 }

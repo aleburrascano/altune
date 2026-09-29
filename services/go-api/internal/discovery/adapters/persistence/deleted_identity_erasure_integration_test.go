@@ -14,11 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// standUpIdentityStore creates a Supabase-shaped auth.users in the test database
-// and drops it again afterwards, so the anti-join runs against a real Postgres
-// without the test owning a schema Supabase owns in production. A database that
-// already has auth.users is that production identity store: the test skips
-// rather than writing to it.
 func standUpIdentityStore(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
@@ -38,10 +33,6 @@ func standUpIdentityStore(t *testing.T, pool *pgxpool.Pool) {
 	})
 }
 
-// adoptStoredOwners registers every owner the discovery tables already hold, so
-// the sweep under test finds exactly the account this test deletes. Without it
-// the erasure is correct and still destroys whatever another test left behind,
-// since to a fresh auth.users every one of those owners is a deleted account.
 func adoptStoredOwners(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `
@@ -62,9 +53,6 @@ func forgetIdentity(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	}
 }
 
-// storedRowsOf is one owner's footprint across every discovery table that keys
-// rows by account, counted straight from the tables because no read port spans
-// all three.
 type storedRowsOf struct {
 	history   int
 	favorites int
@@ -89,9 +77,6 @@ func countOwnedRows(t *testing.T, pool *pgxpool.Pool, countSQL string, owner sha
 	return n
 }
 
-// seedEveryDiscoveryTableFor writes one row per discovery table through the real
-// write paths, so the sweep erases the rows production actually produces, and
-// removes them again if the sweep under test did not.
 func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	t.Helper()
 	ctx := context.Background()
@@ -142,9 +127,6 @@ func deleteStoredRowsOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	}
 }
 
-// deletedIdentityErasers is the sweep's own list, built here from the same
-// constructors the composition root uses, so a repository that stops
-// implementing the port fails to compile rather than silently dropping out.
 func deletedIdentityErasers(pool *pgxpool.Pool) []ports.DeletedIdentityEraser {
 	return []ports.DeletedIdentityEraser{
 		NewPgxSearchHistoryRepository(pool),
@@ -166,12 +148,6 @@ func sweepDeletedIdentities(t *testing.T, pool *pgxpool.Pool) int64 {
 	return erased
 }
 
-// TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne is the account
-// deletion guard for #2236: the discovery tables carry no foreign key to
-// auth.users, so a deleted account's search text, favorites and telemetry are
-// erased only if this sweep finds them. Both owners go through one sweep,
-// because what has to hold is that the sweep tells them apart — an erasure that
-// takes the live account's rows with it is the failure that cannot be undone.
 func TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -197,13 +173,6 @@ func TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne(t *testing.T) {
 	}
 }
 
-// TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows is the
-// guard for the one owner that is absent from auth.users by design rather than
-// by deletion. DiscographyTelemetry stamps every discography_observed row with
-// shared.SystemUserId() precisely so the structural signal sits on no real
-// account, and the smoke eval runs under it too — to an anti-join that account
-// looks deleted, so a sweep without this exclusion evicts the whole discography
-// quality aggregate on its first tick.
 func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -211,14 +180,9 @@ func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testin
 	system := shared.SystemUserId()
 	deleted := shared.NewUserId(uuid.New())
 	seedEveryDiscoveryTableFor(t, pool, system)
-	// A live account keeps auth.users non-empty and a deleted one gives the
-	// sweep real work, so the system identity surviving cannot be the blast
-	// bound short-circuiting the whole run.
 	seedEveryDiscoveryTableFor(t, pool, shared.NewUserId(uuid.New()))
 	seedEveryDiscoveryTableFor(t, pool, deleted)
 	adoptStoredOwners(t, pool)
-	// auth.users never holds the synthetic identity in production; adopting the
-	// stored owners above would hide exactly the case this test exists for.
 	forgetIdentity(t, pool, system)
 	forgetIdentity(t, pool, deleted)
 
@@ -233,10 +197,6 @@ func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testin
 	}
 }
 
-// TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing pins the blast
-// bound in every erase SQL: an identity store this role reaches but sees no rows
-// in (row-level security, a restore still in flight) would otherwise make every
-// stored row look like a deleted account's and empty all three tables.
 func TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -255,10 +215,6 @@ func TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing(t *testing.T) {
 	}
 }
 
-// TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted
-// covers the deployment with no Supabase auth schema at all: the erasure must
-// report the store unreadable so the sweep idles, rather than failing open on a
-// delete that cannot be undone.
 func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)

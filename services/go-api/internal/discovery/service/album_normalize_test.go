@@ -103,8 +103,6 @@ func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 	}
 
 	t.Run("bare year is not forced older than a same-year full date", func(t *testing.T) {
-		// Plain string comparison ranks "2020" below "2020-01-01" because it
-		// is a byte prefix, so the year-only release always sank to the end.
 		in := []domain.SearchResult{
 			album("YearOnly", "", 2020),
 			album("FullDate", "2020-01-01", 0),

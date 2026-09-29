@@ -109,13 +109,8 @@ func TestRedisResultCache_CorruptValueIsMiss(t *testing.T) {
 	}
 }
 
-// legacyV1ResultPayload is a []domain.SearchResult encoded by the pre-#1084
-// code, when record_type and resolution_tier lived in Extras.
 const legacyV1ResultPayload = `[{"Kind":2,"Title":"Blue","Subtitle":"Band","ImageURL":"","ArtworkSource":"","Confidence":2,"Sources":[{"Provider":1,"ExternalID":"1","URL":""},{"Provider":10,"ExternalID":"2","URL":""}],"Popularity":0,"ISRC":"","MBID":"","UPC":"123","Xref":null,"Year":0,"ReleaseDate":"","TrackCount":5,"ProviderRank":0,"FanCount":0,"Album":"","Duration":0,"DeezerAlbumID":"","Signature":"","Extras":{"genre_id":1,"record_type":"ep","resolution_tier":"upc","upc":"123"}}]`
 
-// A v1 entry decodes without the typed fields, so serving it would silently
-// re-bucket an EP as an album. The key version bump is what keeps new code from
-// ever reading one (and old instances from reading v2 entries mid-deploy).
 func TestResultCache_legacyV1PayloadIsNotReachable(t *testing.T) {
 	var legacy []domain.SearchResult
 	if err := json.Unmarshal([]byte(legacyV1ResultPayload), &legacy); err != nil {
@@ -148,9 +143,6 @@ func TestResultCache_typedFieldsRoundTripThroughJSON(t *testing.T) {
 	}
 }
 
-// RecordType is a named string kind, so a v2 entry cached by an instance that
-// predates the move still decodes here. Giving it an int kind or a custom
-// marshaller would strand every live entry without bumping the key version.
 func TestResultCache_recordTypeEncodesAsItsBareString(t *testing.T) {
 	blob, err := json.Marshal([]domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "Blue", RecordType: "ep"}})
 	if err != nil {

@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// searchDTOTypedExtrasGolden was captured from the pre-#1084 code, when
-// record_type and resolution_tier still lived in SearchResult.Extras. The
-// mobile client reads extras["record_type"], so promoting them to typed fields
-// must leave the wire bytes unchanged, including inside collapsed_artists.
 const searchDTOTypedExtrasGolden = `[{"kind":"album","title":"Blue","subtitle":"Band","confidence":"high","result_signature":"album|blue|band","favorite_key":"band|blue","sources":[{"provider":"deezer","external_id":"1","url":""},{"provider":"applemusic","external_id":"2","url":""}],"extras":{"genre_id":1,"record_type":"ep","resolution_tier":"upc","track_count":5,"upc":"123"}},{"kind":"album","title":"Red","subtitle":"Band","confidence":"low","result_signature":"album|red|band","favorite_key":"band|red","sources":[{"provider":"deezer","external_id":"3","url":""}],"extras":{"record_type":"compile"}},{"kind":"artist","title":"Band","confidence":"low","result_signature":"artist|band|","favorite_key":"band","sources":[{"provider":"deezer","external_id":"4","url":""}],"extras":{"collapsed_artists":[{"title":"Band","subtitle":"","sources":[{"Provider":11,"ExternalID":"5","URL":""}],"extras":{"mbid":"m1","resolution_tier":"isrc"}}]}}]`
 
 func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {

@@ -29,14 +29,9 @@ const (
 	amzSearchTimeout   = 4 * time.Second
 	amzUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 	amzResponseBodyCap = 16 << 20
-	// amzMaxWalkDepth bounds the recursive response walk. Real showSearch
-	// payloads nest a card roughly ten levels deep; anything past this is
-	// malformed or hostile and is rejected before it can exhaust the stack.
-	amzMaxWalkDepth = 128
+	amzMaxWalkDepth    = 128
 )
 
-// ErrAmazonMusicResponseTooDeep reports a showSearch response nested beyond
-// amzMaxWalkDepth; the walk stops instead of recursing further.
 var ErrAmazonMusicResponseTooDeep = errors.New("amazon music: response nested beyond max walk depth")
 
 func NewAmazonMusicAdapter(client *http.Client) *AmazonMusicAdapter {
@@ -214,9 +209,6 @@ func buildAmazonMusicSearchBody(sess *amazonMusicSession, query string) (string,
 	return string(out), nil
 }
 
-// walkAmazonMusicNode collects card results from node, which sits at depth
-// levels below the response root. It fails with ErrAmazonMusicResponseTooDeep
-// when an object or array sits deeper than amzMaxWalkDepth.
 func walkAmazonMusicNode(node any, depth int, seen map[string]bool, out *[]domain.SearchResult) error {
 	switch v := node.(type) {
 	case map[string]any:

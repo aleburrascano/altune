@@ -231,9 +231,6 @@ func TestAmazonMusicAdapter_Name(t *testing.T) {
 const amzDeepCard = `{"interface":"Web.TemplatesInterface.v1_0.Touch.WidgetsInterface.CircleVerticalItemElement",` +
 	`"primaryText":{"text":"Deep Artist"},"primaryLink":{"deeplink":"/artists/B0DEEP0001"}}`
 
-// nestedAmazonMusicJSON wraps a card in levels alternating object/array
-// nesting, so the card sits at depth `levels` and its own nested objects
-// (primaryText, primaryLink) at depth levels+1.
 func nestedAmazonMusicJSON(levels int) string {
 	var b strings.Builder
 	for i := range levels {

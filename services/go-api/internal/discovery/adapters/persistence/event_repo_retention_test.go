@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// seedEvent appends one event of the given type at the given time through the real
-// Append, so a retention test exercises the same rows the write path produces.
 func seedEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domain.EventType) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
@@ -22,8 +20,6 @@ func seedEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domai
 	}
 }
 
-// countEventsOfType returns how many rows of one event type remain in the table,
-// so a prune's per-type effect can be asserted directly rather than inferred.
 func countEventsOfType(t *testing.T, store *PgxEventStore, eventType domain.EventType) int {
 	t.Helper()
 	var n int
@@ -43,12 +39,6 @@ func deleteEventsOfType(t *testing.T, store *PgxEventStore, eventType domain.Eve
 	}
 }
 
-// TestPgxEventStore_PruneEvents_PerTypeWindow proves the retention invariant for
-// every non-discography event type against real Postgres: a row inside the type's
-// window and a row exactly at the retention cutoff both survive, while a row past
-// the window is evicted. It is table-driven off eventRetention itself, so a type
-// added to the policy without a window — or a window narrowed below its read
-// window — is caught here rather than in production as silent data loss.
 func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -59,8 +49,6 @@ func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 			deleteEventsOfType(t, store, ret.eventType)
 			t.Cleanup(func() { deleteEventsOfType(t, store, ret.eventType) })
 
-			// fresh is well inside the window; boundary sits exactly at the cutoff
-			// (a strict `<` must keep it); ancient is one day past the window.
 			seedEvent(t, store, now.Add(-1*time.Hour), ret.eventType)
 			seedEvent(t, store, now.Add(-ret.window), ret.eventType)
 			seedEvent(t, store, now.Add(-ret.window-24*time.Hour), ret.eventType)
@@ -80,10 +68,6 @@ func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 	}
 }
 
-// TestPgxEventStore_PruneEvents_LeavesDiscographyObserved proves PruneEvents never
-// touches discography_observed — that type owns the wider discographyRetentionWindow
-// and its own eviction, so folding it into the per-type prune would evict cases the
-// discography endpoint reads over its 365-day window.
 func TestPgxEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -91,7 +75,6 @@ func TestPgxEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
 	deleteEventsOfType(t, store, domain.EventTypeDiscographyObserved)
 
 	now := time.Now().UTC()
-	// Older than every per-type window but inside discography's own window.
 	seedObservation(t, store, now.Add(-aggregateEventRetention-30*24*time.Hour), "spotify:kept", 10, 8,
 		map[string]int{"spotify": 10})
 

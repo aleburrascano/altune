@@ -88,11 +88,6 @@ func (f *fakeArtistContentProvider) GetArtistAlbums(ctx context.Context, provide
 	return nil, nil
 }
 
-// captureDetachedLogs installs the production handler chain and returns its
-// ring. The bare JSON handler captureProductionLogs installs stamps no
-// correlation id and applies no attr redaction, so it could not tell a line
-// that reaches an operator from one the redaction filter drops. Stdout stays at
-// Error so only the panic line is echoed into test output.
 func captureDetachedLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()

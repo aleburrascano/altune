@@ -15,10 +15,6 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// TestSpotifyAdapter_Search_transportErrorDoesNotLeakTOTP forces a network-level
-// failure on the TOTP access-token request. Go's http.Client wraps it in a
-// *url.Error that embeds the full request URL; the error that reaches the
-// fan-out WARN log must not carry the totp/totpServer values.
 func TestSpotifyAdapter_Search_transportErrorDoesNotLeakTOTP(t *testing.T) {
 	var mu sync.Mutex
 	var sentCodes []string
@@ -74,9 +70,6 @@ func TestSpotifyAdapter_Search_transportErrorDoesNotLeakTOTP(t *testing.T) {
 	}
 }
 
-// spotifyTokenResolverServing builds a resolver whose server-time and
-// access-token endpoints answer normally, so a test drives the client-token
-// call alone.
 func spotifyTokenResolverServing(t *testing.T, clientToken http.HandlerFunc) *spotifyTokenResolver {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -122,10 +115,6 @@ func TestSpotifyTokenResolver_clientTokenOversizedBodyIsRejected(t *testing.T) {
 	}
 }
 
-// TestSpotifyTokenResolver_clientTokenStatusReachesBreaker pins the typed
-// status: the discovery circuit breaker reads HTTPStatus() to tell an unhealthy
-// Spotify from a rejection of this one request, so the status has to survive
-// the session-resolve wraps.
 func TestSpotifyTokenResolver_clientTokenStatusReachesBreaker(t *testing.T) {
 	r := spotifyTokenResolverServing(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)

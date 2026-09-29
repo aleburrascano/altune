@@ -11,8 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// performSearch records the server-emitted search_performed row that owns the
-// canonical query_norm for searchID.
 func performSearch(t *testing.T, store *PgxEventStore, userId shared.UserId, queryNorm, searchID string) {
 	t.Helper()
 	appendOrFatal(t, store, domain.InteractionEvent{
@@ -22,8 +20,6 @@ func performSearch(t *testing.T, store *PgxEventStore, userId shared.UserId, que
 	})
 }
 
-// storedQueryNorm reads the row by (user, event_id): since #2245 the event_id
-// key is per-user, so an id alone can name a row belonging to someone else.
 func storedQueryNorm(t *testing.T, store *PgxEventStore, userId shared.UserId, eventID string) *string {
 	t.Helper()
 	var queryNorm *string
@@ -36,10 +32,6 @@ func storedQueryNorm(t *testing.T, store *PgxEventStore, userId shared.UserId, e
 	return queryNorm
 }
 
-// Regression for #1086: a client-submitted event's query_norm is never
-// trusted. It is resolved from the submitting user's own search_performed row
-// for the event's search_id, so a garbled or forged value cannot hide a real
-// click from, or plant a fake click into, the no-click coverage-gap signal.
 func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	store := NewPgxEventStore(testPool(t))

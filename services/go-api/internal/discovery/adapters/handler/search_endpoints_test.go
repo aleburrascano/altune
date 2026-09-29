@@ -25,9 +25,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// classifiedTestError is a service failure that carries its own HTTP status
-// and machine-readable code through the httputil StatusError/ErrorCoder
-// contract.
 type classifiedTestError struct{}
 
 func (classifiedTestError) Error() string     { return "history store unavailable" }
@@ -116,14 +113,8 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 	}
 }
 
-// mobileOutboxEventID is the shape apps/mobile/src/shared/telemetry/outbox.ts
-// makeEventId mints for every label-critical event: a lower-case RFC 4122 v4.
 const mobileOutboxEventID = "3f2b8c1e-9a4d-4e6f-b1c2-7d8e9f0a1b2c"
 
-// Regression for #1093: a label-critical event without a parseable event_id
-// used to be stored with a NULL event_id, which the partial unique index never
-// dedups, so a retry or double-fire inserted a second row. Every such request
-// is now rejected before it reaches the store.
 func TestHandleRecordEvent_LabelCriticalRequiresValidEventID(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -174,10 +165,6 @@ func TestHandleRecordEvent_MalformedEventIDRejectedForEveryType(t *testing.T) {
 	}
 }
 
-// The mobile client sends play/skip/completed and the other fire-and-forget
-// events through useRecordEvent with no event_id at all, and only
-// library_add/wrong_album through the outbox with a minted one. Every shape a
-// real client sends must still be accepted, or its telemetry is silently lost.
 func TestHandleRecordEvent_AcceptsEveryRealClientShape(t *testing.T) {
 	cases := []struct {
 		name string
@@ -793,9 +780,6 @@ func TestHandleRecordEvent_DetailHealthIsClientSubmittable(t *testing.T) {
 	}
 }
 
-// Regression for #1086: query_norm is server-owned (resolved from the
-// search_id's search_performed row), so a client-sent value never reaches the
-// store for any client-submittable event.
 func TestHandleRecordEvent_IgnoresClientQueryNorm(t *testing.T) {
 	for _, typ := range []string{"result_clicked", "play", "skip", "completed", "library_add", "wrong_album"} {
 		t.Run(typ, func(t *testing.T) {
@@ -986,7 +970,6 @@ func TestHandleSearchHistory_LimitClamping(t *testing.T) {
 	}
 }
 
-// countingSearchProvider records every fan-out call it receives.
 type countingSearchProvider struct {
 	fakeSearchProvider
 	calls atomic.Int32
@@ -997,7 +980,6 @@ func (p *countingSearchProvider) Search(ctx context.Context, q string, k map[dis
 	return p.fakeSearchProvider.Search(ctx, q, k)
 }
 
-// recordingVocabStore records every term written to the shared vocabulary.
 type recordingVocabStore struct {
 	fakeVocabStore
 	mu    sync.Mutex
@@ -1047,9 +1029,6 @@ func wordQuery(n int) string {
 	return strings.TrimSpace(strings.Repeat("a ", n))
 }
 
-// TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab guards #1087: a
-// query under the rune cap but over the token cap must never reach provider
-// fan-out, correction, or the shared vocabulary index.
 func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) {
 	p, vocab, router := newQueryCapFixture()
 	raw := wordQuery(discdomain.MaxSearchQueryTokens + 1)
@@ -1060,7 +1039,7 @@ func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
 
 	discAssertStatus(t, rec, http.StatusBadRequest)
-	time.Sleep(100 * time.Millisecond) // let any stray background ingest land
+	time.Sleep(100 * time.Millisecond)
 	if n := p.calls.Load(); n != 0 {
 		t.Errorf("provider fan-out calls = %d, want 0", n)
 	}
@@ -1121,10 +1100,6 @@ func buildQueryNormRouter(history *fakeSearchHistoryRepo) chi.Router {
 	return r
 }
 
-// TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue guards #1085: the
-// response's query_norm must be the value the service computed (from the
-// cleaned query) and persisted to history, not a re-normalization of the raw
-// query string.
 func TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue(t *testing.T) {
 	cases := []struct{ name, raw string }{
 		{"noise stripped", "Humble Official Video"},
@@ -1158,8 +1133,6 @@ func TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue(t *testing.T) {
 	}
 }
 
-// validationRouter serves every discovery route over providers that answer, so
-// a rejected request is rejected by validation and not by a missing service.
 func validationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
@@ -1169,8 +1142,6 @@ func validationRouter(t *testing.T) chi.Router {
 		&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, albumProviders, nil)
 }
 
-// A client that cannot tell a missing q from an unrecognized kind has to match
-// on the detail text, which is the failure #2233 closes.
 func TestSearchRejection_MissingQIsDistinctFromUnknownKind(t *testing.T) {
 	missingQ := rejectionCode(t, discServe(t, validationRouter(t), http.MethodGet, "/discovery/search", nil))
 	unknownKind := rejectionCode(t, discServe(t, validationRouter(t), http.MethodGet, "/discovery/search?q=x&kinds=bogus", nil))
@@ -1207,8 +1178,6 @@ func TestSearchRejections_CodeNamesTheCause(t *testing.T) {
 	}
 }
 
-// A malformed paging param used to be swallowed by strconv.Atoi and served as
-// page one, so a client paging with a typo got results it never asked for.
 func TestSearchPaging_MalformedValueIsRejectedRatherThanDefaulted(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -1328,9 +1297,6 @@ func TestRecordEvent_UnparseableBodyCarriesCode(t *testing.T) {
 	}
 }
 
-// eventBodyWithJunk is one event carrying junkBytes of payload, the shape an
-// authenticated caller would use to park rows in the events table, which are
-// kept 30 to 90 days.
 func eventBodyWithJunk(t *testing.T, junkBytes int) string {
 	t.Helper()
 	return discJsonBody(t, map[string]any{
@@ -1364,8 +1330,6 @@ func TestRecordEvent_PayloadOverTheCapAnswersWithTheInvalidEventCode(t *testing.
 	assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_event")
 }
 
-// A body past the route's own cap is refused before it is decoded, so it
-// answers for the body rather than for the payload inside it.
 func TestRecordEvent_BodyPastTheRouteCapIsRejectedUndecoded(t *testing.T) {
 	router := buildEventRouter(&recordingEventStore{})
 
@@ -1380,8 +1344,6 @@ func TestHandleSuggest_OverlongQ(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusBadRequest)
 }
 
-// secretSearchText is seeded into history so the audit tests can prove the
-// erased search text never reaches the logs (#1097).
 const secretSearchText = "very private query 7f3a"
 
 func seededHistoryRepo() *fakeSearchHistoryRepo {
@@ -1424,8 +1386,6 @@ func assertNoSearchText(t *testing.T, ring *logging.RingBuffer) {
 	}
 }
 
-// TestHandleClearSearchHistory_AuditsSuccess pins #1101: a successful clear
-// leaves an actor-attributed, timestamped audit record without the erased text.
 func TestHandleClearSearchHistory_AuditsSuccess(t *testing.T) {
 	ring := captureLogs(t)
 	router := buildDiscoveryRouter(nil, seededHistoryRepo(), nil, nil)
@@ -1447,7 +1407,6 @@ func TestHandleClearSearchHistory_AuditsSuccess(t *testing.T) {
 	if r.Attrs["action"] != "clear_search_history" {
 		t.Errorf("action = %q, want clear_search_history", r.Attrs["action"])
 	}
-	// The ring renders slog time values with time.Time.String().
 	at, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", r.Attrs["at"])
 	if err != nil {
 		t.Fatalf("at = %q is not a timestamp: %v", r.Attrs["at"], err)
@@ -1458,8 +1417,6 @@ func TestHandleClearSearchHistory_AuditsSuccess(t *testing.T) {
 	assertNoSearchText(t, ring)
 }
 
-// TestHandleClearSearchHistory_AuditsFailure pins #1101: a failed clear names
-// the user on the error line and emits no success audit record.
 func TestHandleClearSearchHistory_AuditsFailure(t *testing.T) {
 	ring := captureLogs(t)
 	repo := seededHistoryRepo()
@@ -1485,9 +1442,6 @@ func TestHandleClearSearchHistory_AuditsFailure(t *testing.T) {
 	assertNoSearchText(t, ring)
 }
 
-// driftingSearchProvider answers each fan-out with the next slate, so a second
-// page that re-ranks instead of continuing shows results the first page never
-// ranked.
 type driftingSearchProvider struct {
 	slates [][]discdomain.SearchResult
 	calls  int
@@ -1528,10 +1482,6 @@ func searchSlate(prefix string, n int) []discdomain.SearchResult {
 	return out
 }
 
-// pagingRouter serves search over a provider that drifts between fan-outs and
-// one that is down. The failure keeps every slate partial, the slate the
-// query-keyed cache never stores, so a later page has nothing to continue from
-// but what the first page held.
 func pagingRouter(provider ports.SearchProvider) chi.Router {
 	down := &fakeSearchProvider{name: discdomain.ProviderITunes, err: context.DeadlineExceeded}
 	searchSvc := service.NewService(

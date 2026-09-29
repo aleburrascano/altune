@@ -90,8 +90,6 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id IN ('234701081','987654')`)
 }
 
-// queryCounter is a pgx tracer that counts statements sent to Postgres, so the
-// batch lookup's round-trip cost is asserted against a real database.
 type queryCounter struct{ n atomic.Int64 }
 
 func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {

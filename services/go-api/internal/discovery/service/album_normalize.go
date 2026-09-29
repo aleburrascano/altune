@@ -26,13 +26,6 @@ func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 	return deduped
 }
 
-// sortByReleaseDateDesc orders items newest first with undated items last,
-// keeping input order for ties. Keys may mix precisions ("2020" from a
-// year-only provider vs "2020-01-01"); a raw string compare would always rank
-// the bare year as older because it is a byte prefix. Each key is truncated
-// to the coarsest precision present within its year before comparing, so
-// same-year releases of differing precision tie instead of being misordered,
-// and the comparison stays a strict weak ordering.
 func sortByReleaseDateDesc[T any](items []T, key func(T) string) {
 	pairs := normalizeReleaseSortKeys(items, key)
 	sort.SliceStable(pairs, func(i, j int) bool { return releaseKeyNewer(pairs[i].key, pairs[j].key) })
@@ -55,8 +48,6 @@ func releaseKeyNewer(ki, kj string) bool {
 	return ki > kj
 }
 
-// normalizeReleaseSortKeys pairs each item with its sort key truncated to the
-// shortest key length seen among keys sharing the same year.
 func normalizeReleaseSortKeys[T any](items []T, key func(T) string) []keyedItem[T] {
 	pairs := make([]keyedItem[T], 0, len(items))
 	minLen := make(map[string]int)

@@ -339,7 +339,6 @@ func TestSortChronological_NewestFirstUnknownLast(t *testing.T) {
 	}
 }
 
-// logRecordsFor returns every captured record logged under the event msg.
 func logRecordsFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any {
 	t.Helper()
 	var out []map[string]any
@@ -380,9 +379,6 @@ func TestConsensus_RespondedCountsCleanEmptyButNotErrors(t *testing.T) {
 	}
 }
 
-// Issue #2239: a provider answering 500 or 429 fails fast, leaving the
-// deadline intact, so the partial union used to be frozen for every user for
-// DefaultConsensusCacheTTL.
 func TestConsensus_ProviderFailureLeavesAnswerUncachedAndSaysSo(t *testing.T) {
 	cache := newInMemoryConsensusCache()
 	svc := NewConsensusService([]ConsensusProvider{
@@ -514,8 +510,6 @@ func TestFanOutConsensus_CollectsEveryProvider(t *testing.T) {
 	}
 }
 
-// Regression test for #568: a panic in a goroutine spawned around a provider
-// or port call must be contained, not terminate the process.
 func TestFanOutConsensus_PanickingCollectIsContained(t *testing.T) {
 	providers := []ConsensusProvider{{Name: "boom"}, {Name: "ok"}}
 	out := FanOutConsensus(context.Background(), providers, func(_ context.Context, p ConsensusProvider) int {

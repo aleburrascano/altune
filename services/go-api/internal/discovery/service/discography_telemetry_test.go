@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// recordingEventStore captures appended events for assertion. Append is called
-// from the emit's detached goroutine, so access is mutex-guarded.
 type recordingEventStore struct {
 	mu     sync.Mutex
 	events []domain.InteractionEvent
@@ -31,10 +29,6 @@ func (s *recordingEventStore) only(t *testing.T) domain.InteractionEvent {
 	return s.events[0]
 }
 
-// The best-effort test reuses panickingEventStore (search_orchestrator_more_test.go),
-// a store whose Append blows up, to prove the emit contains a panic and never
-// reaches the response path.
-
 func mergedRelease(providers ...domain.ProviderName) MergedRelease {
 	set := make(map[domain.ProviderName]bool, len(providers))
 	for _, p := range providers {
@@ -43,29 +37,19 @@ func mergedRelease(providers ...domain.ProviderName) MergedRelease {
 	return MergedRelease{Providers: set}
 }
 
-// idBackedRelease is a release exactly one provider supplied but that still
-// carries a shared id anchor (HasStrongID). It is a single-provider release that
-// is NOT a contamination suspect.
 func idBackedRelease(provider domain.ProviderName) MergedRelease {
 	m := mergedRelease(provider)
 	m.HasStrongID = true
 	return m
 }
 
-// TestDiscographyEmit_PayloadShapeAndNoUserID plants the no-user-id-in-payload
-// core rule and asserts the pinned discography_observed shape: the structural
-// signal carries the artist ref, release/suspect counts and per-provider counts
-// — and no user identity anywhere in the payload. The observation time rides on
-// the event's OccurredAt column (the single source of truth the aggregate reads),
-// not in the payload. The event row uses the synthetic system identity, never a
-// real account.
 func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 	store := &recordingEventStore{}
 	tel := newDiscographyTelemetry(store)
 
 	merged := []MergedRelease{
 		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz),
-		mergedRelease(domain.ProviderSpotify), // contamination suspect: one provider
+		mergedRelease(domain.ProviderSpotify),
 	}
 	tel.emit(context.Background(), "spotify:abc123", merged)
 	tel.bg.wait()
@@ -80,14 +64,10 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 
 	assertPayloadInt(t, ev.Payload, "releases", 2)
 	assertPayloadInt(t, ev.Payload, "single_provider", 1)
-	// The lone spotify release carries no shared id, so it is a real suspect.
 	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 1)
 	if ref, _ := ev.Payload["artist_ref"].(string); ref != "spotify:abc123" {
 		t.Errorf("artist_ref = %q, want spotify:abc123", ref)
 	}
-	// The observation time is the event's occurred_at column, not a payload
-	// field: the aggregate derives LastSeen from occurred_at, so a payload
-	// timestamp would be dead data.
 	if ev.OccurredAt.IsZero() {
 		t.Error("event OccurredAt is zero, want the observation time")
 	}
@@ -102,7 +82,6 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 		t.Errorf("provider_counts = %v, want spotify:2 musicbrainz:1", counts)
 	}
 
-	// The structural signal must carry no user identity, present or hashed.
 	for _, k := range []string{"user_id", "userId", "user", "uid", "user_hash", "hashed_user_id"} {
 		if _, present := ev.Payload[k]; present {
 			t.Errorf("payload leaks user identity via key %q: %v", k, ev.Payload[k])
@@ -113,19 +92,14 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 	}
 }
 
-// TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect plants the id-anchor
-// core rule at the payload: a lone-provider release still carrying a shared id
-// counts toward single_provider (headcount) but NOT toward single_provider_no_id,
-// so the real-suspect count the aggregate ranks on excludes it. The id, not the
-// provider headcount, is the anchor.
 func TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect(t *testing.T) {
 	store := &recordingEventStore{}
 	tel := newDiscographyTelemetry(store)
 
 	merged := []MergedRelease{
-		idBackedRelease(domain.ProviderSpotify),                           // single provider, id-backed: not a suspect
-		mergedRelease(domain.ProviderDeezer),                              // single provider, no id: a suspect
-		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz), // two providers
+		idBackedRelease(domain.ProviderSpotify),
+		mergedRelease(domain.ProviderDeezer),
+		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz),
 	}
 	tel.emit(context.Background(), "spotify:mixed", merged)
 	tel.bg.wait()
@@ -133,15 +107,9 @@ func TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect(t *testing.T) {
 	ev := store.only(t)
 	assertPayloadInt(t, ev.Payload, "releases", 3)
 	assertPayloadInt(t, ev.Payload, "single_provider", 2)
-	// Only the id-less lone-provider release is a real suspect; the id-backed one
-	// is not, even though it too has exactly one provider.
 	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 1)
 }
 
-// TestDiscographyEmit_BestEffortContainsPanic plants the best-effort-emit core
-// rule end to end: a store whose Append panics must not fail or crash the artist
-// discography response. GetAlbums returns its merged albums normally and the
-// contained panic never escapes the detached emit.
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 	svc := identityFanOut(func(domain.ProviderName) bool { return false }, WithContentEventStore(&panickingEventStore{}))
 
@@ -152,13 +120,9 @@ func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 	if resp.Status != domain.ProviderStatusOK || len(resp.Items) == 0 {
 		t.Fatalf("status = %s, items = %d, want ok with the merged discography intact", resp.Status, len(resp.Items))
 	}
-	// Drain the detached emit: an uncontained panic here would crash the test
-	// binary rather than fail this assertion.
 	svc.discographyTelemetry.bg.wait()
 }
 
-// TestDiscographyEmit_NilTelemetryIsNoOp confirms the signal is purely additive:
-// a service wired without an event store simply records nothing.
 func TestDiscographyEmit_NilTelemetryIsNoOp(t *testing.T) {
 	svc := identityFanOut(func(domain.ProviderName) bool { return false })
 	if svc.discographyTelemetry != nil {

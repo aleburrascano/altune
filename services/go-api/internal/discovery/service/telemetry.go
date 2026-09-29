@@ -15,15 +15,8 @@ const (
 	emitTimeout       = 3 * time.Second
 )
 
-// shownSignaturesCap bounds the per-search proof-of-display list so a huge
-// slate cannot bloat the event row.
 const shownSignaturesCap = 200
 
-// SearchTelemetry is the event-telemetry collaborator: it emits the
-// search_performed interaction event (result counts, tail-noise, the shown
-// signatures SatisfactionSignals trusts, and an exploration stamp) off the
-// request path. Pulled off Service like FindRelatedService so the event schema
-// can change without touching the orchestrator.
 type SearchTelemetry struct {
 	eventStore ports.EventStore
 	activity   ports.ActivityFeed
@@ -45,8 +38,6 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 		return
 	}
 
-	// result_count and pipeline_version stay literal: no SQL reads them back, so
-	// there is no second site for a shared name to hold together.
 	payload := map[string]any{
 		"result_count":                   len(shown),
 		domain.PayloadKeyZeroResult:      len(shown) == 0,
@@ -75,8 +66,6 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 			Payload:    payload,
 		}
 		if err := t.eventStore.Append(emitCtx, event); err != nil {
-			// A dropped search_performed is a hole in the data ranking learns
-			// from, so the line names which search and whose (#2244).
 			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed",
 				"search_id", searchId,
 				"user_id", userId.String(),
@@ -87,10 +76,6 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 	})
 }
 
-// shownSignatures lists, deduplicated and capped, the result_signature of
-// every result a search response can surface to the client: the whole ranked
-// slate (later pages are served from it but never re-emit search_performed)
-// and the related groups. SatisfactionSignals trusts only these (#573).
 func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup) []string {
 	sigs := make([]string, 0, len(slate))
 	seen := make(map[string]bool, len(slate))
@@ -113,8 +98,6 @@ func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup)
 	return sigs
 }
 
-// signatureOf mirrors the handler DTO: a stamped signature wins, otherwise it
-// is derived, so the recorded value equals what the client receives.
 func signatureOf(r domain.SearchResult) string {
 	if r.Signature != "" {
 		return r.Signature

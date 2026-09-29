@@ -13,7 +13,6 @@ func TestSearchAcrossKinds_DoesNotLogQueryText(t *testing.T) {
 	buf := captureDefaultLog(t)
 	all := allSearchKinds()
 
-	// The provider error embeds the request URL, as *url.Error does.
 	_, _ = searchAcrossKinds(context.Background(), "deezer", sensitiveQuery, all, all,
 		func(_ context.Context, _ domain.ResultKind) ([]domain.SearchResult, error) {
 			return nil, fmt.Errorf("get \"https://api.example/search?q=%s\": timeout", url.QueryEscape(sensitiveQuery))

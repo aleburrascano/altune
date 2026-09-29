@@ -18,12 +18,7 @@ const (
 	relatedPerGroup    = 10
 	maxProviderLookups = 5
 
-	// relatedMemoTTL outlives the result cache's 45s TTL so that every request
-	// served a warm slate is served warm related groups too; a related group may
-	// be this far behind the user's library and the provider's catalogue.
-	relatedMemoTTL = time.Minute
-	// relatedMemoMaxEntries bounds the memo, whose keys grow with distinct
-	// albums, artists and users rather than with the process's lifetime.
+	relatedMemoTTL        = time.Minute
 	relatedMemoMaxEntries = 4096
 )
 
@@ -76,8 +71,6 @@ func (s *FindRelatedService) Execute(
 	return groups
 }
 
-// dispatchLibraryMatches looks up the user's own library, so unlike the
-// Deezer lookups it does not draw from the provider-call budget.
 func (s *FindRelatedService) dispatchLibraryMatches(fan *relatedFanOut, userId shared.UserId, result domain.SearchResult) {
 	album := result.Album
 	if album == "" || s.querier == nil {
@@ -142,9 +135,6 @@ func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result dom
 	})
 }
 
-// serveMemoized answers a lookup from the memo when one is warm and reports
-// whether it did. A memoized answer with no items is still an answer: it
-// records that this subject has nothing related, and contributes no group.
 func (s *FindRelatedService) serveMemoized(fan *relatedFanOut, lookup relatedGroupLookup) bool {
 	items, memoized := s.memo.items(lookup.memoKey())
 	if !memoized {
@@ -157,10 +147,6 @@ func (s *FindRelatedService) serveMemoized(fan *relatedFanOut, lookup relatedGro
 	return true
 }
 
-// relatedFanOut runs related-group lookups concurrently under one context and
-// collects the non-empty successful groups in completion order. memoHits counts
-// the lookups answered without a query or a call; only the dispatch goroutine
-// touches it.
 type relatedFanOut struct {
 	ctx           context.Context
 	wg            sync.WaitGroup
@@ -170,16 +156,10 @@ type relatedFanOut struct {
 	memoHits      int
 }
 
-// relatedPanicLog names the event and identifying attribute logged when a
-// lookup goroutine panics.
 type relatedPanicLog struct {
 	event, key, value string
 }
 
-// relatedGroupLookup is one related-group fetch: the group it produces, the
-// subject it is about, and the owner whose rows it reads — the zero UserId when
-// the answer is the same for every user. Deriving the memo key from all three
-// is what keeps a user-scoped answer out of a shared entry.
 type relatedGroupLookup struct {
 	relationship domain.RelationshipKind
 	relatedTo    string
@@ -224,9 +204,6 @@ func (f *relatedFanOut) reserveProviderCall() bool {
 	return tryReserveProviderCall(&f.providerCalls, maxProviderLookups)
 }
 
-// fetchRelatedGroup runs fetch in its own goroutine and records its items as
-// one group. A failed, empty or panicking fetch contributes no group and does
-// not affect the other lookups.
 func (f *relatedFanOut) fetchRelatedGroup(
 	lookup relatedGroupLookup,
 	fetch func(ctx context.Context) ([]domain.SearchResult, error),
@@ -258,9 +235,6 @@ func (f *relatedFanOut) wait() []domain.RelatedGroup {
 	return f.groups
 }
 
-// relatedMemoKey identifies one memoized lookup. owner is the zero UserId for
-// the provider-backed lookups, whose answer is public catalogue data; a library
-// lookup carries its user, so one user's rows can never key another's entry.
 type relatedMemoKey struct {
 	relationship domain.RelationshipKind
 	owner        shared.UserId
@@ -272,14 +246,6 @@ type relatedMemoEntry struct {
 	expiresAt time.Time
 }
 
-// relatedMemo is the process-local memo of related lookups. Without it a slate
-// served from the result cache still costs a library query and a provider call
-// per top result, so the related fan-out's cost tracked request rate rather
-// than the number of distinct queries. Concurrent identical searches still both
-// fetch: collapsing them is singleflight's job, not this one's.
-//
-// A nil memo memoizes nothing, so a FindRelatedService assembled without one
-// still answers.
 type relatedMemo struct {
 	ttl     time.Duration
 	mu      sync.Mutex
@@ -303,8 +269,6 @@ func (m *relatedMemo) items(key relatedMemoKey) ([]domain.SearchResult, bool) {
 	return entry.items, true
 }
 
-// remember stores items under key and hands them back, so a fetch can memoize
-// and return in one line. Callers must treat a memoized slice as read-only.
 func (m *relatedMemo) remember(key relatedMemoKey, items []domain.SearchResult) []domain.SearchResult {
 	if m == nil {
 		return items
@@ -320,9 +284,6 @@ func (m *relatedMemo) remember(key relatedMemoKey, items []domain.SearchResult) 
 	return items
 }
 
-// dropExpired sweeps every key, so it runs only when the memo is full: one pass
-// over relatedMemoMaxEntries keys, and a memo that stays full stops taking new
-// entries rather than growing. The caller holds m.mu.
 func (m *relatedMemo) dropExpired() {
 	now := time.Now()
 	for key, entry := range m.entries {

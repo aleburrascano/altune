@@ -19,22 +19,14 @@ const (
 const (
 	failureThreshold = 5
 	openDuration     = 30 * time.Second
-	// probeLease bounds how long a half-open probe may hold the single probe
-	// slot without being resolved by RecordSuccess, RecordFailure or
-	// ReleaseProbe. It is a backstop for a probe abandoned with no outcome
-	// (e.g. a provider that ignores its context and never returns), and sits
-	// well above every provider's search timeout so a live probe is never
-	// preempted.
-	probeLease = 30 * time.Second
+	probeLease       = 30 * time.Second
 )
 
 type circuitEntry struct {
-	state        CircuitState
-	failures     int
-	lastFailedAt time.Time
-	probing      bool
-	// probeStartedAt is when the in-flight half-open probe was admitted; only
-	// meaningful while probing is true.
+	state          CircuitState
+	failures       int
+	lastFailedAt   time.Time
+	probing        bool
 	probeStartedAt time.Time
 }
 
@@ -113,11 +105,6 @@ func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
 	}
 }
 
-// ReleaseProbe hands back an admitted half-open probe slot without recording
-// an outcome, for a call abandoned for reasons that say nothing about the
-// provider's health (the caller's context was canceled). The circuit stays
-// half-open so the next request is admitted as a fresh probe. It is a no-op in
-// any other state.
 func (cb *CircuitBreaker) ReleaseProbe(provider domain.ProviderName) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()

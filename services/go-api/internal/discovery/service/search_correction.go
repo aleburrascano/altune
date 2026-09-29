@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// correctionTimeout is the budget for the vocabulary lookups behind a
-// correction, mirroring fillArtwork's explicit budget: a slow or overloaded
-// Redis degrades to "no correction" instead of holding the request open.
 const correctionTimeout = 1500 * time.Millisecond
 
 func (s *Service) lookupCorrection(ctx context.Context, raw string) *CorrectionResult {
@@ -47,11 +44,6 @@ func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) 
 	return result.Corrected, query.Raw, results, corrStatuses
 }
 
-// mergedStatuses reports each provider across both passes of a corrected
-// search: one that was down for the query as asked stays down in the answer,
-// so a clean retry cannot hide the outage from the client or from
-// provider-health metrics. Both passes fan out over the same configured
-// providers, a fixed handful, so the pairwise scan is cheap.
 func mergedStatuses(fanOut, corrected []domain.ProviderSearchResponse) []domain.ProviderSearchResponse {
 	merged := make([]domain.ProviderSearchResponse, 0, len(corrected))
 	for _, status := range corrected {

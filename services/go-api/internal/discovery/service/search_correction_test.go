@@ -298,10 +298,6 @@ func loggedEvent(t *testing.T, buf *bytes.Buffer, msg string) string {
 	return ""
 }
 
-// TestService_Correcting_DoesNotLogRawQueryText guards the same #1097 erasure
-// promise as the search lifecycle logs: the auto-correct path fingerprints the
-// before/after query text instead of copying it into stdout, so clear-history
-// deletion is not silently voided by log retention.
 func TestService_Correcting_DoesNotLogRawQueryText(t *testing.T) {
 	buf := captureLogs(t)
 
@@ -325,9 +321,6 @@ func TestService_Correcting_DoesNotLogRawQueryText(t *testing.T) {
 	}
 }
 
-// TestCorrectTokens_DoesNotLogRawTokenText guards the per-token correction
-// debug log: the raw token is a per-word slice of the user's query and must be
-// fingerprinted, not emitted verbatim under a redactor-blind key.
 func TestCorrectTokens_DoesNotLogRawTokenText(t *testing.T) {
 	buf := captureLogs(t)
 

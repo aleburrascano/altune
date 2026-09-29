@@ -32,14 +32,6 @@ func NewPgxEventStore(pool *pgxpool.Pool) *PgxEventStore {
 	return &PgxEventStore{pool: pool}
 }
 
-// appendEventSQL stores event.QueryNorm only on the server-emitted
-// search_performed row. Every other event's query_norm is resolved from the
-// same user's search_performed row for its search_id (NULL when there is none),
-// so a client-chosen value can never enter the coverage-gap joins (#1086).
-//
-// The conflict target carries user_id because event_id alone is the caller's to
-// choose: scoped to its author, a replayed id can no-op only that author's own
-// retry, never another user's event (#2245, migration 024).
 const appendEventSQL = `INSERT INTO discovery_events
 		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
 	VALUES ($1, $2::text,
@@ -137,10 +129,6 @@ var zeroResultTotalSQL = fmt.Sprintf(`SELECT COUNT(*)
 		AND CASE WHEN jsonb_typeof(payload->'%[1]s') = 'boolean'
 			THEN (payload->>'%[1]s')::boolean ELSE false END`, domain.PayloadKeyZeroResult)
 
-// ZeroResultTotal counts every zero-result search in the window, unbounded by
-// the top-N cap of ZeroResultQueries. The list is truncated at a LIMIT for
-// display; this true total is what threshold comparisons must use so a window
-// spanning more than that many distinct normalized queries is not undercounted.
 func (r *PgxEventStore) ZeroResultTotal(ctx context.Context, since time.Time) (int, error) {
 	var total int
 	err := r.pool.QueryRow(ctx, zeroResultTotalSQL,
@@ -173,10 +161,6 @@ var nonZeroNoClickQueriesSQL = fmt.Sprintf(`SELECT e.query_norm, COUNT(*) AS cnt
 	ORDER BY cnt DESC
 	LIMIT $3`, domain.PayloadKeyZeroResult)
 
-// NonZeroNoClickQueries reports non-zero searches whose query was never
-// clicked. A click is attributed to a query through its search_id's
-// search_performed row, never through the click row's own query_norm, so the
-// signal holds for clicks recorded before that row landed or before #1086.
 func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx, nonZeroNoClickQueriesSQL,
 		domain.EventTypeSearchPerformed.String(), since, limit,
@@ -193,8 +177,6 @@ const shortDwellThresholdMs = 20000
 
 const perUserSignalCap = 3
 
-// shownResultWindow bounds how long after a search a shown result may still
-// earn a satisfaction signal from the user it was shown to.
 const shownResultWindow = 24 * time.Hour
 
 var satisfactionSignalsSQL = fmt.Sprintf(`SELECT sig, SUM(user_score)::float8 AS score
@@ -223,10 +205,6 @@ var satisfactionSignalsSQL = fmt.Sprintf(`SELECT sig, SUM(user_score)::float8 AS
 	HAVING SUM(user_score) <> 0`,
 	domain.PayloadKeyResultSignature, domain.PayloadKeyDwellMs, domain.PayloadKeyShownSignatures)
 
-// SatisfactionSignals aggregates play/skip/completed events into a global
-// per-signature score. A result_signature is computable offline, so an event
-// only counts when the same user was shown that signature by a server-emitted
-// search_performed event within shownResultWindow before it (#573).
 func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
 	rows, err := r.pool.Query(ctx, satisfactionSignalsSQL,
 		since, shortDwellThresholdMs, perUserSignalCap, int64(shownResultWindow/time.Second),
@@ -249,9 +227,6 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 	})
 }
 
-// behavioralLabelsSQL reads title and subtitle straight as literals: unlike the
-// keys below, they are client-submitted display fields with no Go definition to
-// name them by.
 var behavioralLabelsSQL = fmt.Sprintf(`SELECT sp.query_norm,
 		ev.payload->>'%[1]s' AS sig,
 		COALESCE(ev.payload->>'title', '') AS title,
@@ -331,19 +306,6 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 	return scanQueryCounts(rows)
 }
 
-// eraseEventsOfDeletedIdentitiesSQL drops the telemetry of accounts whose
-// identity is gone. The per-type retention prune already bounds the table by
-// age, but its widest window is 400 days, so without this a deleted account's
-// events — its search terms, the results it was shown, what it played — survive
-// the account by that long.
-//
-// $1 is the synthetic system identity, and this table is the reason it has to be
-// excluded: discography_observed rows are server-emitted under it on purpose, so
-// they belong to no account and are not an account's to erase.
-//
-// Cost: one pass over discovery_events per run, each row probing auth.users'
-// primary key. This is the widest of the three tables, and the reason the
-// sweep's hourly cadence is the ceiling rather than something finer.
 const eraseEventsOfDeletedIdentitiesSQL = `
 	DELETE FROM discovery_events e
 	WHERE EXISTS (SELECT 1 FROM auth.users)
@@ -355,19 +317,6 @@ func (r *PgxEventStore) EraseRowsOfDeletedIdentities(ctx context.Context) (int64
 		"erase events of deleted identities", eraseEventsOfDeletedIdentitiesSQL)
 }
 
-// eraseEventSearchTextOfUserSQL is the discovery_events half of clear-history
-// (#2237): query_norm is the only column here that holds what the account typed
-// — the payload keys are signatures, ids and counters — so nulling it is what
-// makes the promise true. It covers the derived rows too, because Append copies
-// the search's query_norm onto each one at insert rather than joining for it.
-//
-// The rows are kept and only blanked so the signals that need a count rather
-// than the text (SatisfactionSignals, the discography aggregate) stay whole;
-// the query-keyed signals drop the blanked rows through their own
-// `query_norm IS NOT NULL` filter.
-//
-// Cost: one probe of idx_discovery_events_user_time and a rewrite of that
-// account's rows that still carry text. Re-clearing an account matches none.
 const eraseEventSearchTextOfUserSQL = `
 	UPDATE discovery_events
 	SET query_norm = NULL

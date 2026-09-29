@@ -105,7 +105,6 @@ func TestCoverageSignalB_EntityLevelNotCount(t *testing.T) {
 	}
 }
 
-// artistStubProvider returns per-artist titles; an artist absent from the map fails.
 func artistStubProvider(name string, byArtist map[string][]string) service.ConsensusProvider {
 	return service.ConsensusProvider{
 		Name: name,
@@ -123,8 +122,6 @@ func artistStubProvider(name string, byArtist map[string][]string) service.Conse
 	}
 }
 
-// Pins the exact per-provider counters (missing, union, unique) across
-// several artists, partial provider responses and a fully-failed artist.
 func TestCoverageSignalB_PinsPerProviderTallies(t *testing.T) {
 	providers := []service.ConsensusProvider{
 		artistStubProvider("p1", map[string][]string{
@@ -147,11 +144,6 @@ func TestCoverageSignalB_PinsPerProviderTallies(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Artist A: entities Alpha{p1,p2,p3} Beta{p1,p3} OnlyOne{p1} Gamma{p2,p3} ThreeOnly{p3}
-	//   responded p1,p2,p3 -> union 5 each; missing p1=2 p2=3 p3=1; unique p1=1 p3=1.
-	// Artist B: entities Red{p1,p2} Blue{p2} Green{p2}
-	//   responded p1,p2 -> union 3 each; missing p1=2 p2=0; unique p2=2.
-	// Artist Nobody: no provider responded -> skipped.
 	if report.ArtistsScanned != 2 {
 		t.Errorf("ArtistsScanned = %d, want 2", report.ArtistsScanned)
 	}

@@ -41,9 +41,6 @@ func WithContentIdentityStore(store ports.IdentityStore) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityStore = store }
 }
 
-// WithContentCircuitBreaker gates every provider call the service makes through
-// cb. Pass the search fan-out's breaker so a provider tripped open by either
-// path is short-circuited on both. Without it, calls are ungated.
 func WithContentCircuitBreaker(cb *CircuitBreaker) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.breaker = cb }
 }
@@ -52,10 +49,6 @@ func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
 }
 
-// WithContentEventStore injects the event store the v2 discography path emits
-// its server-only discography_observed structural-quality signal through. Absent
-// it, the service records nothing (the emit is a no-op), so the signal is purely
-// additive and never on the request's critical path.
 func WithContentEventStore(eventStore ports.EventStore) ArtistContentOption {
 	return func(s *GetArtistContentService) {
 		if eventStore != nil {
@@ -97,14 +90,7 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 
 var detailFanOutTimeout = consensusTimeout
 
-// fanOutByIdentity calls every provider that holds an ID for identity and
-// returns the non-empty result groups. partial reports whether any provider the
-// fan-out would have asked failed to answer: it errored, panicked, timed out,
-// or was short-circuited by an open circuit. A provider with no ID for the
-// artist was never going to contribute, so it does not make the answer partial.
 func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) (groups [][]domain.SearchResult, partial bool) {
-	// The breaker judges outcomes against the caller's context: a provider cut
-	// off by the fan-out deadline below is slow, not abandoned.
 	callerCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, detailFanOutTimeout)
 	defer cancel()
@@ -145,8 +131,6 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 		go func(i int, j job) {
 			defer wg.Done()
 			defer RecoverGoroutine(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
-			// Set before the call and cleared on success, so a panic that
-			// RecoverGoroutine swallows still counts as a failed provider.
 			failed[i] = true
 			settled := false
 			defer j.call.failPanicked(&settled)
@@ -182,20 +166,10 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	return groups, partial
 }
 
-// fanOutFailureAttr describes one provider's failed fan-out call for the
-// per-fan-out Warn summary, keyed by provider name. One summary per fan-out
-// rather than one line per provider keeps a widespread outage to a line per
-// request. It reports false when there is nothing worth warning about: no
-// error, or a call abandoned because the caller went away, which says nothing
-// about the provider. Our own fan-out deadline still counts: that provider was
-// slow. Circuit-open skips never reach here, and panics are logged at Error by
-// RecoverGoroutine.
 func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, externalID string, err error) (slog.Attr, bool) {
 	if err == nil || callerCtx.Err() != nil || errors.Is(err, context.Canceled) {
 		return slog.Attr{}, false
 	}
-	// A transport failure's *url.Error embeds the request URL, which for
-	// LastFM and SoundCloud carries api_key / client_id.
 	return slog.Group(provider.String(), "external_id", externalID, "error", redact.Secrets(err.Error())), true
 }
 

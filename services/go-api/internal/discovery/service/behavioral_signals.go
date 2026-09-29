@@ -23,9 +23,6 @@ func (c *SatisfactionConsumer) Signals(ctx context.Context, since time.Time) ([]
 	return c.store.SatisfactionSignals(ctx, since)
 }
 
-// RefreshBehavioralScores, StartBehavioralRefresh and BehavioralScoresSnapshot
-// are the composition root's entry points into the ranking collaborator; they
-// stay on Service to preserve the public API and delegate to RankingExperiments.
 func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
 	return s.ranking.refreshBehavioralScores(ctx)
 }

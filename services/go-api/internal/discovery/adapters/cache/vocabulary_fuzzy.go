@@ -60,9 +60,6 @@ func (s *RedisVocabularyStore) metaphoneCandidatesLogged(ctx context.Context, co
 	return set
 }
 
-// vocabPhoneticCandidateCap bounds the phonetic bucket one lookup keeps. Its
-// members bypass the edit-distance filter, so a crowded metaphone code would
-// otherwise put its whole bucket into the entry load.
 const vocabPhoneticCandidateCap = 64
 
 func (s *RedisVocabularyStore) metaphoneCandidates(
@@ -83,14 +80,8 @@ func (s *RedisVocabularyStore) metaphoneCandidates(
 	return result, nil
 }
 
-// vocabTrigramLookupCap bounds the trigram sets one fuzzy lookup reads, the
-// fuzzy counterpart of vocabPrefixScanCap. A real title or artist name stays
-// well under it (64 trigrams = a 66-rune string); an oversized or adversarial
-// query is truncated rather than fanned out into one Redis read per trigram.
 const vocabTrigramLookupCap = 64
 
-// trigramLookupKeys maps query trigrams to their set keys, keeping at most
-// vocabTrigramLookupCap of them.
 func trigramLookupKeys(queryTrigrams []string) []string {
 	if len(queryTrigrams) > vocabTrigramLookupCap {
 		queryTrigrams = queryTrigrams[:vocabTrigramLookupCap]
@@ -102,9 +93,6 @@ func trigramLookupKeys(queryTrigrams []string) []string {
 	return keys
 }
 
-// trigramCandidates reads the capped trigram sets in a single pipelined round
-// trip. A failed set read is skipped so one bad key degrades, not fails, the
-// lookup.
 func (s *RedisVocabularyStore) trigramCandidates(
 	ctx context.Context,
 	queryTrigrams []string,
@@ -134,10 +122,6 @@ type sharedCandidate struct {
 	shared int
 }
 
-// vocabFuzzyPrefilterCap bounds how many trigram candidates one lookup scores
-// and loads. A common trigram such as "the" holds thousands of a 50k-entry
-// vocabulary; a real match shares most of the query's trigrams, so the tail that
-// shares one is dropped before it costs any work.
 const vocabFuzzyPrefilterCap = 256
 
 func topSharedCandidates(candidates map[string]int) map[string]int {
@@ -182,9 +166,6 @@ func (s *RedisVocabularyStore) topMatchingEntries(
 	return topFuzzyCandidates(s.loadEntries(ctx, survivors), limit), nil
 }
 
-// survivingNorms scores straight from the candidate key: everything the score
-// needs is in the norm itself, so the edit-distance filter runs before any entry
-// is fetched rather than after.
 func survivingNorms(
 	candidates map[string]int,
 	queryTrigrams []string,
@@ -221,8 +202,6 @@ func matchScore(
 	), true
 }
 
-// loadEntries fetches the survivors in one MGET. A norm the index still holds
-// but whose entry key has expired is dropped, never returned blank.
 func (s *RedisVocabularyStore) loadEntries(
 	ctx context.Context,
 	survivors []scoredNorm,

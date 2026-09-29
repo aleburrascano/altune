@@ -12,11 +12,7 @@ import (
 )
 
 const (
-	correctionCandidates = 5
-	// maxCorrectionQueryRunes and maxCorrectionTokens bound the fuzzy-correction
-	// work one query can trigger. Typo correction targets short names; a query
-	// past either bound is left uncorrected instead of costing one vocabulary
-	// fuzzy lookup per token.
+	correctionCandidates    = 5
 	maxCorrectionQueryRunes = 100
 	maxCorrectionTokens     = 8
 )

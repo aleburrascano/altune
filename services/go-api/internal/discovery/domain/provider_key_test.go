@@ -2,8 +2,6 @@ package domain
 
 import "testing"
 
-// The key strings are persisted (Postgres entity_identity.provider, Redis
-// identity and artwork caches), so each constant is pinned byte-for-byte.
 func TestProviderKey_PersistedStrings(t *testing.T) {
 	tests := []struct {
 		key  ProviderKey

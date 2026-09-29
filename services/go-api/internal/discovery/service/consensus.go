@@ -154,10 +154,6 @@ func (s *ConsensusService) BuildConsensus(
 	return results
 }
 
-// cacheCompleteAnswer stores the answer only when every provider spoke for it.
-// A provider that fails fast leaves the deadline intact, so without this the
-// catalogue it alone holds would be missing — and the rest left unconfirmed —
-// for every user for DefaultConsensusCacheTTL over an outage of seconds.
 func (s *ConsensusService) cacheCompleteAnswer(
 	ctx context.Context,
 	cacheKey, artistName string,
@@ -183,9 +179,6 @@ func consensusAlbumSortKey(a ConsensusAlbum) string {
 	return albumReleaseSortKey(a.Album)
 }
 
-// providerFetch is one provider's consensus answer. responded is true only
-// when the fetcher returned without error, so a clean "no albums" (nil, nil)
-// still counts as a reachable provider while an error or panic does not.
 type providerFetch struct {
 	albums    []domain.SearchResult
 	responded bool

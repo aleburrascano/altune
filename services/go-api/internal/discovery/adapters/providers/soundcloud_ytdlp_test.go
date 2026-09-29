@@ -9,10 +9,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Note: TestSoundCloudAdapter_Search_Integration lives in
-// soundcloud_ytdlp_integration_test.go behind the `integration` build tag
-// because it requires the real yt-dlp binary plus live SoundCloud network.
-
 func TestSoundCloudAdapter_Name(t *testing.T) {
 	adapter := NewSoundCloudAdapter()
 	if got := adapter.Name(); got != domain.ProviderSoundCloud {

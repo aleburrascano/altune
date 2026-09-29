@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// A single-provider content fetch reports its failure in the typed status
-// model search uses, not one generic error.
 func TestFetchProviderResults_ClassifiesFailureStatus(t *testing.T) {
 	cases := []struct {
 		name string

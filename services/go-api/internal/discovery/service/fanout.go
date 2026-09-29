@@ -15,10 +15,6 @@ import (
 
 const defaultProviderTimeout = 1500 * time.Millisecond
 
-// ErrAllProvidersFailed signals that every provider in a fan-out returned a
-// non-OK status, so an empty result set reflects an upstream outage rather than
-// a genuine absence of matches. Inspection call sites surface it to tell the
-// two apart.
 var ErrAllProvidersFailed = errors.New("all providers failed")
 
 func (s *Service) fanOut(
@@ -58,9 +54,6 @@ func (s *Service) fanOut(
 	return perProvider, statuses
 }
 
-// searchProvider runs one provider's search under its own time budget and
-// settles the admitted breaker call with the outcome, using the same health
-// classification as content calls.
 func (s *Service) searchProvider(
 	ctx context.Context,
 	call breakerCall,
@@ -110,10 +103,6 @@ func (s *Service) searchProvider(
 	}
 }
 
-// budgetOutcome marks an error from a search its own time budget cut off as a
-// timeout, so a provider that surfaces the cut-off as an unclassified error (a
-// killed subprocess, a truncated body) still counts against its breaker. A
-// call shed by the rate-limiter queue keeps its own classification.
 func budgetOutcome(provCtx context.Context, err error) error {
 	if err == nil || !errors.Is(provCtx.Err(), context.DeadlineExceeded) ||
 		errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || errors.Is(err, context.DeadlineExceeded) {
@@ -131,10 +120,6 @@ func anyProviderFailed(statuses []domain.ProviderSearchResponse) bool {
 	return false
 }
 
-// AllProvidersFailed reports whether every provider in the fan-out returned a
-// non-OK status. It lets inspection call sites distinguish a genuine
-// zero-result search from a total upstream outage, which otherwise collapse to
-// the same empty result set. An empty status slice is not an outage.
 func AllProvidersFailed(statuses []domain.ProviderSearchResponse) bool {
 	if len(statuses) == 0 {
 		return false

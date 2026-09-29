@@ -147,8 +147,6 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 	if err != nil {
 		return nil, err
 	}
-	// Memoize only a complete discography; a partial set from the later-page
-	// degrade path must not be cached and reused.
 	if !degraded {
 		a.releaseMemo.put(mbid, all)
 	}

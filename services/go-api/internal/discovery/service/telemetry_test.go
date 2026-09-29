@@ -92,9 +92,6 @@ func TestService_NoEventStoreNoEmit(t *testing.T) {
 	svc.WaitForBackground()
 }
 
-// #573: the aggregation only trusts signatures the server proves it showed,
-// so search_performed must carry every signature the response can surface —
-// including results beyond the first page, which later pages never re-emit.
 func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 	store := &fakeEventStore{}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{
@@ -144,8 +141,6 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 	}
 }
 
-// Regression test for #2244: a detached job's failure line must carry what an
-// operator needs to diagnose it without a reproduction.
 func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
 	store := &fakeEventStore{err: errors.New("db down")}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}

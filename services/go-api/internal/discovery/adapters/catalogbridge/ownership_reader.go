@@ -61,10 +61,6 @@ func (w *TrackNumberWriter) FillTrackNumber(
 	trackId string,
 	trackNumber int,
 ) error {
-	// The track id crosses as a string; the catalog side of the seam parses it
-	// to a domain TrackId (see app wiring). A malformed persisted id surfaces as
-	// an error there so the batch caller's per-track warn log fires instead of
-	// silently dropping the fill; that caller tolerates the error and moves on.
 	if _, err := w.setter.Execute(ctx, userId, trackId, trackNumber); err != nil {
 		return fmt.Errorf("fill track number: %w", err)
 	}

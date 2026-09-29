@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// defaultArtworkChainTimeout caps the total wall time the resolver chain may
-// spend walking its providers. It sits comfortably below the sum of the
-// per-provider client timeouts (~10 providers * 10s) so a full miss fails fast
-// instead of holding the request goroutine for ~100s.
 const defaultArtworkChainTimeout = 20 * time.Second
 
 type ChainedArtworkResolver struct {
@@ -48,9 +44,6 @@ func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.
 	return "", "", missVerdict(failures)
 }
 
-// missVerdict grades a walk that found no art: nil when every provider answered
-// and none had any, ErrArtworkDegraded when one failed or the deadline cut the
-// walk short. Only the first is a fact about the artwork rather than about us.
 func missVerdict(failures error) error {
 	if failures == nil {
 		return nil

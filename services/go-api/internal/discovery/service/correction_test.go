@@ -91,8 +91,6 @@ func TestPickBestCorrection(t *testing.T) {
 	})
 }
 
-// ctxRecordingVocab records how many fuzzy lookups ran and whether each ran
-// under a deadline.
 type ctxRecordingVocab struct {
 	mu               sync.Mutex
 	findClosestCalls int
@@ -129,7 +127,6 @@ func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
 	hostile := strings.TrimSpace(strings.Repeat("zxqv ", 5000))
 	svc.CorrectAggressive(context.Background(), hostile)
 
-	// one whole-query lookup plus at most maxCorrectionTokens per-token lookups
 	if limit := 1 + maxCorrectionTokens; vocab.findClosestCalls > limit {
 		t.Errorf("FindClosest calls = %d, want at most %d", vocab.findClosestCalls, limit)
 	}

@@ -245,10 +245,6 @@ func TestFindRelated_TimeoutReturnsPartialResults(t *testing.T) {
 	_ = got
 }
 
-// These tests pin FindRelatedService.Execute's fan-out semantics: per-kind
-// truncation, which lookups count against the provider budget, partial
-// failure, panic isolation, and context propagation.
-
 type scriptedQuerier struct {
 	calls   atomic.Int32
 	matches func(album string) ([]ports.RelatedTrackMatch, error)
@@ -351,9 +347,6 @@ func TestFindRelatedDispatch_ProviderGroupsTruncatedLibraryGroupsNot(t *testing.
 	assertGroup(domain.RelationshipArtistAlbums, "Organic Artist Name", relatedPerGroup)
 }
 
-// Library lookups do not draw from the provider-call budget: with a full
-// top-N of tracks carrying both an album name and a Deezer album ID, every
-// library lookup and every album-tracks lookup runs.
 func TestFindRelatedDispatch_LibraryLookupsNotCountedAgainstProviderBudget(t *testing.T) {
 	querier := &scriptedQuerier{matches: func(album string) ([]ports.RelatedTrackMatch, error) {
 		return []ports.RelatedTrackMatch{{Title: "Lib " + album, Artist: "Lib Artist"}}, nil
@@ -394,7 +387,7 @@ func TestFindRelatedDispatch_OneFailingLookupDropsOnlyItsGroup(t *testing.T) {
 		return manyResults(id, 2), nil
 	}}
 	artists := &scriptedArtistProvider{albums: func(string) ([]domain.SearchResult, error) {
-		return nil, nil // empty result: no group
+		return nil, nil
 	}}
 	svc := NewFindRelatedService(querier, albums, artists)
 
@@ -504,9 +497,6 @@ func (p *countingAlbumTracksProvider) GetAlbumTracks(_ context.Context, _ domain
 	return p.tracksByAlbum[albumID], nil
 }
 
-// relatedSearchFixture is a slate of tracks whose titles all match the query, so
-// ranking keeps every one of them in the top relatedTopN, each on its own album
-// so each draws its own library query and provider call.
 func relatedSearchFixture() ([]domain.SearchResult, map[string][]domain.SearchResult) {
 	var organic []domain.SearchResult
 	tracksByAlbum := map[string][]domain.SearchResult{}
@@ -615,8 +605,6 @@ type ownedTrackRow struct {
 	match ports.RelatedTrackMatch
 }
 
-// ownershipQuerier holds library rows for several users, like the shared
-// tracks table, and answers related-track lookups for the caller.
 type ownershipQuerier struct {
 	rows []ownedTrackRow
 }
@@ -631,8 +619,6 @@ func (q *ownershipQuerier) FindRelatedByAlbum(_ context.Context, userId shared.U
 	return out, nil
 }
 
-// Regression for #570: a search must never surface another user's private
-// library tracks in its related groups.
 func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T) {
 	userA := shared.NewUserId(uuid.New())
 	userB := shared.NewUserId(uuid.New())
@@ -695,8 +681,6 @@ func (panickingArtistProvider) GetArtistAlbums(context.Context, domain.ProviderN
 	panic("artist provider exploded")
 }
 
-// Regression test for #568: a panic in a goroutine spawned around a provider
-// or port call must be contained, not terminate the process.
 func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
 	svc := NewFindRelatedService(panickingQuerier{}, panickingAlbumProvider{}, panickingArtistProvider{})
 
@@ -713,8 +697,6 @@ func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
 	}
 }
 
-// Regression test for #568: a panic in a goroutine spawned around a provider
-// or port call must be contained, not terminate the process.
 func TestFindRelated_PanicInOneLookupKeepsTheOthers(t *testing.T) {
 	artistProvider := &fakeArtistProvider{albums: []domain.SearchResult{
 		albumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil),

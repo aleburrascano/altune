@@ -29,8 +29,6 @@ func newEventTestUser(t *testing.T, store *PgxEventStore) shared.UserId {
 	return userId
 }
 
-// showResults records the server-emitted search_performed event that proves
-// userId was shown the given result signatures at occurredAt.
 func showResults(t *testing.T, store *PgxEventStore, userId shared.UserId, occurredAt time.Time, sigs ...string) {
 	t.Helper()
 	appendOrFatal(t, store, domain.InteractionEvent{
@@ -42,10 +40,6 @@ func showResults(t *testing.T, store *PgxEventStore, userId shared.UserId, occur
 	})
 }
 
-// Regression for #573: a result_signature is deterministic and computable
-// offline, so a client can fabricate play/completed events for a result it
-// was never shown. Only signatures the submitting user was shown in a real,
-// recent search may move the global score.
 func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -62,7 +56,6 @@ func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 	sigForged := "track|forged title " + suffix + "|forged artist"
 	sigLegit := "track|legit title " + suffix + "|legit artist"
 
-	// viewer was shown sigForged, but that does not legitimise the attacker.
 	showResults(t, store, viewer, now, "track|other "+suffix+"|x")
 	showResults(t, store, attacker, now, sigLegit)
 	for _, typ := range []domain.EventType{domain.EventTypePlay, domain.EventTypeCompleted} {
@@ -77,7 +70,6 @@ func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 		Payload: map[string]any{"result_signature": sigForged},
 	})
 
-	// stale was shown sigForged, but long before the event window allows.
 	showResults(t, store, stale, now.Add(-shownResultWindow-time.Hour), sigForged)
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: stale, Type: domain.EventTypePlay,
@@ -253,13 +245,10 @@ func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
 		})
 	}
 
-	// 1100 distinct zero-result queries, beyond the 1000 top-N cap. Each counts
-	// once: the true total is 1100, but the capped list sums to only 1000.
 	const distinct = 1100
 	for i := range distinct {
 		search(fmt.Sprintf("qa total %s %d", suffix, i), map[string]any{"zero_result": true})
 	}
-	// Noise that must not be counted: poisoned, absent, and false zero_result.
 	search("qa total poison "+suffix, map[string]any{"zero_result": "yes"})
 	search("qa total absent "+suffix, map[string]any{})
 	search("qa total false "+suffix, map[string]any{"zero_result": false})
@@ -519,9 +508,6 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 		}
 	})
 
-	// Regression for #2245: the dedup key is (user_id, event_id), so a client
-	// that replays another user's event_id — guessed, or learned — claims only
-	// its own row and never silences the event that id belonged to.
 	t.Run("another user's identical event_id still inserts", func(t *testing.T) {
 		replayer := newEventTestUser(t, store)
 		victim := newEventTestUser(t, store)

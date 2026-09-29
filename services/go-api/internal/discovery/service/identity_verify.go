@@ -23,8 +23,6 @@ func NewIdentityVerifier(
 	return &IdentityVerifier{anchor: anchor, providers: providers, memo: newVerifyMemo(6*time.Hour, time.Now)}
 }
 
-// verifiableEdge reports the content provider that can verify the xref edge
-// stored under key. iTunes ids are served by the Apple Music content provider.
 func verifiableEdge(key string) (domain.ProviderName, bool) {
 	provider, ok := domain.ProviderKey(key).ProviderName()
 	switch {
@@ -82,10 +80,6 @@ func (v *IdentityVerifier) Forget(mbid string) {
 	v.memo.forget(mbid)
 }
 
-// verifyMemo suppresses re-verifying an artist for ttl after its first pass.
-// One key per distinct MBID, so the set is swept at most once per ttl and holds
-// only the artists verified in the current window rather than every artist the
-// process has ever seen.
 type verifyMemo struct {
 	mu        sync.Mutex
 	ttl       time.Duration
@@ -113,8 +107,6 @@ func (c *verifyMemo) mark(mbid string) {
 	c.m[mbid] = now.Add(c.ttl)
 }
 
-// dropExpired runs at most once per ttl, so marking costs one full scan per ttl
-// rather than one per call. The caller holds c.mu.
 func (c *verifyMemo) dropExpired(now time.Time) {
 	if now.Sub(c.lastSweep) < c.ttl {
 		return

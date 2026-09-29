@@ -122,9 +122,6 @@ func TestLengthSimilarity(t *testing.T) {
 	}
 }
 
-// commandCounter is a go-redis hook that records every command the store sends
-// without touching the network, so the Redis call shape of the fuzzy path can be
-// asserted in CI where no Redis server exists.
 type commandCounter struct {
 	mu            sync.Mutex
 	single        map[string]int
@@ -169,7 +166,7 @@ func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testi
 	client, counter := newCountingClient(t)
 	store := NewVocabularyStore(client, lowercaseNorm)
 
-	hostile := strings.Repeat("qwertyuiopasdfghjklz", 500) // 10,000 runes -> 9,998 trigrams
+	hostile := strings.Repeat("qwertyuiopasdfghjklz", 500)
 	if _, err := store.FindClosest(context.Background(), hostile, 5); err != nil {
 		t.Fatalf("FindClosest: %v", err)
 	}
@@ -185,7 +182,6 @@ func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testi
 	}
 }
 
-// passthroughCounter counts SMEMBERS round trips against a real Redis.
 type passthroughCounter struct {
 	mu        sync.Mutex
 	smembers  int
@@ -248,8 +244,6 @@ func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(
 	}
 }
 
-// stubRedis answers the vocabulary store's commands from memory, so the fuzzy
-// path's Redis call shape can be asserted at vocabulary scale with no server.
 type stubRedis struct {
 	mu         sync.Mutex
 	sets       map[string]map[string]bool
@@ -373,12 +367,8 @@ func redisArg(v any) string {
 	return fmt.Sprint(v)
 }
 
-// sharedTrigramVocabularySize is the scale the bound has to survive: one common
-// trigram holding a large slice of a 50k-entry vocabulary.
 const sharedTrigramVocabularySize = 20000
 
-// firstThreeRunes stands in for the production metaphone at its worst: it
-// buckets the whole seeded vocabulary under a single phonetic code.
 func firstThreeRunes(term string) string {
 	runes := []rune(term)
 	if len(runes) < 3 {

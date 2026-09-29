@@ -46,7 +46,6 @@ func withEnricher(
 	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
-// titleAndSubtitle reads the pair every enrichment route is addressed by.
 func titleAndSubtitle(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	title, ok := textParam(w, r, "title")
 	if !ok {
@@ -59,10 +58,6 @@ func titleAndSubtitle(w http.ResponseWriter, r *http.Request) (string, string, b
 	return title, subtitle, true
 }
 
-// splitDegraded separates a degraded lookup (an upstream fetch failed, so the
-// empty payload is best-effort and should be retried later) from a hard error.
-// A degraded lookup still answers 200 with its empty payload, flagged
-// degraded=true; any other error is returned for the caller to fail on.
 func splitDegraded(err error) (bool, error) {
 	if errors.Is(err, enrich.ErrDegraded) {
 		return true, nil
@@ -114,9 +109,7 @@ type EnrichmentResponseDTO struct {
 	ExternalIDs    map[string]string `json:"external_ids"`
 	ArtworkURL     string            `json:"artwork_url"`
 	HasContent     bool              `json:"has_content"`
-	// Degraded is true when the result is empty because the upstream lookup
-	// failed transiently, not because the provider has no data for it.
-	Degraded bool `json:"degraded"`
+	Degraded       bool              `json:"degraded"`
 }
 
 func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {

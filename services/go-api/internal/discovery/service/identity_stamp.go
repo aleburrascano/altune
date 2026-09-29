@@ -10,14 +10,6 @@ import (
 
 const identityPersistTimeout = 30 * time.Second
 
-// IdentityStamper is the identity collaborator: it stamps bridged external IDs
-// (xref) onto MBID-bearing provider results before merge, and persists newly
-// learned bridges — verified first when a verifier is wired — to the durable
-// identity store off the request path. It replaces the identityBridge,
-// identityStore and identityVerifier fields that used to sit on the Service god
-// object, so identity handling can change (or be tested)
-// without constructing the rest of the search pipeline. A nil bridge disables
-// stamping.
 type IdentityStamper struct {
 	bridge   ports.IdentityBridge
 	store    ports.IdentityStore
@@ -53,8 +45,6 @@ func (s *IdentityStamper) stamp(ctx context.Context, perProvider [][]domain.Sear
 	})
 }
 
-// stampXrefs stamps bridged external IDs onto every MBID-bearing result in
-// place and returns the bridges worth persisting (none without a store).
 func (s *IdentityStamper) stampXrefs(ctx context.Context, perProvider [][]domain.SearchResult) []learnedBridge {
 	var learned []learnedBridge
 
@@ -80,9 +70,6 @@ func (s *IdentityStamper) stampXrefs(ctx context.Context, perProvider [][]domain
 	return learned
 }
 
-// persist verifies (when a verifier is wired) and durably stores each learned
-// bridge under identityPersistTimeout. A failed write forgets the verify memo
-// so the next sighting re-verifies instead of silently skipping.
 func (s *IdentityStamper) persist(bgCtx context.Context, learned []learnedBridge) {
 	bgCtx, cancel := context.WithTimeout(bgCtx, identityPersistTimeout)
 	defer cancel()

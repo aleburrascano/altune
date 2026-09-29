@@ -13,15 +13,8 @@ type SearchQuery struct {
 	Offset int
 }
 
-// MaxSearchQueryRunes caps a raw search query. No real title or artist search
-// approaches it, and it bounds the per-query work downstream (fuzzy correction,
-// provider fan-out) an oversized query could otherwise trigger.
 const MaxSearchQueryRunes = 200
 
-// MaxSearchQueryTokens caps the whitespace-separated words in a raw search
-// query. The rune cap alone still admits ~100 one-letter words, all of which
-// fan out to every provider and flow into ranking and vocabulary ingestion;
-// real title/artist searches stay far below it.
 const MaxSearchQueryTokens = 32
 
 func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQuery, error) {

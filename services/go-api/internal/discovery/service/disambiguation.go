@@ -13,10 +13,6 @@ const (
 	disambigMaxLookups = 3
 )
 
-// artistDisambiguator fills blank artist subtitles with a disambiguation,
-// first from provider-supplied extras and then, within a small lookup budget,
-// from the injected artist-identity resolver. It replaces the albumValidator
-// port that used to sit on the Service god object.
 type artistDisambiguator struct {
 	validator ports.ArtistIdentityResolver
 }
@@ -65,8 +61,6 @@ func (s *artistDisambiguator) apply(ctx context.Context, results []domain.Search
 	return results
 }
 
-// applyDisambiguationExtras fills blank artist subtitles from the
-// provider-supplied disambiguation extra, which costs no lookup.
 func applyDisambiguationExtras(results []domain.SearchResult) {
 	for i, r := range results {
 		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
@@ -78,8 +72,6 @@ func applyDisambiguationExtras(results []domain.SearchResult) {
 	}
 }
 
-// applyArtistIdentity copies a resolved identity's disambiguation (memoized in
-// extras) and, when the result has none, its MBID onto the result.
 func applyArtistIdentity(r *domain.SearchResult, identity *ports.ArtistIdentity) {
 	if identity.Disambiguation != "" {
 		r.Subtitle = identity.Disambiguation

@@ -25,8 +25,6 @@ func (f panickingTrackNumberFiller) FillTrackNumber(context.Context, shared.User
 	panic("track number fill exploded")
 }
 
-// stallingTrackNumberFiller is a write that never returns on its own: it blocks
-// until the caller's deadline fires or release is closed.
 type stallingTrackNumberFiller struct {
 	entered chan struct{}
 	release chan struct{}
@@ -90,8 +88,6 @@ func TestEnrichAlbumTracks_PanickingFillerIsContained(t *testing.T) {
 
 	done := svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item})
 
-	// done closes only once the detached goroutine has recovered the panic and
-	// finished; an unrecovered panic crashes the binary before it closes.
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):

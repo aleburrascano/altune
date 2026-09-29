@@ -131,7 +131,6 @@ func breakerFailures(cb *CircuitBreaker, provider domain.ProviderName) int {
 
 var errQueueShed = fmt.Errorf("%w: %w", ports.ErrProviderRateLimitQueueTimeout, context.DeadlineExceeded)
 
-// Search settles through the same health classification as content calls.
 func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 	cases := []struct {
 		name string
@@ -163,7 +162,6 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 	}
 }
 
-// A queue-shed search reports a timeout, like one its budget cut off.
 func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
 	svc := NewService([]ports.SearchProvider{&fakeProvider{name: domain.ProviderITunes, err: errQueueShed}}, NewCircuitBreaker())
 
@@ -174,7 +172,6 @@ func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
 	}
 }
 
-// A queue-shed half-open probe hands its slot back instead of re-opening.
 func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 	cb := NewCircuitBreaker()
 	tripToHalfOpenWindow(cb, domain.ProviderITunes)
@@ -190,8 +187,6 @@ func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 	}
 }
 
-// ignoresCtxProvider outlives its budget and then reports an error that does
-// not itself say "timeout", as a killed subprocess would.
 type ignoresCtxProvider struct{ fakeProvider }
 
 func (p *ignoresCtxProvider) SearchTimeout() time.Duration { return 5 * time.Millisecond }

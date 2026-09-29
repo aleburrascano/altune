@@ -179,8 +179,6 @@ func TestMergeReleases_typedUPCFolds(t *testing.T) {
 }
 
 func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
-	// Two variants of the same release: a plain provider cover must lose to the
-	// id-pinned one instead of winning just because it was seen first.
 	a := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
 	a.ArtworkSource = "deezer"
 	b := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea", withCover("https://caa/identity.jpg"))
@@ -192,15 +190,12 @@ func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
 		t.Errorf("bestArtwork = (%q, %q), want the identity-pinned cover to win", url, source)
 	}
 
-	// Order-independent: the id-pinned cover still wins when it is the first arg.
 	if url, source := bestArtwork(b, a); url != "https://caa/identity.jpg" || source != "coverartarchive" {
 		t.Errorf("bestArtwork(b, a) = (%q, %q), want the identity-pinned cover to win", url, source)
 	}
 }
 
 func TestBestArtwork_fallsBackToTheOnlyCoverForCoverage(t *testing.T) {
-	// A missing cover on the id-bearing side must still adopt the sibling's image
-	// — same album, so coverage must not regress.
 	a := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
 	a.MBID = "mbid-noidea"
 	b := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/cover.jpg"))
@@ -220,9 +215,6 @@ func TestBestReleaseDate_prefersPrecision(t *testing.T) {
 	}
 }
 
-// Pins the Extras-era semantics bestOfRelease kept when record_type and
-// resolution_tier became typed: an unrecognised type survives when the other
-// side has none, and the receiver's tier wins only when it has one.
 func TestBestOfRelease_typedRecordTypeAndTierFallBack(t *testing.T) {
 	a := albumVariant(domain.ProviderDeezer, "1", "Blue")
 	b := albumVariant(domain.ProviderYouTube, "2", "Blue", withType("Album"))

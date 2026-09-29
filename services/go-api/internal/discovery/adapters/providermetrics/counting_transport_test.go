@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// stubTransport returns a canned response/error and captures the last request
-// it saw, standing in for a real network transport.
 type stubTransport struct {
 	status  int
 	err     error
@@ -48,8 +46,6 @@ func delta(before, after Outcomes) Outcomes {
 	}
 }
 
-// TestCountsPerProviderAndOutcome drives one round trip per (host, status) case
-// and asserts exactly the matching (provider, outcome) counter advanced by one.
 func TestCountsPerProviderAndOutcome(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -93,8 +89,6 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 	}
 }
 
-// TestTransparentDelegate proves the wrap alters neither the response nor the
-// error, nor mutates the outgoing request.
 func TestTransparentDelegate(t *testing.T) {
 	t.Run("response and request pass through unchanged", func(t *testing.T) {
 		stub := &stubTransport{status: 201}
@@ -131,8 +125,6 @@ func TestTransparentDelegate(t *testing.T) {
 	})
 }
 
-// TestSnapshotHasNoPII proves the snapshot exposes only fixed provider labels —
-// never a host, URL, or query — even after a request carrying query text.
 func TestSnapshotHasNoPII(t *testing.T) {
 	const secret = "topsecretquery"
 	resp, _ := roundTrip(t, &stubTransport{status: 200},
@@ -156,8 +148,6 @@ func TestSnapshotHasNoPII(t *testing.T) {
 	}
 }
 
-// TestKeySetIsBounded proves unknown hosts never grow new keys: the snapshot
-// always has exactly the fixed provider set, regardless of hosts seen.
 func TestKeySetIsBounded(t *testing.T) {
 	for _, host := range []string{"https://a.example", "https://b.invalid", "https://c.test"} {
 		resp, _ := roundTrip(t, &stubTransport{status: 200}, host+"/x")
@@ -170,10 +160,6 @@ func TestKeySetIsBounded(t *testing.T) {
 	}
 }
 
-// TestConcurrentRoundTripsCountExactly fires many parallel round trips through
-// one shared CountingTransport and asserts the deltas sum to exactly the work
-// done — under -race this pins the assembled-feature claim that the process-
-// global counters are safe under concurrent provider traffic.
 func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 	const goroutines, perGoroutine = 16, 64
 	before := ReadSnapshot()[providerDeezer]
@@ -183,8 +169,6 @@ func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 	for g := 0; g < goroutines; g++ {
 		go func() {
 			defer wg.Done()
-			// Each goroutine owns its transport so the only shared state under
-			// test is the process-global counters the wrap increments.
 			ct := NewCountingTransport(&stubTransport{status: 200})
 			for i := 0; i < perGoroutine; i++ {
 				req := httptest.NewRequest(http.MethodGet, "https://api.deezer.com/x", nil)
@@ -206,8 +190,6 @@ func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 }
 
 func TestNilBaseDoesNotPanic(t *testing.T) {
-	// A nil base must fall back to http.DefaultTransport rather than panic; the
-	// request to an unroutable host errors, which is fine — we assert no panic.
 	req := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:0/x", nil)
 	resp, err := (&CountingTransport{}).RoundTrip(req)
 	if resp != nil {

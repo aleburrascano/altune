@@ -137,9 +137,6 @@ func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 	assertEntryTerm(t, store.bulkAdded[0], "Bad Bunny")
 }
 
-// Issue #2243: a refresh where every chart provider failed stored nothing and
-// still returned nil, leaving the job-health record green while suggest and
-// correction went on serving stale vocabulary.
 func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	store := &fakeVocabularyStore{}
 	charts := []fakeChartProvider{

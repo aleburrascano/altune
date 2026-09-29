@@ -22,12 +22,6 @@ const (
 	emptyArtHash           = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
-// ArtworkFiller is the artwork-resolution collaborator: it fills missing cover
-// art on the top of a ranked slate from the artwork cache, the durable identity
-// store, the shared MBID index, and the tagging artwork resolver. It replaces
-// the four artwork/identity-lookup ports that used to sit on the Service god
-// object, so artwork sourcing can change without touching the orchestrator.
-// A nil resolver disables the fill and leaves results untouched.
 type ArtworkFiller struct {
 	resolver      ports.TaggingArtworkResolver
 	cache         ports.ArtworkCache
@@ -35,8 +29,6 @@ type ArtworkFiller struct {
 	mbidIndex     ports.MBIDIndex
 }
 
-// identityLookup is the single-ref durable identity read the cascade needs; a
-// ports.IdentityStore satisfies it, and so does a batch-prefetched snapshot.
 type identityLookup interface {
 	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[string]string, ok bool)
 }
@@ -85,10 +77,6 @@ func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult)
 	return append(filled, rest...)
 }
 
-// withPrefetchedIdentities resolves every durable identity the slate needs in
-// one batched store call and returns a filler whose cascade reads that
-// snapshot, instead of issuing one store round-trip per result. A store
-// without the batch capability keeps the per-result lookup.
 func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []domain.SearchResult) *ArtworkFiller {
 	batch, ok := a.identityStore.(ports.BatchIdentityLookup)
 	if !ok {
@@ -103,8 +91,6 @@ func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []
 	return &scoped
 }
 
-// durableIdentityRefs lists the refs the cascade would look up: results with no
-// usable provider art that still need the durable store.
 func durableIdentityRefs(results []domain.SearchResult) []ports.IdentityRef {
 	refs := make([]ports.IdentityRef, 0, len(results))
 	for _, r := range results {
@@ -125,10 +111,6 @@ func durableIdentityRef(r domain.SearchResult) ports.IdentityRef {
 	return ports.IdentityRef{Kind: r.Kind, Provider: src.Provider.Key(), ExternalID: src.ExternalID}
 }
 
-// prefetchedIdentities answers single-ref lookups from a batch result; a ref
-// the batch did not return is a miss. It is read-only once built, so the
-// concurrent fill goroutines can share it; each hit's xref is cloned so results
-// that share a ref never alias one map.
 type prefetchedIdentities map[ports.IdentityRef]ports.IdentityHit
 
 func (p prefetchedIdentities) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
@@ -136,19 +118,16 @@ func (p prefetchedIdentities) LookupByProviderID(_ context.Context, kind domain.
 	return hit.MBID, maps.Clone(hit.Xref), ok
 }
 
-// artworkStage names the cascade stage that settled a result's artwork.
 type artworkStage int
 
 const (
-	artworkStageProvider   artworkStage = iota // the provider already supplied usable art
-	artworkStageCacheHit                       // the artwork cache held a usable URL
-	artworkStageCachedMiss                     // the cache recorded a miss for a non-artist kind
-	artworkStageDegraded                       // the live resolver failed, so its miss proves nothing
-	artworkStageLive                           // the live resolver ran (hit or miss)
+	artworkStageProvider artworkStage = iota
+	artworkStageCacheHit
+	artworkStageCachedMiss
+	artworkStageDegraded
+	artworkStageLive
 )
 
-// artworkOutcome is what the cascade learned; the artwork_path label is derived
-// from it once, after the cascade, rather than stamped at every exit.
 type artworkOutcome struct {
 	stage       artworkStage
 	resolved    string
@@ -177,10 +156,6 @@ func (a *ArtworkFiller) fillOne(ctx context.Context, result domain.SearchResult)
 	return result
 }
 
-// runStages tries each artwork stage in order, returning at the first that
-// settles the result: provider art, then the artwork cache keyed on the MBID
-// (from the durable identity store or the shared MBID index), then the live
-// resolver.
 func (a *ArtworkFiller) runStages(ctx context.Context, result *domain.SearchResult) artworkOutcome {
 	if usableArtwork(result.ImageURL) {
 		defaultArtworkSource(result)
@@ -204,10 +179,6 @@ func defaultArtworkSource(result *domain.SearchResult) {
 	result.ArtworkSource = result.Sources[0].Provider.String()
 }
 
-// lookupMBID resolves the MBID to key artwork on: the result's own MBID, else
-// the durable identity store's, else the shared MBID index's. fromDurable
-// reports whether the durable store knew the result, even when the result's own
-// MBID wins.
 func (a *ArtworkFiller) lookupMBID(ctx context.Context, result *domain.SearchResult) (mbid string, fromDurable bool) {
 	durableMBID, fromDurable := a.lookupDurableIdentity(ctx, result)
 	mbid = cmp.Or(result.MBID, durableMBID)
@@ -217,8 +188,6 @@ func (a *ArtworkFiller) lookupMBID(ctx context.Context, result *domain.SearchRes
 	return mbid, fromDurable
 }
 
-// lookupDurableIdentity consults the durable identity store for a result that
-// has no bridged ids yet, stamping the stored xref onto it. ok reports a hit.
 func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domain.SearchResult) (mbid string, ok bool) {
 	if a.identityStore == nil || !needsDurableIdentity(*result) {
 		return "", false
@@ -248,9 +217,6 @@ func (a *ArtworkFiller) lookupMBIDIndex(ctx context.Context, result domain.Searc
 	return mbid
 }
 
-// lookupArtworkCache consults the artwork cache and reports whether the cached
-// entry settled the result (a usable URL, or a cached miss for a non-artist
-// kind), in which case the live resolver must not run.
 func (a *ArtworkFiller) lookupArtworkCache(ctx context.Context, result *domain.SearchResult, mbid string) (stage artworkStage, settled bool) {
 	if a.cache == nil {
 		return artworkStageLive, false
@@ -270,10 +236,6 @@ func (a *ArtworkFiller) lookupArtworkCache(ctx context.Context, result *domain.S
 	return artworkStageLive, false
 }
 
-// resolveLive runs the live resolver, records its answer (hit or miss) in the
-// artwork cache, and applies a hit to the result. A miss the resolvers could
-// not vouch for is never written: a negative entry would blank this art for the
-// whole negative TTL over a provider blip that lasted seconds.
 func (a *ArtworkFiller) resolveLive(ctx context.Context, result *domain.SearchResult, mbid string, fromDurable bool) artworkOutcome {
 	resolved, source, confidence, err := a.resolve(ctx, *result, mbid)
 	if ports.IsUnverifiedArtworkMiss(resolved, err) {
@@ -319,9 +281,6 @@ func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDur
 	}
 }
 
-// resolve walks the id-pinned resolver then the name-keyed one. A miss carries
-// every failure both legs reported, so the caller can tell "no art exists" from
-// "we could not look"; a hit carries none.
 func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult, mbid string) (string, domain.ProviderKey, ports.ArtworkConfidence, error) {
 	idURL, idSource, idErr := a.resolveByIdentity(ctx, result, mbid)
 	if idURL != "" {
@@ -334,8 +293,6 @@ func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult,
 	return "", "", ports.ArtworkConfidenceNone, errors.Join(idErr, nameErr)
 }
 
-// resolveByIdentity runs the id-pinned resolver, reporting a clean empty when
-// the result carries no durable id to pin on.
 func (a *ArtworkFiller) resolveByIdentity(ctx context.Context, result domain.SearchResult, mbid string) (string, domain.ProviderKey, error) {
 	identity := artworkIdentity(result, mbid)
 	if !identity.HasLinks() {

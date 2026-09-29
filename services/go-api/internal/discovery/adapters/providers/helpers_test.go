@@ -13,13 +13,8 @@ import (
 	"time"
 )
 
-// hostileMBID carries every URL-special character that could restructure an
-// outbound request if interpolated raw: a path separator, a query start and a
-// fragment start. MBIDs come verbatim from third-party JSON (issue #572).
 const hostileMBID = "a/b?c#d"
 
-// capturingClient records the outbound request and answers with an empty 404,
-// so nothing leaves the process.
 func capturingClient(capture **http.Request) *http.Client {
 	return &http.Client{Transport: fakeRoundTripper{fn: func(r *http.Request) (*http.Response, error) {
 		*capture = r
@@ -31,12 +26,8 @@ func capturingClient(capture **http.Request) *http.Client {
 	}}}
 }
 
-// sensitiveQuery is distinctive enough that any substring hit in captured log
-// output can only come from the user's search text.
 const sensitiveQuery = "zqxj private diagnosis clinic"
 
-// captureDefaultLog routes the default slog logger into a JSON buffer, as the
-// production stdout handler does, and restores it when the test ends.
 func captureDefaultLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer

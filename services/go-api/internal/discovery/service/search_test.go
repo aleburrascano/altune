@@ -500,9 +500,6 @@ func TestOptions_WireTheirDependencies(t *testing.T) {
 	}
 }
 
-// driftingProvider answers each fan-out with a different slate, the way a real
-// provider does when its upstream re-ranks, a timeout truncates the answer, or
-// a breaker drops a source between two pages of the same search.
 type driftingProvider struct {
 	name   domain.ProviderName
 	slates [][]domain.SearchResult
@@ -521,8 +518,6 @@ func (p *driftingProvider) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 }
 
-// artistRun is one provider answer: n tracks of the same title, told apart by
-// artist, so a result that came from another fan-out is visible by its prefix.
 func artistRun(title, prefix string, n int) []domain.SearchResult {
 	out := make([]domain.SearchResult, n)
 	for i := range out {
@@ -531,10 +526,6 @@ func artistRun(title, prefix string, n int) []domain.SearchResult {
 	return out
 }
 
-// pagingService searches one provider that drifts between fan-outs and one that
-// is down. The failure keeps every slate partial, which is the slate the
-// query-keyed cache never stores, so a later page has nothing to continue from
-// but what the first page held.
 func pagingService(t *testing.T, slates ...[]domain.SearchResult) (*Service, *driftingProvider) {
 	t.Helper()
 	drifting := &driftingProvider{name: domain.ProviderDeezer, slates: slates}
@@ -641,8 +632,6 @@ func TestService_SearchIdReplayedAgainstAnotherQueryServesThatQuery(t *testing.T
 	}
 }
 
-// TestService_Execute_DoesNotLogQueryText guards issue #1097: search text is
-// erasable via clear-history, so it must never be copied into stdout logs.
 func TestService_Execute_DoesNotLogQueryText(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()
@@ -667,12 +656,6 @@ func TestService_Execute_DoesNotLogQueryText(t *testing.T) {
 	}
 }
 
-// The smoke-eval job runs the real per-user search path with a canned query.
-// When it ran as the real operator account it read that operator's favorites
-// and persisted an InteractionEvent and a history row under their real id,
-// contaminating their ranking and behavioral signal. The synthetic system
-// identity must skip all three, while a real identity keeps its
-// personalization, telemetry, and history.
 func TestExecute_SystemIdentityDoesNotTouchFavoritesOrTelemetry(t *testing.T) {
 	favorites := []domain.Favorite{favoriteOf(domain.ResultKindArtist, "Kendrick Lamar", "")}
 	results := []domain.SearchResult{

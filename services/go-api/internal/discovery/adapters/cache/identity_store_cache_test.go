@@ -185,9 +185,6 @@ func TestRedisIdentityStore_NilClient_DelegatesToInner(t *testing.T) {
 	}
 }
 
-// Redis keys and payloads written before domain.ProviderKey existed must still
-// be found and decoded: the golden values below were captured from the
-// string-typed implementation.
 func TestIdentityKey_ByteIdenticalAcrossProviderKey(t *testing.T) {
 	tests := []struct {
 		kind       domain.ResultKind

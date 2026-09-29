@@ -19,13 +19,8 @@ type ContentFetchResponseDTO struct {
 	Provider string            `json:"provider_name"`
 	Status   string            `json:"status"`
 	Items    []SearchResultDTO `json:"items"`
-	// Partial is true when a provider in the fan-out failed while others
-	// answered, so Items may be incomplete. Mirrors search's partial flag.
-	Partial bool `json:"partial"`
-	// Code names why the fetch failed, and is absent when it did not. Unlike
-	// Status, it separates a provider with no adapter for this content kind
-	// from one that was called and failed.
-	Code string `json:"code,omitempty"`
+	Partial  bool              `json:"partial"`
+	Code     string            `json:"code,omitempty"`
 }
 
 func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
@@ -43,7 +38,6 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 	}
 }
 
-// Error codes a content fetch that fully failed answers with, one per cause.
 const (
 	contentCodeUnserved        = "discovery.content_unserved"
 	contentCodeProviderTimeout = "discovery.provider_timeout"
@@ -52,12 +46,6 @@ const (
 	contentCodeProviderError   = "discovery.provider_error"
 )
 
-// contentFetchOutcome maps a content fetch onto its HTTP status and error
-// code. A fetch with an ok status answers 200 with no code, even when Partial.
-// A failed one answers non-2xx so monitoring sees it: 404 when no provider is
-// wired for the content (permanent), 504 for an upstream timeout (retry now),
-// 503 for a throttled upstream or an open circuit (retry later), and 502 for
-// any other upstream failure.
 func contentFetchOutcome(resp *service.ContentFetchResponse) (int, string) {
 	if resp.Unserved {
 		return http.StatusNotFound, contentCodeUnserved
@@ -76,7 +64,6 @@ func contentFetchOutcome(resp *service.ContentFetchResponse) (int, string) {
 	}
 }
 
-// unservedContentDTO is the answer for a content kind no service is wired for.
 func unservedContentDTO(provider string) ContentFetchResponseDTO {
 	return ContentFetchResponseDTO{
 		Provider: provider, Status: domain.ProviderStatusError.String(), Items: []SearchResultDTO{},
@@ -231,18 +218,11 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 }
 
 type ArtistContentResponseDTO struct {
-	// Code is set only when both halves failed, and is then the code the
-	// response's HTTP status was taken from.
 	Code      string                  `json:"code,omitempty"`
 	TopTracks ContentFetchResponseDTO `json:"top_tracks"`
 	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
-// artistContentOutcome is the HTTP status and top-level code for the combined
-// artist content response. It fails only when both halves failed, so a
-// response with either half's content stays 200. When the halves failed for
-// different reasons, a provider that was called and failed outranks one with
-// no adapter, and top tracks break any remaining tie.
 func artistContentOutcome(tracks, albums *service.ContentFetchResponse) (int, string) {
 	tracksStatus, tracksCode := contentFetchOutcome(tracks)
 	albumsStatus, albumsCode := contentFetchOutcome(albums)
@@ -255,9 +235,6 @@ func artistContentOutcome(tracks, albums *service.ContentFetchResponse) (int, st
 	return tracksStatus, tracksCode
 }
 
-// runRecovered runs one of handleArtistContent's fetches inside its goroutine,
-// containing a panic by logging it and returning it as that fetch's error, so
-// the request fails on its own instead of the panic terminating the process.
 func runRecovered(ctx context.Context, event string, fetch func() error) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {

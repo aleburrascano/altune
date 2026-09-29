@@ -159,8 +159,6 @@ func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 	}
 }
 
-// The MusicBrainz adapter does not classify HTTP statuses, so a stale-MBID 404
-// is indistinguishable from a transient failure here and is reported degraded.
 func TestEnrichmentService_PassedMBID_404DegradesToEmpty(t *testing.T) {
 	enr := &fakeEnricher{lookupErr: errors.New("musicbrainz returned 404")}
 	svc := NewEnrichmentService(enr, nil, nil)
@@ -182,9 +180,6 @@ func TestEnrichmentService_ArtworkMerged(t *testing.T) {
 	}
 }
 
-// The MB data is good, only the artwork chain was down. Caching the coverless
-// entry would pin it for the positive TTL, so the entry is served but not
-// stored and the next call re-resolves the cover.
 func TestEnrichmentService_CoverlessEntryFromADownChainIsNotCached(t *testing.T) {
 	enr := &fakeEnricher{enrichment: sampleEnrichment()}
 	art := &fakeArtwork{err: ports.ErrArtworkDegraded}

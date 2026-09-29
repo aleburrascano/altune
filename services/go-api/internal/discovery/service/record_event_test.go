@@ -263,7 +263,6 @@ func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 	}
 }
 
-// append never reports activity that was not actually recorded.
 func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
 	feed := &recordingActivityFeed{}
 	svc := NewRecordEventService(failingEventStore{}, WithRecordEventActivityFeed(feed))

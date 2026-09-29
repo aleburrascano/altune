@@ -92,15 +92,11 @@ func (t EntityResolutionTier) String() string {
 	}
 }
 
-// ResolutionTierStamp is the entity-resolution tier an entity merge settled on.
-// The zero value means the result never went through an entity merge, which is
-// distinct from a merge that resolved at EntityResolutionNone (a name match).
 type ResolutionTierStamp struct {
 	Tier    EntityResolutionTier
 	Stamped bool
 }
 
-// StampResolutionTier records that a merge resolved at tier.
 func StampResolutionTier(tier EntityResolutionTier) ResolutionTierStamp {
 	return ResolutionTierStamp{Tier: tier, Stamped: true}
 }
@@ -122,13 +118,8 @@ const (
 	ProviderSpotify
 )
 
-// CanonicalContentProvider is the provider whose IDs back browseable content:
-// album-track and artist-album lookups, featured-artist enrichment, and the
-// head of the artist-content fan-out all resolve through it. Changing the
-// canonical provider means changing this one constant.
 const CanonicalContentProvider = ProviderDeezer
 
-// IsCanonicalContentProvider reports whether p is the canonical content provider.
 func IsCanonicalContentProvider(p ProviderName) bool {
 	return p == CanonicalContentProvider
 }
