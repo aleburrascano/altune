@@ -561,3 +561,66 @@ func TestRunDiffDoesNotFlagCommentsCarriedAcrossARename(t *testing.T) {
 		t.Fatalf("output flagged the base comment carried by the rename, new.sh:2:\n%s", stdout.String())
 	}
 }
+
+func trackedFilesMatching(t *testing.T, k kind) map[string][]byte {
+	t.Helper()
+	rootOut, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		t.Skip("git rev-parse --show-toplevel unavailable")
+	}
+	root := strings.TrimSpace(string(rootOut))
+	listing, err := exec.Command("git", "-C", root, "ls-files").Output()
+	if err != nil {
+		t.Fatalf("git ls-files: %v", err)
+	}
+	files := map[string][]byte{}
+	for _, relPath := range strings.Split(strings.TrimSpace(string(listing)), "\n") {
+		if !k.match(relPath, nil) {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(root, relPath))
+		if err != nil {
+			t.Fatalf("read %s: %v", relPath, err)
+		}
+		files[relPath] = src
+	}
+	if len(files) == 0 {
+		t.Fatalf("no tracked file matched kind %s", k.name)
+	}
+	return files
+}
+
+func assertStripsToACleanEquivalent(t *testing.T, k kind, files map[string][]byte) {
+	t.Helper()
+	for relPath, src := range files {
+		t.Run(relPath, func(t *testing.T) {
+			out, _, err := strip(src, k)
+			if err != nil {
+				t.Fatalf("strip %s: %v", relPath, err)
+			}
+			if err := k.same(src, out); err != nil {
+				t.Fatalf("%s: %v", relPath, err)
+			}
+			remaining, err := k.comments(out)
+			if err != nil {
+				t.Fatalf("reparse stripped %s: %v", relPath, err)
+			}
+			if len(remaining) != 0 {
+				t.Fatalf("%s: %d comments remain after strip", relPath, len(remaining))
+			}
+		})
+	}
+}
+
+func TestCheckReportsAMultiLineCommentBetweenCodeAsOneLine(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.js", "a(); /* one\ntwo */ b();\n")
+
+	var stdout strings.Builder
+	code := run([]string{"check", dir}, &stdout)
+
+	want := filepath.Join(dir, "a.js") + ":1\ncomment violations: 1\n"
+	if code != 1 || stdout.String() != want {
+		t.Fatalf("exit = %d, output %q, want exit 1 and %q", code, stdout.String(), want)
+	}
+}
