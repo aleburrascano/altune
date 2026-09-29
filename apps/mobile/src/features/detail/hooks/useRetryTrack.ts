@@ -1,4 +1,6 @@
-import { useMutation, type UseMutationResult } from '@tanstack/react-query';
+import { type UseMutationResult } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { retryAcquisition } from '@shared/api-client/tracks';
@@ -33,13 +35,15 @@ async function sendRetry(trackId: TrackId, entryPoint: RetryEntryPoint): Promise
 }
 
 function useRetryMutation(entryPoint: RetryEntryPoint) {
-  return useMutation(
-    guardedMutationOptions({
+  return useAppMutation({
+    ...guardedMutationOptions({
       mutationFn: (trackId: TrackId) => sendRetry(trackId, entryPoint),
       onMutate: markPending,
       onError: markFailed(entryPoint),
     }),
-  );
+    action: 'detail.retry',
+    trackIdOf: (trackId: TrackId) => trackId,
+  });
 }
 
 export function useRetryTrack(entryPoint: RetryEntryPoint): RetryTrack {

@@ -9,6 +9,7 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { libraryKeys } from '@shared/lib/query-keys';
+import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import {
@@ -36,6 +37,7 @@ jest.mock('@shared/api-client/tracks', () => ({
   retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
   reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
 }));
+jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
 
 let alertSpy: jest.SpyInstance;
 let warnSpy: jest.SpyInstance;
@@ -128,6 +130,21 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
 
     expect(pagedIds(queryClient)).toEqual(['t1']);
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('records the delete as a library.delete_track user action with the track id', async () => {
+    const { wrapper } = setup();
+    mockDeleteTrack.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t2')));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(recordUserAction).toHaveBeenCalledWith({
+      action: 'library.delete_track',
+      outcome: 'succeeded',
+      track_id: 't2',
+    });
   });
 
   it('marks the membership-derived caches stale once the delete lands (#938)', async () => {

@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import { isRetryable } from '@shared/api-client';
 import {
@@ -17,7 +19,8 @@ export type ClearSearchHistory = {
 
 export function useClearSearchHistory(): ClearSearchHistory {
   const queryClient = useQueryClient();
-  const clearHistoryMutation = useMutation({
+  const clearHistoryMutation = useAppMutation({
+    action: 'discover.clear_search_history',
     ...guardedMutationOptions({
       mutationFn: clearSearchHistory,
       onMutate: () => {

@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
@@ -71,5 +73,9 @@ function deleteTrackOptions(queryClient: QueryClient) {
 
 export function useDeleteTrack() {
   const queryClient = useQueryClient();
-  return useMutation(deleteTrackOptions(queryClient));
+  return useAppMutation({
+    ...deleteTrackOptions(queryClient),
+    action: 'library.delete_track',
+    trackIdOf: (trackId: TrackId) => trackId,
+  });
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { showAlert } from '@shared/ui/dialog/dialog';
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
@@ -189,11 +191,12 @@ function recoverFailedBulkRun(queryClient: QueryClient) {
 export function useDeleteTracks() {
   const queryClient = useQueryClient();
   const startRun = useUnmountStop();
-  return useMutation(
-    guardedMutationOptions({
+  return useAppMutation({
+    ...guardedMutationOptions({
       mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds),
       onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, summary),
       onError: recoverFailedBulkRun(queryClient),
     }),
-  );
+    action: 'library.delete_tracks',
+  });
 }

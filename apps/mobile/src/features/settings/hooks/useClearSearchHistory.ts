@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import { clearSearchHistory } from '@shared/api-client/discovery';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
@@ -7,7 +9,8 @@ import { transientRetryOptions } from '@shared/query/retryDelay';
 
 export function useClearSearchHistory() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useAppMutation({
+    action: 'settings.clear_search_history',
     ...guardedMutationOptions({
       mutationFn: clearSearchHistory,
       onMutate: () => {

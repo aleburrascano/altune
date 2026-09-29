@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { isSafeId } from '@shared/api-client/ids';
@@ -104,7 +106,9 @@ function guardedMutate(entryPoint: EntryPoint, run: TrackMutation<void, RetryCon
 
 function useRetryRun(entryPoint: EntryPoint) {
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  const mutation = useAppMutation({
+    action: 'library.retry',
+    trackIdOf: (trackId: TrackId) => trackId,
     mutationKey: trackMutationKeys.retryAcquisition,
     ...retryOptions(queryClient, entryPoint),
   });

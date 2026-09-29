@@ -1,4 +1,6 @@
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+
+import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { toPending } from '@shared/api-client/trackAcquisition';
@@ -41,7 +43,9 @@ function reacquireOptions(queryClient: QueryClient) {
 
 export function useReacquireTrack(): TrackMutation<void, unknown> {
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  const mutation = useAppMutation({
+    action: 'library.reacquire',
+    trackIdOf: (trackId: TrackId) => trackId,
     mutationKey: trackMutationKeys.reacquire,
     ...reacquireOptions(queryClient),
   });

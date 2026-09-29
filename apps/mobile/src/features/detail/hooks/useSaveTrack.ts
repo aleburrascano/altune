@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
+import { useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
 import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
@@ -18,6 +18,7 @@ import {
   replaceTrackInCaches,
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
+import { useAppMutation } from '@shared/query/useAppMutation';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { useDetailHandoff } from '../handoff-context';
@@ -55,7 +56,9 @@ export function useSaveTrack(): SaveTrack {
   const queryClient = useQueryClient();
   const handoff = useDetailHandoff();
 
-  const mutation = useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
+  const mutation = useAppMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
+    action: 'detail.save_track',
+    trackIdOf: optimisticTrackId,
     mutationFn: (body) =>
       createTrack(body, saveIdempotencyKey(body)).then((saved) => {
         rememberDownloadMeta(saved.id, {
