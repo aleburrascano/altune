@@ -214,6 +214,11 @@ if touches '^\.(github|gitea)/workflows/.*\.ya?ml$|\.sh$'; then
   check "workflows and shell no new comments" . hash_comments '.github/workflows/*.yml' '.github/workflows/*.yaml' '.gitea/workflows/*.yml' '.gitea/workflows/*.yaml' '*.sh'
 fi
 
+if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then
+  go_pin services/go-api
+  check "no new comments (nocomments)" services/go-api go run ./scripts/nocomments diff "$base"
+fi
+
 [ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"; exit 1; }
 [ $missing = 1 ] && { echo "precheck: incomplete, see SKIP lines"; exit 3; }
 [ $lint_only = 1 ] && { echo "precheck: lint green, tests left to CI"; exit 0; }

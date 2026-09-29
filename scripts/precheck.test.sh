@@ -361,6 +361,37 @@ run_script --lint
 expect_rc 0
 expect_out "precheck: lint green, tests left to CI"
 
+CASE="a failing nocomments diff fails precheck, and it runs though the PR touches no shell"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/scripts/nocomments
+    printf 'module fixture/go-api\n\ngo 1.26.6\n' >services/go-api/go.mod
+    printf 'package main\n\nimport "os"\n\nfunc main() {\n\tprintln("added.txt:1")\n\tos.Exit(1)\n}\n' >services/go-api/scripts/nocomments/main.go
+    git add -A
+    git commit -qm "add nocomments fixture"
+    git update-ref refs/remotes/gitea/main HEAD
+)
+run_script
+expect_rc 1
+expect_out "FAIL  no new comments (nocomments)"
+expect_out "added.txt:1"
+
+CASE="a clean nocomments diff keeps precheck green"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/scripts/nocomments
+    printf 'module fixture/go-api\n\ngo 1.26.6\n' >services/go-api/go.mod
+    printf 'package main\n\nfunc main() {}\n' >services/go-api/scripts/nocomments/main.go
+    git add -A
+    git commit -qm "add nocomments fixture"
+    git update-ref refs/remotes/gitea/main HEAD
+)
+run_script
+expect_rc 0
+expect_out "ok    no new comments (nocomments)"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
