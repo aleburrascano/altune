@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const enrichmentUnavailableCode = "enrichment_unavailable"
+
 func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {
 	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if kindStr == "" {
@@ -34,6 +36,13 @@ func withEnricher(
 	logArgs ...any,
 ) {
 	if !available {
+		if empty == nil {
+			httputil.WriteJSON(w, http.StatusServiceUnavailable, httputil.ErrorResponse{
+				Detail: "enrichment is not configured",
+				Code:   enrichmentUnavailableCode,
+			})
+			return
+		}
 		httputil.WriteJSON(w, http.StatusOK, empty())
 		return
 	}
@@ -84,7 +93,7 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 	}
 
 	withEnricher(w, r, h.enrichSvc != nil,
-		func() any { return enrichmentToDTO(domain.EmptyEnrichment()) },
+		nil,
 		func() (any, error) {
 			e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
 			degraded, err := splitDegraded(err)

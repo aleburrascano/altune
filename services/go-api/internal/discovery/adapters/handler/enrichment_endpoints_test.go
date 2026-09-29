@@ -588,3 +588,11 @@ func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleEnrichment_UnconfiguredIsNotEmptySuccess(t *testing.T) {
+	router := buildEnrichersRouter(DetailEnrichers{})
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
+
+	assertErrorCode(t, rec, http.StatusServiceUnavailable, "enrichment_unavailable")
+}

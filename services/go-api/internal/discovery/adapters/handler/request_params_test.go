@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/enrich"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,9 +27,21 @@ func paramValidationRouter(t *testing.T) chi.Router {
 	artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
 		discdomain.ProviderDeezer: &fakeArtistContentProvider{albums: seedTracks(3)},
 	}
-	return buildDiscoveryRouter(
-		&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{},
-		albumProviders, artistProviders)
+	historyRepo := &fakeSearchHistoryRepo{}
+	h := NewDiscoveryHandler(DiscoveryServices{
+		Search: service.NewService(
+			[]ports.SearchProvider{&fakeSearchProvider{name: discdomain.ProviderDeezer}},
+			service.NewCircuitBreaker(), service.WithHistoryRepository(historyRepo)),
+		History:      service.NewListSearchHistoryService(historyRepo),
+		ClearHistory: service.NewClearSearchHistoryService(historyRepo),
+		Album:        service.NewGetAlbumTracksService(albumProviders),
+		Artist:       service.NewGetArtistContentService(artistProviders),
+		Enrich:       enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil),
+	})
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
 }
 
 func TestContentRejections_ExternalIDAddressingAnotherPath(t *testing.T) {

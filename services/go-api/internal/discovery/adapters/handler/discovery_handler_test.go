@@ -685,19 +685,10 @@ func TestHandleEnrichment(t *testing.T) {
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
-	t.Run("nil service returns 200 empty DTO", func(t *testing.T) {
+	t.Run("nil service returns 503 enrichment_unavailable", func(t *testing.T) {
 		router := buildEnrichmentRouter(nil)
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var resp EnrichmentResponseDTO
-		discDecodeJSON(t, rec, &resp)
-		if resp.MBID != "" || len(resp.Genres) != 0 {
-			t.Errorf("want empty DTO, got %+v", resp)
-		}
-		if resp.Genres == nil || resp.ExternalIDs == nil || resp.SecondaryTypes == nil {
-			t.Error("DTO collections must be non-null even when empty")
-		}
+		assertErrorCode(t, rec, http.StatusServiceUnavailable, "enrichment_unavailable")
 	})
 }
 

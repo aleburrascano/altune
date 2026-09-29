@@ -1244,8 +1244,9 @@ func TestLoad_AudioKeyPrefixAccepted(t *testing.T) {
 
 func TestLoad_AudioKeyPrefixRefusedInProduction(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{
-		"ENV":              "production",
-		"AUDIO_KEY_PREFIX": "staging/",
+		"ENV":                    "production",
+		"AUDIO_KEY_PREFIX":       "staging/",
+		"MUSICBRAINZ_USER_AGENT": "altune/1.0 (ops@altune.app)",
 	}))
 
 	_, err := Load()
@@ -1272,5 +1273,22 @@ func TestValidateAudioKeyPrefix_RefusesProductionWithSurroundingWhitespace(t *te
 	cfg := &Config{Env: " production ", AudioKeyPrefix: "staging/"}
 	if err := cfg.validateAudioKeyPrefix(); err == nil {
 		t.Fatal("expected an error for AUDIO_KEY_PREFIX with ENV=\" production \"")
+	}
+}
+
+func TestLoad_MusicBrainzUserAgentRequiredInProduction(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{"ENV": "production"}))
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "MUSICBRAINZ_USER_AGENT") {
+		t.Fatalf("expected error naming MUSICBRAINZ_USER_AGENT, got %v", err)
+	}
+}
+
+func TestLoad_MusicBrainzUserAgentOptionalInDevelopment(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{"ENV": "development"}))
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -61,6 +61,9 @@ func (c *Config) validateRedis() error {
 }
 
 func (c *Config) validateTuning() error {
+	if c.MusicBrainzUserAgent == "" && strings.EqualFold(strings.TrimSpace(c.Env), "production") {
+		return fmt.Errorf("MUSICBRAINZ_USER_AGENT must be set when ENV=production")
+	}
 	if c.MusicBrainzUserAgent != "" {
 		if !strings.Contains(c.MusicBrainzUserAgent, "@") && !strings.Contains(strings.ToLower(c.MusicBrainzUserAgent), "http") {
 			return fmt.Errorf("MUSICBRAINZ_USER_AGENT must contain a contact form URL or email")
