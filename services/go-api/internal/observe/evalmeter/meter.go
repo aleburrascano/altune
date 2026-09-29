@@ -128,6 +128,9 @@ func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
 }
 
 func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
+	if err != nil && ctx.Err() != nil {
+		return
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastRun = time.Now().UTC()

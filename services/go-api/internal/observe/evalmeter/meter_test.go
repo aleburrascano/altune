@@ -189,3 +189,24 @@ func TestMeter_SkipIfRunning(t *testing.T) {
 		t.Fatalf("runner calls = %d, want 1 (second skipped)", calls)
 	}
 }
+
+func TestMeter_CancelledRunKeepsLastGoodResult(t *testing.T) {
+	calls := 0
+	m := New(true, 0, func(ctx context.Context) (Result, error) {
+		calls++
+		if calls == 1 {
+			return Result{Score: 0.81, Baseline: 0.80}, nil
+		}
+		return Result{}, ctx.Err()
+	})
+	m.runOnce(context.Background())
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	m.runOnce(cancelled)
+
+	st := m.Status()
+	if st.State != StateOK || st.Error != "" || st.Score == nil || *st.Score != 0.81 {
+		t.Fatalf("status = %+v, want ok with the last good score after a cancelled run", st)
+	}
+}
