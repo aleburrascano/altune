@@ -1,47 +1,24 @@
-import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
-
 import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { isNetworkError } from '@shared/lib/isNetworkError';
+import { useNavigator } from '@shared/navigation';
 
 import { withAuthDeadline } from '../authDeadline';
 import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
-import type { AuthErrorReason } from '../errorReason';
-import { authRedirectUrl, parseAuthLink } from '../parseAuthLink';
+import { openAuthSession } from '../native/authBrowser';
 import {
-  isRateLimitedAuthError,
-  isTransportAuthError,
-  type SupabaseAuthErrorLike,
-} from '../supabaseAuthError';
+  failureReason,
+  OAUTH_BROWSER_TIMEOUT_MS,
+  thrownFailure,
+  useOAuthFlow,
+  type OAuthFailure,
+  type OAuthOutcome,
+  type OAuthProvider,
+} from '../oauthRequest';
+import { authRedirectUrl, parseAuthLink } from '../parseAuthLink';
 
-WebBrowser.maybeCompleteAuthSession();
-
-export type OAuthProvider = 'google';
-
-export type OAuthResult =
-  | { kind: 'idle' }
-  | { kind: 'pending'; provider: OAuthProvider }
-  | { kind: 'ok' }
-  | { kind: 'cancelled' }
-  | {
-      kind: 'error';
-      reason: Extract<AuthErrorReason, 'network' | 'unknown' | 'too_many_attempts'>;
-    };
-
-type OAuthOutcome = Exclude<OAuthResult, { kind: 'idle' } | { kind: 'pending' }>;
-type OAuthFailure = Extract<OAuthOutcome, { kind: 'error' }>;
-
-export const OAUTH_BROWSER_TIMEOUT_MS = 5 * 60_000;
+export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthRequest';
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
-
-function failureReason(error: SupabaseAuthErrorLike): OAuthFailure['reason'] {
-  if (isRateLimitedAuthError(error)) return 'too_many_attempts';
-  return isTransportAuthError(error) ? 'network' : 'unknown';
-}
 
 async function requestAuthorizationUrl(provider: OAuthProvider): Promise<AuthorizationRequest> {
   const { data, error } = await withAuthDeadline(
@@ -55,29 +32,11 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
   return { kind: 'authorization_url', url: data.url };
 }
 
-function thrownFailure(err: unknown): OAuthFailure {
-  return { kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' };
-}
-
-async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
-  try {
-    const { error } = await withAuthDeadline(
-      supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: authRedirectUrl('callback') },
-      }),
-    );
-    return error ? { kind: 'error', reason: failureReason(error) } : null;
-  } catch (err) {
-    return thrownFailure(err);
-  }
-}
-
 async function redirectFromBrowser(authorizationUrl: string): Promise<string | null> {
-  let session: WebBrowser.WebBrowserAuthSessionResult;
+  let session: Awaited<ReturnType<typeof openAuthSession>>;
   try {
     session = await withAuthDeadline(
-      WebBrowser.openAuthSessionAsync(authorizationUrl, authRedirectUrl('callback')),
+      openAuthSession(authorizationUrl, authRedirectUrl('callback')),
       OAUTH_BROWSER_TIMEOUT_MS,
     );
   } catch (err) {
@@ -111,35 +70,6 @@ async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promi
 }
 
 export function useOAuth() {
-  const router = useRouter();
-  const [state, setState] = useState<OAuthResult>({ kind: 'idle' });
-  const mounted = useRef(true);
-  const inFlight = useRef(false);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  async function signInWith(provider: OAuthProvider): Promise<void> {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    try {
-      setState({ kind: 'pending', provider });
-      if (Platform.OS === 'web') {
-        const failure = await beginWebRedirect(provider);
-        if (failure && mounted.current) setState(failure);
-        return;
-      }
-      const outcome = await signInOutcome(provider, router);
-      if (!mounted.current) return;
-      setState(outcome);
-    } finally {
-      inFlight.current = false;
-    }
-  }
-
-  return { state, signInWith };
+  const navigator = useNavigator();
+  return useOAuthFlow((provider) => signInOutcome(provider, navigator));
 }

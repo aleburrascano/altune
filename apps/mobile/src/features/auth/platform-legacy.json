@@ -5,7 +5,6 @@
   ],
   "logic": [
     "src/features/auth/completeAuthIntent.ts",
-    "src/features/auth/hooks/useOAuth.ts",
     "src/features/auth/parseAuthLink.ts"
   ]
 }
