@@ -21,7 +21,7 @@ The only survivors are the 4 `//go:embed` lines, which Go has no other syntax fo
 
 **Stop the bleed (tracer).** Widen today's diff-scoped gates now, before any deletion:
 - `apps/mobile/scripts/lint-changed-lines.mjs` also covers test files and everything under `apps/mobile/`, not just `src/`.
-- `services/go-api/scripts/lint-changed-comments.go` also covers `_test.go`.
+- `services/go-api/scripts/lintcomments` also covers `_test.go`.
 - The same Go check runs for `services/overseer`, plus a TS check for `services/overseer/web`.
 - A push with no usable diff base fails closed; today it skips.
 
@@ -107,7 +107,7 @@ The only survivors are the 4 `//go:embed` lines, which Go has no other syntax fo
 
 ## Build, where it lives, `extends <module>` or the decisions made with rejected alternatives; a mermaid diagram when the shape isn't obvious. When the feature has UI on more than one platform, its first line is `Platforms: <list>`; builder, review and qa key their platform checks on it
 
-Extends the existing gates: `apps/mobile/scripts/lint-changed-lines.mjs`, `services/go-api/scripts/lint-changed-comments.go`, `scripts/precheck.sh`, `.github/workflows/test-mobile.yml` and `test-backend.yml`, and overseer's CI workflow. The TS tool uses the `typescript` and `prettier` packages the app already has, and the Go tool uses the standard library; the one new dependency is `mvdan.cc/sh/v3`, linked only into the `nocomments` script's binary, for the shell kind's parser.
+Extends the existing gates: `apps/mobile/scripts/lint-changed-lines.mjs`, `services/go-api/scripts/lintcomments`, `scripts/precheck.sh`, `.github/workflows/test-mobile.yml` and `test-backend.yml`, and overseer's CI workflow. The TS tool uses the `typescript` and `prettier` packages the app already has, and the Go tool uses the standard library; the one new dependency is `mvdan.cc/sh/v3`, linked only into the `nocomments` script's binary, for the shell kind's parser.
 
 Order: the tracer and the tools, then deletions and suppression fixes in parallel per module, then the whole-file bans last, once the tree is clean.
 
