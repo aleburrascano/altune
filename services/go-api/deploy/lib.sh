@@ -1,6 +1,7 @@
 set -euo pipefail
 
 COMPOSE_FILE=deploy/compose.prod.yml
+CADDYFILE=deploy/Caddyfile
 UPSTREAM_FILE=deploy/caddy/upstream.conf
 LEGACY_UPSTREAM_FILE=caddy/upstream.conf
 PUBLIC_HEALTH_URL=""
@@ -59,7 +60,30 @@ idle_color() {
     if [ "$1" = blue ]; then echo green; else echo blue; fi
 }
 
+host_caddyfile_hash() {
+    sha256sum "$CADDYFILE" | cut -d' ' -f1
+}
+
+container_caddyfile_hash() {
+    compose exec -T caddy sha256sum /etc/caddy/Caddyfile | cut -d' ' -f1
+}
+
+sync_caddyfile() {
+    local host container
+    host=$(host_caddyfile_hash)
+    container=$(container_caddyfile_hash || true)
+    [ "$host" = "$container" ] && return 0
+    log "Caddyfile drift: host=$host container=$container, recreating caddy"
+    compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile || return 1
+    compose up -d --no-deps --force-recreate caddy
+    container=$(container_caddyfile_hash || true)
+    [ "$host" = "$container" ] && return 0
+    log "FAILED: caddy still serves a different Caddyfile: host=$host container=$container"
+    return 1
+}
+
 reload_caddy() {
+    sync_caddyfile || return 1
     compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 }
 

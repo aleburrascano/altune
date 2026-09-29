@@ -11,7 +11,13 @@ setup_case() {
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"
     cp "$HERE/lib.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
-    cp "$HERE/compose.prod.yml" "$WORK/api/deploy/"
+    cp "$HERE/compose.prod.yml" "$HERE/Caddyfile" "$WORK/api/deploy/"
+    if [ "${CADDY_DRIFT:-no}" = yes ]; then
+        echo stale >"$WORK/container.hash"
+    else
+        sha256sum "$HERE/Caddyfile" | cut -d' ' -f1 >"$WORK/container.hash"
+    fi
+    sha256sum "$HERE/Caddyfile" | cut -d' ' -f1 >"$WORK/host.hash"
 
     if [ -n "$prod_env" ]; then
         printf '%s\n' "$prod_env" >"$WORK/api/.env.production"
@@ -26,6 +32,8 @@ setup_case() {
 echo "docker \$*" >> "$WORK/actions.log"
 case "\$*" in
   "ps --format {{.Names}}") [ "$legacy" = yes ] && echo altune-go-api; exit 0 ;;
+  *"exec -T caddy sha256sum"*) echo "\$(cat "$WORK/container.hash")  /etc/caddy/Caddyfile"; exit 0 ;;
+  *"--force-recreate caddy"*) [ "${CADDY_STUCK:-no}" = yes ] || cp "$WORK/host.hash" "$WORK/container.hash"; exit 0 ;;
   *"wget"*"/health"*) exit $([ "$health_ok" = yes ] && echo 0 || echo 1) ;;
 esac
 exit 0
@@ -43,7 +51,7 @@ EOF
         bash deploy/blue-green.sh >"$WORK/out.log" 2>&1)
     RC=$?
     UPSTREAM=$(cat "$WORK/api/deploy/caddy/upstream.conf" 2>/dev/null)
-    unset PROD_ENV
+    unset PROD_ENV CADDY_DRIFT CADDY_STUCK
 }
 
 fail() {
@@ -122,6 +130,26 @@ expect_rc 0
 expect_upstream "reverse_proxy altune-go-api-blue:8000"
 expect_action "build go-api-blue"
 [ -f "$WORK/api/caddy/upstream.conf" ] && fail "legacy upstream file was left behind"
+
+CASE="a stale container Caddyfile is recreated before the reload"
+CADDY_DRIFT=yes setup_case blue yes yes no
+expect_rc 0
+expect_action "up -d --no-deps --force-recreate caddy"
+recreate_line=$(grep -nF "force-recreate caddy" "$WORK/actions.log" | head -1 | cut -d: -f1)
+reload_line=$(grep -nF "caddy reload" "$WORK/actions.log" | head -1 | cut -d: -f1)
+[ "$recreate_line" -lt "$reload_line" ] || fail "caddy was reloaded before it was recreated"
+
+CASE="a matching container Caddyfile is not recreated"
+setup_case blue yes yes no
+expect_rc 0
+expect_no_action "force-recreate"
+expect_action "caddy reload"
+
+CASE="a recreate that still serves a different Caddyfile fails naming both hashes"
+CADDY_DRIFT=yes CADDY_STUCK=yes setup_case blue yes yes no
+expect_rc 1
+grep -qF "host=$(cat "$WORK/host.hash") container=stale" "$WORK/out.log" || fail "expected both hashes in the log"
+expect_no_action "caddy reload"
 
 site_imports() {
     awk -v site="$1" '
