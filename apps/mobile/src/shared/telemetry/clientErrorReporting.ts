@@ -1,5 +1,6 @@
-import Constants from 'expo-constants';
 import ErrorUtils from 'react-native/Libraries/vendor/core/ErrorUtils';
+
+import { appVersion } from '@shared/device/device';
 
 import { enqueueCritical } from './outbox';
 
@@ -10,10 +11,6 @@ export type ClientErrorSource = 'uncaught' | 'unhandled_rejection' | 'boundary';
 
 function trimmed(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
-}
-
-function appVersion(): string {
-  return Constants.expoConfig?.version ?? 'dev';
 }
 
 function messageAndStackOf(error: unknown): { message: string; stack: string | undefined } {

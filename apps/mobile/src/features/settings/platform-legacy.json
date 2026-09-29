@@ -2,7 +2,5 @@
   "ui": [
     "src/features/settings/ui/SettingsModal.tsx"
   ],
-  "logic": [
-    "src/features/settings/reportDiagnostics.ts"
-  ]
+  "logic": []
 }
