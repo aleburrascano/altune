@@ -597,3 +597,27 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+type scriptedIdentifier struct {
+	acqPorts.AudioIdentifier
+	err error
+}
+
+func (s scriptedIdentifier) Identify(context.Context, string, float64) (acqPorts.RecordingMatch, error) {
+	return acqPorts.RecordingMatch{}, s.err
+}
+
+func TestWireCatalogFingerprintVerifiedStaysFalseUntilALookupSucceeds(t *testing.T) {
+	failing := &lookupTracker{AudioIdentifier: scriptedIdentifier{err: errors.New("invalid api key")}}
+	working := &lookupTracker{AudioIdentifier: scriptedIdentifier{}}
+
+	_, _ = failing.Identify(context.Background(), "a.opus", 0)
+	_, _ = working.Identify(context.Background(), "a.opus", 0)
+
+	if failing.Verified() {
+		t.Error("Verified() = true after only failed lookups, want false")
+	}
+	if !working.Verified() {
+		t.Error("Verified() = false after a successful lookup, want true")
+	}
+}

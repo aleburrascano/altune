@@ -12,9 +12,11 @@ import (
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared/config"
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
@@ -126,13 +128,15 @@ func (a *App) buildAcquisitionScheduler(
 	audioSources []acqPorts.AudioSource,
 	verification acqPorts.AcquisitionVerification,
 ) *acqService.BackgroundAcquisitionScheduler {
-	audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
+	skips := &acqService.VerifySkipCounter{}
+	audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation, ytdlp.WithSkipRecorder(skips))
 	verification.Ffprobe, verification.Ffmpeg = audioProber.Available()
 
 	acquireOpts := []func(*acqService.AcquireTrackAudioService){
 		acqService.WithAcquireEvents(tap),
 		acqService.WithAcquireOrphanQueue(persistence.NewPgxOrphanedAudioRepository(a.pool)),
 		acqService.WithAudioProber(audioProber),
+		acqService.WithVerifySkips(skips),
 		acqService.WithAudioTagger(id3.NewTagger()),
 		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 		acqService.WithRejectionStore(acqPersistence.NewPgxRejectionStore(a.pool)),
@@ -145,11 +149,15 @@ func (a *App) buildAcquisitionScheduler(
 		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
 			acqDiscoveryBridge.NewRecordingResolver(searchSvc, resolverOpts...)))
 	}
+	lookups := &lookupTracker{}
 	if a.cfg.AcoustIDAPIKey != "" {
 		identifier := chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)
 		verification.Fpcalc = identifier.Available()
-		acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(identifier))
-		slog.Info("acquisition: fingerprint verification enabled", "fpcalc", verification.Fpcalc)
+		lookups.AudioIdentifier = identifier
+		acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(lookups))
+		slog.Info("acquisition: fingerprint verification wired", "fpcalc", verification.Fpcalc)
+	} else {
+		slog.Warn("acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
 	}
 	acquireOpts = append(acquireOpts,
 		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)))
@@ -163,6 +171,8 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithSchedulerEvents(tap),
 		acqService.WithPrincipalQueueDepth(a.cfg.AcquisitionPrincipalQueueDepth),
 		acqService.WithVerificationStatus(verification),
+		acqService.WithVerifySkipCount(skips.Count),
+		acqService.WithFingerprintVerified(lookups.Verified),
 		acqService.WithDrainBudget(time.Duration(a.cfg.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
 	if a.pool != nil {
@@ -173,6 +183,21 @@ func (a *App) buildAcquisitionScheduler(
 	}
 	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem, schedulerOpts...)
 }
+
+type lookupTracker struct {
+	acqPorts.AudioIdentifier
+	succeeded atomic.Bool
+}
+
+func (t *lookupTracker) Identify(ctx context.Context, filePath string, durationHint float64) (acqPorts.RecordingMatch, error) {
+	match, err := t.AudioIdentifier.Identify(ctx, filePath, durationHint)
+	if err == nil {
+		t.succeeded.Store(true)
+	}
+	return match, err
+}
+
+func (t *lookupTracker) Verified() bool { return t.succeeded.Load() }
 
 func (a *App) wireCatalogServices(
 	tap *eventtap.Tap,

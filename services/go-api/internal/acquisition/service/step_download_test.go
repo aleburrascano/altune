@@ -1213,3 +1213,41 @@ func TestDownloadStep_SharedLimiterCapsInFlightFetchesAcrossExecutes(t *testing.
 		t.Errorf("peak in-flight fetches = %d, want <= 6", peak)
 	}
 }
+
+type gateRecorder struct{ gates []string }
+
+func (r *gateRecorder) RecordVerifySkip(gate string) { r.gates = append(r.gates, gate) }
+
+func TestDownloadStep_IdentifierErrorRecordsAnIdentifyFailedSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	identifier := &stubIdentifier{err: errors.New("acoustid down"), cluster: []string{"ac-master"}}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadIdentifier(identifier), WithStepVerifySkips(rec))
+	ac := downloadContext("mb-master", []string{"ac-master"})
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if len(rec.gates) != 1 || rec.gates[0] != "identify_failed" {
+		t.Errorf("recorded gates = %v, want [identify_failed]", rec.gates)
+	}
+}
+
+func TestDownloadStep_FailedPreviewIdentifyRecordsAPreviewFallbackSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}, previewErr: errors.New("boom")}
+	identifier := &durationRecordingIdentifier{match: previewMatch("mb-studio", "Nessun dorma")}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier), WithStepVerifySkips(rec))
+	ac := previewContext()
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if len(rec.gates) != 1 || rec.gates[0] != "preview_fallback" {
+		t.Errorf("recorded gates = %v, want [preview_fallback]", rec.gates)
+	}
+}

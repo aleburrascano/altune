@@ -106,3 +106,33 @@ func TestFfprobeProber_ValidateDecodable_PropagatesACancelledCaller(t *testing.T
 		t.Fatalf("ValidateDecodable() = %v, want the caller's cancellation", err)
 	}
 }
+
+type gateRecorder struct{ gates []string }
+
+func (r *gateRecorder) RecordVerifySkip(gate string) { r.gates = append(r.gates, gate) }
+
+func TestFfprobeProber_ValidateDecodable_RecordsADecodeTimeoutSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	p := fakeFfmpegProber(t, "#!/bin/sh\nsleep 30\n", 100*time.Millisecond)
+	WithSkipRecorder(rec)(p)
+
+	if err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus"); err != nil {
+		t.Fatalf("ValidateDecodable() = %v, want nil", err)
+	}
+	if len(rec.gates) != 1 || rec.gates[0] != "decode_timeout" {
+		t.Errorf("recorded gates = %v, want [decode_timeout]", rec.gates)
+	}
+}
+
+func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	p := NewFfprobeProber("", WithSkipRecorder(rec))
+	p.ffmpeg = filepath.Join(t.TempDir(), "ffmpeg-absent")
+
+	if err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus"); err != nil {
+		t.Fatalf("ValidateDecodable() = %v, want nil", err)
+	}
+	if len(rec.gates) != 1 || rec.gates[0] != "decoder_unavailable" {
+		t.Errorf("recorded gates = %v, want [decoder_unavailable]", rec.gates)
+	}
+}

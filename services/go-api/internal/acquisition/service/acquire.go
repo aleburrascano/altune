@@ -26,6 +26,7 @@ type AcquireTrackAudioService struct {
 	storeKeyPrefix  string
 	rejections      ports.RejectionStore
 	downloadLimiter *DownloadLimiter
+	verifySkips     ports.VerifySkipRecorder
 }
 
 func NewAcquireTrackAudioService(
@@ -49,6 +50,10 @@ func NewAcquireTrackAudioService(
 
 func WithDownloadLimiter(l *DownloadLimiter) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
+}
+
+func WithVerifySkips(r ports.VerifySkipRecorder) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.verifySkips = r }
 }
 
 func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {

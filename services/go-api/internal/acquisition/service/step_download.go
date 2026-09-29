@@ -27,6 +27,7 @@ type DownloadStep struct {
 	prober     ports.AudioProber
 	identifier ports.AudioIdentifier
 	limiter    *DownloadLimiter
+	skips      ports.VerifySkipRecorder
 	width      int
 }
 
@@ -48,6 +49,16 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 
 func WithStepDownloadLimiter(l *DownloadLimiter) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.limiter = l }
+}
+
+func WithStepVerifySkips(r ports.VerifySkipRecorder) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.skips = r }
+}
+
+func (s *DownloadStep) recordSkip(gate string) {
+	if s.skips != nil {
+		s.skips.RecordVerifySkip(gate)
+	}
 }
 
 func WithVerifyWidth(n int) func(*DownloadStep) {
@@ -341,6 +352,7 @@ func (s *DownloadStep) previewIdentification(
 		slog.WarnContext(ctx, "acquisition.preview_fallback",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
+		s.recordSkip(ports.SkipPreviewFallback)
 		return nil, nil
 	}
 
@@ -413,6 +425,7 @@ func (s *DownloadStep) identify(
 		slog.WarnContext(ctx, "acquisition.identify_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
+		s.recordSkip(ports.SkipIdentifyFailed)
 		return nil
 	}
 

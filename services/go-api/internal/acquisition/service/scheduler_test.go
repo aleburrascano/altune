@@ -2183,3 +2183,24 @@ func TestBackgroundScheduler_HeartbeatFailuresOutlastingTheLease_CancelsTheJob(t
 		t.Fatal("job context was never cancelled once heartbeat failures outlasted the lease duration")
 	}
 }
+
+func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testing.T) {
+	skips := &VerifySkipCounter{}
+	fingerprinted := false
+	s := newStatusTestScheduler(t)
+	WithVerifySkipCount(skips.Count)(s)
+	WithFingerprintVerified(func() bool { return fingerprinted })(s)
+
+	before := s.Status()
+	skips.RecordVerifySkip("decode_timeout")
+	skips.RecordVerifySkip("identify_failed")
+	fingerprinted = true
+	after := s.Status()
+
+	if before.VerifySkipped != 0 || before.Verification.FingerprintVerified {
+		t.Errorf("before = %d skips, verified %v, want 0 and false", before.VerifySkipped, before.Verification.FingerprintVerified)
+	}
+	if after.VerifySkipped != 2 || !after.Verification.FingerprintVerified {
+		t.Errorf("after = %d skips, verified %v, want 2 and true", after.VerifySkipped, after.Verification.FingerprintVerified)
+	}
+}

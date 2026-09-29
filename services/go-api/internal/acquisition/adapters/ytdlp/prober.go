@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 	"altune/go-api/internal/shared/redact"
@@ -25,13 +26,28 @@ type FfprobeProber struct {
 	ffprobe       string
 	ffmpeg        string
 	decodeTimeout time.Duration
+	skips         ports.VerifySkipRecorder
 }
 
-func NewFfprobeProber(ffmpegLocation string) *FfprobeProber {
-	return &FfprobeProber{
+func WithSkipRecorder(r ports.VerifySkipRecorder) func(*FfprobeProber) {
+	return func(p *FfprobeProber) { p.skips = r }
+}
+
+func NewFfprobeProber(ffmpegLocation string, opts ...func(*FfprobeProber)) *FfprobeProber {
+	p := &FfprobeProber{
 		ffprobe:       binpath.Resolve("ffprobe", ffmpegLocation),
 		ffmpeg:        binpath.Resolve("ffmpeg", ffmpegLocation),
 		decodeTimeout: defaultDecodeTimeout,
+	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
+}
+
+func (p *FfprobeProber) recordSkip(gate string) {
+	if p.skips != nil {
+		p.skips.RecordVerifySkip(gate)
 	}
 }
 
@@ -88,12 +104,14 @@ func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) 
 	case errors.Is(decodeCtx.Err(), context.DeadlineExceeded):
 		slog.WarnContext(ctx, "acquisition.decode_timeout_accepting",
 			"file", filePath, "timeout", p.decodeTimeout.String())
+		p.recordSkip(ports.SkipDecodeTimeout)
 		return nil
 	case errors.As(err, &exitErr):
 		return fmt.Errorf("audio stream failed to decode: %s", firstLine(stderr))
 	default:
 		slog.WarnContext(ctx, "acquisition.decoder_unavailable_accepting",
 			"file", filePath, "error", redact.LogError(err))
+		p.recordSkip(ports.SkipDecoderUnavailable)
 		return nil
 	}
 }

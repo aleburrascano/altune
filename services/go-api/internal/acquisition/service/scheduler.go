@@ -73,10 +73,12 @@ type BackgroundAcquisitionScheduler struct {
 	inflightCount atomic.Int64
 	rejected      atomic.Uint64
 
-	verification ports.AcquisitionVerification
-	log          *jobLog
-	outcomes     ports.OutcomeRecorder
-	outcomeWG    sync.WaitGroup
+	verification        ports.AcquisitionVerification
+	skipCount           func() uint64
+	fingerprintVerified func() bool
+	log                 *jobLog
+	outcomes            ports.OutcomeRecorder
+	outcomeWG           sync.WaitGroup
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -209,6 +211,33 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 		}
 		slog.Info("acquisition.verification_armed")
 	}
+}
+
+func WithVerifySkipCount(count func() uint64) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.skipCount = count }
+}
+
+func WithFingerprintVerified(verified func() bool) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.fingerprintVerified = verified }
+}
+
+type VerifySkipCounter struct{ n atomic.Uint64 }
+
+func (c *VerifySkipCounter) RecordVerifySkip(string) { c.n.Add(1) }
+
+func (c *VerifySkipCounter) Count() uint64 { return c.n.Load() }
+
+func (s *BackgroundAcquisitionScheduler) verificationStatus() ports.AcquisitionVerification {
+	v := s.verification
+	v.FingerprintVerified = s.fingerprintVerified != nil && s.fingerprintVerified()
+	return v
+}
+
+func (s *BackgroundAcquisitionScheduler) verifySkipped() uint64 {
+	if s.skipCount == nil {
+		return 0
+	}
+	return s.skipCount()
 }
 
 func (s *BackgroundAcquisitionScheduler) Pause() { s.paused.Store(true) }
@@ -551,10 +580,11 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 		Succeeded:     succeeded,
 		Failed:        failed,
 		Rejected:      s.rejected.Load(),
+		VerifySkipped: s.verifySkipped(),
 		Paused:        s.paused.Load(),
 		QueueDepth:    int(s.inflightCount.Load()),
 		QueueCapacity: workers,
-		Verification:  s.verification,
+		Verification:  s.verificationStatus(),
 		ActiveJobs:    jobs,
 		Recent:        recent,
 	}
