@@ -74,6 +74,11 @@ function lastPersisted(): readonly OutboxEntry[] | undefined {
 
 beforeEach(() => {
   jest.useFakeTimers();
+  (
+    jest.requireMock('react-native/Libraries/AppState/AppState') as {
+      __listeners: AppStateChangeHandler[];
+    }
+  ).__listeners.length = 0;
   _resetOutboxForTest();
   loadPersistedOutboxMock.mockReset().mockReturnValue([]);
   persistOutboxMock.mockReset();
@@ -81,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   _resetOutboxForTest();
   jest.useRealTimers();
 });
