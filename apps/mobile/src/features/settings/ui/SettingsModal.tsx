@@ -1,14 +1,8 @@
 import type { ReactElement, ReactNode } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-} from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 
 import { radius, spacing, useTheme } from '@shared/ui';
+import { keyboardAvoidingBehavior } from '@shared/ui/keyboard/keyboard';
 
 type SettingsModalProps = {
   visible: boolean;
@@ -40,7 +34,7 @@ export function SettingsModal({
       />
       <KeyboardAvoidingView
         style={styles.centering}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={keyboardAvoidingBehavior}
         pointerEvents="box-none"
       >
         <ScrollView

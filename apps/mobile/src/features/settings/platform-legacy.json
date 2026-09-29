@@ -1,6 +1,4 @@
 {
-  "ui": [
-    "src/features/settings/ui/SettingsModal.tsx"
-  ],
+  "ui": [],
   "logic": []
 }

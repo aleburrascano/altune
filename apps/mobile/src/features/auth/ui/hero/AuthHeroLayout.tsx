@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { adjustsKeyboardInsets } from '@shared/ui/keyboard/keyboard';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing, useTheme } from '@shared/ui/theme';
@@ -50,7 +51,7 @@ export function AuthHeroLayout({
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
         bounces={false}
-        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        automaticallyAdjustKeyboardInsets={adjustsKeyboardInsets}
       >
         <View>{children}</View>
       </ScrollView>

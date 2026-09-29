@@ -1,6 +1,4 @@
 {
-  "ui": [
-    "src/features/auth/ui/hero/AuthHeroLayout.tsx"
-  ],
+  "ui": [],
   "logic": []
 }
