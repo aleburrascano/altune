@@ -363,3 +363,50 @@ describe('useOAuth: the authorization request on native, precisely (#2837)', () 
     );
   });
 });
+
+const reportFetch = jest.fn();
+const realFetch = global.fetch;
+
+beforeEach(() => {
+  reportFetch.mockReset().mockResolvedValue({ status: 204 });
+  global.fetch = reportFetch as unknown as typeof fetch;
+});
+
+afterEach(() => {
+  global.fetch = realFetch;
+});
+
+const reportedReasons = (): string[] =>
+  reportFetch.mock.calls.map(([, init]) => JSON.parse(init.body).reason);
+
+describe('useOAuth: reporting a failed sign-in to the anonymous ingest', () => {
+  beforeEach(() => {
+    grantAuthorizationUrl();
+    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+  });
+
+  it('reports the error reason once when the exchange fails', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 503 } });
+
+    await signIn();
+
+    expect(reportedReasons()).toEqual(['network']);
+  });
+});
+
+describe('useOAuth: a cancelled browser is not a failure to report', () => {
+  beforeEach(() => {
+    grantAuthorizationUrl();
+    mockComplete.mockReset().mockResolvedValue({ kind: 'failure' });
+  });
+
+  it('adds no report for a cancel after an error was reported', async () => {
+    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    await signIn();
+    openAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
+    await signIn();
+
+    expect(reportedReasons()).toEqual(['unknown']);
+  });
+});

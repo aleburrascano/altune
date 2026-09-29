@@ -15,6 +15,7 @@ import {
   type OAuthProvider,
 } from '../oauthRequest';
 import { authRedirectUrl, parseAuthLink } from '../parseAuthLink';
+import { reportSignInFailure } from '../reportSignInFailure';
 
 export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthRequest';
 
@@ -57,16 +58,29 @@ async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promis
   return { kind: 'error', reason };
 }
 
-async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promise<OAuthOutcome> {
+async function authorizeAndExchange(
+  provider: OAuthProvider,
+  router: AuthRouter,
+): Promise<OAuthOutcome> {
+  const authorization = await requestAuthorizationUrl(provider);
+  if (authorization.kind !== 'authorization_url') return authorization;
+  const redirectUrl = await redirectFromBrowser(authorization.url);
+  if (!redirectUrl) return { kind: 'cancelled' };
+  return exchangeRedirect(redirectUrl, router);
+}
+
+async function attemptSignIn(provider: OAuthProvider, router: AuthRouter): Promise<OAuthOutcome> {
   try {
-    const authorization = await requestAuthorizationUrl(provider);
-    if (authorization.kind !== 'authorization_url') return authorization;
-    const redirectUrl = await redirectFromBrowser(authorization.url);
-    if (!redirectUrl) return { kind: 'cancelled' };
-    return await exchangeRedirect(redirectUrl, router);
+    return await authorizeAndExchange(provider, router);
   } catch (err) {
     return thrownFailure(err);
   }
+}
+
+async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promise<OAuthOutcome> {
+  const outcome = await attemptSignIn(provider, router);
+  if (outcome.kind === 'error') reportSignInFailure(outcome.reason);
+  return outcome;
 }
 
 export function useOAuth() {

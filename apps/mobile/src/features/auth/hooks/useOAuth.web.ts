@@ -11,6 +11,7 @@ import {
   type OAuthProvider,
 } from '../oauthRequest';
 import { authRedirectUrl } from '../parseAuthLink';
+import { reportSignInFailure } from '../reportSignInFailure';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -26,12 +27,18 @@ async function redirectToProvider(provider: OAuthProvider): Promise<OAuthFailure
   return error ? { kind: 'error', reason: failureReason(error) } : null;
 }
 
-async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
+async function attemptWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
   try {
     return await redirectToProvider(provider);
   } catch (err) {
     return thrownFailure(err);
   }
+}
+
+async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
+  const failure = await attemptWebRedirect(provider);
+  if (failure) reportSignInFailure(failure.reason);
+  return failure;
 }
 
 export function useOAuth() {

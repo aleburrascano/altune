@@ -170,3 +170,38 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
     jest.useRealTimers();
   });
 });
+
+const reportFetch = jest.fn();
+const realFetch = global.fetch;
+
+beforeEach(() => {
+  reportFetch.mockReset().mockResolvedValue({ status: 204 });
+  global.fetch = reportFetch as unknown as typeof fetch;
+});
+
+afterEach(() => {
+  global.fetch = realFetch;
+});
+
+const reportedReasons = (): string[] =>
+  reportFetch.mock.calls.map(([, init]) => JSON.parse(init.body).reason);
+
+describe('useOAuth (web): reporting a failed redirect to the anonymous ingest', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('reports the error reason once, and nothing when the redirect starts', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockResolvedValue({ data: null, error: { message: 'nope' } });
+    await signIn();
+    expect(reportedReasons()).toEqual(['unknown']);
+
+    reportFetch.mockClear();
+    signInWithOAuth.mockResolvedValue({ data: { url: 'https://x' }, error: null });
+    await signIn();
+    expect(reportFetch).not.toHaveBeenCalled();
+  });
+});

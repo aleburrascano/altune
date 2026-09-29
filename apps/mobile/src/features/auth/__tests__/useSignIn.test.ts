@@ -198,3 +198,39 @@ describe('a server rate limit', () => {
     });
   });
 });
+
+const reportFetch = jest.fn();
+const realFetch = global.fetch;
+
+beforeEach(() => {
+  reportFetch.mockReset().mockResolvedValue({ status: 204 });
+  global.fetch = reportFetch as unknown as typeof fetch;
+});
+
+afterEach(() => {
+  global.fetch = realFetch;
+});
+
+const reportedReasons = (): string[] =>
+  reportFetch.mock.calls.map(([, init]) => JSON.parse(init.body).reason);
+
+describe('useSignIn: reporting the failure to the anonymous ingest', () => {
+  it('reports a resolved error once, and reports nothing on success', async () => {
+    signInWithPassword.mockResolvedValue(WRONG_PASSWORD);
+    await signIn();
+    expect(reportedReasons()).toEqual(['invalid_credentials']);
+
+    reportFetch.mockClear();
+    signInWithPassword.mockResolvedValue(SIGNED_IN);
+    await signIn();
+    expect(reportFetch).not.toHaveBeenCalled();
+  });
+
+  it('returns the error result while the report request hangs', async () => {
+    reportFetch.mockReturnValue(new Promise(() => undefined));
+    signInWithPassword.mockResolvedValue(WRONG_PASSWORD);
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'invalid_credentials' });
+    expect(reportedReasons()).toEqual(['invalid_credentials']);
+  });
+});
