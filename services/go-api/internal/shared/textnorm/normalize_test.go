@@ -106,6 +106,11 @@ func TestNormalizeForMatch(t *testing.T) {
 			input: "Crosby, Stills, Nash",
 			want:  "crosby stills nash",
 		},
+		{
+			name:  "zero-width space dropped not split",
+			input: "Instru\u200bmental",
+			want:  "instrumental",
+		},
 	}
 
 	for _, tt := range tests {
@@ -246,5 +251,11 @@ func TestStripSymbolsASCIIByteIdentical(t *testing.T) {
 		if got != want {
 			t.Errorf("stripSymbols(%q) = %q, old regex = %q", in, got, want)
 		}
+	}
+}
+
+func TestNormalizeForIdentityDropsZeroWidthSpace(t *testing.T) {
+	if got := NormalizeForIdentity("Instru\u200bmental"); got != "instrumental" {
+		t.Errorf("NormalizeForIdentity with zero-width space = %q, want %q", got, "instrumental")
 	}
 }

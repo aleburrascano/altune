@@ -791,6 +791,12 @@ func TestUnrequestedQualifiers_InstrumentalAndAccuracyClaimAreVetoed(t *testing.
 	assertQualifiers(t, "fallback", fallback, nil)
 }
 
+func TestUnrequestedQualifiers_ZeroWidthSpaceInsideQualifierIsStillVetoed(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Rollacoasta", "prettifun", "prettifun - Rollacoasta (Instru\u200bmental)")
+	assertQualifiers(t, "veto", veto, []string{"instrumental"})
+	assertQualifiers(t, "fallback", fallback, nil)
+}
+
 func TestUnrequestedQualifiers_ReactionVideoIsVetoed(t *testing.T) {
 	veto, fallback := UnrequestedQualifiers("8AM In Charlotte", "Drake", "ImDontai Reacts To Drake 8AM In Charlotte")
 	assertQualifiers(t, "veto", veto, []string{"reacts"})

@@ -54,6 +54,9 @@ func stripSymbols(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
+		if unicode.Is(unicode.Cf, r) {
+			continue
+		}
 		if isWordContent(r) {
 			b.WriteRune(r)
 			continue
