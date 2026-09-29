@@ -40,19 +40,24 @@ export function usePlaybackSignals(args: {
   });
 
   const { track, positionMs, durationMs } = args;
-  const playRef = useRef<{ key: TrackKey | null; emitted: boolean }>({ key: null, emitted: false });
+  const playRef = useRef<{
+    key: TrackKey | null;
+    emitted: boolean;
+    stalePositionMs: number;
+  }>({ key: null, emitted: false, stalePositionMs: 0 });
   const key = track ? trackKey(track) : null;
   useEffect(() => {
-    playRef.current = { key, emitted: false };
-  }, [key]);
-  useEffect(() => {
+    if (playRef.current.key !== key) {
+      playRef.current = { key, emitted: false, stalePositionMs: positionMs };
+      return;
+    }
     const ps = playRef.current;
-    if (!track) return;
+    if (!track || positionMs === ps.stalePositionMs) return;
     if (!ps.emitted && hasCrossedListenThreshold(positionMs, durationMs)) {
       ps.emitted = true;
       emitRef.current('play', track);
     }
-  }, [track, positionMs, durationMs]);
+  }, [track, key, positionMs, durationMs]);
 
   const handledKeyRef = useRef<TrackKey | null>(null);
   useTrackPlayerEvents([Event.PlaybackActiveTrackChanged, Event.PlaybackQueueEnded], (event) => {
@@ -77,7 +82,9 @@ export function usePlaybackSignals(args: {
       const trackIdx = s.playOrder[event.track];
       const ended = trackIdx != null ? s.tracks[trackIdx] : undefined;
       if (!ended) return;
-      if (handledKeyRef.current === trackKey(ended)) return;
+      const alreadyHandled = handledKeyRef.current === trackKey(ended);
+      handledKeyRef.current = null;
+      if (alreadyHandled) return;
       const dwellMs = Math.round((event.position ?? 0) * 1000) || undefined;
       emitRef.current('completed', ended, dwellMs);
     }

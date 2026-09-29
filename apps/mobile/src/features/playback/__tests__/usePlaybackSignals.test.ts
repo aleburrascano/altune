@@ -72,4 +72,43 @@ describe('usePlaybackSignals — one telemetry event per track that stops playin
 
     expect(recordedTypes()).toEqual(['skip', 'completed']);
   });
+
+  it('does not emit play for a new track from the previous track position', () => {
+    useQueueStore.setState({ tracks: [first, second], playOrder: [0, 1], source: null });
+    const { rerender } = renderHook(
+      (props: { track: PlaybackTrack; positionMs: number }) =>
+        usePlaybackSignals({ ...props, durationMs: 200000 }),
+      { initialProps: { track: first, positionMs: 45000 } },
+    );
+
+    rerender({ track: second, positionMs: 45000 });
+
+    expect(recordedTypes()).toEqual([]);
+  });
+
+  it('emits play once when the new track own position crosses the threshold', () => {
+    useQueueStore.setState({ tracks: [first, second], playOrder: [0, 1], source: null });
+    const { rerender } = renderHook(
+      (props: { track: PlaybackTrack; positionMs: number }) =>
+        usePlaybackSignals({ ...props, durationMs: 200000 }),
+      { initialProps: { track: first, positionMs: 45000 } },
+    );
+
+    rerender({ track: second, positionMs: 45000 });
+    rerender({ track: second, positionMs: 1000 });
+    rerender({ track: second, positionMs: 46000 });
+    rerender({ track: second, positionMs: 47000 });
+
+    expect(recordedTypes()).toEqual(['play']);
+  });
+
+  it('reports queue-ended completed for a track skipped in an earlier run', () => {
+    listenTo([first, second]);
+
+    emitActiveTrackChanged(0);
+    emitQueueEnded(0);
+    emitQueueEnded(0);
+
+    expect(recordedTypes()).toEqual(['skip', 'completed']);
+  });
 });
