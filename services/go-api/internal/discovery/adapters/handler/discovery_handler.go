@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -108,7 +110,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 // contentRoutes are the provider fan-out routes, which share one per-user
 // budget because they spend one shared provider quota.
 func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
-	r.Use(h.contentLimiter.middleware)
+	r.Use(requireUser, h.contentLimiter.middleware)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -118,4 +120,13 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
+}
+
+func requireUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := auth.RequireUserID(w, r); !ok {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

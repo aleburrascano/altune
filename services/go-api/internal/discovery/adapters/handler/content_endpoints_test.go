@@ -313,3 +313,55 @@ func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/content", nil)
 	discAssertStatus(t, rec, http.StatusInternalServerError)
 }
+
+type countingArtistContentProvider struct {
+	fakeArtistContentProvider
+	calls int
+}
+
+func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	p.calls++
+	return p.fakeArtistContentProvider.GetArtistTopTracks(ctx, name, id)
+}
+
+func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	p.calls++
+	return p.fakeArtistContentProvider.GetArtistAlbums(ctx, name, id)
+}
+
+func unauthenticatedDiscoveryRouter(h *DiscoveryHandler) chi.Router {
+	r := chi.NewRouter()
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
+	provider := &countingArtistContentProvider{}
+	h := NewDiscoveryHandler(DiscoveryServices{
+		Artist: service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+			discdomain.ProviderDeezer: provider,
+		}),
+	})
+
+	rec := discServeNoAuth(t, unauthenticatedDiscoveryRouter(h), http.MethodGet, "/discovery/artists/deezer/1/content")
+
+	discAssertStatus(t, rec, http.StatusUnauthorized)
+	if provider.calls != 0 {
+		t.Errorf("artist provider called %d times, want 0", provider.calls)
+	}
+}
+
+func TestContentRoutes_NoIdentityIs401(t *testing.T) {
+	paths := []string{
+		"/discovery/albums/deezer/1/tracks",
+		"/discovery/artists/deezer/1/top-tracks",
+		"/discovery/artists/deezer/1/albums",
+		"/discovery/tracks/deezer/1/related",
+	}
+	router := unauthenticatedDiscoveryRouter(NewDiscoveryHandler(DiscoveryServices{}))
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
+		})
+	}
+}

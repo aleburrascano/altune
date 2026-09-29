@@ -586,3 +586,18 @@ func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
 		t.Errorf("degraded = false, want true")
 	}
 }
+
+func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
+	paths := []string{
+		"/discovery/enrichment?kind=track&title=X",
+		"/discovery/enrichment/lastfm?kind=track&title=X",
+		"/discovery/enrichment/deezer?kind=track&title=X",
+		"/discovery/lyrics?title=X&artist=Y",
+	}
+	router := unauthenticatedDiscoveryRouter(NewDiscoveryHandler(DiscoveryServices{}))
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
+		})
+	}
+}

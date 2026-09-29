@@ -1,12 +1,14 @@
 package app
 
 import (
+	"altune/go-api/internal/auth"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"bytes"
 	"context"
@@ -19,6 +21,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type countingProviderRT struct {
@@ -68,7 +72,9 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
 			before := providermetrics.ReadSnapshot()
-			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, route.target, nil))
+			req := httptest.NewRequest(http.MethodGet, route.target, nil)
+			req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
 			counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
 
 			if rt.roundTrips() == 0 {
