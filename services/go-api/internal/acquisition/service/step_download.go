@@ -111,7 +111,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		attempts++
 		result := s.runAttempt(ctx, ac, ac.Ranked[i], tmpDir)
 		result.applyTo(ctx, ac)
-		if result.accepted {
+		if result.status == attemptAccepted {
 			return afterDownload{}, nil
 		}
 		holds.offer(result)
@@ -131,7 +131,7 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 		return fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
 			held.confidence, s.confidenceFloor(), ErrNoConfidentMatch)
 	}
-	held.accepted = true
+	held.status = attemptAccepted
 	held.applyTo(ctx, ac)
 	ac.BestEffort = true
 	return nil
@@ -142,7 +142,7 @@ type holdBook struct {
 }
 
 func (h *holdBook) offer(candidate attempt) {
-	if !candidate.held {
+	if candidate.status != attemptHeld {
 		return
 	}
 	if h.best != nil && !candidate.beats(*h.best) {
@@ -227,14 +227,21 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 	)
 }
 
+type attemptStatus int
+
+const (
+	attemptRejected attemptStatus = iota
+	attemptHeld
+	attemptAccepted
+)
+
 type attempt struct {
 	candidate  ports.AudioCandidate
 	filePath   string
 	tmpDir     string
 	verified   verificationResult
 	rejection  *downloadRejection
-	accepted   bool
-	held       bool
+	status     attemptStatus
 	fallback   bool
 	evidence   Evidence
 	confidence float64
@@ -251,7 +258,7 @@ func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
 	if a.rejection != nil {
 		ac.recordRejection(a.candidate.URL, a.candidate.Title, a.candidate.Source, a.rejection.stage, a.rejection.reason)
 	}
-	if !a.accepted {
+	if a.status != attemptAccepted {
 		return
 	}
 	sel := a.candidate
@@ -272,7 +279,7 @@ func (s *DownloadStep) runAttempt(
 	tmpDir string,
 ) (result attempt) {
 	defer func() {
-		if !result.accepted && !result.held {
+		if result.status == attemptRejected {
 			_ = os.RemoveAll(tmpDir)
 		}
 	}()
@@ -321,8 +328,10 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		}
 		return result
 	}
-	result.held = result.fallback || verified.verdict.Kind == VerdictUnknown
-	result.accepted = !result.held
+	result.status = attemptAccepted
+	if result.fallback || verified.verdict.Kind == VerdictUnknown {
+		result.status = attemptHeld
+	}
 	return result
 }
 

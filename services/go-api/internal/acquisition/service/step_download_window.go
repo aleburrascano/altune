@@ -83,7 +83,7 @@ func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, wi
 		go func(rank int) {
 			defer wg.Done()
 			results[rank] = s.guardedWindowAttempt(ctxs[rank], ac, window[rank])
-			if results[rank].accepted {
+			if results[rank].status == attemptAccepted {
 				mu.Lock()
 				cancelAll(cancels[rank+1:])
 				mu.Unlock()
@@ -135,14 +135,14 @@ func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionCont
 func mergeWindow(ctx context.Context, ac *AcquisitionContext, results []attempt, holds *holdBook, failures *downloadFailures) bool {
 	won := false
 	for _, result := range results {
-		if won && (result.accepted || result.held) {
+		if won && result.status != attemptRejected {
 			_ = os.RemoveAll(result.tmpDir)
 			continue
 		}
 		result.applyTo(ctx, ac)
 		failures.note(result.err())
 		holds.offer(result)
-		won = won || result.accepted
+		won = won || result.status == attemptAccepted
 	}
 	return won
 }
