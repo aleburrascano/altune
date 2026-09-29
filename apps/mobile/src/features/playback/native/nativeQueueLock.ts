@@ -7,27 +7,57 @@ export class NativeQueueTimeoutError extends Error {
   }
 }
 
+export type Fence = () => void;
+
 let chain: Promise<unknown> = Promise.resolve();
 
-function armDeadline(): { expired: Promise<never>; clear: () => void } {
+const timeoutListeners = new Set<() => void>();
+
+export function onNativeQueueTimeout(listener: () => void): () => void {
+  timeoutListeners.add(listener);
+  return () => timeoutListeners.delete(listener);
+}
+
+function notifyTimeoutListeners(): void {
+  for (const listener of timeoutListeners) {
+    try {
+      listener();
+    } catch (err) {
+      console.warn('[playback] native queue timeout listener failed', err);
+    }
+  }
+}
+
+interface DeadlineState {
+  hasExpired: boolean;
+}
+
+function fenceOf(state: DeadlineState): Fence {
+  return () => {
+    if (state.hasExpired) throw new NativeQueueTimeoutError(NATIVE_QUEUE_OP_TIMEOUT_MS);
+  };
+}
+
+function deadlineTimer(state: DeadlineState, reject: (err: Error) => void) {
+  return setTimeout(() => {
+    state.hasExpired = true;
+    reject(new NativeQueueTimeoutError(NATIVE_QUEUE_OP_TIMEOUT_MS));
+    notifyTimeoutListeners();
+  }, NATIVE_QUEUE_OP_TIMEOUT_MS);
+}
+
+function withDeadline<T>(op: (fence: Fence) => Promise<T>): Promise<T> {
+  const state: DeadlineState = { hasExpired: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new NativeQueueTimeoutError(NATIVE_QUEUE_OP_TIMEOUT_MS)),
-      NATIVE_QUEUE_OP_TIMEOUT_MS,
-    );
+    timer = deadlineTimer(state, reject);
   });
-  return { expired, clear: () => clearTimeout(timer) };
-}
-
-function withDeadline<T>(op: () => Promise<T>): Promise<T> {
-  const pending = new Promise<T>((resolve) => resolve(op()));
+  const pending = new Promise<T>((resolve) => resolve(op(fenceOf(state))));
   pending.catch(() => undefined);
-  const { expired, clear } = armDeadline();
-  return Promise.race([pending, expired]).finally(clear);
+  return Promise.race([pending, expired]).finally(() => clearTimeout(timer));
 }
 
-export function withNativeQueue<T>(op: () => Promise<T>): Promise<T> {
+export function withNativeQueue<T>(op: (fence: Fence) => Promise<T>): Promise<T> {
   const start = () => withDeadline(op);
   const run = chain.then(start, start);
   chain = run.catch(() => undefined);

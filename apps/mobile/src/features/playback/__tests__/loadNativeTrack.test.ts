@@ -17,6 +17,7 @@ import {
   reorderUpcomingNative,
 } from '../native/loadNativeTrack';
 import { claimLoad } from '../loadToken';
+import { NATIVE_QUEUE_OP_TIMEOUT_MS, withNativeQueue } from '../native/nativeQueueLock';
 import { forgetAllSwaps } from '../native/nativeTrackSwap';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { NATIVE_QUEUE_WINDOW } from '../presignWindow';
@@ -1086,5 +1087,103 @@ describe('loadNativeQueue presign window', () => {
       headers?: Record<string, string>;
     }[];
     expect(Object.keys(added[0]?.headers ?? {}).length).toBeGreaterThan(0);
+  });
+});
+
+describe('a tail rebuild that outlived the lock deadline', () => {
+  const player = TrackPlayer as unknown as Record<string, jest.Mock>;
+
+  function track(id: string): PlaybackTrack {
+    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } });
+  }
+
+  const A = track('a');
+  const B = track('b');
+  const C = track('c');
+  const D = track('d');
+  const E = track('e');
+
+  let nativeQueue: { id: string }[];
+
+  function modelNativePlayer(items: readonly PlaybackTrack[], active: number): void {
+    nativeQueue = items.map((t) => ({ id: trackKey(t) }));
+    player.add!.mockImplementation(async (added: { id: string } | { id: string }[]) => {
+      nativeQueue = [...nativeQueue, ...(Array.isArray(added) ? added : [added])];
+    });
+    player.getQueue!.mockImplementation(async () => nativeQueue);
+    player.removeUpcomingTracks!.mockImplementation(async () => {
+      nativeQueue = nativeQueue.slice(0, active + 1);
+    });
+    player.getActiveTrack!.mockImplementation(async () => nativeQueue[active]);
+    player.getActiveTrackIndex!.mockImplementation(async () => active);
+  }
+
+  beforeEach(() => {
+    fetchUrls.mockImplementation(async () => []);
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    for (const name of [
+      'add',
+      'getQueue',
+      'removeUpcomingTracks',
+      'getActiveTrack',
+      'getActiveTrackIndex',
+    ] as const) {
+      restorePlayerDefault(name);
+    }
+    useQueueStore.getState().clearQueue();
+  });
+
+  describe('reorderUpcomingNative — a stalled getQueue that resumes after the next op started', () => {
+    it('runs no remove or add itself and leaves the native tail equal to the store window', async () => {
+      useQueueStore.getState().loadQueue([A, B, C, D], 1, null);
+      modelNativePlayer([A, B, C, D], 1);
+      let releaseStall!: () => void;
+      const stalled = new Promise<{ id: string }[]>((resolve) => {
+        releaseStall = () => resolve(nativeQueue);
+      });
+      player.getQueue!.mockImplementationOnce(() => stalled);
+
+      const rebuild = reorderUpcomingNative([C, D]);
+      const rebuildOutcome = rebuild.catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(1);
+      const next = withNativeQueue(async () => undefined);
+      useQueueStore.getState().loadQueue([A, B, E], 1, null);
+
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await next;
+      releaseStall();
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await rebuildOutcome;
+
+      expect(nativeQueue.map((n) => n.id)).toEqual([A, B, E].map(trackKey));
+      expect(__player.calls('removeUpcomingTracks')).toHaveLength(1);
+    });
+  });
+
+  describe('insertNativeTrackNext — a stalled getQueue that resumes after the next op started', () => {
+    it('makes no add call', async () => {
+      let releaseStall!: () => void;
+      const stalled = new Promise<{ id: string }[]>((resolve) => {
+        releaseStall = () => resolve([]);
+      });
+      player.getQueue!.mockImplementationOnce(() => stalled);
+
+      const insert = insertNativeTrackNext(A, 1);
+      const insertOutcome = insert.catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(1);
+      const next = withNativeQueue(async () => undefined);
+
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await next;
+      releaseStall();
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await insertOutcome;
+
+      expect(__player.calls('add')).toHaveLength(0);
+    });
   });
 });

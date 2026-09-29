@@ -1,6 +1,7 @@
 import {
   NATIVE_QUEUE_OP_TIMEOUT_MS,
   NativeQueueTimeoutError,
+  onNativeQueueTimeout,
   withNativeQueue,
 } from '../native/nativeQueueLock';
 
@@ -141,5 +142,59 @@ describe('withNativeQueue — serialising native queue operations', () => {
       await withNativeQueue(async () => 'quick');
       expect(jest.getTimerCount()).toBe(0);
     });
+  });
+});
+
+describe('withNativeQueue — fencing an op that outlived its deadline', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('throws from the late fence, makes no further calls, then runs the next op and the listener once', async () => {
+    const stall = deferred<void>();
+    const calls: string[] = [];
+    const listener = jest.fn(() => calls.push('listener'));
+    const unsubscribe = onNativeQueueTimeout(listener);
+
+    const late = withNativeQueue(async (fence) => {
+      calls.push('first-call');
+      await stall.promise;
+      fence();
+      calls.push('late-call');
+    });
+    const lateOutcome = late.catch((err: unknown) => err);
+    const next = withNativeQueue(async () => {
+      calls.push('next');
+    });
+
+    await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+    await next;
+    stall.resolve();
+    await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+    unsubscribe();
+
+    expect(await lateOutcome).toBeInstanceOf(NativeQueueTimeoutError);
+    expect(calls).toEqual(['first-call', 'listener', 'next']);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the fence pass before the deadline', async () => {
+    const result = await withNativeQueue(async (fence) => {
+      fence();
+      return 'in time';
+    });
+
+    expect(result).toBe('in time');
+  });
+
+  it('does not run an unsubscribed listener', async () => {
+    const listener = jest.fn();
+    onNativeQueueTimeout(listener)();
+
+    const hung = withNativeQueue(() => new Promise<void>(() => {}));
+    const hungOutcome = hung.catch((err: unknown) => err);
+    await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+    await hungOutcome;
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });

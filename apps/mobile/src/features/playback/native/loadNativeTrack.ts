@@ -12,7 +12,7 @@ import { classifyPlaybackFailure } from '../classifyPlaybackError';
 import { redactedPlaybackFailure } from '../redactPlaybackError';
 import { recordPresignOutcome } from '../playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
-import { withNativeQueue } from './nativeQueueLock';
+import { onNativeQueueTimeout, withNativeQueue, type Fence } from './nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { forgetAllSwaps } from './nativeTrackSwap';
 import { claimLoad, currentLoadToken, isStale } from '../loadToken';
@@ -122,13 +122,54 @@ function tracksNativeHolds(
   return tracks.slice(0, activeIndex + 1 + NATIVE_QUEUE_WINDOW);
 }
 
-async function addAllOrRollback(tracks: AddTrack[], token: number): Promise<void> {
+async function rollbackUnlessStale(token: number, fence: Fence): Promise<void> {
+  if (isStale(token)) return;
+  fence();
+  await clearNativeQueue().catch(() => undefined);
+}
+
+async function addAllOrRollback(tracks: AddTrack[], token: number, fence: Fence): Promise<void> {
   try {
     await TrackPlayer.add(tracks);
   } catch (err) {
-    if (!isStale(token)) await clearNativeQueue().catch(() => undefined);
+    await rollbackUnlessStale(token, fence);
     throw err;
   }
+}
+
+interface StartPlan {
+  idx: number;
+  startPositionMs: number;
+  autoplay: boolean;
+  token: number;
+}
+
+async function skipTo(idx: number, token: number, fence: Fence): Promise<boolean> {
+  if (idx <= 0) return true;
+  fence();
+  await TrackPlayer.skip(idx);
+  return !isStale(token);
+}
+
+async function seekToStart(ms: number, token: number, fence: Fence): Promise<boolean> {
+  if (ms <= 0) return true;
+  fence();
+  await TrackPlayer.seekTo(ms / 1000);
+  return !isStale(token);
+}
+
+async function startAt(plan: StartPlan, fence: Fence): Promise<void> {
+  if (!(await skipTo(plan.idx, plan.token, fence))) return;
+  if (!(await seekToStart(plan.startPositionMs, plan.token, fence))) return;
+  if (!plan.autoplay) return;
+  fence();
+  await TrackPlayer.play();
+}
+
+async function addAndStart(native: AddTrack[], plan: StartPlan, fence: Fence): Promise<void> {
+  await addAllOrRollback(native, plan.token, fence);
+  if (isStale(plan.token)) return;
+  await startAt(plan, fence);
 }
 
 export async function loadNativeQueue(
@@ -149,23 +190,12 @@ export async function loadNativeQueue(
 
   const idx = clamp(startIndex, 0, tracks.length - 1);
   markPresignedFrom(idx, tracks.length - idx);
-  await withNativeQueue(async () => {
+  const plan: StartPlan = { idx, startPositionMs, autoplay, token };
+  await withNativeQueue(async (fence) => {
     if (isStale(token)) return;
     const generation = beginNativeLoad(idx);
     try {
-      await addAllOrRollback(tracksNativeHolds(tracks, idx).map(build), token);
-      if (isStale(token)) return;
-      if (idx > 0) {
-        await TrackPlayer.skip(idx);
-        if (isStale(token)) return;
-      }
-      if (startPositionMs > 0) {
-        await TrackPlayer.seekTo(startPositionMs / 1000);
-        if (isStale(token)) return;
-      }
-      if (autoplay) {
-        await TrackPlayer.play();
-      }
+      await addAndStart(tracksNativeHolds(tracks, idx).map(build), plan, fence);
     } finally {
       endNativeLoad(generation);
     }
@@ -237,7 +267,8 @@ async function rebuildRequestedTails(): Promise<boolean> {
   }
 }
 
-async function upcomingHeldNatively(): Promise<AddTrack[]> {
+async function upcomingHeldNatively(fence: Fence): Promise<AddTrack[]> {
+  fence();
   const [held, activeIndex] = await Promise.all([
     TrackPlayer.getQueue(),
     TrackPlayer.getActiveTrackIndex(),
@@ -245,25 +276,37 @@ async function upcomingHeldNatively(): Promise<AddTrack[]> {
   return activeIndex === undefined ? [] : (held ?? []).slice(activeIndex + 1);
 }
 
-async function restoreUpcoming(previous: AddTrack[]): Promise<void> {
+async function restoreUpcoming(previous: AddTrack[], fence: Fence): Promise<void> {
+  fence();
   if (previous.length > 0) await TrackPlayer.add(previous).catch(() => undefined);
 }
 
-async function addWindow(window: AddTrack[], previous: AddTrack[]): Promise<boolean> {
+async function addWindow(window: AddTrack[], previous: AddTrack[], fence: Fence): Promise<boolean> {
   try {
+    fence();
     if (window.length > 0) await TrackPlayer.add(window);
     return true;
   } catch (err) {
-    await restoreUpcoming(previous);
+    await restoreUpcoming(previous, fence);
     throw err;
   }
 }
 
-async function replaceUpcomingOrRestore(window: AddTrack[], token: number): Promise<boolean> {
-  const previous = await upcomingHeldNatively();
+async function detachUpcoming(fence: Fence): Promise<AddTrack[]> {
+  const previous = await upcomingHeldNatively(fence);
+  fence();
   await TrackPlayer.removeUpcomingTracks();
-  if (!isStale(token)) return addWindow(window, previous);
-  await restoreUpcoming(previous);
+  return previous;
+}
+
+async function replaceUpcomingOrRestore(
+  window: AddTrack[],
+  token: number,
+  fence: Fence,
+): Promise<boolean> {
+  const previous = await detachUpcoming(fence);
+  if (!isStale(token)) return addWindow(window, previous, fence);
+  await restoreUpcoming(previous, fence);
   return false;
 }
 
@@ -281,12 +324,16 @@ async function tailInputs(upcoming: readonly PlaybackTrack[]): Promise<TailInput
   return { upcoming, keyAtCall, build };
 }
 
-async function applyTailLocked(inputs: TailInputs, token: number): Promise<boolean> {
+function windowFor(inputs: TailInputs, keyNow: string | undefined): AddTrack[] {
+  const tail = liveTailAfter(keyNow) ?? stillUpcoming(inputs.upcoming, inputs.keyAtCall, keyNow);
+  return tail.slice(0, NATIVE_QUEUE_WINDOW).map(inputs.build);
+}
+
+async function applyTailLocked(inputs: TailInputs, token: number, fence: Fence): Promise<boolean> {
   if (isStale(token)) return false;
   const keyNow = await activeNativeTrackId();
   if (isStale(token)) return false;
-  const tail = liveTailAfter(keyNow) ?? stillUpcoming(inputs.upcoming, inputs.keyAtCall, keyNow);
-  return replaceUpcomingOrRestore(tail.slice(0, NATIVE_QUEUE_WINDOW).map(inputs.build), token);
+  return replaceUpcomingOrRestore(windowFor(inputs, keyNow), token, fence);
 }
 
 async function rebuildNativeTail(
@@ -295,7 +342,7 @@ async function rebuildNativeTail(
 ): Promise<boolean> {
   await ensurePlayerSetup();
   const inputs = await tailInputs(upcoming);
-  return withNativeQueue(() => applyTailLocked(inputs, token));
+  return withNativeQueue((fence) => applyTailLocked(inputs, token, fence));
 }
 
 export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
@@ -318,16 +365,28 @@ export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
 export async function insertNativeTrackNext(track: PlaybackTrack, position: number): Promise<void> {
   const token = currentLoadToken();
   const native = await resolveNative(track);
-  await withNativeQueue(async () => {
+  await withNativeQueue(async (fence) => {
     if (isStale(token)) return;
     const held = await TrackPlayer.getQueue();
     const rebuiltFromStore =
       held.length >= useQueueStore.getState().playOrder.length &&
       held[position]?.id === trackKey(track);
     if (rebuiltFromStore) return;
+    fence();
     await TrackPlayer.add(native, position);
   });
 }
+
+function reconcileUpcomingFromStore(): void {
+  const state = useQueueStore.getState();
+  const ordered = orderedQueueTracks(state);
+  if (ordered.length === 0) return;
+  rebuildNativeTail(ordered.slice(state.currentIndex + 1), currentLoadToken()).catch(
+    () => undefined,
+  );
+}
+
+onNativeQueueTimeout(reconcileUpcomingFromStore);
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {
   await ensurePlayerSetup();

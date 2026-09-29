@@ -16,6 +16,8 @@ import {
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
 import { resetPlaybackForSignOut } from '../native/service';
+import '../native/loadNativeTrack';
+import { NATIVE_QUEUE_OP_TIMEOUT_MS, withNativeQueue } from '../native/nativeQueueLock';
 
 import { libraryTrack, previewTrack } from './fixtures';
 
@@ -357,6 +359,117 @@ describe('swap-path presign health tally', () => {
     flushPlaybackHealth();
     expect((recordEvent as jest.Mock).mock.calls[0]![0].payload).toMatchObject({
       presign_failed: 1,
+    });
+  });
+});
+
+describe('native slot ops that outlived the lock deadline', () => {
+  const { __player } = jest.requireMock('react-native-track-player');
+  const player = TrackPlayer as unknown as Record<string, jest.Mock>;
+  const RECONCILE_METHODS = ['getActiveTrack', 'removeUpcomingTracks'] as const;
+  const defaultReconcileImpls = new Map(
+    RECONCILE_METHODS.map((name) => [name, player[name]!.getMockImplementation()]),
+  );
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    forgetAllSwaps();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    for (const name of RECONCILE_METHODS) {
+      player[name]!.mockReset().mockImplementation(defaultReconcileImpls.get(name));
+    }
+    for (const name of [
+      'getQueue',
+      'getActiveTrackIndex',
+      'remove',
+      'add',
+      'load',
+      'play',
+    ] as const) {
+      restorePlayerDefault(name);
+    }
+    useQueueStore.getState().clearQueue();
+  });
+
+  function holdOpenPastDeadline(): { release: () => void; stalled: Promise<void> } {
+    let release!: () => void;
+    const stalled = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { release, stalled };
+  }
+
+  describe('swapUpcomingToLocal — a remove that resumes after the next op started', () => {
+    it('adds nothing late and the reconcile puts the removed slot back', async () => {
+      const active = libraryTrack({ title: 'Active' });
+      const upcoming = libraryTrack({
+        title: 'Upcoming',
+        source: { kind: 'library', trackId: asTrackId('trk-2') },
+      });
+      useQueueStore.getState().loadQueue([active, upcoming], 0, null);
+      const native: { id: string; url: string }[] = [active, upcoming].map((t) => ({
+        id: trackKey(t),
+        url: 'https://s/x',
+      }));
+      player.getQueue!.mockImplementation(async () => [...native]);
+      player.getActiveTrackIndex!.mockImplementation(async () => 0);
+      player.getActiveTrack!.mockImplementation(async () => native[0]);
+      player.removeUpcomingTracks!.mockImplementation(async () => {
+        native.splice(1);
+      });
+      player.add!.mockImplementation(async (added: { id: string } | { id: string }[]) => {
+        native.push(...([] as { id: string; url: string }[]).concat(added as never));
+      });
+      const { release, stalled } = holdOpenPastDeadline();
+      player.remove!.mockImplementation(async (index: number) => {
+        native.splice(index, 1);
+        await stalled;
+      });
+
+      const swap = swapUpcomingToLocal(upcoming, 'file:///cache/trk-2.mp3');
+      const swapOutcome = swap.catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(1);
+      const next = withNativeQueue(async () => undefined);
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await next;
+      release();
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await swapOutcome;
+
+      expect(native.map((n) => n.id)).toEqual([active, upcoming].map(trackKey));
+      const addedUrls = player.add!.mock.calls.flatMap(([added]) =>
+        ([] as { url: string }[]).concat(added).map((entry) => entry.url),
+      );
+      expect(addedUrls).not.toContain('file:///cache/trk-2.mp3');
+    });
+  });
+
+  describe('repairActiveToStreaming — an active-track lookup that resumes after the next op started', () => {
+    it('makes no load or play call', async () => {
+      const track = previewTrack({
+        source: { kind: 'preview', previewUrl: 'https://cdn.example/preview.mp3' },
+      });
+      const { release, stalled } = holdOpenPastDeadline();
+      player.getActiveTrack!.mockImplementationOnce(async () => {
+        await stalled;
+        return undefined;
+      });
+
+      const repair = repairActiveToStreaming(track);
+      const repairOutcome = repair.catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(1);
+      const next = withNativeQueue(async () => undefined);
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await next;
+      release();
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      await repairOutcome;
+
+      expect(__player.calls('load')).toHaveLength(0);
+      expect(__player.calls('play')).toHaveLength(0);
     });
   });
 });
