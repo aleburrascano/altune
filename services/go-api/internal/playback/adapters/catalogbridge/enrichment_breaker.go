@@ -26,6 +26,7 @@ type enrichmentBreaker struct {
 	failures     int
 	lastFailedAt time.Time
 	probing      bool
+	generation   uint64
 	now          func() time.Time
 	metrics      ports.EnrichmentMetrics
 }
@@ -34,27 +35,30 @@ func newEnrichmentBreaker(metrics ports.EnrichmentMetrics) *enrichmentBreaker {
 	return &enrichmentBreaker{now: time.Now, metrics: metrics}
 }
 
-func noProbeHeld() {}
+type admission struct {
+	generation uint64
+	probe      bool
+}
 
-func (b *enrichmentBreaker) allow() (bool, func()) {
+func (b *enrichmentBreaker) allow() (bool, admission) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	switch b.state {
 	case breakerOpen:
 		if b.probing || !b.openWindowElapsed() {
-			return false, noProbeHeld
+			return false, admission{}
 		}
 		b.state = breakerHalfOpen
 		slog.Warn("now-playing enrichment breaker half-open (probing catalog recovery)")
-		return true, b.holdProbe()
+		return true, b.admitProbe()
 	case breakerHalfOpen:
 		if b.probing {
-			return false, noProbeHeld
+			return false, admission{}
 		}
-		return true, b.holdProbe()
+		return true, b.admitProbe()
 	default:
-		return true, noProbeHeld
+		return true, admission{generation: b.generation}
 	}
 }
 
@@ -62,36 +66,49 @@ func (b *enrichmentBreaker) openWindowElapsed() bool {
 	return b.now().Sub(b.lastFailedAt) > enrichmentOpenDuration
 }
 
-func (b *enrichmentBreaker) holdProbe() func() {
+func (b *enrichmentBreaker) admitProbe() admission {
 	b.probing = true
-	return b.releaseProbe
+	return admission{generation: b.generation, probe: true}
 }
 
-func (b *enrichmentBreaker) releaseProbe() {
+func (b *enrichmentBreaker) release(adm admission) {
+	if !adm.probe {
+		return
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.probing = false
 }
 
-func (b *enrichmentBreaker) recordSuccess() {
-	if !b.closeCircuit() {
+func (b *enrichmentBreaker) recordSuccess(adm admission) {
+	if !b.closeCircuit(adm) {
 		return
 	}
 	slog.Info("now-playing enrichment breaker closed (catalog recovered)")
 }
 
-func (b *enrichmentBreaker) closeCircuit() bool {
+func (b *enrichmentBreaker) closeCircuit(adm admission) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	recovered := b.state != breakerClosed
+	if adm.probe {
+		return b.closeAfterProbe()
+	}
+	if b.state == breakerClosed && adm.generation == b.generation {
+		b.failures = 0
+	}
+	return false
+}
+
+func (b *enrichmentBreaker) closeAfterProbe() bool {
+	if b.state != breakerHalfOpen {
+		return false
+	}
 	b.state = breakerClosed
 	b.failures = 0
-	if recovered {
-		b.metrics.EnrichmentBreakerClosed()
-	}
-	return recovered
+	b.metrics.EnrichmentBreakerClosed()
+	return true
 }
 
 func (b *enrichmentBreaker) recordFailure() {
@@ -113,6 +130,7 @@ func (b *enrichmentBreaker) countFailure() (failures int, tripped bool) {
 		return b.failures, false
 	}
 	b.state = breakerOpen
+	b.generation++
 	b.metrics.EnrichmentBreakerOpened()
 	return b.failures, true
 }

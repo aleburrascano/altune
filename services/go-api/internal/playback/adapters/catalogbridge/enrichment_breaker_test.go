@@ -3,6 +3,7 @@ package catalogbridge
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -76,7 +77,7 @@ func TestBreaker_GaugeMatchesStateWhenASuccessRacesTheTrippingFailure(t *testing
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			breaker.recordSuccess()
+			breaker.recordSuccess(admission{})
 		}()
 		go func() {
 			defer wg.Done()
@@ -94,6 +95,8 @@ func TestBreaker_GaugeMatchesStateWhenARecoverySuccessFollowsTheTrip(t *testing.
 	for attempt := 0; attempt < gaugeRaceAttempts; attempt++ {
 		gauge := &breakerGauge{}
 		breaker := newEnrichmentBreaker(gauge)
+		var skew atomic.Int64
+		breaker.now = func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -104,7 +107,14 @@ func TestBreaker_GaugeMatchesStateWhenARecoverySuccessFollowsTheTrip(t *testing.
 		go func() {
 			defer wg.Done()
 			awaitDegraded(t, breaker)
-			breaker.recordSuccess()
+			skew.Store(int64(enrichmentOpenDuration + time.Second))
+			admitted, probe := breaker.allow()
+			if !admitted || !probe.probe {
+				t.Errorf("attempt %d: expected a half-open probe admission, got admitted=%v probe=%v", attempt, admitted, probe.probe)
+				return
+			}
+			breaker.recordSuccess(probe)
+			breaker.release(probe)
 		}()
 		wg.Wait()
 

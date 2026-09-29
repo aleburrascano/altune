@@ -1,10 +1,12 @@
 package catalogbridge
 
 import (
+	catalogPorts "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -43,7 +45,7 @@ func testUser() shared.UserId {
 type failingTrackReader struct{}
 
 func (failingTrackReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ shared.UserId) (*catalogDomain.Track, error) {
-	return nil, errors.New("catalog unavailable")
+	return nil, fmt.Errorf("catalog unavailable: %w", catalogPorts.ErrDBTransient)
 }
 
 type recordingMetrics struct {
@@ -350,5 +352,72 @@ func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
 
 	if admitted, _ := reader.breaker.allow(); !admitted {
 		t.Fatal("client cancellations must not trip the enrichment breaker")
+	}
+}
+
+type permanentRowErrorReader struct{}
+
+func (permanentRowErrorReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ shared.UserId) (*catalogDomain.Track, error) {
+	return nil, errors.New("acquisition status no longer parses")
+}
+
+func TestLookup_PermanentRowErrorsLeaveBreakerClosed(t *testing.T) {
+	m := &recordingMetrics{}
+	reader := NewNowPlayingReader(permanentRowErrorReader{}, WithNowPlayingMetrics(m))
+	user := testUser()
+
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); err == nil {
+			t.Fatalf("call %d: expected the row error to surface", i)
+		}
+	}
+
+	if admitted, _ := reader.breaker.allow(); !admitted {
+		t.Fatal("permanent per-row errors must not open the breaker for every user")
+	}
+	if m.enrichmentFailed != enrichmentFailureThreshold {
+		t.Errorf("EnrichmentFailed = %d, want %d: row errors still count as failed lookups",
+			m.enrichmentFailed, enrichmentFailureThreshold)
+	}
+}
+
+type staleSuccessReader struct {
+	firstCallAdmitted chan struct{}
+	releaseFirstCall  chan struct{}
+	calls             int
+}
+
+func (r *staleSuccessReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ shared.UserId) (*catalogDomain.Track, error) {
+	r.calls++
+	if r.calls == 1 {
+		close(r.firstCallAdmitted)
+		<-r.releaseFirstCall
+		return nil, nil
+	}
+	return nil, catalogPorts.ErrDBTransient
+}
+
+func TestLookup_StaleSuccessDoesNotCloseAnOpenBreaker(t *testing.T) {
+	catalog := &staleSuccessReader{firstCallAdmitted: make(chan struct{}), releaseFirstCall: make(chan struct{})}
+	reader := NewNowPlayingReader(catalog)
+	user := testUser()
+
+	firstDone := make(chan error)
+	go func() {
+		_, err := reader.Lookup(context.Background(), user, uuid.New().String())
+		firstDone <- err
+	}()
+	<-catalog.firstCallAdmitted
+
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		_, _ = reader.Lookup(context.Background(), user, uuid.New().String())
+	}
+	close(catalog.releaseFirstCall)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+
+	if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); !errors.Is(err, errEnrichmentUnavailable) {
+		t.Fatalf("a stale success closed the open breaker without a probe, got err = %v", err)
 	}
 }
