@@ -1,11 +1,10 @@
-import * as Linking from 'expo-linking';
-import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
+import { useNavigator } from '@shared/navigation';
 import { type AuthIntentResult, completeAuthIntent } from '../completeAuthIntent';
 import { thrownErrorDetail } from '../errorDetail';
+import { initialUrl, subscribeUrl } from '../native/linkEvents';
 import { type AuthLinkIntent, parseAuthLink } from '../parseAuthLink';
 
 type LinkKind = AuthLinkIntent['kind'];
@@ -33,12 +32,9 @@ async function reportFailedExchange(
 }
 
 export function useAuthDeepLink(): void {
-  const router = useRouter();
+  const router = useNavigator();
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      return;
-    }
     let active = true;
 
     const handle = (url: string | null): void => {
@@ -49,12 +45,12 @@ export function useAuthDeepLink(): void {
       void reportFailedExchange(intent.kind, completeAuthIntent(intent, router, supabase.auth));
     };
 
-    void Linking.getInitialURL().then(handle);
-    const sub = Linking.addEventListener('url', ({ url }) => handle(url));
+    void initialUrl().then(handle);
+    const unsubscribe = subscribeUrl(handle);
 
     return () => {
       active = false;
-      sub.remove();
+      unsubscribe();
     };
   }, [router]);
 }
