@@ -1,8 +1,3 @@
-# Service Level Objectives for Altune's tier 1 Critical User Journeys (see module-tiers.tsv).
-# Machine-read config, written by the global slo skill; judge.sh reads it.
-# target TBD = measuring: set it a little better than observed after ~2 weeks of real data.
-# A journey below min_events valid events in the window is not judged.
-# journey	sli_type	signal	target	window	min_events	status	exclusions	revisit_by	source
 play a song	availability	none: play_attempt/play_started counts in apps/mobile/src/features/playback/playbackHealth.ts (only failures today)	TBD	28d	200	measuring	device offline	2026-11-30	-
 play a song	latency	none: p95 tap to first audio, timer from tap to PlaybackState.Playing	TBD	28d	200	measuring	device offline	2026-11-30	-
 play a song	latency	none: p95 skip to next track playing, timer from PlaybackActiveTrackChanged (usePlaybackSignals.ts:60)	TBD	28d	200	measuring	device offline	2026-11-30	-

@@ -1,4 +1,3 @@
-# ---- OS / editor ----
 .DS_Store
 Thumbs.db
 *.swp
@@ -10,7 +9,6 @@ Thumbs.db
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# ---- Node / Expo ----
 node_modules/
 .expo/
 .expo-shared/
@@ -23,7 +21,6 @@ yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
 
-# ---- Python ----
 __pycache__/
 *.py[cod]
 *$py.class
@@ -36,7 +33,6 @@ __pycache__/
 .coverage.*
 htmlcov/
 
-# coverage output (jest --coverage, go test -coverprofile)
 coverage/
 coverage.out
 .venv/
@@ -46,7 +42,6 @@ ENV/
 build/
 .python-version
 
-# ---- Env / secrets ----
 .env
 .env.*
 !.env.example
@@ -54,7 +49,6 @@ build/
 *.pem
 *.key
 
-# ---- Claude / local ----
 .superpowers/
 .fallow/
 CLAUDE.local.md
@@ -67,29 +61,19 @@ CLAUDE.local.md
 .claude/worktrees/
 .claude/survey-deferred/
 
-# ---- Serena (LSP server) ----
 .serena/
 
-# ---- Local data (dev audio storage, DB files) ----
 .data/
 
-# Recorded provider exchanges and pipeline dumps: `discoveryeval -fixtures <dir>`
-# and `discoverytrace -out <dir>` both write under tmp/. Bodies are scrubbed on
-# record (internal/shared/redact), this is the second line of defence.
 tmp/
 
-# ---- Build artifacts ----
 *.tgz
 *.zip
 *.exe
 
-# Blue-green active-upstream pointer, written on the VM by deploy/blue-green.sh
 services/go-api/deploy/caddy/upstream.conf
-# Mutation testing sandbox (Stryker; kept outside apps/mobile so jest never collects it)
 .stryker-tmp/
 
-# graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
 
-# Supabase CLI local link state
 supabase/.temp/

@@ -1,10 +1,3 @@
-# Critical User Journeys: how much each module matters to someone using Altune.
-# Read by ~/.claude/overnight (survey order) and bin/issue-title.mjs: an issue titled
-# type(module): summary takes its module's tier, and only these module names are accepted.
-# 1 = the app is broken without it (every rotation, bugs raised a severity level)
-# 2 = daily but not the core loop · 3 = rarely used (bugs lowered a level, never security)
-# An unlisted path is tier 2. Shared code takes the tier of its most critical user.
-# prefix	tier	why	module
 services/go-api/internal/playback/	1	streaming is the app	playback
 services/go-api/internal/acquisition/	1	no audio acquired, nothing to stream	acquisition
 services/go-api/internal/discovery/	1	finding music is part of the core loop	discover

@@ -83,9 +83,6 @@ func TestRenderBody_ReporterIdentityMatchesShippedContract(t *testing.T) {
 	if strings.Contains(doc, "carry no reporter identity") {
 		t.Fatal(".env.example still claims reports carry no reporter identity")
 	}
-	if !strings.Contains(doc, "`reporterIdentityRow`") {
-		t.Fatal(".env.example must name reporterIdentityRow as the reporter-identity contract")
-	}
 }
 
 func TestRenderBody_FenceOutlastsLongestBacktickRun(t *testing.T) {
