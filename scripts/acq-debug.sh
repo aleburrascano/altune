@@ -10,6 +10,8 @@ Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
   summary [days]        status mix, failure codes, which sources delivered, stuck pending (default 14 days)
   track <text|uuid>     a track's acquisition row(s), then its log lines from the running go-api
   capture <title|uuid>  replay a track's rejection log through cmd/acquisitioneval's evaluator
+  audit-qualifiers [limit]  ready tracks whose stored source title carries a veto qualifier (Instrumental,
+                        reaction...) the track did not ask for; fetches titles via oEmbed, default limit 500
   client [since] [track]  acquisition_ui/client_error events from discovery_events (default
                         since 24 hours ago; track filters on the event's track_id)
   probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
@@ -151,6 +153,29 @@ SQL
   printf '{"track": %s, "logs": [%s]}\n' "$track_json" "$logs_json"
   ;;
 
+audit-qualifiers)
+  limit=${1:-500}
+  case $limit in ''|*[!0-9]*) echo "usage: audit-qualifiers [limit]" >&2; exit 3 ;; esac
+  oembed_title() {
+    case $1 in
+      *youtube.com/*|*youtu.be/*) endpoint=https://www.youtube.com/oembed ;;
+      *soundcloud.com/*) endpoint=https://soundcloud.com/oembed ;;
+      *) return 0 ;;
+    esac
+    curl -sfG --max-time 10 --data-urlencode "url=$1" --data-urlencode format=json "$endpoint" |
+      sed -nE 's/.*"title" *: *"(([^"\\]|\\.)*)".*/\1/p' | tr -d '\t\r\n'
+  }
+  db -A -t -F "$(printf '\t')" -v limit="$limit" <<'SQL' |
+SELECT id, replace(title, E'\t', ' '), replace(artist, E'\t', ' '), audio_source_url
+  FROM tracks WHERE acquisition_status = 'ready' AND audio_source_url <> ''
+ ORDER BY added_at DESC LIMIT :limit;
+SQL
+  while IFS="$(printf '\t')" read -r id title artist url; do
+    printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$title" "$artist" "$url" "$(oembed_title "$url")"
+    sleep 0.5
+  done
+  ;;
+
 client)
   since=${1:-24h}
   track=${2:-}
@@ -228,6 +253,18 @@ sql)
 esac
 REMOTE
 }
+
+if [ "${1:-}" = audit-qualifiers ]; then
+  root=$(cd "$(dirname "$0")/.." && pwd)
+  dump=$(run_remote "$@")
+  status=$?
+  [ $status -eq 0 ] || exit $status
+  bin=$(mktemp)
+  trap 'rm -f "$bin"' EXIT
+  (cd "$root/services/go-api" && go build -o "$bin" ./cmd/acquisitioneval) || exit 1
+  printf '%s\n' "$dump" | "$bin" audit-qualifiers
+  exit $?
+fi
 
 if [ "${1:-}" = capture ]; then
   root=$(cd "$(dirname "$0")/.." && pwd)

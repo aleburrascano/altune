@@ -12,8 +12,11 @@ import (
 )
 
 func main() {
-	if cmd, rest := subcommand(os.Args); cmd == "capture" {
+	switch cmd, rest := subcommand(os.Args); cmd {
+	case "capture":
 		os.Exit(runCapture(rest, os.Stdin, os.Stdout, time.Now()))
+	case "audit-qualifiers":
+		os.Exit(runAuditQualifiers(os.Stdin, os.Stdout))
 	}
 
 	var (
@@ -78,8 +81,8 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 }
 
 func subcommand(args []string) (name string, rest []string) {
-	if len(args) > 1 && args[1] == "capture" {
-		return "capture", args[2:]
+	if len(args) > 1 && (args[1] == "capture" || args[1] == "audit-qualifiers") {
+		return args[1], args[2:]
 	}
 	return "", args[1:]
 }

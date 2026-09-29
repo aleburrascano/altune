@@ -50,4 +50,12 @@ bash scripts/acq-debug.sh [--staging] capture "<title|uuid>"
 
 It pulls the track row plus its `candidate_evaluated` and `acquisition.rejection_summary` log lines and turns them into one `eval.Case` JSON object (`class: "RW"`), printed to stdout. It never commits or edits goldens: review the output, then add it under `services/go-api/internal/acquisition/service/eval/goldens/` yourself.
 
+To find tracks that were stored with an unrequested version (Instrumental, reaction, and other veto qualifiers):
+
+```bash
+bash scripts/acq-debug.sh [--staging] audit-qualifiers [limit]
+```
+
+It lists ready tracks, fetches each stored source's title from the public oEmbed endpoints (about 2 requests per second, default limit 500), and prints `track_id`, `title`, `artist`, `source_title`, `veto_words` for each flagged track, then `flagged N of M`. It only reads; re-acquiring what it finds is the operator's call, batch by batch.
+
 Anything that writes to prod (retrying a track, failing a stuck row, replacing cookies) needs the user's yes first. Name the exact change and wait for approval.
