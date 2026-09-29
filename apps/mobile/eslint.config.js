@@ -1,6 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-const { sync: globSync } = require('glob');
 const expoConfig = require('eslint-config-expo/flat');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
@@ -65,19 +62,10 @@ const rulesWrittenForTheWebAndWrongForReactNative = {
   },
 };
 
-function platformLegacyPathsForRule(ruleKey) {
-  return globSync('src/{features/*,app}/platform-legacy.json', { cwd: __dirname }).flatMap(
-    (relativePath) => {
-      const contents = JSON.parse(fs.readFileSync(path.join(__dirname, relativePath), 'utf8'));
-      return contents[ruleKey] || [];
-    },
-  );
-}
-
 const noInlinePlatformBranchesInFeatureUi = {
   name: 'noInlinePlatformBranchesInFeatureUi',
   files: ['src/features/*/ui/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
-  ignores: [...TEST_FILES, ...platformLegacyPathsForRule('ui')],
+  ignores: TEST_FILES,
   rules: {
     'no-restricted-syntax': [
       'error',
@@ -108,7 +96,6 @@ const featureLogicStaysPlatformFree = {
     'src/features/**/web/**',
     'src/features/**/*.web.{ts,tsx}',
     'src/features/**/*.native.{ts,tsx}',
-    ...platformLegacyPathsForRule('logic'),
   ],
   rules: {
     'no-restricted-imports': [
