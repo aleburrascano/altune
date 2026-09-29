@@ -52,6 +52,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: async (by: number) => {
             seenMidFlight = queryClient.getQueryData<Counter>(KEY);
@@ -80,6 +81,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: failing,
           applyOptimistic,
@@ -105,6 +107,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: failing,
           applyOptimistic: bump,
@@ -133,6 +136,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: () => {
             queryClient.setQueryData<Counter & { label: string }>(KEY, (prev) => ({
@@ -169,6 +173,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: (_by: number) => {
             queryClient.removeQueries({ queryKey: KEY });
@@ -200,6 +205,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: async (by: number) => by * 10,
           applyOptimistic: bump,
@@ -235,6 +241,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: async (by: number) => by,
           applyOptimistic: bump,
@@ -260,6 +267,7 @@ describe('useOptimisticMutation(): unguarded', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           unguarded: true,
           mutationFn: (by: number) => {
@@ -293,6 +301,7 @@ describe('useOptimisticMutation(): unguarded', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           unguarded: true,
           mutationFn: failing,
@@ -324,6 +333,7 @@ describe('useOptimisticMutation(): session fencing', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           unguarded: true,
           mutationFn: (_by: number) => {
@@ -352,6 +362,7 @@ describe('useOptimisticMutation(): session fencing', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: (_by: number) => {
             switchUser(queryClient, { count: 99 });
@@ -379,6 +390,7 @@ describe('useOptimisticMutation(): session fencing', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: async (by: number) => {
             switchUser(queryClient, { count: 99 });
@@ -431,6 +443,7 @@ describe('session fencing of the request and its callbacks', () => {
       const { result } = renderHook(
         () =>
           useOptimisticMutation({
+            action: 'test.optimistic',
             queryKey: KEY,
             mutationFn: (_by: number) => {
               signOutThenLoadUserB(queryClient);
@@ -457,6 +470,7 @@ describe('session fencing of the request and its callbacks', () => {
       const { result } = renderHook(
         () =>
           useOptimisticMutation({
+            action: 'test.optimistic',
             queryKey: KEY,
             mutationFn: async (by: number) => {
               signOutThenLoadUserB(queryClient);
@@ -485,6 +499,7 @@ describe('session fencing of the request and its callbacks', () => {
       const { result } = renderHook(
         () =>
           useOptimisticMutation({
+            action: 'test.optimistic',
             queryKey: KEY,
             mutationFn,
             applyOptimistic: bump,
@@ -517,6 +532,7 @@ describe('useOptimisticMutation(): alerting on web', () => {
     const { result } = renderHook(
       () =>
         useOptimisticMutation({
+          action: 'test.optimistic',
           queryKey: KEY,
           mutationFn: failing,
           applyOptimistic: bump,

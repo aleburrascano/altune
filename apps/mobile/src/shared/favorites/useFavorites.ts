@@ -35,6 +35,7 @@ export function useFavorites(): FavoritesApi {
     saved.has(entryKey(target.kind, target.favorite_key));
 
   const mutation = useOptimisticMutation({
+    action: 'favorites.toggle',
     queryKey: discoveryKeys.favorites,
     unguarded: true,
     mutationFn: sendToggle,

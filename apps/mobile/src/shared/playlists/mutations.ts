@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import {
   addTracksToPlaylist,
@@ -12,6 +12,7 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
+import { useAppMutation } from '@shared/query/useAppMutation';
 import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
 import {
   currentSessionEpoch,
@@ -130,7 +131,8 @@ function reinsertTracks<T extends { id: TrackId }>(
 
 export function useCreatePlaylist() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useAppMutation({
+    action: 'playlist.create',
     ...guardedMutationOptions({
       mutationFn: (name: string) => createPlaylist({ name }),
       onError: alertCreateFailed,
@@ -141,7 +143,8 @@ export function useCreatePlaylist() {
 
 export function useCreatePlaylistWithTracks() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useAppMutation({
+    action: 'playlist.create_with_tracks',
     ...guardedMutationOptions({
       mutationFn: createWithTracks,
       onSuccess: alertCreatedWithTracks,
@@ -154,6 +157,7 @@ export function useCreatePlaylistWithTracks() {
 export function useAddTracksToPlaylist() {
   const queryClient = useQueryClient();
   return useOptimisticMutation({
+    action: 'playlist.add_tracks',
     queryKey: playlistKeys.list,
     mutationFn: ({ playlistId, trackIds }: AddTracksVariables) =>
       addTracksToPlaylist(playlistId, { track_ids: trackIds }),
@@ -192,6 +196,7 @@ export function useAddTracksToPlaylist() {
 
 export function useRenamePlaylist(playlistId: PlaylistId) {
   return useOptimisticMutation({
+    action: 'playlist.rename',
     queryKey: playlistKeys.detail(playlistId),
     mutationFn: (name: string) => renamePlaylist(playlistId, name),
     applyOptimistic: (previous: PlaylistDetail, name) => ({ ...previous, name }),
@@ -218,17 +223,19 @@ function alertDeleteFailed(): void {
 
 export function useDeletePlaylist(playlistId: PlaylistId) {
   const queryClient = useQueryClient();
-  return useMutation(
-    guardedMutationOptions({
+  return useAppMutation({
+    action: 'playlist.delete',
+    ...guardedMutationOptions({
       mutationFn: () => deletePlaylist(playlistId),
       onSuccess: forgetDeletedPlaylist(queryClient, playlistId),
       onError: alertDeleteFailed,
     }),
-  );
+  });
 }
 
 export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
   return useOptimisticMutation({
+    action: 'playlist.remove_tracks',
     queryKey: playlistKeys.detail(playlistId),
     mutationFn: (trackIds: TrackId[]) =>
       removeTracksFromPlaylist(playlistId, { track_ids: trackIds }),

@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { appMutationCache, appQueryCache } from '../shared/query/useAppMutation';
 import { transientRetryOptions } from '../shared/query/retryDelay';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
@@ -65,6 +66,8 @@ export default function RootLayout() {
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        queryCache: appQueryCache(),
+        mutationCache: appMutationCache(),
         defaultOptions: {
           queries: {
             staleTime: 30_000,

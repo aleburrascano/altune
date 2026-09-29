@@ -978,7 +978,11 @@ describe('useRemoveTracksFromPlaylist(): onMutate filter', () => {
       const expected = tracks.filter((t) => !removeIds.includes(t.id)).map((t) => t.id);
       expect(detail.tracks.map((t) => t.id)).toEqual(expected);
 
-      const request = __http.last();
+      const request = __http.requests.find(
+        (r: { method: string; path: string }) =>
+          r.method === 'DELETE' && r.path === '/v1/playlists/p1/tracks',
+      )!;
+      expect(request).toBeDefined();
       expect(request.method).toBe('DELETE');
       expect(request.path).toBe('/v1/playlists/p1/tracks');
       expect(JSON.parse(request.body)).toEqual({ track_ids: removeIds });

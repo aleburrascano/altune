@@ -1,20 +1,17 @@
-import {
-  useMutation,
-  useQueryClient,
-  type MutationFunctionContext,
-  type QueryKey,
-} from '@tanstack/react-query';
+import { useQueryClient, type MutationFunctionContext, type QueryKey } from '@tanstack/react-query';
 
 import {
   currentSessionEpoch,
   isSameSession,
   SessionEndedError,
 } from '@shared/session/signOutCleanup';
+import { useAppMutation } from '@shared/query/useAppMutation';
 import { showAlert } from '@shared/ui/dialog/dialog';
 
 type ErrorAlert = { title: string; message: string };
 
 type BaseOptions<TData, TVariables> = {
+  action: string;
   queryKey: QueryKey;
   mutationFn: (variables: TVariables) => Promise<TData>;
   invalidate?: (variables: TVariables) => readonly QueryKey[];
@@ -115,7 +112,8 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     );
   };
 
-  return useMutation<TData, Error, TVariables, Snapshot<TCache>>({
+  return useAppMutation<TData, Error, TVariables, Snapshot<TCache>>({
+    action: options.action,
     mutationFn: onlyWhileTheStartingSessionLasts(options.mutationFn),
     onMutate: options.unguarded
       ? (variables, run) => optimisticWrite(variables, pinStartingSession(run))

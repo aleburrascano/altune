@@ -7,7 +7,8 @@ import { enqueueCritical } from './outbox';
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_STACK_LENGTH = 4_000;
 
-export type ClientErrorSource = 'uncaught' | 'unhandled_rejection' | 'boundary';
+export type ClientErrorSource =
+  'uncaught' | 'unhandled_rejection' | 'boundary' | 'query' | 'mutation';
 
 function trimmed(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
