@@ -1,9 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"encoding/json"
 	"math"
 	"testing"
 
@@ -182,6 +184,46 @@ func TestUpdateTrackStep_ReplaceSwapsReadyAudio(t *testing.T) {
 	got := storedTrack(t, repo, track)
 	if got.AudioRef == nil || *got.AudioRef != "u/a/b/new.opus" {
 		t.Errorf("AudioRef = %v, want the replacement audio", got.AudioRef)
+	}
+}
+
+func TestUpdateTrackStep_Execute_StoresVerdictScoreAndSourceTitleAsEvidence(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+	ac := &AcquisitionContext{
+		AudioRef: "user/artist/album/song.mp3",
+		Selected: &ports.AudioCandidate{Title: "Song (Official Audio)", URL: "https://example.com/v"},
+		Verdict:  AudioVerdict{Kind: VerdictHard, Score: 0.93},
+	}
+
+	if _, err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	updated := storedTrack(t, repo, track)
+	var got Evidence
+	if err := json.Unmarshal(updated.AcquisitionEvidence(), &got); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v (%q)", err, updated.AcquisitionEvidence())
+	}
+	if got.Verdict != "hard" || got.AcoustIDScore != 0.93 || got.SourceTitle != "Song (Official Audio)" {
+		t.Errorf("evidence = %+v", got)
+	}
+	if updated.AcquisitionConfidence() != 0 {
+		t.Errorf("confidence = %v, want 0 until computed", updated.AcquisitionConfidence())
+	}
+}
+
+func TestUpdateTrackStep_Execute_NoStoredCandidateLeavesEvidenceEmpty(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := seedTrackInRepo(t, repo, userId, nil)
+
+	if _, err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), &AcquisitionContext{AudioRef: "a.mp3"}, afterStore{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if updated := storedTrack(t, repo, track); updated.AcquisitionEvidence() != nil {
+		t.Errorf("evidence = %s, want none", updated.AcquisitionEvidence())
 	}
 }
 

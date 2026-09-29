@@ -2,6 +2,7 @@ package domain
 
 import (
 	"altune/go-api/internal/shared"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -100,6 +101,9 @@ type Track struct {
 	AcquisitionProvenance *string
 	AudioSourceURL        *string
 	RejectedSourceKeys    []string
+
+	ConfidenceScore *float64
+	EvidenceJSON    json.RawMessage
 
 	AcquisitionStartedAt *time.Time
 
@@ -291,6 +295,29 @@ func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
 	}
 	value := string(p)
 	t.AcquisitionProvenance = &value
+}
+
+func (t *Track) SetAcquisitionConfidence(confidence float64, evidence json.RawMessage) error {
+	if math.IsNaN(confidence) || confidence < 0 || confidence > 1 {
+		return fmt.Errorf("acquisition confidence must be within [0, 1], got %v", confidence)
+	}
+	if len(evidence) > 0 && !json.Valid(evidence) {
+		return errors.New("acquisition evidence must be valid JSON")
+	}
+	t.ConfidenceScore = &confidence
+	t.EvidenceJSON = evidence
+	return nil
+}
+
+func (t *Track) AcquisitionConfidence() float64 {
+	if t.ConfidenceScore == nil {
+		return 0
+	}
+	return *t.ConfidenceScore
+}
+
+func (t *Track) AcquisitionEvidence() json.RawMessage {
+	return t.EvidenceJSON
 }
 
 func (t *Track) SetDuration(seconds float64) error {

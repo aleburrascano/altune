@@ -115,7 +115,7 @@ SQL
   for id in $ids; do
     db -x -v id="$id" <<'SQL'
 SELECT id, title, artist, album, duration_seconds, acquisition_status, failure_reason,
-       acquisition_provenance, audio_source_url, cardinality(rejected_source_keys) AS rejected_sources,
+       acquisition_provenance, acquisition_confidence, acquisition_evidence, audio_source_url, cardinality(rejected_source_keys) AS rejected_sources,
        added_at, acquisition_started_at, audio_ref IS NOT NULL AS has_audio
   FROM tracks WHERE id = :'id';
 SQL

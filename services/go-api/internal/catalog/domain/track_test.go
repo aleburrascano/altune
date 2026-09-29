@@ -2,6 +2,7 @@ package domain
 
 import (
 	"altune/go-api/internal/shared"
+	"encoding/json"
 	"errors"
 	"math"
 	"reflect"
@@ -529,6 +530,47 @@ func TestTrack_RevertToPending(t *testing.T) {
 	}
 	if track.FailureReason != nil {
 		t.Errorf("FailureReason should be nil after RevertToPending, got %q", *track.FailureReason)
+	}
+}
+
+func TestTrack_SetAcquisitionConfidence(t *testing.T) {
+	tests := []struct {
+		name       string
+		confidence float64
+		evidence   string
+		wantErr    bool
+	}{
+		{"zero", 0, `{"verdict":"hard"}`, false},
+		{"one", 1, `{"verdict":"hard"}`, false},
+		{"middle without evidence", 0.5, "", false},
+		{"above one", 1.01, `{}`, true},
+		{"below zero", -0.01, `{}`, true},
+		{"NaN", math.NaN(), `{}`, true},
+		{"malformed evidence", 0.5, `{"verdict":`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			track, err := NewTrack(shared.NewUserId(uuid.New()), "Song", "Artist", "Album")
+			if err != nil {
+				t.Fatalf("NewTrack: %v", err)
+			}
+			err = track.SetAcquisitionConfidence(tt.confidence, json.RawMessage(tt.evidence))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				if track.ConfidenceScore != nil || track.EvidenceJSON != nil {
+					t.Errorf("rejected call mutated the track: %v %s", track.ConfidenceScore, track.EvidenceJSON)
+				}
+				return
+			}
+			if got := track.AcquisitionConfidence(); got != tt.confidence {
+				t.Errorf("AcquisitionConfidence() = %v, want %v", got, tt.confidence)
+			}
+			if got := string(track.AcquisitionEvidence()); got != tt.evidence {
+				t.Errorf("AcquisitionEvidence() = %q, want %q", got, tt.evidence)
+			}
+		})
 	}
 }
 

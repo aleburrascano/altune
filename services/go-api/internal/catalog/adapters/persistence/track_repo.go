@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,7 +18,7 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, version`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, version`
 
 var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
 
@@ -55,8 +56,9 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 			id, user_id, title, artist, album, duration_seconds,
 			added_at, artwork_url, acquisition_status, dedup_key,
 			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
-			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
+			acquisition_confidence, acquisition_evidence
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
 		ON CONFLICT DO NOTHING
 		RETURNING id`,
 		track.ID.UUID(), track.UserId.UUID(),
@@ -65,6 +67,7 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
+		track.ConfidenceScore, track.EvidenceJSON,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -196,13 +199,15 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, ex
 			duration_seconds=$3, acquisition_status=$4, audio_ref=$5,
 			failure_reason=$6, acquisition_provenance=$7, audio_source_url=$8,
 			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11,
+			acquisition_confidence=$12, acquisition_evidence=$13,
 			version = version + 1
-		WHERE id = $1 AND user_id = $2 AND version = $12
+		WHERE id = $1 AND user_id = $2 AND version = $14
 		RETURNING version`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.DurationSeconds, track.AcquisitionStatus.String(), track.AudioRef,
 		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
+		track.ConfidenceScore, track.EvidenceJSON,
 		expectedVersion,
 	).Scan(&newVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -405,6 +410,8 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		rejectedKeys  []string
 		audioVersion  *string
 		startedAt     *time.Time
+		confidence    *float64
+		evidence      json.RawMessage
 		version       int
 	)
 
@@ -412,7 +419,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion, &startedAt, &version,
+		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &version,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -454,6 +461,8 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			AudioSourceURL:        sourceURL,
 			RejectedSourceKeys:    rejectedKeys,
 			AcquisitionStartedAt:  startedAt,
+			ConfidenceScore:       confidence,
+			EvidenceJSON:          evidence,
 			Version:               version,
 		}, nil
 	}

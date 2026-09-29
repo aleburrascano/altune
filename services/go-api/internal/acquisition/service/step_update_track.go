@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -44,8 +45,24 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 		if ac.Selected != nil {
 			track.SetAudioSource(ac.Selected.URL)
 		}
-		return nil
+		return recordConfidence(ctx, track, ac)
 	})
+}
+
+func recordConfidence(ctx context.Context, track *domain.Track, ac *AcquisitionContext) error {
+	if ac.Selected == nil {
+		return nil
+	}
+	evidence := ac.collectEvidence()
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		return fmt.Errorf("marshal acquisition evidence: %w", err)
+	}
+	if err := track.SetAcquisitionConfidence(ac.Confidence, raw); err != nil {
+		slog.WarnContext(ctx, "acquisition.confidence_rejected",
+			"track_id", track.ID.String(), "confidence", ac.Confidence, "error", logSafeError(err))
+	}
+	return nil
 }
 
 func settleAudio(track *domain.Track, ac *AcquisitionContext) error {

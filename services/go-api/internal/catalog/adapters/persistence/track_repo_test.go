@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -957,6 +958,49 @@ func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 
 	if got := countTracksForUser(ctx, t, pool, userId); got != 1 {
 		t.Fatalf("row count for user = %d, want 1", got)
+	}
+}
+
+func TestPgxTrackRepo_Update_RoundTripsAcquisitionConfidenceAndEvidence(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	before, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || before == nil {
+		t.Fatalf("GetByID before: %v %v", before, err)
+	}
+	if before.ConfidenceScore != nil || before.EvidenceJSON != nil {
+		t.Fatalf("fresh track carries confidence %v evidence %s", before.ConfidenceScore, before.EvidenceJSON)
+	}
+
+	evidence := `{"verdict": "hard", "acoustid_score": 0.9, "source_title": "Song"}`
+	if err := track.SetAcquisitionConfidence(0.5, json.RawMessage(evidence)); err != nil {
+		t.Fatalf("SetAcquisitionConfidence: %v", err)
+	}
+	if err := repo.Update(ctx, track, track.Version); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID after: %v %v", got, err)
+	}
+	if got.AcquisitionConfidence() != 0.5 {
+		t.Errorf("confidence = %v, want 0.5", got.AcquisitionConfidence())
+	}
+	var stored map[string]any
+	if err := json.Unmarshal(got.AcquisitionEvidence(), &stored); err != nil {
+		t.Fatalf("evidence not JSON: %v (%q)", err, got.AcquisitionEvidence())
+	}
+	if stored["verdict"] != "hard" || stored["source_title"] != "Song" {
+		t.Errorf("evidence = %v", stored)
 	}
 }
 
