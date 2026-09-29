@@ -20,9 +20,20 @@ function renderBridge(pause: () => void, now: () => number): void {
   );
 }
 
+let foreground: ((state: AppStateStatus) => void) | undefined;
+
+beforeEach(() => {
+  foreground = undefined;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, l) => {
+    foreground = l as (state: AppStateStatus) => void;
+    return { remove: jest.fn() };
+  });
+});
+
 afterEach(() => {
   useSleepTimerStore.getState().cancel();
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('SleepTimerBridge under a controlled clock', () => {
@@ -57,35 +68,27 @@ describe('SleepTimerBridge under a controlled clock', () => {
 
   it('fires when the app returns to the foreground past the deadline', () => {
     jest.useFakeTimers();
-    let listener: ((state: AppStateStatus) => void) | undefined;
-    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, l) => {
-      listener = l as (state: AppStateStatus) => void;
-      return { remove: jest.fn() };
-    });
     let clock = T0;
     const pause = jest.fn();
 
     useSleepTimerStore.getState().start(30, clock, clock);
     renderBridge(pause, () => clock);
 
-    act(() => listener?.('active'));
+    act(() => foreground?.('active'));
     expect(pause).not.toHaveBeenCalled();
 
     clock = T0 + THIRTY_MIN_MS;
-    act(() => listener?.('background'));
+    act(() => foreground?.('background'));
     expect(pause).not.toHaveBeenCalled();
-    act(() => listener?.('active'));
+    act(() => foreground?.('active'));
 
     expect(pause).toHaveBeenCalledTimes(1);
     expect(useSleepTimerStore.getState().endsAt).toBeNull();
-    spy.mockRestore();
   });
 });
 
 describe('SleepTimerBridge across a system clock jump', () => {
   const DAY_MS = 24 * 60 * 60_000;
-
-  let foreground: ((state: AppStateStatus) => void) | undefined;
 
   function renderDefaultBridge(pause: () => void): void {
     const value = { pause } as unknown as PlaybackContextValue;
@@ -105,14 +108,6 @@ describe('SleepTimerBridge across a system clock jump', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(T0);
-    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, l) => {
-      foreground = l as (state: AppStateStatus) => void;
-      return { remove: jest.fn() };
-    });
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
   });
 
   it('does not fire early when the wall clock jumps forward', () => {
