@@ -463,11 +463,6 @@ func (s *Service) RankVariantsForEval(
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
 }
 
-func (s *Service) InspectSearch(ctx context.Context, query *domain.SearchQuery) []domain.SearchResult {
-	results, _ := s.InspectSearchWithStatuses(ctx, query)
-	return results
-}
-
 // InspectSearchWithStatuses runs the inspection fan-out and returns the ranked
 // results alongside each provider's status. The statuses let callers tell a
 // genuine zero-result query apart from a total upstream outage, which both

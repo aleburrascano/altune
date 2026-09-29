@@ -594,10 +594,7 @@ Per-provider notes worth carrying:
   discography — confirmed-by-MB albums kept, everything else **rejected** as
   same-name contamination. This MB-*veto* is the legacy path, still used by the
   detail single-provider fallback; the V2 discography core replaces it with
-  corroboration-based keeping (§5.2). `NameGroups` exposes the raw by-name provider
-  albums, but the V2 path passes `includeNameGroups=false` at both call sites — the
-  by-name completeness feed is a dormant seam, consumed today only by the
-  single-provider fallback/consensus path. The per-artist result is cached behind a
+  corroboration-based keeping (§5.2). The per-artist result is cached behind a
   pluggable name-keyed cache (Redis, 6h; a no-op default that recomputes correctly
   when unwired).
 

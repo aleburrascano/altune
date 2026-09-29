@@ -447,10 +447,10 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := svc.InspectSearch(context.Background(), q)
+	got, _ := svc.InspectSearchWithStatuses(context.Background(), q)
 
 	if p.calls != 2 {
-		t.Errorf("provider calls = %d, want 2 (InspectSearch must bypass the cache)", p.calls)
+		t.Errorf("provider calls = %d, want 2 (inspection must bypass the cache)", p.calls)
 	}
 	if len(got) != 1 {
 		t.Errorf("results = %d, want the limit=1 truncation", len(got))

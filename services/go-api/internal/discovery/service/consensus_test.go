@@ -358,31 +358,6 @@ func logRecordsFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any
 	return out
 }
 
-func TestConsensus_NameGroups(t *testing.T) {
-	svc := NewConsensusService([]ConsensusProvider{
-		{Name: "broken", Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
-			return nil, errors.New("down")
-		}},
-		consensusProvider("lastfm", "Album A", "Album B"),
-		{Name: "empty", Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
-			return nil, nil
-		}},
-		consensusProvider("itunes", "Album C"),
-	})
-
-	groups := svc.NameGroups(context.Background(), "Artist")
-
-	if len(groups) != 2 {
-		t.Fatalf("groups = %d, want 2 (erroring + empty providers dropped)", len(groups))
-	}
-	if len(groups[0]) != 2 || groups[0][0].Title != "Album A" {
-		t.Errorf("groups[0] = %v, want lastfm's two albums first (slice order)", titles(groups[0]))
-	}
-	if len(groups[1]) != 1 || groups[1][0].Title != "Album C" {
-		t.Errorf("groups[1] = %v, want itunes' album", titles(groups[1]))
-	}
-}
-
 func TestConsensus_RespondedCountsCleanEmptyButNotErrors(t *testing.T) {
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("lastfm", "Album A"),

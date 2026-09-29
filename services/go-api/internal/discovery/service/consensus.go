@@ -183,17 +183,6 @@ func consensusAlbumSortKey(a ConsensusAlbum) string {
 	return albumReleaseSortKey(a.Album)
 }
 
-func (s *ConsensusService) NameGroups(ctx context.Context, artistName string) [][]domain.SearchResult {
-	byProvider := s.fetchFromProviders(ctx, ctx, artistName)
-	groups := make([][]domain.SearchResult, 0, len(s.providers))
-	for _, p := range s.providers {
-		if albums := byProvider[p.Name].albums; len(albums) > 0 {
-			groups = append(groups, albums)
-		}
-	}
-	return groups
-}
-
 // providerFetch is one provider's consensus answer. responded is true only
 // when the fetcher returned without error, so a clean "no albums" (nil, nil)
 // still counts as a reachable provider while an error or panic does not.
