@@ -21,9 +21,8 @@ import {
   MAX_TRACKED_RECOVERIES,
   RECOVERY_ATTEMPTS_PER_TRACK,
   RECOVERY_COOLDOWN_BASE_MS,
-  playbackService,
-  resetPlaybackForSignOut,
-} from '../native/service';
+} from '../native/recoveryBudget';
+import { playbackService, resetPlaybackForSignOut } from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
 
