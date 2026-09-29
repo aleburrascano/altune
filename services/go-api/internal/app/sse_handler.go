@@ -218,6 +218,9 @@ func (h *sseHandler) stream(
 	defer heartbeat.Stop()
 
 	deliveredThroughID := replayed.deliveredThroughID
+	if deliveredThroughID == 0 {
+		deliveredThroughID = h.bus.LatestID(userId)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -237,6 +240,16 @@ func (h *sseHandler) stream(
 		case <-heartbeat.C:
 			if err := h.writeFrame(rc, w, ":ping\n\n"); err != nil {
 				return
+			}
+			latestID := h.bus.LatestID(userId)
+			if len(ch) == 0 && latestID > deliveredThroughID {
+				slog.Warn("sse.stream_gap_at_heartbeat",
+					"user_id", userId.String(), "delivered_through_id", deliveredThroughID,
+					"latest_id", latestID)
+				if err := h.writeResync(rc, w); err != nil {
+					return
+				}
+				deliveredThroughID = latestID
 			}
 		}
 	}

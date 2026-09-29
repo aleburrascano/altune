@@ -182,6 +182,17 @@ func (b *InProcessBus) Subscribe(userId shared.UserId) (<-chan Event, func()) {
 	return ch, cancel
 }
 
+func (b *InProcessBus) LatestID(userId shared.UserId) uint64 {
+	v, ok := b.users.Load(userId.String())
+	if !ok {
+		return 0
+	}
+	us := v.(*userState)
+	us.mu.RLock()
+	defer us.mu.RUnlock()
+	return us.nextID
+}
+
 func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {
 	key := userId.String()
 	v, ok := b.users.Load(key)

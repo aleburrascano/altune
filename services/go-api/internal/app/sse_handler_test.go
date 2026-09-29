@@ -880,3 +880,75 @@ func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
 		t.Fatal("stream did not end on shutdown signal")
 	}
 }
+
+func TestSSEHandler_DroppedTailEventResyncsAtNextHeartbeat(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
+	h := newSSEHandler(overflowing, 0)
+	h.heartbeat = 50 * time.Millisecond
+	srv := serveSSE(t, h, uid)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
+func TestSSEHandler_CaughtUpClientGetsNoResyncAtHeartbeat(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	srv := newTestSSEServer(t, real, uid, 20*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == ":ok" })
+	real.Publish(context.Background(), uid, "one", map[string]any{"k": "v"})
+	readUntil(t, br, func(l string) bool { return l == "event: one" })
+
+	pings := 0
+	for pings < 3 {
+		line := readUntil(t, br, func(l string) bool { return l == ":ping" || l == "event: resync" })
+		if strings.TrimRight(line, "\n") == "event: resync" {
+			t.Fatal("caught-up client received resync")
+		}
+		pings++
+	}
+}
+
+func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	for i := 0; i < 5; i++ {
+		real.Publish(context.Background(), uid, "old", map[string]any{"i": i})
+	}
+	srv := newTestSSEServer(t, real, uid, 20*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == ":ok" })
+
+	pings := 0
+	for pings < 3 {
+		line := readUntil(t, br, func(l string) bool { return l == ":ping" || l == "event: resync" })
+		if strings.TrimRight(line, "\n") == "event: resync" {
+			t.Fatal("fresh connect with prior history received resync")
+		}
+		pings++
+	}
+}

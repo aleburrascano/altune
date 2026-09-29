@@ -49,4 +49,5 @@ type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
 	Replay(userId shared.UserId, afterID uint64) []Event
 	HighestIssuedID() uint64
+	LatestID(userId shared.UserId) uint64
 }

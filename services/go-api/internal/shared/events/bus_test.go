@@ -194,3 +194,20 @@ func TestEvictIdleUsers_ConcurrentSubscribeIsNotOrphaned(t *testing.T) {
 		t.Fatalf("subscriber registered during eviction was orphaned: no event delivered")
 	}
 }
+
+func TestLatestID_TracksLastPublishedIDEvenWhenSubscriberDropped(t *testing.T) {
+	bus := NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	if got := bus.LatestID(uid); got != 0 {
+		t.Fatalf("LatestID for unknown user = %d, want 0", got)
+	}
+	_, cancel := bus.Subscribe(uid)
+	defer cancel()
+	for i := 0; i < subscriberChanSize+4; i++ {
+		bus.Publish(context.Background(), uid, "e", nil)
+	}
+	replayed := bus.Replay(uid, 0)
+	if want := replayed[len(replayed)-1].ID; bus.LatestID(uid) != want {
+		t.Fatalf("LatestID = %d, want %d", bus.LatestID(uid), want)
+	}
+}
