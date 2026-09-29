@@ -2204,3 +2204,59 @@ func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testi
 		t.Errorf("after = %d skips, verified %v, want 2 and true", after.VerifySkipped, after.Verification.FingerprintVerified)
 	}
 }
+
+type releaseRecord struct {
+	fence       int
+	availableAt time.Time
+}
+
+type releaseRecordingQueue struct {
+	*memJobQueue
+	releases chan releaseRecord
+}
+
+func (q *releaseRecordingQueue) Release(ctx context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error {
+	q.releases <- releaseRecord{fence: fence, availableAt: availableAt}
+	return q.memJobQueue.Release(ctx, trackID, fence, availableAt)
+}
+
+func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsTheTrackPending(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := newPendingTrack(t, userId, repo)
+	searcher := &fakeAudioSearcher{searchErr: &acqports.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
+	pub := newRecordingPublisher()
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
+	wake := make(chan struct{}, 1)
+	queue := &releaseRecordingQueue{memJobQueue: newMemJobQueue(wake), releases: make(chan releaseRecord, 1)}
+	queue.rememberUser(track.ID, userId)
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
+		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	before := time.Now()
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	var released releaseRecord
+	select {
+	case released = <-queue.releases:
+	case <-time.After(5 * time.Second):
+		t.Fatal("job was never released for retry")
+	}
+	if released.fence != 1 {
+		t.Errorf("released fence = %d, want 1", released.fence)
+	}
+	if wait := released.availableAt.Sub(before); wait < retryBackoff(1) || wait > retryBackoff(1)+5*time.Second {
+		t.Errorf("released availableAt is %v after scheduling, want about %v", wait, retryBackoff(1))
+	}
+	stored := repo.tracks[track.ID.String()+":"+userId.String()]
+	if stored.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("status = %v, want %v", stored.AcquisitionStatus, domain.AcquisitionPending)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
+	}
+}

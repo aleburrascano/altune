@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -986,5 +987,74 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, otherURL)
+	}
+}
+
+func transientSearchFailure() *fakeAudioSearcher {
+	return &fakeAudioSearcher{searchErr: &ports.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
+}
+
+func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (*domain.Track, *recordingPublisher, error) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	pub := newRecordingPublisher()
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
+	ctx := withJobAttempt(withSchedulerOwnedJobContext(context.Background()), attempt)
+
+	execErr := svc.Execute(ctx, userId, track.ID)
+
+	return repo.tracks[track.ID.String()+":"+userId.String()], pub, execErr
+}
+
+func TestExecute_TransientFailureBelowTheAttemptCap_ReturnsRetryableAndLeavesTheTrackPending(t *testing.T) {
+	for attempt := 1; attempt < maxAcquisitionAttempts; attempt++ {
+		stored, pub, execErr := executeOnAttempt(t, transientSearchFailure(), attempt)
+
+		if !errors.Is(execErr, ErrAcquisitionRetryable) {
+			t.Errorf("attempt %d: err = %v, want ErrAcquisitionRetryable", attempt, execErr)
+		}
+		if stored.AcquisitionStatus != domain.AcquisitionPending {
+			t.Errorf("attempt %d: status = %v, want pending", attempt, stored.AcquisitionStatus)
+		}
+		if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+			t.Errorf("attempt %d: failed publishes = %d, want 0", attempt, got)
+		}
+	}
+}
+
+func TestExecute_TransientFailureOnTheLastAttempt_SettlesFailedAsSourceUnavailable(t *testing.T) {
+	stored, pub, execErr := executeOnAttempt(t, transientSearchFailure(), maxAcquisitionAttempts)
+
+	if errors.Is(execErr, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want a terminal failure", execErr)
+	}
+	if stored.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Fatalf("status = %v, want failed", stored.AcquisitionStatus)
+	}
+	if got := deref(stored.FailureReason); got != string(domain.FailureSourceUnavailable) {
+		t.Errorf("failure reason = %q, want %q", got, domain.FailureSourceUnavailable)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
+		t.Errorf("failed publishes = %d, want 1", got)
+	}
+}
+
+func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *testing.T) {
+	stored, _, execErr := executeOnAttempt(t, &fakeAudioSearcher{}, 1)
+
+	if errors.Is(execErr, ErrAcquisitionRetryable) {
+		t.Errorf("err = %v, want a terminal failure", execErr)
+	}
+	if stored.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Fatalf("status = %v, want failed", stored.AcquisitionStatus)
+	}
+	if got := deref(stored.FailureReason); !strings.HasPrefix(got, string(domain.FailureNoMatchFound)) {
+		t.Errorf("failure reason = %q, want prefix %q", got, domain.FailureNoMatchFound)
 	}
 }

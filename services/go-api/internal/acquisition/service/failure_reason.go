@@ -6,7 +6,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
+
+const maxAcquisitionAttempts = 3
+
+var ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")
+
+func retryBackoff(attempts int) time.Duration {
+	return 30 * time.Second << (2 * (max(attempts, 1) - 1))
+}
+
+func isTransientFailure(err error) bool {
+	return ports.IsSourceUnavailable(err)
+}
 
 func failureReason(err error) string {
 	return string(failureCode(err))

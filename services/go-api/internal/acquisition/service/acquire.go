@@ -104,6 +104,17 @@ func withSchedulerOwnedJobContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, schedulerOwnedJobContextKey{}, true)
 }
 
+type jobAttemptContextKey struct{}
+
+func withJobAttempt(ctx context.Context, attempt int) context.Context {
+	return context.WithValue(ctx, jobAttemptContextKey{}, attempt)
+}
+
+func jobAttemptFrom(ctx context.Context) int {
+	attempt, _ := ctx.Value(jobAttemptContextKey{}).(int)
+	return attempt
+}
+
 func schedulerCancelledJobContext(ctx context.Context) bool {
 	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
 	return ownedByScheduler && ctx.Err() != nil
@@ -129,6 +140,9 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		if schedulerCancelledJobContext(jobCtx) {
 			return s.reportSchedulerCancelledWithoutMarkingFailed(ctx, userId, trackId, err)
+		}
+		if willRetry(jobCtx, err) {
+			return s.reportRetryableFailure(ctx, userId, trackId, err)
 		}
 		return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
 	}
@@ -274,6 +288,20 @@ func (s *AcquireTrackAudioService) reportSchedulerCancelledWithoutMarkingFailed(
 		"error", logSafeError(err),
 	)
 	return err
+}
+
+func willRetry(jobCtx context.Context, err error) bool {
+	attempt := jobAttemptFrom(jobCtx)
+	return attempt > 0 && attempt < maxAcquisitionAttempts && isTransientFailure(err)
+}
+
+func (s *AcquireTrackAudioService) reportRetryableFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error) error {
+	slog.WarnContext(ctx, "track_acquisition_retryable",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"error", logSafeError(err),
+	)
+	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
 }
 
 func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {

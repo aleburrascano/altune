@@ -377,17 +377,17 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	key := job.TrackID.String()
 	run := s.acquisitionRunFor(job.Kind)
 
-	jobCtx, cancelJob := s.jobContextFor(key)
+	jobCtx, cancelJob := s.jobContextFor(key, job.Attempts)
 	defer cancelJob()
 
 	heartbeatDone := make(chan struct{})
 	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)
 
 	reportedCtx := s.startClaimedJob(jobCtx, key, job.UserID)
-	s.execClaimedJob(reportedCtx, key, run, job)
+	jobErr := s.execClaimedJob(reportedCtx, key, run, job)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
-	s.finishJob(job)
+	s.finishJob(job, jobErr)
 }
 
 func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, userId shared.UserId) context.Context {
@@ -412,23 +412,25 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 	return s.svc.Execute
 }
 
-func (s *BackgroundAcquisitionScheduler) jobContextFor(key string) (context.Context, context.CancelFunc) {
+func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, attempt int) (context.Context, context.CancelFunc) {
 	jobCtx, cancelJob := context.WithCancel(s.baseCtx)
-	jobCtx = withSchedulerOwnedJobContext(jobCtx)
+	jobCtx = withJobAttempt(withSchedulerOwnedJobContext(jobCtx), attempt)
 	if corrID, ok := s.corrIDs.LoadAndDelete(key); ok {
 		jobCtx = logging.WithCorrelationID(jobCtx, corrID.(string))
 	}
 	return jobCtx, cancelJob
 }
 
-func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) {
+func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.logJobPanic(ctx, key, r)
+			err = nil
 		}
 	}()
-	err := run(ctx, job.UserID, job.TrackID)
+	err = run(ctx, job.UserID, job.TrackID)
 	s.completeClaimedJob(ctx, key, err)
+	return err
 }
 
 func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
@@ -509,11 +511,17 @@ func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSucces
 	return true
 }
 
-func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job) {
+func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) {
 	defer s.releasePendingWG(job.TrackID)
 
 	if s.baseCtx.Err() != nil {
 		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, time.Now())
+		s.logQueueOutcome("release", job.TrackID, err)
+		return
+	}
+	if errors.Is(jobErr, ErrAcquisitionRetryable) {
+		availableAt := time.Now().Add(retryBackoff(job.Attempts))
+		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, availableAt)
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
