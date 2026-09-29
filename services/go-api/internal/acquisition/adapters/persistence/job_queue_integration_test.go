@@ -414,3 +414,105 @@ func TestPgxJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
 	}
 }
+
+func insertReadyTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
+	t.Helper()
+	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status, audio_ref) VALUES ($1, $2, $3, $4, $5, $6, 'ready', 'audio/old.mp3')`,
+		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
+	if err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+	})
+	return track
+}
+
+func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) string {
+	t.Helper()
+	var status string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT acquisition_status FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&status); err != nil {
+		t.Fatalf("select status: %v", err)
+	}
+	return status
+}
+
+func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+
+	track := insertReadyTrack(t, pool)
+
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("Enqueue = %v, want nil", err)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
+		t.Fatalf("status after Enqueue = %q, want ready so the old audio keeps streaming", got)
+	}
+
+	job, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v, want the replace job", err)
+	}
+	if job.TrackID != track.ID || job.Kind != ports.JobKindReplace {
+		t.Fatalf("Claim = %+v, want a replace job for %s", job, track.ID)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
+		t.Errorf("status when claimed = %q, want ready", got)
+	}
+	if err := queue.Heartbeat(ctx, track.ID, job.Attempts, time.Minute); err != nil {
+		t.Errorf("Heartbeat on a ready track's replace job = %v, want nil", err)
+	}
+
+	if err := queue.Settle(ctx, track.ID, job.Attempts); err != nil {
+		t.Fatalf("Settle = %v", err)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
+		t.Errorf("status after a failed replace settles = %q, want ready", got)
+	}
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+		t.Errorf("Claim after Settle = %v, want ErrNoJobAvailable", err)
+	}
+}
+
+func TestPgxJobQueue_EnqueueOfAcquireOnAReadyTrackStillMarksPending(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+
+	track := insertReadyTrack(t, pool)
+
+	if err := queue.Enqueue(context.Background(), track.ID, ports.JobKindAcquire, time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("Enqueue = %v, want nil", err)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
+		t.Errorf("status = %q, want pending", got)
+	}
+}
+
+func TestPgxJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+
+	track := insertReadyTrack(t, pool)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	if _, err := queue.Claim(ctx, time.Minute); err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, time.Now()); !errors.Is(err, ports.ErrJobKindConflict) {
+		t.Errorf("Enqueue of another kind while a replace is leased = %v, want ErrJobKindConflict", err)
+	}
+}

@@ -29,16 +29,20 @@ func NewPgxJobQueue(pool *pgxpool.Pool) *PgxJobQueue {
 
 const enqueueJobSQL = `
 UPDATE tracks
-SET acquisition_status = 'pending',
+SET acquisition_status = CASE
+		WHEN $2 = 'replace' AND acquisition_status = 'ready' THEN acquisition_status
+		ELSE 'pending'
+	END,
 	acquisition_job_kind = $2,
 	acquisition_available_at = $3,
 	acquisition_lease_until = CASE
-		WHEN acquisition_status = 'pending' AND acquisition_lease_until >= now() THEN acquisition_lease_until
+		WHEN (acquisition_status = 'pending' OR acquisition_available_at IS NOT NULL)
+			AND acquisition_lease_until >= now() THEN acquisition_lease_until
 	END,
 	failure_reason = ''
 WHERE id = $1
 	AND (
-		acquisition_status <> 'pending'
+		(acquisition_status <> 'pending' AND acquisition_available_at IS NULL)
 		OR acquisition_lease_until IS NULL
 		OR acquisition_lease_until < now()
 		OR acquisition_job_kind = $2
@@ -83,13 +87,13 @@ const claimJobSQL = `
 WITH candidate AS (
 	SELECT t.id
 	FROM tracks t
-	WHERE t.acquisition_status = 'pending'
-		AND t.acquisition_available_at <= now()
+	WHERE t.acquisition_available_at <= now()
+		AND (t.acquisition_status = 'pending' OR t.acquisition_job_kind = 'replace')
 		AND (t.acquisition_lease_until IS NULL OR t.acquisition_lease_until < now())
 	ORDER BY (
 			SELECT count(*) FROM tracks u
 			WHERE u.user_id = t.user_id
-				AND u.acquisition_status = 'pending'
+				AND u.acquisition_available_at IS NOT NULL
 				AND u.acquisition_lease_until >= now()
 		), t.acquisition_available_at
 	FOR UPDATE OF t SKIP LOCKED
@@ -137,7 +141,7 @@ func scanTrackClaim(row pgx.Row, trackID *domain.TrackId, userID *shared.UserId,
 const heartbeatJobSQL = `
 UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $3)
-WHERE id = $1 AND acquisition_attempts = $2 AND acquisition_status = 'pending' AND acquisition_lease_until >= now()`
+WHERE id = $1 AND acquisition_attempts = $2 AND acquisition_available_at IS NOT NULL AND acquisition_lease_until >= now()`
 
 func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID domain.TrackId, fence int, lease time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
