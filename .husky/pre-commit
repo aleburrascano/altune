@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' | grep -Ev '^(services/go-api/(deploy/)?)?\.env(\..*)?\.example$' || true)"
+SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' | awk '!/(^|\/)\.env(\.[^\/]*)?\.example$/ || /(^|\/)secrets\//' || true)"
 if [ -n "$SENSITIVE" ]; then
   echo "❌ pre-commit: refusing to commit sensitive files:"
   echo "$SENSITIVE"
