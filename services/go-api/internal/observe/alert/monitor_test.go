@@ -386,3 +386,23 @@ func TestMonitor_SignalPageLogsFiredWithoutBody(t *testing.T) {
 		t.Fatalf("alert body leaked into log: %s", out)
 	}
 }
+
+func TestMonitor_LostLeadershipRepagesAnIncidentOnRegain(t *testing.T) {
+	firing := true
+	n := &stubNotifier{}
+	leads := true
+	m := newTestMonitor(n, signalCond("dep", &firing)).WithLeadership(
+		func(ctx context.Context) (context.Context, context.CancelFunc, bool) {
+			return ctx, func() {}, leads
+		})
+
+	m.tick(context.Background())
+	leads = false
+	m.tick(context.Background())
+	leads = true
+	m.tick(context.Background())
+
+	if n.calls != 2 {
+		t.Fatalf("notify calls = %d, want 2 (fire, lose term, regain, still firing)", n.calls)
+	}
+}

@@ -150,6 +150,7 @@ func (m *Monitor) tick(ctx context.Context) {
 	}
 	termCtx, release, ok := m.leadership(ctx)
 	if !ok {
+		clear(m.firing)
 		return
 	}
 	defer release()
