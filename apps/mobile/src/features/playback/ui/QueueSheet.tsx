@@ -15,7 +15,7 @@ import { useTheme } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
 import { queueMenuOptions } from '../queueMenuOptions';
-import { formatTime, type QueueItem } from '../queueItem';
+import { formatSeconds, type QueueItem } from '../queueItem';
 import { QueueRow } from './QueueRow';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
 
@@ -124,7 +124,7 @@ export function QueueSheet(): ReactElement {
               </Text>
             </View>
             <Text variant="caption" tone="tertiary">
-              {formatTime(currentTrackData.durationSeconds)}
+              {formatSeconds(currentTrackData.durationSeconds)}
             </Text>
           </View>
         </View>

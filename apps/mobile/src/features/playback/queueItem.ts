@@ -10,7 +10,7 @@ export type QueueItem = {
   featuredArtists: readonly FeaturedArtist[] | undefined;
 };
 
-export function formatTime(sec: number | undefined): string {
+export function formatSeconds(sec: number | undefined): string {
   if (sec == null || sec === 0) return '';
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);

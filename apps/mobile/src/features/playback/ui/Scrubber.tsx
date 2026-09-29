@@ -12,7 +12,7 @@ interface ScrubberProps {
   onSeek: (positionMs: number) => void;
 }
 
-function formatTime(ms: number): string {
+function formatMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '0:00';
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -40,7 +40,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         style={styles.trackOuter}
         onLayout={onLayout}
         accessibilityRole="adjustable"
-        accessibilityLabel={`Playback position: ${formatTime(labelMs)} of ${formatTime(durationMs)}`}
+        accessibilityLabel={`Playback position: ${formatMs(labelMs)} of ${formatMs(durationMs)}`}
         accessibilityValue={{
           min: 0,
           max: 100,
@@ -67,10 +67,10 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
       </View>
       <View style={styles.times}>
         <Text variant="caption" tone="secondary">
-          {formatTime(durationMs > 0 ? labelMs : positionMs)}
+          {formatMs(durationMs > 0 ? labelMs : positionMs)}
         </Text>
         <Text variant="caption" tone="secondary">
-          {durationMs > 0 ? `-${formatTime(Math.max(0, durationMs - labelMs))}` : ''}
+          {durationMs > 0 ? `-${formatMs(Math.max(0, durationMs - labelMs))}` : ''}
         </Text>
       </View>
     </View>

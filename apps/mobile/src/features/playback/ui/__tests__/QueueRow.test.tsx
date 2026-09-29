@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { formatTime, type QueueItem } from '../../queueItem';
+import { formatSeconds, type QueueItem } from '../../queueItem';
 import { QueueRow } from '../QueueRow';
 
 jest.mock('react-native-reanimated', () => ({
@@ -50,13 +50,13 @@ describe('QueueRow', () => {
   });
 });
 
-describe('formatTime', () => {
+describe('formatSeconds', () => {
   it('renders nothing for missing or zero durations', () => {
-    expect(formatTime(undefined)).toBe('');
-    expect(formatTime(0)).toBe('');
+    expect(formatSeconds(undefined)).toBe('');
+    expect(formatSeconds(0)).toBe('');
   });
 
   it('pads seconds and floors fractions', () => {
-    expect(formatTime(61.9)).toBe('1:01');
+    expect(formatSeconds(61.9)).toBe('1:01');
   });
 });

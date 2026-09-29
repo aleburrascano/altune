@@ -12,7 +12,7 @@ import type { Theme } from '@shared/ui/theme';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { formatTime, type QueueItem } from '../queueItem';
+import { formatSeconds, type QueueItem } from '../queueItem';
 
 function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>, theme: Theme) {
   const style = useAnimatedStyle(() => ({
@@ -59,7 +59,7 @@ export function QueueRow({ item, onSkip, onRemove, onOpenMenu }: QueueRowProps):
           </Text>
         </View>
         <Text variant="caption" tone="tertiary">
-          {formatTime(item.durationSeconds)}
+          {formatSeconds(item.durationSeconds)}
         </Text>
         <IconButton
           icon={EllipsisVertical}
