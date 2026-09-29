@@ -175,6 +175,7 @@ type AcquisitionContext struct {
 	Ranked           []ports.AudioCandidate
 	Selected         *ports.AudioCandidate
 	TempPath         string
+	TempDir          string
 	AudioRef         string
 	ProbedDuration   float64
 	DurationVerified bool

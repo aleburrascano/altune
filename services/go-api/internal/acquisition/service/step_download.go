@@ -185,6 +185,7 @@ func (a attempt) applyTo(ac *AcquisitionContext) {
 	sel := a.candidate
 	ac.Selected = &sel
 	ac.TempPath = a.filePath
+	ac.TempDir = a.tmpDir
 	ac.DurationVerified = a.verified.duration
 	ac.IdentityVerified = a.verified.identity
 	ac.ProbedDuration = a.verified.probed
@@ -555,7 +556,9 @@ func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downlo
 }
 
 func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {
-	if ac.TempPath != "" {
+	if ac.TempDir != "" {
+		os.RemoveAll(ac.TempDir)
+	} else if ac.TempPath != "" {
 		os.RemoveAll(ac.TempPath)
 	}
 	return nil

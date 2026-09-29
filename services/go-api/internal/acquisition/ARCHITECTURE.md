@@ -199,7 +199,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   sourcekey.go           sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
   logredact.go           logSafeError / logSafeText — cookie paths and host filesystem layout out of log lines
-  cleanup.go             CleanupTemp — removes the parent of TempPath
+  cleanup.go             CleanupTemp — removes TempDir (the MkdirTemp root)
   tempreap.go            SweepStaleTempDirs — startup reap of altune-acquire-* dirs no live job can still own
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
   joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
@@ -378,7 +378,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - One search engine failing never fails the search.
 - Feature extraction reads the raw title; "with" is never a feature separator.
 - No raw error chain reaches the Track row or the wire — `failureReason` first.
-- `CleanupTemp` removes the parent of `TempPath`, never `TempPath` itself.
+- `CleanupTemp` removes `TempDir` (the `MkdirTemp` root), falling back to the parent of `TempPath` when only `TempPath` is set; never `TempPath` itself.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.
 - Acquisition never imports catalog's adapters, observe, or the composition root.

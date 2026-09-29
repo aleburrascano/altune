@@ -1289,3 +1289,34 @@ func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing
 		t.Errorf("throttle logged as preview_fallback: %s", logs.String())
 	}
 }
+
+type nestedLayoutFetcher struct{}
+
+func (nestedLayoutFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (string, error) {
+	dir := filepath.Join(outDir, "Artist", "Album")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "track.flac")
+	return path, os.WriteFile(path, []byte("audio-bytes"), 0o644)
+}
+
+func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T) {
+	step := NewDownloadStep(nestedLayoutFetcher{})
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	root := ac.TempDir
+	if !strings.HasPrefix(filepath.Base(root), tempDirPrefix) || filepath.Dir(root) != os.TempDir() {
+		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, tempDirPrefix)
+	}
+
+	if err := step.Rollback(context.Background(), ac); err != nil {
+		t.Fatalf("Rollback error: %v", err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Errorf("temp root %q should be gone after rollback, stat err = %v", root, err)
+	}
+}
