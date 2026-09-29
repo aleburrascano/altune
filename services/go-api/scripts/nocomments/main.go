@@ -178,19 +178,45 @@ func reportTarget(t target, stdout io.Writer) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	spans, err := t.kind.comments(src)
+	lines, err := reportedLines(t.kind, src)
 	if err != nil {
 		return 0, err
 	}
 	hits := 0
-	for _, s := range spans {
-		if t.added != nil && !t.added[s.line] {
+	for _, line := range lines {
+		if t.added != nil && !t.added[line] {
 			continue
 		}
-		_, _ = fmt.Fprintf(stdout, "%s:%d\n", t.display, s.line)
+		_, _ = fmt.Fprintf(stdout, "%s:%d\n", t.display, line)
 		hits++
 	}
 	return hits, nil
+}
+
+func reportedLines(k kind, src []byte) ([]int, error) {
+	spans, err := k.comments(src)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[int]bool{}
+	for _, s := range spans {
+		seen[s.line] = true
+	}
+	if k.leftovers != nil {
+		extra, err := k.leftovers(src)
+		if err != nil {
+			return nil, err
+		}
+		for _, line := range extra {
+			seen[line] = true
+		}
+	}
+	lines := make([]int, 0, len(seen))
+	for line := range seen {
+		lines = append(lines, line)
+	}
+	sort.Ints(lines)
+	return lines, nil
 }
 
 var hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)

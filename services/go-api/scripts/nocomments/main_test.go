@@ -78,6 +78,54 @@ func TestRunDiffFlagsOnlyLinesAddedSinceBase(t *testing.T) {
 	}
 }
 
+func TestRunCheckListsLeftoverAndStripLeavesItByteIdentical(t *testing.T) {
+	dir := t.TempDir()
+	wfDir := filepath.Join(dir, ".github", "workflows")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	body := "# top\nsteps:\n  - run: |\n      echo a # tail\n"
+	writeFile(t, wfDir, "ci.yml", body)
+
+	var checkOut strings.Builder
+	if code := run([]string{"check", wfDir}, &checkOut); code != 1 {
+		t.Fatalf("check exit = %d, want 1:\n%s", code, checkOut.String())
+	}
+	path := filepath.Join(wfDir, "ci.yml")
+	for _, want := range []string{path + ":1", path + ":4"} {
+		if !strings.Contains(checkOut.String(), want) {
+			t.Errorf("check output missing %q:\n%s", want, checkOut.String())
+		}
+	}
+
+	var stripOut strings.Builder
+	if code := run([]string{"strip", wfDir}, &stripOut); code != 0 {
+		t.Fatalf("strip exit = %d:\n%s", code, stripOut.String())
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != "steps:\n  - run: |\n      echo a # tail\n" {
+		t.Errorf("stripped file = %q", got)
+	}
+	if !strings.Contains(stripOut.String(), "stripped 1 comments in 1 files") {
+		t.Errorf("strip counted leftover:\n%s", stripOut.String())
+	}
+}
+
+func TestRunStripExitsNonZeroNamingPathOnUnsafeYaml(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.yml", "a: 1\rb: 2\n")
+
+	var out strings.Builder
+	code := run([]string{"strip", dir}, &out)
+
+	if code == 0 || !strings.Contains(out.String(), filepath.Join(dir, "a.yml")+": lone CR") {
+		t.Fatalf("exit = %d, output:\n%s", code, out.String())
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {

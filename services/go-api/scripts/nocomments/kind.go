@@ -5,6 +5,8 @@ type kind struct {
 	match    func(path string, head []byte) bool
 	comments func(src []byte) ([]span, error)
 	same     func(before, after []byte) error
+
+	leftovers func(src []byte) ([]int, error)
 }
 
 type span struct{ start, end, line int }
