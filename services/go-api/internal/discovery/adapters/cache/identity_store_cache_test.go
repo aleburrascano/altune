@@ -47,20 +47,29 @@ func TestRedisIdentityStore_Invalidate_SurfacesDurableError(t *testing.T) {
 	}
 }
 
-func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
+func TestRedisIdentityStore_PersistBridges_DropsCachedEntries(t *testing.T) {
 	client := testRedisClient(t)
-	inner := &recordingIdentityStore{}
-	store := NewRedisIdentityStore(inner, client)
-	ctx := context.Background()
-
 	mbid := fmt.Sprintf("qa-idmbid-%s", t.Name())
 	extDeezer := fmt.Sprintf("dz-%s", t.Name())
 	extSpotify := fmt.Sprintf("sp-%s", t.Name())
 	xref := map[string]string{"deezer": extDeezer, "spotify": extSpotify}
-	cleanKeys(t, client,
-		identityKey(domain.ResultKindArtist, "deezer", extDeezer),
-		identityKey(domain.ResultKindArtist, "spotify", extSpotify),
-	)
+	inner := &recordingIdentityStore{mbid: mbid, xref: xref, found: true}
+	store := NewRedisIdentityStore(inner, client)
+	ctx := context.Background()
+	keys := map[string]string{
+		"deezer":  identityKey(domain.ResultKindArtist, "deezer", extDeezer),
+		"spotify": identityKey(domain.ResultKindArtist, "spotify", extSpotify),
+	}
+	cleanKeys(t, client, keys["deezer"], keys["spotify"])
+
+	for provider, extID := range xref {
+		if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, domain.ProviderKey(provider), extID); !ok {
+			t.Fatalf("precondition: lookup (%s,%s) must hit", provider, extID)
+		}
+	}
+	if inner.lookupCalls != 2 {
+		t.Fatalf("precondition: durable lookups = %d, want 2 (backfill)", inner.lookupCalls)
+	}
 
 	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, xref); err != nil {
 		t.Fatalf("PersistBridges: %v", err)
@@ -68,25 +77,23 @@ func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
 	if inner.persistCalls != 1 {
 		t.Fatalf("durable persist calls = %d, want 1 (durable first)", inner.persistCalls)
 	}
+	for provider, key := range keys {
+		if n, err := client.Exists(ctx, key).Result(); err != nil || n != 0 {
+			t.Errorf("Redis entry for %s survived persist (exists=%d, err=%v), want deleted", provider, n, err)
+		}
+	}
 
 	for provider, extID := range xref {
 		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, domain.ProviderKey(provider), extID)
 		if !ok || gotMBID != mbid {
-			t.Errorf("lookup (%s,%s) = (%q,%v), want warmed hit", provider, extID, gotMBID, ok)
+			t.Errorf("lookup (%s,%s) = (%q,%v), want durable hit", provider, extID, gotMBID, ok)
 		}
 		if gotXref["deezer"] != extDeezer || gotXref["spotify"] != extSpotify {
 			t.Errorf("lookup (%s,%s) xref = %v, want full bridge", provider, extID, gotXref)
 		}
 	}
-	if inner.lookupCalls != 0 {
-		t.Errorf("durable lookups = %d, want 0 (warmed cache must answer)", inner.lookupCalls)
-	}
-
-	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindAlbum, "deezer", extDeezer); ok {
-		t.Error("artist cache entry answered an album lookup, want kind-isolated miss")
-	}
-	if inner.lookupCalls != 1 {
-		t.Errorf("durable lookups after cross-kind lookup = %d, want 1", inner.lookupCalls)
+	if inner.lookupCalls != 4 {
+		t.Errorf("durable lookups = %d, want 4 (post-persist lookups refill from durable)", inner.lookupCalls)
 	}
 }
 
@@ -127,20 +134,22 @@ func TestRedisIdentityStore_Lookup_ReadThroughBackfill(t *testing.T) {
 func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.T) {
 	client := testRedisClient(t)
 	extID := fmt.Sprintf("dz-inval-%s", t.Name())
-	inner := &recordingIdentityStore{}
+	inner := &recordingIdentityStore{
+		mbid: "qa-mbid-inval", xref: map[string]string{"deezer": extID}, found: true,
+	}
 	store := NewRedisIdentityStore(inner, client)
 	ctx := context.Background()
 	key := identityKey(domain.ResultKindArtist, "deezer", extID)
 	cleanKeys(t, client, key)
 
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "qa-mbid-inval",
-		map[string]string{"deezer": extID}); err != nil {
-		t.Fatalf("PersistBridges: %v", err)
-	}
 	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", extID); !ok {
-		t.Fatal("precondition: warmed lookup must hit")
+		t.Fatal("precondition: lookup must hit")
+	}
+	if n, err := client.Exists(ctx, key).Result(); err != nil || n != 1 {
+		t.Fatalf("precondition: Redis entry must be backfilled (exists=%d, err=%v)", n, err)
 	}
 
+	inner.found = false
 	inner.invalidateErr = errors.New("pg down")
 	if err := store.Invalidate(ctx, domain.ResultKindArtist, "deezer", extID); err == nil {
 		t.Error("Invalidate swallowed the durable-store error")
@@ -193,5 +202,74 @@ func TestIdentityKey_ByteIdenticalAcrossProviderKey(t *testing.T) {
 		if got := identityKey(tt.kind, tt.provider, tt.externalID); got != tt.want {
 			t.Errorf("identityKey(%v, %q, %q) = %q, want %q", tt.kind, tt.provider, tt.externalID, got, tt.want)
 		}
+	}
+}
+
+type mergingIdentityStore struct {
+	mbid string
+	xref map[string]string
+}
+
+func (m *mergingIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, mbid string, xref map[string]string) error {
+	m.mbid = mbid
+	if m.xref == nil {
+		m.xref = map[string]string{}
+	}
+	for provider, id := range xref {
+		m.xref[provider] = id
+	}
+	return nil
+}
+
+func (m *mergingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
+	return m.mbid, m.xref, m.mbid != ""
+}
+
+func (m *mergingIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
+	return nil
+}
+
+func TestRedisIdentityStore_PersistBridges_NarrowerXrefKeepsMergedUnion(t *testing.T) {
+	client := testRedisClient(t)
+	store := NewRedisIdentityStore(&mergingIdentityStore{}, client)
+	ctx := context.Background()
+
+	mbid := fmt.Sprintf("qa-idmbid-%s", t.Name())
+	extDeezer := fmt.Sprintf("dz-%s", t.Name())
+	extSpotify := fmt.Sprintf("sp-%s", t.Name())
+	extITunes := fmt.Sprintf("it-%s", t.Name())
+	full := map[string]string{"deezer": extDeezer, "spotify": extSpotify, "itunes": extITunes}
+	cleanKeys(t, client,
+		identityKey(domain.ResultKindArtist, "deezer", extDeezer),
+		identityKey(domain.ResultKindArtist, "spotify", extSpotify),
+		identityKey(domain.ResultKindArtist, "itunes", extITunes),
+	)
+
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, full); err != nil {
+		t.Fatalf("PersistBridges full: %v", err)
+	}
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, map[string]string{"deezer": extDeezer}); err != nil {
+		t.Fatalf("PersistBridges subset: %v", err)
+	}
+
+	gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", extDeezer)
+	if !ok || gotMBID != mbid {
+		t.Fatalf("lookup = (%q,%v), want hit", gotMBID, ok)
+	}
+	if len(gotXref) != 3 || gotXref["spotify"] != extSpotify || gotXref["itunes"] != extITunes {
+		t.Errorf("xref = %v, want merged union of 3 providers", gotXref)
+	}
+}
+
+func TestRedisIdentityStore_PersistBridges_RedisDelFailureStillReturnsNil(t *testing.T) {
+	inner := &recordingIdentityStore{}
+	store := NewRedisIdentityStore(inner, unreachableRedisClient(t))
+
+	err := store.PersistBridges(context.Background(), domain.ResultKindArtist, "mbid-1", map[string]string{"deezer": "9"})
+	if err != nil {
+		t.Fatalf("PersistBridges = %v, want nil when Redis DEL fails", err)
+	}
+	if inner.persistCalls != 1 {
+		t.Errorf("durable PersistBridges calls = %d, want 1", inner.persistCalls)
 	}
 }

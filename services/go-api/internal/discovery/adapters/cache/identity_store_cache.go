@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
-	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -41,16 +40,11 @@ func (s *RedisIdentityStore) PersistBridges(
 	if s.disabled() || mbid == "" {
 		return nil
 	}
-	blob, err := json.Marshal(identityEntry{MBID: mbid, Xref: xref})
-	if err != nil {
-		slog.WarnContext(ctx, "identity.cache_warm_skipped", "kind", kind.String(), "error", err)
-		return nil
-	}
 	for provider, externalID := range xref {
 		if provider == "" || externalID == "" {
 			continue
 		}
-		if err := s.client.Set(ctx, identityKey(kind, domain.ProviderKey(provider), externalID), blob, identityTTL).Err(); err != nil {
+		if err := s.client.Del(ctx, identityKey(kind, domain.ProviderKey(provider), externalID)).Err(); err != nil {
 			slog.DebugContext(ctx, "identity.cache_warm_failed",
 				"kind", kind.String(), "provider", provider, "error", err)
 		}
