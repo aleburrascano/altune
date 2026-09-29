@@ -305,6 +305,13 @@ func (s *DownloadStep) verify(
 
 	if s.prober != nil {
 		if err := s.prober.ValidateDecodable(ctx, filePath); err != nil {
+			if ctx.Err() != nil {
+				return result, &downloadRejection{
+					stage:  RejectionDownload,
+					reason: "decode cancelled",
+					err:    withCancellation(ctx, fmt.Errorf("candidate %q decode cancelled: %w", candidate.URL, err)),
+				}
+			}
 			slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
 				"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 				"error", logSafeError(err))

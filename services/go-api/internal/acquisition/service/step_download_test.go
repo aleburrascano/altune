@@ -533,6 +533,56 @@ func TestDownloadStep_RejectsUndecodableAudio(t *testing.T) {
 	}
 }
 
+type cancellingProber struct{ cancel context.CancelFunc }
+
+func (p cancellingProber) ProbeDuration(_ context.Context, _ string) (float64, error) {
+	return 226, nil
+}
+
+func (p cancellingProber) ValidateDecodable(_ context.Context, _ string) error {
+	p.cancel()
+	return context.Canceled
+}
+
+func TestDownloadStep_DecodeCancelled_RecordsNoLastingRejection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadProber(cancellingProber{cancel: cancel}))
+	ac := &AcquisitionContext{
+		Track:  TrackRef{ID: "t1", Title: "X", Artist: "Y", Duration: 226},
+		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=abc", Duration: 226}},
+	}
+
+	_, err := step.Execute(ctx, ac, afterSelect{})
+
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute error = %v, want one wrapping context.Canceled", err)
+	}
+	if recs := lastingRejectionRecords(ac); len(recs) != 0 {
+		t.Errorf("lasting rejection records = %+v, want none for a cancelled decode", recs)
+	}
+}
+
+func TestDownloadStep_DecodeFailureWithLiveContext_RecordsUndecodable(t *testing.T) {
+	prober := &queueProber{
+		durations:  []float64{226},
+		decodeErrs: []error{errors.New("audio stream failed to decode")},
+	}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadProber(prober))
+	ac := &AcquisitionContext{
+		Track:  TrackRef{ID: "t1", Title: "X", Artist: "Y", Duration: 226},
+		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=abc", Duration: 226}},
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+		t.Fatal("expected an error when the only candidate is undecodable")
+	}
+	recs := lastingRejectionRecords(ac)
+	if len(recs) != 1 || recs[0].Reason != string(RejectionUndecodable) {
+		t.Errorf("lasting rejection records = %+v, want one undecodable", recs)
+	}
+}
+
 func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{
