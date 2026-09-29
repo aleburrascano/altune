@@ -10,9 +10,9 @@ import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/play
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { loadNativeQueue } from '../loadNativeTrack';
-import { withNativeQueue } from '../nativeQueueLock';
-import { activeNativeTrackId } from '../nativeTrack';
+import { loadNativeQueue } from './loadNativeTrack';
+import { withNativeQueue } from './nativeQueueLock';
+import { activeNativeTrackId } from './nativeTrack';
 import { reportLoadFailure } from '../playbackErrorStore';
 import {
   rebuildOnFirstWorkingRung,
@@ -21,7 +21,7 @@ import {
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
 import { redactedPlaybackFailure } from '../redactPlaybackError';
 
-import { useAppStateChange } from './useAppStateChange';
+import { useAppStateChange } from '../hooks/useAppStateChange';
 
 const SAVE_INTERVAL_MS = 15_000;
 

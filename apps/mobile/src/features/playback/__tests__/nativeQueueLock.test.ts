@@ -2,7 +2,7 @@ import {
   NATIVE_QUEUE_OP_TIMEOUT_MS,
   NativeQueueTimeoutError,
   withNativeQueue,
-} from '../nativeQueueLock';
+} from '../native/nativeQueueLock';
 
 function deferred<T>(): {
   promise: Promise<T>;

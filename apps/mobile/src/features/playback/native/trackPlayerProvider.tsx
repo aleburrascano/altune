@@ -15,9 +15,9 @@ import type {
 import {
   createNativePlaybackActions,
   ignoringNativeRejection,
-} from '../createNativePlaybackActions';
+} from './createNativePlaybackActions';
 import { derivePlaybackState } from '../derivePlaybackState';
-import { ensurePlayerSetup } from '../initPlayer';
+import { ensurePlayerSetup } from './initPlayer';
 import { usePlaybackErrorFor } from '../playbackErrorStore';
 import { usePlaybackPosition } from './usePlaybackPosition';
 import { usePlaybackSignals } from './usePlaybackSignals';

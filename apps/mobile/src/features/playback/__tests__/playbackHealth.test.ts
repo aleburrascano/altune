@@ -7,17 +7,17 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { prefetchNext } from '../audioPrefetch';
-import { reportQueueFailure } from '../createNativePlaybackActions';
-import { loadNativeQueue } from '../loadNativeTrack';
-import { forgetAllSwaps } from '../nativeTrackSwap';
+import { prefetchNext } from '../native/audioPrefetch';
+import { reportQueueFailure } from '../native/createNativePlaybackActions';
+import { loadNativeQueue } from '../native/loadNativeTrack';
+import { forgetAllSwaps } from '../native/nativeTrackSwap';
 import {
   PLAYBACK_HEALTH_BATCH,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
   recordPresignOutcome,
 } from '../playbackHealth';
-import { playbackService } from '../service';
+import { playbackService } from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
 

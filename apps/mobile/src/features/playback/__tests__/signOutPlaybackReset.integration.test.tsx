@@ -12,10 +12,10 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 
-import { prefetchNext } from '../audioPrefetch';
-import { TrackPlayerPlaybackProvider } from '../hooks/trackPlayerProvider';
-import { registerPlaybackService } from '../registerPlaybackService';
-import { playbackService } from '../service';
+import { prefetchNext } from '../native/audioPrefetch';
+import { TrackPlayerPlaybackProvider } from '../native/trackPlayerProvider';
+import { registerPlaybackService } from '../native/registerPlaybackService';
+import { playbackService } from '../native/service';
 
 import { libraryTrack } from './fixtures';
 

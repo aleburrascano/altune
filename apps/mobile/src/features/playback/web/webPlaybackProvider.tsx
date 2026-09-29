@@ -28,7 +28,7 @@ import {
   redactPlaybackErrorMessage,
   type RedactedPlaybackFailure,
 } from '../redactPlaybackError';
-import { useMediaSession } from './useMediaSession';
+import { useMediaSession } from '../hooks/useMediaSession';
 
 type AudioPhase = 'loading' | 'playing' | 'paused' | 'ended';
 

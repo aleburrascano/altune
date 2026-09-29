@@ -11,7 +11,7 @@ import {
   evictCached,
   extFromUrl,
   findCached,
-} from '../audioCache';
+} from '../native/audioCache';
 
 import { libraryTrack, previewTrack } from './fixtures';
 

@@ -15,7 +15,7 @@ import { setSignedInUser } from '@shared/session/signOutCleanup';
 import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
-} from '../createNativePlaybackActions';
+} from '../native/createNativePlaybackActions';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import {
   MAX_TRACKED_RECOVERIES,
@@ -23,7 +23,7 @@ import {
   RECOVERY_COOLDOWN_BASE_MS,
   playbackService,
   resetPlaybackForSignOut,
-} from '../service';
+} from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
 

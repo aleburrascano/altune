@@ -6,8 +6,8 @@ import { fetchAudioUrls } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { ignoringNativeRejection } from '../createNativePlaybackActions';
-import { repairActiveToStreaming } from '../nativeTrackSwap';
+import { ignoringNativeRejection } from '../native/createNativePlaybackActions';
+import { repairActiveToStreaming } from '../native/nativeTrackSwap';
 import { _resetPlaybackHealthForTest } from '../playbackHealth';
 import { reportingQueueFailure } from '../queueFailureReport';
 

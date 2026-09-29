@@ -12,10 +12,10 @@ import {
   repairActiveToStreaming,
   swapUpcomingToLocal,
   wasSwappedToLocal,
-} from '../nativeTrackSwap';
+} from '../native/nativeTrackSwap';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
-import { resetPlaybackForSignOut } from '../service';
+import { resetPlaybackForSignOut } from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
 

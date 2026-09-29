@@ -18,11 +18,11 @@ import {
   findCached,
 } from './audioCache';
 import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
-import { redactedPlaybackFailure } from './redactPlaybackError';
+import { redactedPlaybackFailure } from '../redactPlaybackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
-} from './playbackHealth';
+} from '../playbackHealth';
 
 const inflight = new Map<string, AbortController>();
 const invalidatedInflight = new Set<string>();

@@ -11,7 +11,7 @@ jest.mock('@supabase/supabase-js', () => ({
   },
 }));
 
-jest.mock('@features/playback/hooks/trackPlayerProvider', () => ({
+jest.mock('@features/playback/native/trackPlayerProvider', () => ({
   TrackPlayerPlaybackProvider: function TrackPlayerPlaybackProvider() {
     return null;
   },

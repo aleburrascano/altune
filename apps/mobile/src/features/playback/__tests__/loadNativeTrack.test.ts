@@ -15,12 +15,12 @@ import {
   loadNativeTrack,
   refreshUpcomingPresign,
   reorderUpcomingNative,
-} from '../loadNativeTrack';
+} from '../native/loadNativeTrack';
 import { claimLoad } from '../loadToken';
-import { forgetAllSwaps } from '../nativeTrackSwap';
+import { forgetAllSwaps } from '../native/nativeTrackSwap';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { NATIVE_QUEUE_WINDOW } from '../presignWindow';
-import { playbackService, resetPlaybackForSignOut } from '../service';
+import { playbackService, resetPlaybackForSignOut } from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
 

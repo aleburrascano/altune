@@ -4,7 +4,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/api-client/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
-import { WebPlaybackProvider } from '@features/playback/hooks/webPlaybackProvider';
+import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
 
 const { __http } = require('../../jest/doubles/fetch.js');
 

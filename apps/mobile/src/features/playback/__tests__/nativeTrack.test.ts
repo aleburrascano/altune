@@ -5,7 +5,7 @@ import { ContractError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
-import { activeNativeTrackId, toNativeTrack } from '../nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from '../native/nativeTrack';
 
 import { libraryTrack, previewTrack } from './fixtures';
 

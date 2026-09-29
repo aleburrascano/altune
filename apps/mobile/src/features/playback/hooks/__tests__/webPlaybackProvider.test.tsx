@@ -12,7 +12,7 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { libraryTrack, previewTrack } from '../../__tests__/fixtures';
-import { WebPlaybackProvider } from '../webPlaybackProvider';
+import { WebPlaybackProvider } from '../../web/webPlaybackProvider';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 

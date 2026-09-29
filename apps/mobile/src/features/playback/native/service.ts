@@ -16,15 +16,15 @@ import { parseTrackId } from '@shared/api-client/ids';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import { discardPrefetchedAudio, evictCached, prefetchNext } from './audioPrefetch';
 import { refreshUpcomingPresign } from './loadNativeTrack';
-import { claimSessionReset } from './loadToken';
+import { claimSessionReset } from '../loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 import { activeNativeTrackId } from './nativeTrack';
 import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './nativeTrackSwap';
-import { classifyNativePlaybackError } from './classifyPlaybackError';
-import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
-import { recordPlaybackFailure } from './playbackHealth';
-import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
+import { classifyNativePlaybackError } from '../classifyPlaybackError';
+import { clearPlaybackError, reportPlaybackError } from '../playbackErrorStore';
+import { recordPlaybackFailure } from '../playbackHealth';
+import { reportingQueueFailure, reportQueueFailure } from '../queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();

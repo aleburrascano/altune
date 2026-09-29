@@ -9,8 +9,8 @@ import {
   createNativePlaybackActions,
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
-} from '../createNativePlaybackActions';
-import { NativeQueueTimeoutError, withNativeQueue } from '../nativeQueueLock';
+} from '../native/createNativePlaybackActions';
+import { NativeQueueTimeoutError, withNativeQueue } from '../native/nativeQueueLock';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { reportingQueueFailure } from '../queueFailureReport';
 

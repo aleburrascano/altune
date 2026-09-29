@@ -6,9 +6,10 @@ import { playsThroughTrackPlayer } from '../playsThroughTrackPlayer';
 type ProviderComponent = ComponentType<{ children: ReactNode }>;
 
 function selectPlaybackProvider(): ProviderComponent {
-  if (playsThroughTrackPlayer) return require('./trackPlayerProvider').TrackPlayerPlaybackProvider;
-  if (Platform.OS === 'web') return require('./webPlaybackProvider').WebPlaybackProvider;
-  return require('./expoGoPlaybackProvider').ExpoGoPlaybackProvider;
+  if (playsThroughTrackPlayer)
+    return require('../native/trackPlayerProvider').TrackPlayerPlaybackProvider;
+  if (Platform.OS === 'web') return require('../web/webPlaybackProvider').WebPlaybackProvider;
+  return require('../native/expoGoPlaybackProvider').ExpoGoPlaybackProvider;
 }
 
 const PlaybackProviderImpl = selectPlaybackProvider();

@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { usePlaybackSignals } from '../hooks/usePlaybackSignals';
+import { usePlaybackSignals } from '../native/usePlaybackSignals';
 
 import { previewTrack } from './fixtures';
 

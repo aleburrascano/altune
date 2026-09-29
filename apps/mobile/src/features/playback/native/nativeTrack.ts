@@ -9,7 +9,7 @@ import { audioStreamUrl } from '@shared/api-client/audio';
 import { ContractError } from '@shared/errors';
 
 const artworkPlaceholder = (): string =>
-  Image.resolveAssetSource(require('../../../assets/artwork-placeholder.png')).uri;
+  Image.resolveAssetSource(require('../../../../assets/artwork-placeholder.png')).uri;
 
 function playablePreviewUrl(previewUrl: string): string {
   if (!isPlayablePreviewUrl(previewUrl)) throw new ContractError('PreviewUrl', 'not an https url');

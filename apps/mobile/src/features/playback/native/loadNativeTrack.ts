@@ -7,22 +7,22 @@ import {
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
-import { clamp } from './clamp';
-import { classifyPlaybackFailure } from './classifyPlaybackError';
-import { redactedPlaybackFailure } from './redactPlaybackError';
-import { recordPresignOutcome } from './playbackHealth';
+import { clamp } from '../clamp';
+import { classifyPlaybackFailure } from '../classifyPlaybackError';
+import { redactedPlaybackFailure } from '../redactPlaybackError';
+import { recordPresignOutcome } from '../playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { forgetAllSwaps } from './nativeTrackSwap';
-import { claimLoad, currentLoadToken, isStale } from './loadToken';
+import { claimLoad, currentLoadToken, isStale } from '../loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import {
   MAX_PRESIGN,
   NATIVE_QUEUE_WINDOW,
   markPresignedFrom,
   refreshUpcomingPresign as slidePresignWindow,
-} from './presignWindow';
+} from '../presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';

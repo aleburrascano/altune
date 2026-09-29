@@ -11,11 +11,11 @@ import {
   loadNativeTrack,
   reorderUpcomingNative,
 } from './loadNativeTrack';
-import { claimSessionReset } from './loadToken';
+import { claimSessionReset } from '../loadToken';
 import { withNativeQueue } from './nativeQueueLock';
-import { clearPlaybackError, reportLoadFailure } from './playbackErrorStore';
-import { nativeErrorCode, reportingQueueFailure } from './queueFailureReport';
-import { redactedPlaybackFailure } from './redactPlaybackError';
+import { clearPlaybackError, reportLoadFailure } from '../playbackErrorStore';
+import { nativeErrorCode, reportingQueueFailure } from '../queueFailureReport';
+import { redactedPlaybackFailure } from '../redactPlaybackError';
 import { seekPreservingPlayback } from './seekControls';
 
 export {
@@ -23,7 +23,7 @@ export {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
   reportQueueFailure,
-} from './queueFailureReport';
+} from '../queueFailureReport';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;

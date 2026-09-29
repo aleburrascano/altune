@@ -13,8 +13,8 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { useQueueResume } from '../hooks/useQueueResume';
-import { loadNativeQueue } from '../loadNativeTrack';
+import { useQueueResume } from '../native/useQueueResume';
+import { loadNativeQueue } from '../native/loadNativeTrack';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
 import { libraryTrack } from './fixtures';

@@ -8,10 +8,10 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import * as audioCache from '../audioCache';
-import { MAX_PREFETCH_FILE_BYTES, cacheDir, findCached } from '../audioCache';
-import { PREFETCH_STALL_TIMEOUT_MS, evictCached, prefetchNext } from '../audioPrefetch';
-import { forgetAllSwaps, wasSwappedToLocal } from '../nativeTrackSwap';
+import * as audioCache from '../native/audioCache';
+import { MAX_PREFETCH_FILE_BYTES, cacheDir, findCached } from '../native/audioCache';
+import { PREFETCH_STALL_TIMEOUT_MS, evictCached, prefetchNext } from '../native/audioPrefetch';
+import { forgetAllSwaps, wasSwappedToLocal } from '../native/nativeTrackSwap';
 
 import { libraryTrack } from './fixtures';
 

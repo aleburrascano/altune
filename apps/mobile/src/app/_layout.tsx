@@ -31,7 +31,7 @@ import { AppChrome } from '../app-shell/AppChrome';
 import { PlaybackShortcuts, SystemNavigationBar } from '../app-shell/platformExtras';
 
 if (playsThroughTrackPlayer) {
-  require('../features/playback/registerPlaybackService').registerPlaybackService();
+  require('../features/playback/native/registerPlaybackService').registerPlaybackService();
 }
 
 void SplashScreen.preventAutoHideAsync();

@@ -1,4 +1,4 @@
-import type * as InitPlayer from '../initPlayer';
+import type * as InitPlayer from '../native/initPlayer';
 
 const trackPlayerDouble = jest.requireMock('react-native-track-player');
 const { __player } = trackPlayerDouble;
@@ -9,7 +9,7 @@ function freshInitPlayer(): InitPlayerModule {
   let loaded: InitPlayerModule | undefined;
   jest.isolateModules(() => {
     jest.doMock('react-native-track-player', () => trackPlayerDouble);
-    loaded = require('../initPlayer');
+    loaded = require('../native/initPlayer');
   });
   if (!loaded) throw new Error('initPlayer did not load');
   return loaded;

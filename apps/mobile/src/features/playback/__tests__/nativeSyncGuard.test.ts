@@ -2,8 +2,8 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { loadNativeQueue } from '../loadNativeTrack';
-import { beginNativeLoad, endNativeLoad, shouldApplyActiveIndex } from '../nativeSyncGuard';
+import { loadNativeQueue } from '../native/loadNativeTrack';
+import { beginNativeLoad, endNativeLoad, shouldApplyActiveIndex } from '../native/nativeSyncGuard';
 
 import { previewTrack } from './fixtures';
 
