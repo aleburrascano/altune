@@ -3,13 +3,14 @@ import type { ReactElement } from 'react';
 
 import { readDetailHandoff, type DetailHandoff } from '@shared/lib/detail-handoff';
 import { featuredArtistsFromExtras } from '@shared/lib/featured';
+import { tabRootFromSegments } from '@shared/navigation';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
 import { useLateralNav } from '../hooks/useLateralNav';
 import { DetailHandoffProvider } from '../handoff-context';
-import { detailRouteFor, tabRootFromSegments } from '../navigation';
+import { detailRouteFor } from '../navigation';
 
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';

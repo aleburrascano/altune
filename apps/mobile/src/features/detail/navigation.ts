@@ -1,16 +1,10 @@
-import { useRouter, type Href, type ImperativeRouter } from 'expo-router';
-
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { detailHref } from '@shared/lib/detail-handoff';
+import { useNavigator, type Href, type Navigator, type TabRoot } from '@shared/navigation';
 
-export type TabRoot = 'discover' | 'library';
 export type DetailRoute = `/${TabRoot}/detail`;
 export type FeaturingRoute = `/${TabRoot}/featuring`;
-
-export function tabRootFromSegments(segments: string[]): TabRoot {
-  return segments[1] === 'library' ? 'library' : 'discover';
-}
 
 export function detailRouteFor(tabRoot: TabRoot): DetailRoute {
   return `/${tabRoot}/detail`;
@@ -21,16 +15,16 @@ export function featuringRouteFor(detailRoute: DetailRoute): FeaturingRoute {
 }
 
 export function openDetail(
-  router: ImperativeRouter,
+  navigator: Navigator,
   detailRoute: DetailRoute,
   result: DiscoveryResult,
 ): void {
-  router.push(detailHref(detailRoute, result));
+  navigator.push(detailHref(detailRoute, result));
 }
 
 export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {
-  const router = useRouter();
-  return (picked) => openDetail(router, detailRoute, picked);
+  const navigator = useNavigator();
+  return (picked) => openDetail(navigator, detailRoute, picked);
 }
 
 export function featuringHref(detailRoute: DetailRoute, artist: FeaturedArtist): Href {
@@ -45,6 +39,6 @@ export function featuringHref(detailRoute: DetailRoute, artist: FeaturedArtist):
 }
 
 export function useOpenFeaturing(detailRoute: DetailRoute): (artist: FeaturedArtist) => void {
-  const router = useRouter();
-  return (artist) => router.push(featuringHref(detailRoute, artist));
+  const navigator = useNavigator();
+  return (artist) => navigator.push(featuringHref(detailRoute, artist));
 }

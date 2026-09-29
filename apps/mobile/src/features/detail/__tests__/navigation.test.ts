@@ -9,7 +9,6 @@ import {
   featuringHref,
   featuringRouteFor,
   openDetail,
-  tabRootFromSegments,
   useOpenDetail,
   useOpenFeaturing,
 } from '../navigation';
@@ -30,17 +29,6 @@ function track(title: string): DiscoveryResult {
 
 beforeEach(() => {
   clearDetailHandoffs();
-});
-
-describe('tabRootFromSegments', () => {
-  it('reads library from the second segment', () => {
-    expect(tabRootFromSegments(['(tabs)', 'library', 'detail'])).toBe('library');
-  });
-
-  it('falls back to discover for any other second segment', () => {
-    expect(tabRootFromSegments(['(tabs)', 'discover'])).toBe('discover');
-    expect(tabRootFromSegments(['(tabs)'])).toBe('discover');
-  });
 });
 
 describe('detailRouteFor', () => {
