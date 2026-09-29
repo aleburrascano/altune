@@ -1,14 +1,14 @@
 services/go-api/internal/playback/	1	streaming is the app	playback
 services/go-api/internal/acquisition/	1	no audio acquired, nothing to stream	acquisition
 services/go-api/internal/discovery/	1	finding music is part of the core loop	discover
-services/go-api/internal/auth/	1	no login, nothing streams	auth
-services/go-api/internal/app/	1	composition root: broken wiring breaks everything	app
-services/go-api/internal/shared/	1	used by playback and acquisition	shared
+services/go-api/internal/auth/	2	wiring: a login defect that stops playback is filed as playback	auth
+services/go-api/internal/app/	2	wiring: a defect that breaks playback is filed as playback	app
+services/go-api/internal/shared/	2	shared code: a defect that breaks playback is filed as playback	shared
 apps/mobile/src/features/playback/	1	streaming is the app	playback
 apps/mobile/src/features/discover/	1	finding music is part of the core loop	discover
-apps/mobile/src/features/auth/	1	no login, nothing streams	auth
-apps/mobile/src/shared/	1	used by playback	shared
-services/go-api/internal/catalog/	1	tracks and their acquisition status: streaming reads it	catalog
+apps/mobile/src/features/auth/	2	wiring: a login defect that stops playback is filed as playback	auth
+apps/mobile/src/shared/	2	shared code: a defect that breaks playback is filed as playback	shared
+services/go-api/internal/catalog/	2	track records: a defect that breaks streaming is filed as playback	catalog
 apps/mobile/src/features/library/	2	managing the library	library
 apps/mobile/src/features/detail/	2	track and album detail	detail
 apps/mobile/src/features/settings/	3	rarely used	settings
