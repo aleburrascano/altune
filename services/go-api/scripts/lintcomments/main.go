@@ -6,8 +6,11 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,36 +23,129 @@ var (
 )
 
 func main() {
-	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
-		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintcomments <base-ref> [module-dir]")
-		os.Exit(2)
+	os.Exit(run(os.Args[1:], os.Stdout))
+}
+
+func run(args []string, stdout io.Writer) int {
+	if len(args) >= 1 && args[0] == "--all" {
+		return runAll(args[1:], stdout)
 	}
-	rawBase := os.Args[1]
-	if len(os.Args) >= 3 {
-		if err := os.Chdir(os.Args[2]); err != nil {
-			fmt.Fprintf(os.Stderr, "chdir %s: %v\n", os.Args[2], err)
-			os.Exit(2)
+	if len(args) < 1 || strings.HasPrefix(args[0], "-") {
+		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintcomments <base-ref> [module-dir]\n       go run ./scripts/lintcomments --all <dir>...")
+		return 2
+	}
+	return runDiff(args, stdout)
+}
+
+func runDiff(args []string, stdout io.Writer) int {
+	rawBase := args[0]
+	if len(args) >= 2 {
+		if err := os.Chdir(args[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "chdir %s: %v\n", args[1], err)
+			return 2
 		}
 	}
 	base := resolveBase(rawBase)
 	addedByFile := changedAddedLines(base)
 	files := goFiles(addedByFile)
 	if len(files) == 0 {
-		fmt.Println("No changed go files to check for new comments.")
-		return
+		fmt.Fprintln(stdout, "No changed go files to check for new comments.")
+		return 0
 	}
-	fmt.Println("Checking added lines for new comments/suppressions in:")
+	fmt.Fprintln(stdout, "Checking added lines for new comments/suppressions in:")
 	for _, file := range files {
-		fmt.Printf("  %s\n", file)
+		fmt.Fprintf(stdout, "  %s\n", file)
 	}
 	hits := 0
 	for _, file := range files {
-		hits += reportFile(file, addedByFile[file])
+		hits += reportFile(stdout, file, addedByFile[file])
 	}
-	fmt.Printf("new-code comment/suppression violations: %d\n", hits)
+	fmt.Fprintf(stdout, "new-code comment/suppression violations: %d\n", hits)
 	if hits > 0 {
-		os.Exit(1)
+		return 1
 	}
+	return 0
+}
+
+var skippedDirs = map[string]bool{"vendor": true, "testdata": true, "node_modules": true}
+
+type violation struct {
+	path string
+	line int
+}
+
+func runAll(dirs []string, stdout io.Writer) int {
+	if len(dirs) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintcomments --all <dir>...")
+		return 2
+	}
+	var found []violation
+	for _, dir := range dirs {
+		hits, err := commentsUnder(dir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		found = append(found, hits...)
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].path != found[j].path {
+			return found[i].path < found[j].path
+		}
+		return found[i].line < found[j].line
+	})
+	for _, hit := range found {
+		fmt.Fprintf(stdout, "%s:%d\n", hit.path, hit.line)
+	}
+	fmt.Fprintf(stdout, "comment violations: %d\n", len(found))
+	if len(found) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func commentsUnder(dir string) ([]violation, error) {
+	var found []violation
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if skippedDirs[entry.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		hits, err := commentsIn(path)
+		found = append(found, hits...)
+		return err
+	})
+	return found, err
+}
+
+func commentsIn(path string) ([]violation, error) {
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, path, nil, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	var found []violation
+	for _, group := range parsed.Comments {
+		for _, comment := range group.List {
+			if !isEmbed(comment.Text) {
+				found = append(found, violation{path, fset.Position(comment.Pos()).Line})
+			}
+		}
+	}
+	return found, nil
+}
+
+func isEmbed(text string) bool {
+	fields := strings.Fields(text)
+	return len(fields) > 0 && fields[0] == "//go:embed"
 }
 
 func resolveBase(rawBase string) string {
@@ -128,7 +224,7 @@ func goFiles(addedByFile map[string]map[int]bool) []string {
 	return files
 }
 
-func reportFile(file string, added map[int]bool) int {
+func reportFile(stdout io.Writer, file string, added map[int]bool) int {
 	if len(added) == 0 {
 		return 0
 	}
@@ -141,13 +237,13 @@ func reportFile(file string, added map[int]bool) int {
 	hits := 0
 	for _, group := range parsed.Comments {
 		for _, comment := range group.List {
-			hits += reportComment(fset, file, added, comment)
+			hits += reportComment(stdout, fset, file, added, comment)
 		}
 	}
 	return hits
 }
 
-func reportComment(fset *token.FileSet, file string, added map[int]bool, comment *ast.Comment) int {
+func reportComment(stdout io.Writer, fset *token.FileSet, file string, added map[int]bool, comment *ast.Comment) int {
 	start := fset.Position(comment.Pos()).Line
 	end := fset.Position(comment.End()).Line
 	if !spansAddedLine(start, end, added) {
@@ -157,7 +253,7 @@ func reportComment(fset *token.FileSet, file string, added map[int]bool, comment
 	if kind == "" {
 		return 0
 	}
-	fmt.Printf("  %s:%d  new %s on a changed line — zero-comments rule\n", file, start, kind)
+	fmt.Fprintf(stdout, "  %s:%d  new %s on a changed line — zero-comments rule\n", file, start, kind)
 	return 1
 }
 
