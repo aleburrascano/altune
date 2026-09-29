@@ -12,6 +12,7 @@ import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types'
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useQueueResume } from '../native/useQueueResume';
 import { loadNativeQueue } from '../native/loadNativeTrack';
@@ -556,6 +557,22 @@ describe('saving the queue state', () => {
         current_index: 1,
         position_ms: 42_000,
       });
+    });
+
+    it('sends no save when the session ends while the snapshot is being read', async () => {
+      renderHook(() => useQueueResume());
+      await flush();
+
+      const progress = deferred<{ position: number; duration: number; buffered: number }>();
+      player.getProgress!.mockReturnValueOnce(progress.promise);
+      await backgroundApp();
+      act(() => {
+        runSignOutCleanups();
+      });
+      progress.resolve({ position: 42, duration: 300, buffered: 300 });
+      await flush();
+
+      expect(mockedSave).not.toHaveBeenCalled();
     });
 
     it('never pairs a freshly started queue with the previous track position', async () => {

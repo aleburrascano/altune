@@ -9,6 +9,7 @@ import { canPlay } from '@shared/playback/canPlay';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 
 import { loadNativeQueue } from './loadNativeTrack';
 import { withNativeQueue } from './nativeQueueLock';
@@ -66,8 +67,9 @@ function savedCurrentIndex(s: QueueStore): number {
 async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
   if (isSkippable(useQueueStore.getState())) return;
 
+  const epoch = currentSessionEpoch();
   const snapshot = await readConsistentSnapshot();
-  if (!snapshot || isSkippable(snapshot.state)) return;
+  if (!snapshot || isSkippable(snapshot.state) || !isSameSession(epoch)) return;
   const { state: s, positionMs } = snapshot;
 
   try {
