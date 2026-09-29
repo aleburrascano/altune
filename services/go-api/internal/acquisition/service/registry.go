@@ -93,3 +93,13 @@ func (r *SourceRegistry) Fetch(ctx context.Context, candidate ports.AudioCandida
 	}
 	return "", fmt.Errorf("no source named %q for candidate %q", candidate.Source, candidate.URL)
 }
+
+func (r *SourceRegistry) PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+	for _, s := range r.sources {
+		if s.Name() == candidate.Source {
+			fetcher, ok := s.(ports.PreviewFetcher)
+			return fetcher, ok
+		}
+	}
+	return nil, false
+}

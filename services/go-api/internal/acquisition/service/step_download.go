@@ -6,12 +6,20 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 )
 
-const maxDownloadAttempts = ports.EnoughCandidates
+const (
+	maxDownloadAttempts = ports.EnoughCandidates
+	previewSeconds      = 130
+)
 
 type candidateFetcher interface {
 	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
+}
+
+type previewSource interface {
+	PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool)
 }
 
 type DownloadStep struct {
@@ -113,6 +121,12 @@ func (s *DownloadStep) tryCandidate(
 		}
 	}()
 
+	prior, rejection := s.previewIdentification(ctx, ac, candidate)
+	if rejection != nil {
+		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, rejection.stage, rejection.reason)
+		return false, rejection.err
+	}
+
 	filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
 	if err != nil {
 		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDownload, "download failed")
@@ -122,7 +136,7 @@ func (s *DownloadStep) tryCandidate(
 		return false, err
 	}
 
-	verified, rejection := s.verify(ctx, ac, candidate, filePath)
+	verified, rejection := s.verify(ctx, ac, candidate, filePath, prior)
 	if rejection != nil {
 		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, rejection.stage, rejection.reason)
 		return false, rejection.err
@@ -157,6 +171,7 @@ func (s *DownloadStep) verify(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	filePath string,
+	prior *identification,
 ) (verificationResult, *downloadRejection) {
 	var result verificationResult
 
@@ -201,11 +216,88 @@ func (s *DownloadStep) verify(
 		}
 	}
 
+	if prior != nil {
+		result.verdict = prior.verdict
+		result.identity = prior.identity
+		return result, nil
+	}
 	if rejection := s.identify(ctx, ac, candidate, filePath, &result); rejection != nil {
 		return result, rejection
 	}
 
 	return result, nil
+}
+
+type identification struct {
+	verdict  AudioVerdict
+	identity bool
+}
+
+func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+	source, ok := s.fetcher.(previewSource)
+	if !ok || s.identifier == nil || ac.Identity.MBID == "" {
+		return nil, false
+	}
+	return source.PreviewFetcherFor(candidate)
+}
+
+func (s *DownloadStep) previewIdentification(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+) (*identification, *downloadRejection) {
+	previewer, ok := s.previewer(ac, candidate)
+	if !ok {
+		return nil, nil
+	}
+
+	started := time.Now()
+	match, err := s.identifyPreview(ctx, ac, candidate, previewer)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.preview_fallback",
+			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+			"error", logSafeError(err))
+		return nil, nil
+	}
+
+	verdict := classifyMatch(ac, match, candidate.Duration)
+	logPreviewFingerprint(ctx, ac, candidate, verdict, time.Since(started))
+	judged := verificationResult{verdict: verdict}
+	if rejection := judgeVerdict(ctx, ac, candidate, match, &judged); rejection != nil {
+		return nil, rejection
+	}
+	return &identification{verdict: verdict, identity: judged.identity}, nil
+}
+
+func logPreviewFingerprint(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	verdict AudioVerdict,
+	elapsed time.Duration,
+) {
+	slog.InfoContext(ctx, "acquisition.preview_fingerprint",
+		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		"fetch_ms", elapsed.Milliseconds(), "verdict", string(verdict.Kind))
+}
+
+func (s *DownloadStep) identifyPreview(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	previewer ports.PreviewFetcher,
+) (ports.RecordingMatch, error) {
+	previewDir, err := os.MkdirTemp("", tempDirPrefix+"preview-*")
+	if err != nil {
+		return ports.RecordingMatch{}, fmt.Errorf("create preview dir: %w", err)
+	}
+	defer os.RemoveAll(previewDir)
+
+	previewPath, err := previewer.FetchPreview(ctx, candidate, previewDir, previewSeconds)
+	if err != nil {
+		return ports.RecordingMatch{}, err
+	}
+	return s.identifier.Identify(ctx, previewPath, candidate.Duration)
 }
 
 func (s *DownloadStep) identify(

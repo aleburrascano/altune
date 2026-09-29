@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -565,5 +566,27 @@ func TestYtDlpAudioSearcher_SearchQueries_AllQueriesUnavailableIsSourceUnavailab
 
 	if !ports.IsSourceUnavailable(err) {
 		t.Fatalf("SearchQueries error = %v, want a source-unavailable error when every query and engine is unavailable", err)
+	}
+}
+
+func TestYtDlpAudioSearcher_DownloadPreview_RequestsOnlyTheLeadingSectionBeforeTheURL(t *testing.T) {
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+
+	if _, err := s.DownloadPreview(context.Background(), "https://youtube.com/watch?v=1", outDir, 130); err != nil {
+		t.Fatalf("DownloadPreview error: %v", err)
+	}
+
+	raw, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	sections, separator := slices.Index(argv, "--download-sections"), slices.Index(argv, "--")
+	if sections < 0 || argv[sections+1] != "*0-130" || sections > separator {
+		t.Fatalf("argv = %q, want --download-sections *0-130 before --", argv)
 	}
 }

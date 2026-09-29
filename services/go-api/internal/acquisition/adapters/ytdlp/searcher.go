@@ -21,6 +21,7 @@ import (
 const (
 	searchTimeout   = 30 * time.Second
 	downloadTimeout = 5 * time.Minute
+	previewTimeout  = 60 * time.Second
 )
 
 const maxSourceFileSize = "200M"
@@ -45,6 +46,7 @@ type YtDlpAudioSearcher struct {
 	inspections     *inspectionCache
 	searchTimeout   time.Duration
 	downloadTimeout time.Duration
+	previewTimeout  time.Duration
 	canaryTimeout   time.Duration
 }
 
@@ -56,6 +58,7 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 		binary:          "yt-dlp",
 		searchTimeout:   searchTimeout,
 		downloadTimeout: downloadTimeout,
+		previewTimeout:  previewTimeout,
 		canaryTimeout:   canaryTimeout,
 		inspections:     newInspectionCache(),
 	}
@@ -220,6 +223,20 @@ func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate
 }
 
 func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir string) (string, error) {
+	return s.fetchAudio(ctx, url, outDir, nil, s.downloadTimeout)
+}
+
+func (s *YtDlpAudioSearcher) DownloadPreview(ctx context.Context, url string, outDir string, seconds int) (string, error) {
+	section := []string{"--download-sections", fmt.Sprintf("*0-%d", seconds)}
+	return s.fetchAudio(ctx, url, outDir, section, s.previewTimeout)
+}
+
+func (s *YtDlpAudioSearcher) fetchAudio(
+	ctx context.Context,
+	url, outDir string,
+	sectionArgs []string,
+	timeout time.Duration,
+) (string, error) {
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
 		"-f", audioFormatSelector,
@@ -229,9 +246,9 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		"--max-filesize", maxSourceFileSize,
 		"--no-progress",
 		"-o", outTemplate,
-		"--",
-		url,
 	}
+	args = append(args, sectionArgs...)
+	args = append(args, "--", url)
 
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
@@ -243,7 +260,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	defer cleanup()
 	args = s.authFlags(args, cookieFile)
 
-	runCtx, cancel := context.WithTimeout(ctx, s.downloadTimeout)
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	_, stderr, err := execcmd.Run(runCtx, s.binary, args...)
 	if err != nil {

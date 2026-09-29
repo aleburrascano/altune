@@ -24,6 +24,10 @@ type AudioSource interface {
 	Fetch(ctx context.Context, candidate AudioCandidate, outDir string) (filePath string, err error)
 }
 
+type PreviewFetcher interface {
+	FetchPreview(ctx context.Context, candidate AudioCandidate, outDir string, seconds int) (filePath string, err error)
+}
+
 type SourceUnavailableError struct {
 	Source string
 	Err    error

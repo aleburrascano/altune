@@ -982,3 +982,123 @@ func (s *sequenceIdentifier) Identify(context.Context, string, float64) (ports.R
 func (s *sequenceIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
 	return nil, nil
 }
+
+type previewingFetcher struct {
+	fileWritingSearcher
+	previewErr  error
+	previewDirs []string
+}
+
+func (f *previewingFetcher) PreviewFetcherFor(ports.AudioCandidate) (ports.PreviewFetcher, bool) {
+	return f, true
+}
+
+func (f *previewingFetcher) FetchPreview(_ context.Context, _ ports.AudioCandidate, outDir string, _ int) (string, error) {
+	f.previewDirs = append(f.previewDirs, outDir)
+	if f.previewErr != nil {
+		return "", f.previewErr
+	}
+	path := filepath.Join(outDir, "preview.mp3")
+	return path, os.WriteFile(path, []byte("preview-bytes"), 0o644)
+}
+
+type durationRecordingIdentifier struct {
+	match     ports.RecordingMatch
+	durations []float64
+}
+
+func (d *durationRecordingIdentifier) Identify(_ context.Context, _ string, hint float64) (ports.RecordingMatch, error) {
+	d.durations = append(d.durations, hint)
+	return d.match, nil
+}
+
+func (d *durationRecordingIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func previewMatch(mbid, title string) ports.RecordingMatch {
+	return ports.RecordingMatch{
+		AcoustID: "ac-" + mbid, MBIDs: []string{mbid}, Score: 0.98,
+		Results: linkedResults(ports.LinkedRecording{MBID: mbid, Title: title}),
+	}
+}
+
+func previewContext() *AcquisitionContext {
+	ac := downloadContext("mb-studio", nil)
+	ac.Track.Title = "Nessun dorma"
+	ac.Ranked = ac.Ranked[:1]
+	ac.Ranked[0].Duration = 250
+	return ac
+}
+
+func TestDownloadStep_PreviewOtherVersionRejectsWithoutFullFetch(t *testing.T) {
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
+	identifier := &durationRecordingIdentifier{match: previewMatch("mb-live", "Nessun dorma (live)")}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+	ac := previewContext()
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+		t.Fatal("expected the live preview to reject the only candidate")
+	}
+
+	if fetcher.calls != 0 {
+		t.Errorf("full fetches = %d, want 0 after a rejecting preview", fetcher.calls)
+	}
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Reason != "other version" {
+		t.Errorf("rejections = %+v, want one other version rejection", ac.Rejections)
+	}
+}
+
+func TestDownloadStep_AcceptedPreviewIsFollowedByOneFullFetchAndNoSecondIdentify(t *testing.T) {
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
+	identifier := &durationRecordingIdentifier{match: previewMatch("mb-studio", "Nessun dorma")}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+	ac := previewContext()
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if fetcher.calls != 1 || len(identifier.durations) != 1 {
+		t.Errorf("full fetches = %d, identify calls = %d, want 1 and 1", fetcher.calls, len(identifier.durations))
+	}
+	if ac.Verdict.Kind != VerdictHard || !ac.IdentityVerified {
+		t.Errorf("verdict = %q identity = %v, want the preview's hard verdict carried over", ac.Verdict.Kind, ac.IdentityVerified)
+	}
+	if _, err := os.Stat(fetcher.previewDirs[0]); !os.IsNotExist(err) {
+		t.Errorf("preview dir still present: %v", err)
+	}
+}
+
+func TestDownloadStep_FailedPreviewFallsBackToTheFullPath(t *testing.T) {
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}, previewErr: errors.New("boom")}
+	identifier := &durationRecordingIdentifier{match: previewMatch("mb-studio", "Nessun dorma")}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+	ac := previewContext()
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if fetcher.calls != 1 || len(identifier.durations) != 1 {
+		t.Errorf("full fetches = %d, identify calls = %d, want the full path to run once", fetcher.calls, len(identifier.durations))
+	}
+}
+
+func TestDownloadStep_PreviewIdentifyCarriesTheCandidatesFullDuration(t *testing.T) {
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
+	identifier := &durationRecordingIdentifier{match: previewMatch("mb-studio", "Nessun dorma")}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+	ac := previewContext()
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if len(identifier.durations) != 1 || identifier.durations[0] != 250 {
+		t.Errorf("identify duration hints = %v, want [250]", identifier.durations)
+	}
+}
