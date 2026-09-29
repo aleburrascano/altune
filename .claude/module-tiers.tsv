@@ -16,6 +16,9 @@ services/go-api/internal/observe/	3	operator only	observe
 services/go-api/internal/feedback/	3	operator only	feedback
 services/overseer/	3	operator only	overseer
 scripts/	2	repo tooling and CI	tooling
+services/go-api/scripts/	2	repo tooling and CI	tooling
+apps/mobile/scripts/	2	repo tooling and CI	tooling
+apps/mobile/e2e/	2	repo tooling and CI	tooling
 .gitea/	2	repo tooling and CI	tooling
 services/go-api/deploy/	2	deploys	deploy
 docs/	3	documentation	docs
