@@ -192,6 +192,10 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
   fi
 fi
 
+if touches '^\.gitea/workflows/pr-shape'; then
+  test_check "pr-shape tests" . bash .gitea/workflows/pr-shape.test.sh
+fi
+
 if touches '\.(go|ts|tsx)$' && need npx "cycles"; then
   if link_deps .; then
     check "no dependency cycles" . "${heavy[@]}" sh -c 'node_modules/.bin/graft build >/dev/null && node scripts/check-cycles.mjs'
