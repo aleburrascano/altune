@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import type uPlot from "uplot";
 import LiveActivityPanel, { type Data } from "./liveactivity.panel";
+import { loadUPlot } from "../charts/uplot";
 import { TokensContext, type TokenProvider } from "../api";
 import type { Snapshot, State } from "../types";
 
@@ -13,6 +14,10 @@ vi.mock("uplot", () => ({
     return { setSize: () => {}, destroy: () => {} };
   },
 }));
+
+beforeAll(async () => {
+  await loadUPlot();
+});
 
 beforeEach(() => {
   plots.length = 0;
