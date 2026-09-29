@@ -298,6 +298,31 @@
       "candidates": [
         { "title": "Halcyon Ferry - Night Drive", "url": "yt:reupload-unknown-fp", "channel": "chill uploads", "categories": ["Music"], "duration": 224 }
       ]
+    },
+    {
+      "id": "mh2-live-links-rejected-clean-candidate-stored",
+      "class": "F0",
+      "note": "must-hold 2: the top-ranked upload is a live recording (AcoustID links only live Pavarotti recordings), rejected as another version; the next candidate links the studio recording and is stored",
+      "track": { "title": "Nessun dorma", "artist": "Luciano Pavarotti", "duration": 180, "authoritative_duration": 180, "mbid": "pav-studio" },
+      "candidates": [
+        { "title": "Nessun dorma", "url": "yt:pavarotti-live", "channel": "Luciano Pavarotti - Topic", "categories": ["Music"], "duration": 181, "view_count": 9000000, "acoustid_results": [ { "id": "ac-pav-live", "score": 0.97, "recordings": [ { "mbid": "pav-live-a", "title": "Nessun dorma (live)", "artists": ["Luciano Pavarotti"], "duration": 181 }, { "mbid": "pav-live-b", "title": "Nessun dorma (live)", "artists": ["Luciano Pavarotti"], "duration": 180 } ] } ] },
+        { "title": "Nessun dorma", "url": "yt:pavarotti-studio", "channel": "Luciano Pavarotti", "categories": ["Music"], "duration": 180, "view_count": 1000, "acoustid_results": [ { "id": "ac-pav-studio", "score": 0.98, "recordings": [ { "mbid": "pav-studio", "title": "Nessun dorma", "artists": ["Luciano Pavarotti"], "duration": 180 } ] } ], "correct": true }
+      ]
+    },
+    {
+      "id": "mh2-drinking-in-la-only-the-236s-link-survives",
+      "class": "F0",
+      "note": "must-hold 2: the fingerprint links the 220s edit, the 342s Thinking in L.A. and the 236s album recording 5d6efd30; only the link whose length agrees with the audio survives, and it is the reference, so the candidate is verified",
+      "track": {
+        "title": "Drinking in L.A.", "artist": "Bran Van 3000", "duration": 236, "isrc": "CAA509814003",
+        "resolution": {
+          "search": { "mbid": "5d6efd30-23c6-4a9b-85af-706ea2df9022", "isrc": "CAA509814003", "duration": 236 },
+          "isrc_recordings": [ { "mbid": "5d6efd30-23c6-4a9b-85af-706ea2df9022", "duration": 236 } ]
+        }
+      },
+      "candidates": [
+        { "title": "Drinking in L.A.", "url": "yt:drinking-links-siblings", "channel": "Bran Van 3000 - Topic", "categories": ["Music"], "duration": 237, "acoustid_results": [ { "id": "5d5d307d-c06e-42c6-928c-b3f7156755f8", "score": 0.99, "recordings": [ { "mbid": "rw-drinking-edit-220s", "title": "Drinking in L.A.", "artists": ["Bran Van 3000"], "duration": 220 }, { "mbid": "rw-thinking-in-la-342s", "title": "Thinking in L.A.", "artists": ["Bran Van 3000"], "duration": 342 }, { "mbid": "5d6efd30-23c6-4a9b-85af-706ea2df9022", "title": "Drinking in L.A.", "artists": ["Bran Van 3000"], "duration": 236 } ] } ], "correct": true }
+      ]
     }
   ]
 }

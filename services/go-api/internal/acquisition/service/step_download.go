@@ -134,6 +134,7 @@ func (s *DownloadStep) tryCandidate(
 	ac.DurationVerified = verified.duration
 	ac.IdentityVerified = verified.identity
 	ac.ProbedDuration = verified.probed
+	ac.Verdict = verified.verdict
 	selected = true
 	return true, nil
 }
@@ -142,6 +143,7 @@ type verificationResult struct {
 	duration bool
 	identity bool
 	probed   float64
+	verdict  AudioVerdict
 }
 
 type downloadRejection struct {
@@ -199,12 +201,8 @@ func (s *DownloadStep) verify(
 		}
 	}
 
-	if rejected := s.identify(ctx, ac, candidate, filePath, &result); rejected {
-		return result, &downloadRejection{
-			stage:  RejectionFingerprint,
-			reason: "different recording",
-			err:    fmt.Errorf("candidate %q is a different recording", candidate.URL),
-		}
+	if rejection := s.identify(ctx, ac, candidate, filePath, &result); rejection != nil {
+		return result, rejection
 	}
 
 	return result, nil
@@ -216,41 +214,133 @@ func (s *DownloadStep) identify(
 	candidate ports.AudioCandidate,
 	filePath string,
 	result *verificationResult,
-) (rejected bool) {
+) *downloadRejection {
 	if s.identifier == nil || ac.Identity.MBID == "" {
-		return false
+		return nil
 	}
 
 	match, err := s.identifier.Identify(ctx, filePath, 0)
-	switch {
-	case err != nil:
+	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identify_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
-		return false
+		return nil
+	}
+
+	result.verdict = classifyMatch(ac, match, result.probed)
+	logAudioVerdict(ctx, ac, candidate, result.verdict)
+	return judgeVerdict(ctx, ac, candidate, match, result)
+}
+
+func classifyMatch(ac *AcquisitionContext, match ports.RecordingMatch, probed float64) AudioVerdict {
+	verdict := ClassifyAudio(referenceFor(ac), probed, match.Results)
+	if verdict.Kind == VerdictUnknown && match.Known() && identityAgrees(ac, match) {
+		return AudioVerdict{Kind: VerdictHard, Score: match.Score}
+	}
+	return verdict
+}
+
+func identityAgrees(ac *AcquisitionContext, match ports.RecordingMatch) bool {
+	return match.Matches(ac.Identity.MBID) || match.InCluster(ac.Identity.AcoustIDs)
+}
+
+func referenceFor(ac *AcquisitionContext) AudioReference {
+	mbids := ac.Identity.MBIDs
+	if len(mbids) == 0 {
+		mbids = []string{ac.Identity.MBID}
+	}
+	duration := ac.Identity.Duration
+	if duration == 0 {
+		duration = ac.Track.Duration
+	}
+	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: duration, MBIDs: mbids}
+}
+
+const maxLoggedSurviving = 5
+
+func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict) {
+	slog.InfoContext(ctx, "acquisition.audio_verdict",
+		"track_id", ac.Track.ID,
+		"candidate_url", candidate.URL,
+		"verdict", string(verdict.Kind),
+		"score", verdict.Score,
+		"surviving", loggedSurviving(verdict.Surviving),
+		"reference_doubted", ac.Identity.ReferenceDoubted,
+	)
+}
+
+func loggedSurviving(surviving []ports.LinkedRecording) []map[string]string {
+	logged := make([]map[string]string, 0, min(len(surviving), maxLoggedSurviving))
+	for _, recording := range surviving[:min(len(surviving), maxLoggedSurviving)] {
+		logged = append(logged, map[string]string{"mbid": recording.MBID, "title": recording.Title})
+	}
+	return logged
+}
+
+func judgeVerdict(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	match ports.RecordingMatch,
+	result *verificationResult,
+) *downloadRejection {
+	switch result.verdict.Kind {
+	case VerdictHard, VerdictSoft:
+		result.identity = true
+		return nil
+	case VerdictOtherVersion:
+		return fingerprintRejection(candidate, "other version")
+	case VerdictDifferentSong:
+		return fingerprintRejection(candidate, "different song")
+	default:
+		return judgeUnknown(ctx, ac, candidate, match)
+	}
+}
+
+func judgeUnknown(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	match ports.RecordingMatch,
+) *downloadRejection {
+	switch {
 	case !match.Known():
 		slog.InfoContext(ctx, "acquisition.identify_unknown",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
-		return false
-	case match.Matches(ac.Identity.MBID), match.InCluster(ac.Identity.AcoustIDs):
-		result.identity = true
-		return false
+		return nil
 	case len(ac.Identity.AcoustIDs) == 0:
 		slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
-		return false
+		return nil
 	default:
-		slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
-			"track_id", ac.Track.ID,
-			"url", candidate.URL,
-			"source", candidate.Source,
-			"want_mbid", ac.Identity.MBID,
-			"want_acoustids", ac.Identity.AcoustIDs,
-			"got_acoustid", match.AcoustID,
-			"got_mbids", match.MBIDs,
-		)
-		return true
+		logFingerprintRejected(ctx, ac, candidate, match)
+		return fingerprintRejection(candidate, "different recording")
+	}
+}
+
+func logFingerprintRejected(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	match ports.RecordingMatch,
+) {
+	slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
+		"track_id", ac.Track.ID,
+		"url", candidate.URL,
+		"source", candidate.Source,
+		"want_mbid", ac.Identity.MBID,
+		"want_acoustids", ac.Identity.AcoustIDs,
+		"got_acoustid", match.AcoustID,
+		"got_mbids", match.MBIDs,
+	)
+}
+
+func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downloadRejection {
+	return &downloadRejection{
+		stage:  RejectionFingerprint,
+		reason: reason,
+		err:    fmt.Errorf("candidate %q rejected by fingerprint: %s", candidate.URL, reason),
 	}
 }
 

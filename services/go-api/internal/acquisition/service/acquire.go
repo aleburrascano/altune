@@ -293,10 +293,11 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 
 func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, identifier ports.AudioIdentifier, ac *AcquisitionContext) {
 	identity, err := recordings.Resolve(ctx, ports.RecordingQuery{
-		Title:  ac.Track.Title,
-		Artist: ac.Track.Artist,
-		Album:  ac.Track.Album,
-		ISRC:   ac.Track.ISRC,
+		Title:    ac.Track.Title,
+		Artist:   ac.Track.Artist,
+		Album:    ac.Track.Album,
+		ISRC:     ac.Track.ISRC,
+		Duration: ac.Track.Duration,
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",

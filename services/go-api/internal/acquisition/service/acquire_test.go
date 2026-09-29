@@ -853,3 +853,15 @@ func TestAcquire_FailureOnPendingTrackStillMarksFailed(t *testing.T) {
 		t.Errorf("status = %v, want failed", got.AcquisitionStatus)
 	}
 }
+
+func TestResolveIdentity_QueryCarriesTheTracksDuration(t *testing.T) {
+	stub := &stubResolver{}
+	svc := serviceWithResolver(stub)
+	ac := &AcquisitionContext{Track: TrackRef{Title: "Circles", Artist: "Post Malone", Duration: 215}}
+
+	svc.resolveIdentity(context.Background(), ac)
+
+	if len(stub.queries) != 1 || stub.queries[0].Duration != 215 {
+		t.Errorf("queries = %+v, want one carrying Duration 215", stub.queries)
+	}
+}

@@ -155,10 +155,14 @@ func (p *casePorts) ValidateDecodable(_ context.Context, filePath string) error 
 
 func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (ports.RecordingMatch, error) {
 	cand, ok := p.byPath[filePath]
-	if !ok || (len(cand.RecordingMBIDs) == 0 && cand.AcoustID == "") {
+	if !ok || (len(cand.RecordingMBIDs) == 0 && cand.AcoustID == "" && len(cand.AcoustIDResults) == 0) {
 		return ports.RecordingMatch{}, nil
 	}
-	return ports.RecordingMatch{AcoustID: cand.AcoustID, MBIDs: cand.RecordingMBIDs, Score: 1}, nil
+	acoustID := cand.AcoustID
+	if acoustID == "" && len(cand.AcoustIDResults) > 0 {
+		acoustID = cand.AcoustIDResults[0].ID
+	}
+	return ports.RecordingMatch{AcoustID: acoustID, MBIDs: cand.RecordingMBIDs, Score: 1, Results: cand.portResults()}, nil
 }
 
 func (p *casePorts) AcoustIDsFor(_ context.Context, mbid string) ([]string, error) {

@@ -165,6 +165,7 @@ type AcquisitionContext struct {
 	ProbedDuration   float64
 	DurationVerified bool
 	IdentityVerified bool
+	Verdict          AudioVerdict
 
 	Rejections []CandidateRejection
 

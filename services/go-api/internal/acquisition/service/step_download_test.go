@@ -900,3 +900,85 @@ func (r *rejectFirstIdentifier) Identify(context.Context, string, float64) (port
 func (r *rejectFirstIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
 	return r.cluster, nil
 }
+
+func linkedResults(recordings ...ports.LinkedRecording) []ports.AcoustIDResult {
+	return []ports.AcoustIDResult{{ID: "ac-audio", Score: 0.97, Recordings: recordings}}
+}
+
+func TestDownloadStep_LiveOnlyLinksRejectedThenCleanCandidateVerified(t *testing.T) {
+	live := ports.RecordingMatch{
+		AcoustID: "ac-live", MBIDs: []string{"mb-live"}, Score: 0.97,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-live", Title: "Nessun dorma (live)"}),
+	}
+	clean := ports.RecordingMatch{
+		AcoustID: "ac-studio", MBIDs: []string{"mb-studio"}, Score: 0.98,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-studio", Title: "Nessun dorma"}),
+	}
+	identifier := &sequenceIdentifier{matches: []ports.RecordingMatch{live, clean}}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
+	ac := downloadContext("mb-studio", nil)
+	ac.Track.Title = "Nessun dorma"
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionFingerprint || ac.Rejections[0].Reason != "other version" {
+		t.Errorf("rejections = %+v, want one fingerprint rejection with reason other version", ac.Rejections)
+	}
+	if ac.Provenance() != domain.ProvenanceVerified || ac.Verdict.Kind != VerdictHard {
+		t.Errorf("provenance = %v, verdict = %v, want verified and hard", ac.Provenance(), ac.Verdict.Kind)
+	}
+}
+
+func TestDownloadStep_LinksToAnotherSongAreRejected(t *testing.T) {
+	match := ports.RecordingMatch{
+		AcoustID: "ac-x", MBIDs: []string{"mb-x"}, Score: 0.9,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-x", Title: "Something Else Entirely"}),
+	}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
+	ac := downloadContext("mb-master", nil)
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+		t.Fatal("expected every candidate rejected as a different song")
+	}
+	if len(ac.Rejections) == 0 || ac.Rejections[0].Reason != "different song" {
+		t.Errorf("rejections = %+v, want reason different song", ac.Rejections)
+	}
+}
+
+func TestDownloadStep_LogsAudioVerdictForEveryDecision(t *testing.T) {
+	logs := captureJSONLog(t)
+	match := ports.RecordingMatch{
+		AcoustID: "ac-a", MBIDs: []string{"mb-master"}, Score: 0.97,
+		Results: linkedResults(ports.LinkedRecording{MBID: "mb-master", Title: "Sunglasses at Night"}),
+	}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(&stubIdentifier{match: match}))
+	ac := downloadContext("mb-master", nil)
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	rec := findLogRecord(t, logs, "acquisition.audio_verdict")
+	if rec["verdict"] != "hard" || rec["score"] != 0.97 {
+		t.Errorf("audio_verdict record = %v, want verdict hard, score 0.97", rec)
+	}
+}
+
+type sequenceIdentifier struct {
+	matches []ports.RecordingMatch
+	calls   int
+}
+
+func (s *sequenceIdentifier) Identify(context.Context, string, float64) (ports.RecordingMatch, error) {
+	match := s.matches[min(s.calls, len(s.matches)-1)]
+	s.calls++
+	return match, nil
+}
+
+func (s *sequenceIdentifier) AcoustIDsFor(context.Context, string) ([]string, error) {
+	return nil, nil
+}

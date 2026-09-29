@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -47,21 +48,47 @@ type ISRCRecording struct {
 }
 
 type Candidate struct {
-	Title           string   `json:"title"`
-	URL             string   `json:"url"`
-	Channel         string   `json:"channel,omitempty"`
-	Categories      []string `json:"categories,omitempty"`
-	Duration        float64  `json:"duration,omitempty"`
-	ViewCount       int64    `json:"view_count,omitempty"`
-	ActualDuration  float64  `json:"actual_duration,omitempty"`
-	Undecodable     bool     `json:"undecodable,omitempty"`
-	DownloadFails   bool     `json:"download_fails,omitempty"`
-	RecordingMBIDs  []string `json:"recording_mbids,omitempty"`
-	AcoustID        string   `json:"acoustid,omitempty"`
-	Resolved        bool     `json:"resolved,omitempty"`
-	Correct         bool     `json:"correct,omitempty"`
-	Query           string   `json:"query,omitempty"`
-	DownloadSeconds float64  `json:"download_seconds,omitempty"`
+	Title           string           `json:"title"`
+	URL             string           `json:"url"`
+	Channel         string           `json:"channel,omitempty"`
+	Categories      []string         `json:"categories,omitempty"`
+	Duration        float64          `json:"duration,omitempty"`
+	ViewCount       int64            `json:"view_count,omitempty"`
+	ActualDuration  float64          `json:"actual_duration,omitempty"`
+	Undecodable     bool             `json:"undecodable,omitempty"`
+	DownloadFails   bool             `json:"download_fails,omitempty"`
+	RecordingMBIDs  []string         `json:"recording_mbids,omitempty"`
+	AcoustID        string           `json:"acoustid,omitempty"`
+	AcoustIDResults []AcoustIDResult `json:"acoustid_results,omitempty"`
+	Resolved        bool             `json:"resolved,omitempty"`
+	Correct         bool             `json:"correct,omitempty"`
+	Query           string           `json:"query,omitempty"`
+	DownloadSeconds float64          `json:"download_seconds,omitempty"`
+}
+
+type AcoustIDResult struct {
+	ID         string            `json:"id"`
+	Score      float64           `json:"score"`
+	Recordings []LinkedRecording `json:"recordings"`
+}
+
+type LinkedRecording struct {
+	MBID     string   `json:"mbid"`
+	Title    string   `json:"title"`
+	Artists  []string `json:"artists,omitempty"`
+	Duration float64  `json:"duration,omitempty"`
+}
+
+func (c Candidate) portResults() []ports.AcoustIDResult {
+	results := make([]ports.AcoustIDResult, 0, len(c.AcoustIDResults))
+	for _, r := range c.AcoustIDResults {
+		recordings := make([]ports.LinkedRecording, 0, len(r.Recordings))
+		for _, rec := range r.Recordings {
+			recordings = append(recordings, ports.LinkedRecording(rec))
+		}
+		results = append(results, ports.AcoustIDResult{ID: r.ID, Score: r.Score, Recordings: recordings})
+	}
+	return results
 }
 
 const (
