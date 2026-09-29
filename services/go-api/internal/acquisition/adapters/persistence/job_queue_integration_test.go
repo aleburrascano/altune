@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/sharedtest"
@@ -514,5 +515,45 @@ func TestPgxJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 
 	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, time.Now()); !errors.Is(err, ports.ErrJobKindConflict) {
 		t.Errorf("Enqueue of another kind while a replace is leased = %v, want ErrJobKindConflict", err)
+	}
+}
+
+type panickingAcquirer struct{ runs atomic.Int32 }
+
+func (a *panickingAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+	a.runs.Add(1)
+	panic("boom")
+}
+
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, u shared.UserId, t domain.TrackId) error {
+	return a.Execute(ctx, u, t)
+}
+
+func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+
+func TestPgxJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	scheduler := service.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for acq.runs.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	if got := acq.runs.Load(); got != 1 {
+		t.Errorf("runs = %d, want 1 (a panicked job must back off, not be re-claimed)", got)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
+		t.Errorf("status = %q, want pending until the attempt cap", got)
 	}
 }

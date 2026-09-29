@@ -404,7 +404,7 @@ func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key
 	defer func() {
 		if r := recover(); r != nil {
 			s.logJobPanic(ctx, key, r)
-			err = nil
+			err = errJobPanicked
 		}
 	}()
 	err = run(ctx, job.UserID, job.TrackID)
@@ -452,6 +452,8 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 	}()
 }
 
+var errJobPanicked = errors.New("acquisition job panicked")
+
 type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 
 func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job ports.Job, cancelJob context.CancelFunc, done chan<- struct{}) {
@@ -498,6 +500,10 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
+	if errors.Is(jobErr, errJobPanicked) {
+		s.releasePanickedJob(job)
+		return
+	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
 		availableAt := time.Now().Add(retryBackoff(job.Attempts))
 		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, availableAt)
@@ -506,6 +512,23 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 	}
 	err := s.queue.Settle(context.Background(), job.TrackID, job.Attempts)
 	s.logQueueOutcome("settle", job.TrackID, err)
+}
+
+func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
+	if job.Attempts >= maxAcquisitionAttempts {
+		s.refuseQueuedRecovering(job)
+	}
+	err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, time.Now().Add(retryBackoff(job.Attempts)))
+	s.logQueueOutcome("release", job.TrackID, err)
+}
+
+func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("acquisition_panic_fail_track", "track_id", job.TrackID.String(), "panic", r)
+		}
+	}()
+	s.svc.RefuseQueued(context.Background(), job.UserID, job.TrackID)
 }
 
 func (s *BackgroundAcquisitionScheduler) releasePendingWG(trackID domain.TrackId) {

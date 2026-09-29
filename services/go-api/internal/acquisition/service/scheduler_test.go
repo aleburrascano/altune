@@ -909,6 +909,68 @@ func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	wg.Wait()
 }
 
+type panickingAcquirer struct {
+	runs    atomic.Int32
+	refused atomic.Int32
+}
+
+func (a *panickingAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+	a.runs.Add(1)
+	panic("boom")
+}
+
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, u shared.UserId, t domain.TrackId) error {
+	return a.Execute(ctx, u, t)
+}
+
+func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {
+	a.refused.Add(1)
+}
+
+type settleKeepsPendingQueue struct{ *memJobQueue }
+
+func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID domain.TrackId, fence int) error {
+	return q.Release(ctx, trackID, fence, time.Now())
+}
+
+func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *testing.T) {
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	wake := make(chan struct{}, 1)
+	queue := settleKeepsPendingQueue{newMemJobQueue(wake)}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	if got := acq.runs.Load(); got != 1 {
+		t.Errorf("runs = %d, want 1 (a panicked job must back off, not be re-claimed on the next poll)", got)
+	}
+}
+
+func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t *testing.T) {
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts}
+
+	scheduler.releasePanickedJob(job)
+
+	if got := acq.refused.Load(); got != 1 {
+		t.Errorf("track failed %d times, want 1", got)
+	}
+}
+
 func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
