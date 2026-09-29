@@ -1,53 +1,16 @@
-import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
-
 import { getLibraryAlbums, type LibrarySort } from '@shared/api-client/library';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-import { pagedListControls } from './pagedListControls';
-import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
+import { usePagedGroupQuery } from './usePagedGroupQuery';
 
 export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: boolean) {
-  const {
-    data,
-    isLoading,
-    isRefetching,
-    error,
-    isFetchingNextPage,
-    isFetchNextPageError,
-    hasNextPage,
-    fetchNextPage,
-    refetch,
-  } = useInfiniteQuery({
+  const { items, ...paged } = usePagedGroupQuery({
     queryKey: libraryKeys.albums(query, sort),
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) =>
-      getLibraryAlbums({ q: query, sort, limit: GROUP_PAGE_SIZE, offset: pageParam }, signal),
-    getNextPageParam: (lastPage, _pages, lastOffset) =>
-      nextGroupPageOffset(lastPage.items.length, lastOffset),
+    chip: 'albums',
+    query,
+    sort,
     enabled,
-    staleTime: Infinity,
-    placeholderData: keepPreviousData,
+    fetchPage: getLibraryAlbums,
   });
-
-  useLoggedLibraryQueryFailure(error, { chip: 'albums', sort, isSearching: query !== '' });
-
-  return {
-    albums: data?.pages.flatMap((page) => page.items) ?? [],
-    isLoading,
-    isRefetching,
-    error: error,
-    isFetchingNextPage,
-    nextPageFailed: isFetchNextPageError,
-    onRetryNextPage: () => {
-      void fetchNextPage();
-    },
-    ...pagedListControls({
-      hasNextPage,
-      isFetchingNextPage,
-      isFetchNextPageError,
-      fetchNextPage,
-      refetch,
-    }),
-  };
+  return { albums: items, ...paged };
 }
