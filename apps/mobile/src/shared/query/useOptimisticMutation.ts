@@ -5,7 +5,11 @@ import {
   type QueryKey,
 } from '@tanstack/react-query';
 
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import {
+  currentSessionEpoch,
+  isSameSession,
+  SessionEndedError,
+} from '@shared/session/signOutCleanup';
 import { showAlert } from '@shared/ui/dialog/dialog';
 
 type ErrorAlert = { title: string; message: string };
@@ -35,13 +39,6 @@ type OptimisticMutationOptions<TData, TVariables, TCache> =
 type Snapshot<TCache> = { previous: TCache | undefined; epoch: number };
 
 const startingSession = new WeakMap<MutationFunctionContext, number>();
-
-class SessionEndedError extends Error {
-  constructor() {
-    super('the session that started this mutation has ended');
-    this.name = 'SessionEndedError';
-  }
-}
 
 function pinStartingSession(run: MutationFunctionContext): number {
   const epoch = currentSessionEpoch();

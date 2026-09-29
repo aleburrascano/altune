@@ -7,6 +7,7 @@ import {
   isSameSession,
   onSignOut,
   runSignOutCleanups,
+  SessionEndedError,
   setSignedInUser,
   notifyIdentityChange,
   onIdentityChange,
@@ -112,6 +113,15 @@ describe('guardedMutationOptions', () => {
 
     await expect(options.mutationFn!(undefined, run)).rejects.toThrow(/session .* has ended/);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a fenced reattempt as the exported SessionEndedError', async () => {
+    const options = guardedMutationOptions({ mutationFn: () => Promise.resolve('cleared') });
+    const run = runContext();
+    await options.onMutate!(undefined, run);
+    runSignOutCleanups();
+
+    await expect(options.mutationFn!(undefined, run)).rejects.toBeInstanceOf(SessionEndedError);
   });
 
   it('refuses an attempt of a run that never captured a session', async () => {

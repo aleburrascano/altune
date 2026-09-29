@@ -60,7 +60,7 @@ export function isSameSession(epoch: number | undefined): boolean {
 
 const startingSession = new WeakMap<MutationFunctionContext, number>();
 
-class SessionEndedError extends Error {
+export class SessionEndedError extends Error {
   constructor() {
     super('the session that started this mutation has ended');
     this.name = 'SessionEndedError';
