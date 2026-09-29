@@ -17,6 +17,7 @@ import {
   flushIndex,
   readyEntry,
   scheduleSaveIndex,
+  tagChangedEntries,
 } from './pinnedIndex';
 
 type QueueState = {
@@ -55,6 +56,7 @@ async function downloadOne(trackId: TrackId, set: Setter, get: Getter): Promise<
     set((s) => {
       if (s.entries[trackId] === undefined) return {};
       const entries = { ...s.entries, [trackId]: entry };
+      tagChangedEntries(entries, [trackId]);
       scheduleSaveIndex(entries);
       return { entries };
     });

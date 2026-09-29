@@ -18,6 +18,21 @@ export type PinnedEntry =
 
 export type PinnedStatus = PinnedEntry['status'];
 
+const changedIdsByEntries = new WeakMap<Record<string, PinnedEntry>, readonly string[]>();
+
+export function tagChangedEntries(
+  entries: Record<string, PinnedEntry>,
+  ids: readonly string[],
+): void {
+  changedIdsByEntries.set(entries, ids);
+}
+
+export function changedEntryIds(
+  entries: Record<string, PinnedEntry>,
+): readonly string[] | undefined {
+  return changedIdsByEntries.get(entries);
+}
+
 export function readyEntry(trackId: TrackId, uri: string, version?: string): PinnedEntry {
   if (version === undefined) return { trackId, status: 'ready', uri };
   return { trackId, status: 'ready', uri, version };

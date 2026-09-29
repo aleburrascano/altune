@@ -3334,3 +3334,139 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
     });
   });
 });
+
+describe('pinMany settles its batch from the ids each writer changed', () => {
+  const BATCH_SIZE = 5_000;
+  const batchIds = Array.from({ length: BATCH_SIZE }, (_, i) => asTrackId(`b${i}`));
+
+  function entryWith(trackId: string, status: 'queued' | 'ready' | 'failed'): PinnedEntry {
+    const id = asTrackId(trackId);
+    if (status === 'ready')
+      return { trackId: id, status, uri: `file:///${trackId}`, version: 'v1' };
+    return { trackId: id, status };
+  }
+
+  function listenerStatusReads(): {
+    instrument: (entries: Record<string, PinnedEntry>) => Record<string, PinnedEntry>;
+    startAfterSubscribers: () => void;
+    reads: () => number;
+    reset: () => void;
+  } {
+    let reads = 0;
+    let isListening = false;
+    usePinnedStore.subscribe(() => (isListening = true));
+    return {
+      instrument: (entries) => {
+        const counted: Record<string, PinnedEntry> = {};
+        for (const [id, entry] of Object.entries(entries)) {
+          counted[id] = Object.defineProperty({ ...entry }, 'status', {
+            enumerable: true,
+            get: () => {
+              if (isListening) reads += 1;
+              return entry.status;
+            },
+          });
+        }
+        return counted;
+      },
+      startAfterSubscribers: () => {
+        usePinnedStore.subscribe(() => (isListening = false));
+      },
+      reads: () => reads,
+      reset: () => (reads = 0),
+    };
+  }
+
+  function writeTagged(changes: Record<string, PinnedEntry>): void {
+    usePinnedStore.setState((s) => ({ entries: { ...s.entries, ...changes } }));
+  }
+
+  beforeEach(() => {
+    usePinnedStore.setState({ entries: {}, queue: [], isWorking: true });
+  });
+
+  afterEach(() => {
+    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
+  });
+
+  function pinBatchWithCountedReads(): ReturnType<typeof listenerStatusReads> {
+    const counter = listenerStatusReads();
+    void usePinnedStore.getState().pinMany(batchIds);
+    counter.startAfterSubscribers();
+    usePinnedStore.setState({ entries: counter.instrument(usePinnedStore.getState().entries) });
+    counter.reset();
+    return counter;
+  }
+
+  it('reads no batch entry when a tagged writer changes a track outside the batch', () => {
+    const counted = pinBatchWithCountedReads();
+
+    usePinnedStore.getState().pin(asTrackId('other'));
+
+    expect(counted.reads()).toBe(0);
+  });
+
+  it('reads no batch entry when only isWorking changes', () => {
+    const counted = pinBatchWithCountedReads();
+
+    usePinnedStore.setState({ isWorking: false });
+
+    expect(counted.reads()).toBe(0);
+  });
+
+  it('resolves with the failed count once tagged writes settle every batch id', async () => {
+    const batch = usePinnedStore.getState().pinMany(batchIds.slice(0, 2));
+    writeTagged({ b0: entryWith('b0', 'ready') });
+    writeTagged({ b1: entryWith('b1', 'failed') });
+
+    await expect(batch).resolves.toEqual({ requested: 2, failed: 1 });
+  });
+
+  it('holds the batch open again when a ready id is re-queued before the batch settles', async () => {
+    let settled = false;
+    const batch = usePinnedStore.getState().pinMany(batchIds.slice(0, 2));
+    void batch.then(() => (settled = true));
+    writeTagged({ b0: entryWith('b0', 'ready') });
+    writeTagged({ b0: entryWith('b0', 'queued'), b1: entryWith('b1', 'ready') });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    writeTagged({ b0: entryWith('b0', 'ready') });
+
+    await expect(batch).resolves.toEqual({ requested: 2, failed: 0 });
+  });
+
+  it('counts a ready id that flips to failed before the batch settles', async () => {
+    const batch = usePinnedStore.getState().pinMany(batchIds.slice(0, 2));
+    writeTagged({ b0: entryWith('b0', 'ready') });
+    writeTagged({ b0: entryWith('b0', 'failed'), b1: entryWith('b1', 'ready') });
+
+    await expect(batch).resolves.toEqual({ requested: 2, failed: 1 });
+  });
+
+  it('still settles the batch when an untagged setState replaces every entry', async () => {
+    const batch = usePinnedStore.getState().pinMany(batchIds.slice(0, 3));
+
+    usePinnedStore.setState({
+      entries: {
+        b0: entryWith('b0', 'ready'),
+        b1: entryWith('b1', 'failed'),
+        b2: entryWith('b2', 'ready'),
+      },
+    });
+
+    await expect(batch).resolves.toEqual({ requested: 3, failed: 1 });
+  });
+
+  it('stops reading the store once the batch has resolved', async () => {
+    const counter = listenerStatusReads();
+    const batch = usePinnedStore.getState().pinMany(batchIds.slice(0, 1));
+    counter.startAfterSubscribers();
+    usePinnedStore.setState({ entries: { b0: entryWith('b0', 'ready') } });
+    await batch;
+
+    usePinnedStore.setState({ entries: counter.instrument({ b0: entryWith('b0', 'queued') }) });
+
+    expect(counter.reads()).toBe(0);
+  });
+});

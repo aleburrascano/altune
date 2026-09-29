@@ -16,6 +16,7 @@ import {
 } from './pinnedFiles';
 import {
   type PinnedEntry,
+  changedEntryIds,
   flushIndex,
   loadIndex,
   queuedEntry,
@@ -23,6 +24,7 @@ import {
   readyEntry,
   saveIndex,
   scheduleSaveIndex,
+  tagChangedEntries,
   writeOwner,
 } from './pinnedIndex';
 
@@ -63,21 +65,36 @@ function refuseForStorage(count: number): void {
   console.warn(`[offline] refused to pin ${count} track(s): pinned storage is full`);
 }
 
+function setMembership(members: Set<string>, id: string, isMember: boolean): void {
+  if (isMember) members.add(id);
+  else members.delete(id);
+}
+
 function awaitBatchSettled(trackIds: readonly TrackId[]): Promise<PinBatchResult> {
   return new Promise((resolve) => {
-    const check = (entries: Record<string, PinnedEntry>): boolean => {
-      let failed = 0;
-      for (const id of trackIds) {
-        const status = entries[id]?.status;
-        if (status === 'queued' || status === 'downloading') return false;
-        if (status === 'failed') failed += 1;
-      }
-      resolve({ requested: trackIds.length, failed });
+    const batch = new Set<string>(trackIds);
+    const pending = new Set<string>();
+    const failed = new Set<string>();
+    const classify = (entries: Record<string, PinnedEntry>, id: string): void => {
+      const status = entries[id]?.status;
+      setMembership(pending, id, status === 'queued' || status === 'downloading');
+      setMembership(failed, id, status === 'failed');
+    };
+    const settleIfDone = (): boolean => {
+      if (pending.size > 0) return false;
+      resolve({ requested: trackIds.length, failed: failed.size });
       return true;
     };
-    if (check(usePinnedStore.getState().entries)) return;
-    const unsubscribe = usePinnedStore.subscribe((state) => {
-      if (check(state.entries)) unsubscribe();
+    const initial = usePinnedStore.getState().entries;
+    for (const id of batch) classify(initial, id);
+    if (settleIfDone()) return;
+    const unsubscribe = usePinnedStore.subscribe((state, previous) => {
+      if (state.entries === previous.entries) return;
+      const changed = changedEntryIds(state.entries);
+      for (const id of changed ?? batch) {
+        if (batch.has(id)) classify(state.entries, id);
+      }
+      if (settleIfDone()) unsubscribe();
     });
   });
 }
@@ -108,6 +125,7 @@ function removeChunk(set: UnpinSetter, get: () => PinnedState, chunk: readonly T
   const stillOnDisk = deletePinnedMany(chunk);
   const entries = withoutRemoved(get().entries, chunk, stillOnDisk);
   scheduleSaveIndex(entries);
+  tagChangedEntries(entries, chunk);
   set((s) => ({ entries, queue: s.queue.filter((trackId) => entries[trackId] !== undefined) }));
   return chunk.filter((trackId) => entries[trackId] === undefined).length;
 }
@@ -159,6 +177,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     }
     set((s) => {
       const entries = { ...s.entries, [trackId]: queuedEntry(trackId) };
+      tagChangedEntries(entries, [trackId]);
       saveIndex(entries);
       return { entries, queue: [...s.queue, trackId] };
     });
@@ -177,6 +196,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     set((s) => {
       const next = { ...s.entries };
       for (const id of fresh) next[id] = queuedEntry(id);
+      tagChangedEntries(next, fresh);
       saveIndex(next);
       return { entries: next, queue: [...s.queue, ...fresh] };
     });
@@ -190,6 +210,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     set((s) => {
       const entries = { ...s.entries };
       delete entries[trackId];
+      tagChangedEntries(entries, [trackId]);
       saveIndex(entries);
       return { entries, queue: s.queue.filter((id) => id !== trackId) };
     });
