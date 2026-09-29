@@ -27,9 +27,9 @@ func TestWireFeedback_KillSwitch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: &config.Config{
-				FeedbackEnabled:  tt.enabled,
-				GitHubIssueRepo:  "aleburrascano/altune",
-				GitHubIssueToken: "ghp_secret",
+				FeedbackEnabled: tt.enabled,
+				GiteaIssueRepo:  "aleburrascano/altune",
+				GiteaIssueToken: "gitea_secret",
 			}}
 
 			handler := a.wireFeedback()
@@ -60,9 +60,9 @@ func TestMountFeedback_DisabledAnswers503WithCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: &config.Config{
-				FeedbackEnabled:  tt.enabled,
-				GitHubIssueRepo:  tt.repo,
-				GitHubIssueToken: "ghp_secret",
+				FeedbackEnabled: tt.enabled,
+				GiteaIssueRepo:  tt.repo,
+				GiteaIssueToken: "gitea_secret",
 			}}
 			r := chi.NewRouter()
 			mountFeedback(r, a.wireFeedback())
@@ -106,7 +106,7 @@ func TestWireFeedback_WarnsWhenEnabledButUnconfigured(t *testing.T) {
 		t.Fatal("expected no handler without credentials")
 	}
 	out := buf.String()
-	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, "GITHUB_ISSUE_TOKEN") {
+	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, "GITEA_ISSUE_TOKEN") {
 		t.Fatalf("log = %q, want a WARN naming the variables", out)
 	}
 }

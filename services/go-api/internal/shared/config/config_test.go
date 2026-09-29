@@ -434,7 +434,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"ACQUISITION_CONCURRENCY",
-		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN", "EXPLORATION_RATE",
+		"GITEA_ISSUE_URL", "GITEA_ISSUE_REPO", "GITEA_ISSUE_TOKEN", "EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
 	}
 	for _, k := range envKeys {
@@ -466,8 +466,8 @@ func feedbackBaseEnv() map[string]string {
 	return map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"GITHUB_ISSUE_REPO":     "aleburrascano/altune",
-		"GITHUB_ISSUE_TOKEN":    "ghp_secret",
+		"GITEA_ISSUE_REPO":      "aleburrascano/altune",
+		"GITEA_ISSUE_TOKEN":     "gitea_secret",
 	}
 }
 
@@ -504,13 +504,13 @@ func TestLoad_FeedbackEnabledRespectsEnv(t *testing.T) {
 }
 
 func TestHasIssueTracker_PassesMalformedRepo(t *testing.T) {
-	cfg := &Config{GitHubIssueRepo: "altune-no-slash", GitHubIssueToken: "ghp_secret"}
+	cfg := &Config{GiteaIssueRepo: "altune-no-slash", GiteaIssueToken: "gitea_secret"}
 	if !cfg.HasIssueTracker() {
 		t.Fatal("HasIssueTracker gates on presence only, so a malformed repo still reports true")
 	}
 }
 
-func TestLoad_GitHubIssueRepoMalformed(t *testing.T) {
+func TestLoad_GiteaIssueRepoMalformed(t *testing.T) {
 	tests := []struct {
 		name string
 		repo string
@@ -524,41 +524,41 @@ func TestLoad_GitHubIssueRepoMalformed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			env := feedbackBaseEnv()
-			env["GITHUB_ISSUE_REPO"] = tt.repo
+			env["GITEA_ISSUE_REPO"] = tt.repo
 			setEnv(t, env)
 
 			_, err := Load()
 			if err == nil {
-				t.Fatal("expected error for malformed GITHUB_ISSUE_REPO")
+				t.Fatal("expected error for malformed GITEA_ISSUE_REPO")
 			}
-			if !searchString(err.Error(), "GITHUB_ISSUE_REPO") {
-				t.Errorf("expected error to name GITHUB_ISSUE_REPO, got: %v", err)
+			if !searchString(err.Error(), "GITEA_ISSUE_REPO") {
+				t.Errorf("expected error to name GITEA_ISSUE_REPO, got: %v", err)
 			}
 		})
 	}
 }
 
-func TestLoad_GitHubIssueRepoValid(t *testing.T) {
+func TestLoad_GiteaIssueRepoValid(t *testing.T) {
 	setEnv(t, feedbackBaseEnv())
 
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("unexpected error for valid GITHUB_ISSUE_REPO: %v", err)
+		t.Fatalf("unexpected error for valid GITEA_ISSUE_REPO: %v", err)
 	}
 	if !cfg.HasIssueTracker() {
 		t.Error("expected HasIssueTracker=true for a valid owner/repo slug")
 	}
 }
 
-func TestLoad_GitHubIssueRepoOptionalWhenUnset(t *testing.T) {
+func TestLoad_GiteaIssueRepoOptionalWhenUnset(t *testing.T) {
 	env := feedbackBaseEnv()
-	delete(env, "GITHUB_ISSUE_REPO")
-	delete(env, "GITHUB_ISSUE_TOKEN")
+	delete(env, "GITEA_ISSUE_REPO")
+	delete(env, "GITEA_ISSUE_TOKEN")
 	setEnv(t, env)
 
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("unexpected error when GITHUB_ISSUE_REPO unset: %v", err)
+		t.Fatalf("unexpected error when GITEA_ISSUE_REPO unset: %v", err)
 	}
 	if cfg.HasIssueTracker() {
 		t.Error("expected HasIssueTracker=false when credentials unset")
@@ -572,21 +572,21 @@ func TestLoad_FeedbackCredentialShape(t *testing.T) {
 		token   string
 		wantErr string
 	}{
-		{"token without repo", "", "ghp_x", "GITHUB_ISSUE_REPO"},
-		{"repo without token", "a/b", "", "GITHUB_ISSUE_TOKEN"},
-		{"dotdot repo", "owner/..", "ghp_x", "GITHUB_ISSUE_REPO"},
-		{"query in repo", "owner/re?po", "ghp_x", "GITHUB_ISSUE_REPO"},
-		{"fragment in repo", "a/b#f", "ghp_x", "GITHUB_ISSUE_REPO"},
-		{"carriage return in repo", "a/b\r", "ghp_x", "GITHUB_ISSUE_REPO"},
-		{"whitespace inside token", "a/b", "tok en", "GITHUB_ISSUE_TOKEN"},
+		{"token without repo", "", "gitea_x", "GITEA_ISSUE_REPO"},
+		{"repo without token", "a/b", "", "GITEA_ISSUE_TOKEN"},
+		{"dotdot repo", "owner/..", "gitea_x", "GITEA_ISSUE_REPO"},
+		{"query in repo", "owner/re?po", "gitea_x", "GITEA_ISSUE_REPO"},
+		{"fragment in repo", "a/b#f", "gitea_x", "GITEA_ISSUE_REPO"},
+		{"carriage return in repo", "a/b\r", "gitea_x", "GITEA_ISSUE_REPO"},
+		{"whitespace inside token", "a/b", "tok en", "GITEA_ISSUE_TOKEN"},
 		{"both empty", "", "", ""},
 		{"trailing newline token is trimmed", "a/b", "tok\n", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			env := feedbackBaseEnv()
-			env["GITHUB_ISSUE_REPO"] = tt.repo
-			env["GITHUB_ISSUE_TOKEN"] = tt.token
+			env["GITEA_ISSUE_REPO"] = tt.repo
+			env["GITEA_ISSUE_TOKEN"] = tt.token
 			setEnv(t, env)
 
 			cfg, err := Load()
@@ -595,8 +595,8 @@ func TestLoad_FeedbackCredentialShape(t *testing.T) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if tt.token == "tok\n" && cfg.GitHubIssueToken != "tok" {
-					t.Fatalf("token = %q, want trimmed", cfg.GitHubIssueToken)
+				if tt.token == "tok\n" && cfg.GiteaIssueToken != "tok" {
+					t.Fatalf("token = %q, want trimmed", cfg.GiteaIssueToken)
 				}
 				return
 			}
@@ -607,10 +607,45 @@ func TestLoad_FeedbackCredentialShape(t *testing.T) {
 	}
 }
 
+func TestLoad_GiteaIssueURLMustBeSecureAbsolute(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"https host", "https://altune-git.duckdns.org", false},
+		{"plain http loopback", "http://127.0.0.1:3300", false},
+		{"relative path", "git.example/api", true},
+		{"no scheme host", "altune-git.duckdns.org", true},
+		{"plain http non-loopback", "http://altune-git.duckdns.org", true},
+		{"plain http private address", "http://10.0.0.5:3300", true},
+		{"non-http scheme", "ftp://altune-git.duckdns.org", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := feedbackBaseEnv()
+			env["GITEA_ISSUE_URL"] = tt.url
+			setEnv(t, env)
+
+			_, err := Load()
+
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !searchString(err.Error(), "GITEA_ISSUE_URL") {
+				t.Fatalf("err = %v, want it to name GITEA_ISSUE_URL", err)
+			}
+		})
+	}
+}
+
 func TestLoad_FeedbackDisabledBothEmptyStarts(t *testing.T) {
 	env := feedbackBaseEnv()
-	env["GITHUB_ISSUE_REPO"] = ""
-	env["GITHUB_ISSUE_TOKEN"] = ""
+	env["GITEA_ISSUE_REPO"] = ""
+	env["GITEA_ISSUE_TOKEN"] = ""
 	env["FEEDBACK_ENABLED"] = "false"
 	setEnv(t, env)
 

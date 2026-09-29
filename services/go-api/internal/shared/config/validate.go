@@ -85,16 +85,19 @@ func (c *Config) validateTuning() error {
 }
 
 func (c *Config) validateFeedback() error {
-	c.GitHubIssueToken = strings.TrimSpace(c.GitHubIssueToken)
-	switch {
-	case c.GitHubIssueRepo == "" && c.GitHubIssueToken == "":
-		return nil
-	case c.GitHubIssueRepo == "":
-		return errors.New("GITHUB_ISSUE_TOKEN set but GITHUB_ISSUE_REPO missing")
-	case c.GitHubIssueToken == "":
-		return errors.New("GITHUB_ISSUE_REPO set but GITHUB_ISSUE_TOKEN missing")
+	c.GiteaIssueToken = strings.TrimSpace(c.GiteaIssueToken)
+	if err := validateSecureURL("GITEA_ISSUE_URL", c.GiteaIssueURL); err != nil {
+		return err
 	}
-	return errors.Join(validateOwnerRepo("GITHUB_ISSUE_REPO", c.GitHubIssueRepo), validateToken("GITHUB_ISSUE_TOKEN", c.GitHubIssueToken))
+	switch {
+	case c.GiteaIssueRepo == "" && c.GiteaIssueToken == "":
+		return nil
+	case c.GiteaIssueRepo == "":
+		return errors.New("GITEA_ISSUE_TOKEN set but GITEA_ISSUE_REPO missing")
+	case c.GiteaIssueToken == "":
+		return errors.New("GITEA_ISSUE_REPO set but GITEA_ISSUE_TOKEN missing")
+	}
+	return errors.Join(validateOwnerRepo("GITEA_ISSUE_REPO", c.GiteaIssueRepo), validateToken("GITEA_ISSUE_TOKEN", c.GiteaIssueToken))
 }
 
 var ownerRepoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)

@@ -73,8 +73,9 @@ type Config struct {
 	AppleMusicEnabled  bool `env:"APPLEMUSIC_ENABLED" envDefault:"true"`
 	AmazonMusicEnabled bool `env:"AMAZONMUSIC_ENABLED" envDefault:"true"`
 
-	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
-	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
+	GiteaIssueURL   string `env:"GITEA_ISSUE_URL" envDefault:"https://altune-git.duckdns.org"`
+	GiteaIssueRepo  string `env:"GITEA_ISSUE_REPO"`
+	GiteaIssueToken string `env:"GITEA_ISSUE_TOKEN"`
 
 	FeedbackEnabled bool `env:"FEEDBACK_ENABLED" envDefault:"true"`
 

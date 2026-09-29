@@ -34,7 +34,7 @@ func (silentMetrics) TrackerCreateFailed(string) {}
 func (silentMetrics) SubmissionRejected(string)  {}
 func (silentMetrics) SubmissionCreated()         {}
 
-func submitThrough(t *testing.T, tracker *GitHubIssueTracker) (status int, detail, code string) {
+func submitThrough(t *testing.T, tracker *GiteaIssueTracker) (status int, detail, code string) {
 	t.Helper()
 	svc := service.NewSubmitReportService(tracker, silentMetrics{})
 	_, err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), service.SubmitReportInput{
@@ -62,7 +62,7 @@ func captureLogLines(t *testing.T) *bytes.Buffer {
 	return buf
 }
 
-func TestSubmitReport_ResponseDetailHidesUpstreamGitHubBody(t *testing.T) {
+func TestSubmitReport_ResponseDetailHidesUpstreamGiteaBody(t *testing.T) {
 	cases := []struct {
 		status   int
 		wantCode string
@@ -74,7 +74,7 @@ func TestSubmitReport_ResponseDetailHidesUpstreamGitHubBody(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(http.StatusText(tc.status), func(t *testing.T) {
 			logs := captureLogLines(t)
-			tracker, _ := newFakeGitHub(t, tc.status, `{"message":"`+upstreamMarker+`"}`)
+			tracker, _ := newFakeGitea(t, tc.status, `{"message":"`+upstreamMarker+`"}`)
 
 			status, detail, code := submitThrough(t, tracker)
 
@@ -151,21 +151,21 @@ func TestSubmitReport_SplitsTrackerFailureMetricByCause(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		tracker   func(t *testing.T) *GitHubIssueTracker
+		tracker   func(t *testing.T) *GiteaIssueTracker
 		wantCause string
 		permanent bool
 	}{
-		{"github 5xx", func(t *testing.T) *GitHubIssueTracker {
-			tr, _ := newFakeGitHub(t, http.StatusServiceUnavailable, `{"message":"boom"}`)
+		{"gitea 5xx", func(t *testing.T) *GiteaIssueTracker {
+			tr, _ := newFakeGitea(t, http.StatusServiceUnavailable, `{"message":"boom"}`)
 			return tr
 		}, codeUnavailable, false},
-		{"network error", func(*testing.T) *GitHubIssueTracker { return newTestTracker(unreachableURL) }, codeUnreachable, false},
-		{"dead token 401", func(t *testing.T) *GitHubIssueTracker {
-			tr, _ := newFakeGitHub(t, http.StatusUnauthorized, `{"message":"Bad credentials"}`)
+		{"network error", func(*testing.T) *GiteaIssueTracker { return newTestTracker(unreachableURL) }, codeUnreachable, false},
+		{"dead token 401", func(t *testing.T) *GiteaIssueTracker {
+			tr, _ := newFakeGitea(t, http.StatusUnauthorized, `{"message":"Bad credentials"}`)
 			return tr
 		}, codeUnauthorized, true},
-		{"wrong repo 404", func(t *testing.T) *GitHubIssueTracker {
-			tr, _ := newFakeGitHub(t, http.StatusNotFound, `{"message":"Not Found"}`)
+		{"wrong repo 404", func(t *testing.T) *GiteaIssueTracker {
+			tr, _ := newFakeGitea(t, http.StatusNotFound, `{"message":"Not Found"}`)
 			return tr
 		}, codeNotFound, true},
 	}
@@ -211,7 +211,7 @@ func TestTrackerError_ForwardsBoundedRetryAfter(t *testing.T) {
 		header string
 		want   string
 	}{
-		{name: "github hint is forwarded", header: "30", want: "30"},
+		{name: "gitea hint is forwarded", header: "30", want: "30"},
 		{name: "an absurd hint is bounded", header: "86400", want: "3600"},
 	}
 	for _, tc := range cases {
@@ -236,10 +236,13 @@ func TestTrackerError_NoHintSendsNoRetryAfter(t *testing.T) {
 	}
 }
 
-func recordThenStallGitHub(t *testing.T) (*GitHubIssueTracker, *atomic.Int32) {
+func recordThenStallGitea(t *testing.T) (*GiteaIssueTracker, *atomic.Int32) {
 	t.Helper()
 	var recorded atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLabels(w, r) {
+			return
+		}
 		_, _ = io.Copy(io.Discard, r.Body)
 		recorded.Add(1)
 		<-r.Context().Done()
@@ -256,7 +259,7 @@ type keyedSubmitter struct {
 	input service.SubmitReportInput
 }
 
-func newKeyedSubmitter(tracker *GitHubIssueTracker, metrics ports.FeedbackMetrics) keyedSubmitter {
+func newKeyedSubmitter(tracker *GiteaIssueTracker, metrics ports.FeedbackMetrics) keyedSubmitter {
 	clock := &steppedClock{t: time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)}
 	key := "retry-" + uuid.NewString()
 	return keyedSubmitter{
@@ -288,8 +291,8 @@ func codeOfErr(err error) string {
 	return coder.ErrorCode()
 }
 
-func TestSubmitReport_TimeoutAfterGitHubRecordedTheIssueKeepsQuotaAndKey(t *testing.T) {
-	tracker, recorded := recordThenStallGitHub(t)
+func TestSubmitReport_TimeoutAfterGiteaRecordedTheIssueKeepsQuotaAndKey(t *testing.T) {
+	tracker, recorded := recordThenStallGitea(t)
 	metrics := &causeRecordingMetrics{}
 	submitter := newKeyedSubmitter(tracker, metrics)
 
@@ -303,7 +306,7 @@ func TestSubmitReport_TimeoutAfterGitHubRecordedTheIssueKeepsQuotaAndKey(t *test
 		t.Fatalf("codes = %q then %q, want %q both times", codeOfErr(first), codeOfErr(retry), codeOutcomeUnknown)
 	}
 	if got := recorded.Load(); got != 1 {
-		t.Fatalf("GitHub recorded %d issues, want 1: the keyed retry must not create again", got)
+		t.Fatalf("Gitea recorded %d issues, want 1: the keyed retry must not create again", got)
 	}
 	if len(metrics.causes) != 1 || metrics.causes[0] != codeOutcomeUnknown {
 		t.Fatalf("counted causes = %v, want [%s]", metrics.causes, codeOutcomeUnknown)
@@ -321,7 +324,7 @@ func TestTransportError_VouchesUncreatedOnlyForProvableNonDelivery(t *testing.T)
 		wantCode      string
 	}{
 		{"dial refused", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}, true, codeUnreachable},
-		{"dns failure", &net.DNSError{Err: "no such host", Name: "api.github.invalid", IsNotFound: true}, true, codeUnreachable},
+		{"dns failure", &net.DNSError{Err: "no such host", Name: "git.invalid", IsNotFound: true}, true, codeUnreachable},
 		{"reset after write", &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, false, codeOutcomeUnknown},
 		{"eof after write", io.EOF, false, codeOutcomeUnknown},
 		{"client timeout", context.DeadlineExceeded, false, codeOutcomeUnknown},
@@ -329,7 +332,7 @@ func TestTransportError_VouchesUncreatedOnlyForProvableNonDelivery(t *testing.T)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			doErr := &url.Error{Op: "Post", URL: "https://api.github.com/repos/o/r/issues", Err: tc.cause}
+			doErr := &url.Error{Op: "Post", URL: "https://git.example/api/v1/repos/o/r/issues", Err: tc.cause}
 
 			err := fmt.Errorf("create issue: %w", transportError(doErr))
 
@@ -348,13 +351,16 @@ type scriptedReply struct {
 
 var (
 	outage  = scriptedReply{status: http.StatusServiceUnavailable, body: `{"message":"Service Unavailable"}`}
-	created = scriptedReply{status: http.StatusCreated, body: `{"number":7,"html_url":"https://github.com/o/r/issues/7"}`}
+	created = scriptedReply{status: http.StatusCreated, body: `{"number":7,"html_url":"https://git.example/o/r/issues/7"}`}
 )
 
-func scriptedGitHub(t *testing.T, fallback scriptedReply, script ...scriptedReply) (*GitHubIssueTracker, *atomic.Int32) {
+func scriptedGitea(t *testing.T, fallback scriptedReply, script ...scriptedReply) (*GiteaIssueTracker, *atomic.Int32) {
 	t.Helper()
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLabels(w, r) {
+			return
+		}
 		_, _ = io.Copy(io.Discard, r.Body)
 		reply := fallback
 		if n := int(hits.Add(1)); n <= len(script) {
@@ -377,7 +383,7 @@ var refundLimits = service.SubmissionLimits{
 	GlobalWindow:  10 * time.Minute,
 }
 
-func refundService(tracker *GitHubIssueTracker) (*service.SubmitReportService, *steppedClock) {
+func refundService(tracker *GiteaIssueTracker) (*service.SubmitReportService, *steppedClock) {
 	clock := &steppedClock{t: time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)}
 	return service.NewSubmitReportServiceWithLimits(tracker, noopMetrics{}, refundLimits, clock.now), clock
 }
@@ -398,25 +404,25 @@ func isLocalRefusal(err error) bool {
 	return errors.As(err, &status) && status.HTTPStatus() == http.StatusTooManyRequests
 }
 
-func TestSubmitReport_GitHubOutageReleasesQuota(t *testing.T) {
-	tracker, hits := scriptedGitHub(t, created, outage, outage)
+func TestSubmitReport_GiteaOutageReleasesQuota(t *testing.T) {
+	tracker, hits := scriptedGitea(t, created, outage, outage)
 	svc, _ := refundService(tracker)
 
 	for i := 0; i < 2; i++ {
 		if err := submitAsFreshUser(svc); err == nil || isLocalRefusal(err) {
-			t.Fatalf("outage create %d = %v, want a GitHub failure", i, err)
+			t.Fatalf("outage create %d = %v, want a Gitea failure", i, err)
 		}
 	}
 	if got := admittedUntilRefused(t, svc); got != refundLimits.Global {
 		t.Fatalf("after the outage %d reports were admitted, want the full global cap %d", got, refundLimits.Global)
 	}
 	if got := hits.Load(); got != 2+int32(refundLimits.Global) {
-		t.Fatalf("GitHub saw %d creates, want %d", got, 2+refundLimits.Global)
+		t.Fatalf("Gitea saw %d creates, want %d", got, 2+refundLimits.Global)
 	}
 }
 
-func TestSubmitReport_UnreachableGitHubReleasesQuota(t *testing.T) {
-	tracker, _ := scriptedGitHub(t, created)
+func TestSubmitReport_UnreachableGiteaReleasesQuota(t *testing.T) {
+	tracker, _ := scriptedGitea(t, created)
 	liveURL := tracker.baseURL
 	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	dead.Close()
@@ -428,12 +434,12 @@ func TestSubmitReport_UnreachableGitHubReleasesQuota(t *testing.T) {
 	}
 	tracker.baseURL = liveURL
 	if got := admittedUntilRefused(t, svc); got != refundLimits.Global {
-		t.Fatalf("after an unreachable GitHub %d reports were admitted, want %d", got, refundLimits.Global)
+		t.Fatalf("after an unreachable Gitea %d reports were admitted, want %d", got, refundLimits.Global)
 	}
 }
 
-func TestSubmitReport_SustainedOutageStillBoundsGitHubCalls(t *testing.T) {
-	tracker, hits := scriptedGitHub(t, outage)
+func TestSubmitReport_SustainedOutageStillBoundsGiteaCalls(t *testing.T) {
+	tracker, hits := scriptedGitea(t, outage)
 	svc, _ := refundService(tracker)
 
 	want := refundLimits.Global + refundLimits.Global/2
@@ -444,7 +450,7 @@ func TestSubmitReport_SustainedOutageStillBoundsGitHubCalls(t *testing.T) {
 		_ = submitAsFreshUser(svc)
 	}
 	if got := hits.Load(); got != int32(want) {
-		t.Fatalf("GitHub saw %d creates during the outage, want at most %d", got, want)
+		t.Fatalf("Gitea saw %d creates during the outage, want at most %d", got, want)
 	}
 }
 
@@ -463,7 +469,7 @@ func TestSubmitReport_FailuresThatMayHaveCreatedOrWereCountedKeepQuota(t *testin
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tracker, hits := scriptedGitHub(t, created, tc.first)
+			tracker, hits := scriptedGitea(t, created, tc.first)
 			svc, clock := refundService(tracker)
 
 			if err := submitAsFreshUser(svc); err == nil {
@@ -477,16 +483,19 @@ func TestSubmitReport_FailuresThatMayHaveCreatedOrWereCountedKeepQuota(t *testin
 				t.Fatalf("%d reports admitted after the failure, want %d (its slot stays spent)", got, refundLimits.Global-1)
 			}
 			if got := hits.Load(); got != int32(refundLimits.Global) {
-				t.Fatalf("GitHub saw %d creates, want %d", got, refundLimits.Global)
+				t.Fatalf("Gitea saw %d creates, want %d", got, refundLimits.Global)
 			}
 		})
 	}
 }
 
-func throttlingGitHub(t *testing.T, status int, headers map[string]string, body string) (*GitHubIssueTracker, *atomic.Int32) {
+func throttlingGitea(t *testing.T, status int, headers map[string]string, body string) (*GiteaIssueTracker, *atomic.Int32) {
 	t.Helper()
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLabels(w, r) {
+			return
+		}
 		_, _ = io.Copy(io.Discard, r.Body)
 		if hits.Add(1) == 1 {
 			for k, v := range headers {
@@ -497,7 +506,7 @@ func throttlingGitHub(t *testing.T, status int, headers map[string]string, body 
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"number":7,"html_url":"https://github.com/o/r/issues/7"}`))
+		_, _ = w.Write([]byte(`{"number":7,"html_url":"https://git.example/o/r/issues/7"}`))
 	}))
 	t.Cleanup(server.Close)
 	return newTestTracker(server.URL), &hits
@@ -532,11 +541,11 @@ func assertRefusedLocally(t *testing.T, err error) {
 	t.Helper()
 	var status interface{ HTTPStatus() int }
 	if !errors.As(err, &status) || status.HTTPStatus() != http.StatusTooManyRequests {
-		t.Fatalf("submission during GitHub's lockout = %v, want a local 429 refusal", err)
+		t.Fatalf("submission during Gitea's lockout = %v, want a local 429 refusal", err)
 	}
 }
 
-func TestAdmission_PausesOnGitHubThrottleSignal(t *testing.T) {
+func TestAdmission_PausesOnGiteaThrottleSignal(t *testing.T) {
 	cases := []struct {
 		name        string
 		status      int
@@ -585,7 +594,7 @@ func TestAdmission_PausesOnGitHubThrottleSignal(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tracker, hits := throttlingGitHub(t, tc.status, tc.headers(), tc.body)
+			tracker, hits := throttlingGitea(t, tc.status, tc.headers(), tc.body)
 			start := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 			clock := &steppedClock{t: start}
 			svc := service.NewSubmitReportServiceWithLimits(tracker, noopMetrics{}, generousLimits, clock.now)
@@ -599,21 +608,21 @@ func TestAdmission_PausesOnGitHubThrottleSignal(t *testing.T) {
 			clock.t = start.Add(tc.stillPaused)
 			assertRefusedLocally(t, submitAsFreshUser(svc))
 			if got := hits.Load(); got != 1 {
-				t.Fatalf("GitHub was called %d times during its lockout, want 1", got)
+				t.Fatalf("Gitea was called %d times during its lockout, want 1", got)
 			}
 
 			clock.t = start.Add(tc.resumed)
 			if err := submitAsFreshUser(svc); err != nil {
-				t.Fatalf("submission after GitHub's wait elapsed was refused: %v", err)
+				t.Fatalf("submission after Gitea's wait elapsed was refused: %v", err)
 			}
 			if got := hits.Load(); got != 2 {
-				t.Fatalf("GitHub was called %d times, want 2 once the wait elapsed", got)
+				t.Fatalf("Gitea was called %d times, want 2 once the wait elapsed", got)
 			}
 		})
 	}
 }
 
-func TestRequestedBackoff_ReadsGitHubHeaders(t *testing.T) {
+func TestRequestedBackoff_ReadsGiteaHeaders(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	cases := []struct {
 		name    string
@@ -656,7 +665,7 @@ func TestAdmission_NonThrottleFailureDoesNotPause(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tracker, hits := throttlingGitHub(t, tc.status, nil, tc.body)
+			tracker, hits := throttlingGitea(t, tc.status, nil, tc.body)
 			clock := &steppedClock{t: time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)}
 			svc := service.NewSubmitReportServiceWithLimits(tracker, noopMetrics{}, generousLimits, clock.now)
 
@@ -665,7 +674,7 @@ func TestAdmission_NonThrottleFailureDoesNotPause(t *testing.T) {
 				t.Fatalf("a non-throttle failure paused admissions: %v", err)
 			}
 			if got := hits.Load(); got != 2 {
-				t.Fatalf("GitHub was called %d times, want 2", got)
+				t.Fatalf("Gitea was called %d times, want 2", got)
 			}
 		})
 	}

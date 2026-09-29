@@ -13,34 +13,37 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	defaultBaseURL = "https://api.github.com"
-	apiVersion     = "2022-11-28"
 	requestTimeout = 15 * time.Second
 	maxErrorBody   = 4 << 10
 	maxIssueBody   = 1 << 20
 	sourceLabel    = "from-app"
-	errPrefix      = "github issues"
+	errPrefix      = "gitea issues"
+	labelPageLimit = 100
 )
 
 func wrapErr(err error) error {
 	return fmt.Errorf("%s: %w", errPrefix, err)
 }
 
-type GitHubIssueTracker struct {
+type GiteaIssueTracker struct {
 	client  *http.Client
 	baseURL string
 	repo    string
 	token   string
+
+	labelsMu sync.Mutex
+	labelIDs map[string]int64
 }
 
-func NewGitHubIssueTracker(repo, token string) *GitHubIssueTracker {
-	return &GitHubIssueTracker{
+func NewGiteaIssueTracker(baseURL, repo, token string) *GiteaIssueTracker {
+	return &GiteaIssueTracker{
 		client:  &http.Client{Timeout: requestTimeout},
-		baseURL: defaultBaseURL,
+		baseURL: strings.TrimSuffix(baseURL, "/"),
 		repo:    repo,
 		token:   token,
 	}
@@ -57,9 +60,14 @@ func labelFor(kind domain.Kind) string {
 }
 
 type createIssueRequest struct {
-	Title  string   `json:"title"`
-	Body   string   `json:"body"`
-	Labels []string `json:"labels"`
+	Title  string  `json:"title"`
+	Body   string  `json:"body"`
+	Labels []int64 `json:"labels"`
+}
+
+type repoLabel struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 type createIssueResponse struct {
@@ -67,8 +75,8 @@ type createIssueResponse struct {
 	HTMLURL string `json:"html_url"`
 }
 
-func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
-	req, err := t.newRequest(ctx, report)
+func (t *GiteaIssueTracker) Create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
+	req, err := t.newRequest(ctx, report, t.resolveLabels(ctx, report.Kind))
 	if err != nil {
 		return ports.IssueRef{}, err
 	}
@@ -85,7 +93,7 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	return t.readCreated(ctx, resp)
 }
 
-func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
+func (t *GiteaIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxIssueBody))
 	if err != nil {
 		return ports.IssueRef{}, outcomeUnknown(confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err))))
@@ -98,7 +106,7 @@ func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Respons
 }
 
 func confirmedButUndecoded(ctx context.Context, status int, raw []byte, err error) error {
-	slog.ErrorContext(ctx, "github.issue_confirmed_but_undecoded",
+	slog.ErrorContext(ctx, "gitea.issue_confirmed_but_undecoded",
 		"status", status,
 		"raw_body", boundedBody(raw),
 		"error", err.Error(),
@@ -114,16 +122,16 @@ func drain(body io.Reader) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxIssueBody))
 }
 
-func (t *GitHubIssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
+func (t *GiteaIssueTracker) newRequest(ctx context.Context, report *domain.Report, labels []int64) (*http.Request, error) {
 	payload, err := json.Marshal(createIssueRequest{
 		Title:  plainTitle(report.Title()),
 		Body:   renderBody(report, logging.CorrelationIDFromContext(ctx)),
-		Labels: []string{labelFor(report.Kind), sourceLabel},
+		Labels: labels,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode issue: %w", err)
 	}
-	url := fmt.Sprintf("%s/repos/%s/issues", t.baseURL, t.repo)
+	url := fmt.Sprintf("%s/api/v1/repos/%s/issues", t.baseURL, t.repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("build issue request: %w", err)
@@ -133,9 +141,7 @@ func (t *GitHubIssueTracker) newRequest(ctx context.Context, report *domain.Repo
 }
 
 func setHeaders(req *http.Request, token string) {
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", apiVersion)
+	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Content-Type", "application/json")
 }
 
@@ -153,4 +159,66 @@ func decodeIssue(raw []byte) (ports.IssueRef, error) {
 		return ports.IssueRef{}, wrapErr(errors.New("response carried no issue number"))
 	}
 	return ports.IssueRef{Number: created.Number, URL: created.HTMLURL}, nil
+}
+
+func (t *GiteaIssueTracker) resolveLabels(ctx context.Context, kind domain.Kind) []int64 {
+	known, err := t.repoLabels(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "gitea.label_lookup_failed", "error", err.Error())
+		return []int64{}
+	}
+	ids := []int64{}
+	for _, name := range []string{labelFor(kind), sourceLabel} {
+		if name == "" {
+			continue
+		}
+		id, ok := known[name]
+		if !ok {
+			slog.WarnContext(ctx, "gitea.label_missing", "label", name)
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (t *GiteaIssueTracker) repoLabels(ctx context.Context) (map[string]int64, error) {
+	t.labelsMu.Lock()
+	defer t.labelsMu.Unlock()
+	if t.labelIDs != nil {
+		return t.labelIDs, nil
+	}
+	labels, err := t.fetchLabels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	t.labelIDs = labels
+	return labels, nil
+}
+
+func (t *GiteaIssueTracker) fetchLabels(ctx context.Context) (map[string]int64, error) {
+	url := fmt.Sprintf("%s/api/v1/repos/%s/labels?limit=%d", t.baseURL, t.repo, labelPageLimit)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, wrapErr(fmt.Errorf("build label request: %w", err))
+	}
+	setHeaders(req, t.token)
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return nil, wrapErr(fmt.Errorf("list labels: %w", err))
+	}
+	defer resp.Body.Close()
+	defer drain(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, wrapErr(fmt.Errorf("list labels: status %d", resp.StatusCode))
+	}
+	var listed []repoLabel
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxIssueBody)).Decode(&listed); err != nil {
+		return nil, wrapErr(fmt.Errorf("decode labels: %w", err))
+	}
+	byName := make(map[string]int64, len(listed))
+	for _, label := range listed {
+		byName[label.Name] = label.ID
+	}
+	return byName, nil
 }

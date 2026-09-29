@@ -17,10 +17,10 @@ func (a *App) wireFeedback() *feedbackHandler.FeedbackHandler {
 		return nil
 	}
 	if !a.cfg.HasIssueTracker() {
-		slog.Warn("feedback: GITHUB_ISSUE_REPO and GITHUB_ISSUE_TOKEN not set, in-app reports disabled")
+		slog.Warn("feedback: GITEA_ISSUE_REPO and GITEA_ISSUE_TOKEN not set, in-app reports disabled")
 		return nil
 	}
-	tracker := feedbackProviders.NewGitHubIssueTracker(a.cfg.GitHubIssueRepo, a.cfg.GitHubIssueToken)
+	tracker := feedbackProviders.NewGiteaIssueTracker(a.cfg.GiteaIssueURL, a.cfg.GiteaIssueRepo, a.cfg.GiteaIssueToken)
 	metrics := feedbackMetrics.NewExpvarFeedbackMetrics()
 	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker, metrics))
 }

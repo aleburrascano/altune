@@ -85,5 +85,5 @@ func (c *Config) HasNowPlayingEnrichment() bool {
 }
 
 func (c *Config) HasIssueTracker() bool {
-	return c.GitHubIssueRepo != "" && c.GitHubIssueToken != ""
+	return c.GiteaIssueRepo != "" && c.GiteaIssueToken != ""
 }
