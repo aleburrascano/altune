@@ -1076,6 +1076,34 @@ describe('loadNativeQueue presign window', () => {
     expect(added.map((t) => t.id)).toEqual(tracks.map(trackKey));
   });
 
+  it('presigns the last track when startIndex is past the end', async () => {
+    const tracks = ['a', 'b', 'c'].map(track);
+    fetchUrls.mockReset();
+    fetchUrls.mockImplementation(async (ids) =>
+      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
+    );
+
+    await loadNativeQueue(tracks, 7, { autoplay: false });
+
+    expect(fetchUrls).toHaveBeenCalledWith(['c']);
+    const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as { url: string }[];
+    expect(added.at(-1)?.url).toBe('https://cdn.example/c.mp3');
+  });
+
+  it('presigns from track 0 when startIndex is negative', async () => {
+    const tracks = ['a', 'b', 'c'].map(track);
+    fetchUrls.mockReset();
+    fetchUrls.mockImplementation(async (ids) =>
+      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
+    );
+
+    await loadNativeQueue(tracks, -1, { autoplay: false });
+
+    expect(fetchUrls).toHaveBeenCalledWith(expect.arrayContaining(['a']));
+    const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as { url: string }[];
+    expect(added[0]?.url).toBe('https://cdn.example/a.mp3');
+  });
+
   it('keeps auth headers on a library track before startIndex when only previews follow', async () => {
     const tracks = [track('a'), previewTrack()];
     fetchUrls.mockReset();

@@ -185,10 +185,10 @@ export async function loadNativeQueue(
   await resetNative();
   if (tracks.length === 0) return;
 
-  const build = await nativeTrackBuilder(tracks.slice(startIndex), tracks);
+  const idx = clamp(startIndex, 0, tracks.length - 1);
+  const build = await nativeTrackBuilder(tracks.slice(idx), tracks);
   if (isStale(token)) return;
 
-  const idx = clamp(startIndex, 0, tracks.length - 1);
   markPresignedFrom(idx, tracks.length - idx);
   const plan: StartPlan = { idx, startPositionMs, autoplay, token };
   await withNativeQueue(async (fence) => {
