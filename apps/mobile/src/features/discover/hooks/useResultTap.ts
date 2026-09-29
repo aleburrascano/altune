@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { Keyboard } from 'react-native';
 
+import { useNavigator, useScreenFocusEffect } from '@shared/navigation';
+import { dismissKeyboard } from '@shared/ui/keyboard/keyboard';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 import { stashHandoffForDetail } from '../handoff';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -51,7 +51,7 @@ function resultClickedPayload(
 }
 
 function useResetNavigationPendingOnFocus(navigationPendingRef: { current: boolean }): void {
-  useFocusEffect(
+  useScreenFocusEffect(
     useCallback(() => {
       navigationPendingRef.current = false;
     }, [navigationPendingRef]),
@@ -76,7 +76,7 @@ function recordResultClicked({ recordEvent, searchData, tapped, position }: Resu
 type TapDeps = {
   navigationPendingRef: { current: boolean };
   recordEvent: ReturnType<typeof useRecordEvent>;
-  router: ReturnType<typeof useRouter>;
+  router: ReturnType<typeof useNavigator>;
   searchData: DiscoverySearchResponse | undefined;
 };
 
@@ -87,13 +87,13 @@ function tapArgs(deps: TapDeps, tapped: DiscoveryResult, position: number): Resu
 function handleResultTap(deps: TapDeps, tapped: DiscoveryResult, position: number): void {
   if (deps.navigationPendingRef.current) return;
   deps.navigationPendingRef.current = true;
-  Keyboard.dismiss();
+  dismissKeyboard();
   recordResultClicked(tapArgs(deps, tapped, position));
   deps.router.push(stashHandoffForDetail(tapped, deps.searchData?.search_id));
 }
 
 export function useResultTap(searchData: DiscoverySearchResponse | undefined): ResultTapHandler {
-  const router = useRouter();
+  const router = useNavigator();
   const recordEvent = useRecordEvent();
   const navigationPendingRef = useRef(false);
   useResetNavigationPendingOnFocus(navigationPendingRef);

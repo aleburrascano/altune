@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ViewToken } from 'react-native';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
@@ -8,7 +7,7 @@ import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 export type ImpressionHandlers = {
   viewabilityConfig: { itemVisiblePercentThreshold: number };
-  onViewableItemsChanged: (info: { viewableItems: ViewToken[] }) => void;
+  onViewableItemsChanged: (info: { viewableItems: readonly unknown[] }) => void;
 };
 
 export function useImpressionLogger(

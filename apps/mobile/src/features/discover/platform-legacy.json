@@ -1,7 +1,4 @@
 {
   "ui": [],
-  "logic": [
-    "src/features/discover/hooks/useImpressionLogger.ts",
-    "src/features/discover/hooks/useResultTap.ts"
-  ]
+  "logic": []
 }
