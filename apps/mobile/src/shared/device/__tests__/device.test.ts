@@ -88,4 +88,10 @@ describe('webOrigin', () => {
     setOS('web');
     expect(webOrigin()).toBeNull();
   });
+
+  it('returns null on web when window has no location', () => {
+    setOS('web');
+    Object.defineProperty(globalThis, 'window', { value: {}, configurable: true });
+    expect(webOrigin()).toBeNull();
+  });
 });

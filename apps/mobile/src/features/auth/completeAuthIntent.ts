@@ -1,5 +1,5 @@
-import type { ImperativeRouter } from 'expo-router';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Navigator } from '@shared/navigation';
 
 import { withAuthDeadline } from './authDeadline';
 import { type SupabaseErrorDetail, supabaseErrorDetail } from './errorDetail';
@@ -56,7 +56,7 @@ const OTP_TYPES_BY_LINK_KIND = {
   confirm: ['signup', 'email'],
 } as const;
 
-export type AuthRouter = Pick<ImperativeRouter, 'replace'>;
+export type AuthRouter = Pick<Navigator, 'replace'>;
 
 type OtpLinkKind = keyof typeof OTP_TYPES_BY_LINK_KIND;
 type SpendableOtpType = (typeof OTP_TYPES_BY_LINK_KIND)[OtpLinkKind][number];

@@ -26,5 +26,7 @@ export function declaredAppScheme(): string | string[] | undefined {
 }
 
 export function webOrigin(): string | null {
-  return Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : null;
+  return Platform.OS === 'web' && typeof window !== 'undefined'
+    ? window.location?.origin || null
+    : null;
 }

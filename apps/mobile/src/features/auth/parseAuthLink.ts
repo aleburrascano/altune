@@ -1,8 +1,7 @@
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { declaredAppScheme, webOrigin } from '@shared/device/device';
 
 function configuredSchemePrefix(): string {
-  const declared = Constants.expoConfig?.scheme;
+  const declared = declaredAppScheme();
   const primary = Array.isArray(declared) ? declared[0] : declared;
   if (typeof primary !== 'string' || primary === '') {
     throw new Error('Missing required Expo config field `scheme` (apps/mobile/app.json)');
@@ -48,13 +47,6 @@ const REDIRECT_PATH_FOR_INTENT: Record<AuthRedirectIntent, string> = {
   confirm: LINK_PATH.confirm,
   recovery: LINK_PATH.recovery,
 };
-
-function webOrigin(): string | null {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return null;
-  }
-  return window.location?.origin || null;
-}
 
 export function authRedirectUrl(intent: AuthRedirectIntent): string {
   const path = REDIRECT_PATH_FOR_INTENT[intent];

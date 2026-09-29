@@ -1,6 +1,10 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { Platform } from 'react-native';
 
 import appJson from '../../../../app.json';
+import { completeAuthIntent } from '../completeAuthIntent';
 import type * as ParseAuthLinkModule from '../parseAuthLink';
 import { CONFIRM_REDIRECT_URL, OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
 import { authRedirectUrl } from '../parseAuthLink';
@@ -331,5 +335,63 @@ describe('authRedirectUrl on native (#2837)', () => {
     expect(authRedirectUrl('callback')).toBe('altune://auth/callback');
     expect(authRedirectUrl('confirm')).toBe('altune://auth/confirm');
     expect(authRedirectUrl('recovery')).toBe('altune://auth/recovery');
+  });
+});
+
+describe.each(['ios', 'web'] as const)(
+  'implicit-grant tokens never become a session on %s',
+  (os) => {
+    afterEach(() => {
+      Platform.OS = 'ios';
+      Reflect.deleteProperty(globalThis, 'window');
+    });
+
+    it('refuses altune://auth/callback#access_token=x&refresh_token=y', async () => {
+      Platform.OS = os;
+      const auth = {
+        exchangeCodeForSession: jest.fn(),
+        setSession: jest.fn(),
+        verifyOtp: jest.fn(),
+      };
+      const result = await completeAuthIntent(
+        parseAuthLink('altune://auth/callback#access_token=x&refresh_token=y'),
+        { replace: jest.fn() },
+        auth,
+      );
+
+      expect(result).toMatchObject({ kind: 'failure', cause: 'no_spendable_credential' });
+      expect(auth.setSession).not.toHaveBeenCalled();
+    });
+  },
+);
+
+describe('parseAuthLink reads its scheme and web origin through the device port', () => {
+  afterEach(() => {
+    jest.dontMock('@shared/device/device');
+  });
+
+  it('builds redirects from the port scheme and origin', () => {
+    jest.resetModules();
+    jest.doMock('@shared/device/device', () => ({
+      declaredAppScheme: () => 'portscheme',
+      webOrigin: () => 'https://port.example',
+    }));
+    const loaded = require('../parseAuthLink') as typeof ParseAuthLinkModule;
+
+    expect(loaded.OAUTH_REDIRECT_URL).toBe('portscheme://auth/callback');
+    expect(loaded.authRedirectUrl('confirm')).toBe('https://port.example/auth/confirm');
+    expect(loaded.parseAuthLink('https://port.example/auth/confirm?type=signup')).toEqual({
+      kind: 'confirm',
+      params: { type: 'signup' },
+    });
+  });
+});
+
+describe.each(['parseAuthLink.ts', 'completeAuthIntent.ts'])('%s is platform-free', (file) => {
+  it('imports no expo or react-native module', () => {
+    const source = readFileSync(join(__dirname, '..', file), 'utf8');
+    const specifiers = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1] ?? '');
+
+    expect(specifiers.filter((s) => /^(expo|react-native)/.test(s))).toEqual([]);
   });
 });

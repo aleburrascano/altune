@@ -3,8 +3,5 @@
     "src/features/auth/ui/AuthCallbackScreen.tsx",
     "src/features/auth/ui/hero/AuthHeroLayout.tsx"
   ],
-  "logic": [
-    "src/features/auth/completeAuthIntent.ts",
-    "src/features/auth/parseAuthLink.ts"
-  ]
+  "logic": []
 }
