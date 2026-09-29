@@ -15,6 +15,8 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 
 export type RetryTrack = Pick<UseMutationResult<void, unknown, TrackId>, 'mutate' | 'isPending'>;
 
+type RetryMutateOptions = Parameters<RetryTrack['mutate']>[1];
+
 function markPending(trackId: TrackId): Record<string, never> {
   patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null }, 'optimistic');
   return {};
@@ -48,9 +50,9 @@ function useRetryMutation(entryPoint: RetryEntryPoint) {
 
 export function useRetryTrack(entryPoint: RetryEntryPoint): RetryTrack {
   const mutation = useRetryMutation(entryPoint);
-  const mutate = (trackId: TrackId): void => {
+  const mutate = (trackId: TrackId, options?: RetryMutateOptions): void => {
     recordRetryTapped(trackId, entryPoint);
-    mutation.mutate(trackId);
+    mutation.mutate(trackId, options);
   };
   return { mutate, isPending: mutation.isPending };
 }

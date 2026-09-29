@@ -228,3 +228,78 @@ describe('useTrackSave repeated saves', () => {
     expect(mockCreateTrack).not.toHaveBeenCalled();
   });
 });
+
+describe('useTrackSave double tap', () => {
+  it('issues exactly one create for two taps in one act', async () => {
+    mockCreateTrack.mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(() => useTrackSave(track(), null), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(result.current.state).toBe('saving'));
+    expect(mockCreateTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls retryAcquisition once for two taps on a failed owned track', async () => {
+    mockRetryAcquisition.mockReturnValue(new Promise(() => undefined));
+    const owned = ownedTrack(asTrackId('server-1'), 'failed', 'network error');
+    const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
+  });
+
+  it('re-arms after a double-tapped create fails', async () => {
+    mockCreateTrack.mockRejectedValue(new ApiError(503, '503 unavailable'));
+    const { result } = renderHook(() => useTrackSave(track(), null), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+      result.current.onSave();
+    });
+    await waitFor(() => expect(result.current.state).toBe('failed'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      result.current.onSave();
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(mockCreateTrack).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockCreateTrack).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries again after a double-tapped retry fails', async () => {
+    mockRetryAcquisition.mockRejectedValue(new ApiError(503, '503 unavailable'));
+    const trackId = asTrackId('server-1');
+    const owned = ownedTrack(trackId, 'failed', 'network error');
+    const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+      result.current.onSave();
+    });
+    await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.state).toBe('failed'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(2));
+  });
+});

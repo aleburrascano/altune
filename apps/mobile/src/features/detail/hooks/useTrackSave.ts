@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import {
@@ -47,23 +49,36 @@ type SaveDeps = {
   retry: RetryTrack;
 };
 
-function saveOrRetry(deps: SaveDeps): () => void {
-  const retryId = ownedRetryTrackId(deps.owned);
-  if (retryId !== null) return () => deps.retry.mutate(retryId);
-  return () => deps.save.mutate(toCreateTrackRequest(deps.track));
+type Release = { onSettled: () => void };
+type Guarded = (action: (release: Release) => void) => void;
+
+function useLatch(): Guarded {
+  const held = useRef(false);
+  return (action) => {
+    if (held.current) return;
+    held.current = true;
+    action({ onSettled: () => void (held.current = false) });
+  };
 }
 
-function buildOnSave(state: SaveState, deps: SaveDeps): () => void {
+function dispatchSave(deps: SaveDeps, release: Release): void {
+  const retryId = ownedRetryTrackId(deps.owned);
+  if (retryId !== null) deps.retry.mutate(retryId, release);
+  else deps.save.mutate(toCreateTrackRequest(deps.track), release);
+}
+
+function buildOnSave(state: SaveState, deps: SaveDeps, guarded: Guarded): () => void {
   if (!saveControlInteractive(state)) return () => undefined;
-  return saveOrRetry(deps);
+  return () => guarded((release) => dispatchSave(deps, release));
 }
 
 export function useTrackSave(track: DiscoveryResult, owned: OwnedTrack | null): TrackSave {
+  const guarded = useLatch();
   const save = useSaveTrack();
   const retry = useRetryTrack('detail');
   const canSave = (track.subtitle ?? '').length > 0;
   const state = deriveState(canSave, save, owned);
   const failure = save.failure ?? (state === 'failed' ? rememberedFailure(owned) : null);
-  const onSave = buildOnSave(state, { owned, track, save, retry });
+  const onSave = buildOnSave(state, { owned, track, save, retry }, guarded);
   return { state, failure, onSave };
 }
