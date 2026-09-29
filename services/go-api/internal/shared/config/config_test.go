@@ -1269,6 +1269,26 @@ func TestLoad_AudioKeyPrefixAllowedOutsideProduction(t *testing.T) {
 	}
 }
 
+func TestLoad_AlertWebhookURLOptionalAndTrimmed(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load without ALERT_WEBHOOK_URL = %v, want nil", err)
+	}
+	if cfg.AlertWebhookURL != "" {
+		t.Errorf("default AlertWebhookURL = %q, want empty", cfg.AlertWebhookURL)
+	}
+
+	setEnv(t, validConfigEnv(map[string]string{"ALERT_WEBHOOK_URL": "  https://hooks.example/alerts \n"}))
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load = %v", err)
+	}
+	if cfg.AlertWebhookURL != "https://hooks.example/alerts" {
+		t.Errorf("AlertWebhookURL = %q", cfg.AlertWebhookURL)
+	}
+}
+
 func TestValidateAudioKeyPrefix_RefusesProductionWithSurroundingWhitespace(t *testing.T) {
 	cfg := &Config{Env: " production ", AudioKeyPrefix: "staging/"}
 	if err := cfg.validateAudioKeyPrefix(); err == nil {

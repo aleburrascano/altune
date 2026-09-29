@@ -93,6 +93,7 @@ type Config struct {
 	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
 	AcquisitionConfidenceFloor float64 `env:"ACQUISITION_CONFIDENCE_FLOOR" envDefault:"0.5"`
 	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
+	AlertWebhookURL            string  `env:"ALERT_WEBHOOK_URL"`
 	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 
 	SSEMaxConns int `env:"SSE_MAX_CONNS" envDefault:"2048"`
@@ -117,6 +118,7 @@ func Load() (*Config, error) {
 
 func (c *Config) normalize() {
 	c.SupabaseJWTAud = strings.TrimSpace(c.SupabaseJWTAud)
+	c.AlertWebhookURL = strings.TrimSpace(c.AlertWebhookURL)
 	for i, origin := range c.CORSOrigins {
 		c.CORSOrigins[i] = strings.TrimSpace(origin)
 	}

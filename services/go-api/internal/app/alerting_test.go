@@ -1,14 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	observeAlert "altune/go-api/internal/observe/alert"
+	"altune/go-api/internal/shared/config"
 )
 
 type fakeCoverageEvents struct {
@@ -246,4 +249,34 @@ func TestJobFailingCondition(t *testing.T) {
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("recovered job still firing: %+v", got)
 	}
+}
+
+func TestStartAlertMonitor_NotifierFollowsWebhookConfig(t *testing.T) {
+	t.Run("webhook url set builds a real notifier", func(t *testing.T) {
+		a := &App{cfg: &config.Config{AlertWebhookURL: "http://127.0.0.1:1/alerts"}}
+		a.startAlertMonitor(context.Background())
+		if a.alertMonitor.Status().NopNotifier {
+			t.Fatal("monitor kept NopNotifier although ALERT_WEBHOOK_URL is set")
+		}
+	})
+
+	t.Run("webhook url unset warns once that alerts are log-only", func(t *testing.T) {
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+
+		a := &App{cfg: &config.Config{}}
+		a.startAlertMonitor(context.Background())
+
+		if !a.alertMonitor.Status().NopNotifier {
+			t.Fatal("monitor has a real notifier without ALERT_WEBHOOK_URL")
+		}
+		if n := strings.Count(buf.String(), "alerts are log-only"); n != 1 {
+			t.Fatalf("log-only warnings = %d, want 1; log: %s", n, buf.String())
+		}
+		if !strings.Contains(buf.String(), "level=WARN") {
+			t.Fatalf("log-only notice is not a Warn: %s", buf.String())
+		}
+	})
 }

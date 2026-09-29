@@ -14,7 +14,7 @@ import (
 )
 
 func (a *App) startAlertMonitor(ctx context.Context) {
-	notifier := observeAlert.AlertNotifier(observeAlert.NopNotifier{})
+	notifier := a.alertNotifier(ctx)
 
 	conditions := []observeAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
 
@@ -29,6 +29,14 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	a.alertMonitor = observeAlert.NewMonitor(notifier, 30*time.Second, conditions...).
 		WithLeadership(a.leaderContext)
 	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
+}
+
+func (a *App) alertNotifier(ctx context.Context) observeAlert.AlertNotifier {
+	if a.cfg.AlertWebhookURL == "" {
+		slog.WarnContext(ctx, "alerts are log-only: ALERT_WEBHOOK_URL is not set")
+		return observeAlert.NopNotifier{}
+	}
+	return observeAlert.NewWebhookNotifier(a.cfg.AlertWebhookURL)
 }
 
 func buildDependencyCondition(health func(context.Context) DependencyHealth) observeAlert.Condition {
