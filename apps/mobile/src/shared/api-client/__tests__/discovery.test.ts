@@ -600,25 +600,28 @@ describe('Off-contract union values fail at the boundary rather than flowing on 
     };
   }
 
-  it("a confidence outside 'high'|'medium'|'low' is a ContractError, not passed through as a bad union", async () => {
+  it("a confidence outside 'high'|'medium'|'low' is coerced to 'low'", async () => {
     __http.reply('GET /v1/discovery/search', {
       status: 200,
       json: responseWith({ ...baseResult(), confidence: 'extreme' }),
     });
 
-    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+    const page = await searchDiscovery({ q: 'q' });
+    expect(page.results).toHaveLength(1);
+    expect(page.results[0]?.confidence).toBe('low');
   });
 
-  it("a kind outside 'artist'|'album'|'track' is a ContractError", async () => {
+  it("a kind outside 'artist'|'album'|'track' is dropped from results", async () => {
     __http.reply('GET /v1/discovery/search', {
       status: 200,
       json: responseWith({ ...baseResult(), kind: 'playlist' }),
     });
 
-    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+    const page = await searchDiscovery({ q: 'q' });
+    expect(page.results).toEqual([]);
   });
 
-  it('a provider status outside the declared set is a ContractError', async () => {
+  it("a provider status outside the declared set is coerced to 'error'", async () => {
     const raw = {
       query: 'q',
       query_norm: 'q',
@@ -633,7 +636,9 @@ describe('Off-contract union values fail at the boundary rather than flowing on 
     };
     __http.reply('GET /v1/discovery/search', { status: 200, json: raw });
 
-    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+    const page = await searchDiscovery({ q: 'q' });
+    expect(page.providers).toHaveLength(1);
+    expect(page.providers[0]?.status).toBe('error');
   });
 });
 
@@ -911,7 +916,7 @@ describe('wire parsing', () => {
     });
   });
 
-  describe('parseDiscoverySearchResponse — off-contract bodies fail as a ContractError', () => {
+  describe('parseDiscoverySearchResponse — off-contract enum values are tolerated, other bodies fail as a ContractError', () => {
     function base(): Record<string, unknown> {
       return {
         query: 'q',
@@ -931,28 +936,98 @@ describe('wire parsing', () => {
       expect(() => parseDiscoverySearchResponse(null)).toThrow(ContractError);
     });
 
-    it('rejects an off-contract result confidence', () => {
-      expect(() =>
-        parseDiscoverySearchResponse({
-          ...base(),
-          results: [fullResult({ confidence: 'extreme' })],
-        }),
-      ).toThrow(ContractError);
+    it("coerces an off-contract result confidence to 'low'", () => {
+      const parsed = parseDiscoverySearchResponse({
+        ...base(),
+        results: [fullResult({ confidence: 'extreme' })],
+      });
+      expect(parsed.results).toHaveLength(1);
+      expect(parsed.results[0]?.confidence).toBe('low');
     });
 
-    it('rejects an off-contract result kind', () => {
-      expect(() =>
-        parseDiscoverySearchResponse({ ...base(), results: [fullResult({ kind: 'playlist' })] }),
-      ).toThrow(ContractError);
+    it('drops a result with an off-contract kind', () => {
+      const parsed = parseDiscoverySearchResponse({
+        ...base(),
+        results: [fullResult({ kind: 'playlist' })],
+      });
+      expect(parsed.results).toEqual([]);
     });
 
-    it('rejects an off-contract provider status', () => {
-      expect(() =>
-        parseDiscoverySearchResponse({
-          ...base(),
-          providers: [{ provider: 'mb', status: 'exploded', result_count: 0, latency_ms: 1 }],
-        }),
-      ).toThrow(ContractError);
+    it("coerces an off-contract provider status to 'error'", () => {
+      const parsed = parseDiscoverySearchResponse({
+        ...base(),
+        providers: [{ provider: 'mb', status: 'exploded', result_count: 0, latency_ms: 1 }],
+      });
+      expect(parsed.providers).toHaveLength(1);
+      expect(parsed.providers[0]?.status).toBe('error');
     });
+  });
+});
+
+describe('searchDiscovery tolerates additive wire enum values', () => {
+  function body(overrides: Record<string, unknown>): Record<string, unknown> {
+    return { ...fullSearchResponse(), results: [], sections: [], ...overrides };
+  }
+
+  it('drops a result with an unknown kind and keeps the rest', async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: body({
+        results: [
+          discoveryResult({ title: 'a' }),
+          { ...discoveryResult({ title: 'b' }), kind: 'playlist' },
+          discoveryResult({ title: 'c' }),
+        ],
+      }),
+    });
+
+    const res = await searchDiscovery({ q: 'q' });
+
+    expect(res.results.map((r) => r.title)).toEqual(['a', 'c']);
+  });
+
+  it('coerces an unknown provider status to error and an unknown confidence to low', async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: body({
+        results: [{ ...discoveryResult(), confidence: 'extreme' }],
+        providers: [{ provider: 'mb', status: 'exploded', result_count: 0, latency_ms: 1 }],
+      }),
+    });
+
+    const res = await searchDiscovery({ q: 'q' });
+
+    expect(res.providers[0]?.status).toBe('error');
+    expect(res.results[0]?.confidence).toBe('low');
+  });
+
+  it('drops a section with an unknown kind and unknown-kind items inside kept sections', async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: body({
+        sections: [
+          { kind: 'playlist', items: [discoveryResult()], has_more: false },
+          {
+            kind: 'artist',
+            items: [discoveryResult(), { ...discoveryResult(), kind: 'playlist' }],
+            has_more: false,
+          },
+        ],
+      }),
+    });
+
+    const res = await searchDiscovery({ q: 'q' });
+
+    expect(res.sections).toHaveLength(1);
+    expect(res.sections?.[0]?.items).toHaveLength(1);
+  });
+
+  it('still rejects a result whose kind is not a string', async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: body({ results: [{ ...discoveryResult(), kind: 7 }] }),
+    });
+
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
   });
 });

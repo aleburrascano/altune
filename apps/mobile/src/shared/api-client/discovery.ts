@@ -111,6 +111,10 @@ function parseDiscoverySource(value: unknown, at: string): DiscoverySource {
   };
 }
 
+function isMember<T extends string>(text: string, allowed: readonly T[]): text is T {
+  return (allowed as readonly string[]).includes(text);
+}
+
 export function parseDiscoveryResult(value: unknown, at: string): DiscoveryResult {
   const r = asRecord(value, at);
   return {
@@ -130,24 +134,35 @@ export function parseDiscoveryResult(value: unknown, at: string): DiscoveryResul
   };
 }
 
+function parseSearchResult(value: unknown, at: string): DiscoveryResult | null {
+  const r = asRecord(value, at);
+  if (!isMember(asString(r.kind, `${at}.kind`), DISCOVERY_KINDS)) return null;
+  const confidence = asString(r.confidence, `${at}.confidence`);
+  const known = isMember(confidence, DISCOVERY_CONFIDENCES) ? confidence : 'low';
+  return parseDiscoveryResult({ ...r, confidence: known }, at);
+}
+
 function parseResultArray(value: unknown, at: string): DiscoveryResult[] {
-  return parseArray(value, at, parseDiscoveryResult);
+  return parseArray(value, at, parseSearchResult).filter((item) => item !== null);
 }
 
 function parseProvider(value: unknown, at: string): DiscoveryProviderInfo {
   const r = asRecord(value, at);
+  const status = asString(r.status, `${at}.status`);
   return {
     provider: asString(r.provider, `${at}.provider`),
-    status: member(r.status, PROVIDER_STATUSES, `${at}.status`),
+    status: isMember(status, PROVIDER_STATUSES) ? status : 'error',
     result_count: asNumber(r.result_count, `${at}.result_count`),
     latency_ms: asNumber(r.latency_ms, `${at}.latency_ms`),
   };
 }
 
-function parseSection(value: unknown, at: string): ResultSection {
+function parseSection(value: unknown, at: string): ResultSection | null {
   const r = asRecord(value, at);
+  const kind = asString(r.kind, `${at}.kind`);
+  if (!isMember(kind, DISCOVERY_KINDS)) return null;
   return {
-    kind: member(r.kind, DISCOVERY_KINDS, `${at}.kind`),
+    kind,
     items: parseResultArray(r.items, `${at}.items`),
     has_more: asBoolean(r.has_more, `${at}.has_more`),
   };
@@ -170,6 +185,10 @@ function parseCache(value: unknown, at: string): { hit: boolean; fetched_at: str
   };
 }
 
+function topResult(parsed: DiscoveryResult | null): { top_result?: DiscoveryResult } {
+  return parsed === null ? {} : { top_result: parsed };
+}
+
 export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchResponse {
   const at = 'DiscoverySearchResponse';
   const r = asRecord(value, at);
@@ -178,7 +197,10 @@ export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchRes
     query: asString(r.query, `${at}.query`),
     query_norm: asString(r.query_norm, `${at}.query_norm`),
     results,
-    sections: r.sections == null ? [] : parseArray(r.sections, `${at}.sections`, parseSection),
+    sections:
+      r.sections == null
+        ? []
+        : parseArray(r.sections, `${at}.sections`, parseSection).filter((s) => s !== null),
     providers: parseArray(r.providers, `${at}.providers`, parseProvider),
     partial: asBoolean(r.partial, `${at}.partial`),
     cache: parseCache(r.cache, `${at}.cache`),
@@ -186,9 +208,7 @@ export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchRes
     offset: r.offset == null ? 0 : asNumber(r.offset, `${at}.offset`),
     has_more: r.has_more == null ? false : asBoolean(r.has_more, `${at}.has_more`),
     ...(r.search_id != null ? { search_id: asString(r.search_id, `${at}.search_id`) } : {}),
-    ...(r.top_result != null
-      ? { top_result: parseDiscoveryResult(r.top_result, `${at}.top_result`) }
-      : {}),
+    ...(r.top_result != null ? topResult(parseSearchResult(r.top_result, `${at}.top_result`)) : {}),
     ...(r.corrected_query != null
       ? { corrected_query: asString(r.corrected_query, `${at}.corrected_query`) }
       : {}),
