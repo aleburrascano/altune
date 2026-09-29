@@ -1,62 +1,39 @@
-# Strict guardrail set for the Go API — the linters that catch the defects
-# AI-written Go tends to ship: swallowed errors, dead identifiers, wrapped-error
-# comparison bugs, leaked HTTP bodies, and runaway complexity.
-#
-# This is SEPARATE from .golangci.yml (which keeps the trusted depguard import
-# gate blocking on all code). This file is run in CI with
-# `--new-from-rev=origin/main`, so the existing backlog does not block, but any
-# NEW violation a PR introduces does — the same ratchet fallow/react-doctor use
-# on the mobile side.
 version: "2"
 
 linters:
   default: none
   enable:
-    # --- the standard set, currently OFF in .golangci.yml (default: none) ---
-    - errcheck      # unchecked errors — the #1 AI slop catcher
-    - govet         # suspicious constructs
-    - ineffassign   # assignments never read
-    - staticcheck   # SA/S/ST rule set (incl. former gosimple + stylecheck)
-    - unused        # unused unexported consts/vars/funcs/types
-    # --- opinionated diagnostics that punch above plain linting ---
-    - gocritic      # ~100 diagnostic/performance checks
-    - errorlint     # bad errors.Is/As, wrong %w usage
-    - bodyclose     # unclosed HTTP response bodies (resource leak)
-    - unconvert     # redundant type conversions
-    - nilerr        # `return nil` after checking err != nil
-    - misspell      # comment/string typos
-    # --- complexity ratchet, mirrors mobile fallow maxCyclomatic/maxCognitive ---
-    - cyclop        # cyclomatic complexity per function + package average
-    - gocognit      # cognitive complexity per function
-    - dupl          # copy-paste blocks
-    # --- mechanical shape rules ---
-    - funlen        # function length cap (aim: functions ≤10 lines)
-    - revive        # guard clauses: no superfluous else after an early return
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - errorlint
+    - bodyclose
+    - unconvert
+    - nilerr
+    - misspell
+    - cyclop
+    - gocognit
+    - dupl
+    - funlen
+    - revive
 
   settings:
     cyclop:
-      max-complexity: 15    # matches .fallowrc.json maxCyclomatic 15
+      max-complexity: 15
       package-average: 0.0
     gocognit:
       min-complexity: 20
     dupl:
       threshold: 150
     funlen:
-      # The aim is functions ≤10 lines. As a BLOCKING new-code
-      # gate that is too aggressive: at lines:10 a recent feature PR (#2271) drew
-      # 18 new-code funlen hits and a fix PR (#2273) drew 10 — a drowned diff. The
-      # curve on those same PRs was 15→8/6, 20→4/3, 30→1/1, so lines:20 keeps the
-      # rule on and firing on genuinely long new functions while leaving a normal
-      # PR ~3-4 nudges rather than a wall. ignore-comments so a documented function
-      # is not punished for its doc block; statements caps real work independent of
-      # line breaks. Tighten toward 10 as the tree's long functions get extracted.
       lines: 20
       statements: 20
       ignore-comments: true
     revive:
       rules:
-        # The guard-clause pair: flag an `else`/`else if`
-        # that only exists because the preceding branch already returned.
         - name: indent-error-flow
         - name: superfluous-else
     gocritic:
@@ -65,14 +42,13 @@ linters:
         - performance
         - style
       disabled-checks:
-        - hugeParam        # struct-passing micro-opt, low signal
+        - hugeParam
         - rangeValCopy
         - unnamedResult
 
   exclusions:
     generated: lax
     rules:
-      # Tests earn their length and repetition; hold them to correctness, not shape.
       - path: _test\.go
         linters:
           - dupl
@@ -82,7 +58,6 @@ linters:
           - gocritic
           - funlen
           - revive
-      # Migrations and eval harnesses are throwaway/one-shot code.
       - path: (cmd/|/eval/|/catalogtest/)
         linters:
           - dupl
@@ -92,4 +67,4 @@ linters:
 
 formatters:
   enable:
-    - gofumpt         # strict superset of gofmt
+    - gofumpt

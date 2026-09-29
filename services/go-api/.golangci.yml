@@ -112,9 +112,6 @@ linters:
             - pkg: altune/go-api/internal/playback
               desc: internal/shared never imports feature packages
 
-        # Inward layer direction within a feature (structure audit F1, second
-        # axis): the application layer orchestrates the domain through ports and
-        # must never reach into an adapter. Verified clean today; kept blocking.
         layer-service-inward:
           files:
             - "**/internal/*/service/**"
@@ -131,9 +128,6 @@ linters:
             - pkg: altune/go-api/internal/acquisition/adapters
               desc: service is driven by ports, it never imports adapters
 
-        # The acquisition eval is a test harness, not service logic: it composes
-        # the real discoverybridge resolver so it scores the path the scheduler
-        # runs. Every other inward deny still holds for it.
         layer-service-inward-acquisition-eval:
           list-mode: lax
           files:
@@ -152,8 +146,6 @@ linters:
             - pkg: altune/go-api/internal/acquisition/adapters
               desc: the eval harness may compose only the discoverybridge adapter
 
-        # Ports declare interfaces in terms of the domain only: no service, no
-        # adapters. This keeps the port surface a pure contract.
         layer-ports-inward:
           files:
             - "**/internal/*/ports/**"

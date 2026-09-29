@@ -1,13 +1,3 @@
-# Runs on the SAME OCI VM as prod but as a fully separate Compose project
-# (`name: staging`) with distinct container names, its own network, its own
-# volumes, and NO host-port binds. Public traffic arrives via the shared prod
-# Caddy (compose.prod.yml) over the `edge` network for the staging site.
-# There is exactly one Caddy on this host and it belongs to prod; staging must
-# never bind 80/443 or run a second Caddy.
-#
-# mem_limit/cpus caps keep a staging build from starving prod (design Decision 1).
-# Secrets live only in ../.env.staging on the VM (see .env.staging.example),
-# never committed.
 name: staging
 
 x-go-api: &go-api
@@ -21,19 +11,8 @@ x-go-api: &go-api
   env_file:
     - ../.env.staging
   environment:
-    # Eval meter hits real provider APIs and shares their quota; staging keeps it
-    # off so smoke runs cannot burn prod's provider budget (prod sets it true).
     - EVAL_METER_ENABLED=false
   volumes:
-    # Host-level acquisition tool config, shared with prod (tier-independent).
-    # READ-ONLY (:ro) from staging so a staging run cannot mutate this prod-shared
-    # state (isolation hardening, task #1526). Both are read at runtime: streamrip
-    # only reads config.toml (downloads_enabled/failed_downloads_enabled are false
-    # on the host, so it never writes a download DB beside it), and yt-dlp's
-    # --cookies write-back of refreshed cookies degrades to a warning on a
-    # read-only file rather than aborting the download — which is the point, since
-    # that write-back is exactly how staging could otherwise clobber prod's cookies.
-    # Host paths resolve against this file's directory: the checkout root on the VM.
     - ../../../cookies.txt:/data/cookies.txt:ro
     - ../../../streamrip.toml:/home/altune/.config/streamrip/config.toml:ro
   tmpfs:
@@ -58,12 +37,6 @@ services:
     image: altune-staging-go-api:green
     container_name: altune-staging-go-api-green
 
-  # Overseer is its own container with no dependency on go-api, so it outlives
-  # go-api restarts (blue-green only touches the go-api-* services). It reaches
-  # go-api at OVERSEER_GOAPI_URL=http://altune-caddy:8082, the prod Caddy's
-  # internal listener over the edge network that imports staging-upstream.conf, so
-  # a blue-green flip needs no overseer restart. Owner-only is enforced inside
-  # Overseer.
   overseer:
     build:
       context: ../../overseer
@@ -75,8 +48,6 @@ services:
       - ../.env.staging
     environment:
       - OVERSEER_ENV=staging
-    # Persist the rotating operator refresh token across restarts (the #1471 bug
-    # class this tier exists to catch). Own volume, isolated from prod's.
     volumes:
       - overseer-data:/var/lib/overseer
     expose:
@@ -109,11 +80,8 @@ services:
       retries: 10
 
 networks:
-  # Staging-internal traffic (go-api <-> redis), isolated from prod.
   staging:
     name: altune-staging
-  # The prod project's default network, joined so the shared prod Caddy can
-  # reach altune-staging-* by name. Created by compose.prod.yml (project go-api).
   edge:
     external: true
     name: go-api_default
