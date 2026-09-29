@@ -65,11 +65,14 @@ func WithContentEventStore(eventStore ports.EventStore) ArtistContentOption {
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
+	v2Partial := false
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		if tracks, partial := s.v2TopTracks(ctx, identity); len(tracks) > 0 {
+		var tracks []domain.SearchResult
+		tracks, v2Partial = s.v2TopTracks(ctx, identity)
+		if len(tracks) > 0 {
 			resp := okContentResponse(providerName, tracks, limit)
-			resp.Partial = partial
+			resp.Partial = v2Partial
 			return resp, nil
 		}
 	}
@@ -85,7 +88,9 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 	if degraded != nil {
 		return degraded, nil
 	}
-	return okContentResponse(providerName, results, limit), nil
+	resp := okContentResponse(providerName, results, limit)
+	resp.Partial = resp.Partial || v2Partial
+	return resp, nil
 }
 
 type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
@@ -195,12 +200,15 @@ func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, 
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
+	v2Partial := false
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
 		artistRef := sourceKey(providerName, externalID)
-		if albums, partial := s.v2Albums(ctx, identity, artistRef); len(albums) > 0 {
+		var albums []domain.SearchResult
+		albums, v2Partial = s.v2Albums(ctx, identity, artistRef)
+		if len(albums) > 0 {
 			resp := okContentResponse(providerName, albums, limit)
-			resp.Partial = partial
+			resp.Partial = v2Partial
 			return resp, nil
 		}
 	}
@@ -236,7 +244,9 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	normalizeAlbumYears(results)
 	sortByReleaseDateDesc(results, albumReleaseSortKey)
 
-	return okContentResponse(providerName, results, limit), nil
+	resp := okContentResponse(providerName, results, limit)
+	resp.Partial = resp.Partial || v2Partial
+	return resp, nil
 }
 
 var providerFanOutPriority = []domain.ProviderName{

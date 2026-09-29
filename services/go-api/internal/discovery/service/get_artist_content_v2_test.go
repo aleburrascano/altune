@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -189,6 +190,79 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	}
 	if len(resp.Items) != 1 || resp.Items[0].Title != "Fully Loaded" {
 		t.Fatalf("items = %+v, want just the fast provider's album (slow one degraded)", resp.Items)
+	}
+}
+
+func failOnceThenEmptyProvider() *fakeArtistContentProvider {
+	var albumCalls, trackCalls int
+	return &fakeArtistContentProvider{
+		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			albumCalls++
+			if albumCalls == 1 {
+				return nil, errors.New("provider down")
+			}
+			return nil, nil
+		},
+		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			trackCalls++
+			if trackCalls == 1 {
+				return nil, errors.New("provider down")
+			}
+			return nil, nil
+		},
+	}
+}
+
+func fallbackPartialService(p *fakeArtistContentProvider) *GetArtistContentService {
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1"}}
+	return NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
+		WithContentIdentityStore(store),
+	)
+}
+
+func TestGetAlbums_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T) {
+	resp, err := fallbackPartialService(failOnceThenEmptyProvider()).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", "Che", 50)
+	if err != nil {
+		t.Fatalf("GetAlbums error = %v", err)
+	}
+	if !resp.Partial {
+		t.Fatalf("Partial = false, want true after v2 failed with zero results")
+	}
+}
+
+func TestGetTopTracks_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T) {
+	resp, err := fallbackPartialService(failOnceThenEmptyProvider()).GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", "Che", 10)
+	if err != nil {
+		t.Fatalf("GetTopTracks error = %v", err)
+	}
+	if !resp.Partial {
+		t.Fatalf("Partial = false, want true after v2 failed with zero results")
+	}
+}
+
+func TestGetArtistContent_v2_fallbackNotPartialWhenNoProviderFailed(t *testing.T) {
+	svc := fallbackPartialService(&fakeArtistContentProvider{
+		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return nil, nil
+		},
+		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return nil, nil
+		},
+	})
+	albums, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", "Che", 50)
+	if err != nil {
+		t.Fatalf("GetAlbums error = %v", err)
+	}
+	if albums.Partial {
+		t.Errorf("GetAlbums Partial = true, want false when no provider failed")
+	}
+	tracks, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", "Che", 10)
+	if err != nil {
+		t.Fatalf("GetTopTracks error = %v", err)
+	}
+	if tracks.Partial {
+		t.Errorf("GetTopTracks Partial = true, want false when no provider failed")
 	}
 }
 
