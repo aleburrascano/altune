@@ -291,7 +291,7 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- NewPgxQueueStateRepository(pool).Upsert(ctx, inFlight) }()
-	time.Sleep(300 * time.Millisecond)
+	awaitBlockedQueueWriter(t, ctx, pool)
 
 	if err := erasure.Commit(ctx); err != nil {
 		t.Fatalf("commit the erasure: %v", err)
