@@ -202,54 +202,104 @@ interface RequestedTail {
 }
 
 let requestedTail: RequestedTail | null = null;
-let rebuildInFlight: Promise<void> | null = null;
-
 function takeRequestedTail(): RequestedTail | null {
   const tail = requestedTail;
   requestedTail = null;
   return tail;
 }
 
-export function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
+let rebuildInFlight: Promise<boolean> | null = null;
+
+function reorderUpcomingApplied(upcoming: readonly PlaybackTrack[]): Promise<boolean> {
   requestedTail = { upcoming, token: currentLoadToken() };
   rebuildInFlight ??= Promise.resolve().then(rebuildRequestedTails);
   return rebuildInFlight;
 }
 
-async function rebuildRequestedTails(): Promise<void> {
+export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
+  await reorderUpcomingApplied(upcoming);
+}
+
+async function drainRequestedTails(): Promise<boolean> {
+  let applied = false;
+  for (let tail = takeRequestedTail(); tail !== null; tail = takeRequestedTail()) {
+    applied = await rebuildNativeTail(tail.upcoming, tail.token);
+  }
+  return applied;
+}
+
+async function rebuildRequestedTails(): Promise<boolean> {
   try {
-    let tail = takeRequestedTail();
-    while (tail !== null) {
-      await rebuildNativeTail(tail.upcoming, tail.token);
-      tail = takeRequestedTail();
-    }
+    return await drainRequestedTails();
   } finally {
     requestedTail = null;
     rebuildInFlight = null;
   }
 }
 
-async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: number): Promise<void> {
-  await ensurePlayerSetup();
+async function upcomingHeldNatively(): Promise<AddTrack[]> {
+  const [held, activeIndex] = await Promise.all([
+    TrackPlayer.getQueue(),
+    TrackPlayer.getActiveTrackIndex(),
+  ]);
+  return activeIndex === undefined ? [] : (held ?? []).slice(activeIndex + 1);
+}
+
+async function restoreUpcoming(previous: AddTrack[]): Promise<void> {
+  if (previous.length > 0) await TrackPlayer.add(previous).catch(() => undefined);
+}
+
+async function addWindow(window: AddTrack[], previous: AddTrack[]): Promise<boolean> {
+  try {
+    if (window.length > 0) await TrackPlayer.add(window);
+    return true;
+  } catch (err) {
+    await restoreUpcoming(previous);
+    throw err;
+  }
+}
+
+async function replaceUpcomingOrRestore(window: AddTrack[], token: number): Promise<boolean> {
+  const previous = await upcomingHeldNatively();
+  await TrackPlayer.removeUpcomingTracks();
+  if (!isStale(token)) return addWindow(window, previous);
+  await restoreUpcoming(previous);
+  return false;
+}
+
+interface TailInputs {
+  upcoming: readonly PlaybackTrack[];
+  keyAtCall: string | undefined;
+  build: (track: PlaybackTrack) => AddTrack;
+}
+
+async function tailInputs(upcoming: readonly PlaybackTrack[]): Promise<TailInputs> {
   const [keyAtCall, build] = await Promise.all([
     activeNativeTrackId(),
     nativeTrackBuilder(upcoming),
   ]);
-  await withNativeQueue(async () => {
-    if (isStale(token)) return;
-    const keyNow = await activeNativeTrackId();
-    if (isStale(token)) return;
-    const tail = liveTailAfter(keyNow) ?? stillUpcoming(upcoming, keyAtCall, keyNow);
-    await TrackPlayer.removeUpcomingTracks();
-    if (isStale(token)) return;
-    const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
-    if (upcomingWindow.length === 0) return;
-    await TrackPlayer.add(upcomingWindow.map(build));
-  });
+  return { upcoming, keyAtCall, build };
+}
+
+async function applyTailLocked(inputs: TailInputs, token: number): Promise<boolean> {
+  if (isStale(token)) return false;
+  const keyNow = await activeNativeTrackId();
+  if (isStale(token)) return false;
+  const tail = liveTailAfter(keyNow) ?? stillUpcoming(inputs.upcoming, inputs.keyAtCall, keyNow);
+  return replaceUpcomingOrRestore(tail.slice(0, NATIVE_QUEUE_WINDOW).map(inputs.build), token);
+}
+
+async function rebuildNativeTail(
+  upcoming: readonly PlaybackTrack[],
+  token: number,
+): Promise<boolean> {
+  await ensurePlayerSetup();
+  const inputs = await tailInputs(upcoming);
+  return withNativeQueue(() => applyTailLocked(inputs, token));
 }
 
 export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
-  return slidePresignWindow(currentIndex, reorderUpcomingNative);
+  return slidePresignWindow(currentIndex, reorderUpcomingApplied);
 }
 
 function isInsideNativeWindow(queuePosition: number): boolean {

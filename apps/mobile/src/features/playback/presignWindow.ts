@@ -14,13 +14,13 @@ export function markPresignedFrom(startIndex: number, available: number): void {
 
 export async function refreshUpcomingPresign(
   currentIndex: number,
-  reorderUpcoming: (upcoming: readonly PlaybackTrack[]) => Promise<void>,
+  reorderUpcoming: (upcoming: readonly PlaybackTrack[]) => Promise<boolean>,
 ): Promise<void> {
   if (currentIndex < 0) return;
   if (presignedThrough - currentIndex > PRESIGN_REFRESH_MARGIN) return;
   const s = useQueueStore.getState();
   const upcoming = orderedQueueTracks(s).slice(currentIndex + 1);
   if (upcoming.length === 0) return;
-  await reorderUpcoming(upcoming);
+  if (!(await reorderUpcoming(upcoming))) return;
   markPresignedFrom(currentIndex + 1, upcoming.length);
 }

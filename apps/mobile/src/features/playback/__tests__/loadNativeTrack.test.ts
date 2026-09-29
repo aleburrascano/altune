@@ -987,6 +987,72 @@ describe('reorderUpcomingNative against the live store queue', () => {
       expect(nativeKeys()).toEqual([A, B, D].map(trackKey));
     });
   });
+
+  describe('reorderUpcomingNative keeps the native queue whole when the rebuild cannot finish', () => {
+    it('restores the previous upcoming tracks when the add rejects, and surfaces the failure', async () => {
+      useQueueStore.getState().loadQueue([A, B, C, D], 0, null);
+      modelNativePlayer([A, B, C, D], 0);
+      const addError = new Error('bridge dropped');
+      const realAdd = player.add!.getMockImplementation()!;
+      player.add!.mockImplementationOnce(async () => {
+        throw addError;
+      });
+
+      await expect(reorderUpcomingNative([C, B, D])).rejects.toBe(addError);
+
+      expect(nativeKeys()).toEqual([A, B, C, D].map(trackKey));
+      player.add!.mockImplementation(realAdd);
+    });
+
+    it('does not leave the queue emptied when the token goes stale after the remove', async () => {
+      useQueueStore.getState().loadQueue([A, B, C, D], 0, null);
+      modelNativePlayer([A, B, C, D], 0);
+      const removeUpcoming = player.removeUpcomingTracks!.getMockImplementation()!;
+      player.removeUpcomingTracks!.mockImplementationOnce(async () => {
+        claimLoad();
+        await removeUpcoming();
+      });
+
+      await reorderUpcomingNative([C, B, D]);
+
+      expect(nativeKeys()).toEqual([A, B, C, D].map(trackKey));
+    });
+  });
+
+  describe('refreshUpcomingPresign only marks the window when the rebuild applied', () => {
+    function library(count: number): PlaybackTrack[] {
+      return Array.from({ length: count }, (_, i) => track(`p${i}`));
+    }
+
+    it('re-presigns on the next refresh after a rebuild that went stale', async () => {
+      const tracks = library(60);
+      useQueueStore.getState().loadQueue(tracks, 20, null);
+      modelNativePlayer(tracks.slice(0, 21), 20);
+      const release = deferredUrls();
+
+      const stale = refreshUpcomingPresign(20);
+      await flush();
+      claimLoad();
+      release();
+      await stale;
+      mockedFetchUrls.mockClear();
+      await refreshUpcomingPresign(20);
+
+      expect(mockedFetchUrls).toHaveBeenCalled();
+    });
+
+    it('skips the next refresh once a rebuild applied', async () => {
+      const tracks = library(60);
+      useQueueStore.getState().loadQueue(tracks, 20, null);
+      modelNativePlayer(tracks.slice(0, 21), 20);
+
+      await refreshUpcomingPresign(20);
+      mockedFetchUrls.mockClear();
+      await refreshUpcomingPresign(20);
+
+      expect(mockedFetchUrls).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('loadNativeQueue presign window', () => {
