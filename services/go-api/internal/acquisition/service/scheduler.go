@@ -15,9 +15,6 @@ import (
 	"time"
 )
 
-const defaultQueueDepthFactor = 4
-const defaultQueueWaitTimeout = 5 * time.Minute
-
 const (
 	defaultLeaseDuration     = 2 * time.Minute
 	defaultHeartbeatInterval = 30 * time.Second
@@ -59,11 +56,6 @@ type BackgroundAcquisitionScheduler struct {
 	wake      chan struct{}
 
 	admitMu sync.RWMutex
-
-	queueDepth       int
-	queueWaitTimeout time.Duration
-	principalCap     int
-	principals       *principalGate
 
 	leaseDuration     time.Duration
 	heartbeatInterval time.Duration
@@ -107,10 +99,6 @@ func NewBackgroundAcquisitionScheduler(
 	for _, opt := range opts {
 		opt(s)
 	}
-	if s.queueWaitTimeout <= 0 {
-		s.queueWaitTimeout = defaultQueueWaitTimeout
-	}
-	s.principals = newPrincipalGate(s.principalCap)
 	if s.queue == nil {
 		s.queue = newMemJobQueue(s.wake)
 	}
@@ -185,18 +173,6 @@ func WithPollInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
 	}
 }
 
-func WithQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) { s.queueDepth = depth }
-}
-
-func WithQueueWaitTimeout(wait time.Duration) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) { s.queueWaitTimeout = wait }
-}
-
-func WithPrincipalQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) { s.principalCap = depth }
-}
-
 func WithOutcomeRecorder(r ports.OutcomeRecorder) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.outcomes = r }
 }
@@ -242,7 +218,10 @@ func (s *BackgroundAcquisitionScheduler) verifySkipped() uint64 {
 
 func (s *BackgroundAcquisitionScheduler) Pause() { s.paused.Store(true) }
 
-func (s *BackgroundAcquisitionScheduler) Resume() { s.paused.Store(false) }
+func (s *BackgroundAcquisitionScheduler) Resume() {
+	s.paused.Store(false)
+	notifyWake(s.wake)
+}
 
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	return s.enqueue(ctx, userId, trackId, ports.JobKindReplace)

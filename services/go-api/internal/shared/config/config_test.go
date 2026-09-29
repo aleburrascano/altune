@@ -24,6 +24,14 @@ func TestLoad_MinimalValid(t *testing.T) {
 	}
 }
 
+func TestLoad_IgnoresRemovedPrincipalQueueDepthEnv(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_PRINCIPAL_QUEUE_DEPTH": "8"}))
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load with a stale ACQUISITION_PRINCIPAL_QUEUE_DEPTH = %v, want nil", err)
+	}
+}
+
 func TestLoad_MissingJWKSURL(t *testing.T) {
 	setEnv(t, map[string]string{})
 

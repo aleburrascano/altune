@@ -88,9 +88,9 @@ func newTrackOrFatal(t *testing.T, userId shared.UserId) *catdomain.Track {
 	return track
 }
 
-func TestHandleRetryAcquisition_QueueFullSurfaces503AndKeepsCooldown(t *testing.T) {
+func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
-	scheduler := &retryFakeScheduler{err: service.ErrAcquisitionQueueFull}
+	scheduler := &retryFakeScheduler{err: service.ErrSchedulerShutdown}
 	track := newTrackOrFatal(t, retryTestUserId)
 	_ = track.MarkFailed("download error")
 	repo.seed(track)
@@ -98,7 +98,7 @@ func TestHandleRetryAcquisition_QueueFullSurfaces503AndKeepsCooldown(t *testing.
 	path := "/tracks/" + track.ID.UUID().String() + "/retry"
 
 	rec := retryServe(t, router, http.MethodPost, path)
-	assertQueueFull(t, rec.Code, rec.Body.Bytes())
+	assertShuttingDown(t, rec.Code, rec.Body.Bytes())
 
 	scheduler.err = nil
 	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
@@ -107,9 +107,9 @@ func TestHandleRetryAcquisition_QueueFullSurfaces503AndKeepsCooldown(t *testing.
 	}
 }
 
-func TestHandleReacquire_QueueFullSurfaces503AndKeepsCooldown(t *testing.T) {
+func TestHandleReacquire_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
-	scheduler := &reacquireFakeScheduler{err: service.ErrAcquisitionQueueFull}
+	scheduler := &reacquireFakeScheduler{err: service.ErrSchedulerShutdown}
 	track := newTrackOrFatal(t, reacquireTestUserId)
 	_ = track.MarkReady("audio/ready.opus")
 	repo.seed(track)
@@ -117,7 +117,7 @@ func TestHandleReacquire_QueueFullSurfaces503AndKeepsCooldown(t *testing.T) {
 	path := "/tracks/" + track.ID.UUID().String() + "/reacquire"
 
 	rec := retryServe(t, router, http.MethodPost, path)
-	assertQueueFull(t, rec.Code, rec.Body.Bytes())
+	assertShuttingDown(t, rec.Code, rec.Body.Bytes())
 
 	scheduler.err = nil
 	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
@@ -126,10 +126,10 @@ func TestHandleReacquire_QueueFullSurfaces503AndKeepsCooldown(t *testing.T) {
 	}
 }
 
-func assertQueueFull(t *testing.T, status int, body []byte) {
+func assertShuttingDown(t *testing.T, status int, body []byte) {
 	t.Helper()
 	if status != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503 on a shed job (body: %s)", status, body)
+		t.Fatalf("status = %d, want 503 while shutting down (body: %s)", status, body)
 	}
 	var env struct {
 		Code string `json:"code"`
@@ -137,8 +137,8 @@ func assertQueueFull(t *testing.T, status int, body []byte) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode body: %v (raw: %s)", err, body)
 	}
-	if env.Code != "acquisition.queue_full" {
-		t.Errorf("code = %q, want acquisition.queue_full", env.Code)
+	if env.Code != "acquisition.shutting_down" {
+		t.Errorf("code = %q, want acquisition.shutting_down", env.Code)
 	}
 }
 

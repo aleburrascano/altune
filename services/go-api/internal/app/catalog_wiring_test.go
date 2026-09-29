@@ -112,15 +112,14 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 	}
 }
 
-func TestWireCatalogEnforcesPrincipalQueueCap(t *testing.T) {
+func TestWireCatalogDoesNotCapPerPrincipalQueue(t *testing.T) {
 	const concurrency = 2
 	const principalCap = concurrency
 	a := &App{
 		cfg: &config.Config{
-			MusicDir:                       t.TempDir(),
-			YtMusicEnabled:                 true,
-			AcquisitionConcurrency:         concurrency,
-			AcquisitionPrincipalQueueDepth: principalCap,
+			MusicDir:               t.TempDir(),
+			YtMusicEnabled:         true,
+			AcquisitionConcurrency: concurrency,
 		},
 		sem: make(chan struct{}, concurrency),
 	}

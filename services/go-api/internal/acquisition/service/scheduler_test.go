@@ -988,6 +988,29 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 	}
 }
 
+func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.T) {
+	acq := &startedAcquirer{started: make(chan struct{}, 1), release: make(chan struct{})}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithPollInterval(10*time.Second))
+	t.Cleanup(func() {
+		close(acq.release)
+		scheduler.Shutdown(context.Background())
+	})
+
+	scheduler.Pause()
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule while paused = %v, want nil", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	scheduler.Resume()
+	select {
+	case <-acq.started:
+	case <-time.After(time.Second):
+		t.Fatal("acquirer not started within 1s of Resume, want a wake well under the 10s poll interval")
+	}
+}
+
 func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -1116,7 +1139,7 @@ func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *te
 	})
 
 	userId := shared.NewUserId(uuid.New())
-	const burst = concurrency*defaultQueueDepthFactor + 5
+	const burst = concurrency*4 + 5
 	for i := 0; i < burst; i++ {
 		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule %d of %d for one user = %v, want nil (the queue is unbounded)", i+1, burst, err)

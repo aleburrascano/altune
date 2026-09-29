@@ -169,7 +169,6 @@ func (a *App) buildAcquisitionScheduler(
 	)
 	schedulerOpts := []func(*acqService.BackgroundAcquisitionScheduler){
 		acqService.WithSchedulerEvents(tap),
-		acqService.WithPrincipalQueueDepth(a.cfg.AcquisitionPrincipalQueueDepth),
 		acqService.WithVerificationStatus(verification),
 		acqService.WithVerifySkipCount(skips.Count),
 		acqService.WithFingerprintVerified(lookups.Verified),

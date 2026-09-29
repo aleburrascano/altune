@@ -204,7 +204,6 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
   joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
-  principal_gate.go      principalGate, the per-principal admission share
   admission_errors.go    admissionError and the admission sentinels
   audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate

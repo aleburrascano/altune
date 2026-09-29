@@ -28,18 +28,6 @@ var (
 	}
 )
 
-var ErrAcquisitionQueueFull = &admissionError{
-	msg:    "acquisition queue is full, try again later",
-	status: 503,
-	code:   "acquisition.queue_full",
-}
-
-var ErrPrincipalQueueFull = &admissionError{
-	msg:    "too many concurrent acquisitions for this user, try again later",
-	status: 429,
-	code:   "acquisition.principal_queue_full",
-}
-
 var ErrTrackJobInFlight = &admissionError{
 	msg:    "another acquisition for this track is already running, try again later",
 	status: 409,
