@@ -89,6 +89,8 @@ jobs:
           fi
           echo "Diff base: $BASE"
           go run ./scripts/lintcomments "$BASE"
+      - name: no comments (whole tree)
+        run: go run ./scripts/lintcomments --all .
       # Vague-name rule (id-denylist parity with mobile #2291): a NEW variable,
       # parameter, local, or function name from the banned set (data, util,
       # helper, manager, temp, arr, val, foo, doWork) on a changed line fails.
