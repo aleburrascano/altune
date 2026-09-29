@@ -4,7 +4,9 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"runtime/debug"
 	"sync"
 )
 
@@ -72,7 +74,7 @@ func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, wi
 		wg.Add(1)
 		go func(rank int) {
 			defer wg.Done()
-			results[rank] = s.runWindowAttempt(ctxs[rank], ac, window[rank])
+			results[rank] = s.guardedWindowAttempt(ctxs[rank], ac, window[rank])
 			if results[rank].accepted {
 				mu.Lock()
 				cancelAll(cancels[rank+1:])
@@ -97,6 +99,19 @@ func cancelAll(cancels []context.CancelFunc) {
 	for _, cancel := range cancels {
 		cancel()
 	}
+}
+
+func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) (result attempt) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, "download attempt panicked",
+				"track_id", ac.Track.ID, "panic", logSafeText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
+			result = attempt{candidate: candidate, rejection: &downloadRejection{
+				stage: RejectionDownload, reason: "download failed", err: fmt.Errorf("attempt panicked: %v", rec),
+			}}
+		}
+	}()
+	return s.runWindowAttempt(ctx, ac, candidate)
 }
 
 func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {

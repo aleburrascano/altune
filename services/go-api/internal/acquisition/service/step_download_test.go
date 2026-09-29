@@ -1565,3 +1565,52 @@ func TestDownloadStep_EveryCandidateImplausibleFailsAsNoConfidentMatch(t *testin
 		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
 	}
 }
+
+type panickingFetcher struct {
+	inner *gatedFetcher
+	url   string
+}
+
+func (f *panickingFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+	if c.URL == f.url {
+		f.inner.mu.Lock()
+		f.inner.dirs[c.URL] = outDir
+		f.inner.mu.Unlock()
+		panic("fetcher exploded")
+	}
+	return f.inner.Fetch(ctx, c, outDir)
+}
+
+func TestDownloadStep_WindowedPanickingAttemptIsRejectedAndOthersStillWin(t *testing.T) {
+	inner := newGatedFetcher(nil)
+	fetcher := &panickingFetcher{inner: inner, url: "rank1"}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "rank1"}, {URL: "rank2"}}}
+
+	_, err := NewDownloadStep(fetcher, WithVerifyWidth(2)).Execute(context.Background(), ac, afterSelect{})
+
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+	if ac.Selected == nil || ac.Selected.URL != "rank2" {
+		t.Fatalf("selected = %+v, want rank2", ac.Selected)
+	}
+	if _, statErr := os.Stat(inner.dirOf("rank1")); !os.IsNotExist(statErr) {
+		t.Errorf("panicked attempt's temp dir should be removed, stat err = %v", statErr)
+	}
+}
+
+func TestDownloadStep_WindowedAllAttemptsPanickingReturnsErrorNotCrash(t *testing.T) {
+	inner := newGatedFetcher(nil)
+	fetcher := &panickingFetcher{inner: inner, url: "only"}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "only"}}}
+
+	_, err := NewDownloadStep(fetcher, WithVerifyWidth(2)).Execute(context.Background(), ac, afterSelect{})
+
+	if err == nil {
+		t.Fatal("Execute should fail when every attempt panics")
+	}
+	if _, statErr := os.Stat(inner.dirOf("only")); !os.IsNotExist(statErr) {
+		t.Errorf("temp dir should be removed, stat err = %v", statErr)
+	}
+}
