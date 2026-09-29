@@ -659,3 +659,60 @@ func terminateLockHolder(t *testing.T, admin *pgxpool.Pool) {
 	}
 	t.Fatal("advisory lock still held after terminating its session")
 }
+
+type switchableConn struct {
+	mu      sync.Mutex
+	pingErr error
+}
+
+func (c *switchableConn) failPings(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pingErr = err
+}
+
+func (c *switchableConn) TryAdvisoryLock(context.Context, int64) (bool, error) { return true, nil }
+
+func (c *switchableConn) Ping(context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.pingErr
+}
+
+func (c *switchableConn) AdvisoryUnlock(context.Context, int64) error { return nil }
+func (c *switchableConn) Release()                                    {}
+
+func TestElection_FailedPingIsLoggedWithCauseAndCounted(t *testing.T) {
+	cases := []struct {
+		name    string
+		settled bool
+	}{
+		{"after settle", true},
+		{"inside settle window", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logged := captureWarnings(t)
+			conn := &switchableConn{}
+			e := electionOver(fixedConnector{conn})
+			e.Start(context.Background())
+			t.Cleanup(func() { e.Shutdown(context.Background()) })
+			if tc.settled && !awaitLeader(t, e, 5*time.Second) {
+				t.Fatal("election never settled into leadership")
+			}
+
+			conn.failPings(errors.New("connection reset by peer"))
+
+			deadline := time.Now().Add(5 * time.Second)
+			for e.Counters().HoldsLost == 0 && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			if got := e.Counters().HoldsLost; got != 1 {
+				t.Errorf("HoldsLost = %d, want 1", got)
+			}
+			if !strings.Contains(logged.String(), "connection reset by peer") {
+				t.Errorf("leader.lost warning did not carry the ping error, got: %q", logged.String())
+			}
+		})
+	}
+}

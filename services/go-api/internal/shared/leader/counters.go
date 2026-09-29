@@ -8,6 +8,7 @@ type electionCounters struct {
 	contended atomic.Int64
 	failures  atomic.Int64
 	termEnds  atomic.Int64
+	holdsLost atomic.Int64
 }
 
 type Counters struct {
@@ -16,6 +17,7 @@ type Counters struct {
 	Contended int64 `json:"acquire_contended_total"`
 	Failures  int64 `json:"acquire_failures_total"`
 	TermEnds  int64 `json:"term_ends_total"`
+	HoldsLost int64 `json:"holds_lost_total"`
 }
 
 func (c *electionCounters) read() Counters {
@@ -25,5 +27,6 @@ func (c *electionCounters) read() Counters {
 		Contended: c.contended.Load(),
 		Failures:  c.failures.Load(),
 		TermEnds:  c.termEnds.Load(),
+		HoldsLost: c.holdsLost.Load(),
 	}
 }

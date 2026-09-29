@@ -201,11 +201,13 @@ func (e *Election) verify(base context.Context) {
 	}
 	ctx, cancel := e.opCtx(base)
 	defer cancel()
-	if conn.Ping(ctx) == nil {
+	err := conn.Ping(ctx)
+	if err == nil {
 		e.settle(base)
 		return
 	}
-	slog.WarnContext(base, "leader.lost", "key", e.key)
+	slog.WarnContext(base, "leader.lost", "key", e.key, "err", err)
+	e.counters.holdsLost.Add(1)
 	e.release(base)
 }
 
