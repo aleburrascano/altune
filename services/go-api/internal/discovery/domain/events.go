@@ -45,6 +45,7 @@ const (
 	EventTypeSseReconnect
 	EventTypeOutboxFlushFailed
 	EventTypeDownloadFailed
+	EventTypeAuthFailed
 )
 
 var eventTypeNames = map[EventType]string{
@@ -68,6 +69,7 @@ var eventTypeNames = map[EventType]string{
 	EventTypeSseReconnect:        "sse_reconnect",
 	EventTypeOutboxFlushFailed:   "outbox_flush_failed",
 	EventTypeDownloadFailed:      "download_failed",
+	EventTypeAuthFailed:          "auth_failed",
 }
 
 func (e EventType) String() string {

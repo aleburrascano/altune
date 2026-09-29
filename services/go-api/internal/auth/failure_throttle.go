@@ -86,6 +86,8 @@ func (t *failureThrottle) makeRoom(now time.Time) {
 	}
 }
 
+func ClientKey(r *http.Request) string { return clientKey(r) }
+
 func clientKey(r *http.Request) string {
 	peer := parseIP(hostOnly(r.RemoteAddr))
 	if forwarded, ok := forwardedClient(r, peer); ok {

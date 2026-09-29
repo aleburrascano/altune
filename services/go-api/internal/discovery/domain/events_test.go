@@ -29,6 +29,7 @@ func TestEventType_String(t *testing.T) {
 		{EventTypeSseReconnect, "sse_reconnect"},
 		{EventTypeOutboxFlushFailed, "outbox_flush_failed"},
 		{EventTypeDownloadFailed, "download_failed"},
+		{EventTypeAuthFailed, "auth_failed"},
 	}
 
 	for _, tt := range tests {
@@ -158,6 +159,7 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeOutboxFlushFailed, true},
 		{EventTypeDownloadFailed, true},
 		{EventTypeDiscographyObserved, false},
+		{EventTypeAuthFailed, false},
 		{EventType(999), false},
 	}
 

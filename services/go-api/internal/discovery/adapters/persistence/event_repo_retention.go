@@ -41,6 +41,7 @@ var eventRetention = []struct {
 	{domain.EventTypeSseReconnect, writeOnlyEventRetention},
 	{domain.EventTypeOutboxFlushFailed, writeOnlyEventRetention},
 	{domain.EventTypeDownloadFailed, writeOnlyEventRetention},
+	{domain.EventTypeAuthFailed, writeOnlyEventRetention},
 }
 
 func (r *PgxEventStore) PruneEvents(ctx context.Context, now time.Time) (int64, error) {

@@ -305,3 +305,20 @@ func TestCapabilityNotes_NameMountedRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testing.T) {
+	r := productionRouter(t)
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"reason":"invalid_credentials","app_version":"1.2.3"}`)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/public/auth-failures", body))
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("POST /v1/public/auth-failures without Authorization = %d, want 204", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/library", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("GET /v1/library without Authorization = %d, want 401", rec.Code)
+	}
+}

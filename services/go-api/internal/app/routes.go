@@ -30,25 +30,29 @@ func (a *App) mountRoutes(
 	r.Get("/health", a.handleHealth)
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(authMiddleware(verifier))
+		discoveryH.PublicRoutes(r, discoveryHandler.DefaultAuthFailureLimit)
 
-		r.Route("/tracks", func(r chi.Router) {
-			r.Mount("/", cat.trackHandler.Routes())
+		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware(verifier))
+
+			r.Route("/tracks", func(r chi.Router) {
+				r.Mount("/", cat.trackHandler.Routes())
+			})
+			cat.streamHandler.Routes(r)
+			cat.audioURLHandler.Routes(r)
+			if cat.reacquireH != nil {
+				r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
+			}
+			if cat.retryH != nil {
+				r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
+			}
+			r.Mount("/library", cat.libraryHandler.Routes())
+			r.Mount("/playlists", cat.playlistHandler.Routes())
+			r.Mount("/playback", queueHandler.Routes())
+			r.Mount("/discovery", discoveryH.Routes())
+			mountFeedback(r, feedbackH)
+			r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns).withShutdown(a.lifecycleDone))
 		})
-		cat.streamHandler.Routes(r)
-		cat.audioURLHandler.Routes(r)
-		if cat.reacquireH != nil {
-			r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
-		}
-		if cat.retryH != nil {
-			r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
-		}
-		r.Mount("/library", cat.libraryHandler.Routes())
-		r.Mount("/playlists", cat.playlistHandler.Routes())
-		r.Mount("/playback", queueHandler.Routes())
-		r.Mount("/discovery", discoveryH.Routes())
-		mountFeedback(r, feedbackH)
-		r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns).withShutdown(a.lifecycleDone))
 	})
 
 	return r

@@ -148,6 +148,20 @@ func validateEventID(t domain.EventType, eventID string) error {
 	return nil
 }
 
+func (s *RecordEventService) RecordAnonymousAuthFailure(ctx context.Context, reason, appVersion string) error {
+	event := domain.InteractionEvent{
+		OccurredAt: time.Now().UTC(),
+		UserId:     shared.AnonymousUserId(),
+		Type:       domain.EventTypeAuthFailed,
+		Payload:    map[string]any{"reason": reason, "app_version": appVersion},
+	}
+	if err := s.eventStore.Append(ctx, event); err != nil {
+		return fmt.Errorf("record anonymous auth failure: %w", err)
+	}
+	s.activity.EmitActivity(domain.EventTypeAuthFailed.String())
+	return nil
+}
+
 func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, input RecordEventInput) error {
 	if input.Type == domain.EventTypeUnknown {
 		return fmt.Errorf("record event: unknown event type")
