@@ -143,7 +143,9 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		     THEN playback_queue_state.natural_order ELSE EXCLUDED.natural_order END,
 		   updated_at = EXCLUDED.updated_at,
 		   erased_at = NULL
-		 WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at`,
+		 WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at
+		   AND (playback_queue_state.erased_at IS NULL
+		     OR playback_queue_state.erased_at + $10::bigint * interval '1 microsecond' < EXCLUDED.updated_at)`,
 			state.UserId.UUID(),
 			state.TrackIds,
 			state.CurrentIdx,
@@ -153,6 +155,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 			state.SourceId,
 			state.NaturalOrder,
 			handlingAge{stampedAt: state.UpdatedAt},
+			erasureSaveGrace.Microseconds(),
 		)
 		return err
 	})
@@ -252,6 +255,8 @@ func (r *PgxQueueStateRepository) GetForUser(
 }
 
 const erasureFenceWindow = 15 * time.Minute
+
+var erasureSaveGrace = queueStateOpTimeout
 
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
 	return r.runOp(ctx, "delete_for_user", userId, func(opCtx context.Context) error {

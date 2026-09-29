@@ -352,9 +352,13 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	if err := repo.Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
 		t.Fatalf("Upsert(before the erasure): %v", err)
 	}
+	prevGrace := erasureSaveGrace
+	erasureSaveGrace = 50 * time.Millisecond
+	t.Cleanup(func() { erasureSaveGrace = prevGrace })
 	if err := repo.DeleteForUser(ctx, userId); err != nil {
 		t.Fatalf("DeleteForUser: %v", err)
 	}
+	time.Sleep(2 * erasureSaveGrace)
 
 	if err := repo.Upsert(ctx, stateAt(userId, 1000, time.Now())); err != nil {
 		t.Fatalf("Upsert(handled after the erasure) = %v, want nil; erasure is not a lockout", err)
@@ -840,5 +844,33 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 	got, err := repo.GetForUser(ctx, userId)
 	if err != nil || got == nil || got.PositionMs != 4000 || got.CurrentIdx != 5 {
 		t.Fatalf("stored state = %+v (err %v), want the newer full save's position 4000 at index 5; the lock wait aged the older position save past it", got, err)
+	}
+}
+
+func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	dropQueueStateOnCleanup(t, pool, userId)
+
+	if err := repo.Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
+		t.Fatalf("Upsert(the queue the user then erases): %v", err)
+	}
+	handledBeforeErasure := stateAt(userId, 65000, time.Now())
+	if err := repo.DeleteForUser(ctx, userId); err != nil {
+		t.Fatalf("DeleteForUser: %v", err)
+	}
+
+	if err := repo.Upsert(ctx, handledBeforeErasure); !errors.Is(err, domain.ErrStaleQueueWrite) {
+		t.Fatalf("Upsert(stamped within the grace of the erasure) = %v, want ErrStaleQueueWrite", err)
+	}
+	got, err := repo.GetForUser(ctx, userId)
+	if err != nil {
+		t.Fatalf("GetForUser: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("erased queue state came back: %+v; a save inside the grace recreated it", got)
 	}
 }
