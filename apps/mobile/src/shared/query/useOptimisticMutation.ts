@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import {
   useMutation,
   useQueryClient,
@@ -7,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import { showAlert } from '@shared/ui/dialog/dialog';
 
 type ErrorAlert = { title: string; message: string };
 
@@ -79,7 +79,7 @@ function alertAfterRollback<TVariables>(
 ): void {
   if (!alertOnError) return;
   const { title, message } = alertOnError(variables);
-  Alert.alert(title, message);
+  showAlert(title, message);
 }
 
 export function useOptimisticMutation<TData, TVariables, TCache>(

@@ -4,8 +4,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { showAlert } from '@shared/ui/dialog/dialog';
+import * as webDialog from '@shared/ui/dialog/dialog.web';
 
 import { useOptimisticMutation } from '../useOptimisticMutation';
+
+jest.mock('@shared/ui/dialog/dialog', () => {
+  const actual = jest.requireActual('@shared/ui/dialog/dialog');
+  return { ...actual, showAlert: jest.fn(actual.showAlert) };
+});
 
 type Counter = { count: number };
 const KEY = ['counter'] as const;
@@ -493,5 +500,36 @@ describe('session fencing of the request and its callbacks', () => {
       expect(mutationFn).not.toHaveBeenCalled();
       expect(queryClient.getQueryData(KEY)).toEqual(USER_B_COUNTER);
     });
+  });
+});
+
+describe('useOptimisticMutation(): alerting on web', () => {
+  it('shows the failure through window.alert with the title and message', async () => {
+    const windowAlert = jest.fn();
+    Object.defineProperty(globalThis, 'window', {
+      value: { alert: windowAlert },
+      configurable: true,
+    });
+    (showAlert as jest.Mock).mockImplementationOnce(webDialog.showAlert);
+    const queryClient = newClient();
+    queryClient.setQueryData(KEY, { count: 1 });
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          mutationFn: failing,
+          applyOptimistic: bump,
+          revertOptimistic: unbump,
+          alertOnError: (by: number) => ({ title: 'Failed', message: `Could not add ${by}.` }),
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await expect(result.current.mutateAsync(4)).rejects.toThrow('boom');
+    });
+
+    expect(windowAlert).toHaveBeenCalledWith('Failed\n\nCould not add 4.');
   });
 });

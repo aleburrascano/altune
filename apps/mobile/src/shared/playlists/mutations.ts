@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import {
@@ -19,6 +18,7 @@ import {
   guardedMutationOptions,
   isSameSession,
 } from '@shared/session/signOutCleanup';
+import { showAlert } from '@shared/ui/dialog/dialog';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
@@ -83,7 +83,7 @@ async function createWithTracks({
 }
 
 function alertCreateFailed(): void {
-  Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
+  showAlert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
 }
 
 function alertCreatedWithTracks(
@@ -91,7 +91,7 @@ function alertCreatedWithTracks(
   { trackIds }: CreateWithTracksVariables,
 ) {
   const alert = createWithTracksAlert(created, trackIds.length);
-  if (alert !== null) Alert.alert(alert.title, alert.message);
+  if (alert !== null) showAlert(alert.title, alert.message);
 }
 
 function refreshPlaylistsInSameSession(queryClient: QueryClient) {
@@ -174,12 +174,12 @@ export function useAddTracksToPlaylist() {
         ),
       };
     },
-    onSuccess: (result, { playlistId, trackIds }) => {
-      if (result.added < trackIds.length) {
+    onSuccess: (outcome, { playlistId, trackIds }) => {
+      if (outcome.added < trackIds.length) {
         const name = queryClient
           .getQueryData<PlaylistList>(playlistKeys.list)
           ?.items.find((p) => p.id === playlistId)?.name;
-        Alert.alert('Note', alreadyThereMessage(trackIds.length - result.added, name));
+        showAlert('Note', alreadyThereMessage(trackIds.length - outcome.added, name));
       }
     },
     alertOnError: ({ trackIds }) => ({
@@ -213,7 +213,7 @@ function forgetDeletedPlaylist(queryClient: QueryClient, playlistId: PlaylistId)
 }
 
 function alertDeleteFailed(): void {
-  Alert.alert('Delete failed', `Could not delete the playlist. ${RETRY_TAIL}`);
+  showAlert('Delete failed', `Could not delete the playlist. ${RETRY_TAIL}`);
 }
 
 export function useDeletePlaylist(playlistId: PlaylistId) {
