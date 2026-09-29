@@ -16,6 +16,7 @@ type RejectionStage string
 
 const (
 	RejectionIdentity     RejectionStage = "identity"
+	RejectionQualifier    RejectionStage = "qualifier"
 	RejectionDownload     RejectionStage = "download"
 	RejectionDuration     RejectionStage = "duration"
 	RejectionUndecodable  RejectionStage = "undecodable"

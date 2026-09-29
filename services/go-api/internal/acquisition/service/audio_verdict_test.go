@@ -156,6 +156,11 @@ func TestClassifyAudio_SoftNeedsTitleQualifierArtistAndLengthToAgree(t *testing.
 			want:    VerdictOtherVersion,
 		},
 		{
+			name: "an instrumental title is another version", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("sibling", "Don't Stop Me Now (Instrumental)", 210, "Queen")),
+			want:    VerdictOtherVersion,
+		},
+		{
 			name: "no overlapping artist is a different song", ref: dontStopMeNow, audioDuration: 210,
 			results: singleLink(linked("sibling", "Don't Stop Me Now", 210, "Journey")),
 			want:    VerdictDifferentSong,

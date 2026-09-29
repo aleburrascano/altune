@@ -95,6 +95,10 @@ var qualifierLexicon = []qualifierEntry{
 	{"remix", true, []string{"remix"}},
 	{"remix", true, []string{"remixed"}},
 	{"mix", true, []string{"mix"}},
+	{"", false, []string{"original", "mix"}},
+	{"", false, []string{"stereo", "mix"}},
+	{"", false, []string{"mono", "mix"}},
+	{"", false, []string{"album", "mix"}},
 	{"live", true, []string{"live"}},
 	{"cover", true, []string{"cover"}},
 	{"slowed", true, []string{"slowed"}},
@@ -163,11 +167,21 @@ func lexiconEntryAt(tokens []string, pos int) (qualifierEntry, bool) {
 	return qualifierEntry{}, false
 }
 
+var yearRe = regexp.MustCompile(`^(?:19|20)\d\d$`)
+
+func isYearQualifiedMix(tokens []string, pos int) bool {
+	return tokens[pos] == "mix" && pos > 0 && yearRe.MatchString(tokens[pos-1])
+}
+
+func (e qualifierEntry) isBenign() bool {
+	return e.label == ""
+}
+
 func lexiconMatches(tokens []string) []qualifierEntry {
 	var matches []qualifierEntry
 	for pos := 0; pos < len(tokens); {
 		entry, ok := lexiconEntryAt(tokens, pos)
-		if !ok {
+		if !ok || isYearQualifiedMix(tokens, pos) {
 			pos++
 			continue
 		}
@@ -188,7 +202,7 @@ func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto
 	titleTokens := normalizeToTokens(trackTitle)
 	artistTokens := normalizeToTokens(trackArtist)
 	for _, entry := range lexiconMatches(normalizeToTokens(withoutFeatureCredits(candidateTitle))) {
-		if containsPhrase(titleTokens, entry.tokens) || containsPhrase(artistTokens, entry.tokens) {
+		if entry.isBenign() || containsPhrase(titleTokens, entry.tokens) || containsPhrase(artistTokens, entry.tokens) {
 			continue
 		}
 		if entry.veto {
@@ -288,6 +302,7 @@ type candidateEntry struct {
 	meta          float64
 	durationDelta float64
 	qualDistance  int
+	isFallback    bool
 	artistMatch   bool
 	featMatch     bool
 	candidate     ports.AudioCandidate
@@ -312,6 +327,9 @@ func lessResolved(a, b candidateEntry) bool {
 }
 
 func lessTopic(a, b candidateEntry) bool {
+	if a.isFallback != b.isFallback {
+		return b.isFallback
+	}
 	if a.artistMatch != b.artistMatch {
 		return a.artistMatch
 	}
@@ -328,6 +346,9 @@ func lessTopic(a, b candidateEntry) bool {
 }
 
 func lessOther(a, b candidateEntry) bool {
+	if a.isFallback != b.isFallback {
+		return b.isFallback
+	}
 	if a.ident != b.ident {
 		return a.ident > b.ident
 	}
@@ -398,6 +419,16 @@ func logCandidateEvaluated(ctx context.Context, track TrackRef, c ports.AudioCan
 	)
 }
 
+func qualifierRejection(c ports.AudioCandidate, veto []string) CandidateRejection {
+	return CandidateRejection{
+		URL:    c.URL,
+		Title:  c.Title,
+		Source: c.Source,
+		Stage:  RejectionQualifier,
+		Reason: "unrequested " + strings.Join(veto, ", "),
+	}
+}
+
 func classifyCandidates(
 	ctx context.Context,
 	track TrackRef,
@@ -437,6 +468,12 @@ func classifyCandidates(
 			})
 			continue
 		}
+		veto, fallback := UnrequestedQualifiers(track.Title, track.Artist, c.Title)
+		if len(veto) > 0 {
+			rejected = append(rejected, qualifierRejection(c, veto))
+			continue
+		}
+		entry.isFallback = len(fallback) > 0
 		if isTopicChannel(c.Channel) {
 			topic = append(topic, entry)
 		} else {

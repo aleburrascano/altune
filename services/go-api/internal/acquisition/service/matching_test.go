@@ -212,7 +212,7 @@ func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T)
 	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200}
 	candidates := []ports.AudioCandidate{
 		{
-			Title:      "Blinding Lights (Slowed + Reverb)",
+			Title:      "Blinding Lights",
 			Channel:    "The Weeknd - Topic",
 			Duration:   240,
 			URL:        "https://youtube.com/watch?v=slowed",
@@ -1046,5 +1046,63 @@ func TestUnrequestedQualifiers_UnicodeDashSeparatorsAfterFeatureCredit(t *testin
 			veto, _ := UnrequestedQualifiers("Song", "Someone", candidate)
 			assertQualifiers(t, "veto", veto, []string{"instrumental"})
 		})
+	}
+}
+
+func TestUnrequestedQualifiers_RemasterStyleMixIsNotAQualifier(t *testing.T) {
+	for _, title := range []string{
+		"Come Together (2019 Mix)",
+		"Come Together (Original Mix)",
+		"Come Together (Stereo Mix)",
+		"Come Together (Mono Mix)",
+		"Come Together (Album Mix)",
+	} {
+		veto, fallback := UnrequestedQualifiers("Come Together", "The Beatles", title)
+		assertQualifiers(t, title+" veto", veto, nil)
+		assertQualifiers(t, title+" fallback", fallback, nil)
+	}
+}
+
+func TestUnrequestedQualifiers_OtherMixesStayVetoed(t *testing.T) {
+	for _, title := range []string{"Song (Who Mix?)", "Song (Club Mix)"} {
+		veto, _ := UnrequestedQualifiers("Song", "A", title)
+		assertQualifiers(t, title+" veto", veto, []string{"mix"})
+	}
+}
+
+func TestRankAndCollect_RejectsUnrequestedVersionBeforeDownload(t *testing.T) {
+	track := TrackRef{Title: "Rollacoasta", Artist: "prettifun", Duration: 159}
+	candidates := []ports.AudioCandidate{
+		{
+			Title:      "prettifun - Rollacoasta (Instrumental) [100% Accurate]",
+			Channel:    "ProdADN",
+			Duration:   159,
+			URL:        "https://youtube.com/watch?v=instrumental",
+			Categories: []string{"Music"},
+		},
+		{Title: "Rollacoasta", Channel: "prettifun", Duration: 159, URL: "https://youtube.com/watch?v=clean", Categories: []string{"Music"}},
+	}
+
+	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+
+	if len(ranked) != 1 || ranked[0].URL != "https://youtube.com/watch?v=clean" {
+		t.Fatalf("ranked = %v, want only the clean upload", ranked)
+	}
+	if len(rejected) != 1 || rejected[0].Stage != RejectionQualifier || rejected[0].Reason != "unrequested instrumental, 100% accurate" {
+		t.Fatalf("rejected = %+v, want one qualifier rejection naming its labels", rejected)
+	}
+}
+
+func TestRankAndCollect_RadioEditRanksAfterEveryCleanCandidate(t *testing.T) {
+	track := TrackRef{Title: "Harbour Lights", Artist: "The Marram", Duration: 236}
+	candidates := []ports.AudioCandidate{
+		{Title: "Harbour Lights (Radio Edit)", Channel: "The Marram - Topic", Duration: 236, URL: "https://x.example/edit", Categories: []string{"Music"}},
+		{Title: "Harbour Lights", Channel: "The Marram - Topic", Duration: 200, URL: "https://x.example/clean", Categories: []string{"Music"}},
+	}
+
+	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+
+	if len(rejected) != 0 || len(ranked) != 2 || ranked[0].URL != "https://x.example/clean" {
+		t.Fatalf("ranked = %v rejected = %v, want the clean upload first and the edit kept", ranked, rejected)
 	}
 }

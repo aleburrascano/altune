@@ -169,7 +169,7 @@ func TestRun_FailsWhenWrongRecordingStored(t *testing.T) {
 	kase := Case{
 		ID: "t", Class: "F1",
 		Track:      Track{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		Candidates: []Candidate{{Title: "Blinding Lights (Cover)", URL: "cover", Channel: "Covers", Duration: 200}},
+		Candidates: []Candidate{{Title: "Blinding Lights", URL: "cover", Channel: "Covers", Duration: 200}},
 	}
 	out := Run(context.Background(), kase)
 	if out.Pass {
@@ -310,7 +310,7 @@ func remixMBIDCase(resolution *Resolution, isrc string) Case {
 		Track: Track{Title: "Drinking in L.A.", Artist: "Bran Van 3000", Duration: 236, ISRC: isrc, Resolution: resolution},
 		Candidates: []Candidate{
 			{Title: "Drinking in L.A.", URL: "album", Channel: "Bran Van 3000 - Topic", Duration: 237, AcoustID: "album-ac", RecordingMBIDs: []string{"album"}, Correct: true},
-			{Title: "Drinking in L.A. (Who Mix?)", URL: "remix", Channel: "Bran Van 3000 - Topic", Duration: 307, AcoustID: "remix-ac", RecordingMBIDs: []string{"remix"}},
+			{Title: "Drinking in L.A. (Who?)", URL: "remix", Channel: "Bran Van 3000 - Topic", Duration: 307, AcoustID: "remix-ac", RecordingMBIDs: []string{"remix"}},
 		},
 	}
 }
@@ -425,8 +425,6 @@ func TestRunAll_ReportsEmbeddedMustHoldsAsPending(t *testing.T) {
 	want := map[string]string{
 		"mh4-unknown-fingerprint-topic-within-2s-stored-best-effort": "compute acquisition confidence from evidence",
 		"mh4-unknown-fingerprint-non-topic-20s-off-fails":            "compute acquisition confidence from evidence",
-		"rw-rollacoasta-instrumental-top-ranked":                     "selection vetoes unrequested versions",
-		"rw-speed-demon-instrumental-only":                           "selection vetoes unrequested versions",
 		"mh11-radio-edit-loses-to-clean-topic-upload":                "compute acquisition confidence from evidence",
 		"mh11-radio-edit-only-with-wrong-length-fails":               "compute acquisition confidence from evidence",
 	}

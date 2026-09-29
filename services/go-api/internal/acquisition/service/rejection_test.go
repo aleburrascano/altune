@@ -192,13 +192,14 @@ func TestSummarizeRejections(t *testing.T) {
 func TestRejectionStage_LiteralsArePinned(t *testing.T) {
 	want := map[RejectionStage]string{
 		RejectionIdentity:     "identity",
+		RejectionQualifier:    "qualifier",
 		RejectionDownload:     "download",
 		RejectionDuration:     "duration",
 		RejectionUndecodable:  "undecodable",
 		RejectionFingerprint:  "fingerprint",
 		RejectionNotAttempted: "not_attempted",
 	}
-	if len(want) != 6 {
+	if len(want) != 7 {
 		t.Fatalf("rejection stage constants collide: %v", want)
 	}
 	for stage, literal := range want {

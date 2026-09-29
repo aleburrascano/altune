@@ -276,6 +276,36 @@
       "candidates": [
         { "title": "Harbour Lights (Radio Edit)", "url": "yt:radio-edit", "channel": "The Marram - Topic", "categories": ["Music"], "duration": 205 }
       ]
+    },
+    {
+      "id": "f4-reaction-video-loses-to-clean-upload",
+      "class": "F4",
+      "note": "a reaction video shares the artist and title but is never the recording; the clean audio upload is stored",
+      "track": { "title": "8am in Charlotte", "artist": "Drake", "duration": 205 },
+      "candidates": [
+        { "title": "ImDontai Reacts To Drake 8AM In Charlotte", "url": "yt:reaction", "channel": "ImDontai", "categories": ["Music"], "duration": 205, "view_count": 900000 },
+        { "title": "Drake - 8am in Charlotte (Audio)", "url": "yt:clean", "channel": "Drake", "categories": ["Music"], "duration": 205, "view_count": 1000, "correct": true }
+      ]
+    },
+    {
+      "id": "f4-remix-ranked-first-loses-to-clean-topic",
+      "class": "F4",
+      "note": "must-hold 5: a remix that would otherwise rank first is vetoed and the clean Topic upload is stored",
+      "track": { "title": "Drinking in L.A.", "artist": "Bran Van 3000", "duration": 307 },
+      "candidates": [
+        { "title": "Drinking in L.A. Fink Remix", "url": "yt:fink", "channel": "Bran Van 3000 - Topic", "categories": ["Music"], "duration": 307, "view_count": 90000000 },
+        { "title": "Drinking in L.A.", "url": "yt:clean-topic", "channel": "Bran Van 3000 - Topic", "categories": ["Music"], "duration": 307, "view_count": 1000, "correct": true }
+      ]
+    },
+    {
+      "id": "f4-radio-edit-ranks-after-clean-upload",
+      "class": "F4",
+      "note": "a radio edit is only a last resort: the clean upload wins even with a lower identity score",
+      "track": { "title": "Harbour Lights", "artist": "The Marram", "duration": 236 },
+      "candidates": [
+        { "title": "The Marram - Harbour Lights (Radio Edit)", "url": "yt:radio-edit", "channel": "Some Label", "categories": ["Music"], "duration": 236, "view_count": 9000000 },
+        { "title": "Harbour Lights", "url": "yt:clean", "channel": "Some Label", "categories": ["Music"], "duration": 236, "view_count": 1000, "correct": true }
+      ]
     }
   ]
 }

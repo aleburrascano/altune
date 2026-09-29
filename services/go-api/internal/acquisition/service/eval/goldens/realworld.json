@@ -21,7 +21,6 @@
     {
       "id": "rw-rollacoasta-instrumental-top-ranked",
       "class": "RW",
-      "pending": "selection vetoes unrequested versions",
       "note": "staging: stored as verified from the instrumental, which fingerprints to the vocal recording b29ac684 at 0.908. Only the title's unrequested (Instrumental) qualifier separates it from the clean upload",
       "track": {
         "title": "Rollacoasta", "artist": "prettifun", "duration": 158.67, "isrc": "USC4R2668964",
@@ -38,7 +37,6 @@
     {
       "id": "rw-speed-demon-instrumental-only",
       "class": "RW",
-      "pending": "selection vetoes unrequested versions",
       "note": "staging: stored as corroborated from an instrumental with an unknown fingerprint and a matching length. The only candidate is an unrequested version, so nothing may be stored",
       "track": { "title": "SPEED DEMON", "artist": "Lucy Bedroque", "duration": 146 },
       "candidates": [
