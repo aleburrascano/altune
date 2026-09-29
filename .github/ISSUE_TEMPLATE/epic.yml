@@ -1,6 +1,6 @@
 name: Epic
 description: A goal too big for one ticket. Split it into child tasks.
-title: "[Epic]: "
+title: "feat(<module>): "
 labels: ["epic"]
 body:
   - type: textarea

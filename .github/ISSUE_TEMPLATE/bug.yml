@@ -1,6 +1,6 @@
 name: Bug
 description: Something is broken. Report what happened so it can be reproduced.
-title: "[Bug]: "
+title: "bug(<module>): "
 labels: ["bug", "needs-triage"]
 body:
   - type: textarea

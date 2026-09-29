@@ -1,6 +1,6 @@
 name: Task
 description: One small, self-contained unit of work for a single fresh chat.
-title: "[Task]: "
+title: "feat(<module>): "
 labels: ["ready"]
 body:
   - type: textarea

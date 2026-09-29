@@ -6,8 +6,6 @@ DAYS="${2:-${DAYS:-14}}"
 SINCE=$(date -u -d "-${DAYS} days" +%Y-%m-%d)
 OUT="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
-count() { forge issue list -R "$R" --state all --search "$1" --limit 5000 --json number -q length 2>/dev/null || echo 0; }
-
 merged=$(forge pr list -R "$R" --state merged --search "merged:>=$SINCE" --limit 5000 --json number -q length 2>/dev/null || echo 0)
 PRS=$(forge pr list -R "$R" --state merged --search "merged:>=$SINCE" --limit 500 \
   --json title,createdAt,mergedAt,labels 2>/dev/null || echo '[]')
@@ -22,10 +20,13 @@ cfr_n=$(jq '[.[] | select((.title|test("revert|rollback|hotfix";"i")) or (any(.l
 cfr=$([ "$sample" -gt 0 ] && awk "BEGIN{printf \"%.1f\", 100*$cfr_n/$sample}" || echo 0)
 types=$(jq -r '[.[].title | (try (capture("^(?<t>[a-z]+)").t) catch "other")] | group_by(.) | map({t:.[0], n:length}) | sort_by(-.n) | map("\(.t)=\(.n)") | join("  ")' <<<"$PRS")
 
-bugs=$(count "label:bug created:>=$SINCE")
-c_review=$(count "label:bug label:caught:review created:>=$SINCE")
-c_qa=$(count "label:bug label:caught:qa created:>=$SINCE")
-c_prod=$(count "label:bug label:caught:prod created:>=$SINCE")
+BUG_LABELS=$(forge issue list -R "$R" --state all --search "created:>=$SINCE" --limit 5000 --json title,labels 2>/dev/null \
+  | jq -c '[.[] | [.labels[].name] as $l | select((.title | test("^bug\\(")) or ($l | index("bug"))) | $l]' 2>/dev/null || echo '[]')
+caught() { jq --arg c "caught:$1" '[.[] | select(index($c))] | length' <<<"$BUG_LABELS"; }
+bugs=$(jq length <<<"$BUG_LABELS")
+c_review=$(caught review)
+c_qa=$(caught qa)
+c_prod=$(caught prod)
 tagged=$((c_review + c_qa + c_prod))
 untagged=$((bugs - tagged)); [ "$untagged" -lt 0 ] && untagged=0
 escaped=$([ "$tagged" -gt 0 ] && awk "BEGIN{printf \"%.0f\", 100*$c_prod/$tagged}" || echo "n/a")
