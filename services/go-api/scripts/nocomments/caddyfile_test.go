@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,8 +186,11 @@ func TestTrackedCaddyConfigsStripToZeroCommentsAndAdaptUnchanged(t *testing.T) {
 			if err != nil {
 				t.Fatalf("strip: %v", err)
 			}
-			if count == 0 {
-				t.Fatal("strip removed 0 comments, want the tracked file's comments")
+			if count != 0 {
+				t.Fatalf("strip removed %d comments, want the tracked file already comment-free", count)
+			}
+			if !bytes.Equal(out, src) {
+				t.Fatal("strip changed a comment-free tracked file")
 			}
 			remaining, err := caddyfileComments(out)
 			if err != nil {
