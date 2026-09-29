@@ -793,3 +793,126 @@ func TestLookup_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
 		t.Fatal("lookup kept reading an endless body")
 	}
 }
+
+func throttlingServer(t *testing.T, throttled int, okBody string) (*httptest.Server, *int) {
+	t.Helper()
+	hits := new(int)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		*hits++
+		if *hits <= throttled {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(okBody))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, hits
+}
+
+const throttleMatchBody = `{"status":"ok","results":[{"id":"ac-1","score":0.97,"recordings":[{"id":"mb-1"}]}]}`
+
+func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
+	srv, hits := throttlingServer(t, 2, throttleMatchBody)
+	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+
+	_, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
+
+	if !errors.Is(err, ports.ErrIdentifyThrottled) {
+		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
+	}
+	if *hits != 2 {
+		t.Errorf("hits = %d, want 2 (one retry)", *hits)
+	}
+}
+
+func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
+	srv, _ := throttlingServer(t, 1, throttleMatchBody)
+	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+
+	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if match.AcoustID != "ac-1" {
+		t.Errorf("AcoustID = %q, want ac-1", match.AcoustID)
+	}
+}
+
+func TestAcoustIDsFor_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
+	srv, hits := throttlingServer(t, 2, `{"status":"ok","tracks":[{"id":"t1"}]}`)
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+
+	_, err := id.AcoustIDsFor(context.Background(), "mbid")
+
+	if !errors.Is(err, ports.ErrIdentifyThrottled) {
+		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
+	}
+	if *hits != 2 {
+		t.Errorf("hits = %d, want 2 (one retry)", *hits)
+	}
+}
+
+func TestAcoustIDsFor_ThrottledOnceThenOKReturnsTheIDs(t *testing.T) {
+	srv, _ := throttlingServer(t, 1, `{"status":"ok","tracks":[{"id":"t1"}]}`)
+	id := NewIdentifier("", "real-key").WithClusterEndpoint(srv.URL)
+
+	ids, err := id.AcoustIDsFor(context.Background(), "mbid")
+	if err != nil {
+		t.Fatalf("AcoustIDsFor: %v", err)
+	}
+	if !reflect.DeepEqual(ids, []string{"t1"}) {
+		t.Errorf("ids = %v, want [t1]", ids)
+	}
+}
+
+func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
+	srv, _ := throttlingServer(t, 0, `{"status":"ok","results":[]}`)
+	id := NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
+	if err != nil || match.Known() {
+		t.Fatalf("no-match = %+v, %v; want zero match and nil error", match, err)
+	}
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failing.Close()
+	id = NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
+	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
+	if err == nil || errors.Is(err, ports.ErrIdentifyThrottled) {
+		t.Errorf("500 err = %v, want a non-throttled error", err)
+	}
+}
+
+func TestLookup_ContextCancelAbortsTheRetryAfterWait(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "5")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	id := NewIdentifier("", "real-key").WithEndpoint(srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
+
+	if err == nil || errors.Is(err, ports.ErrIdentifyThrottled) {
+		t.Errorf("err = %v, want the context error", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Errorf("took %v, want the wait aborted by ctx", time.Since(start))
+	}
+}
+
+func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
+	for header, want := range map[string]time.Duration{
+		"2": 2 * time.Second, "60": 5 * time.Second, "": time.Second, "soon": time.Second, "0": 0,
+	} {
+		if got := retryAfter(header); got != want {
+			t.Errorf("retryAfter(%q) = %v, want %v", header, got, want)
+		}
+	}
+}

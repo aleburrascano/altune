@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -1249,5 +1250,42 @@ func TestDownloadStep_FailedPreviewIdentifyRecordsAPreviewFallbackSkip(t *testin
 
 	if len(rec.gates) != 1 || rec.gates[0] != "preview_fallback" {
 		t.Errorf("recorded gates = %v, want [preview_fallback]", rec.gates)
+	}
+}
+
+func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(t *testing.T) {
+	logs := captureJSONLog(t)
+	ac := logTestDownloadContext()
+	ac.Track.Duration = 0
+	ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
+	throttled := fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled)
+
+	runDownloadForLog(context.Background(), t, ac,
+		WithDownloadIdentifier(&stubIdentifier{err: throttled}))
+
+	findLogRecord(t, logs, "acquisition.identify_throttled")
+	if strings.Contains(logs.String(), "acquisition.identify_failed") {
+		t.Errorf("throttle logged as identify_failed: %s", logs.String())
+	}
+	if ac.IdentityVerified {
+		t.Error("IdentityVerified = true, want false after a throttled lookup")
+	}
+}
+
+func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing.T) {
+	logs := captureJSONLog(t)
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
+	identifier := &stubIdentifier{err: fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled)}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
+	ac := previewContext()
+
+	_, _ = step.Execute(context.Background(), ac, afterSelect{})
+	if ac.TempPath != "" {
+		_ = os.RemoveAll(filepath.Dir(ac.TempPath))
+	}
+
+	findLogRecord(t, logs, "acquisition.identify_throttled")
+	if strings.Contains(logs.String(), "acquisition.preview_fallback") {
+		t.Errorf("throttle logged as preview_fallback: %s", logs.String())
 	}
 }

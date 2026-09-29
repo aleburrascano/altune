@@ -33,6 +33,8 @@ const (
 	clusterEndpoint    = "https://api.acoustid.org/v2/track/list_by_mbid"
 	requestsPerSecond  = 3
 	lookupBodyCap      = 2 << 20
+	defaultRetryAfter  = time.Second
+	maxRetryAfter      = 5 * time.Second
 )
 
 var _ ports.AudioIdentifier = (*Identifier)(nil)
@@ -129,9 +131,6 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	if i.apiKey == "" {
 		return ports.RecordingMatch{}, ErrMissingAPIKey
 	}
-	if err := i.limiter.Wait(ctx); err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
-	}
 
 	form := url.Values{}
 	form.Set("client", i.apiKey)
@@ -139,15 +138,9 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	form.Set("duration", strconv.Itoa(int(fp.Duration)))
 	form.Set("fingerprint", fp.Fingerprint)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.endpoint, bytes.NewBufferString(form.Encode()))
+	resp, err := i.send(ctx, i.endpoint, form, "acoustid lookup")
 	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("build acoustid request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := i.client.Do(req)
-	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: %w", err)
+		return ports.RecordingMatch{}, err
 	}
 	defer resp.Body.Close()
 
@@ -181,6 +174,57 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	return match, nil
 }
 
+func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
+	resp, err := i.post(ctx, endpoint, form, label)
+	if err != nil || resp.StatusCode != http.StatusTooManyRequests {
+		return resp, err
+	}
+	wait := retryAfter(resp.Header.Get("Retry-After"))
+	resp.Body.Close()
+
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%s: %w", label, ctx.Err())
+	case <-timer.C:
+	}
+
+	resp, err = i.post(ctx, endpoint, form, label)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		resp.Body.Close()
+		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, ports.ErrIdentifyThrottled)
+	}
+	return resp, nil
+}
+
+func (i *Identifier) post(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
+	if err := i.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBufferString(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build %s request: %w", label, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := i.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
+	}
+	return resp, nil
+}
+
+func retryAfter(header string) time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(header))
+	if err != nil || seconds < 0 {
+		return defaultRetryAfter
+	}
+	return min(time.Duration(seconds)*time.Second, maxRetryAfter)
+}
+
 type clusterResponse struct {
 	Status string `json:"status"`
 	Error  struct {
@@ -198,24 +242,15 @@ func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, e
 	if mbid == "" {
 		return nil, nil
 	}
-	if err := i.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("acoustid cluster lookup: %w", err)
-	}
 
 	form := url.Values{}
 	form.Set("client", i.apiKey)
 	form.Set("mbid", mbid)
 	form.Set("format", "json")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.clusterEndpoint, bytes.NewBufferString(form.Encode()))
+	resp, err := i.send(ctx, i.clusterEndpoint, form, "acoustid cluster lookup")
 	if err != nil {
-		return nil, fmt.Errorf("build acoustid cluster request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := i.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("acoustid cluster lookup: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 

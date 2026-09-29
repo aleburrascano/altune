@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -349,7 +350,7 @@ func (s *DownloadStep) previewIdentification(
 	started := time.Now()
 	match, err := s.identifyPreview(ctx, ac, candidate, previewer)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.preview_fallback",
+		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.preview_fallback"),
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
 		s.recordSkip(ports.SkipPreviewFallback)
@@ -363,6 +364,13 @@ func (s *DownloadStep) previewIdentification(
 		return nil, rejection
 	}
 	return &identification{verdict: verdict, identity: judged.identity}, nil
+}
+
+func identifyFailureEvent(err error, fallback string) string {
+	if errors.Is(err, ports.ErrIdentifyThrottled) {
+		return "acquisition.identify_throttled"
+	}
+	return fallback
 }
 
 func logPreviewFingerprint(
@@ -422,7 +430,7 @@ func (s *DownloadStep) identify(
 
 	match, err := s.identifier.Identify(ctx, filePath, 0)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.identify_failed",
+		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.identify_failed"),
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
 		s.recordSkip(ports.SkipIdentifyFailed)
