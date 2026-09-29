@@ -258,6 +258,7 @@
     },
     {
       "id": "mh11-radio-edit-loses-to-clean-topic-upload",
+      "expect_provenance": "best_effort",
       "class": "F4",
       "pending": "compute acquisition confidence from evidence",
       "note": "must-hold 11: an edit is only a fallback; the clean Topic upload within 1s is stored",
@@ -269,6 +270,7 @@
     },
     {
       "id": "mh11-radio-edit-only-with-wrong-length-fails",
+      "expect_failure_code": "no_confident_match",
       "class": "F4",
       "pending": "compute acquisition confidence from evidence",
       "note": "must-hold 11: with only a 205s radio edit for a 236s track the length disagrees, so it fails as no_confident_match",

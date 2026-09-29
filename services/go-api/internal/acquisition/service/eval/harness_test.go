@@ -773,3 +773,67 @@ func TestValidateCases_NamesTheCaseAndFieldForArtistAlbumAndSourceCandidates(t *
 		})
 	}
 }
+
+func expectationCase(provenance, failureCode string, candidate Candidate) Case {
+	return Case{
+		ID: "t", Class: "F0", ExpectProvenance: provenance, ExpectFailureCode: failureCode,
+		Track:      Track{Title: "Night Drive", Artist: "Halcyon Ferry", Duration: 204},
+		Candidates: []Candidate{candidate},
+	}
+}
+
+func TestRun_JudgesTheExpectedProvenanceAndFailureCode(t *testing.T) {
+	stored := Candidate{Title: "Night Drive", URL: "u", Channel: "Halcyon Ferry - Topic", Duration: 205, Correct: true}
+	rejected := Candidate{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 204}
+	probe := Run(context.Background(), expectationCase("", "", stored))
+	failProbe := Run(context.Background(), expectationCase("", "", rejected))
+	if probe.Failed || probe.Provenance == "" || !failProbe.Failed || failProbe.FailureCode == "" {
+		t.Fatalf("probe runs did not store/fail as assumed: %+v %+v", probe, failProbe)
+	}
+	wrongProvenance := "verified"
+	if probe.Provenance == wrongProvenance {
+		wrongProvenance = "best_effort"
+	}
+	tests := []struct {
+		name string
+		kase Case
+		pass bool
+	}{
+		{"provenance mismatch", expectationCase(wrongProvenance, "", stored), false},
+		{"provenance match", expectationCase(probe.Provenance, "", stored), true},
+		{"failure code mismatch", expectationCase("", "no_confident_match_x", rejected), false},
+		{"failure code match", expectationCase("", failProbe.FailureCode, rejected), true},
+		{"failure code ignored when stored", expectationCase("", "no_confident_match_x", stored), true},
+		{"provenance ignored when failed", expectationCase(wrongProvenance, "", rejected), true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := Run(context.Background(), tc.kase)
+			if out.Pass != tc.pass {
+				t.Errorf("pass = %v (%s), want %v", out.Pass, out.Reason, tc.pass)
+			}
+		})
+	}
+}
+
+func TestLoadEmbedded_RejectsUnknownExpectedProvenance(t *testing.T) {
+	kase := expectationCase("maybe", "", Candidate{URL: "u"})
+	if err := validateCases([]Case{kase}); err == nil {
+		t.Fatal("expected expect_provenance \"maybe\" to be rejected")
+	}
+}
+
+func TestEmbeddedMustHoldCasesCarryTheirExpectations(t *testing.T) {
+	want := map[string][2]string{
+		"mh4-unknown-fingerprint-topic-within-2s-stored-best-effort": {"best_effort", ""},
+		"mh4-unknown-fingerprint-non-topic-20s-off-fails":            {"", "no_confident_match"},
+		"mh11-radio-edit-loses-to-clean-topic-upload":                {"best_effort", ""},
+		"mh11-radio-edit-only-with-wrong-length-fails":               {"", "no_confident_match"},
+	}
+	for id, exp := range want {
+		kase := embeddedCase(t, id)
+		if kase.ExpectProvenance != exp[0] || kase.ExpectFailureCode != exp[1] || !kase.isPending() {
+			t.Errorf("%s: got %q/%q pending=%v", id, kase.ExpectProvenance, kase.ExpectFailureCode, kase.isPending())
+		}
+	}
+}

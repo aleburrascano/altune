@@ -2,6 +2,7 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -152,6 +153,9 @@ type Case struct {
 	Candidates    []Candidate `json:"candidates,omitempty"`
 	Sources       []Source    `json:"sources,omitempty"`
 	Pending       string      `json:"pending,omitempty"`
+
+	ExpectProvenance  string `json:"expect_provenance,omitempty"`
+	ExpectFailureCode string `json:"expect_failure_code,omitempty"`
 }
 
 func (c Case) isPending() bool { return c.Pending != "" }
@@ -351,7 +355,23 @@ func validateCaseExtensions(c Case) error {
 	if c.isPending() && strings.TrimSpace(c.Pending) == "" {
 		return fmt.Errorf("case %q is pending without naming its owning ticket", c.ID)
 	}
+	if err := validateExpectProvenance(c); err != nil {
+		return err
+	}
 	return validateResolution(c)
+}
+
+var knownProvenances = []string{
+	string(domain.ProvenanceVerified),
+	string(domain.ProvenanceCorroborated),
+	string(domain.ProvenanceBestEffort),
+}
+
+func validateExpectProvenance(c Case) error {
+	if c.ExpectProvenance != "" && !slices.Contains(knownProvenances, c.ExpectProvenance) {
+		return fmt.Errorf("case %q expects unknown provenance %q", c.ID, c.ExpectProvenance)
+	}
+	return nil
 }
 
 func validateResolution(c Case) error {

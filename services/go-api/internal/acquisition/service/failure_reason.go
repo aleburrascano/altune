@@ -26,6 +26,10 @@ func failureReason(err error) string {
 	return string(failureCode(err))
 }
 
+func FailureCodeOf(err error) string {
+	return string(failureCode(err))
+}
+
 func failureCode(err error) domain.FailureCode {
 	if isCancellation(err) {
 		return domain.FailureAcquisitionCancelled

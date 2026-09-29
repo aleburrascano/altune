@@ -20,6 +20,8 @@ type Outcome struct {
 	Pending          bool
 	SimulatedSeconds float64
 	Attempts         int
+	Provenance       string
+	FailureCode      string
 }
 
 func Run(ctx context.Context, kase Case) Outcome {
@@ -80,12 +82,14 @@ func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *s
 	}
 	if runErr != nil {
 		out.Err = runErr.Error()
+		out.FailureCode = service.FailureCodeOf(runErr)
 	}
 	if len(ac.Ranked) > 0 {
 		out.TopRanked = ac.Ranked[0].URL
 	}
 	if runErr == nil && ac.Selected != nil {
 		out.Stored = ac.Selected.URL
+		out.Provenance = string(ac.Provenance())
 	}
 	out.Pass, out.Reason = judge(kase, out)
 	return out
@@ -100,6 +104,24 @@ func RunAll(ctx context.Context, cases []Case) []Outcome {
 }
 
 func judge(kase Case, out Outcome) (bool, string) {
+	pass, reason := judgeStored(kase, out)
+	if !pass {
+		return false, reason
+	}
+	return judgeExpectations(kase, out, reason)
+}
+
+func judgeExpectations(kase Case, out Outcome, reason string) (bool, string) {
+	if out.Stored != "" && kase.ExpectProvenance != "" && out.Provenance != kase.ExpectProvenance {
+		return false, "want provenance " + kase.ExpectProvenance + ", got " + out.Provenance
+	}
+	if out.Failed && kase.ExpectFailureCode != "" && out.FailureCode != kase.ExpectFailureCode {
+		return false, "want failure code " + kase.ExpectFailureCode + ", got " + out.FailureCode
+	}
+	return true, reason
+}
+
+func judgeStored(kase Case, out Outcome) (bool, string) {
 	if !kase.hasCorrectCandidate() {
 		if out.Failed {
 			return true, "correctly acquired nothing"
