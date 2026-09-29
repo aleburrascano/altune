@@ -906,3 +906,85 @@ func TestService_ExecutePageReportsCachedForAHeldSlate(t *testing.T) {
 		t.Error("a page cut from the held slate reported Cached = false")
 	}
 }
+
+type gatedProvider struct {
+	fakeProvider
+	calls   atomic.Int32
+	release chan struct{}
+}
+
+func (p *gatedProvider) Search(ctx context.Context, q string, k map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	p.calls.Add(1)
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return p.fakeProvider.Search(ctx, q, k)
+}
+
+func newCollapseService(release chan struct{}) (*Service, *gatedProvider) {
+	p := &gatedProvider{
+		fakeProvider: fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}},
+		release:      release,
+	}
+	return NewService([]ports.SearchProvider{p}, NewCircuitBreaker()), p
+}
+
+func TestService_Search_ColdStampedeSharesOneFanOut(t *testing.T) {
+	release := make(chan struct{})
+	svc, p := newCollapseService(release)
+	const callers = 10
+	outs := make([]*SearchOutput, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, err := svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
+			if err != nil {
+				t.Errorf("Execute: %v", err)
+				return
+			}
+			outs[i] = out
+		}()
+	}
+	time.Sleep(100 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	if got := p.calls.Load(); got != 1 {
+		t.Errorf("provider reached %d times for %d concurrent callers, want 1", got, callers)
+	}
+	for i, out := range outs {
+		if out == nil || out.Partial || len(out.Results) != 1 {
+			t.Errorf("caller %d got %+v, want one non-partial result", i, out)
+		}
+	}
+}
+
+func TestService_Search_CancelledCallerDoesNotFailSharedFanOut(t *testing.T) {
+	release := make(chan struct{})
+	svc, _ := newCollapseService(release)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan *SearchOutput, 1)
+	go func() {
+		out, _ := svc.Execute(cancelCtx, newUser(), newQuery(t, "humble"), false)
+		done <- out
+	}()
+	time.Sleep(50 * time.Millisecond)
+	survivor := make(chan *SearchOutput, 1)
+	go func() {
+		out, _ := svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
+		survivor <- out
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+	close(release)
+
+	out := <-survivor
+	if out == nil || out.Partial || len(out.Results) != 1 {
+		t.Errorf("surviving caller got %+v, want one non-partial result", out)
+	}
+}

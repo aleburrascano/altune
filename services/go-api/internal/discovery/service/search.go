@@ -8,8 +8,10 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 )
 
 type Service struct {
@@ -29,6 +31,8 @@ type Service struct {
 	vocab          *VocabularyIngestor
 
 	bg *backgroundRunner
+
+	resolveGroup singleflight.Group
 }
 
 type SearchOutput struct {
@@ -326,7 +330,30 @@ func (s *Service) resolveRanked(
 	if ranked, cached := s.cache.get(ctx, queryNorm, query.Kinds); cached {
 		return rankedResolution{ranked: ranked, cached: true}
 	}
+	if queryNorm == "" {
+		return s.resolveCold(ctx, query, searchQuery, queryNorm)
+	}
 
+	detached := context.WithoutCancel(ctx)
+	call := s.resolveGroup.DoChan(s.cache.key(queryNorm, query.Kinds), func() (any, error) {
+		return s.resolveCold(detached, query, searchQuery, queryNorm), nil
+	})
+	select {
+	case <-ctx.Done():
+		return rankedResolution{partial: true}
+	case res := <-call:
+		shared := res.Val.(rankedResolution)
+		shared.ranked = slices.Clone(shared.ranked)
+		shared.statuses = slices.Clone(shared.statuses)
+		return shared
+	}
+}
+
+func (s *Service) resolveCold(
+	ctx context.Context,
+	query *domain.SearchQuery,
+	searchQuery, queryNorm string,
+) rankedResolution {
 	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
 	resolution := rankedResolution{
 		ranked:   s.mergeRankEnrich(ctx, perProvider, queryNorm),
