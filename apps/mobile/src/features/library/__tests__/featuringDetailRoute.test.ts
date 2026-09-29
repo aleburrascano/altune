@@ -9,13 +9,13 @@ describe('featuringDetailRoute', () => {
     expect(featuringDetailRoute(['(tabs)', 'library', 'featuring'])).toBe('/library/detail');
   });
 
-  it('defaults to the library detail screen for an unknown segment', () => {
-    expect(featuringDetailRoute(['(tabs)', 'search', 'featuring'])).toBe('/library/detail');
+  it('defaults to the discover detail screen for an unknown segment', () => {
+    expect(featuringDetailRoute(['(tabs)', 'search', 'featuring'])).toBe('/discover/detail');
   });
 });
 
 describe('featuringDetailRoute before the router has resolved a route', () => {
-  it('keeps the library default when there are no segments yet', () => {
-    expect(featuringDetailRoute([])).toBe('/library/detail');
+  it('uses the discover default when there are no segments yet', () => {
+    expect(featuringDetailRoute([])).toBe('/discover/detail');
   });
 });

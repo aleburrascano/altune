@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
-
 import { searchDiscovery, type DiscoveryResult } from '@shared/api-client/discovery';
 import { detailHref } from '@shared/lib/detail-handoff';
+import { useNavigator, type Navigator } from '@shared/navigation';
 
 import { failureLogFields } from '../failureLogFields';
 import type { FeaturingDetailRoute } from '../featuringDetailRoute';
@@ -10,8 +9,6 @@ import { alertLibraryFailure } from '../libraryFailureAlert';
 import { classifyLibraryError } from '../state';
 
 type DetailPath = FeaturingDetailRoute;
-
-type Router = ReturnType<typeof useRouter>;
 
 type SetBusy = (busy: boolean) => void;
 
@@ -41,10 +38,12 @@ async function searchTopMatch(artist: string): Promise<DiscoveryResult | undefin
   return res.results[0];
 }
 
-async function openTopMatch(artist: string, detailPath: DetailPath, router: Router): Promise<void> {
+type OpenTopMatch = { artist: string; detailPath: DetailPath; navigator: Navigator };
+
+async function openTopMatch({ artist, detailPath, navigator }: OpenTopMatch): Promise<void> {
   try {
     const topMatch = await searchTopMatch(artist);
-    if (topMatch !== undefined) router.push(detailHref(detailPath, topMatch));
+    if (topMatch !== undefined) navigator.push(detailHref(detailPath, topMatch));
   } catch (error) {
     reportExploreFailure(artist, error);
   }
@@ -60,11 +59,11 @@ async function whileBusy(setBusy: SetBusy, work: () => Promise<void>): Promise<v
 }
 
 export function useExploreArtist(): ExploreArtist {
-  const router = useRouter();
+  const navigator = useNavigator();
   const [exploring, setExploring] = useState(false);
   const explore = async (artist: string, detailPath: DetailPath): Promise<void> => {
     if (exploring) return;
-    await whileBusy(setExploring, () => openTopMatch(artist, detailPath, router));
+    await whileBusy(setExploring, () => openTopMatch({ artist, detailPath, navigator }));
   };
   return { explore, exploring };
 }

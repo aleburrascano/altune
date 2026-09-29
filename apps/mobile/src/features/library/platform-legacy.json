@@ -1,8 +1,4 @@
 {
   "ui": [],
-  "logic": [
-    "src/features/library/hooks/useExploreArtist.ts",
-    "src/features/library/hooks/useLibraryNavigation.ts",
-    "src/features/library/hooks/usePlaylistDelete.ts"
-  ]
+  "logic": []
 }

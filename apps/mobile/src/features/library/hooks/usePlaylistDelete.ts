@@ -1,25 +1,19 @@
-import type { useRouter } from 'expo-router';
-
 import type { PlaylistId } from '@shared/api-client/ids';
+import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 
-export function usePlaylistDelete(
-  playlistId: PlaylistId,
-  router: ReturnType<typeof useRouter>,
-): () => void {
-  const deleteMut = useDeletePlaylist(playlistId);
+const DELETE_PROMPT = {
+  title: 'Delete Playlist',
+  message: 'This cannot be undone.',
+  confirmLabel: 'Delete',
+};
 
-  return () =>
-    confirmDestructive({
-      title: 'Delete Playlist',
-      message: 'This cannot be undone.',
-      confirmLabel: 'Delete',
-      onConfirm: () =>
-        deleteMut.mutate(undefined, {
-          onSuccess: () => goBackOrToLibrary(router),
-        }),
-    });
+export function usePlaylistDelete(playlistId: PlaylistId, navigator: Navigator): () => void {
+  const deleteMut = useDeletePlaylist(playlistId);
+  const onSuccess = () => goBackOrToLibrary(navigator);
+  const onConfirm = () => deleteMut.mutate(undefined, { onSuccess });
+  return () => confirmDestructive({ ...DELETE_PROMPT, onConfirm });
 }

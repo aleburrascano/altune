@@ -1,41 +1,25 @@
-import { useCallback } from 'react';
-import type { useRouter } from 'expo-router';
+import { useMemo } from 'react';
 
 import { detailHref } from '@shared/lib/detail-handoff';
+import type { Navigator } from '@shared/navigation';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 
 import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import { albumToDiscoveryResult, artistToDiscoveryResult } from '../library-to-discovery';
 
-export function useLibraryNavigation(router: ReturnType<typeof useRouter>) {
-  const navigateToTrack = useCallback(
-    (track: TrackResponse): void => {
-      router.push(detailHref('/library/detail', trackToDiscoveryResult(track)));
-    },
-    [router],
-  );
+const toDetail = (item: DiscoveryResult) => detailHref('/library/detail', item);
 
-  const navigateToAlbum = useCallback(
-    (album: AlbumGroup): void => {
-      router.push(detailHref('/library/detail', albumToDiscoveryResult(album)));
-    },
-    [router],
-  );
+function buildNavigation(navigator: Navigator) {
+  return {
+    navigateToTrack: (t: TrackResponse) => navigator.push(toDetail(trackToDiscoveryResult(t))),
+    navigateToAlbum: (a: AlbumGroup) => navigator.push(toDetail(albumToDiscoveryResult(a))),
+    navigateToArtist: (a: ArtistGroup) => navigator.push(toDetail(artistToDiscoveryResult(a))),
+    navigateToPlaylist: (p: PlaylistResponse) => navigator.push(`/library/playlist/${p.id}`),
+  };
+}
 
-  const navigateToArtist = useCallback(
-    (artist: ArtistGroup): void => {
-      router.push(detailHref('/library/detail', artistToDiscoveryResult(artist)));
-    },
-    [router],
-  );
-
-  const navigateToPlaylist = useCallback(
-    (playlist: PlaylistResponse): void => {
-      router.push(`/library/playlist/${playlist.id}`);
-    },
-    [router],
-  );
-
-  return { navigateToTrack, navigateToAlbum, navigateToArtist, navigateToPlaylist };
+export function useLibraryNavigation(navigator: Navigator) {
+  return useMemo(() => buildNavigation(navigator), [navigator]);
 }
