@@ -154,15 +154,17 @@ func runCheck(args []string, stdout io.Writer) int {
 
 func reportTargets(targets []target, stdout io.Writer) (int, bool) {
 	violations := 0
+	ok := true
 	for _, t := range targets {
 		n, err := reportTarget(t, stdout)
 		if err != nil {
 			_, _ = fmt.Fprintf(stdout, "%s: %v\n", t.display, err)
-			return 0, false
+			ok = false
+			continue
 		}
 		violations += n
 	}
-	return violations, true
+	return violations, ok
 }
 
 func violationExit(stdout io.Writer, violations int) int {

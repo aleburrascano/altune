@@ -624,3 +624,50 @@ func TestCheckReportsAMultiLineCommentBetweenCodeAsOneLine(t *testing.T) {
 		t.Fatalf("exit = %d, output %q, want exit 1 and %q", code, stdout.String(), want)
 	}
 }
+
+func TestCheckReportsLaterViolationsAfterAParseError(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a_bad.sh", "f() { # x\n}\n")
+	writeFile(t, dir, "b_real.sh", "#!/bin/sh\n# real\necho hi\n")
+
+	var stdout strings.Builder
+	code := run([]string{"check", dir}, &stdout)
+
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
+	}
+	for _, want := range []string{filepath.Join(dir, "a_bad.sh") + ":", filepath.Join(dir, "b_real.sh") + ":2"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("output missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestRunDiffReportsLaterViolationsAfterAParseError(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	gitCmd(t, dir, "config", "user.email", "test@example.com")
+	gitCmd(t, dir, "config", "user.name", "test")
+	writeFile(t, dir, "keep.txt", "x\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "base")
+	base := strings.TrimSpace(gitOutput(t, dir, "rev-parse", "HEAD"))
+
+	writeFile(t, dir, "a_bad.sh", "f() { # x\n}\n")
+	writeFile(t, dir, "b_real.sh", "#!/bin/sh\n# real\necho hi\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "second")
+	chdirFor(t, dir)
+
+	var stdout strings.Builder
+	code := run([]string{"diff", base}, &stdout)
+
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
+	}
+	for _, want := range []string{"a_bad.sh:", "b_real.sh:2"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("output missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
