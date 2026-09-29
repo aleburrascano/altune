@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# duckdns — minimal CLI for the DuckDNS HTTP API.
-# Token resolves from --token, $DUCKDNS_TOKEN, or ~/.config/duckdns/token.
-# NOTE: DuckDNS has no API to CREATE a subdomain — new subdomains are added on
-# the duckdns.org website while logged in. This CLI drives what the token allows:
-# updating A records, setting/clearing TXT records, and checking status.
 set -euo pipefail
 
 API="https://www.duckdns.org"
@@ -12,11 +7,8 @@ TOKEN_FILE="${DUCKDNS_TOKEN_FILE:-$HOME/.config/duckdns/token}"
 
 die() { echo "duckdns: $*" >&2; exit 1; }
 
-# strip a trailing .duckdns.org and any leading protocol so callers can pass
-# either "altune-staging" or "altune-staging.duckdns.org".
 norm_domain() { echo "${1#https://}" | sed -E 's/\.duckdns\.org$//'; }
 
-# percent-encode one query value so a stray & or = can't inject extra params.
 urlenc() {
   local s="$1" i c out=""
   for (( i=0; i<${#s}; i++ )); do
@@ -35,7 +27,7 @@ load_token() {
   die "no token (set \$DUCKDNS_TOKEN, write $TOKEN_FILE, or pass --token <t>)"
 }
 
-call() { # call <query-string> — prints the raw duckdns response, fails on KO
+call() {
   local resp
   resp="$(curl -sS --max-time 20 "$API/update?$1")" || die "request failed"
   echo "$resp"

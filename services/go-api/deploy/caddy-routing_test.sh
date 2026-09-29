@@ -130,10 +130,6 @@ web_dir_missing_prod() {
     rm -rf "$WORK/web/prod"
 }
 
-# Mirrors what a real `expo export -p web` inlines into dist/index.html (a
-# router-hydration script Expo emits verbatim). Used to prove the CSP
-# actually allows the export's own inline script, not two copies of the same
-# hand-typed literal.
 publish_export_with_inline_script() {
     local release="$WORK/web/staging/releases/abc1234"
     rm -rf "$WORK/web/staging"
@@ -155,8 +151,6 @@ publish_export_with_inline_script_prod() {
     ln -sfn releases/def5678 "$WORK/web/prod/current"
 }
 
-# Same extraction/digest as deploy-web.yml's "Every inline script is allowed
-# by the ... CSP" step: base64(sha256(script text)), formatted 'sha256-...'.
 inline_script_digest() {
     printf '%s' "$1" | openssl dgst -sha256 -binary | base64
 }
@@ -343,10 +337,6 @@ fetch "$PROD" /_expo/static/js/web/entry.js >/dev/null
     fail "prod GET /_expo/static/js/web/entry.js carried Cache-Control '$(header_of Cache-Control)', expected immutable"
 
 CASE="the served export's inline-script hash sits in both blocks' CSP alike"
-# The exact text a real `expo export -p web` inlines (verified by running the
-# staging export locally against this worktree: `find dist -name '*.html' |
-# xargs cat | grep -o '<script[^>]*>[^<][^<]*</script>'` yields this one
-# line, and its digest below matches the Caddyfile literal byte for byte).
 INLINE_SCRIPT='globalThis.__EXPO_ROUTER_HYDRATE__=true;'
 DIGEST=$(inline_script_digest "$INLINE_SCRIPT")
 publish_export_with_inline_script "$INLINE_SCRIPT"

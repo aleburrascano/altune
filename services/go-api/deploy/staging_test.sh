@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 
-# Self-test for staging.sh, in the same shape as overseer_test.sh: stubbed `psql`,
-# `docker`, and `curl` on PATH record the actions the script would run and replay a
-# tiny stateful schema_migrations table, so we can assert the env gate fails loudly
-# BEFORE any build, an already-migrated DB is adopted (no non-idempotent re-run), a
-# fresh DB applies every migration (a no-transaction one in autocommit, a normal one
-# inside --single-transaction, #1550), and an unhealthy go-api fails the deploy.
 
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
-# env_body is the literal .env.staging contents ("" + has_file=no == no file).
-# STUB_TRACKS is what to_regclass('public.tracks') reports ('t' == already-migrated
-# DB, 'f' == fresh). STUB_HEALTHY drives the public /health poll (yes == 200).
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_tracks=${STUB_TRACKS:-t} stub_healthy=${STUB_HEALTHY:-yes}
@@ -27,9 +18,6 @@ setup_case() {
     : >"$WORK/api/migrations/001_baseline.sql"
     : >"$WORK/api/migrations/002_indexes.sql"
     : >"$WORK/api/migrations/016_constraint.sql"
-    # The three transaction routes lib.sh must tell apart (#1550): the explicit
-    # marker, an unmarked CONCURRENTLY the author forgot to mark, and a file that
-    # only mentions CONCURRENTLY in prose (which keeps its transaction).
     printf '%s\n' '-- migrate:no-transaction' 'SELECT 1;' \
         >"$WORK/api/migrations/020_marked_index.sql"
     printf '%s\n' 'CREATE INDEX CONCURRENTLY idx_x ON tracks (id);' \

@@ -1,26 +1,11 @@
 #!/usr/bin/env bash
 
-# Self-test for prod-migrate.sh, in the same shape as staging_test.sh: a stubbed
-# `psql` on PATH records the actions the script would run and replays a tiny
-# stateful schema_migrations table. Prod deliberately does NOT blind-adopt (unlike
-# staging), so we assert: the env gate fails loudly BEFORE any migration; an
-# already-migrated prod DB with an EMPTY tracker FAILS CLOSED (never auto-adopts,
-# so a migration prod never got can't be silently skipped); an established baseline
-# applies only genuinely-new migrations; a truly fresh DB applies every migration;
-# a no-transaction migration drops --single-transaction while a normal one keeps it
-# (#1550); and a failing migration aborts non-zero without recording itself (so the
-# caller never swaps onto an unmigrated schema).
 
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
-# env_body is the literal .env.production contents ("" + has_file=no == no file).
-# STUB_TRACKS is what to_regclass('public.tracks') reports ('t' == schema present,
-# 'f' == fresh empty DB). STUB_PREAPPLIED seeds schema_migrations (newline list of
-# versions) so a case can model an established baseline. STUB_MIGRATE_FAIL is a
-# version glob whose `psql -f <file>` apply exits non-zero ('*' == every migration).
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_tracks=${STUB_TRACKS:-t} stub_fail=${STUB_MIGRATE_FAIL:-__none__}
@@ -31,9 +16,6 @@ setup_case() {
     : >"$WORK/api/migrations/001_baseline.sql"
     : >"$WORK/api/migrations/002_indexes.sql"
     : >"$WORK/api/migrations/016_constraint.sql"
-    # The three transaction routes lib.sh must tell apart (#1550): the explicit
-    # marker, an unmarked CONCURRENTLY the author forgot to mark, and a file that
-    # only mentions CONCURRENTLY in prose (which keeps its transaction).
     printf '%s\n' '-- migrate:no-transaction' 'SELECT 1;' \
         >"$WORK/api/migrations/020_marked_index.sql"
     printf '%s\n' 'CREATE INDEX CONCURRENTLY idx_x ON tracks (id);' \

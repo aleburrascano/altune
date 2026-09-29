@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
 
-# Self-test for smoke.sh, in the same shape as overseer_test.sh: stubbed `curl`
-# and `docker` on PATH let a case drive the go-api /health status, the /overseer/
-# status, the overseer /health status+body, and the overseer log contents, so we
-# can assert the gate passes only when the tier is healthy and fails (red) on each
-# failure signature — the red-proof #1492 requires.
 
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
-# STUB_HEALTH is the code curl reports for go-api /health (default 200), STUB_OVERSEER
-# for /overseer/ (default 200), STUB_OVH_CODE / STUB_OVH_BODY the status and JSON body
-# for the overseer /health liveness probe (default 200 with buckets_ok=6), STUB_LOGS
-# what `docker logs` emits (default clean), STUB_VERSION the go-api /health `version`
-# field (#2926) a version-checking case reads via a plain (no -o /dev/null) curl.
 setup_case() {
     local stub_health=${STUB_HEALTH:-200} stub_overseer=${STUB_OVERSEER:-200}
     local stub_ovh_code=${STUB_OVH_CODE:-200}

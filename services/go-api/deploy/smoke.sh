@@ -1,34 +1,5 @@
 #!/usr/bin/env bash
 
-# Smoke gate for a deployed tier (epic #1488, task #1492). Tier-agnostic so prod
-# can reuse it after promotion:
-#   bash deploy/smoke.sh https://<staging-host> altune-staging-overseer
-#   bash deploy/smoke.sh https://<prod-host>    altune-overseer
-#
-# Exits non-zero if the tier is unhealthy, so the pipeline blocks promotion. Runs
-# on the VM (needs `docker logs` for the overseer container). Checks:
-#   1. go-api /health == 200
-#   2. /overseer/ reachable (SPA served)
-#   3. no operator-token persistence/seed failure in recent overseer logs (#1471)
-#   4. overseer /health == 200 with buckets_ok>=1, proving the collect loop is
-#      live AND at least one bucket collected (#1812 moved loop liveness off the
-#      per-tick log heartbeat and onto this endpoint; the heartbeat is now DEBUG
-#      and absent at staging/prod log levels, #1820).
-#   5. `/app journey-check` inside the go-api container ($SMOKE_GOAPI_CONTAINER,
-#      default altune-staging-go-api-blue): one real discovery search and one
-#      real yt-dlp download of the YouTube canary with the app's own format
-#      selector, egress IP and cookie jar (#2928). Liveness alone stayed green
-#      through five weeks of dead YouTube downloads (#2788).
-# A generic overseer.collect.failed (e.g. the OCI-usage 404, #1487) is tolerated:
-# a partial-failure cycle still reports buckets_ok>=1. Only token/persist breakage,
-# a stalled/dead loop (/health non-200), or an all-sources-down cycle
-# (buckets_ok=0) fails the gate.
-#
-# An optional third argument, <expected-commit>, checks go-api /health's
-# `version` field (#2926) against the commit the workflow is deploying (#2927):
-# a stale container, a failed rebuild that left the old image serving, or a
-# checkout mistake would otherwise still pass every check above. Omitting it
-# keeps behaviour unchanged for manual runs.
 
 set -euo pipefail
 
@@ -63,10 +34,6 @@ overseer_token_failures() {
     printf '%s\n' "$1" | token_failures
 }
 
-# overseer_health prints the /health JSON body to stdout and exits non-zero unless
-# the endpoint answered 200. A stalled or dead collect loop answers 503 (#1812), the
-# liveness failure the gate must block on — it replaces the old log-heartbeat scan
-# now that the heartbeat is DEBUG and absent at staging/prod log levels (#1820).
 overseer_health() {
     local response status
     response=$(curl -s -w '\n%{http_code}' --max-time 15 --retry 5 --retry-delay 3 "$1")
@@ -75,14 +42,10 @@ overseer_health() {
     [ "$status" = "200" ]
 }
 
-# overseer_buckets_ok extracts buckets_ok from the /health JSON body, defaulting to
-# 0 when the field is absent so an unexpected body reads as an all-down cycle.
 overseer_buckets_ok() {
     printf '%s' "$1" | grep -oE '"buckets_ok" *: *[0-9]+' | grep -oE '[0-9]+' || true
 }
 
-# goapi_version extracts `version` from the go-api /health JSON body (#2926),
-# printing nothing when the field is absent so a mismatch reads as "missing".
 goapi_version() {
     printf '%s' "$1" | grep -oE '"version" *: *"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"' || true
 }
@@ -123,9 +86,6 @@ if [ "${ok_count:-0}" -lt 1 ]; then
 fi
 
 log "running journey-check in $GOAPI_CONTAINER"
-# journey-check bounds itself (DB connect, 60s search, 5min download); the
-# outer timeout keeps the gate's worst case explicit, same as the curl checks
-# above bound themselves with --max-time/--retry.
 JOURNEY_TIMEOUT="${SMOKE_JOURNEY_TIMEOUT:-6m}"
 journey=$(timeout "$JOURNEY_TIMEOUT" docker exec "$GOAPI_CONTAINER" /app journey-check 2>&1) && rc=0 || rc=$?
 if [ "$rc" != 0 ]; then

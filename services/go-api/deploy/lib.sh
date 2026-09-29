@@ -101,15 +101,8 @@ flip_to() {
     reload_caddy
 }
 
-# --- shared migration runner (staging.sh + prod-migrate.sh) -------------------
-# Both tiers apply migrations to their Supabase project through this ONE runner so
-# the non-idempotent-safe logic can never drift between them (the lockstep
-# invariant, #1525). Callers set ENV_FILE + MIGRATIONS_DIR, grep DATABASE_URL into
-# MIGRATE_DATABASE_URL, then call apply_migrations <tier>. The URL is passed to
-# psql as an argument only, never through log().
 
 read_env_var() {
-    # .env values can hold unquoted parens, so grep the line, don't `source` it.
     grep -E "^[[:space:]]*$1=" "$ENV_FILE" | head -1 | sed -E "s/^[[:space:]]*$1=//"
 }
 
@@ -137,12 +130,6 @@ schema_is_present() {
     [ "$(psql_value "SELECT to_regclass('public.tracks') IS NOT NULL;")" = t ]
 }
 
-# An already-migrated DB predates this tracker (migrations were applied by hand):
-# the baseline table exists but nothing is tracked. Adopt the current set as the
-# baseline so already-applied, non-idempotent migrations (016's bare ADD
-# CONSTRAINT) are never re-run. ONLY sound when the DB is known to hold the full
-# set (staging's documented lockstep invariant) — prod is NOT, so prod-migrate.sh
-# gates this behind an explicit baseline check rather than calling it blindly.
 adopt_existing_schema() {
     [ "$(tracked_migration_count)" = 0 ] || return 0
     schema_is_present || return 0
@@ -153,11 +140,6 @@ adopt_existing_schema() {
     done
 }
 
-# CREATE INDEX CONCURRENTLY (and REINDEX/DROP INDEX CONCURRENTLY) are rejected by
-# Postgres inside a transaction block, so such a file cannot be wrapped. The
-# `-- migrate:no-transaction` header is the contract; the CONCURRENTLY scan, with
-# comments stripped so a file that only discusses it in prose keeps its
-# transaction, is the net under a migration whose author forgot the header.
 migration_forbids_transaction() {
     local statements
     statements=$(sed -E 's/--.*//' "$1")
@@ -165,12 +147,6 @@ migration_forbids_transaction() {
         grep -qiw CONCURRENTLY <<<"$statements"
 }
 
-# --single-transaction: a half-applied migration rolls back rather than leaving
-# the DB in a shape the tracker would then call applied. A no-transaction file
-# gives that up, so its tracker INSERT is a separate autocommit statement that
-# ON_ERROR_STOP keeps psql from reaching once the file has errored: a half-built
-# CONCURRENTLY index is never recorded as applied, and the next run retries the
-# file (drop the INVALID index first — see the header of migrations/020).
 apply_migration_file() {
     local version=$1 file="$MIGRATIONS_DIR/$1.sql"
     local psql_args=("$MIGRATE_DATABASE_URL" -v ON_ERROR_STOP=1)
@@ -198,10 +174,6 @@ require_psql() {
     command -v psql >/dev/null || { log "FAILED: psql not found on PATH"; exit 1; }
 }
 
-# staging entrypoint: adopt-then-apply. Safe on staging because its schema is the
-# documented lockstep baseline, so adopting the full set as applied is always true.
-# prod-migrate.sh does NOT call this — prod's baseline is not guaranteed, so it
-# gates adoption itself.
 apply_migrations() {
     MIGRATE_TIER=$1
     require_psql

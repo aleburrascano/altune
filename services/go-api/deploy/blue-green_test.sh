@@ -7,8 +7,6 @@ FAILURES=0
 
 setup_case() {
     local seed=$1 health_ok=$2 public_ok=$3 legacy=$4 seed_at=${5:-deploy/caddy}
-    # PROD_ENV is the literal .env.production ("" == no file). The default proves
-    # the public health URL comes from the VM's env file, not the repo.
     local prod_env=${PROD_ENV-PUBLIC_HEALTH_URL=https://prod.example.test/health}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"

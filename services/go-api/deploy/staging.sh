@@ -1,25 +1,5 @@
 #!/usr/bin/env bash
 
-# Deploy the STAGING backend stack to the OCI VM (epic #1488, tasks #1491/#1492).
-#
-# Staging runs on the SAME VM as prod but as a separate Compose project
-# (compose.staging.yml, project `staging`, containers altune-staging-*). This
-# script ONLY builds/recreates those staging containers and applies migrations to
-# the STAGING Supabase project. It never touches prod: prod's blue-green.sh +
-# overseer.sh run ONLY in the workflow's deploy-prod job, behind the `production`
-# environment's manual-approval gate.
-#
-# Staging auto-applies migrations through lib.sh's shared apply_migrations runner;
-# deploy-prod (prod-migrate.sh) uses the SAME runner, so the two Supabase projects
-# stay in lockstep and their non-idempotent-safe logic can never drift. Staging is
-# where a migration is proven before prod. Migrations are tracked in a
-# schema_migrations table so a non-idempotent migration (e.g. 016's bare
-# ADD CONSTRAINT) is applied exactly once. An already-migrated DB with no tracking
-# table is adopted at the current baseline rather than re-run.
-#
-# Fails fast (set -euo pipefail via lib.sh) on a missing staging env var, a
-# migration error, or an unhealthy go-api, so a broken staging deploy blocks the
-# smoke gate that gates promotion.
 
 cd "$(dirname "$0")/.." || exit
 . deploy/lib.sh
@@ -42,7 +22,6 @@ require_staging_env() {
     fi
     local missing="" var
     for var in $REQUIRED_VARS; do
-        # Present == a line "VAR=" with at least one non-space char of value.
         if ! grep -Eq "^[[:space:]]*${var}=.*[^[:space:]]" "$ENV_FILE"; then
             missing="$missing $var"
         fi
@@ -160,9 +139,6 @@ log "applying staging migrations"
 MIGRATE_DATABASE_URL=$(read_env_var DATABASE_URL)
 apply_migrations staging
 
-# A brief staging blip is acceptable (design Decision 1): recreate go-api-blue,
-# overseer, and redis in place rather than run a full blue-green flip. Caddy
-# (prod's, shared) already imports staging-upstream.conf -> altune-staging-go-api-blue.
 log "building and recreating the staging stack"
 compose up -d --build go-api-blue overseer redis
 

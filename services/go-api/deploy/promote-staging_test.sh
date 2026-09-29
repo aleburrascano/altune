@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
 
-# Self-test for the `promote-staging` CLI command against real Postgres,
-# alongside staging-sync_test.sh: one throwaway container holds a "prod" and a
-# "staging" database, both migrated from migrations/*.sql with a stand-in
-# auth.users, and a filesystem-backed audio store (MUSIC_DIR) stands in for the
-# S3 bucket the two tiers actually share, so Copy is exercised for real without
-# live OCI credentials. Asserts: a ready staging track lands in prod under the
-# prod user id and a rewritten ref, a track whose (user_id, dedup_key) already
-# exists in prod is skipped rather than duplicated or overwritten, and an
-# unrelated pre-existing prod row is byte-for-byte unchanged after the run.
 
 set -uo pipefail
 
@@ -19,12 +10,12 @@ RUN_ID="promote-staging-test-$$"
 IMAGE=postgres:17
 WORK=$(mktemp -d)
 
-P1=11111111-1111-1111-1111-111111111111   # prod operator, has a staging twin
-S1=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa   # staging twin of P1
+P1=11111111-1111-1111-1111-111111111111
+S1=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 
-T_NEW=10000000-0000-0000-0000-000000000001    # staging-only, ready, promotable
-T_DUP=20000000-0000-0000-0000-000000000002    # staging-only, ready, dedup already in prod
-T_KEEP=30000000-0000-0000-0000-000000000003   # already in prod, must never change
+T_NEW=10000000-0000-0000-0000-000000000001
+T_DUP=20000000-0000-0000-0000-000000000002
+T_KEEP=30000000-0000-0000-0000-000000000003
 
 cleanup() {
     docker rm -f "$RUN_ID" >/dev/null 2>&1

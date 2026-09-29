@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 
-# Self-test for overseer.sh, in the same shape as blue-green_test.sh: a stubbed
-# `docker` on PATH records the actions the script would run, so we can assert the
-# env-var presence gate fails loudly BEFORE any build/up, and lets a complete env
-# through.
 
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
-# env_body is the literal contents of the fake .env.production ("" == no file). The
-# stub docker replays canned responses for the post-`up` checks so a case can drive
-# ownership repair and the smoke check: STUB_OWNER is what `stat` reports for the
-# data dir (default 1000 == already fixed), STUB_HEALTH what `inspect` reports
-# (default healthy), STUB_LOGS what `logs` emits (default clean).
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_owner=${STUB_OWNER:-1000} stub_health=${STUB_HEALTH:-healthy}

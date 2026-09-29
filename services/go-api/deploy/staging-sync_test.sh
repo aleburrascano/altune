@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
 
-# Self-test for staging-sync.sh against real Postgres: one throwaway container
-# holds a "prod" and a "staging" database, both migrated from migrations/*.sql with
-# a stand-in auth.users, and the script runs inside the container so the test needs
-# no host psql. Asserts: matched accounts' rows land in staging under their staging
-# UUID, while an unmatched prod account's rows never cross; staging-only accounts
-# and their rows survive; orphaned_audio is never copied; a column only one tier
-# has is skipped; prod is left byte-for-byte unchanged; a staging failure mid-swap
-# rolls back to the old staging data; and the env gates refuse to run before
-# touching anything, including when staging points at the prod database.
 
 set -uo pipefail
 
@@ -18,10 +9,10 @@ RUN_ID="staging-sync-test-$$"
 IMAGE=postgres:17
 WORK=$(mktemp -d)
 
-P1=11111111-1111-1111-1111-111111111111   # prod operator, has a staging twin
-P2=22222222-2222-2222-2222-222222222222   # prod-only account, must never cross
-S1=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa   # staging twin of P1
-S2=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb   # staging-only smoke account
+P1=11111111-1111-1111-1111-111111111111
+P2=22222222-2222-2222-2222-222222222222
+S1=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+S2=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 T1=10000000-0000-0000-0000-000000000001
 T2=20000000-0000-0000-0000-000000000002
 T_STALE=30000000-0000-0000-0000-000000000003
@@ -39,13 +30,6 @@ sql() {
     docker exec -i "$RUN_ID" psql -X -q -At -v ON_ERROR_STOP=1 -U postgres -d "$1" "${@:2}"
 }
 
-# staging-sync.sh now shells out to `docker ps`/`docker exec` to run
-# promote-staging and sweep-staging-audio in the real go-api containers
-# (#3092), neither of which exist in this throwaway container. This stub
-# stands in: `ps` reports a fake container name for either filter, and `exec`
-# succeeds unless /tmp/docker-exec-should-fail was touched, so the existing
-# assertions below exercise the same sync they always did, and a new test can
-# still prove the abort-on-promote-failure path.
 install_docker_stub() {
     cat >"$WORK/docker-stub" <<'STUB'
 #!/usr/bin/env bash
@@ -137,7 +121,6 @@ run_sync() {
     docker exec "$RUN_ID" bash /api/deploy/staging-sync.sh >"$WORK/out" 2>&1
 }
 
-# Prints 1 when the sync exits non-zero, 0 when it succeeds.
 sync_refused() {
     if run_sync; then echo 0; else echo 1; fi
 }
