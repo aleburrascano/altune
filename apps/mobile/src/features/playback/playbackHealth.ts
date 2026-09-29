@@ -25,6 +25,7 @@ type Tally = {
   playback_failed_queue_out_of_sync: number;
   playback_failed_queue_update_failed: number;
   playback_failed_unknown: number;
+  audio_recovery_failed: number;
 };
 
 const emptyTally = (): Tally => ({
@@ -44,6 +45,7 @@ const emptyTally = (): Tally => ({
   playback_failed_queue_out_of_sync: 0,
   playback_failed_queue_update_failed: 0,
   playback_failed_unknown: 0,
+  audio_recovery_failed: 0,
 });
 
 let tally = emptyTally();
@@ -71,6 +73,10 @@ export function recordQueueRebuildOutcome(rung: QueueRebuildRung): void {
 
 export function recordPlaybackFailure(kind: PlaybackErrorKind): void {
   count(`playback_failed_${kind}`);
+}
+
+export function recordAudioRecoveryFailure(): void {
+  count('audio_recovery_failed');
 }
 
 export function flushPlaybackHealth(): void {

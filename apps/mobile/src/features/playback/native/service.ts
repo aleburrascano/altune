@@ -24,7 +24,8 @@ import { activeNativeTrackId } from './nativeTrack';
 import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './nativeTrackSwap';
 import { classifyNativePlaybackError } from '../classifyPlaybackError';
 import { clearPlaybackError, reportPlaybackError } from '../playbackErrorStore';
-import { recordPlaybackFailure } from '../playbackHealth';
+import { recordAudioRecoveryFailure, recordPlaybackFailure } from '../playbackHealth';
+import { redactedPlaybackFailure } from '../redactPlaybackError';
 import { reportingQueueFailure, reportQueueFailure } from '../queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
@@ -97,17 +98,26 @@ async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promi
     await repairActiveToStreaming(failed);
     return;
   }
-  await recoverAudio(failed.source.trackId).catch(() => {});
+  await recoverAudio(failed.source.trackId).catch(warnAudioRecoveryFailed);
+}
+
+function warnAudioRecoveryFailed(err: unknown): void {
+  console.warn('[playback] audio recovery failed', { error: redactedPlaybackFailure(err) });
+  recordAudioRecoveryFailure();
+}
+
+function reportingRemoteCommand(op: string, run: () => Promise<unknown>): void {
+  void reportingQueueFailure(currentQueueTrackKey, op, run);
 }
 
 function handleRemoteDuck(data: RemoteDuckEvent): void {
   if (data.permanent) return;
   if (data.paused) {
-    void TrackPlayer.pause();
+    reportingRemoteCommand('remoteDuckPause', () => TrackPlayer.pause());
     return;
   }
   if (!hasSignedInUser()) return;
-  void TrackPlayer.play();
+  reportingRemoteCommand('remoteDuckPlay', () => TrackPlayer.play());
 }
 
 async function playPreviousRemotely(): Promise<void> {
@@ -130,12 +140,12 @@ export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 
   TrackPlayer.addEventListener(Event.RemotePause, () => {
-    void TrackPlayer.pause();
+    reportingRemoteCommand('remotePause', () => TrackPlayer.pause());
   });
   TrackPlayer.addEventListener(
     Event.RemotePlay,
     whenSignedIn(() => {
-      void TrackPlayer.play();
+      reportingRemoteCommand('remotePlay', () => TrackPlayer.play());
     }),
   );
   TrackPlayer.addEventListener(
@@ -155,12 +165,12 @@ export async function playbackService() {
   TrackPlayer.addEventListener(
     Event.RemoteSeek,
     whenSignedIn((data: RemoteSeekEvent) => {
-      void TrackPlayer.seekTo(data.position);
+      reportingRemoteCommand('remoteSeek', () => TrackPlayer.seekTo(data.position));
     }),
   );
 
   TrackPlayer.addEventListener(Event.PlaybackError, (data) => {
-    void handlePlaybackError(data);
+    reportingRemoteCommand('handlePlaybackError', () => handlePlaybackError(data));
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {

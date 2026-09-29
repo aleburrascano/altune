@@ -136,6 +136,7 @@ describe('playback health metric', () => {
         playback_failed_queue_out_of_sync: 0,
         playback_failed_queue_update_failed: 0,
         playback_failed_unknown: 0,
+        audio_recovery_failed: 0,
       },
     ]);
   });
@@ -228,6 +229,19 @@ describe('playback health metric — user-visible failures', () => {
         playback_failed_queue_out_of_sync: 1,
         playback_failed_queue_update_failed: 1,
       }),
+    ]);
+  });
+
+  it('counts a native error whose audio recovery request fails', async () => {
+    const { __http } = jest.requireActual('../../../../jest/doubles/fetch.js');
+    __http.replyAll({ status: 500 });
+    useQueueStore.getState().loadQueue([track('trk-1')], 0, null);
+
+    await firePlaybackError('android-io-bad-http-status', 'Response code: 403');
+    flushPlaybackHealth();
+
+    expect(sentPayloads()).toEqual([
+      expect.objectContaining({ playback_failed_auth: 1, audio_recovery_failed: 1 }),
     ]);
   });
 });

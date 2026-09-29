@@ -22,6 +22,7 @@ import {
   RECOVERY_ATTEMPTS_PER_TRACK,
   RECOVERY_COOLDOWN_BASE_MS,
 } from '../native/recoveryBudget';
+import * as nativeTrackSwap from '../native/nativeTrackSwap';
 import { playbackService, resetPlaybackForSignOut } from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
@@ -461,5 +462,110 @@ describe('remote skip commands', () => {
       expect(__player.calls('skipToPrevious')).toHaveLength(0);
       expect(warn).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('playbackService — handler rejections are reported, not left unhandled (#543)', () => {
+  const RECOVER_TRACK_1 = 'POST /v1/tracks/trk-1/audio/recover';
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown): void => {
+    unhandled.push(reason);
+  };
+  let warn: jest.SpyInstance;
+
+  async function handlerFor(event: unknown): Promise<(data?: unknown) => void> {
+    await playbackService();
+    const registration = __player
+      .calls('addEventListener')
+      .find(([registered]: [unknown]) => registered === event);
+    if (!registration) throw new Error(`no ${String(event)} listener was registered`);
+    return registration[1];
+  }
+
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  beforeEach(() => {
+    setSignedInUser(true);
+    unhandled.length = 0;
+    process.on('unhandledRejection', onUnhandled);
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    useQueueStore
+      .getState()
+      .loadQueue(
+        [libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-1') } })],
+        0,
+        null,
+      );
+  });
+
+  afterEach(async () => {
+    process.off('unhandledRejection', onUnhandled);
+    jest.restoreAllMocks();
+    usePlaybackErrorStore.getState().clear();
+    await resetPlaybackForSignOut();
+  });
+
+  it('reports a failed repair to streaming from a PlaybackError', async () => {
+    jest.spyOn(nativeTrackSwap, 'wasSwappedToLocal').mockReturnValue(true);
+    jest
+      .spyOn(nativeTrackSwap, 'repairActiveToStreaming')
+      .mockRejectedValue(new Error('headers unavailable'));
+    const onError = await handlerFor(Event.PlaybackError);
+
+    onError({ code: 'android-io-bad-http-status', message: 'Response code: 403' });
+    await settle();
+
+    expect(unhandled).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      '[playback] native queue mutation failed',
+      expect.objectContaining({ op: 'handlePlaybackError' }),
+    );
+  });
+
+  it.each([
+    ['pause', Event.RemotePause, 'remotePause'],
+    ['play', Event.RemotePlay, 'remotePlay'],
+    ['seekTo', Event.RemoteSeek, 'remoteSeek'],
+  ])('reports a rejected %s from its remote handler', async (method, event, op) => {
+    const handler = await handlerFor(event);
+    __player.failNext(method, new Error('bridge hiccup'));
+
+    handler({ position: 5 });
+    await settle();
+
+    expect(unhandled).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      '[playback] native queue mutation failed',
+      expect.objectContaining({ op }),
+    );
+  });
+
+  it('reports a rejected pause from a RemoteDuck interruption', async () => {
+    const handler = await handlerFor(Event.RemoteDuck);
+    __player.failNext('pause', new Error('bridge hiccup'));
+
+    handler({ paused: true, permanent: false });
+    await settle();
+
+    expect(unhandled).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      '[playback] native queue mutation failed',
+      expect.objectContaining({ op: 'remoteDuckPause' }),
+    );
+  });
+
+  it('logs a redacted warning and counts a failed audio recovery', async () => {
+    __http.replyAll({ status: 500, body: 'https://cdn.example/a.mp3?X-Amz-Signature=deadbeef' });
+    const onError = await handlerFor(Event.PlaybackError);
+
+    onError({ code: 'android-io-bad-http-status', message: 'Response code: 403' });
+    await settle();
+
+    expect(__http.countFor(RECOVER_TRACK_1)).toBe(1);
+    expect(warn).toHaveBeenCalledWith('[playback] audio recovery failed', expect.any(Object));
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/deadbeef|X-Amz-Signature/);
   });
 });
