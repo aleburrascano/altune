@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
 )
 
 func (a *MusicBrainzAdapter) ValidateArtistAlbums(
@@ -106,20 +107,29 @@ func (a *MusicBrainzAdapter) ReleaseGroupTitles(ctx context.Context, mbid string
 
 const mbMaxReleaseGroupPages = 5
 
+const mbReleaseGroupsFlightTimeout = 60 * time.Second
+
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
 	if rgs, ok := a.releaseMemo.get(mbid); ok {
 		return rgs, nil
 	}
-	v, err, _ := a.releaseSF.Do(mbid, func() (any, error) {
+	ch := a.releaseSF.DoChan(mbid, func() (any, error) {
 		if rgs, ok := a.releaseMemo.get(mbid); ok {
 			return rgs, nil
 		}
-		return a.fetchReleaseGroupPages(ctx, mbid)
+		fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mbReleaseGroupsFlightTimeout)
+		defer cancel()
+		return a.fetchReleaseGroupPages(fctx, mbid)
 	})
-	if err != nil {
-		return nil, err
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		return res.Val.([]mbReleaseGroup), nil
 	}
-	return v.([]mbReleaseGroup), nil
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
