@@ -1,6 +1,7 @@
 import {
   currentOccurrence,
   currentTrackId,
+  isSavedCurrentResumable,
   reconstructPlayOrder,
   resolveResumeStartIndex,
 } from '../resumeQueue';
@@ -150,5 +151,39 @@ describe('reconstructPlayOrder — rebuilding the play order over the currently 
     const { playOrder } = reconstructPlayOrder(['a', 'b'], ['a', 'b', 'a'], 'b', 0);
 
     expect(playOrder).toEqual([0, 1, 0]);
+  });
+});
+
+describe('reconstructPlayOrder — reporting whether the saved current track was found', () => {
+  it('reports found when the current id is among the play ids', () => {
+    expect(reconstructPlayOrder(['a', 'b'], ['b', 'a'], 'a', 0).found).toBe(true);
+  });
+
+  it('reports found for the second copy of a duplicated track', () => {
+    expect(reconstructPlayOrder(['a', 'a'], ['a', 'a'], 'a', 1).found).toBe(true);
+  });
+
+  it('reports not found when the current id is absent', () => {
+    expect(reconstructPlayOrder(['a', 'b'], ['b', 'a'], 'missing', 0).found).toBe(false);
+  });
+
+  it('reports found for the first copy and not found when the id is gone', () => {
+    expect(reconstructPlayOrder(['a', 'b'], ['a', 'b'], 'a', 1).found).toBe(true);
+    expect(reconstructPlayOrder(['b'], ['b'], 'a', 0).found).toBe(false);
+  });
+});
+
+describe('isSavedCurrentResumable — the resolveResumeStartIndex found flag', () => {
+  it('is true when the saved current id is among the valid ids', () => {
+    expect(isSavedCurrentResumable(['a', 'b', 'c'], 1, ['a', 'b'])).toBe(true);
+  });
+
+  it('is false when the saved current id was dropped, though an index is still clamped', () => {
+    expect(isSavedCurrentResumable(['a', 'b', 'c'], 1, ['a', 'c'])).toBe(false);
+    expect(resolveResumeStartIndex(['a', 'b', 'c'], 1, ['a', 'c'])).toBe(1);
+  });
+
+  it('is true for a kept duplicate occurrence', () => {
+    expect(isSavedCurrentResumable(['a', 'b', 'a'], 2, ['a', 'a'])).toBe(true);
   });
 });

@@ -31,15 +31,31 @@ function occurrenceIndex(ids: readonly string[], id: string, occurrence: number)
   return found;
 }
 
+function savedCurrentPosition(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+  validTrackIds: readonly string[],
+): number {
+  const currentId = currentTrackId(savedTrackIds, savedCurrentIndex);
+  const occurrence = currentOccurrence(savedTrackIds, savedCurrentIndex);
+  return currentId ? occurrenceIndex(validTrackIds, currentId, occurrence) : -1;
+}
+
+export function isSavedCurrentResumable(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+  validTrackIds: readonly string[],
+): boolean {
+  return savedCurrentPosition(savedTrackIds, savedCurrentIndex, validTrackIds) >= 0;
+}
+
 export function resolveResumeStartIndex(
   savedTrackIds: readonly string[],
   savedCurrentIndex: number,
   validTrackIds: readonly string[],
 ): number {
   if (validTrackIds.length === 0) return 0;
-  const currentId = currentTrackId(savedTrackIds, savedCurrentIndex);
-  const occurrence = currentOccurrence(savedTrackIds, savedCurrentIndex);
-  const found = currentId ? occurrenceIndex(validTrackIds, currentId, occurrence) : -1;
+  const found = savedCurrentPosition(savedTrackIds, savedCurrentIndex, validTrackIds);
   if (found >= 0) return found;
   return clamp(savedCurrentIndex, 0, validTrackIds.length - 1);
 }
@@ -66,18 +82,20 @@ export function reconstructPlayOrder(
   playIds: readonly string[],
   currentId: string,
   currentOccurrenceRank: number,
-): { playOrder: number[]; currentIndex: number } {
+): { playOrder: number[]; currentIndex: number; found: boolean } {
   const nextNatural = naturalPositions(naturalIds);
   const playOrder: number[] = [];
   let currentIndex = 0;
   let currentSeen = 0;
+  let found = false;
   for (const id of playIds) {
     const ni = nextNatural(id);
     if (ni === undefined) continue;
     if (id === currentId && currentSeen++ <= currentOccurrenceRank) {
       currentIndex = playOrder.length;
+      found = true;
     }
     playOrder.push(ni);
   }
-  return { playOrder, currentIndex };
+  return { playOrder, currentIndex, found };
 }

@@ -10,6 +10,7 @@ import { fromWireSource } from './queueStateWire';
 import {
   currentOccurrence,
   currentTrackId,
+  isSavedCurrentResumable,
   reconstructPlayOrder,
   resolveResumeStartIndex,
 } from './resumeQueue';
@@ -23,20 +24,40 @@ export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): numbe
   return useQueueStore.getState().generation;
 }
 
+export interface RungOutcome {
+  rung: QueueRebuildRung;
+  currentFound: boolean;
+}
+
+export function rebuildOnFirstWorkingRungReportingCurrent(
+  saved: QueueStateResponse,
+  trackMap: Map<string, TrackResponse>,
+  isReady: (id: string) => boolean,
+  source: QueueSource | null,
+): RungOutcome {
+  const natural = attemptNaturalOrder(saved, trackMap, isReady, source);
+  const playOrder = natural ? null : attemptPlayOrderAlone(saved, trackMap, source);
+  return recordedOutcome(natural, playOrder);
+}
+
 export function rebuildOnFirstWorkingRung(
   saved: QueueStateResponse,
   trackMap: Map<string, TrackResponse>,
   isReady: (id: string) => boolean,
   source: QueueSource | null,
 ): QueueRebuildRung {
-  if (rebuildFromNaturalOrder(saved, trackMap, isReady, source)) return recordedRung('natural');
-  if (rebuildFromPlayOrderAlone(saved, trackMap, source)) return recordedRung('play_order');
-  return recordedRung('exhausted');
+  return rebuildOnFirstWorkingRungReportingCurrent(saved, trackMap, isReady, source).rung;
 }
 
 function recordedRung(rung: QueueRebuildRung): QueueRebuildRung {
   recordQueueRebuildOutcome(rung);
   return rung;
+}
+
+function recordedOutcome(natural: Attempt | null, playOrder: Attempt | null): RungOutcome {
+  const rung = natural ? 'natural' : playOrder ? 'play_order' : 'exhausted';
+  const found = (natural ?? playOrder)?.currentFound ?? false;
+  return { rung: recordedRung(rung), currentFound: found };
 }
 
 export function rebuildFromNaturalOrder(
@@ -45,27 +66,52 @@ export function rebuildFromNaturalOrder(
   isReady: (id: string) => boolean,
   source: QueueSource | null,
 ): boolean {
-  if (!saved.natural_order.length) return false;
+  return attemptNaturalOrder(saved, trackMap, isReady, source) !== null;
+}
 
+interface Attempt {
+  currentFound: boolean;
+}
+
+function attemptNaturalOrder(
+  saved: QueueStateResponse,
+  trackMap: Map<string, TrackResponse>,
+  isReady: (id: string) => boolean,
+  source: QueueSource | null,
+): Attempt | null {
+  const rebuilt = reconstructNatural(saved, isReady);
+  return rebuilt ? restoreNatural(trackMap, source, rebuilt) : null;
+}
+
+type NaturalRebuild = ReturnType<typeof reconstructPlayOrder> & {
+  naturalIds: string[];
+  shuffled: boolean;
+};
+
+function reconstructNatural(
+  saved: QueueStateResponse,
+  isReady: (id: string) => boolean,
+): NaturalRebuild | null {
   const naturalIds = saved.natural_order.filter(isReady);
   const playIds = saved.track_ids.filter(isReady);
-  const { playOrder, currentIndex } = reconstructPlayOrder(
-    naturalIds,
-    playIds,
-    currentTrackId(saved.track_ids, saved.current_index),
-    currentOccurrence(saved.track_ids, saved.current_index),
-  );
-  if (!naturalIds.length || !playOrder.length) return false;
+  const rebuilt = reconstructPlayOrder(naturalIds, playIds, ...savedCurrent(saved));
+  if (!naturalIds.length || !rebuilt.playOrder.length) return null;
+  return { ...rebuilt, naturalIds, shuffled: saved.shuffled };
+}
 
-  const naturalTracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
-  useQueueStore.getState().restoreQueue({
-    tracks: naturalTracks,
-    playOrder,
-    currentIndex,
-    source,
-    shuffled: saved.shuffled,
-  });
-  return true;
+function savedCurrent(saved: QueueStateResponse): [string, number] {
+  const { track_ids: ids, current_index: at } = saved;
+  return [currentTrackId(ids, at), currentOccurrence(ids, at)];
+}
+
+function restoreNatural(
+  trackMap: Map<string, TrackResponse>,
+  source: QueueSource | null,
+  { naturalIds, found, ...queue }: NaturalRebuild,
+): Attempt {
+  const tracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
+  useQueueStore.getState().restoreQueue({ ...queue, tracks, source });
+  return { currentFound: found };
 }
 
 export function rebuildFromPlayOrderAlone(
@@ -73,17 +119,43 @@ export function rebuildFromPlayOrderAlone(
   trackMap: Map<string, TrackResponse>,
   source: QueueSource | null,
 ): boolean {
-  const validTracks = saved.track_ids
+  return attemptPlayOrderAlone(saved, trackMap, source) !== null;
+}
+
+function attemptPlayOrderAlone(
+  saved: QueueStateResponse,
+  trackMap: Map<string, TrackResponse>,
+  source: QueueSource | null,
+): Attempt | null {
+  const validTracks = playableTracks(saved, trackMap);
+  if (!validTracks.length) return null;
+  loadPlayOrder(saved, validTracks, source);
+  return { currentFound: isSavedCurrentResumable(...savedIdsAt(saved), validIds(validTracks)) };
+}
+
+function playableTracks(
+  saved: QueueStateResponse,
+  trackMap: Map<string, TrackResponse>,
+): TrackResponse[] {
+  return saved.track_ids
     .map((id) => trackMap.get(id))
     .filter((t): t is TrackResponse => t != null && canPlay(t.acquisition_status));
-  if (!validTracks.length) return false;
+}
 
-  const startIdx = resolveResumeStartIndex(
-    saved.track_ids,
-    saved.current_index,
-    validTracks.map((t) => t.id),
-  );
+function validIds(tracks: TrackResponse[]): string[] {
+  return tracks.map((t) => t.id);
+}
+
+function savedIdsAt(saved: QueueStateResponse): [string[], number] {
+  return [saved.track_ids, saved.current_index];
+}
+
+function loadPlayOrder(
+  saved: QueueStateResponse,
+  validTracks: TrackResponse[],
+  source: QueueSource | null,
+): void {
+  const startIdx = resolveResumeStartIndex(...savedIdsAt(saved), validIds(validTracks));
   useQueueStore.getState().loadQueue(validTracks.map(toPlaybackTrack), startIdx, source);
   if (saved.shuffled) useQueueStore.getState().setShuffled(true);
-  return true;
 }

@@ -408,6 +408,33 @@ describe('a restore whose native load fails', () => {
     jest.restoreAllMocks();
   });
 
+  describe('useQueueResume restore, saved current track unavailable', () => {
+    it('resumes at 0 when the saved current track is gone from the library', async () => {
+      (getAllTracks as jest.Mock).mockResolvedValue(['x', 'z'].map((id) => trackResponse(id)));
+      (getQueueState as jest.Mock).mockResolvedValue({
+        ...wire,
+        track_ids: ['x', 'y', 'z'],
+        natural_order: ['x', 'y', 'z'],
+        current_index: 1,
+        position_ms: 90_000,
+      });
+      renderHook(() => useQueueResume());
+      await act(async () => {
+        for (let i = 0; i < 40; i++) await Promise.resolve();
+      });
+
+      expect(useQueueStore.getState().resumePositionMs).toBe(0);
+      expect(nativePlayer.seekTo).not.toHaveBeenCalled();
+    });
+
+    it('keeps the saved position when the saved current track is present', async () => {
+      await restore();
+
+      expect(useQueueStore.getState().resumePositionMs).toBe(5000);
+      expect(nativePlayer.seekTo).toHaveBeenCalledWith(5);
+    });
+  });
+
   describe('useQueueResume restore, native stage failure (#2702)', () => {
     it('reports the failure against the current track when the native load rejects', async () => {
       __player.failNext('add', new Error('native add rejected'));

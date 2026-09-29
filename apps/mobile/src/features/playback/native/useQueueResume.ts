@@ -16,8 +16,9 @@ import { withNativeQueue } from './nativeQueueLock';
 import { activeNativeTrackId } from './nativeTrack';
 import { reportLoadFailure } from '../playbackErrorStore';
 import {
-  rebuildOnFirstWorkingRung,
+  rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
+  type RungOutcome,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
 import { redactedPlaybackFailure } from '../redactPlaybackError';
@@ -104,13 +105,13 @@ function warnOnSavedTracksMissingFromLibrary(
   });
 }
 
-function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): boolean {
+function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): RungOutcome {
   const trackMap = new Map<string, TrackResponse>(home.map((t) => [t.id, t]));
   const isReady = (id: string): boolean => canPlay(trackMap.get(id)?.acquisition_status);
   const source = fromWireSource(saved.source);
   warnOnSavedTracksMissingFromLibrary(saved, trackMap);
 
-  return rebuildOnFirstWorkingRung(saved, trackMap, isReady, source) !== 'exhausted';
+  return rebuildOnFirstWorkingRungReportingCurrent(saved, trackMap, isReady, source);
 }
 
 function applyRepeatMode(wireRepeatMode: string): void {
@@ -178,13 +179,15 @@ async function restoreSavedQueue(
     if (userTookOver(owned)) return;
 
     stage = 'rebuild';
-    if (!rebuildSavedQueue(saved, home)) return;
-    useQueueStore.getState().setResumePosition(saved.position_ms);
+    const rebuilt = rebuildSavedQueue(saved, home);
+    if (rebuilt.rung === 'exhausted') return;
+    const resumeMs = rebuilt.currentFound ? saved.position_ms : 0;
+    useQueueStore.getState().setResumePosition(resumeMs);
     applyRepeatMode(saved.repeat_mode);
     rebuiltGeneration = useQueueStore.getState().generation;
 
     stage = 'native';
-    await resumeNativeQueue(saved.position_ms);
+    await resumeNativeQueue(resumeMs);
   } catch (err) {
     console.warn('[playback] failed to restore the saved queue', {
       stage,
