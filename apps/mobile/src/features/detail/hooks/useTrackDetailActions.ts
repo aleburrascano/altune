@@ -17,7 +17,7 @@ import { useSaveTrack } from './useSaveTrack';
 import { useTrackSave, type TrackSave } from './useTrackSave';
 import { useOpenFeaturing, type DetailRoute } from '../navigation';
 import { isResultPlaying, resolvePlaySource } from '../play-source';
-import { toCreateTrackRequest } from '../save-cache';
+import { isOptimisticTrackId, toCreateTrackRequest } from '../save-cache';
 
 export type { LateralNavHandle };
 
@@ -100,7 +100,7 @@ export function useTrackDetailActions({
   };
 
   const resolveTrackIds = useCallback(async (): Promise<TrackId[]> => {
-    if (owned !== null) {
+    if (owned !== null && !isOptimisticTrackId(owned.trackId)) {
       return [owned.trackId];
     }
     const saved = await save.mutateAsync(toCreateTrackRequest(result));

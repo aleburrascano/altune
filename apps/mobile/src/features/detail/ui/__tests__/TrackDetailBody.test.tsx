@@ -4,8 +4,14 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/api-client/ids';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import {
+  linkTrackIdentity,
+  patchTrackStatus,
+  trackIdentityKey,
+  useTrackStatusStore,
+} from '@shared/acquisition/trackStatusStore';
 
+import { optimisticTrackId, toCreateTrackRequest } from '../../save-cache';
 import type { LateralNavHandle } from '../../hooks/useTrackDetailActions';
 import { TrackDetailBody } from '../TrackDetailBody';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
@@ -357,5 +363,30 @@ describe('TrackDetailBody pins its router calls', () => {
     const { readDetailHandoff } = jest.requireActual('@shared/lib/detail-handoff');
     expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Related One');
     expect(resultCarriedBy(href.params.handoff)).toBe('Related One');
+  });
+});
+
+describe('TrackDetailBody add to playlist during a pending save', () => {
+  it('resolves to the server-issued id, never the optimistic placeholder', async () => {
+    let resolveTrackIds: (() => Promise<string[]>) | undefined;
+    jest
+      .spyOn(require('@shared/playlists'), 'AddToPlaylistSheet')
+      .mockImplementation((props: unknown) => {
+        resolveTrackIds = (props as { resolveTrackIds: () => Promise<string[]> }).resolveTrackIds;
+        return null;
+      });
+    const placeholderId = optimisticTrackId(toCreateTrackRequest(trackResult()));
+    patchTrackStatus(
+      placeholderId,
+      { acquisitionStatus: 'pending', failureMessage: null },
+      'optimistic',
+    );
+    linkTrackIdentity(trackIdentityKey(TITLE, ARTIST), placeholderId);
+    __http.reply('POST /v1/tracks', { status: 201, json: savedTrackResponse('pending') });
+    renderDetail();
+
+    const ids = await resolveTrackIds!();
+
+    expect(ids).toEqual(['srv-midnight-city']);
   });
 });
