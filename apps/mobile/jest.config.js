@@ -28,6 +28,8 @@ const RATCHET_RAISE_ONLY = {
 module.exports = {
   ...preset,
   rootDir: __dirname,
+  randomize: true,
+  restoreMocks: true,
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/__tests__/**', '!src/**/*.d.ts'],
   coverageThreshold: RATCHET_RAISE_ONLY,

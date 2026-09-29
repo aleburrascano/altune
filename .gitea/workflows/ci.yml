@@ -97,7 +97,7 @@ jobs:
       - name: go test with integration tests
         env:
           INTEGRATION: "1"
-        run: cd "$WT/services/go-api" && go test -count=1 -coverprofile=coverage.out ./...
+        run: cd "$WT/services/go-api" && go test -shuffle=on -count=1 -coverprofile=coverage.out ./...
       - name: coverage ratchet
         env:
           MIN: 65
@@ -123,7 +123,7 @@ jobs:
       - name: go test -race
         env:
           CGO_ENABLED: "1"
-        run: cd "$WT/services/overseer" && go test -race -count=1 ./...
+        run: cd "$WT/services/overseer" && go test -race -shuffle=on -count=1 ./...
       - name: govulncheck
         run: cd "$WT/services/overseer" && govulncheck ./...
       - name: nilaway ceiling
