@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 )
 
@@ -23,8 +24,13 @@ func NewSourceRegistry(sources ...ports.AudioSource) *SourceRegistry {
 }
 
 func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	candidates, _, err := r.FindReportingOutage(ctx, req)
+	return candidates, err
+}
+
+func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error) {
 	if len(r.sources) == 0 {
-		return nil, fmt.Errorf("no audio sources configured")
+		return nil, nil, fmt.Errorf("no audio sources configured")
 	}
 
 	slots := make([][]ports.AudioCandidate, len(r.sources))
@@ -50,7 +56,7 @@ func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]por
 	}
 	wg.Wait()
 
-	return mergeSlots(ctx, r.sources, slots, errs)
+	return mergeSlotsReportingOutage(ctx, r.sources, slots, errs)
 }
 
 func mergeSlots(
@@ -59,8 +65,18 @@ func mergeSlots(
 	slots [][]ports.AudioCandidate,
 	errs []error,
 ) ([]ports.AudioCandidate, error) {
-	return ports.CollectCandidates(
-		len(sources),
+	merged, _, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
+	return merged, err
+}
+
+func mergeSlotsReportingOutage(
+	ctx context.Context,
+	sources []ports.AudioSource,
+	slots [][]ports.AudioCandidate,
+	errs []error,
+) ([]ports.AudioCandidate, error, error) {
+	return ports.CollectCandidatesReportingOutage(
+		len(sources), math.MaxInt,
 		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
 		func(i int, candidates []ports.AudioCandidate) {
 			slog.InfoContext(ctx, "acquisition.source_find_results",

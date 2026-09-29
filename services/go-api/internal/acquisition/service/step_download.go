@@ -72,7 +72,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 	if s.width > 1 {
 		return s.executeWindowed(ctx, ac)
 	}
-	var failures downloadFailures
+	failures := downloadFailures{unavailable: ac.SearchUnavailable}
 	attempts := 0
 
 	for i := range ac.Ranked {
@@ -119,6 +119,9 @@ func (f *downloadFailures) note(err error) {
 }
 
 func (f *downloadFailures) result(ctx context.Context) error {
+	if f.last == nil && f.unavailable != nil {
+		return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", f.unavailable))
+	}
 	if f.last == nil {
 		return fmt.Errorf("no candidate produced acceptable audio")
 	}

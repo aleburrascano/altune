@@ -9,7 +9,7 @@ import (
 )
 
 func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionContext) (afterDownload, error) {
-	var failures downloadFailures
+	failures := downloadFailures{unavailable: ac.SearchUnavailable}
 	pending := ac.Ranked
 	used := 0
 

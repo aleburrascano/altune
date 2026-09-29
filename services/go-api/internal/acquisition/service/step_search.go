@@ -11,6 +11,10 @@ type candidateFinder interface {
 	Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error)
 }
 
+type outageReportingFinder interface {
+	FindReportingOutage(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error)
+}
+
 type SearchStep struct {
 	finder candidateFinder
 }
@@ -22,7 +26,7 @@ func NewSearchStep(finder candidateFinder) *SearchStep {
 func (s *SearchStep) Name() string { return stepNameSearch }
 
 func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipelineStart) (afterSearch, error) {
-	candidates, err := s.finder.Find(ctx, findRequestFor(ac))
+	candidates, outage, err := s.find(ctx, findRequestFor(ac))
 	if err != nil {
 		return afterSearch{}, withCancellation(ctx, err)
 	}
@@ -38,7 +42,16 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 	}
 
 	ac.Candidates = kept
+	ac.SearchUnavailable = outage
 	return afterSearch{}, nil
+}
+
+func (s *SearchStep) find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error) {
+	if reporter, ok := s.finder.(outageReportingFinder); ok {
+		return reporter.FindReportingOutage(ctx, req)
+	}
+	candidates, err := s.finder.Find(ctx, req)
+	return candidates, nil, err
 }
 
 func filterCandidates(ctx context.Context, ac *AcquisitionContext, candidates []ports.AudioCandidate) (kept, skipped []ports.AudioCandidate) {

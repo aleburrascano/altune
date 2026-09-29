@@ -169,20 +169,21 @@ func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext)
 }
 
 type AcquisitionContext struct {
-	Track            TrackRef
-	Identity         ports.RecordingIdentity
-	Candidates       []ports.AudioCandidate
-	Ranked           []ports.AudioCandidate
-	Selected         *ports.AudioCandidate
-	TempPath         string
-	TempDir          string
-	AudioRef         string
-	ProbedDuration   float64
-	DurationVerified bool
-	IdentityVerified bool
-	Verdict          AudioVerdict
-	Confidence       float64
-	Evidence         Evidence
+	Track             TrackRef
+	Identity          ports.RecordingIdentity
+	Candidates        []ports.AudioCandidate
+	SearchUnavailable error
+	Ranked            []ports.AudioCandidate
+	Selected          *ports.AudioCandidate
+	TempPath          string
+	TempDir           string
+	AudioRef          string
+	ProbedDuration    float64
+	DurationVerified  bool
+	IdentityVerified  bool
+	Verdict           AudioVerdict
+	Confidence        float64
+	Evidence          Evidence
 
 	Rejections []CandidateRejection
 

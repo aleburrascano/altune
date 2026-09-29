@@ -1320,3 +1320,61 @@ func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T
 		t.Errorf("temp root %q should be gone after rollback, stat err = %v", root, err)
 	}
 }
+
+type findOnlySource struct {
+	name       string
+	candidates []ports.AudioCandidate
+	err        error
+	fetchErr   error
+}
+
+func (s findOnlySource) Name() string { return s.name }
+
+func (s findOnlySource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return s.candidates, s.err
+}
+
+func (s findOnlySource) Fetch(context.Context, ports.AudioCandidate, string) (string, error) {
+	return "", s.fetchErr
+}
+
+func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.Context, error) {
+	t.Helper()
+	healthy := findOnlySource{
+		name:       "healthy",
+		candidates: []ports.AudioCandidate{{URL: "https://example.com/a"}},
+		fetchErr:   errors.New("exit 1"),
+	}
+	registry := NewSourceRegistry(down, healthy)
+	ctx := withJobAttempt(context.Background(), 1)
+	ac := &AcquisitionContext{}
+	if _, err := NewSearchStep(registry).Execute(ctx, ac, pipelineStart{}); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	ac.Ranked = ac.Candidates
+	_, err := NewDownloadStep(registry).Execute(ctx, ac, afterSelect{})
+	if err == nil {
+		t.Fatal("expected a download error")
+	}
+	return ctx, err
+}
+
+func TestDownloadStep_SearchOutageWithAllSurvivorsRejected_IsRetryable(t *testing.T) {
+	down := findOnlySource{name: "down", err: &ports.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+
+	ctx, err := searchThenDownloadRejectingAll(t, down)
+
+	if !ports.IsSourceUnavailable(err) || !willRetry(ctx, err) {
+		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
+	}
+}
+
+func TestDownloadStep_HealthySourcesAllRejected_StaysPermanent(t *testing.T) {
+	quiet := findOnlySource{name: "quiet"}
+
+	ctx, err := searchThenDownloadRejectingAll(t, quiet)
+
+	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
+		t.Fatalf("err = %v, want a permanent failure", err)
+	}
+}

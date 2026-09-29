@@ -129,8 +129,18 @@ func CollectCandidatesUntilEnough(
 	onFailure func(i int, err error),
 	allFailed func(firstErr error) error,
 ) ([]AudioCandidate, error) {
+	merged, _, err := CollectCandidatesReportingOutage(n, enough, run, onSuccess, onFailure, allFailed)
+	return merged, err
+}
+
+func CollectCandidatesReportingOutage(
+	n, enough int,
+	run func(i int) ([]AudioCandidate, error),
+	onSuccess func(i int, candidates []AudioCandidate),
+	onFailure func(i int, err error),
+	allFailed func(firstErr error) error,
+) (merged []AudioCandidate, outage error, err error) {
 	positionByKey := make(map[string]int)
-	var merged []AudioCandidate
 	var firstErr, firstUnavailable error
 	failures := 0
 
@@ -152,10 +162,10 @@ func CollectCandidatesUntilEnough(
 	}
 
 	if failures == n && firstErr != nil {
-		return nil, allFailed(firstErr)
+		return nil, firstUnavailable, allFailed(firstErr)
 	}
 	if len(merged) == 0 && firstUnavailable != nil {
-		return nil, fmt.Errorf("no candidates and a source was unavailable: %w", firstUnavailable)
+		return nil, firstUnavailable, fmt.Errorf("no candidates and a source was unavailable: %w", firstUnavailable)
 	}
-	return merged, nil
+	return merged, firstUnavailable, nil
 }
