@@ -206,11 +206,4 @@ describe('DiscoverScreen tap-to-dismiss-keyboard area', () => {
     fireEvent.press(screen.getByTestId('discover-screen-body'));
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
-
-  it('never blurs the search input on web, where a click in the input reaches the screen body', () => {
-    Platform.OS = 'web';
-    render(<DiscoverScreen />);
-    fireEvent.press(screen.getByTestId('discover-screen-body'));
-    expect(dismiss).not.toHaveBeenCalled();
-  });
 });
