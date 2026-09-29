@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   addFavorite,
@@ -16,11 +16,14 @@ type FavoritesApi = {
   toggle: (target: FavoriteTarget) => void;
 };
 
+type ToggleRequest = { target: FavoriteTarget; wasFavorite: boolean };
+
 function entryKey(kind: string, key: string): string {
   return `${kind}|${key}`;
 }
 
 export function useFavorites(): FavoritesApi {
+  const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: discoveryKeys.favorites,
     queryFn: listFavorites,
@@ -34,28 +37,30 @@ export function useFavorites(): FavoritesApi {
   const mutation = useOptimisticMutation({
     queryKey: discoveryKeys.favorites,
     unguarded: true,
-    mutationFn: async (target: FavoriteTarget) => {
-      const ref = {
-        kind: target.kind,
-        title: target.title,
-        subtitle: target.subtitle,
-        image_url: target.image_url,
-      };
-      if (isFavorite(target)) {
-        await removeFavorite(ref);
-        return;
-      }
-      await addFavorite(ref);
-    },
-    applyOptimistic: (previous: FavoritesResponse | undefined, target) =>
-      patched(previous, target, isFavorite(target)),
+    mutationFn: sendToggle,
+    applyOptimistic: (previous: FavoritesResponse | undefined, { target, wasFavorite }) =>
+      patched(previous, target, wasFavorite),
     alertOnError: () => ({
       title: 'Update failed',
       message: `Could not update your favorites. ${RETRY_TAIL}`,
     }),
   });
 
-  return { isFavorite, toggle: (target) => mutation.mutate(target) };
+  const toggle = (target: FavoriteTarget): void => {
+    const current = queryClient.getQueryData<FavoritesResponse>(discoveryKeys.favorites);
+    const wasFavorite = (current?.items ?? []).some(
+      (f) => entryKey(f.kind, f.key) === entryKey(target.kind, target.favorite_key),
+    );
+    mutation.mutate({ target, wasFavorite });
+  };
+
+  return { isFavorite, toggle };
+}
+
+async function sendToggle({ target, wasFavorite }: ToggleRequest): Promise<void> {
+  const { kind, title, subtitle, image_url } = target;
+  const send = wasFavorite ? removeFavorite : addFavorite;
+  await send({ kind, title, subtitle, image_url });
 }
 
 function patched(

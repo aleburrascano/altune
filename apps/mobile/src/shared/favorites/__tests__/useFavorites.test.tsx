@@ -209,4 +209,31 @@ describe('useFavorites(): optimistic toggle', () => {
       await flush();
     });
   });
+
+  it('toggles back on a second tap before re-render instead of duplicating the entry', async () => {
+    const pendingAdd = deferred<void>();
+    const pendingRemove = deferred<void>();
+    mockedAdd.mockReturnValue(pendingAdd.promise);
+    mockedRemove.mockReturnValue(pendingRemove.promise);
+    mockedList.mockReturnValue(new Promise(() => {}));
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+    await act(async () => {
+      result.current.toggle(target);
+      result.current.toggle(target);
+      await flush();
+    });
+
+    expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual({ items: [], total: 0 });
+    expect(mockedAdd).toHaveBeenCalledTimes(1);
+    expect(mockedRemove).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pendingAdd.resolve();
+      pendingRemove.resolve();
+      await flush();
+    });
+  });
 });
