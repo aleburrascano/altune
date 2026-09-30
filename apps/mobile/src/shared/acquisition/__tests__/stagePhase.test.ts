@@ -18,7 +18,7 @@ function findGoApiRoot(): string | null {
 
 type GoSource = { fileName: string; text: string };
 
-const STEP_NAME_RETURN = /func \(\w+ \*\w+Step\) Name\(\) string\s*\{\s*return\s+("[^"]*"|\w+)/g;
+const STEP_NAME_RETURN = /func \(\w+ \*\w+Step\) Name\(\) StepName\s*\{\s*return\s+("[^"]*"|\w+)/g;
 const CONST_BLOCK_BODY = /^const \(\n([\s\S]*?)\n\)/gm;
 const CONST_SINGLE_LINE = /^const (.+)$/gm;
 const STRING_CONST = /^\s*(\w+)(?:\s+\w+)?\s*=\s*"([^"]*)"/gm;
@@ -61,14 +61,18 @@ function resolveStepName(returned: string, constants: Map<string, string>): stri
   return value;
 }
 
+function returnedStepNames(goSource: string): string[] {
+  return [...goSource.matchAll(STEP_NAME_RETURN)].map(([, returned]) => returned!);
+}
+
 function deriveAcquisitionStepNames(goApiRoot: string): Set<string> {
   const sources = readPackageSources(path.join(goApiRoot, 'internal', 'acquisition', 'service'));
   const constants = goStringConstants(sources);
   const names = new Set<string>();
   for (const { fileName, text } of sources) {
     if (!fileName.startsWith('step_')) continue;
-    for (const [, returned] of text.matchAll(STEP_NAME_RETURN)) {
-      names.add(resolveStepName(returned!, constants));
+    for (const returned of returnedStepNames(text)) {
+      names.add(resolveStepName(returned, constants));
     }
   }
   return names;
@@ -131,6 +135,12 @@ describe('resolving what a Go step Name() returns', () => {
 
   it('reads a literal return unchanged', () => {
     expect(resolveStepName('"update_track"', new Map())).toBe('update_track');
+  });
+
+  it('finds the constant a step returns as the typed StepName', () => {
+    const source = 'func (s *SearchStep) Name() StepName { return stepNameSearch }\n';
+
+    expect(returnedStepNames(source)).toEqual(['stepNameSearch']);
   });
 
   it('names the identifier it could not resolve rather than deriving nothing', () => {
