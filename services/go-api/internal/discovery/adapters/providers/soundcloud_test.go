@@ -502,35 +502,6 @@ func TestSoundCloudAPIAdapter_NoFallback_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSoundCloudAPIAdapter_Resolve(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/resolve" {
-			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-		if r.URL.Query().Get("url") == "" {
-			t.Error("expected url query param")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"id": 555,
-			"kind": "track",
-			"title": "Leaked Cut",
-			"permalink_url": "https://soundcloud.com/x/leaked-cut",
-			"user": { "username": "Artist" }
-		}`))
-	}))
-	defer srv.Close()
-
-	a := newTestSoundCloudAPI(srv, nil)
-	r, err := a.ResolvePermalink(context.Background(), "https://soundcloud.com/x/leaked-cut")
-	if err != nil {
-		t.Fatalf("ResolvePermalink error: %v", err)
-	}
-	if r.Title != "Leaked Cut" || r.Sources[0].ExternalID != "555" {
-		t.Fatalf("unexpected resolve result: %+v", r)
-	}
-}
-
 func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -916,88 +887,6 @@ func TestSoundCloudAPIAdapter_ResolveArtistID(t *testing.T) {
 			t.Errorf("ResolveArtistID = (%q, %v), want ok=false so the provider sits out", id, ok)
 		}
 	})
-}
-
-func TestSoundCloudAPIAdapter_ResolvePermalink(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/resolve") {
-			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-		if got := r.URL.Query().Get("url"); got != "https://soundcloud.com/che/los-santos" {
-			t.Errorf("url param = %q", got)
-		}
-		_, _ = w.Write([]byte(`{
-			"id": 111, "kind": "track", "title": "Los Santos",
-			"permalink_url": "https://soundcloud.com/che/los-santos",
-			"duration": 125000,
-			"user": {"username": "Che"}
-		}`))
-	}))
-	defer srv.Close()
-
-	a := newTestSoundCloudAPI(srv, nil)
-	r, err := a.ResolvePermalink(context.Background(), "https://soundcloud.com/che/los-santos")
-	if err != nil {
-		t.Fatalf("ResolvePermalink: %v", err)
-	}
-	if r.Title != "Los Santos" || r.Subtitle != "Che" || r.Duration != 125 {
-		t.Errorf("result = %+v", r)
-	}
-	if r.Sources[0].ExternalID != "111" {
-		t.Errorf("ExternalID = %q, want 111", r.Sources[0].ExternalID)
-	}
-}
-
-func TestSoundCloudAPIAdapter_ResolvePermalink_reResolvesClientIDOnAuth(t *testing.T) {
-	const freshID = "abcdefabcdefabcdefabcdefabcdef12"
-	var resolveHits, staleHits, freshHits int
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, ".js"):
-			_, _ = w.Write([]byte(`client_id:"` + freshID + `"`))
-		case strings.HasSuffix(r.URL.Path, "/resolve"):
-			if r.URL.Query().Get("client_id") == freshID {
-				freshHits++
-				_, _ = w.Write([]byte(`{"id": 111, "kind": "track", "title": "Los Santos", "user": {"username": "Che"}}`))
-				return
-			}
-			staleHits++
-			w.WriteHeader(http.StatusUnauthorized)
-		default:
-			resolveHits++
-			_, _ = w.Write([]byte(`<script src="` + srv.URL + `/assets/app-1.js"></script>`))
-		}
-	}))
-	defer srv.Close()
-
-	a := newTestSoundCloudAPI(srv, nil)
-	a.resolver.siteURL = srv.URL
-
-	r, err := a.ResolvePermalink(context.Background(), "https://soundcloud.com/che/los-santos")
-	if err != nil {
-		t.Fatalf("ResolvePermalink after auth retry: %v", err)
-	}
-	if r.Title != "Los Santos" {
-		t.Errorf("result = %+v", r)
-	}
-	if staleHits != 1 || resolveHits != 1 || freshHits != 1 {
-		t.Errorf("stale=%d resolve=%d fresh=%d, want exactly one 401 → one re-resolve → one retry",
-			staleHits, resolveHits, freshHits)
-	}
-}
-
-func TestSoundCloudAPIAdapter_ResolvePermalink_nonTrackIsError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"id": 909, "kind": "user", "username": "Che"}`))
-	}))
-	defer srv.Close()
-
-	a := newTestSoundCloudAPI(srv, nil)
-	_, err := a.ResolvePermalink(context.Background(), "https://soundcloud.com/che")
-	if err == nil || !strings.Contains(err.Error(), "did not yield a track") {
-		t.Fatalf("err = %v, want the non-track rejection", err)
-	}
 }
 
 func TestSoundCloud_doSearch_capsAtMaxResults(t *testing.T) {

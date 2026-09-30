@@ -252,31 +252,6 @@ func (a *SoundCloudAPIAdapter) searchArtworkTracks(ctx context.Context, query st
 	return out, nil
 }
 
-func (a *SoundCloudAPIAdapter) ResolvePermalink(ctx context.Context, permalink string) (*domain.SearchResult, error) {
-	return withAuthRetry(ctx, a.resolver.cachedResolver,
-		func(ctx context.Context, id string) (*domain.SearchResult, int, error) {
-			return a.doResolve(ctx, id, permalink)
-		})
-}
-
-func (a *SoundCloudAPIAdapter) doResolve(ctx context.Context, clientID, permalink string) (*domain.SearchResult, int, error) {
-	u := fmt.Sprintf(
-		"%s/resolve?url=%s&client_id=%s",
-		a.baseURL, url.QueryEscape(permalink), url.QueryEscape(clientID),
-	)
-
-	var t scAPITrack
-	status, err := a.getJSON(ctx, u, &t)
-	if err != nil {
-		return nil, status, err
-	}
-	result, ok := mapSoundCloudAPITrack(t)
-	if !ok {
-		return nil, status, fmt.Errorf("resolve %q did not yield a track", permalink)
-	}
-	return &result, status, nil
-}
-
 func (a *SoundCloudAPIAdapter) GetRelatedTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	return scFetchList(ctx, a, func(clientID string) string {
 		return fmt.Sprintf(

@@ -28,7 +28,6 @@ type ytmFilter string
 
 const (
 	ytmNoFilter     ytmFilter = ""
-	ytmTrackFilter  ytmFilter = "EgWKAQIIAWoMEA4QChADEAQQCRAF"
 	ytmAlbumFilter  ytmFilter = "EgWKAQIYAWoMEA4QChADEAQQCRAF"
 	ytmArtistFilter ytmFilter = "EgWKAQIgAWoMEA4QChADEAQQCRAF"
 )
