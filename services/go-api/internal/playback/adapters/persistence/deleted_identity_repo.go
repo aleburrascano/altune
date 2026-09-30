@@ -13,11 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	undefinedTableCode   = "42P01"
-	insufficientPrivCode = "42501"
-)
-
 var _ ports.DeletedIdentityLister = (*PgxDeletedIdentityRepository)(nil)
 
 type rowsQuerier interface {

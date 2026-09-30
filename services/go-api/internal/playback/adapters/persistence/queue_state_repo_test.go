@@ -874,3 +874,46 @@ func TestGetForUser_TransientFailureIsNotCorruptState(t *testing.T) {
 		t.Fatalf("err = %v, want unavailable and not corrupt", err)
 	}
 }
+
+func TestTransientSQLState(t *testing.T) {
+	cases := map[string]bool{
+		"57P01": true,
+		"57P02": true,
+		"57P03": true,
+		"40001": true,
+		"40P01": true,
+		"08006": true,
+		"08000": true,
+		"53300": true,
+		"53000": true,
+		"23505": false,
+		"42P01": false,
+		"":      false,
+	}
+	for code, want := range cases {
+		t.Run(code, func(t *testing.T) {
+			if got := transientSQLState(code); got != want {
+				t.Fatalf("transientSQLState(%q) = %v, want %v", code, got, want)
+			}
+		})
+	}
+}
+
+func TestSQLStateConstants_NamedOnce(t *testing.T) {
+	named := map[string]string{
+		sqlStateAdminShutdown:        "57P01",
+		sqlStateCrashShutdown:        "57P02",
+		sqlStateCannotConnectNow:     "57P03",
+		sqlStateSerializationFailure: "40001",
+		sqlStateDeadlockDetected:     "40P01",
+		sqlStateClassConnection:      "08",
+		sqlStateClassInsufficientRes: "53",
+		undefinedTableCode:           "42P01",
+		insufficientPrivCode:         "42501",
+	}
+	for got, want := range named {
+		if got != want {
+			t.Fatalf("constant = %q, want %q", got, want)
+		}
+	}
+}

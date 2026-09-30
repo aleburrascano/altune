@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -85,39 +83,6 @@ func (r *PgxQueueStateRepository) runOp(
 		return fmt.Errorf("%w: %w", ports.ErrQueueStateUnavailable, err)
 	}
 	return err
-}
-
-func isTransientFault(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) {
-		return false
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return transientSQLState(pgErr.Code)
-	}
-	var connectErr *pgconn.ConnectError
-	var netErr net.Error
-	return errors.Is(err, context.DeadlineExceeded) ||
-		errors.As(err, &connectErr) ||
-		errors.As(err, &netErr) ||
-		pgconn.SafeToRetry(err)
-}
-
-func transientSQLState(code string) bool {
-	switch code {
-	case "57P01", "57P02", "57P03", "40001", "40P01":
-		return true
-	}
-	return strings.HasPrefix(code, "08") || strings.HasPrefix(code, "53")
-}
-
-func isUnclassifiedFault(err error) bool {
-	if err == nil {
-		return false
-	}
-	return !errors.Is(err, context.DeadlineExceeded) &&
-		!errors.Is(err, context.Canceled) &&
-		!errors.Is(err, pgx.ErrNoRows)
 }
 
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
