@@ -3,9 +3,12 @@ package app
 import (
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/config"
 	"bytes"
 	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -170,13 +173,13 @@ func TestRunShutdownSequence_OrderPinned(t *testing.T) {
 
 func TestShutdownPlan_TimeoutsPinned(t *testing.T) {
 	want := map[string]time.Duration{
-		"alert monitor":         5 * time.Second,
-		"event feed":            5 * time.Second,
-		"eval meter":            5 * time.Second,
-		"acquisition scheduler": 70 * time.Second,
-		"background tasks":      30 * time.Second,
-		"leader election":       5 * time.Second,
-		"discovery search":      30 * time.Second,
+		"alert monitor":         2 * time.Second,
+		"event feed":            2 * time.Second,
+		"eval meter":            2 * time.Second,
+		"acquisition scheduler": 35 * time.Second,
+		"background tasks":      15 * time.Second,
+		"leader election":       3 * time.Second,
+		"discovery search":      10 * time.Second,
 	}
 
 	plan := (&App{}).shutdownPlan()
@@ -263,5 +266,69 @@ func TestShutdown_DrainCompletes_ReleasesLeaderLock(t *testing.T) {
 	}
 	if leadershipRetained(outcomes) {
 		t.Error("clean drain reported leadership as retained")
+	}
+}
+
+func TestShutdownPlan_BudgetsPlusServerDrainFitInsideTotal(t *testing.T) {
+	total := serverDrainTimeout
+	for _, c := range (&App{cfg: &config.Config{AcquisitionDrainBudgetSeconds: 600}}).shutdownPlan() {
+		total += c.timeout
+	}
+	if total > shutdownTotalBudget {
+		t.Fatalf("worst-case shutdown %v exceeds total budget %v", total, shutdownTotalBudget)
+	}
+	if shutdownTotalBudget >= 90*time.Second {
+		t.Fatalf("total budget %v must stay under the 90s stop_grace_period", shutdownTotalBudget)
+	}
+}
+
+func TestShutdownPlan_SchedulerTimeoutFollowsDrainBudget(t *testing.T) {
+	timeoutFor := func(seconds int) time.Duration {
+		plan := (&App{cfg: &config.Config{AcquisitionDrainBudgetSeconds: seconds}}).shutdownPlan()
+		for _, c := range plan {
+			if c.name == "acquisition scheduler" {
+				return c.timeout
+			}
+		}
+		t.Fatal("no scheduler component")
+		return 0
+	}
+	if got := timeoutFor(20); got != 20*time.Second {
+		t.Errorf("drain budget 20s: scheduler timeout %v, want 20s", got)
+	}
+	if got := timeoutFor(600); got != schedulerDrainCap {
+		t.Errorf("drain budget 600s: scheduler timeout %v, want cap %v", got, schedulerDrainCap)
+	}
+}
+
+func TestDrainServer_HungHandlerIsClosedAfterDeadline(t *testing.T) {
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+		close(cancelled)
+	}))
+	srv.Start()
+	a := &App{server: srv.Config}
+
+	go func() {
+		if resp, err := http.Get(srv.URL); err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	<-started
+
+	returned := make(chan struct{})
+	go func() { a.drainServer(50 * time.Millisecond); close(returned) }()
+	select {
+	case <-returned:
+	case <-time.After(3 * time.Second):
+		t.Fatal("drainServer did not return with a hung handler")
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("in-flight handler was not cancelled at drain expiry")
 	}
 }

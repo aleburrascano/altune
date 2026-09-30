@@ -100,12 +100,7 @@ func (a *App) Run(ctx context.Context) error {
 		slog.Info("shutting down")
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		slog.Error("server shutdown error", "error", err)
-	}
+	a.drainServer(serverDrainTimeout)
 
 	slog.Info("waiting for background tasks")
 	outcomes := a.runShutdownSequence()

@@ -10,8 +10,35 @@ const (
 	backgroundTasksComponent = "background tasks"
 	leaderElectionComponent  = "leader election"
 	discoverySearchComponent = "discovery search"
-	backgroundDrainTimeout   = 30 * time.Second
+	backgroundDrainTimeout   = 15 * time.Second
+	discoveryDrainTimeout    = 10 * time.Second
+	serverDrainTimeout       = 10 * time.Second
+	observerDrainTimeout     = 2 * time.Second
+	leaderReleaseTimeout     = 3 * time.Second
+	schedulerDrainCap        = 35 * time.Second
+
+	shutdownTotalBudget = 80 * time.Second
 )
+
+func (a *App) schedulerDrainTimeout() time.Duration {
+	if a.cfg == nil || a.cfg.AcquisitionDrainBudgetSeconds <= 0 {
+		return schedulerDrainCap
+	}
+	return min(time.Duration(a.cfg.AcquisitionDrainBudgetSeconds)*time.Second, schedulerDrainCap)
+}
+
+func (a *App) drainServer(timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	err := a.server.Shutdown(ctx)
+	if err == nil {
+		return
+	}
+	slog.Error("server shutdown error", "error", err)
+	if closeErr := a.server.Close(); closeErr != nil {
+		slog.Error("server close error", "error", closeErr)
+	}
+}
 
 type shutdownOutcome struct {
 	name      string
@@ -66,29 +93,29 @@ type componentShutdown struct {
 
 func (a *App) shutdownPlan() []componentShutdown {
 	return []componentShutdown{
-		{name: "alert monitor", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
+		{name: "alert monitor", timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
 			if a.alertMonitor != nil {
 				a.alertMonitor.Shutdown(ctx)
 			}
 		}},
-		{name: "event feed", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
+		{name: "event feed", timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
 			if a.eventFeed != nil {
 				a.eventFeed.Shutdown(ctx)
 			}
 		}},
-		{name: "eval meter", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
+		{name: "eval meter", timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
 			if a.evalMeter != nil {
 				a.evalMeter.Shutdown(ctx)
 			}
 		}},
-		{name: "acquisition scheduler", timeout: 70 * time.Second, shutdown: func(ctx context.Context) {
+		{name: "acquisition scheduler", timeout: a.schedulerDrainTimeout(), shutdown: func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
 			}
 		}},
 		{name: backgroundTasksComponent, timeout: backgroundDrainTimeout, shutdown: a.waitBackground},
 		{
-			name: leaderElectionComponent, timeout: 5 * time.Second,
+			name: leaderElectionComponent, timeout: leaderReleaseTimeout,
 			shutdown: func(ctx context.Context) {
 				if a.election != nil {
 					a.election.Shutdown(ctx)
@@ -99,7 +126,7 @@ func (a *App) shutdownPlan() []componentShutdown {
 				"leader-only jobs still running; the advisory lock clears only when this " +
 				"instance's DB session ends (process exit)",
 		},
-		{name: discoverySearchComponent, timeout: backgroundDrainTimeout, shutdown: a.waitSearchBackground},
+		{name: discoverySearchComponent, timeout: discoveryDrainTimeout, shutdown: a.waitSearchBackground},
 	}
 }
 
