@@ -10,8 +10,10 @@ import { GROUP_PAGE_SIZE } from '../groupPaging';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { usePlaylistsView } from '../hooks/usePlaylistsView';
 import { SortControl } from '../ui/SortControl';
+import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
-const PLAYLIST_COUNT = 3000;
+const PLAYLIST_COUNT = 20;
+let mockGroupPageSize = 3;
 
 const playlists: PlaylistResponse[] = Array.from({ length: PLAYLIST_COUNT }, (_unused, i) => ({
   id: asPlaylistId(`pl-${i}`),
@@ -35,6 +37,18 @@ const mockGetPlaylists = jest.fn(servePage);
 jest.mock('@shared/api-client/playlists', () => ({
   getPlaylists: (page?: PlaylistPage) => mockGetPlaylists(page),
 }));
+
+jest.mock('../groupPaging', () => {
+  const actual = jest.requireActual('../groupPaging');
+  return {
+    __esModule: true,
+    get GROUP_PAGE_SIZE() {
+      return mockGroupPageSize;
+    },
+    nextGroupPageOffset: (pageLength: number, pageOffset: number) =>
+      actual.nextGroupPageOffset(pageLength, pageOffset, mockGroupPageSize),
+  };
+});
 
 const noop = () => undefined;
 
@@ -67,6 +81,23 @@ function scrollToEnd(): void {
 function showsPlaylistCount(count: number): Promise<void> {
   return waitFor(() => expect(screen.getByText(`${count} playlists`)).toBeTruthy());
 }
+
+function WarmUpPlaylistsScreen(): ReactElement {
+  const pl = usePlaylistActions();
+  return usePlaylistsView({ pl, sort: 'recent', onPlaylistPress: noop }).view
+    .content as ReactElement;
+}
+
+warmUpFirstRender(async () => {
+  const warmUpClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mockGetPlaylists.mockImplementation(servePage);
+  render(
+    <QueryClientProvider client={warmUpClient}>
+      <WarmUpPlaylistsScreen />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(mockGetPlaylists).toHaveBeenCalled());
+});
 
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -109,10 +140,10 @@ describe('a library holding far more playlists than one page', () => {
 describe('a library whose playlists all fit in one page', () => {
   it('stops asking once a page comes back short of a full one', async () => {
     mockGetPlaylists.mockImplementation(({ offset = 0 } = {}) =>
-      Promise.resolve({ items: playlists.slice(offset, 10), total: 10 }),
+      Promise.resolve({ items: playlists.slice(offset, 2), total: 2 }),
     );
     render(<PlaylistsScreen />, { wrapper });
-    await showsPlaylistCount(10);
+    await showsPlaylistCount(2);
 
     scrollToEnd();
     scrollToEnd();
