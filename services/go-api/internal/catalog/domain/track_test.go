@@ -240,6 +240,13 @@ func TestNewTrack(t *testing.T) {
 			album:   "Album Name",
 			wantErr: "track artist exceeds 300 characters",
 		},
+		{
+			name:    "overlong album returns error",
+			title:   "Track Title",
+			artist:  "Artist Name",
+			album:   strings.Repeat("c", 301),
+			wantErr: "track album exceeds 300 characters",
+		},
 	}
 
 	for _, tt := range tests {
@@ -289,6 +296,19 @@ func TestNewTrack(t *testing.T) {
 				t.Error("expected non-zero AddedAt")
 			}
 		})
+	}
+}
+
+func TestNewTrack_AcceptsAlbumAtCap(t *testing.T) {
+	t.Parallel()
+	album := strings.Repeat("c", 300)
+
+	track, err := NewTrack(shared.NewUserId(uuid.New()), "Track Title", "Artist Name", album)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if track.Album != album {
+		t.Errorf("Album length = %d, want 300", len(track.Album))
 	}
 }
 

@@ -150,7 +150,7 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 		return nil, err
 	}
 	resolved := resolveAlbum(album, title)
-	if err := ValidateText(resolved, "track album"); err != nil {
+	if err := validateTrackText(resolved, "album"); err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()

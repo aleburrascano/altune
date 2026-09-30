@@ -547,6 +547,11 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 			wantErr: "artwork_url",
 		},
 		{
+			name:    "oversized album is rejected",
+			mutate:  func(in *AddTrackInput) { in.Album = oversized },
+			wantErr: "album",
+		},
+		{
 			name:    "oversized genre is rejected",
 			mutate:  func(in *AddTrackInput) { in.Genre = &oversized },
 			wantErr: "genre",

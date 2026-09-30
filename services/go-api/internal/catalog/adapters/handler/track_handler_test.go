@@ -521,6 +521,29 @@ func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 	}
 }
 
+func TestHandleCreateTrack_RejectsOversizedAlbum(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	body := CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 301))}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	if len(repo.Tracks) != 0 {
+		t.Errorf("stored %d tracks, want none", len(repo.Tracks))
+	}
+}
+
+func TestHandleCreateTrack_AcceptsAlbumAtCap(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	body := CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 300))}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusCreated)
+}
+
 func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
