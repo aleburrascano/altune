@@ -25,7 +25,7 @@ func (a *LastFmAdapter) fetchChart(
 	limit int,
 ) ([]domain.VocabularyEntry, error) {
 	u := fmt.Sprintf(
-		"https://ws.audioscrobbler.com/2.0/?method=%s&limit=%d&api_key=%s&format=json",
+		lastfmAPIBaseURL+"?method=%s&limit=%d&api_key=%s&format=json",
 		method, limit, a.apiKey,
 	)
 	var raw json.RawMessage

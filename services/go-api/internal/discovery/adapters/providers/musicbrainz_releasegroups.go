@@ -84,7 +84,7 @@ func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistNa
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroupMatches(ctx context.Context, query string) ([]mbReleaseGroup, error) {
-	u := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=10",
+	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/release-group/?query=%s&fmt=json&limit=10",
 		url.QueryEscape(mbLuceneEscape(query)))
 	var body mbReleaseGroupResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {
@@ -138,7 +138,7 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 	all, err := fetchPaged(mbMaxReleaseGroupPages,
 		func(page int) ([]mbReleaseGroup, bool, error) {
 			u := fmt.Sprintf(
-				"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100&offset=%d",
+				musicbrainzAPIBaseURL+"/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100&offset=%d",
 				url.QueryEscape(mbid), page*100)
 
 			var body mbReleaseGroupResponse

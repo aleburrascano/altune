@@ -23,7 +23,7 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	}
 	entity := itunesEntity(kind)
 
-	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
+	u := fmt.Sprintf(itunesAPIBaseURL+"/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
 	if err := a.limiter.wait(ctx); err != nil {
 		return artworkFailure(domain.ProviderKeyITunes, err)
 	}

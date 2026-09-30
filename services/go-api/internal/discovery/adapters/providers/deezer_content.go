@@ -10,14 +10,14 @@ import (
 )
 
 func (a *DeezerAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=50", url.PathEscape(externalID))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/album/%s/tracks?limit=50", url.PathEscape(externalID))
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
 		return mapDeezerResult(item, domain.ResultKindTrack)
 	})
 }
 
 func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/artist/%s/top?limit=10", url.PathEscape(externalID))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/artist/%s/top?limit=10", url.PathEscape(externalID))
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
 		return mapDeezerResult(item, domain.ResultKindTrack)
 	})
@@ -28,7 +28,7 @@ const deezerMaxDiscographyPages = 5
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	return fetchPaged(deezerMaxDiscographyPages,
 		func(page int) ([]domain.SearchResult, bool, error) {
-			u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100&index=%d",
+			u := fmt.Sprintf(deezerAPIBaseURL+"/artist/%s/albums?limit=100&index=%d",
 				url.PathEscape(externalID), page*100)
 			var body deezerSearchResponse
 			if err := a.getJSON(ctx, u, &body); err != nil {

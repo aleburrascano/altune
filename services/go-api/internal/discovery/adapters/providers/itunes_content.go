@@ -21,7 +21,7 @@ func (a *ITunesAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 
 func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([]domain.SearchResult, error) {
 	u := fmt.Sprintf(
-		"https://itunes.apple.com/lookup?id=%s&entity=%s&country=US&limit=50",
+		itunesAPIBaseURL+"/lookup?id=%s&entity=%s&country=US&limit=50",
 		url.QueryEscape(id), entity,
 	)
 	if err := a.limiter.wait(ctx); err != nil {

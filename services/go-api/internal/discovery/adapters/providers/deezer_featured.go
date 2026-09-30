@@ -19,7 +19,7 @@ func (a *DeezerAdapter) LookupTrackFeatured(ctx context.Context, trackID string)
 	var detail struct {
 		Contributors []deezerContributor `json:"contributors"`
 	}
-	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(trackID))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/track/%s", url.PathEscape(trackID))
 	if err := a.getJSON(ctx, u, &detail); err != nil {
 		return nil, err
 	}

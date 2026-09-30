@@ -60,7 +60,7 @@ func (a *DeezerAdapter) lookupTrackDetail(ctx context.Context, id string) (domai
 		Explicit     bool                `json:"explicit_lyrics"`
 		Contributors []deezerContributor `json:"contributors"`
 	}
-	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(id))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/track/%s", url.PathEscape(id))
 	if err := a.getJSON(ctx, u, &detail); err != nil {
 		return domain.EmptyDeezerEnrichment(), err
 	}
@@ -84,7 +84,7 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 		} `json:"genres"`
 		Contributors []deezerContributor `json:"contributors"`
 	}
-	u := fmt.Sprintf("https://api.deezer.com/album/%s", url.PathEscape(id))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/album/%s", url.PathEscape(id))
 	if err := a.getJSON(ctx, u, &detail); err != nil {
 		return domain.EmptyDeezerEnrichment(), err
 	}

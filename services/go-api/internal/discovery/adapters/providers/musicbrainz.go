@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+const musicbrainzAPIBaseURL = "https://musicbrainz.org/ws/2"
+
 type MusicBrainzAdapter struct {
 	client    *http.Client
 	userAgent string
@@ -82,7 +84,7 @@ func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 
 func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := mbEntity(kind)
-	u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=15",
+	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/%s/?query=%s&fmt=json&limit=15",
 		entity, url.QueryEscape(query))
 	if kind == domain.ResultKindTrack {
 		u += "&inc=isrcs"
@@ -292,7 +294,7 @@ func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) err
 }
 
 func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query string) ([]mbRecording, error) {
-	u := fmt.Sprintf("https://musicbrainz.org/ws/2/recording/?query=%s&fmt=json&limit=10",
+	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/recording/?query=%s&fmt=json&limit=10",
 		url.QueryEscape(mbLuceneEscape(query)))
 	var body mbRecordingResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {

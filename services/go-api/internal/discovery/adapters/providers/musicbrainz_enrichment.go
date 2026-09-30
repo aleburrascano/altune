@@ -21,7 +21,7 @@ func (a *MusicBrainzAdapter) Lookup(ctx context.Context, kind domain.ResultKind,
 	switch kind {
 	case domain.ResultKindArtist:
 		u := fmt.Sprintf(
-			"https://musicbrainz.org/ws/2/artist/%s?inc=genres+ratings+url-rels&fmt=json",
+			musicbrainzAPIBaseURL+"/artist/%s?inc=genres+ratings+url-rels&fmt=json",
 			url.PathEscape(mbid),
 		)
 		var body mbLookupArtist
@@ -38,7 +38,7 @@ func (a *MusicBrainzAdapter) Lookup(ctx context.Context, kind domain.ResultKind,
 
 	case domain.ResultKindAlbum:
 		u := fmt.Sprintf(
-			"https://musicbrainz.org/ws/2/release-group/%s?inc=genres+ratings&fmt=json",
+			musicbrainzAPIBaseURL+"/release-group/%s?inc=genres+ratings&fmt=json",
 			url.PathEscape(mbid),
 		)
 		var body mbLookupReleaseGroup

@@ -24,7 +24,7 @@ func (a *DeezerAdapter) fetchChartKind(
 	limit int,
 ) ([]domain.VocabularyEntry, error) {
 	u := fmt.Sprintf(
-		"https://api.deezer.com/chart/0/%s?limit=%d",
+		deezerAPIBaseURL+"/chart/0/%s?limit=%d",
 		kind, limit,
 	)
 	return a.fetchChartEntries(ctx, u, kind)

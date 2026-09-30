@@ -31,7 +31,7 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	if looksLikeMBID(artistRef) {
 		idParam = "mbid=" + artistRef
 	}
-	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&%s&api_key=%s&format=json&limit=10&autocorrect=1",
+	u := fmt.Sprintf(lastfmAPIBaseURL+"?method=artist.gettoptracks&%s&api_key=%s&format=json&limit=10&autocorrect=1",
 		idParam, a.apiKey)
 
 	var body struct {
@@ -71,7 +71,7 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 const lastfmAlbumsLimit = 50
 
 func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettopalbums&artist=%s&api_key=%s&format=json&limit=%d",
+	u := fmt.Sprintf(lastfmAPIBaseURL+"?method=artist.gettopalbums&artist=%s&api_key=%s&format=json&limit=%d",
 		url.QueryEscape(artistName), a.apiKey, lastfmAlbumsLimit)
 
 	var body struct {

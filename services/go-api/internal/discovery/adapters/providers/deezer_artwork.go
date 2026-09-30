@@ -18,7 +18,7 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 		endpoint = "track"
 	}
 
-	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
 	var body deezerSearchResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {
 		return artworkFailure(domain.ProviderKeyDeezer, err)

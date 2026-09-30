@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const lastfmAPIBaseURL = "https://ws.audioscrobbler.com/2.0/"
+
 type LastFmAdapter struct {
 	client *http.Client
 	apiKey string
@@ -37,7 +39,7 @@ func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 func (a *LastFmAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	method := lastfmMethod(kind)
-	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=%s&%s=%s&api_key=%s&format=json&limit=15",
+	u := fmt.Sprintf(lastfmAPIBaseURL+"?method=%s&%s=%s&api_key=%s&format=json&limit=15",
 		method, lastfmQueryParam(kind), url.QueryEscape(query), a.apiKey)
 
 	var raw json.RawMessage

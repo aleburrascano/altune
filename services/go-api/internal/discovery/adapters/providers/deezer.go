@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+const deezerAPIBaseURL = "https://api.deezer.com"
+
 type DeezerAdapter struct {
 	client *http.Client
 }
@@ -69,7 +71,7 @@ func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domai
 		return nil, fmt.Errorf("unsupported kind")
 	}
 
-	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=15&order=RANKING", endpoint, url.QueryEscape(query))
+	u := fmt.Sprintf(deezerAPIBaseURL+"/search/%s?q=%s&limit=15&order=RANKING", endpoint, url.QueryEscape(query))
 
 	var body deezerSearchResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {

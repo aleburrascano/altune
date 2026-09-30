@@ -82,7 +82,7 @@ func (a *MusicBrainzAdapter) resolveArtistMBID(ctx context.Context, name string)
 }
 
 func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string) ([]mbArtistItem, error) {
-	u := fmt.Sprintf("https://musicbrainz.org/ws/2/artist/?query=%s&fmt=json&limit=5",
+	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/artist/?query=%s&fmt=json&limit=5",
 		url.QueryEscape(mbLuceneEscape(name)))
 
 	var body mbArtistResponse

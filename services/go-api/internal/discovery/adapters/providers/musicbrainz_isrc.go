@@ -15,7 +15,7 @@ func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) 
 	if isrc == "" {
 		return nil, nil
 	}
-	u := fmt.Sprintf("https://musicbrainz.org/ws/2/isrc/%s?fmt=json", url.PathEscape(isrc))
+	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/isrc/%s?fmt=json", url.PathEscape(isrc))
 	if err := a.limiter.wait(ctx); err != nil {
 		return nil, err
 	}

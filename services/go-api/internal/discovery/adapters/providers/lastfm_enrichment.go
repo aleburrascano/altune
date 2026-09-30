@@ -68,7 +68,7 @@ func (a *LastFmAdapter) lookupArtistInfo(ctx context.Context, artistName string)
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 	u := fmt.Sprintf(
-		"https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=%s&autocorrect=1&api_key=%s&format=json",
+		lastfmAPIBaseURL+"?method=artist.getinfo&artist=%s&autocorrect=1&api_key=%s&format=json",
 		url.QueryEscape(artistName), a.apiKey,
 	)
 	body, err := a.getInfo(ctx, u)
@@ -111,7 +111,7 @@ func (a *LastFmAdapter) lookupTrackInfo(ctx context.Context, artistName, track s
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 	u := fmt.Sprintf(
-		"https://ws.audioscrobbler.com/2.0/?method=track.getinfo&artist=%s&track=%s&autocorrect=1&api_key=%s&format=json",
+		lastfmAPIBaseURL+"?method=track.getinfo&artist=%s&track=%s&autocorrect=1&api_key=%s&format=json",
 		url.QueryEscape(artistName), url.QueryEscape(track), a.apiKey,
 	)
 	body, err := a.getInfo(ctx, u)
@@ -154,7 +154,7 @@ func (a *LastFmAdapter) lookupAlbumInfo(ctx context.Context, artistName, album s
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 	u := fmt.Sprintf(
-		"https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist=%s&album=%s&autocorrect=1&api_key=%s&format=json",
+		lastfmAPIBaseURL+"?method=album.getinfo&artist=%s&album=%s&autocorrect=1&api_key=%s&format=json",
 		url.QueryEscape(artistName), url.QueryEscape(album), a.apiKey,
 	)
 	body, err := a.getInfo(ctx, u)
