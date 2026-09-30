@@ -1030,16 +1030,16 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 		t.Fatal("Status().Paused = false after Pause, want true")
 	}
 	paused := domain.NewTrackId()
-	if err := scheduler.Schedule(context.Background(), user, paused, ""); err != nil {
-		t.Fatalf("schedule while paused = %v, want nil (paused stops claiming, not enqueuing)", err)
+	if err := scheduler.Schedule(context.Background(), user, paused, ""); !errors.Is(err, ErrAcquisitionPaused) {
+		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
-	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); err != nil {
-		t.Fatalf("replace while paused = %v, want nil (paused stops claiming, not enqueuing)", err)
+	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, ErrAcquisitionPaused) {
+		t.Fatalf("replace while paused = %v, want ErrAcquisitionPaused", err)
 	}
 
 	time.Sleep(30 * time.Millisecond)
 	if _, settled := settledJob(scheduler, paused.String()); settled {
-		t.Fatal("paused job already settled, want it left unclaimed until Resume")
+		t.Fatal("refused job settled while paused, want it never admitted")
 	}
 	if got := acq.calls.Load(); got != 1 {
 		t.Fatalf("acquirer executions while paused = %d, want 1 (only the earlier, already-finished job)", got)
@@ -1048,6 +1048,9 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 	scheduler.Resume()
 	if scheduler.Status().Paused {
 		t.Fatal("Status().Paused = true after Resume, want false")
+	}
+	if err := scheduler.Schedule(context.Background(), user, paused, ""); err != nil {
+		t.Fatalf("schedule after Resume = %v, want nil", err)
 	}
 	settled := awaitSettledJob(t, scheduler, paused.String())
 	if settled.State != JobSucceeded {
@@ -1065,12 +1068,21 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 	})
 
 	scheduler.Pause()
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
-		t.Fatalf("schedule while paused = %v, want nil", err)
+	user := shared.NewUserId(uuid.New())
+	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); !errors.Is(err, ErrAcquisitionPaused) {
+		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
 	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-acq.started:
+		t.Fatal("acquirer started while paused, want no execution")
+	default:
+	}
 
 	scheduler.Resume()
+	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule after Resume = %v, want nil", err)
+	}
 	select {
 	case <-acq.started:
 	case <-time.After(time.Second):
@@ -1098,18 +1110,21 @@ func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 
 	scheduler.Pause()
 	queued := domain.NewTrackId()
-	if err := scheduler.Schedule(context.Background(), user, queued, ""); err != nil {
-		t.Fatalf("schedule while paused = %v, want nil (enqueued, not claimed)", err)
+	if err := scheduler.Schedule(context.Background(), user, queued, ""); !errors.Is(err, ErrAcquisitionPaused) {
+		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
 
 	close(repo.release)
 	_ = awaitSettledJob(t, scheduler, running.String())
 	time.Sleep(30 * time.Millisecond)
 	if _, settled := settledJob(scheduler, queued.String()); settled {
-		t.Fatal("job scheduled while paused already settled, want it left unclaimed until Resume")
+		t.Fatal("job refused while paused settled, want it never admitted")
 	}
 
 	scheduler.Resume()
+	if err := scheduler.Schedule(context.Background(), user, queued, ""); err != nil {
+		t.Fatalf("schedule after Resume = %v, want nil", err)
+	}
 	settled := awaitSettledJob(t, scheduler, queued.String())
 	if settled.State != JobSucceeded {
 		t.Errorf("resumed job state = %q, want %q", settled.State, JobSucceeded)
@@ -2348,5 +2363,36 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
+	}
+}
+
+func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
+	acq := &startedAcquirer{started: make(chan struct{}, 2), release: make(chan struct{})}
+	close(acq.release)
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithPollInterval(10*time.Millisecond))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	user := shared.NewUserId(uuid.New())
+	scheduler.Pause()
+
+	refused := domain.NewTrackId()
+	if err := scheduler.Schedule(context.Background(), user, refused, ""); !errors.Is(err, ErrAcquisitionPaused) {
+		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
+	}
+	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, ErrAcquisitionPaused) {
+		t.Fatalf("replace while paused = %v, want ErrAcquisitionPaused", err)
+	}
+	if _, queued := settledJob(scheduler, refused.String()); queued {
+		t.Fatal("refused job settled, want it never enqueued")
+	}
+
+	scheduler.Resume()
+	accepted := domain.NewTrackId()
+	if err := scheduler.Schedule(context.Background(), user, accepted, ""); err != nil {
+		t.Fatalf("schedule after Resume = %v, want nil", err)
+	}
+	if settled := awaitSettledJob(t, scheduler, accepted.String()); settled.State != JobSucceeded {
+		t.Errorf("post-resume job state = %q, want %q", settled.State, JobSucceeded)
 	}
 }

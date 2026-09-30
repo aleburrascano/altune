@@ -234,6 +234,11 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
 		return ErrSchedulerShutdown
 	}
+	if s.paused.Load() {
+		s.rejected.Add(1)
+		slog.WarnContext(ctx, "acquisition.schedule_while_paused", "track_id", trackId.String())
+		return ErrAcquisitionPaused
+	}
 
 	key := trackId.String()
 	alreadyTracked := s.pending.track(key)
