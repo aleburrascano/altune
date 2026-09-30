@@ -352,6 +352,7 @@ describe.each(['ios', 'web'] as const)(
         exchangeCodeForSession: jest.fn(),
         setSession: jest.fn(),
         verifyOtp: jest.fn(),
+        getSession: jest.fn(),
       };
       const result = await completeAuthIntent(
         parseAuthLink('altune://auth/callback#access_token=x&refresh_token=y'),

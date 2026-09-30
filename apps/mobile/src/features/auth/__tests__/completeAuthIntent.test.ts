@@ -8,6 +8,7 @@ describe('the outcome it reports', () => {
     exchangeCodeForSession: jest.fn(),
     setSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
 
   const router = { replace: jest.fn() };
@@ -19,6 +20,7 @@ describe('the outcome it reports', () => {
       data: { user: { id: 'user-a' }, session: {} },
       error: null,
     });
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
     _resetConsumedCredentialForTest();
   });
@@ -201,6 +203,7 @@ describe('PKCE-only credential exchange', () => {
     exchangeCodeForSession: jest.fn(),
     setSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
 
   const router = { replace: jest.fn() };
@@ -209,6 +212,7 @@ describe('PKCE-only credential exchange', () => {
     auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.verifyOtp.mockReset().mockResolvedValue(VERIFIED);
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
     clearRecoveryUnlock();
     _resetConsumedCredentialForTest();
@@ -295,6 +299,7 @@ describe('binding the OTP type to the link path', () => {
     exchangeCodeForSession: jest.fn(),
     setSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
 
   const router = { replace: jest.fn() };
@@ -303,6 +308,7 @@ describe('binding the OTP type to the link path', () => {
     auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.verifyOtp.mockReset().mockResolvedValue(VERIFIED);
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
     clearRecoveryUnlock();
     _resetConsumedCredentialForTest();
@@ -395,6 +401,7 @@ describe('unlocking the reset-password screen', () => {
     exchangeCodeForSession: jest.fn(),
     setSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
 
   const router = { replace: jest.fn() };
@@ -403,6 +410,7 @@ describe('unlocking the reset-password screen', () => {
     auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.verifyOtp.mockReset().mockResolvedValue(verified(VERIFIED_USER));
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockReset();
     clearRecoveryUnlock();
     _resetConsumedCredentialForTest();
@@ -489,6 +497,7 @@ describe('spending a one-time credential once', () => {
     exchangeCodeForSession: jest.fn(),
     setSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
 
   const router = { replace: jest.fn() };
@@ -497,6 +506,7 @@ describe('spending a one-time credential once', () => {
     auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockClear();
     _resetConsumedCredentialForTest();
   });
@@ -604,6 +614,7 @@ describe('a verification that outlives the auth deadline', () => {
   const auth = {
     exchangeCodeForSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
   const router = { replace: jest.fn() };
   const url = 'altune://auth/recovery?token_hash=slow-recovery&type=recovery';
@@ -622,6 +633,7 @@ describe('a verification that outlives the auth deadline', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     auth.verifyOtp.mockReset();
     router.replace.mockReset();
     _resetConsumedCredentialForTest();
@@ -680,6 +692,7 @@ describe('an exchange that never settles', () => {
   const auth = {
     exchangeCodeForSession: jest.fn(),
     verifyOtp: jest.fn(),
+    getSession: jest.fn(),
   };
 
   const router = { replace: jest.fn() };
@@ -692,6 +705,7 @@ describe('an exchange that never settles', () => {
     jest.useFakeTimers();
     auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
     auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
+    auth.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null });
     router.replace.mockClear();
     _resetConsumedCredentialForTest();
   });
@@ -751,5 +765,88 @@ describe('an exchange that never settles', () => {
       expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
       expect(router.replace).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('refusing to swap a signed-in session', () => {
+  const auth = {
+    exchangeCodeForSession: jest.fn(),
+    verifyOtp: jest.fn(),
+    getSession: jest.fn(),
+  };
+  const router = { replace: jest.fn() };
+  const SIGNED_IN = { data: { session: { user: { id: 'victim' } } }, error: null };
+  const SIGNED_OUT = { data: { session: null }, error: null };
+
+  beforeEach(() => {
+    auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
+    auth.verifyOtp
+      .mockReset()
+      .mockResolvedValue({ data: { user: { id: 'attacker' }, session: {} }, error: null });
+    auth.getSession.mockReset().mockResolvedValue(SIGNED_OUT);
+    router.replace.mockReset();
+    clearRecoveryUnlock();
+    _resetConsumedCredentialForTest();
+  });
+
+  it.each([
+    ['recovery', 'altune://auth/recovery?token_hash=t-1&type=recovery'],
+    ['confirm', 'altune://auth/confirm?token_hash=t-2&type=signup'],
+  ])('refuses a %s link while a session exists', async (_kind, url) => {
+    auth.getSession.mockResolvedValue(SIGNED_IN);
+
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(result).toEqual({ kind: 'failure', cause: 'session_already_active' });
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(isRecoveryUnlocked('attacker')).toBe(false);
+  });
+
+  it('spends a recovery link as before when no session exists', async () => {
+    const url = 'altune://auth/recovery?token_hash=t-3&type=recovery';
+
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(result).toEqual({ kind: 'success' });
+    expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith('/reset-password');
+  });
+
+  it('spends a confirm link as before when no session exists', async () => {
+    const url = 'altune://auth/confirm?token_hash=t-4&type=signup';
+
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(result).toEqual({ kind: 'success' });
+    expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('still exchanges an OAuth code while a session exists', async () => {
+    auth.getSession.mockResolvedValue(SIGNED_IN);
+
+    const result = await completeAuthIntent(
+      parseAuthLink('altune://auth/callback?code=c-1'),
+      router,
+      auth,
+    );
+
+    expect(result).toEqual({ kind: 'success' });
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledWith('c-1');
+  });
+
+  it('does not spend the link and resolves as a failure when getSession rejects', async () => {
+    auth.getSession.mockRejectedValue(new Error('storage offline'));
+    const url = 'altune://auth/recovery?token_hash=t-5&type=recovery';
+
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(result).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'Error', message: 'storage offline' },
+    });
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Navigator } from '@shared/navigation';
 
 import { withAuthDeadline } from './authDeadline';
-import { type SupabaseErrorDetail, supabaseErrorDetail } from './errorDetail';
+import { type SupabaseErrorDetail, supabaseErrorDetail, thrownErrorDetail } from './errorDetail';
 import {
   type AuthLinkIntent,
   type AuthLinkParams,
@@ -11,11 +11,15 @@ import {
 import { markRecoveryUnlocked } from './recoveryUnlock';
 import type { SupabaseAuthErrorLike } from './supabaseAuthError';
 
-type AuthClient = Pick<SupabaseClient['auth'], 'exchangeCodeForSession' | 'verifyOtp'>;
+type AuthClient = Pick<
+  SupabaseClient['auth'],
+  'exchangeCodeForSession' | 'verifyOtp' | 'getSession'
+>;
 
 export type AuthFailureCause =
   | 'gotrue_rejected'
   | 'no_spendable_credential'
+  | 'session_already_active'
   | 'otp_type_not_allowed_for_path'
   | 'verification_named_no_user'
   | 'unhandled_intent_kind';
@@ -103,11 +107,31 @@ async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<
   return error ? rejectedByGoTrue(error) : { kind: 'success' };
 }
 
+async function sessionRefusal(auth: AuthClient): Promise<AuthIntentFailure | null> {
+  const { data: sessionResult, error } = await auth.getSession();
+  if (error) {
+    return rejectedByGoTrue(error);
+  }
+  return sessionResult.session ? refused('session_already_active') : null;
+}
+
+async function refusalWhileSignedIn(auth: AuthClient): Promise<AuthIntentFailure | null> {
+  try {
+    return await sessionRefusal(auth);
+  } catch (thrown) {
+    return { kind: 'failure', cause: 'gotrue_rejected', error: thrownErrorDetail(thrown) };
+  }
+}
+
 async function completeRecovery(
   params: AuthLinkParams,
   router: AuthRouter,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
+  const signedIn = await refusalWhileSignedIn(auth);
+  if (signedIn) {
+    return signedIn;
+  }
   const verified = await verifyRecoveryOrConfirm('recovery', params, auth);
   return verified.kind === 'failure'
     ? verified
@@ -115,6 +139,10 @@ async function completeRecovery(
 }
 
 async function confirmSignUp(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
+  const signedIn = await refusalWhileSignedIn(auth);
+  if (signedIn) {
+    return signedIn;
+  }
   const verified = await verifyRecoveryOrConfirm('confirm', params, auth);
   return verified.kind === 'failure' ? verified : { kind: 'success' };
 }

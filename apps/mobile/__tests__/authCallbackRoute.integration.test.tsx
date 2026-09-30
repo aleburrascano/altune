@@ -167,6 +167,10 @@ describe('the deep-link bridge survives AuthGate redirecting away mid-exchange (
     );
     (supabase.auth.verifyOtp as jest.Mock).mockImplementation(async () => {
       signedIn();
+      const session = { access_token: 'tok', user: { id: 'user-1' } };
+      for (const [handler] of (supabase.auth.onAuthStateChange as jest.Mock).mock.calls) {
+        handler('SIGNED_IN', session);
+      }
       return { data: { user: { id: 'user-1' } }, error: null };
     });
 

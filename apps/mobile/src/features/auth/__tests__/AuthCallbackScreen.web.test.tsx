@@ -204,9 +204,11 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
     auth.verifyOtp = jest
       .fn()
       .mockResolvedValue({ data: { session: {}, user: { id: 'user-1' } }, error: null });
+    auth.getSession = jest.fn().mockResolvedValue({ data: { session: null }, error: null });
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(auth, 'getSession');
     Reflect.deleteProperty(auth, 'exchangeCodeForSession');
     Reflect.deleteProperty(auth, 'verifyOtp');
   });
