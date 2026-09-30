@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	observeAlert "altune/go-api/internal/observe/alert"
 	observeHandler "altune/go-api/internal/observe/handler"
+	playbackPorts "altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/config"
 )
 
@@ -280,4 +282,21 @@ func TestStartAlertMonitor_NotifierFollowsWebhookConfig(t *testing.T) {
 			t.Fatalf("log-only notice is not a Warn: %s", buf.String())
 		}
 	})
+}
+
+func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *testing.T) {
+	ctx := context.Background()
+	a := &App{}
+	name := jobDeletedIdentityErasure
+	jc := a.job(name)
+	cond := buildJobCondition(name, jc)
+	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playbackPorts.ErrIdentityStoreUnavailable)
+
+	for range jobFailureEscalation {
+		jc.record(sweepErr)
+	}
+
+	if got := cond.Eval(ctx); got == nil {
+		t.Fatal("unreadable identity store for consecutive runs produced no alert")
+	}
 }

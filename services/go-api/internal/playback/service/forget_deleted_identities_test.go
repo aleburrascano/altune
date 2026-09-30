@@ -122,8 +122,8 @@ func TestForgetDeletedIdentities_UnreadableIdentityStoreErasesNothing(t *testing
 	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
 
 	forgotten, err := newSweep(repo, identities).Execute(context.Background())
-	if err != nil {
-		t.Fatalf("an identity store this deployment cannot read is not a sweep failure: %v", err)
+	if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
 	}
 
 	if forgotten != 0 {
@@ -218,8 +218,8 @@ func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 	spy := &sweepMetricsSpy{}
 	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
 
-	if _, err := svc.Execute(context.Background()); err != nil {
-		t.Fatalf("Execute: %v", err)
+	if _, err := svc.Execute(context.Background()); !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
 	}
 
 	if spy.idle != 1 || spy.erased != 0 {
@@ -241,5 +241,22 @@ func TestForgetDeletedIdentities_ErasedAccountsAreCounted(t *testing.T) {
 
 	if spy.erased != 1 || spy.idle != 0 {
 		t.Errorf("idle=%d erased=%d, want 0 and 1", spy.idle, spy.erased)
+	}
+}
+
+func TestForgetDeletedIdentities_UnreadableIdentityStoreFailsTheRun(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	spy := &sweepMetricsSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
+
+	forgotten, err := svc.Execute(context.Background())
+
+	if !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
+	}
+	if forgotten != 0 || spy.idle != 1 {
+		t.Errorf("forgotten=%d idle=%d, want 0 and 1", forgotten, spy.idle)
 	}
 }

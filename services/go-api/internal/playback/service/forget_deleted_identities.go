@@ -36,7 +36,7 @@ func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, erro
 	if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
 		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
 		s.metrics.SweepIdle()
-		return 0, nil
+		return 0, fmt.Errorf("deleted identity sweep idle: %w", ports.ErrIdentityStoreUnavailable)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("list deleted identities: %w", err)
