@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
@@ -43,7 +44,25 @@ func (c *Config) validate() error {
 	if err := c.validateAlerting(); err != nil {
 		return err
 	}
+	if err := c.validateBehavioralCorpusPath(); err != nil {
+		return err
+	}
 	return c.validateRedis()
+}
+
+func (c *Config) validateBehavioralCorpusPath() error {
+	if c.BehavioralCorpusPath == "" {
+		return nil
+	}
+	dir := filepath.Dir(c.BehavioralCorpusPath)
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent directory is unusable: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent %q is not a directory", dir)
+	}
+	return nil
 }
 
 func (c *Config) validateAlerting() error {

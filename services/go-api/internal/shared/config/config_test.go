@@ -390,6 +390,40 @@ func TestLoad_YtDLPCookieFile(t *testing.T) {
 	}
 }
 
+func TestLoad_BehavioralCorpusPath(t *testing.T) {
+	dir := t.TempDir()
+	file := dir + "/plain-file"
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{"empty accepted", "", false},
+		{"file in writable dir accepted", dir + "/corpus.json", false},
+		{"missing parent rejected", dir + "/absent/corpus.json", true},
+		{"parent is a file rejected", file + "/corpus.json", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": tt.path}))
+
+			_, err := Load()
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("Load: unexpected error %v", err)
+				}
+				return
+			}
+			if err == nil || !searchString(err.Error(), "BEHAVIORAL_CORPUS_PATH") {
+				t.Fatalf("Load error = %v, want it to name BEHAVIORAL_CORPUS_PATH", err)
+			}
+		})
+	}
+}
+
 func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	cfg, err := Load()
