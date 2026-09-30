@@ -39,7 +39,7 @@ func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 
 	a := &App{searchSvc: svc}
 
-	inFlight := a.drainSearchBackground(50 * time.Millisecond)
+	inFlight := a.shutdownComponent(discoverySearchComponent, 50*time.Millisecond, a.waitSearchBackground)
 	if inFlight.completed {
 		t.Fatal("drain reported completed=true while search background work was still in flight")
 	}
@@ -50,14 +50,15 @@ func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 	close(store.release)
 	cancel()
 
-	drained := a.drainSearchBackground(2 * time.Second)
+	drained := a.shutdownComponent(discoverySearchComponent, 2*time.Second, a.waitSearchBackground)
 	if !drained.completed {
 		t.Fatal("drain reported completed=false after search background work finished")
 	}
 }
 
 func TestDrainSearchBackground_NilServiceIsClean(t *testing.T) {
-	clean := (&App{}).drainSearchBackground(time.Second)
+	a := &App{}
+	clean := a.shutdownComponent(discoverySearchComponent, time.Second, a.waitSearchBackground)
 	if !clean.completed {
 		t.Fatal("drain with no search service reported completed=false")
 	}
@@ -93,16 +94,16 @@ func TestShutdownComponent_TimeoutSurfacedDistinctly(t *testing.T) {
 }
 
 func TestDrainBackground_TimeoutVsClean(t *testing.T) {
-	clean := (&App{}).drainBackground(time.Second)
+	a := &App{}
+	clean := a.shutdownComponent(backgroundTasksComponent, time.Second, a.waitBackground)
 	if !clean.completed {
 		t.Fatal("drain with no outstanding work reported completed=false")
 	}
 
-	a := &App{}
 	a.wg.Add(1)
 	defer a.wg.Done()
 
-	timedOut := a.drainBackground(20 * time.Millisecond)
+	timedOut := a.shutdownComponent(backgroundTasksComponent, 20*time.Millisecond, a.waitBackground)
 	if timedOut.completed {
 		t.Fatal("drain that timed out with work still running reported completed=true")
 	}
@@ -198,7 +199,7 @@ func TestDrains_LogSharedBudgetWarning(t *testing.T) {
 	a := &App{}
 	a.wg.Add(1)
 	defer a.wg.Done()
-	a.drainBackground(10 * time.Millisecond)
+	a.shutdownComponent(backgroundTasksComponent, 10*time.Millisecond, a.waitBackground)
 
 	logged := buf.String()
 	if !strings.Contains(logged, "component shutdown exceeded its budget") ||

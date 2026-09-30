@@ -126,14 +126,6 @@ func (a *App) runPlannedShutdown(c componentShutdown, completed map[string]bool)
 	return a.shutdownComponent(c.name, c.timeout, c.shutdown)
 }
 
-func (a *App) drainBackground(timeout time.Duration) shutdownOutcome {
-	return a.shutdownComponent(backgroundTasksComponent, timeout, a.waitBackground)
-}
-
-func (a *App) drainSearchBackground(timeout time.Duration) shutdownOutcome {
-	return a.shutdownComponent(discoverySearchComponent, timeout, a.waitSearchBackground)
-}
-
 func (a *App) waitBackground(context.Context) { a.wg.Wait() }
 
 func (a *App) waitSearchBackground(context.Context) {
