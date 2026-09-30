@@ -24,59 +24,110 @@ function messageAndStackOf(error: unknown): { message: string; stack: string | u
   return { message: String(error), stack: undefined };
 }
 
-type SeenError = { windowStart: number; suppressed: number };
+type ClientErrorPayload = Record<string, unknown>;
+
+type SeenError = {
+  windowStart: number;
+  suppressed: number;
+  payload: ClientErrorPayload;
+  flushTimer: ReturnType<typeof setTimeout> | undefined;
+};
 
 const seenErrors = new Map<string, SeenError>();
 
 function dedupeKey(source: ClientErrorSource, message: string, stack: string | undefined): string {
-  return [source, message, (stack ?? '').slice(0, DEDUPE_STACK_HEAD_LENGTH)].join('\n');
+  return [
+    source,
+    trimmed(message, MAX_MESSAGE_LENGTH),
+    (stack ?? '').slice(0, DEDUPE_STACK_HEAD_LENGTH),
+  ].join('\n');
+}
+
+function enqueueReport(payload: ClientErrorPayload, suppressedRepeats: number): void {
+  const withCount =
+    suppressedRepeats > 0 ? { ...payload, suppressed_repeats: suppressedRepeats } : payload;
+  void enqueueCritical({ type: 'client_error', payload: withCount });
+}
+
+function forgetError(key: string, seen: SeenError): void {
+  clearTimeout(seen.flushTimer);
+  seenErrors.delete(key);
+}
+
+function flushSuppressedRepeats(key: string, seen: SeenError): void {
+  forgetError(key, seen);
+  if (seen.suppressed > 0) enqueueReport(seen.payload, seen.suppressed);
+}
+
+function isInsideWindow(seen: SeenError, now: number): boolean {
+  const elapsed = now - seen.windowStart;
+  return elapsed >= 0 && elapsed < DEDUPE_WINDOW_MS;
 }
 
 function forgetExpiredErrors(now: number): void {
   for (const [key, seen] of seenErrors) {
-    if (now - seen.windowStart >= DEDUPE_WINDOW_MS) seenErrors.delete(key);
+    if (!isInsideWindow(seen, now)) flushSuppressedRepeats(key, seen);
   }
+}
+
+function evictOneToMakeRoom(): void {
   if (seenErrors.size < MAX_TRACKED_ERRORS) return;
-  const oldest = seenErrors.keys().next();
-  if (!oldest.done) seenErrors.delete(oldest.value);
+  const entries = [...seenErrors];
+  const [key, seen] =
+    entries.find(([, candidate]) => candidate.suppressed === 0) ?? entries[0] ?? [];
+  if (key !== undefined && seen !== undefined) flushSuppressedRepeats(key, seen);
 }
 
-function isInsideWindow(seen: SeenError | undefined, now: number): boolean {
-  return seen !== undefined && now - seen.windowStart < DEDUPE_WINDOW_MS;
+function flushWhenWindowEnds(key: string, seen: SeenError, now: number): void {
+  if (seen.flushTimer !== undefined) return;
+  const remaining = seen.windowStart + DEDUPE_WINDOW_MS - now;
+  seen.flushTimer = setTimeout(() => flushSuppressedRepeats(key, seen), remaining);
 }
 
-function suppressedRepeatsBefore(key: string, now: number): number | undefined {
-  const seen = seenErrors.get(key);
-  if (seen !== undefined && isInsideWindow(seen, now)) {
-    seen.suppressed += 1;
-    return undefined;
-  }
-  forgetExpiredErrors(now);
-  seenErrors.set(key, { windowStart: now, suppressed: 0 });
+function countSuppressedRepeat(key: string, seen: SeenError, now: number): void {
+  seen.suppressed += 1;
+  flushWhenWindowEnds(key, seen, now);
+}
+
+type Occurrence = { key: string; now: number; payload: ClientErrorPayload };
+
+function startWindow({ key, now, payload }: Occurrence): void {
+  seenErrors.set(key, { windowStart: now, suppressed: 0, payload, flushTimer: undefined });
+}
+
+function reopenWindow(seen: SeenError | undefined, occurrence: Occurrence): number {
+  if (seen !== undefined) forgetError(occurrence.key, seen);
+  forgetExpiredErrors(occurrence.now);
+  if (seen === undefined) evictOneToMakeRoom();
+  startWindow(occurrence);
   return seen?.suppressed ?? 0;
 }
 
-function optionalPayloadFields(
-  stack: string | undefined,
-  suppressedRepeats: number,
-): Record<string, unknown> {
-  return {
-    ...(stack === undefined ? {} : { stack: trimmed(stack, MAX_STACK_LENGTH) }),
-    ...(suppressedRepeats > 0 && { suppressed_repeats: suppressedRepeats }),
-  };
+function suppressedRepeatsBefore(occurrence: Occurrence): number | undefined {
+  const seen = seenErrors.get(occurrence.key);
+  if (seen === undefined || !isInsideWindow(seen, occurrence.now)) {
+    return reopenWindow(seen, occurrence);
+  }
+  countSuppressedRepeat(occurrence.key, seen, occurrence.now);
+  return undefined;
+}
+
+function optionalPayloadFields(stack: string | undefined): ClientErrorPayload {
+  return stack === undefined ? {} : { stack: trimmed(stack, MAX_STACK_LENGTH) };
 }
 
 export function reportClientError(error: unknown, source: ClientErrorSource): void {
   const { message, stack } = messageAndStackOf(error);
-  const suppressedRepeats = suppressedRepeatsBefore(dedupeKey(source, message, stack), Date.now());
-  if (suppressedRepeats === undefined) return;
   const payload = {
     source,
     message: trimmed(message, MAX_MESSAGE_LENGTH),
     app_version: appVersion(),
-    ...optionalPayloadFields(stack, suppressedRepeats),
+    ...optionalPayloadFields(stack),
   };
-  void enqueueCritical({ type: 'client_error', payload });
+  const key = dedupeKey(source, message, stack);
+  const suppressedRepeats = suppressedRepeatsBefore({ key, now: Date.now(), payload });
+  if (suppressedRepeats === undefined) return;
+  enqueueReport(payload, suppressedRepeats);
 }
 
 let installed = false;
@@ -121,5 +172,6 @@ export function installGlobalErrorReporting(): void {
 
 export function _resetGlobalErrorReportingForTest(): void {
   installed = false;
+  seenErrors.forEach((seen) => clearTimeout(seen.flushTimer));
   seenErrors.clear();
 }

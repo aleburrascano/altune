@@ -54,6 +54,10 @@ beforeEach(() => {
   _resetGlobalErrorReportingForTest();
 });
 
+afterAll(() => {
+  _resetGlobalErrorReportingForTest();
+});
+
 afterEach(() => {
   delete globalWithHermes.HermesInternal;
   globalWithHermes.__DEV__ = devMode;
@@ -152,6 +156,73 @@ describe('reportClientError dedupe', () => {
     for (let i = 0; i < 120; i += 1) reportClientError(new Error(`distinct ${i}`), 'boundary');
 
     expect(enqueueCriticalMock).toHaveBeenCalledTimes(120);
+  });
+
+  it('reports again when the clock is moved backwards', () => {
+    const error = new Error('render loop');
+    reportClientError(error, 'boundary');
+    now -= 3_600_000;
+    reportClientError(error, 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('delivers the count of a burst that stops inside the window when the window ends', () => {
+    jest.useFakeTimers({ doNotFake: ['Date'] });
+    const error = new Error('render loop');
+    for (let i = 0; i < 4; i += 1) reportClientError(error, 'boundary');
+    enqueueCriticalMock.mockClear();
+
+    now += WINDOW_MS;
+    jest.advanceTimersByTime(WINDOW_MS);
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+    expect(lastPayload()['suppressed_repeats']).toBe(3);
+    jest.useRealTimers();
+  });
+
+  it('does not report a burst count twice', () => {
+    jest.useFakeTimers({ doNotFake: ['Date'] });
+    const error = new Error('render loop');
+    for (let i = 0; i < 4; i += 1) reportClientError(error, 'boundary');
+    now += WINDOW_MS;
+    reportClientError(error, 'boundary');
+    enqueueCriticalMock.mockClear();
+
+    jest.advanceTimersByTime(WINDOW_MS);
+
+    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
+  it('keeps the hot repeating error suppressed while distinct errors fill the cap', () => {
+    const hot = new Error('hot');
+    reportClientError(hot, 'boundary');
+    reportClientError(hot, 'boundary');
+    for (let i = 0; i < 120; i += 1) reportClientError(new Error(`distinct ${i}`), 'boundary');
+    enqueueCriticalMock.mockClear();
+
+    reportClientError(hot, 'boundary');
+
+    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+  });
+
+  it('treats messages that differ only past the size cap as the same error', () => {
+    reportClientError(new Error(`${'x'.repeat(600)}a`), 'boundary');
+    reportClientError(new Error(`${'x'.repeat(600)}b`), 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells apart errors that differ only in their stack head', () => {
+    const first = new Error('same');
+    first.stack = 'Error: same\n    at first (a.js:1:1)';
+    const second = new Error('same');
+    second.stack = 'Error: same\n    at second (b.js:2:2)';
+    reportClientError(first, 'boundary');
+    reportClientError(second, 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
   });
 });
 
