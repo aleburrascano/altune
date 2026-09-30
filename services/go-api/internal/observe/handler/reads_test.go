@@ -306,3 +306,33 @@ func TestReadsRoutes_NoPostRoute(t *testing.T) {
 		}
 	}
 }
+
+func TestReadsAcquisition_StripsCredentialsAndQueryFromSourceURL(t *testing.T) {
+	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	job := acqPorts.JobRecord{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
+	malformed := acqPorts.JobRecord{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
+	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
+		ActiveJobs: []acqPorts.JobRecord{job},
+		Recent:     []acqPorts.JobRecord{job, malformed},
+	}}
+
+	rec := serveRead(t, Deps{Acquisition: reader}, "/acquisition")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var got acquisitionStatusDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	const want = "https://host.example/a/b"
+	if got.ActiveJobs[0].SourceURL != want || got.Recent[0].SourceURL != want {
+		t.Errorf("source_url = %q / %q, want %q in jobs and recent", got.ActiveJobs[0].SourceURL, got.Recent[0].SourceURL, want)
+	}
+	if got.Recent[1].SourceURL != "" {
+		t.Errorf("malformed source_url = %q, want empty", got.Recent[1].SourceURL)
+	}
+	if strings.Contains(rec.Body.String(), "token") || strings.Contains(rec.Body.String(), "u:p") {
+		t.Errorf("body leaks credentials: %s", rec.Body.String())
+	}
+}

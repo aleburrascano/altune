@@ -4,6 +4,7 @@ import (
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -72,7 +73,7 @@ func newJobRecordDTOs(jobs []acqPorts.JobRecord) []jobRecordDTO {
 			Title:          j.Title,
 			Artist:         j.Artist,
 			Album:          j.Album,
-			SourceURL:      j.SourceURL,
+			SourceURL:      redactSourceURL(j.SourceURL),
 			ResolvedSource: j.ResolvedSource,
 			State:          j.State,
 			Stage:          j.Stage,
@@ -83,6 +84,14 @@ func newJobRecordDTOs(jobs []acqPorts.JobRecord) []jobRecordDTO {
 		}
 	}
 	return out
+}
+
+func redactSourceURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
 }
 
 func (h *Handler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
