@@ -21,6 +21,9 @@ func (c *Config) validate() error {
 	if err := c.validateTuning(); err != nil {
 		return err
 	}
+	if err := c.validateSilentDefaults(); err != nil {
+		return err
+	}
 	if err := c.validateCORSOrigins(); err != nil {
 		return err
 	}
@@ -123,6 +126,30 @@ func (c *Config) validateTuning() error {
 	}
 	if !isUnitFraction(c.AcquisitionConfidenceFloor) {
 		return fmt.Errorf("ACQUISITION_CONFIDENCE_FLOOR must be between 0 and 1, got %v", c.AcquisitionConfidenceFloor)
+	}
+	return nil
+}
+
+var knownLogLevels = map[string]bool{"DEBUG": true, "INFO": true, "WARN": true, "WARNING": true, "ERROR": true}
+
+func (c *Config) validateSilentDefaults() error {
+	for _, p := range []struct {
+		name  string
+		value int
+	}{
+		{"DB_POOL_MAX_CONNS", c.DBPoolMaxConns},
+		{"SSE_MAX_CONNS", c.SSEMaxConns},
+		{"REDIS_POOL_SIZE", c.RedisPoolSize},
+	} {
+		if p.value < 1 {
+			return fmt.Errorf("%s must be >= 1, got %d", p.name, p.value)
+		}
+	}
+	if !knownLogLevels[strings.ToUpper(c.LogLevel)] {
+		return fmt.Errorf("LOG_LEVEL must be one of DEBUG, INFO, WARN, WARNING, ERROR, got %q", c.LogLevel)
+	}
+	if c.ProviderReplayOptIn && c.ProviderReplayDir == "" {
+		return errors.New("PROVIDER_REPLAY_DIR must be set when PROVIDER_REPLAY_ENABLED=true")
 	}
 	return nil
 }

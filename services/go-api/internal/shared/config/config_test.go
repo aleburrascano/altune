@@ -1456,3 +1456,57 @@ func TestLoad_ProductionOCIEndpointRejectsPlaintext(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_SilentDefaultSettingsRejected(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		wantVar string
+	}{
+		{"db pool zero", map[string]string{"DB_POOL_MAX_CONNS": "0"}, "DB_POOL_MAX_CONNS"},
+		{"db pool negative", map[string]string{"DB_POOL_MAX_CONNS": "-3"}, "DB_POOL_MAX_CONNS"},
+		{"sse zero", map[string]string{"SSE_MAX_CONNS": "0"}, "SSE_MAX_CONNS"},
+		{"sse negative", map[string]string{"SSE_MAX_CONNS": "-1"}, "SSE_MAX_CONNS"},
+		{"redis pool zero", map[string]string{"REDIS_POOL_SIZE": "0"}, "REDIS_POOL_SIZE"},
+		{"redis pool negative", map[string]string{"REDIS_POOL_SIZE": "-1"}, "REDIS_POOL_SIZE"},
+		{"log level typo", map[string]string{"LOG_LEVEL": "DEBGU"}, "LOG_LEVEL"},
+		{"replay without dir", map[string]string{"PROVIDER_REPLAY_ENABLED": "true", "PROVIDER_REPLAY_DIR": ""}, "PROVIDER_REPLAY_DIR"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := feedbackBaseEnv()
+			for k, v := range tc.env {
+				env[k] = v
+			}
+			setEnv(t, env)
+			t.Setenv("PROVIDER_REPLAY_DIR", tc.env["PROVIDER_REPLAY_DIR"])
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), tc.wantVar) {
+				t.Fatalf("Load() error = %v, want it to name %s", err, tc.wantVar)
+			}
+		})
+	}
+}
+
+func TestLoad_SilentDefaultSettingsAccepted(t *testing.T) {
+	for _, level := range []string{"debug", "INFO", "Warn", "WARNING", "error"} {
+		t.Run(level, func(t *testing.T) {
+			env := feedbackBaseEnv()
+			env["LOG_LEVEL"] = level
+			setEnv(t, env)
+			if _, err := Load(); err != nil {
+				t.Fatalf("Load() with LOG_LEVEL=%s: %v", level, err)
+			}
+		})
+	}
+	t.Run("replay with dir", func(t *testing.T) {
+		env := feedbackBaseEnv()
+		env["PROVIDER_REPLAY_ENABLED"] = "true"
+		env["PROVIDER_REPLAY_DIR"] = "/tmp/replay"
+		setEnv(t, env)
+		if _, err := Load(); err != nil {
+			t.Fatalf("Load(): %v", err)
+		}
+	})
+}
