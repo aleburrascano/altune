@@ -397,7 +397,7 @@ func TestRunTicker_KillSwitchStopsAndResumesJob(t *testing.T) {
 
 func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
 	a := &App{}
-	a.startTicker(context.Background(), "rollup", time.Hour, func(context.Context) error { return nil })
+	a.startTicker("rollup", time.Hour, func(context.Context) error { return nil })
 	findJobHealth(t, a.JobHealth(), "rollup")
 	if _, ok := a.SetJobEnabled("rollup", false); !ok {
 		t.Fatal("registered but not-yet-leading job was reported unknown")

@@ -91,7 +91,7 @@ func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 	}
 	for name, wire := range want {
 		a := &App{}
-		a.startTicker(context.Background(), name, time.Hour, func(context.Context) error { return nil })
+		a.startTicker(name, time.Hour, func(context.Context) error { return nil })
 		st, ok := a.SetJobEnabled(jobName(wire), false)
 		if !ok {
 			t.Fatalf("job %q not addressable by wire name %q", name, wire)

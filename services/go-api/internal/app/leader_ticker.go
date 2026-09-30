@@ -61,7 +61,7 @@ func (a *App) startBackgroundWhenLeader(ctx context.Context) {
 	}()
 }
 
-func (a *App) startTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
+func (a *App) startTicker(name jobName, interval time.Duration, fn func(context.Context) error) {
 	a.job(name)
 	a.whenLeader(name, func(ctx context.Context) { a.runTicker(ctx, name, interval, fn) })
 }

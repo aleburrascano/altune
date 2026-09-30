@@ -24,7 +24,7 @@ func (a *App) startSourceCanary(ctx context.Context, searcher *ytdlp.YtDlpAudioS
 		return
 	}
 	probe := sourceCanaryProbe(searcher)
-	a.startSimpleJob(ctx, jobAcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobAcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
 		return runSourceCanaries(ctx, probe, canaries)
 	}, "interval", sourceCanaryInterval.String())
 }

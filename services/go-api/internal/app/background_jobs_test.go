@@ -197,7 +197,7 @@ func runFailingSimpleJobOn(t *testing.T, a *App, tc simpleJobLogCase) {
 	defer cancel()
 
 	ran := make(chan struct{}, 1)
-	a.startSimpleJob(ctx, tc.name, time.Millisecond, func(context.Context) error {
+	a.startSimpleJob(tc.name, time.Millisecond, func(context.Context) error {
 		select {
 		case ran <- struct{}{}:
 		default:
