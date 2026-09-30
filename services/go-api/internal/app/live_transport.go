@@ -25,6 +25,14 @@ var providerRateLimits = map[string]rate.Limit{
 	"api-v2.soundcloud.com":      3,
 	"na.web.skill.music.a2z.com": 2,
 	"api-partner.spotify.com":    3,
+	"api.genius.com":             2,
+	"webservice.fanart.tv":       2,
+	"coverartarchive.org":        2,
+	"api.music.apple.com":        3,
+	"open.spotify.com":           3,
+	"auth.deezer.com":            1,
+	"pipe.deezer.com":            3,
+	"theaudiodb.com":             0.5,
 }
 
 const defaultProviderBurst = 4

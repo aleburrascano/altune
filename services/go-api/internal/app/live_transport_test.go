@@ -320,3 +320,56 @@ func TestLiveTransport_MusicBrainzAllowsNoBurst(t *testing.T) {
 		t.Errorf("deezer burst = %d, want %d", got, defaultProviderBurst)
 	}
 }
+
+var wiredProviderHosts = []string{
+	"musicbrainz.org",
+	"itunes.apple.com",
+	"ws.audioscrobbler.com",
+	"music.youtube.com",
+	"api.discogs.com",
+	"api.deezer.com",
+	"api-v2.soundcloud.com",
+	"na.web.skill.music.a2z.com",
+	"api-partner.spotify.com",
+	"api.genius.com",
+	"webservice.fanart.tv",
+	"coverartarchive.org",
+	"api.music.apple.com",
+	"open.spotify.com",
+	"auth.deezer.com",
+	"pipe.deezer.com",
+	"theaudiodb.com",
+}
+
+func TestLiveTransport_EveryWiredProviderHostHasLimiter(t *testing.T) {
+	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
+	for _, h := range wiredProviderHosts {
+		if lt.limiter(h) == nil {
+			t.Errorf("wired provider host %q has no rate limit", h)
+		}
+	}
+}
+
+func TestLiveTransport_PacedHostRetries429ThenSucceeds(t *testing.T) {
+	for _, h := range wiredProviderHosts[9:] {
+		t.Run(h, func(t *testing.T) {
+			rt := &fakeRT{steps: []fakeStep{{status: 429}, {status: 200}}}
+			lt := recordDelays(rt, &[]time.Duration{})
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://"+h+"/x", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := lt.RoundTrip(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			if resp.StatusCode != 200 || rt.calls != 2 {
+				t.Fatalf("status=%d calls=%d, want 200 after 2 calls", resp.StatusCode, rt.calls)
+			}
+			if lt.limiter(h) == nil {
+				t.Fatalf("host %q is unpaced", h)
+			}
+		})
+	}
+}
