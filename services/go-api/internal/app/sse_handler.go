@@ -96,19 +96,26 @@ func (l *connLimiter) release(key string) {
 }
 
 func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	userId, rc, ch, cancel, ok := h.setup(w, r)
+	conn, ch, cancel, ok := h.setup(w, r)
 	if !ok {
 		return
 	}
-	defer h.releaseSlot(userId)
+	defer h.releaseSlot(conn.userId)
 	defer cancel()
 
-	replayed, ok := h.replayHistory(rc, w, r, userId)
+	replayed, ok := h.replayHistory(conn, r)
 	if !ok {
 		return
 	}
 
-	h.serveLive(r, rc, w, ch, userId, replayed)
+	h.serveLive(r, conn, ch, replayed)
+}
+
+type sseConn struct {
+	rc           *http.ResponseController
+	w            http.ResponseWriter
+	userId       shared.UserId
+	writeTimeout time.Duration
 }
 
 type replayOutcome struct {
@@ -119,32 +126,32 @@ type replayOutcome struct {
 func (h *sseHandler) setup(
 	w http.ResponseWriter,
 	r *http.Request,
-) (shared.UserId, *http.ResponseController, <-chan events.Event, func(), bool) {
+) (*sseConn, <-chan events.Event, func(), bool) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
-		return shared.UserId{}, nil, nil, nil, false
+		return nil, nil, nil, false
 	}
 	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
-		return shared.UserId{}, nil, nil, nil, false
+		return nil, nil, nil, false
 	}
 	if !h.acquireSlot(w, userId) {
-		return shared.UserId{}, nil, nil, nil, false
+		return nil, nil, nil, false
 	}
 
 	httputil.ClearWriteDeadline(w)
 	setSSEHeaders(w)
-	rc := http.NewResponseController(w)
+	conn := &sseConn{rc: http.NewResponseController(w), w: w, userId: userId, writeTimeout: h.writeTimeout}
 	ch, cancel := h.bus.Subscribe(userId)
-	return userId, rc, ch, cancel, true
+	return conn, ch, cancel, true
 }
 
-func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseWriter, r *http.Request, userId shared.UserId) (replayOutcome, bool) {
+func (h *sseHandler) replayHistory(conn *sseConn, r *http.Request) (replayOutcome, bool) {
 	lastID := r.Header.Get("Last-Event-ID")
 	if lastID == "" {
 		return replayOutcome{}, true
 	}
-	replayed, err := h.resume(rc, w, userId, lastID)
+	replayed, err := h.resume(conn, lastID)
 	if err != nil {
 		return replayOutcome{}, false
 	}
@@ -153,20 +160,18 @@ func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseW
 
 func (h *sseHandler) serveLive(
 	r *http.Request,
-	rc *http.ResponseController,
-	w http.ResponseWriter,
+	conn *sseConn,
 	ch <-chan events.Event,
-	userId shared.UserId,
 	replayed replayOutcome,
 ) {
-	if err := h.writeFrame(rc, w, ":ok\n\n"); err != nil {
+	if err := conn.writeFrame(":ok\n\n"); err != nil {
 		return
 	}
-	slog.InfoContext(r.Context(), "sse.connected", "user_id", userId.String())
+	slog.InfoContext(r.Context(), "sse.connected", "user_id", conn.userId.String())
 
 	ctx, cancel := auth.UntilTokenExpiry(r.Context())
 	defer cancel()
-	h.stream(ctx, rc, w, ch, userId, replayed)
+	h.stream(ctx, conn, ch, replayed)
 }
 
 func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bool {
@@ -204,10 +209,8 @@ func (h *sseHandler) releaseSlot(userId shared.UserId) {
 
 func (h *sseHandler) stream(
 	ctx context.Context,
-	rc *http.ResponseController,
-	w http.ResponseWriter,
+	conn *sseConn,
 	ch <-chan events.Event,
-	userId shared.UserId,
 	replayed replayOutcome,
 ) {
 	interval := h.heartbeat
@@ -219,34 +222,34 @@ func (h *sseHandler) stream(
 
 	deliveredThroughID := replayed.deliveredThroughID
 	if deliveredThroughID == 0 {
-		deliveredThroughID = h.bus.LatestID(userId)
+		deliveredThroughID = h.bus.LatestID(conn.userId)
 	}
 	for {
 		select {
 		case <-ctx.Done():
-			slog.InfoContext(ctx, disconnectLogEvent(ctx), "user_id", userId.String())
+			slog.InfoContext(ctx, disconnectLogEvent(ctx), "user_id", conn.userId.String())
 			return
 		case <-h.shutdown:
-			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
+			slog.InfoContext(ctx, "sse.disconnected", "user_id", conn.userId.String())
 			return
 		case evt := <-ch:
 			if evt.ID <= replayed.dedupThroughID {
 				continue
 			}
-			if err := h.writeLiveEvent(rc, w, userId, evt, deliveredThroughID); err != nil {
+			if err := h.writeLiveEvent(conn, evt, deliveredThroughID); err != nil {
 				return
 			}
 			deliveredThroughID = evt.ID
 		case <-heartbeat.C:
-			if err := h.writeFrame(rc, w, ":ping\n\n"); err != nil {
+			if err := conn.writeFrame(":ping\n\n"); err != nil {
 				return
 			}
-			latestID := h.bus.LatestID(userId)
+			latestID := h.bus.LatestID(conn.userId)
 			if len(ch) == 0 && latestID > deliveredThroughID {
 				slog.Warn("sse.stream_gap_at_heartbeat",
-					"user_id", userId.String(), "delivered_through_id", deliveredThroughID,
+					"user_id", conn.userId.String(), "delivered_through_id", deliveredThroughID,
 					"latest_id", latestID)
-				if err := h.writeResync(rc, w); err != nil {
+				if err := conn.writeResync(); err != nil {
 					return
 				}
 				deliveredThroughID = latestID
@@ -255,37 +258,37 @@ func (h *sseHandler) stream(
 	}
 }
 
-func (h *sseHandler) writeLiveEvent(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, evt events.Event, deliveredThroughID uint64) error {
+func (h *sseHandler) writeLiveEvent(conn *sseConn, evt events.Event, deliveredThroughID uint64) error {
 	if streamGapped(deliveredThroughID, evt.ID) {
 		slog.Warn("sse.stream_gap",
-			"user_id", userId.String(), "delivered_through_id", deliveredThroughID,
+			"user_id", conn.userId.String(), "delivered_through_id", deliveredThroughID,
 			"event_id", evt.ID, "lost", evt.ID-deliveredThroughID-1)
-		if err := h.writeResync(rc, w); err != nil {
+		if err := conn.writeResync(); err != nil {
 			return err
 		}
 	}
-	return h.writeEvent(rc, w, evt)
+	return conn.writeEvent(evt)
 }
 
-func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) (replayOutcome, error) {
+func (h *sseHandler) resume(conn *sseConn, lastID string) (replayOutcome, error) {
 	id, err := strconv.ParseUint(lastID, 10, 64)
 	if err != nil {
-		return replayOutcome{}, h.writeResync(rc, w)
+		return replayOutcome{}, conn.writeResync()
 	}
-	return h.replay(rc, w, userId, id)
+	return h.replay(conn, id)
 }
 
-func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (replayOutcome, error) {
+func (h *sseHandler) replay(conn *sseConn, afterID uint64) (replayOutcome, error) {
 	if afterID > h.bus.HighestIssuedID() {
-		return h.resyncOutOfRange(rc, w, userId, afterID)
+		return h.resyncOutOfRange(conn, afterID)
 	}
-	replayed := h.bus.Replay(userId, afterID)
+	replayed := h.bus.Replay(conn.userId, afterID)
 	if replayGapped(replayed, afterID) {
-		return replayOutcome{dedupThroughID: afterID}, h.writeResync(rc, w)
+		return replayOutcome{dedupThroughID: afterID}, conn.writeResync()
 	}
 	outcome := replayOutcome{dedupThroughID: afterID, deliveredThroughID: afterID}
 	for _, evt := range replayed {
-		if err := h.writeEvent(rc, w, evt); err != nil {
+		if err := conn.writeEvent(evt); err != nil {
 			return outcome, err
 		}
 		outcome = replayOutcome{dedupThroughID: evt.ID, deliveredThroughID: evt.ID}
@@ -293,35 +296,35 @@ func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, 
 	return outcome, nil
 }
 
-func (h *sseHandler) resyncOutOfRange(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (replayOutcome, error) {
+func (h *sseHandler) resyncOutOfRange(conn *sseConn, afterID uint64) (replayOutcome, error) {
 	slog.Warn("sse.last_event_id_out_of_range",
-		"user_id", userId.String(), "after_id", afterID, "highest_issued_id", h.bus.HighestIssuedID())
-	return replayOutcome{}, h.writeResync(rc, w)
+		"user_id", conn.userId.String(), "after_id", afterID, "highest_issued_id", h.bus.HighestIssuedID())
+	return replayOutcome{}, conn.writeResync()
 }
 
-func (h *sseHandler) writeFrame(rc *http.ResponseController, w http.ResponseWriter, frame string) error {
-	if h.writeTimeout > 0 {
-		if err := rc.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+func (c *sseConn) writeFrame(frame string) error {
+	if c.writeTimeout > 0 {
+		if err := c.rc.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return err
 		}
 	}
-	if _, err := io.WriteString(w, frame); err != nil {
+	if _, err := io.WriteString(c.w, frame); err != nil {
 		return err
 	}
-	return rc.Flush()
+	return c.rc.Flush()
 }
 
-func (h *sseHandler) writeEvent(rc *http.ResponseController, w http.ResponseWriter, evt events.Event) error {
+func (c *sseConn) writeEvent(evt events.Event) error {
 	data, err := json.Marshal(evt.Payload)
 	if err != nil {
 		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
-		return h.writeResync(rc, w)
+		return c.writeResync()
 	}
-	return h.writeFrame(rc, w, fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data))
+	return c.writeFrame(fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data))
 }
 
-func (h *sseHandler) writeResync(rc *http.ResponseController, w http.ResponseWriter) error {
-	return h.writeFrame(rc, w, "event: resync\ndata: {}\n\n")
+func (c *sseConn) writeResync() error {
+	return c.writeFrame("event: resync\ndata: {}\n\n")
 }
 
 func setSSEHeaders(w http.ResponseWriter) {

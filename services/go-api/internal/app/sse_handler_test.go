@@ -952,3 +952,43 @@ func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T)
 		pings++
 	}
 }
+
+func TestSSEHandler_RequestWithoutUserIsRejected(t *testing.T) {
+	h := newSSEHandler(events.NewInProcessBus(), 0)
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got == "text/event-stream" {
+		t.Fatal("unauthenticated request received an event-stream response")
+	}
+}
+
+type nonFlushingWriter struct {
+	header http.Header
+	status int
+}
+
+func (w *nonFlushingWriter) Header() http.Header         { return w.header }
+func (w *nonFlushingWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (w *nonFlushingWriter) WriteHeader(status int)      { w.status = status }
+
+func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
+	h := newSSEHandler(events.NewInProcessBus(), 0)
+	w := &nonFlushingWriter{header: http.Header{}}
+	uid := shared.NewUserId(uuid.New())
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
+	r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+
+	h.ServeHTTP(w, r)
+
+	if w.status != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", w.status)
+	}
+	if h.limiter.total != 0 {
+		t.Fatal("rejected request held a connection slot")
+	}
+}
