@@ -21,7 +21,7 @@ func BuildBlendedSlate(page, all []domain.SearchResult) BlendedSlate {
 	}
 
 	top := page[0]
-	topKey := slateKey(top)
+	topKey := domain.SignatureOf(top)
 
 	byKind := map[domain.ResultKind][]domain.SearchResult{}
 	countByKind := map[domain.ResultKind]int{}
@@ -32,7 +32,7 @@ func BuildBlendedSlate(page, all []domain.SearchResult) BlendedSlate {
 			seen[r.Kind] = true
 			kindOrder = append(kindOrder, r.Kind)
 		}
-		if slateKey(r) == topKey {
+		if domain.SignatureOf(r) == topKey {
 			continue
 		}
 		countByKind[r.Kind]++
@@ -54,11 +54,4 @@ func BuildBlendedSlate(page, all []domain.SearchResult) BlendedSlate {
 	}
 
 	return BlendedSlate{TopResult: &top, Sections: sections}
-}
-
-func slateKey(r domain.SearchResult) string {
-	if r.Signature != "" {
-		return r.Signature
-	}
-	return domain.ResultSignature(r)
 }

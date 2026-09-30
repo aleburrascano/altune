@@ -93,3 +93,10 @@ func ResultSignature(r SearchResult) string {
 		textnorm.NormalizeForMatch(r.Title) + "|" +
 		textnorm.NormalizeForMatch(r.Subtitle)
 }
+
+func SignatureOf(r SearchResult) string {
+	if r.Signature != "" {
+		return r.Signature
+	}
+	return ResultSignature(r)
+}

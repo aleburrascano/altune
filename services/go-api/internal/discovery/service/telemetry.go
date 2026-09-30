@@ -80,7 +80,7 @@ func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup)
 	sigs := make([]string, 0, len(slate))
 	seen := make(map[string]bool, len(slate))
 	add := func(r domain.SearchResult) {
-		sig := signatureOf(r)
+		sig := domain.SignatureOf(r)
 		if seen[sig] || len(sigs) >= shownSignaturesCap {
 			return
 		}
@@ -96,13 +96,6 @@ func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup)
 		}
 	}
 	return sigs
-}
-
-func signatureOf(r domain.SearchResult) string {
-	if r.Signature != "" {
-		return r.Signature
-	}
-	return domain.ResultSignature(r)
 }
 
 func buildShownTop(results []domain.SearchResult) []map[string]any {

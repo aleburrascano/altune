@@ -137,10 +137,6 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 			extras[domain.ExtraFeaturedArtists] = domain.FeaturedArtistsToExtras(parsed)
 		}
 	}
-	signature := sr.Signature
-	if signature == "" {
-		signature = domain.ResultSignature(sr)
-	}
 	return SearchResultDTO{
 		Kind:            sr.Kind.String(),
 		Title:           sr.Title,
@@ -148,7 +144,7 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		ImageURL:        sr.ImageURL,
 		ArtworkSource:   sr.ArtworkSource,
 		Confidence:      sr.Confidence.String(),
-		ResultSignature: signature,
+		ResultSignature: domain.SignatureOf(sr),
 		FavoriteKey:     domain.FavoriteKeyOf(sr),
 		Sources:         sources,
 		Extras:          extras,

@@ -102,3 +102,15 @@ func TestResultSignature_CaseAndSpacingStable(t *testing.T) {
 		t.Errorf("signatures must match: %q vs %q", ResultSignature(a), ResultSignature(b))
 	}
 }
+
+func TestSignatureOf(t *testing.T) {
+	derived := SearchResult{Kind: ResultKindTrack, Title: "Hello", Subtitle: "Adele"}
+	stamped := derived
+	stamped.Signature = "stamped-wins"
+	if got := SignatureOf(stamped); got != "stamped-wins" {
+		t.Errorf("SignatureOf(stamped) = %q, want the stamped value", got)
+	}
+	if got, want := SignatureOf(derived), ResultSignature(derived); got != want {
+		t.Errorf("SignatureOf(unstamped) = %q, want derived %q", got, want)
+	}
+}
