@@ -219,3 +219,19 @@ func TestFormatQueueSource_LegitimateFallbacksAccepted(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatQueueSource_EveryAcceptedKindFormatsToNonEmptyToken(t *testing.T) {
+	for _, kind := range []string{SourceKindLibrary, SourceKindPlaylist, SourceKindSearch} {
+		source := QueueSource{Kind: kind, PlaylistId: "abc"}
+		if !source.hasKnownKind() {
+			t.Fatalf("kind %q is not accepted by hasKnownKind", kind)
+		}
+		got, err := FormatQueueSource(source, "")
+		if err != nil {
+			t.Fatalf("FormatQueueSource(%q) error: %v", kind, err)
+		}
+		if got == "" {
+			t.Errorf("FormatQueueSource(%q) = empty token", kind)
+		}
+	}
+}

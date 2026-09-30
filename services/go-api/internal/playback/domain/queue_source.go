@@ -107,11 +107,7 @@ func FormatQueueSource(source QueueSource, fallback string) (string, error) {
 	if !named.hasKnownKind() {
 		return "", newValidationError(codeUnknownSourceKind, fmt.Sprintf("unknown queue source kind: %q", named.Kind))
 	}
-	formatted := named.String()
-	if formatted == "" {
-		return validatedFallback(fallback)
-	}
-	return formatted, nil
+	return named.String(), nil
 }
 
 func validatedFallback(fallback string) (string, error) {
