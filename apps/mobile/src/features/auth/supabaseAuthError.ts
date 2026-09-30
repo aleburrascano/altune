@@ -1,3 +1,5 @@
+import type { AuthErrorReason } from './errorReason';
+
 export type SupabaseAuthErrorLike = {
   name?: string | undefined;
   code?: string | undefined;
@@ -34,4 +36,15 @@ export function isWeakPasswordError(error: SupabaseAuthErrorLike): boolean {
 
 export function isAlreadyRegisteredError(error: SupabaseAuthErrorLike): boolean {
   return error.code === 'user_already_exists' || error.code === 'email_exists';
+}
+
+type Rung<R extends AuthErrorReason> = readonly [(error: SupabaseAuthErrorLike) => boolean, R];
+
+export function classifyAuthError<R extends AuthErrorReason = never>(
+  error: SupabaseAuthErrorLike,
+  rungs: readonly Rung<R>[] = [],
+): 'too_many_attempts' | 'network' | R | 'unknown' {
+  if (isRateLimitedAuthError(error)) return 'too_many_attempts';
+  if (isTransportAuthError(error)) return 'network';
+  return rungs.find(([matches]) => matches(error))?.[1] ?? 'unknown';
 }

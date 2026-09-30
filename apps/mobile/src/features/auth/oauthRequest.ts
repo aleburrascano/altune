@@ -3,11 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
 import type { AuthErrorReason } from './errorReason';
-import {
-  isRateLimitedAuthError,
-  isTransportAuthError,
-  type SupabaseAuthErrorLike,
-} from './supabaseAuthError';
+import { classifyAuthError, type SupabaseAuthErrorLike } from './supabaseAuthError';
 
 export type OAuthProvider = 'google';
 
@@ -27,8 +23,7 @@ export type OAuthFailure = Extract<OAuthOutcome, { kind: 'error' }>;
 export const OAUTH_BROWSER_TIMEOUT_MS = 5 * 60_000;
 
 export function failureReason(error: SupabaseAuthErrorLike): OAuthFailure['reason'] {
-  if (isRateLimitedAuthError(error)) return 'too_many_attempts';
-  return isTransportAuthError(error) ? 'network' : 'unknown';
+  return classifyAuthError(error);
 }
 
 export function thrownFailure(err: unknown): OAuthFailure {

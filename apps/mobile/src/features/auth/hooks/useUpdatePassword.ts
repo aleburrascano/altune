@@ -8,11 +8,7 @@ import {
   thrownErrorDetail,
 } from '../errorDetail';
 import type { AuthErrorReason } from '../errorReason';
-import {
-  isRateLimitedAuthError,
-  isTransportAuthError,
-  isWeakPasswordError,
-} from '../supabaseAuthError';
+import { classifyAuthError, isWeakPasswordError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
@@ -53,10 +49,10 @@ export function useUpdatePassword() {
       void revokeOtherSessions();
       return { kind: 'ok' };
     }
-    if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' };
-    if (isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
-    if (isWeakPasswordError(error)) return { kind: 'error', reason: 'weak_password' };
-    return { kind: 'error', reason: 'unknown' };
+    return {
+      kind: 'error',
+      reason: classifyAuthError(error, [[isWeakPasswordError, 'weak_password']]),
+    };
   });
 
   return { state, updatePassword: run };

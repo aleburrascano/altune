@@ -3,7 +3,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
 import type { AuthErrorReason } from '../errorReason';
 import { authRedirectUrl } from '../parseAuthLink';
-import { isRateLimitedAuthError, isTransportAuthError } from '../supabaseAuthError';
+import { classifyAuthError, type SupabaseAuthErrorLike } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
@@ -24,9 +24,8 @@ async function requestReset(email: string) {
   return { kind: 'sent' } as const;
 }
 
-function failure(error: Parameters<typeof isTransportAuthError>[0]) {
-  if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' } as const;
-  return { kind: 'error', reason: isTransportAuthError(error) ? 'network' : 'unknown' } as const;
+function failure(error: SupabaseAuthErrorLike) {
+  return { kind: 'error', reason: classifyAuthError(error) } as const;
 }
 
 export function useResetPassword() {

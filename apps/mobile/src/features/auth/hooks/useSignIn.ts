@@ -5,8 +5,7 @@ import type { AuthErrorReason } from '../errorReason';
 import { reportSignInFailure } from '../reportSignInFailure';
 import {
   isInvalidCredentialsError,
-  isRateLimitedAuthError,
-  isTransportAuthError,
+  classifyAuthError,
   isUnconfirmedEmailError,
   type SupabaseAuthErrorLike,
 } from '../supabaseAuthError';
@@ -25,11 +24,10 @@ export type SignInResult =
   | { kind: 'error'; reason: SignInErrorReason };
 
 function signInErrorReason(error: SupabaseAuthErrorLike): SignInErrorReason {
-  if (isRateLimitedAuthError(error)) return 'too_many_attempts';
-  if (isTransportAuthError(error)) return 'network';
-  if (isUnconfirmedEmailError(error)) return 'email_not_confirmed';
-  if (isInvalidCredentialsError(error)) return 'invalid_credentials';
-  return 'unknown';
+  return classifyAuthError(error, [
+    [isUnconfirmedEmailError, 'email_not_confirmed'],
+    [isInvalidCredentialsError, 'invalid_credentials'],
+  ]);
 }
 
 export function useSignIn() {

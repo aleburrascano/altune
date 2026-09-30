@@ -3,9 +3,8 @@ import { supabase } from '@shared/auth/supabaseClient';
 import type { AuthErrorReason } from '../errorReason';
 import { authRedirectUrl } from '../parseAuthLink';
 import {
+  classifyAuthError,
   isAlreadyRegisteredError,
-  isRateLimitedAuthError,
-  isTransportAuthError,
   isWeakPasswordError,
 } from '../supabaseAuthError';
 
@@ -46,11 +45,13 @@ export function useSignUp() {
         options: { emailRedirectTo: authRedirectUrl('confirm') },
       });
       if (error) {
-        if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' };
-        if (isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
-        if (isWeakPasswordError(error)) return { kind: 'error', reason: 'weak_password' };
-        if (isAlreadyRegisteredError(error)) return { kind: 'error', reason: 'already_registered' };
-        return { kind: 'error', reason: 'unknown' };
+        return {
+          kind: 'error',
+          reason: classifyAuthError(error, [
+            [isWeakPasswordError, 'weak_password'],
+            [isAlreadyRegisteredError, 'already_registered'],
+          ]),
+        };
       }
       return signUpOutcome(data);
     },
