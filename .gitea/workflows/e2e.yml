@@ -18,6 +18,8 @@ jobs:
   e2e:
     runs-on: ci
     timeout-minutes: 30
+    env:
+      E2E_STACK_DIR: /tmp/altune-e2e-stack-${{ github.run_id }}
     steps:
       - name: checkout
         env:
@@ -35,7 +37,7 @@ jobs:
           set -euo pipefail
           [ -n "$PR" ] || exit 0
           cd "$WT"
-          if ! git diff --name-only gitea/main...HEAD | grep -qE '^(apps/mobile/|services/go-api/|scripts/e2e-stack\.sh$)'; then
+          if ! git diff --name-only gitea/main...HEAD | grep -qE '^(apps/mobile/|services/go-api/|scripts/e2e-stack\.sh$|\.gitea/workflows/e2e\.yml$)'; then
             echo "E2E_SKIP=true" >>"$GITHUB_ENV"
             echo "no mobile or backend change, skipping e2e"
           fi
