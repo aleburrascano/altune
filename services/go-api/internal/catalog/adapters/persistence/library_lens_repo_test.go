@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -488,6 +489,96 @@ func TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) 
 		}
 		if len(got) != c.wantLen || total != c.wantTotal {
 			t.Errorf("%s: len=%d total=%d, want len=%d total=%d", c.name, len(got), total, c.wantLen, c.wantTotal)
+		}
+	}
+}
+
+const (
+	tiedGroupCount = 300
+	tiedPageSize   = 7
+)
+
+func tiedArtistNames() []string {
+	names := make([]string, tiedGroupCount)
+	for i := range names {
+		names[i] = "Artist " + strconv.Itoa(i)
+	}
+	return names
+}
+
+func TestPgxTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+
+	addedAt := time.Now().UTC().Truncate(time.Second)
+	for i, artist := range tiedArtistNames() {
+		seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+			title: "t" + strconv.Itoa(i), artist: artist, album: "Greatest Hits",
+			year: intPtr(2000), addedAt: addedAt,
+		})
+	}
+
+	for _, sort := range []domain.LibrarySort{domain.SortAlphabetical, domain.SortYear, domain.SortRecent} {
+		seen := map[string]int{}
+		for offset := 0; offset < tiedGroupCount; offset += tiedPageSize {
+			page, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: sort, Limit: tiedPageSize, Offset: offset})
+			if err != nil {
+				t.Fatalf("ListAlbumsForUser(sort=%s, offset=%d): %v", sort, offset, err)
+			}
+			for _, g := range page {
+				seen[g.Key]++
+			}
+		}
+		if len(seen) != tiedGroupCount {
+			t.Errorf("sort=%s: pages covered %d groups, want %d", sort, len(seen), tiedGroupCount)
+		}
+		for key, n := range seen {
+			if n != 1 {
+				t.Errorf("sort=%s: group %q returned %d times, want 1", sort, key, n)
+			}
+		}
+	}
+}
+
+func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+
+	addedAt := time.Now().UTC().Truncate(time.Second)
+	for i, artist := range tiedArtistNames() {
+		seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+			title: "t" + strconv.Itoa(i), artist: artist, album: "x" + strconv.Itoa(i), addedAt: addedAt,
+		})
+	}
+
+	seen := map[string]int{}
+	for offset := 0; offset < tiedGroupCount; offset += tiedPageSize {
+		page, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: tiedPageSize, Offset: offset})
+		if err != nil {
+			t.Fatalf("ListArtistsForUser(offset=%d): %v", offset, err)
+		}
+		for _, g := range page {
+			seen[g.Key]++
+		}
+	}
+	if len(seen) != tiedGroupCount {
+		t.Errorf("pages covered %d artists, want %d", len(seen), tiedGroupCount)
+	}
+	for key, n := range seen {
+		if n != 1 {
+			t.Errorf("artist %q returned %d times, want 1", key, n)
 		}
 	}
 }

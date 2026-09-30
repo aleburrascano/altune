@@ -66,19 +66,19 @@ func limitOffsetClause(query domain.LibraryQuery, args *[]any) string {
 func albumOrderBy(sort domain.LibrarySort) string {
 	switch sort {
 	case domain.SortAlphabetical:
-		return ` ORDER BY min(t.album) ASC`
+		return ` ORDER BY min(t.album) ASC, ` + albumGroupKey
 	case domain.SortYear:
-		return ` ORDER BY (array_agg(t.year ORDER BY t.added_at DESC) FILTER (WHERE t.year IS NOT NULL))[1] DESC NULLS LAST`
+		return ` ORDER BY (array_agg(t.year ORDER BY t.added_at DESC) FILTER (WHERE t.year IS NOT NULL))[1] DESC NULLS LAST, ` + albumGroupKey
 	default:
-		return ` ORDER BY max(t.added_at) DESC`
+		return ` ORDER BY max(t.added_at) DESC, ` + albumGroupKey
 	}
 }
 
 func artistOrderBy(sort domain.LibrarySort) string {
 	if sort == domain.SortAlphabetical {
-		return ` ORDER BY min(t.artist) ASC`
+		return ` ORDER BY min(t.artist) ASC, ` + artistGroupKey
 	}
-	return ` ORDER BY max(t.added_at) DESC`
+	return ` ORDER BY max(t.added_at) DESC, ` + artistGroupKey
 }
 
 func (r *PgxLibraryLensRepository) ListAlbumsForUser(
