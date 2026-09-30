@@ -112,6 +112,20 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		}
 	})
 
+	t.Run("ambiguous MBID-less artists sharing an external id stay apart by provider", func(t *testing.T) {
+		results := []domain.SearchResult{
+			withMBID(artistResult(domain.ProviderMusicBrainz, "mb-1", "Che", nil), "mbid-1"),
+			withMBID(artistResult(domain.ProviderMusicBrainz, "mb-2", "Che", nil), "mbid-2"),
+			artistResult(domain.ProviderDeezer, "1", "Che", nil),
+			artistResult(domain.ProviderITunes, "1", "Che", nil),
+			artistResult(domain.ProviderDeezer, "1", "Che", nil),
+		}
+		got := CollapseArtistDuplicates(results)
+		if len(got) != 4 {
+			t.Errorf("expected 4 cards (2 MBIDs, deezer:1, itunes:1), got %d", len(got))
+		}
+	})
+
 	t.Run("no grouping when names differ", func(t *testing.T) {
 		results := []domain.SearchResult{
 			artistResult(domain.ProviderDeezer, "1", "Drake", map[string]any{"popularity": float64(90)}),

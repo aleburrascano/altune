@@ -142,6 +142,10 @@ func sourceKey(provider domain.ProviderName, id string) string {
 	return provider.String() + ":" + id
 }
 
+func SourceKey(provider domain.ProviderName, id string) string {
+	return sourceKey(provider, id)
+}
+
 func stringExtra(extras map[string]any, key string) string {
 	if extras == nil {
 		return ""

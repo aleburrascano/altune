@@ -549,3 +549,14 @@ func TestConsensus_PartialProviderResultKeepsAlbumsWithoutBreakerFailure(t *test
 		t.Errorf("provider called %d times, want %d: a partial result must not open the breaker", calls.Load(), want)
 	}
 }
+
+func TestConsensus_CacheKeyFormat(t *testing.T) {
+	cache := newInMemoryConsensusCache()
+	svc := NewConsensusService([]ConsensusProvider{consensusProvider("lastfm", "X")}, WithConsensusCache(cache))
+
+	svc.BuildConsensus(context.Background(), "Che", domain.ProviderDeezer, "rapper-1", nil)
+
+	if _, ok := cache.m["che|deezer:rapper-1"]; !ok || len(cache.m) != 1 {
+		t.Errorf("cache keys = %v, want exactly che|deezer:rapper-1", cache.m)
+	}
+}

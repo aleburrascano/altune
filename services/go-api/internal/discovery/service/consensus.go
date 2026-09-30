@@ -104,7 +104,7 @@ func (s *ConsensusService) BuildConsensus(
 ) []ConsensusAlbum {
 	cacheKey := textnorm.NormalizeForMatch(artistName)
 	if seedID != "" {
-		cacheKey += "|" + seedProvider.String() + ":" + seedID
+		cacheKey += "|" + sourceKey(seedProvider, seedID)
 	}
 	if cached, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
 		return cached

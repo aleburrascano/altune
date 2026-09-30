@@ -58,7 +58,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if ambiguous[norm] {
 			key = norm + "\x00" + r.MBID
 			if r.MBID == "" && len(r.Sources) > 0 {
-				key = norm + "\x00" + r.Sources[0].Provider.String() + ":" + r.Sources[0].ExternalID
+				key = norm + "\x00" + sourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
 			}
 		}
 		pop := r.Popularity
