@@ -91,6 +91,9 @@ func (a *App) liveMetrics() observeHandler.LiveMetrics {
 		bus.Dropped = a.eventBus.Dropped()
 	}
 	m["event_bus"] = bus
+	if a.alertMonitor != nil {
+		m["alert_monitor"] = a.alertMonitor.Status()
+	}
 	return m
 }
 

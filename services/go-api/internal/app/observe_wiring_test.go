@@ -7,6 +7,7 @@ import (
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
+	observeAlert "altune/go-api/internal/observe/alert"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
 	observeHandler "altune/go-api/internal/observe/handler"
@@ -359,6 +360,37 @@ func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
 	}
 	if out.EventBus.Dropped != a.eventBus.Dropped() {
 		t.Errorf("event_bus.dropped_total = %d, want the bus's %d", out.EventBus.Dropped, a.eventBus.Dropped())
+	}
+}
+
+func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
+	a := &App{alertMonitor: observeAlert.NewMonitor(observeAlert.NopNotifier{}, time.Second)}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
+		t.Fatal(err)
+	}
+	var monitor map[string]json.RawMessage
+	if err := json.Unmarshal(out["alert_monitor"], &monitor); err != nil {
+		t.Fatalf("alert_monitor missing or not an object: %v", err)
+	}
+	for _, key := range []string{"last_pass", "consecutive_failures", "contained_panics", "nop_notifier"} {
+		if _, ok := monitor[key]; !ok {
+			t.Errorf("alert_monitor missing key %q", key)
+		}
+	}
+	if string(monitor["nop_notifier"]) != "true" {
+		t.Errorf("nop_notifier = %s, want true", monitor["nop_notifier"])
+	}
+}
+
+func TestObserveLiveMetrics_OmitsAlertMonitorWhenNil(t *testing.T) {
+	a := &App{}
+	var out map[string]json.RawMessage
+	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["alert_monitor"]; ok {
+		t.Error("alert_monitor present although no monitor was built")
 	}
 }
 

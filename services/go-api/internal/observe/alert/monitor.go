@@ -60,13 +60,13 @@ type Monitor struct {
 }
 
 type Status struct {
-	LastPass            time.Time
-	LastNotifyOK        bool
-	ConsecutiveFailures int64
-	ContainedPanics     uint64
-	NopNotifier         bool
-	LastNotifyOKAt      time.Time
-	LastNotifyErrorAt   time.Time
+	LastPass            time.Time `json:"last_pass"`
+	LastNotifyOK        bool      `json:"last_notify_ok"`
+	ConsecutiveFailures int64     `json:"consecutive_failures"`
+	ContainedPanics     uint64    `json:"contained_panics"`
+	NopNotifier         bool      `json:"nop_notifier"`
+	LastNotifyOKAt      time.Time `json:"last_notify_ok_at"`
+	LastNotifyErrorAt   time.Time `json:"last_notify_error_at"`
 }
 
 func (m *Monitor) Status() Status {
