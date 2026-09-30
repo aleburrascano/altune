@@ -17,7 +17,6 @@ import { withNativeQueue } from './nativeQueueLock';
 import { clearPlaybackError, reportLoadFailure } from '../playbackErrorStore';
 import { isIndexOutOfBounds, reportingQueueFailure } from './queueFailureReport';
 import { redactedPlaybackFailure, warnPlayback } from '../redactPlaybackError';
-import { seekPreservingPlayback } from './seekControls';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;
@@ -152,7 +151,10 @@ function stopNativePlayback(): Promise<void> {
 }
 
 function movePlaybackTo(positionMs: number, memory: PlaybackMemory): Promise<void> {
-  return withNativeQueue(() => seekPreservingPlayback(positionMs / 1000, memory.isPlaying));
+  return withNativeQueue(async () => {
+    await TrackPlayer.seekTo(positionMs / 1000);
+    if (memory.isPlaying) await TrackPlayer.play();
+  });
 }
 
 function createTransportCommands(
