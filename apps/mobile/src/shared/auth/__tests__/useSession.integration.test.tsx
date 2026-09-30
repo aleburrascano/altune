@@ -10,6 +10,7 @@ import {
   trackIdentityKey,
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
+import { getSessionId } from '@shared/telemetry/session';
 import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telemetry/outbox';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import type { TrackExtras } from '@features/detail/extras-accessors';
@@ -185,6 +186,22 @@ describe('cross-account queued-telemetry leak on a shared device', () => {
     });
 
     expect(__http.countFor(EVENTS)).toBe(attemptsAsA);
+
+    session.unmount();
+  });
+});
+
+describe('telemetry session id across an account switch', () => {
+  it("B's events do not carry A's session id when B signs in within the inactivity window", async () => {
+    bootSignedIn(sessionFor(USER_A, 'token-a'));
+    const queryClient = new QueryClient();
+    const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
+    await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
+    const idAsA = getSessionId();
+
+    switchAccountTo(sessionFor(USER_B, 'token-b'));
+
+    expect(getSessionId()).not.toBe(idAsA);
 
     session.unmount();
   });

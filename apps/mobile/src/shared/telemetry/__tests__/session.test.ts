@@ -427,4 +427,14 @@ describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
 
     expect(session.getSessionId()).not.toBe(before);
   });
+
+  it('rotates the id on sign-out cleanup but keeps it across reads without one', () => {
+    const { session } = loadFreshSession(1000);
+    const before = session.getSessionId();
+    expect(session.getSessionId()).toBe(before);
+
+    require('@shared/session/signOutCleanup').runSignOutCleanups();
+
+    expect(session.getSessionId()).not.toBe(before);
+  });
 });

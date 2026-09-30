@@ -1,5 +1,7 @@
 import { AppState } from 'react-native';
 
+import { onSignOut } from '@shared/session/signOutCleanup';
+
 export const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
 
 export type SessionState = { sessionId: string; lastActivity: number };
@@ -48,3 +50,11 @@ export function getSessionId(now: Clock = Date.now, tick: Clock = () => performa
   touch(now, tick);
   return _state.sessionId;
 }
+
+export function resetSession(now: Clock = Date.now): void {
+  const at = now();
+  _state = { sessionId: makeSessionId(at), lastActivity: at };
+  _tickAnchor = null;
+}
+
+onSignOut(() => resetSession());
