@@ -88,7 +88,7 @@ describe('the NetworkError the api-client throws', () => {
       const error = await settle(apiFetch('/v1/library'));
 
       expect(error).toBeInstanceOf(NetworkError);
-      expect((error as Error).message).toBe('API http://127.0.0.1:8000/v1/library is unreachable');
+      expect((error as Error).message).toBe('API /v1/library is unreachable');
       expect(isNetworkError(error)).toBe(true);
       expect(describeError(error).title).toBe('No connection');
     });

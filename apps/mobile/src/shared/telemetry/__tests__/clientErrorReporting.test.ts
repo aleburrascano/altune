@@ -1,9 +1,17 @@
+import { apiFetch } from '@shared/api-client';
+import { supabase } from '@shared/auth/supabaseClient';
 import { enqueueCritical } from '../outbox';
 import {
   _resetGlobalErrorReportingForTest,
   installGlobalErrorReporting,
   reportClientError,
 } from '../clientErrorReporting';
+
+const { __http } = require('../../../../jest/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
+}));
 
 jest.mock('../outbox', () => ({ enqueueCritical: jest.fn() }));
 
@@ -207,5 +215,21 @@ describe('installGlobalErrorReporting', () => {
 
     expect(() => installGlobalErrorReporting()).not.toThrow();
     expect(mockSetGlobalHandler).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('reportClientError with a failed search request', () => {
+  it('ships a payload that carries no search text', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+    __http.fail('GET /v1/discovery/search');
+
+    const error = await apiFetch('/v1/discovery/search?q=secret').catch((e: unknown) => e);
+    reportClientError(error, 'unhandled_rejection');
+
+    expect(JSON.stringify(lastPayload())).not.toContain('secret');
   });
 });

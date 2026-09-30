@@ -1025,3 +1025,49 @@ describe('transport failures', () => {
     });
   });
 });
+
+describe('NetworkError messages never carry the query string', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    withSession();
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it('names only the path when a request with ?q=secret times out', async () => {
+    jest.useFakeTimers();
+    __http.hang('GET /v1/discovery/search');
+
+    const caught = apiFetch('/v1/discovery/search?q=secret').catch((error: unknown) => error);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(15_000);
+    const error = await caught;
+
+    expect(error).toMatchObject({ failure: 'timeout' });
+    expect((error as Error).message).toContain('/v1/discovery/search');
+    expect((error as Error).message).not.toContain('secret');
+  });
+
+  it('names only the path when a request with ?q=secret cannot reach the server', async () => {
+    __http.fail('GET /v1/discovery/search');
+
+    const error = await apiFetch('/v1/discovery/search?q=secret').catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ failure: 'transport' });
+    expect((error as Error).message).toContain('/v1/discovery/search');
+    expect((error as Error).message).not.toContain('secret');
+  });
+
+  it('names only the path in a non-2xx ApiError message', async () => {
+    __http.reply('GET /v1/discovery/search', { status: 500 });
+
+    const error = await apiFetch('/v1/discovery/search?q=secret').catch((e: unknown) => e);
+
+    expect((error as Error).message).not.toContain('secret');
+  });
+});

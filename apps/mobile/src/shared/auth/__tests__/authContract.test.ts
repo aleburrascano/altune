@@ -89,7 +89,8 @@ function apiClientSource(): string {
 }
 
 function deriveRejectTokenStatus(source: string): number {
-  const body = extractGoFuncBody(source, 'rejectToken');
+  expect(extractGoFuncBody(source, 'rejectToken')).toContain('writeUnauthorized(w, r,');
+  const body = extractGoFuncBody(source, 'writeUnauthorized');
   const match = /httputil\.WriteJSON\(w, (http\.Status\w+),/.exec(body);
   expect(match).not.toBeNull();
   const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
@@ -145,9 +146,11 @@ describe('cross-surface 401 contract, derived from services/go-api/internal/auth
   it('rejectToken sets the WWW-Authenticate challenge header; rejectVerifierUnavailable does not', () => {
     const source = middlewareSource();
     const rejectTokenBody = extractGoFuncBody(source, 'rejectToken');
+    const writeUnauthorizedBody = extractGoFuncBody(source, 'writeUnauthorized');
     const rejectVerifierUnavailableBody = extractGoFuncBody(source, 'rejectVerifierUnavailable');
 
-    expect(rejectTokenBody).toContain('w.Header().Set("WWW-Authenticate", "Bearer")');
+    expect(rejectTokenBody).toContain('writeUnauthorized(w, r,');
+    expect(writeUnauthorizedBody).toContain('w.Header().Set("WWW-Authenticate", "Bearer")');
     expect(rejectVerifierUnavailableBody).not.toContain('WWW-Authenticate');
   });
 });

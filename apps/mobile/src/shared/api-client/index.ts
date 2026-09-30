@@ -82,6 +82,7 @@ export async function authorization(
 
 async function send(
   url: string,
+  route: string,
   init: RequestInit,
   deadline: Deadline,
   correlationId: string | undefined,
@@ -93,12 +94,12 @@ async function send(
     if (deadline.expired()) {
       throw new NetworkError(
         'timeout',
-        `API ${url} timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        `API ${route} timed out after ${REQUEST_TIMEOUT_MS}ms`,
         correlationId,
       );
     }
     if (isAbort(cause)) throw cause;
-    throw new NetworkError('transport', `API ${url} is unreachable`, correlationId);
+    throw new NetworkError('transport', `API ${route} is unreachable`, correlationId);
   }
 }
 
@@ -188,14 +189,15 @@ async function receive<T>(
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const correlationId = newCorrelationId() ?? undefined;
+  const route = path.split('?', 1)[0] ?? path;
   const sentWith = stampCredentials();
   try {
     const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
     try {
-      const headers = await requestHeaders(path, correlationId, init);
+      const headers = await requestHeaders(route, correlationId, init);
       return await receive<T>(
-        await send(`${apiBase}${path}`, { ...init, headers }, deadline, correlationId),
-        path,
+        await send(`${apiBase}${path}`, route, { ...init, headers }, deadline, correlationId),
+        route,
         correlationId,
         sentWith,
       );
