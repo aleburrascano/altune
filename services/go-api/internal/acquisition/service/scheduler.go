@@ -252,9 +252,13 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 	return s.finishEnqueue(ctx, trackId, userId, kind)
 }
 
+type userRememberer interface {
+	rememberUser(trackId domain.TrackId, userId shared.UserId)
+}
+
 func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, key string, alreadyTracked bool) {
-	if mq, ok := s.queue.(*memJobQueue); ok {
-		mq.rememberUser(trackId, userId)
+	if r, ok := s.queue.(userRememberer); ok {
+		r.rememberUser(trackId, userId)
 	}
 	if corrID := logging.CorrelationIDFromContext(ctx); corrID != "" && !alreadyTracked {
 		s.corrIDs.Store(key, corrID)
