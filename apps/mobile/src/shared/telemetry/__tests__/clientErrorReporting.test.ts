@@ -96,6 +96,57 @@ describe('reportClientError', () => {
   });
 });
 
+describe('reportClientError dedupe', () => {
+  const WINDOW_MS = 60_000;
+  let now = 1_000_000;
+
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('enqueues one client_error for the same error repeated inside the window', () => {
+    const error = new Error('render loop');
+    for (let i = 0; i < 5; i += 1) reportClientError(error, 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('enqueues distinct errors and the same message from another source', () => {
+    reportClientError(new Error('first'), 'boundary');
+    reportClientError(new Error('second'), 'boundary');
+    reportClientError(new Error('first'), 'uncaught');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports again after the window, carrying the count of suppressed repeats', () => {
+    const error = new Error('render loop');
+    for (let i = 0; i < 4; i += 1) reportClientError(error, 'boundary');
+    now += WINDOW_MS;
+    reportClientError(error, 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+    expect(lastPayload()['suppressed_repeats']).toBe(3);
+  });
+
+  it('omits the count when nothing was suppressed', () => {
+    reportClientError(new Error('once'), 'boundary');
+
+    expect('suppressed_repeats' in lastPayload()).toBe(false);
+  });
+
+  it('keeps reporting every distinct error past the tracking cap', () => {
+    for (let i = 0; i < 120; i += 1) reportClientError(new Error(`distinct ${i}`), 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(120);
+  });
+});
+
 describe('installGlobalErrorReporting', () => {
   it('wires the global handler and rejection tracking exactly once', () => {
     installGlobalErrorReporting();
