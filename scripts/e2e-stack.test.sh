@@ -8,6 +8,7 @@ stubbin="$scratch/stubbin"; mkdir -p "$stubbin"
 export E2E_STACK_DIR="$scratch/state"
 export E2E_HEALTH_ATTEMPTS=1 E2E_READY_ATTEMPTS=1
 export STUB_LOG="$scratch/calls.log"
+export STUB_API_ENV="$scratch/api.env"
 
 cat >"$stubbin/docker" <<'STUB'
 #!/usr/bin/env bash
@@ -24,6 +25,7 @@ echo "go $*" >>"$STUB_LOG"
 out=""
 while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
 printf '#!/usr/bin/env bash\nsleep 30\n' >"$out"; chmod +x "$out"
+sed -i '1a env >"$STUB_API_ENV"' "$out"
 STUB
 cat >"$stubbin/npx" <<'STUB'
 #!/usr/bin/env bash
@@ -70,6 +72,13 @@ grep -q "^DATABASE_URL=postgres://altune:altune_dev@127.0.0.1:5555/altune" <<<"$
 grep -q "expo export -p web --dev TEST_AUTH=1" "$STUB_LOG" || { echo "FAIL web export should run with --dev and test auth"; fail=1; }
 [ -d "$E2E_STACK_DIR" ] || { echo "FAIL state should exist while the stack is up"; fail=1; }
 [ "$(grep -c '^docker run' "$STUB_LOG")" = "$(grep -c '^docker run .*--label altune-ci=1 ' "$STUB_LOG")" ] || { echo "FAIL every docker run should carry the altune-ci label"; fail=1; }
+
+sleep 1
+for want in PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR=.*/apps/mobile/e2e/fixtures/providers \
+  SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
+  AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false; do
+  grep -q "^$want$" "$STUB_API_ENV" || { echo "FAIL api should start with $want"; fail=1; }
+done
 
 run up
 check 1 "a second up refuses while the first is running"
