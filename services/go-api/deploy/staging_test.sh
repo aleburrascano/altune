@@ -83,7 +83,7 @@ EOF
     for tag in ${STUB_IMAGES-}; do printf 'altune-staging-go-api:%s\n' "$tag"; done >"$WORK/images"
 
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" STAGING_HEALTH_TIMEOUT=1 \
-        bash deploy/staging.sh >"$WORK/out.log" 2>&1)
+        env --default-signal=INT bash deploy/staging.sh >"$WORK/out.log" 2>&1)
     RC=$?
     unset STUB_TRACKS STUB_HEALTHY
     unset STUB_IMAGES STUB_GREEN_HEALTHY STUB_GREEN_STOPS
