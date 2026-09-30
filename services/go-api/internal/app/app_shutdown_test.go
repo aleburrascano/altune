@@ -1,8 +1,9 @@
 package app
 
 import (
-	discoveryPorts "altune/go-api/internal/discovery/ports"
+	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"bytes"
 	"context"
@@ -14,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type gatedStore struct {
@@ -22,22 +25,26 @@ type gatedStore struct {
 	once    sync.Once
 }
 
-func (s *gatedStore) SatisfactionSignals(ctx context.Context, _ time.Time) ([]discoveryPorts.BehavioralSignal, error) {
+func (s *gatedStore) Append(ctx context.Context, _ discoveryDomain.InteractionEvent) error {
 	s.once.Do(func() { close(s.entered) })
 	select {
 	case <-s.release:
 	case <-ctx.Done():
 	}
-	return nil, nil
+	return nil
 }
 
 func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
 	svc := discoveryService.NewService(nil, discoveryService.NewCircuitBreaker(),
-		discoveryService.WithBehavioralRanking(discoveryService.NewSatisfactionConsumer(store)))
+		discoveryService.WithEventStore(store))
 
+	query, err := discoveryDomain.NewSearchQuery("humble", discoveryDomain.AllKinds(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	svc.StartBehavioralRefresh(ctx, time.Hour)
+	_, _ = svc.Execute(ctx, shared.NewUserId(uuid.New()), query, false)
 	<-store.entered
 
 	a := &App{searchSvc: svc}
