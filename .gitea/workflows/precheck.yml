@@ -27,8 +27,8 @@ jobs:
           if [ "${ALTUNE_CI_OWNED:-}" = 1 ]; then
             bash "$repo/../refresh-deps.sh" "gitea/$BASE"
           fi
-          wt=$(mktemp -d /tmp/ci-wf.XXXXXX)
-          trap 'git -C "$repo" worktree remove --force "$wt"' EXIT
+          wt=$(mktemp -d "${TMPDIR:-/tmp}/ci-wf.XXXXXX")
+          trap 'git -C "$repo" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"' EXIT
           git -C "$repo" worktree add -q --detach "$wt" "gitea/pr/$PR"
           cd "$wt"
           if [ -x "$HOME/.claude/bin/precheck-cached.sh" ]; then

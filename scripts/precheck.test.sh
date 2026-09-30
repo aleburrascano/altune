@@ -392,6 +392,61 @@ run_script
 expect_rc 0
 expect_out "ok    no new comments (nocomments)"
 
+add_mobile_stubs() {
+    mkdir -p "$WORK/bin" "$WORK/home"
+    printf '#!/usr/bin/env bash\nprintf "npx %%s\\n" "$*" >>"%s/npx.log"\n' "$WORK" >"$WORK/bin/npx"
+    chmod +x "$WORK/bin/npx"
+    (
+        cd "$WORK/repo" || exit 1
+        mkdir -p apps/mobile
+        printf 'x\n' >apps/mobile/.keep
+        printf 'echo true\n' >scripts/worktree-deps.sh
+        git add -A
+        git commit -qm "mobile fixture"
+        git update-ref refs/remotes/gitea/main HEAD
+    )
+}
+
+run_script_with_stubs() {
+    (
+        cd "$WORK/repo" || exit 1
+        HOME="$WORK/home" PATH="$WORK/bin:$PATH" bash scripts/precheck.sh "$@" >"$WORK/out.log" 2>&1
+    )
+    RC=$?
+}
+
+expect_npx() {
+    grep -qF -- "$1" "$WORK/npx.log" 2>/dev/null || fail "expected npx call to include '$1'"
+}
+
+CASE="mobile related tests keep the jest cache under HOME, not the /tmp tmpfs"
+new_repo
+add_mobile_stubs
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p apps/mobile/src
+    printf 'export const x = 1;\n' >apps/mobile/src/x.ts
+    git add -A
+    git commit -qm "mobile change"
+)
+run_script_with_stubs
+expect_npx "--findRelatedTests"
+expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
+
+CASE="mobile event contracts keep the jest cache under HOME, not the /tmp tmpfs"
+new_repo
+add_mobile_stubs
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api/internal/shared/events
+    printf 'package events\n' >services/go-api/internal/shared/events/e.go
+    git add -A
+    git commit -qm "events change"
+)
+run_script_with_stubs
+expect_npx "eventContract.test.ts"
+expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
