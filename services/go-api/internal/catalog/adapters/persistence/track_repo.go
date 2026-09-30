@@ -58,8 +58,9 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 			added_at, artwork_url, acquisition_status, dedup_key,
 			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
 			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
-			acquisition_confidence, acquisition_evidence
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+			acquisition_confidence, acquisition_evidence, acquisition_available_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+			CASE WHEN $9::text = 'pending' THEN now() END)
 		ON CONFLICT DO NOTHING
 		RETURNING id`,
 		track.ID.UUID(), track.UserId.UUID(),

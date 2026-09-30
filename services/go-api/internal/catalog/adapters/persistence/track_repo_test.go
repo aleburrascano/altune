@@ -1047,3 +1047,26 @@ func countTracksForUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 	}
 	return n
 }
+
+func TestPgxTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	var claimable bool
+	if err := pool.QueryRow(ctx,
+		`SELECT acquisition_available_at <= now() FROM tracks WHERE id = $1`,
+		track.ID.UUID()).Scan(&claimable); err != nil {
+		t.Fatalf("read acquisition_available_at: %v", err)
+	}
+	if !claimable {
+		t.Fatal("pending row has no acquisition_available_at, so no worker can ever claim it")
+	}
+}

@@ -720,3 +720,21 @@ func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
 		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, domain.FailureAcquisitionRefused)
 	}
 }
+
+func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t *testing.T) {
+	ctx := context.Background()
+	repo := catalogtest.NewTrackRepo()
+	repo.ErrOnUpdate = errors.New("db down")
+	sched := &catalogtest.Scheduler{Err: errors.New("acquisition queue is full")}
+	svc := NewAddTrackService(repo, WithAcquisitionScheduler(sched))
+
+	out, err := svc.Execute(ctx, testUserId(), AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	stored, _ := repo.GetByID(ctx, out.Track.ID, out.Track.UserId)
+	if stored.AcquisitionStatus == domain.AcquisitionPending && !repo.Claimable(stored.ID) {
+		t.Fatal("stored track is pending and unclaimable: nothing will ever acquire or fail it")
+	}
+}

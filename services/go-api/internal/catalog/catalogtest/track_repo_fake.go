@@ -13,6 +13,8 @@ import (
 type TrackRepo struct {
 	Tracks map[string]*domain.Track
 
+	claimable map[string]bool
+
 	ErrOnAdd       error
 	ErrOnCount     error
 	ErrOnGetBy     error
@@ -46,7 +48,7 @@ var (
 )
 
 func NewTrackRepo() *TrackRepo {
-	return &TrackRepo{Tracks: make(map[string]*domain.Track)}
+	return &TrackRepo{Tracks: make(map[string]*domain.Track), claimable: make(map[string]bool)}
 }
 
 func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, bool, error) {
@@ -62,7 +64,12 @@ func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, 
 		}
 	}
 	r.Tracks[track.ID.String()] = track
+	r.claimable[track.ID.String()] = track.AcquisitionStatus == domain.AcquisitionPending
 	return track, true, nil
+}
+
+func (r *TrackRepo) Claimable(id domain.TrackId) bool {
+	return r.claimable[id.String()]
 }
 
 func sameIdempotencyKey(a, b *domain.Track) bool {
