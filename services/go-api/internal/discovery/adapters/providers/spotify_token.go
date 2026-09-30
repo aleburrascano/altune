@@ -49,7 +49,19 @@ func newSpotifyTokenResolver(client *http.Client) *spotifyTokenResolver {
 	return r
 }
 
-const spotifyResolveTimeout = 20 * time.Second
+const (
+	spotifyResolveTimeout  = 20 * time.Second
+	spotifyMaxTokenTTL     = 24 * time.Hour
+	spotifyMinSessionLife  = 30 * time.Second
+	spotifyAccessMargin    = time.Minute
+	spotifyClientMargin    = time.Hour
+	spotifyMaxTokenSeconds = int64(spotifyMaxTokenTTL / time.Second)
+)
+
+func spotifyExpiryAfter(ttl, margin time.Duration) time.Time {
+	ttl = min(ttl, spotifyMaxTokenTTL)
+	return time.Now().Add(max(ttl-margin, spotifyMinSessionLife))
+}
 
 func (r *spotifyTokenResolver) resolve(ctx context.Context) (*spotifySession, time.Time, error) {
 	accessToken, accessExpiry, err := r.resolveAccessToken(ctx)
@@ -102,7 +114,12 @@ func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, 
 			lastErr = fmt.Errorf("empty access token for totp version %d", s.version)
 			continue
 		}
-		return body.AccessToken, time.UnixMilli(body.AccessTokenExpirationTimestampMs).Add(-time.Minute), nil
+		ttlMs := body.AccessTokenExpirationTimestampMs - time.Now().UnixMilli()
+		if body.AccessTokenExpirationTimestampMs <= 0 || ttlMs <= 0 {
+			return "", time.Time{}, fmt.Errorf("access token expiry %d is not in the future", body.AccessTokenExpirationTimestampMs)
+		}
+		ttl := time.Duration(min(ttlMs, spotifyMaxTokenSeconds*1000)) * time.Millisecond
+		return body.AccessToken, spotifyExpiryAfter(ttl, spotifyAccessMargin), nil
 	}
 	return "", time.Time{}, fmt.Errorf("all totp secret versions exhausted: %w", lastErr)
 }
@@ -113,6 +130,9 @@ func (r *spotifyTokenResolver) fetchServerTime(ctx context.Context) (int64, erro
 	}
 	if err := getJSON(ctx, r.client, r.serverTimeURL, &body, withHeader("User-Agent", spotifyUserAgent)); err != nil {
 		return 0, err
+	}
+	if body.ServerTime <= 0 {
+		return 0, fmt.Errorf("server time %d is not positive", body.ServerTime)
 	}
 	return body.ServerTime, nil
 }
@@ -148,8 +168,12 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 	if body.GrantedToken.Token == "" {
 		return "", time.Time{}, errors.New("empty client token")
 	}
-	expiry := time.Now().Add(time.Duration(body.GrantedToken.ExpiresAfterSeconds) * time.Second).Add(-time.Hour)
-	return body.GrantedToken.Token, expiry, nil
+	seconds := body.GrantedToken.ExpiresAfterSeconds
+	if seconds <= 0 {
+		return "", time.Time{}, fmt.Errorf("client token lifetime %ds is not positive", seconds)
+	}
+	ttl := time.Duration(min(seconds, spotifyMaxTokenSeconds)) * time.Second
+	return body.GrantedToken.Token, spotifyExpiryAfter(ttl, spotifyClientMargin), nil
 }
 
 func spotifyClientTokenHeaders() []reqOption {

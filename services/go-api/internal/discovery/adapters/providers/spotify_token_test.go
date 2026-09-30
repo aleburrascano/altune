@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -130,5 +132,100 @@ func TestSpotifyTokenResolver_clientTokenStatusReachesBreaker(t *testing.T) {
 	}
 	if got := status.HTTPStatus(); got != http.StatusServiceUnavailable {
 		t.Errorf("HTTPStatus() = %d, want 503", got)
+	}
+}
+
+func spotifyTokenResolverWithUpstream(t *testing.T, serverTime int64, accessExpiryMs func() int64, clientSeconds int64) *spotifyTokenResolver {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/server-time":
+			_ = json.NewEncoder(w).Encode(map[string]int64{"serverTime": serverTime})
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"accessToken":                      "resolved-token",
+				"accessTokenExpirationTimestampMs": accessExpiryMs(),
+			})
+		case "/clienttoken":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"granted_token": map[string]any{"token": "client-token", "expires_after_seconds": clientSeconds},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	r := newSpotifyTokenResolver(srv.Client())
+	r.serverTimeURL = srv.URL + "/server-time"
+	r.accessTokenURL = srv.URL + "/token"
+	r.clientTokenURL = srv.URL + "/clienttoken"
+	return r
+}
+
+func inMillis(d time.Duration) func() int64 {
+	return func() int64 { return time.Now().Add(d).UnixMilli() }
+}
+
+func TestSpotifyTokenResolver_resolveRejectsBadAccessExpiry(t *testing.T) {
+	for name, expiry := range map[string]func() int64{
+		"zero":     func() int64 { return 0 },
+		"negative": func() int64 { return -5 },
+		"past":     inMillis(-time.Hour),
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := spotifyTokenResolverWithUpstream(t, 1700000000, expiry, 1209600)
+			if _, _, err := r.resolve(t.Context()); err == nil {
+				t.Fatal("resolve() error = nil, want a rejected access-token expiry")
+			}
+		})
+	}
+}
+
+func TestSpotifyTokenResolver_resolveRejectsBadClientLifetime(t *testing.T) {
+	for name, seconds := range map[string]int64{"zero": 0, "negative": -1} {
+		t.Run(name, func(t *testing.T) {
+			r := spotifyTokenResolverWithUpstream(t, 1700000000, inMillis(time.Hour), seconds)
+			if _, _, err := r.resolve(t.Context()); err == nil {
+				t.Fatal("resolve() error = nil, want a rejected client-token lifetime")
+			}
+		})
+	}
+}
+
+func TestSpotifyTokenResolver_resolveKeepsSessionUsableForShortOrHugeLifetimes(t *testing.T) {
+	cases := map[string]struct {
+		accessExpiry  func() int64
+		clientSeconds int64
+	}{
+		"short client lifetime": {inMillis(time.Hour), 60},
+		"short access lifetime": {inMillis(10 * time.Second), 1209600},
+		"overflowing client":    {inMillis(time.Hour), math.MaxInt64},
+		"overflowing access":    {func() int64 { return math.MaxInt64 }, 1209600},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := spotifyTokenResolverWithUpstream(t, 1700000000, c.accessExpiry, c.clientSeconds)
+			session, _, err := r.resolve(t.Context())
+			if err != nil {
+				t.Fatalf("resolve() error = %v, want a session", err)
+			}
+			if !session.valid() {
+				t.Error("session.valid() = false, want a freshly resolved session usable")
+			}
+			if limit := time.Now().Add(25 * time.Hour); session.accessExpiry.After(limit) || session.clientExpiry.After(limit) {
+				t.Errorf("expiries %v / %v exceed the 24h ceiling", session.accessExpiry, session.clientExpiry)
+			}
+		})
+	}
+}
+
+func TestSpotifyTokenResolver_fetchServerTimeRejectsNonPositive(t *testing.T) {
+	for _, serverTime := range []int64{0, -1} {
+		r := spotifyTokenResolverWithUpstream(t, serverTime, inMillis(time.Hour), 1209600)
+		if _, err := r.fetchServerTime(t.Context()); err == nil {
+			t.Errorf("fetchServerTime() error = nil for serverTime %d, want rejection", serverTime)
+		}
 	}
 }
