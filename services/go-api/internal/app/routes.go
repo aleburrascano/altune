@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/reqmetrics"
+	"net/http"
+	"strings"
 	"time"
 
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
@@ -16,7 +18,37 @@ import (
 	"github.com/go-chi/cors"
 )
 
-const apiWriteTimeout = 60 * time.Second
+const (
+	apiWriteTimeout   = 60 * time.Second
+	apiRequestTimeout = 50 * time.Second
+)
+
+func (a *App) requestBudget() time.Duration {
+	if a.requestTimeout > 0 {
+		return a.requestTimeout
+	}
+	return apiRequestTimeout
+}
+
+func isLongLivedRoute(r *http.Request) bool {
+	path := r.URL.Path
+	return path == "/v1/events" ||
+		(r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/tracks/") && strings.HasSuffix(path, "/audio"))
+}
+
+func v1RequestTimeout(d time.Duration) func(http.Handler) http.Handler {
+	bounded := httputil.RequestTimeout(d)
+	return func(next http.Handler) http.Handler {
+		withDeadline := bounded(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.HasPrefix(r.URL.Path, "/v1/") || isLongLivedRoute(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			withDeadline.ServeHTTP(w, r)
+		})
+	}
+}
 
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
@@ -64,6 +96,7 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r.Use(httputil.CorrelationID)
 	r.Use(latencyMiddleware(reqmetrics.Observe))
 	r.Use(httputil.WriteDeadline(writeTimeout))
+	r.Use(v1RequestTimeout(a.requestBudget()))
 	r.Use(httputil.RequestLogger)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.MaxBodySize(1 << 20))

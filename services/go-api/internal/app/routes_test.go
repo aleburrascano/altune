@@ -322,3 +322,40 @@ func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testin
 		t.Errorf("GET /v1/library without Authorization = %d, want 401", rec.Code)
 	}
 }
+
+func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *testing.T) {
+	const budget = 100 * time.Millisecond
+	a := &App{cfg: &config.Config{Env: "test"}, requestTimeout: budget}
+	r := a.newRouter(apiWriteTimeout)
+	blockUntilDone := func(w http.ResponseWriter, req *http.Request) {
+		select {
+		case <-req.Context().Done():
+			w.WriteHeader(http.StatusGatewayTimeout)
+		case <-time.After(3 * budget):
+			w.WriteHeader(http.StatusOK)
+		}
+	}
+	r.Get("/v1/blocked", blockUntilDone)
+	r.Get("/v1/events", blockUntilDone)
+	r.Get("/v1/tracks/{trackId}/audio", blockUntilDone)
+	r.Get("/health", blockUntilDone)
+
+	cases := []struct {
+		path string
+		want int
+	}{
+		{"/v1/blocked", http.StatusGatewayTimeout},
+		{"/v1/events", http.StatusOK},
+		{"/v1/tracks/abc/audio", http.StatusOK},
+		{"/health", http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if rec.Code != tc.want {
+				t.Errorf("GET %s = %d, want %d", tc.path, rec.Code, tc.want)
+			}
+		})
+	}
+}
