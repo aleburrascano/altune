@@ -117,7 +117,7 @@ func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, e
 func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
 	v.metrics.JWKSFetchFailed()
 	failures, age := v.refresher.recordBackgroundFailure(err)
-	slog.Warn("JWKS background refresh failed, serving last-known-good key set",
+	slog.Warn("JWKS background refresh failed, serving last-known-good key set until it is older than stale_after, then rejecting tokens",
 		"error", err,
 		"consecutive_failures", failures,
 		"key_set_age", age.Round(time.Second).String(),
@@ -126,7 +126,7 @@ func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
 }
 
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (auth.VerifiedToken, error) {
-	keySet, err := v.fetchKeySet(ctx)
+	keySet, err := v.fetchFreshKeySet(ctx)
 	if err != nil {
 		return auth.VerifiedToken{}, err
 	}
@@ -217,6 +217,24 @@ func (v *SupabaseJWTVerifier) fetchKeySet(ctx context.Context) (jwk.Set, error) 
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
 	return keySet, nil
+}
+
+func (v *SupabaseJWTVerifier) fetchFreshKeySet(ctx context.Context) (jwk.Set, error) {
+	keySet, err := v.fetchKeySet(ctx)
+	if err != nil {
+		return nil, err
+	}
+	staleErr := v.refresher.checkFresh()
+	if staleErr == nil {
+		return keySet, nil
+	}
+	if err := v.refresher.RefreshIfStale(ctx); err != nil {
+		return nil, staleErr
+	}
+	if err := v.refresher.checkFresh(); err != nil {
+		return nil, err
+	}
+	return v.cache.Get(ctx, v.jwksURL)
 }
 
 func (v *SupabaseJWTVerifier) forceRefresh(ctx context.Context) error {

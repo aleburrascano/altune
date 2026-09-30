@@ -1009,3 +1009,75 @@ func TestSupabaseJWTVerifier_CountsBackgroundJWKSRefreshFailures(t *testing.T) {
 		return verifier.refresher.bgFailures >= 2 && metrics.jwksFailures.Load() >= 2
 	})
 }
+
+func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T) {
+	shortenJWKSBackgroundRefresh(t)
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated", privateKey: keyA, keyID: "key-a"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+
+	var skew atomic.Int64
+	clock := func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
+	ctx := t.Context()
+	verifier, err := newSupabaseJWTVerifier(ctx, jwks.server.URL, f.projectURL, f.audience, clock)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	token := f.signToken(t, validClaims(f.issuer, f.audience))
+
+	jwks.down.Store(true)
+	waitFor(t, 10*time.Second, "a failed background refresh", func() bool {
+		verifier.refresher.mu.Lock()
+		defer verifier.refresher.mu.Unlock()
+		return verifier.refresher.bgFailures >= 1
+	})
+	skew.Store(int64(jwksStaleAfter + time.Minute))
+
+	_, err = verifier.Verify(ctx, token)
+	if !errors.Is(err, errJWKSStale) {
+		t.Fatalf("Verify past the staleness bound: got %v, want errJWKSStale", err)
+	}
+	var invalid *auth.InvalidTokenError
+	if errors.As(err, &invalid) {
+		t.Fatalf("stale key set must not read as a token rejection: %v", err)
+	}
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	auth.Middleware(verifier)(next).ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("middleware status with a stale key set: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestSupabaseJWTVerifier_VerifyAcceptsAgainOnceKeySetRefreshes(t *testing.T) {
+	shortenJWKSBackgroundRefresh(t)
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated", privateKey: keyA, keyID: "key-a"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+
+	var skew atomic.Int64
+	clock := func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
+	ctx := t.Context()
+	verifier, err := newSupabaseJWTVerifier(ctx, jwks.server.URL, f.projectURL, f.audience, clock)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	token := f.signToken(t, validClaims(f.issuer, f.audience))
+
+	jwks.down.Store(true)
+	skew.Store(int64(jwksStaleAfter + time.Minute))
+	if _, err := verifier.Verify(ctx, token); !errors.Is(err, errJWKSStale) {
+		t.Fatalf("Verify while stale and down: got %v, want errJWKSStale", err)
+	}
+
+	jwks.down.Store(false)
+	waitFor(t, 10*time.Second, "Verify to accept after the endpoint recovers", func() bool {
+		_, err := verifier.Verify(ctx, token)
+		return err == nil
+	})
+}
