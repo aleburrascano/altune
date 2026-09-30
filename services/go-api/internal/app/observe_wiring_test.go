@@ -437,24 +437,8 @@ func TestObserveLiveMetrics_CarriesProviderBreakerAndLatency(t *testing.T) {
 	}
 }
 
-func TestDepStatus_MatchesObserveWireValues(t *testing.T) {
-	pairs := []struct {
-		app     DepStatus
-		observe observeHandler.DepStatus
-	}{
-		{DepUp, observeHandler.DepUp},
-		{DepNotConfigured, observeHandler.DepNotConfigured},
-		{DepDown, observeHandler.DepDown},
-	}
-	for _, p := range pairs {
-		if string(p.app) != string(p.observe) {
-			t.Errorf("app %q != observe %q", p.app, p.observe)
-		}
-	}
-}
-
-func TestObserveHealthProbe_MapsStatuses(t *testing.T) {
-	got := (&App{}).observeHealthProbe(context.Background())
+func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
+	got := (&App{}).dependencyHealth(context.Background())
 
 	if got.DB != observeHandler.DepNotConfigured || got.Redis != observeHandler.DepNotConfigured || got.Auth != observeHandler.DepNotConfigured {
 		t.Errorf("statuses = %q/%q/%q, want all not_configured", got.DB, got.Redis, got.Auth)

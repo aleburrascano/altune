@@ -1,6 +1,7 @@
 package app
 
 import (
+	observeHandler "altune/go-api/internal/observe/handler"
 	"altune/go-api/internal/shared/database"
 	"context"
 	"encoding/json"
@@ -47,7 +48,7 @@ func TestDependencyHealth_HangingDBRespectsTimeout(t *testing.T) {
 		},
 	}
 
-	done := make(chan DependencyHealth, 1)
+	done := make(chan observeHandler.DependencyHealth, 1)
 	go func() { done <- a.dependencyHealth(context.Background()) }()
 
 	select {

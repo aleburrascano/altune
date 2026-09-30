@@ -24,7 +24,7 @@ import (
 func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *eventtap.Tap) {
 	a.startObserveSources(ctx, tap)
 	deps := observeHandler.Deps{
-		Health:      a.observeHealthProbe,
+		Health:      a.dependencyHealth,
 		Logs:        a.logRing,
 		Events:      a.eventFeed,
 		Eval:        a.evalMeter,
@@ -127,23 +127,5 @@ func meterResult(res EvalResult) evalmeter.Result {
 		Regressed: res.Regressed,
 		Errored:   res.Errored,
 		Queries:   queries,
-	}
-}
-
-func (a *App) observeHealthProbe(ctx context.Context) observeHandler.DependencyHealth {
-	h := a.dependencyHealth(ctx)
-	return observeHandler.DependencyHealth{
-		DB:    observeHandler.DepStatus(h.DB),
-		Redis: observeHandler.DepStatus(h.Redis),
-		Auth:  observeHandler.DepStatus(h.Auth),
-		Detail: observeHandler.DependencyDetail{
-			DBLatencyMs:    h.Detail.DBLatencyMs,
-			DBError:        h.Detail.DBError,
-			RedisLatencyMs: h.Detail.RedisLatencyMs,
-			RedisError:     h.Detail.RedisError,
-			AuthLatencyMs:  h.Detail.AuthLatencyMs,
-			AuthError:      h.Detail.AuthError,
-			CheckedAt:      h.Detail.CheckedAt,
-		},
 	}
 }

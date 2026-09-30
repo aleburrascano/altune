@@ -7,6 +7,7 @@ import (
 	"time"
 
 	observeAlert "altune/go-api/internal/observe/alert"
+	observeHandler "altune/go-api/internal/observe/handler"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 
@@ -39,7 +40,7 @@ func (a *App) alertNotifier(ctx context.Context) observeAlert.AlertNotifier {
 	return observeAlert.NewWebhookNotifier(a.cfg.AlertWebhookURL)
 }
 
-func buildDependencyCondition(health func(context.Context) DependencyHealth) observeAlert.Condition {
+func buildDependencyCondition(health func(context.Context) observeHandler.DependencyHealth) observeAlert.Condition {
 	return observeAlert.Condition{
 		Key: "dependency_down",
 		Eval: func(ctx context.Context) *observeAlert.Alert {
@@ -56,12 +57,25 @@ func buildDependencyCondition(health func(context.Context) DependencyHealth) obs
 	}
 }
 
-func dependencyDownMessage(h DependencyHealth) string {
+func dependencyDownMessage(h observeHandler.DependencyHealth) string {
 	msg := "dependencies down:"
-	for _, name := range h.down() {
+	for _, name := range downDependencies(h) {
 		msg += " " + name
 	}
 	return msg
+}
+
+func downDependencies(h observeHandler.DependencyHealth) []string {
+	var names []string
+	for _, dep := range []struct {
+		name   string
+		status observeHandler.DepStatus
+	}{{"db", h.DB}, {"redis", h.Redis}, {"auth", h.Auth}} {
+		if dep.status == observeHandler.DepDown {
+			names = append(names, dep.name)
+		}
+	}
+	return names
 }
 
 type coverageEvents interface {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	observeHandler "altune/go-api/internal/observe/handler"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -15,11 +16,11 @@ var buildCommit = "unknown"
 
 type healthCache struct {
 	mu        sync.Mutex
-	result    DependencyHealth
+	result    observeHandler.DependencyHealth
 	expiresAt time.Time
 }
 
-func (c *healthCache) get(probe func() DependencyHealth) DependencyHealth {
+func (c *healthCache) get(probe func() observeHandler.DependencyHealth) observeHandler.DependencyHealth {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if time.Now().Before(c.expiresAt) {
@@ -30,59 +31,23 @@ func (c *healthCache) get(probe func() DependencyHealth) DependencyHealth {
 	return c.result
 }
 
-type DependencyHealth struct {
-	DB     DepStatus
-	Redis  DepStatus
-	Auth   DepStatus
-	Detail DependencyDetail
+type probeResult struct {
+	status    observeHandler.DepStatus
+	err       string
+	latencyMs int64
 }
 
-type DepStatus string
-
-const (
-	DepUp            DepStatus = "ok"
-	DepNotConfigured DepStatus = "not_configured"
-	DepDown          DepStatus = "down"
-)
-
-type DependencyDetail struct {
-	DBLatencyMs    int64
-	DBError        string
-	RedisLatencyMs int64
-	RedisError     string
-	AuthLatencyMs  int64
-	AuthError      string
-	CheckedAt      time.Time
-}
-
-func (d DependencyHealth) Healthy() bool {
-	return len(d.down()) == 0
-}
-
-func (d DependencyHealth) down() []string {
-	var names []string
-	for _, dep := range []struct {
-		name   string
-		status DepStatus
-	}{{"db", d.DB}, {"redis", d.Redis}, {"auth", d.Auth}} {
-		if dep.status == DepDown {
-			names = append(names, dep.name)
-		}
-	}
-	return names
-}
-
-func probeDependency(configured bool, run func() error) (DepStatus, string, int64) {
+func probeDependency(configured bool, run func() error) probeResult {
 	if !configured {
-		return DepNotConfigured, "", 0
+		return probeResult{status: observeHandler.DepNotConfigured}
 	}
 	start := time.Now()
 	err := run()
 	ms := time.Since(start).Milliseconds()
 	if err != nil {
-		return DepDown, err.Error(), ms
+		return probeResult{status: observeHandler.DepDown, err: err.Error(), latencyMs: ms}
 	}
-	return DepUp, "", ms
+	return probeResult{status: observeHandler.DepUp, latencyMs: ms}
 }
 
 type authHealthChecker interface {
@@ -94,7 +59,7 @@ type dbHealthChecker func(ctx context.Context) database.HealthStatus
 const defaultDependencyProbeTimeout = 2 * time.Second
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
-	health := a.healthCache.get(func() DependencyHealth { return a.dependencyHealth(context.WithoutCancel(r.Context())) })
+	health := a.healthCache.get(func() observeHandler.DependencyHealth { return a.dependencyHealth(context.WithoutCancel(r.Context())) })
 	if health.Healthy() {
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": buildCommit})
 		return
@@ -102,25 +67,25 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded", "version": buildCommit})
 }
 
-func (a *App) dependencyHealth(ctx context.Context) DependencyHealth {
+func (a *App) dependencyHealth(ctx context.Context) observeHandler.DependencyHealth {
 	timeout := a.probeTimeout()
-	dbStatus, dbErr, dbMs := probeDependency(a.dbHealth != nil, func() error {
+	db := probeDependency(a.dbHealth != nil, func() error {
 		if status := a.probeDB(ctx, timeout); !status.OK {
 			return status.Err
 		}
 		return nil
 	})
-	redisStatus, redisErr, redisMs := probeDependency(a.redisClient != nil, func() error {
+	redis := probeDependency(a.redisClient != nil, func() error {
 		return probe(ctx, timeout, func(c context.Context) error {
 			return a.redisClient.Ping(c).Err()
 		})
 	})
-	authStatus, authErr, authMs := probeDependency(a.authVerifier != nil, func() error {
+	auth := probeDependency(a.authVerifier != nil, func() error {
 		return probe(ctx, timeout, a.authVerifier.CheckHealth)
 	})
-	return DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: DependencyDetail{
-		DBLatencyMs: dbMs, DBError: dbErr, RedisLatencyMs: redisMs, RedisError: redisErr,
-		AuthLatencyMs: authMs, AuthError: authErr, CheckedAt: time.Now().UTC(),
+	return observeHandler.DependencyHealth{DB: db.status, Redis: redis.status, Auth: auth.status, Detail: observeHandler.DependencyDetail{
+		DBLatencyMs: db.latencyMs, DBError: db.err, RedisLatencyMs: redis.latencyMs, RedisError: redis.err,
+		AuthLatencyMs: auth.latencyMs, AuthError: auth.err, CheckedAt: time.Now().UTC(),
 	}}
 }
 
