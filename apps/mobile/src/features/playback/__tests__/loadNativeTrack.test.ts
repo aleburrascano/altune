@@ -1221,4 +1221,19 @@ describe('a tail rebuild that outlived the lock deadline', () => {
       expect(__player.calls('add')).toHaveLength(0);
     });
   });
+  describe('the timeout reconcile — native has no active track', () => {
+    it('makes no add call', async () => {
+      useQueueStore.getState().loadQueue([A, B, C], 0, null);
+      player.getActiveTrack!.mockImplementation(async () => undefined);
+      player.getActiveTrackIndex!.mockImplementation(async () => undefined);
+      player.getQueue!.mockImplementation(async () => []);
+
+      const stuck = withNativeQueue(() => new Promise<void>(() => undefined));
+      stuck.catch(() => undefined);
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS + 1);
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+
+      expect(__player.calls('add')).toHaveLength(0);
+    });
+  });
 });

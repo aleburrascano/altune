@@ -3,6 +3,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 import { clamp } from '../clamp';
 import { ensurePlayerSetup } from './initPlayer';
 import { onNativeQueueTimeout, withNativeQueue, type Fence } from './nativeQueueLock';
+import { activeNativeTrackId } from './nativeTrack';
 import { nativeTrackBuilder } from './nativeTrackBuilder';
 import { rebuildNativeTail, reorderUpcomingApplied } from './rebuildNativeTail';
 import { forgetAllSwaps } from './nativeTrackSwap';
@@ -174,16 +175,17 @@ export async function insertNativeTrackNext(track: PlaybackTrack, position: numb
   });
 }
 
-function reconcileUpcomingFromStore(): void {
+async function reconcileUpcomingFromStore(): Promise<void> {
   const state = useQueueStore.getState();
   const ordered = orderedQueueTracks(state);
   if (ordered.length === 0) return;
-  rebuildNativeTail(ordered.slice(state.currentIndex + 1), currentLoadToken()).catch(
-    () => undefined,
-  );
+  if ((await activeNativeTrackId()) === undefined) return;
+  await rebuildNativeTail(ordered.slice(state.currentIndex + 1), currentLoadToken());
 }
 
-onNativeQueueTimeout(reconcileUpcomingFromStore);
+onNativeQueueTimeout(() => {
+  reconcileUpcomingFromStore().catch(() => undefined);
+});
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {
   await ensurePlayerSetup();
