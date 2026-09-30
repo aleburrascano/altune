@@ -1,0 +1,1 @@
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS acquisition_run_attempts INTEGER NOT NULL DEFAULT 0;

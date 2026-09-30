@@ -621,3 +621,36 @@ func TestPgxJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *testin
 		t.Errorf("oldest age = %v, want at least 10m", oldest)
 	}
 }
+
+func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+
+	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
+	var stale ports.Job
+	for i := 0; i < 3; i++ {
+		job, err := queue.Claim(ctx, time.Minute)
+		if err != nil {
+			t.Fatalf("Claim #%d = %v", i+1, err)
+		}
+		stale = job
+		expireLease(t, pool, track.ID)
+	}
+
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("re-Enqueue = %v", err)
+	}
+	job, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim after re-Enqueue = %v", err)
+	}
+
+	if job.Run != 1 || job.Attempts != 4 {
+		t.Errorf("Run/Attempts = %d/%d, want 1/4", job.Run, job.Attempts)
+	}
+	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
+	}
+}

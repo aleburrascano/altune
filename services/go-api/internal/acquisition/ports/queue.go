@@ -26,6 +26,7 @@ type Job struct {
 	UserID   shared.UserId
 	Kind     JobKind
 	Attempts int
+	Run      int
 	Fence    Fence
 }
 

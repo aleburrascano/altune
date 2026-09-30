@@ -350,7 +350,7 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	key := job.TrackID.String()
 	run := s.acquisitionRunFor(job.Kind)
 
-	jobCtx, cancelJob := s.jobContextFor(key, job.Attempts)
+	jobCtx, cancelJob := s.jobContextFor(key, job.Run)
 	defer cancelJob()
 
 	heartbeatDone := make(chan struct{})
@@ -499,7 +499,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 		return
 	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
-		availableAt := s.now().Add(retryBackoff(job.Attempts))
+		availableAt := s.now().Add(retryBackoff(job.Run))
 		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, availableAt)
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
@@ -509,10 +509,10 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 }
 
 func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
-	if job.Attempts >= maxAcquisitionAttempts {
+	if job.Run >= maxAcquisitionAttempts {
 		s.refuseQueuedRecovering(job)
 	}
-	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, s.now().Add(retryBackoff(job.Attempts)))
+	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, s.now().Add(retryBackoff(job.Run)))
 	s.logQueueOutcome("release", job.TrackID, err)
 }
 

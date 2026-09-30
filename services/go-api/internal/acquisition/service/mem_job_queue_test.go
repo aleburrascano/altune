@@ -163,3 +163,37 @@ func TestMemJobQueue_ClaimReclaimsAJobWhoseLeaseExpired(t *testing.T) {
 		t.Errorf("reclaim = %+v, want same track with a new fence (first %v)", second, first.Fence)
 	}
 }
+
+func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
+	ctx := context.Background()
+	trackID := domain.NewTrackId()
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, clock); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	var stale ports.Job
+	for i := 0; i < 3; i++ {
+		job, err := q.Claim(ctx, time.Minute)
+		if err != nil {
+			t.Fatalf("Claim #%d = %v", i+1, err)
+		}
+		stale = job
+		clock = clock.Add(2 * time.Minute)
+	}
+
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, clock); err != nil {
+		t.Fatalf("re-Enqueue = %v", err)
+	}
+	job, err := q.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim after re-Enqueue = %v", err)
+	}
+
+	if job.Run != 1 || job.Attempts != 4 {
+		t.Errorf("Run/Attempts = %d/%d, want 1/4", job.Run, job.Attempts)
+	}
+	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
+	}
+}

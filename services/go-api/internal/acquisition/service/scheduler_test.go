@@ -967,7 +967,41 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts, Run: maxAcquisitionAttempts}
+
+	scheduler.releasePanickedJob(job)
+
+	if got := acq.refused.Load(); got != 1 {
+		t.Errorf("track failed %d times, want 1", got)
+	}
+}
+
+func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetried(t *testing.T) {
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts + 4, Run: 1}
+
+	scheduler.releasePanickedJob(job)
+
+	if got := acq.refused.Load(); got != 0 {
+		t.Errorf("track failed %d times, want 0 (first panic of a fresh run keeps its budget)", got)
+	}
+}
+
+func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *testing.T) {
+	acq := &panickingAcquirer{}
+	var wg sync.WaitGroup
+	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Attempts: maxAcquisitionAttempts + 4, Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 

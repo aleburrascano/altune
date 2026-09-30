@@ -24,6 +24,7 @@ type memJob struct {
 	availableAt time.Time
 	leaseUntil  time.Time
 	attempts    int
+	run         int
 	leased      bool
 	reenqueued  bool
 }
@@ -64,6 +65,7 @@ func (q *memJobQueue) Enqueue(_ context.Context, trackID domain.TrackId, kind po
 	j.availableAt = availableAt
 	j.leased = false
 	j.reenqueued = false
+	j.run = 0
 	q.mu.Unlock()
 	notifyWake(q.wake)
 	return nil
@@ -93,6 +95,7 @@ func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt tim
 		return true, ports.ErrJobKindConflict
 	}
 	j.reenqueued = true
+	j.run = 0
 	j.availableAt = availableAt
 	q.mu.Unlock()
 	notifyWake(q.wake)
@@ -111,8 +114,9 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	best.leased = true
 	best.leaseUntil = now.Add(lease)
 	best.attempts++
+	best.run++
 	best.reenqueued = false
-	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Fence: ports.Fence(best.attempts)}, nil
+	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Run: best.run, Fence: ports.Fence(best.attempts)}, nil
 }
 
 func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {

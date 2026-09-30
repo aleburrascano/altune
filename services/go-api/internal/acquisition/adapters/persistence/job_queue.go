@@ -40,6 +40,7 @@ SET acquisition_status = CASE
 		WHEN (acquisition_status = 'pending' OR acquisition_available_at IS NOT NULL)
 			AND acquisition_lease_until >= now() THEN acquisition_lease_until
 	END,
+	acquisition_run_attempts = 0,
 	failure_reason = ''
 WHERE id = $1
 	AND (
@@ -125,10 +126,11 @@ WITH candidate AS (
 UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $1),
 	acquisition_attempts = acquisition_attempts + 1,
+	acquisition_run_attempts = acquisition_run_attempts + 1,
 	acquisition_started_at = now()
 FROM candidate
 WHERE tracks.id = candidate.id
-RETURNING tracks.id, tracks.user_id, tracks.acquisition_job_kind, tracks.acquisition_attempts`
+RETURNING tracks.id, tracks.user_id, tracks.acquisition_job_kind, tracks.acquisition_attempts, tracks.acquisition_run_attempts`
 
 func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -139,21 +141,22 @@ func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job
 		userID   shared.UserId
 		kind     string
 		attempts int
+		run      int
 	)
 	row := q.pool.QueryRow(ctx, claimJobSQL, lease.Seconds())
-	err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts)
+	err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts, &run)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.Job{}, ports.ErrNoJobAvailable
 	}
 	if err != nil {
 		return ports.Job{}, fmt.Errorf("claim acquisition job: %w", err)
 	}
-	return ports.Job{TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Attempts: attempts, Fence: ports.Fence(attempts)}, nil
+	return ports.Job{TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Attempts: attempts, Run: run, Fence: ports.Fence(attempts)}, nil
 }
 
-func scanTrackClaim(row pgx.Row, trackID *domain.TrackId, userID *shared.UserId, kind *string, attempts *int) error {
+func scanTrackClaim(row pgx.Row, trackID *domain.TrackId, userID *shared.UserId, kind *string, attempts, run *int) error {
 	var rawTrackID, rawUserID uuid.UUID
-	if err := row.Scan(&rawTrackID, &rawUserID, kind, attempts); err != nil {
+	if err := row.Scan(&rawTrackID, &rawUserID, kind, attempts, run); err != nil {
 		return err
 	}
 	*trackID = domain.TrackIdFromUUID(rawTrackID)
