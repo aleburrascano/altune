@@ -1,19 +1,3 @@
-# Discovery nightly eval — the ACTUAL baselines gate.
-#
-# discovery-eval-gate.yml runs only the deterministic, provider-free unit tests
-# per-PR. This workflow runs every gated mode against the frozen corpus and
-# reports each metric against cmd/discoveryeval/baselines.json.
-#
-# Repo secrets required:
-#   DATABASE_URL        (Supabase Postgres — identity store + metric history)
-#   SUPABASE_JWT_JWKS_URL                (config.Load() validates this even though
-#                                         eval mode never touches auth)
-#   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN
-#                       (dedicated CI-only credentials — a heavy nightly run
-#                        shares no quota with live user traffic. Rotate
-#                        independently of prod.)
-#   MUSICBRAINZ_USER_AGENT   (no key — a contact UA string; rate limiting there
-#                             is IP-scoped, so sharing with prod is fine)
 name: Discovery eval nightly
 
 on:
@@ -27,11 +11,6 @@ env:
   CORPUS: cmd/discoveryeval/corpus-library.json
 
 jobs:
-  # Modes that sweep the corpus against live providers. max-parallel is 1 by
-  # deliberate design, not runner scarcity: the rate limiter in
-  # internal/app/live_transport.go is per-process, so two concurrent jobs would
-  # double the request rate on the Last.fm and Discogs credentials, whose quotas
-  # are per-key. MusicBrainz and iTunes are IP-scoped and would be unaffected.
   heavy:
     strategy:
       fail-fast: false
@@ -60,11 +39,6 @@ jobs:
       - name: build harness
         run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
 
-      # A regressed mode re-runs once before it counts. Live providers are noisy
-      # enough that a single red result is not evidence: detail's contamination
-      # guard is fail-open on a MusicBrainz timeout, and a rate-limited response
-      # can flip a gate with no code change (observed 2026-07-24: 0 contamination,
-      # then 70, same commit, ~30s apart). Two consecutive regressions is signal.
       - name: ${{ matrix.mode }}
         env:
           MODE: ${{ matrix.mode }}
@@ -78,11 +52,6 @@ jobs:
           path: services/go-api/tmp/*-${{ matrix.mode }}.json
           retention-days: 30
 
-  # Modes that spend no per-key provider quota: correction is offline against a
-  # seeded Redis, signal-a reads telemetry, and detail touches only MusicBrainz,
-  # which is IP-scoped and so unaffected by a concurrent heavy job on another
-  # runner. Safe to run alongside the heavy group. signal-b is NOT here — it
-  # fans out over Last.fm, MusicBrainz and Discogs (BuildConsensusProviders).
   cheap:
     strategy:
       fail-fast: false
@@ -120,10 +89,6 @@ jobs:
       - name: build harness
         run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
 
-      # correction hard-requires a populated vocabulary store. The VM's Redis has
-      # no public exposure and isn't reachable from Actions, so CI seeds its own
-      # from the frozen corpus — deterministic, and gated against a baseline
-      # measured the same way.
       - name: seed vocabulary
         if: matrix.mode == 'correction'
         env:
@@ -168,9 +133,6 @@ jobs:
           pattern: discovery-eval-*
           merge-multiple: true
 
-      # Renders the table and exits 2 on a regression. The trend used to be
-      # upserted into discovery_metrics for cross-run history; that store is
-      # gone (#2806) and Overseer owns history now.
       - name: aggregate
         id: aggregate
         run: bash "$GITHUB_WORKSPACE/.github/workflows/discovery-eval-report.sh"

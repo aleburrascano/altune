@@ -1,19 +1,7 @@
-# Mobile mutation gate. Answers the question coverage cannot: do the tests
-# CONSTRAIN the code, or merely execute it?
-#
-# On 2026-07-29 an agent-driven mutation pass over six src/shared/ subsystems
-# ran 72 mutations against 552 passing tests and killed 26 — a 38% kill rate.
-# Coverage reported those lines as covered. That gap is what this workflow
-# watches, and it is why the `break` threshold in stryker.config.json is a
-# ratchet: raise it when a slice is hardened, never lower it to go green.
-#
-# Scheduled rather than per-PR because a full run mutates hundreds of variants
-# and takes far too long to block a push. `test-mobile.yml` is the fast gate.
 name: Mutation (mobile)
 
 on:
   schedule:
-    # 03:20 UTC nightly — after the discovery-eval nightly, before working hours.
     - cron: '20 3 * * *'
   workflow_dispatch:
     inputs:
@@ -33,8 +21,6 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      # Full repo, not just apps/mobile: the cross-surface contract test derives
-      # the backend's published event names from services/go-api at test time.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v7
@@ -50,8 +36,6 @@ jobs:
           MUTATE: ${{ github.event.inputs.mutate }}
         run: bash "$GITHUB_WORKSPACE/.github/workflows/mutation-mobile.sh"
 
-      # Kept even on failure — the surviving-mutant list is the actionable part,
-      # and a failed run is exactly when you want to read it.
       - name: upload mutation report
         if: always()
         uses: actions/upload-artifact@v7

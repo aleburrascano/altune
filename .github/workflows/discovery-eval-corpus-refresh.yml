@@ -1,9 +1,3 @@
-# Rebuild the frozen eval corpus from the live tracks table and open a PR.
-#
-# The nightly evaluates a checked-in snapshot so a metric delta means the code or
-# a provider changed, never that the library grew. Refreshing the snapshot is
-# therefore a deliberate act: it moves the denominator, which invalidates every
-# corpus-derived baseline. Re-baseline each gated mode after merging this.
 name: Discovery eval corpus refresh
 
 on:

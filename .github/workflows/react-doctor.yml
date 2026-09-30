@@ -1,13 +1,7 @@
-# React Doctor — finds security, performance, correctness, accessibility,
-# bundle-size, and architecture issues in React codebases.
-#
-# Docs: https://www.react.doctor/ci
-# Source: https://github.com/millionco/react-doctor
 
 name: React Doctor
 
 on:
-  # Scans the PR's changed files and posts a sticky summary comment listing only the new issues introduced relative to the merge base of the target branch.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
@@ -19,7 +13,6 @@ permissions:
   issues: write
   statuses: write
 
-# Cancels any in-flight scan for the same PR (or branch, on push) the moment a new commit arrives, so reviewers only ever see the latest run.
 concurrency:
   group: react-doctor-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -28,30 +21,15 @@ jobs:
   react-doctor:
     runs-on: ubuntu-latest
     steps:
-      # Full history so react-doctor can find the merge base and comment only on
-      # the issues this PR introduces, not every pre-existing one in changed files.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      # This workflow exists for the sticky per-PR delta comment, not for gating.
-      # The actual gate moved to test-mobile.yml on 2026-07-30, where it runs the
-      # PINNED devDependency and asserts errorCount == 0 with a warning ceiling.
-      # That split is deliberate: the comment is allowed to follow upstream's
-      # newest rules, a gate must not change behaviour because upstream shipped
-      # one. Do not make this step blocking — you would be gating on @latest.
-      # Full knob reference: https://www.react.doctor/ci
       - uses: millionco/react-doctor@v2
         with:
           directory: apps/mobile
           blocking: warning
 
-      # react-doctor is ADVISORY (the real gate is test-mobile.yml). But it posts
-      # inline REVIEW comments, and `main` requires conversation resolution — so a
-      # single advisory warning would silently block merge until a human resolved
-      # the bot's thread. Auto-resolve react-doctor's OWN threads (matched by its
-      # `react-doctor` marker) to keep it advisory. Human review threads, and any
-      # other bot's, are left untouched — conversation resolution still gates them.
       - name: keep react-doctor advisory (resolve its own threads)
         if: ${{ github.event_name == 'pull_request' }}
         env:

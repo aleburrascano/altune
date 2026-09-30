@@ -1,14 +1,3 @@
-# Build an UNSIGNED iOS .ipa for sideloading and publish it as a GitHub Release.
-#
-# Sideloaders (AltStore / SideStore) re-sign the app on-device with the user's
-# own Apple ID, so we ship an unsigned archive — no Apple Developer account or
-# signing certificate needed here. macOS runner minutes are free on public repos.
-#
-# Trigger: push a tag like `v1.0.0`  (git tag v1.0.0 && git push origin v1.0.0)
-# or run manually via the Actions tab (provide the version).
-#
-# After the build, the AltStore source (apps.json on main) is updated so
-# existing installs see the new version automatically.
 
 name: Release iOS (sideload)
 
@@ -29,25 +18,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # The release gate. test-mobile.yml runs only when a workflow calls it, so
-  # without this a tag push matched nothing and every .ipa published here shipped
-  # with zero checks — no typecheck, no lint, no tests. This runs them against
-  # the tagged commit before anything is built, on a cheap ubuntu runner rather
-  # than the macOS one.
   verify:
     uses: ./.github/workflows/test-mobile.yml
 
   build:
     needs: verify
-    # macos-26 ships Xcode 26.5+ (Swift 6.3.x). Older images topped out at Xcode
-    # 26.3 (Swift 6.2.x), which rejects the SWIFT_RETURNS_RETAINED annotation on
-    # expo-modules-jsi's RuntimeScheduler constructors and fails the archive.
     runs-on: macos-26
     outputs:
       version: ${{ steps.meta.outputs.version }}
       size: ${{ steps.pack.outputs.size }}
     env:
-      # Public (publishable) build-time config, inlined into the JS bundle.
       EXPO_PUBLIC_API_URL: ${{ vars.PROD_API_URL }}
       EXPO_PUBLIC_SUPABASE_URL: ${{ vars.PROD_SUPABASE_URL }}
       EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PROD_SUPABASE_ANON_KEY }}
@@ -110,15 +90,13 @@ jobs:
           files: ${{ runner.temp }}/Altune.ipa
           fail_on_unmatched_files: true
 
-  # Publishes the AltStore/SideStore manifest to the dedicated, UNPROTECTED
-  # `altstore` branch. main stays fully protected — the bot never writes to it.
   update-source:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4 # main — has the updater script
+      - uses: actions/checkout@v4
 
       - name: Seed working copy with the currently published manifest
         run: |

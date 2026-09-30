@@ -1,7 +1,4 @@
-# Altune label taxonomy — source of truth.
-# Sync to GitHub with a label-sync tool or the gh loop in the repo docs.
 
-# --- type: nature of the work (bug + enhancement kept as GitHub defaults) ---
 - name: "type:refactor"
   color: "d4c5f9"
   description: "Restructure code; behavior unchanged"
@@ -15,7 +12,6 @@
   color: "d4c5f9"
   description: "Research or ADR-first decision work; no shippable code"
 
-# --- flow: ticket state ---
 - name: "needs-triage"
   color: "fbca04"
   description: "Seen, not yet groomed or sliced"
@@ -23,7 +19,6 @@
   color: "d93f0b"
   description: "Touches auth/concurrency/parsing/data/security — crew runs an attack pass before the PR"
 
-# --- kept existing labels ---
 - name: "bug"
   color: "d73a4a"
   description: "Something isn't working"

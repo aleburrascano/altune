@@ -1,9 +1,5 @@
-# Default owner for everything in the repo.
-# Informational: code-owner review is not required on main (solo dev can't
-# self-approve), so this maps ownership rather than gating merges.
 *       @aleburrascano
 
-# CI/CD and deploy config — owner review required.
 /.github/        @aleburrascano
 /services/go-api/deploy/   @aleburrascano
 /apps.json       @aleburrascano

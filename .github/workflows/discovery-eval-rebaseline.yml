@@ -1,15 +1,3 @@
-# Re-measure one mode's baselines and open a PR with the diff.
-#
-# Manual dispatch only, never implicit re-baselining: the PR is the explicit,
-# reviewed step, and the diff shows every metric that moved before anything is
-# enforced.
-#
-# Margins must be measured HERE, not locally — -noise-runs sets each margin from
-# the spread across runs, and that spread is dominated by provider behaviour as
-# seen from GitHub runner IPs. A margin measured from a laptop describes a
-# different network.
-#
-# Run one mode at a time; eval at -noise-runs 3 is ~2.6h.
 name: Discovery eval rebaseline
 
 on:

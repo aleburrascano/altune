@@ -1,8 +1,5 @@
 name: danger
 
-# PR-shape gate: posts one updating comment with any issues (missing "Closes
-# #", no description, source-without-test, oversized diff). Advisory unless
-# added to branch protection as a required check.
 
 on:
   pull_request:

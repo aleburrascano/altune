@@ -1,28 +1,3 @@
-# Deploy the Go API + Overseer through the staging-first pipeline (epic #1488).
-#
-# On a push to main that touches the backend or overseer, the chain is:
-#   test + test-overseer  -> gate on the exact commit being shipped
-#   deploy-staging        -> SSH to the VM, fast-forward main, run deploy/staging.sh
-#                            (builds/recreates the altune-staging-* stack + applies
-#                            staging migrations). Prod is NOT touched here.
-#   smoke-staging         -> deploy/smoke.sh against vars.STAGING_API_URL;
-#                            a red gate blocks promotion.
-#   approve-prod          -> the `production` environment's manual-approval gate.
-#                            Waits for a required reviewer and touches nothing.
-#   deploy-prod           -> applies new prod migrations, then runs the prod deploy
-#                            (blue-green.sh + overseer.sh). Prod is touched ONLY
-#                            here, and only once approve-prod has passed.
-#
-# Migration lockstep (#1525): prod-migrate.sh applies genuinely-new migrations to
-# the prod Supabase project through lib.sh's SAME runner staging.sh uses, before the
-# swap. A failed migration aborts the deploy with the old colour still serving. Prod
-# does NOT blind-adopt: on an untracked schema it fails closed rather than skip.
-#
-# Required repo secrets (Settings -> Secrets and variables -> Actions):
-#   DEPLOY_HOST     the prod VM's public hostname (staging shares this VM)
-#   DEPLOY_USER     e.g. ubuntu
-#   DEPLOY_SSH_KEY  the PRIVATE key matching an authorized key on the VM
-#   DEPLOY_PORT     (optional) SSH port, defaults to 22
 
 name: Deploy backend
 
@@ -34,39 +9,9 @@ on:
       - 'services/overseer/**'
   workflow_dispatch:
 
-# No workflow-level `concurrency:` here on purpose (#1555). A workflow-level group
-# with cancel-in-progress:true cancels the WHOLE run — every job, deploy-prod
-# included — when superseded, which could kill a prod deploy mid blue-green flip.
-# And a workflow-level group with cancel-in-progress:false is exactly what
-# deadlocked (a cancelled superseded run never released the lock). Instead each
-# job below carries its own concurrency: the cheap jobs supersede per-ref, the
-# approval wait supersedes globally, and deploy-prod serializes without ever
-# being cancelled.
-#
-# The rule that keeps the serialize lock from deadlocking (#1807): a job that
-# waits on something unbounded must not hold a `cancel-in-progress: false` group.
-# Approval is unbounded (it waits on a human), so it is its own job.
 
 jobs:
-  # Docs-only backend merges (every *.md) match the push
-  # `paths` above but are no-ops for prod code, so they used to burn a prod-gate
-  # approval for nothing (#1522). Diff the push and set deploy=true only when a
-  # genuinely deployable, non-doc file changed. Fails safe (deploy=true) whenever
-  # the diff base is unknown — a manual dispatch, a force-push, or the first push
-  # of a branch — so a real deploy is never silently swallowed.
-  #
-  # The non-deployable rule is *.md and nothing else (#1553). A directory-name
-  # rule such as */docs/* is a silent-skip trap: any deployable file that ever
-  # lands under a docs/ dir (services/go-api/internal/docs/x.go, an embedded
-  # asset) would read as non-deployable and swallow a real prod deploy. The
-  # repo's doc assets are all *.md, and the top-level docs/ tree is already out
-  # of scope — it fails the services/go-api|overseer prefix test below.
   changes:
-    # Per-ref group so a newer push to the same ref cleanly supersedes the cheap
-    # (non-prod) leg of an in-flight run — no pileup, no deadlock. deploy-prod has
-    # its own uncancellable group below. test/test-overseer can't take job-level
-    # concurrency (they call reusable workflows via `uses:`); a superseded run's
-    # tests just finish, which is harmless.
     concurrency:
       group: deploy-cheap-${{ github.ref }}
       cancel-in-progress: true
@@ -84,20 +29,14 @@ jobs:
           AFTER: ${{ github.sha }}
         run: bash .github/workflows/deploy-backend-changes.sh
 
-  # The deploy gate. A reusable workflow runs against the caller's ref, so what
-  # gets tested is exactly the commit that gets shipped.
   test:
     uses: ./.github/workflows/test-backend.yml
 
-  # The SSH deploy ships overseer alongside go-api, so gate on its suite too.
   test-overseer:
     uses: ./.github/workflows/test-overseer.yml
 
   deploy-staging:
     needs: [changes, test, test-overseer]
-    # Docs-only merges skip the deploy chain; smoke-staging and deploy-prod
-    # cascade-skip through their `needs` on this job, so no prod-gate approval
-    # is ever requested for a no-op. Any real code change runs the full chain.
     if: ${{ needs.changes.outputs.deploy == 'true' }}
     concurrency:
       group: deploy-cheap-${{ github.ref }}
@@ -158,23 +97,8 @@ jobs:
             cd ~/altune/services/go-api
             bash deploy/smoke.sh ${{ vars.STAGING_API_URL }} altune-staging-overseer ${{ github.sha }}
 
-  # The manual-approval gate (design Decision 4): a required reviewer on the
-  # `production` environment must approve after a green staging smoke before prod
-  # is touched. It is a job of its own, holding no serialize lock, because a job
-  # carrying `environment:` occupies its concurrency group for the entire wait,
-  # and GitHub only emits the review request once the job is actually dispatched.
-  # Fusing the wait and the lock deadlocked prod promotion (#1807): a superseded
-  # predecessor kept `deploy-prod` held, so the successor sat queued, its
-  # deployment never became reviewable, and approving it returned HTTP 422 — the
-  # gate was unreachable and prod could only be shipped by hand. The `production`
-  # deployment record is therefore created here; a prod deploy that then fails
-  # still reds the run and prints the rollback command below.
   approve-prod:
     needs: [smoke-staging]
-    # Superseding a job that only waits is safe — it touches nothing, so nothing
-    # is left half-done — and it keeps at most one promotion awaiting review, so
-    # an approval can never ship a commit older than the one staging just smoked.
-    # cancel-in-progress:true is also the variant #1555 found cannot deadlock.
     concurrency:
       group: deploy-prod-approval
       cancel-in-progress: true
@@ -188,18 +112,6 @@ jobs:
 
   deploy-prod:
     needs: [approve-prod]
-    # The serialize lock, now taken only after approval is already granted, so
-    # every holder is a deploy that is actually running and bounded by the SSH
-    # command_timeout below — the group is always released. cancel-in-progress
-    # stays false to keep #1555's guarantee: with no workflow-level concurrency,
-    # a newer push queues behind a running prod deploy instead of cancelling it,
-    # so once prod-migrate or blue-green.sh starts it runs to completion and prod
-    # is never left half-swapped. This is the ONLY job that runs the prod path.
-    # Renamed deploy-prod -> deploy-prod-v2 (since Sept 2026): GitHub's own
-    # concurrency-group bookkeeping got stuck holding the old group name, so
-    # every approved run sat `pending` forever even with nothing else running
-    # (e.g. run 35992166385). Renaming the group cleared the stale lock; if
-    # this recurs, renaming again is the fix.
     concurrency:
       group: deploy-prod-v2
       cancel-in-progress: false

@@ -2,7 +2,6 @@ name: staging-sync
 
 on:
   schedule:
-    # 08:00 UTC (~04:00 Eastern), outside the usual merge window.
     - cron: "0 8 * * *"
   workflow_dispatch: {}
 

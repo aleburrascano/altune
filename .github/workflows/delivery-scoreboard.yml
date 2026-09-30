@@ -1,11 +1,9 @@
 name: delivery-scoreboard
 
-# Weekly delivery scoreboard: DORA + flow + escaped-defect split, written to the
-# run's job summary. Read-only, opens nothing, changes no code.
 
 on:
   schedule:
-    - cron: '0 13 * * 1'   # Mondays 13:00 UTC
+    - cron: '0 13 * * 1'
   workflow_dispatch:
     inputs:
       days:

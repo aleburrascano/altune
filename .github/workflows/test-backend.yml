@@ -1,23 +1,6 @@
-# Backend test gate. Reachable only as a reusable workflow: called by the PR gate
-# (pr-gate.yml) on PRs/merge-queue that touch the Go API, and by deploy-backend.yml
-# on pushes to main, which tests the exact commit it ships. A `push` trigger of
-# its own ran the suite a second time on every backend merge, so it has none. It
-# deliberately has NO `pull_request` trigger of its own either — that ran
-# a second, unprefixed copy on every PR that shared this workflow's concurrency
-# group with the gate-called copy and cancelled it, stalling the required check.
-#
-# Two parallel jobs: `static` (vet + depguard, fast, fails in seconds) and
-# `test` (the slow race detector + gates). They run at once, so a lint break
-# surfaces without waiting behind `go test -race`.
-#
-# `go test -race` needs cgo — the local dev box (Windows, no C toolchain) can't,
-# so this Linux runner is where data races in the concurrent telemetry code (log
-# ring, event tap, provider store, scheduler counters, alert monitor) get caught.
 name: Test backend
 
 on:
-  # A reusable workflow runs against the caller's ref, so the deploy gate tests
-  # exactly the commit it is about to ship.
   workflow_call:
 
 jobs:
@@ -29,32 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so the diff-scoped changed-comments check below can find
-          # the PR base and gate only the lines this change added.
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
-      # Integration test files carry no build tag anymore: they are always in
-      # the build, so this vet is the type check on them same as everything
-      # else. golangci-lint below runs unflagged too, and, with `default:
-      # none`, reports 0 issues and exits 0 on a package that does not compile.
       - name: go vet (incl. integration test files)
         run: go vet ./...
-      # Import direction (structure audit F1): domain purity + feature isolation +
-      # shared-bottom + inward layer direction (service-/->adapters, ports pure).
-      # Rules live in services/go-api/.golangci.yml. Blocking on all code.
       - name: import direction (depguard)
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: services/go-api
-      # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
-      # bodyclose, complexity, dupl) — the linters that catch AI-written slop.
-      # only-new-issues: the existing backlog does not block, a NEW violation a PR
-      # introduces does. Mirrors the mobile side's ratchets. PR-only: the base is
-      # already green, so there is no diff to gate on push/merge_group.
       - name: strict linters (new code only)
         if: ${{ github.event_name == 'pull_request' }}
         uses: golangci/golangci-lint-action@v9
@@ -63,11 +32,6 @@ jobs:
           working-directory: services/go-api
           args: --config .golangci.strict.yml
           only-new-issues: true
-      # Zero-comments rule: a NEW `//` / `/* */` comment or a
-      # `//nolint` suppression on a changed line fails, mirroring the mobile
-      # lint-changed-lines gate. Diff-scoped so existing comments never regress.
-      # Go compiler directives (//go:build, //go:embed, //line) are allowed; the
-      # package clause is not a comment. PR-only: needs a diff base to scope to.
       - name: no new comments on changed code (diff-scoped)
         env:
           EVENT: ${{ github.event_name }}
@@ -91,44 +55,18 @@ jobs:
           go run ./scripts/lintcomments "$BASE"
       - name: no comments (whole tree)
         run: go run ./scripts/lintcomments --all .
-      # Vague-name rule (id-denylist parity with mobile #2291): a NEW variable,
-      # parameter, local, or function name from the banned set (data, util,
-      # helper, manager, temp, arr, val, foo, doWork) on a changed line fails.
-      # Calibrated to Go idioms — handler/result/process are NOT banned. Diff-
-      # scoped so existing identifiers never regress. PR-only: needs a diff base.
       - name: no new vague identifier names on changed code (diff-scoped)
         if: ${{ github.event_name == 'pull_request' }}
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-diff-lint.sh" names
-      # Known-CVE scan against the Go vuln DB. Reports only vulnerabilities the
-      # code actually reaches (call-graph analysis), so false positives are rare.
-      # Blocking: a reachable CVE should stop the merge. If a new advisory lands
-      # against a dependency, bump it (see the crypto/tls + x/net bumps that
-      # cleared the initial 8 findings).
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
-      # Nil-panic inference (Uber nilaway) as a ceiling ratchet, the same shape as
-      # the mobile react-doctor warning ceiling: findings may not exceed the count
-      # in nilaway-baseline.txt. Lower that number when you fix one; never raise
-      # it to go green. nilaway is not a golangci-lint linter, hence a own step.
-      # The baseline is the Linux/amd64 count — nilaway analyses build-tagged files
-      # per GOOS, so this runner is the source of truth (local Windows counts less).
       - name: nilaway ceiling
         run: bash "$GITHUB_WORKSPACE/.github/workflows/nilaway-ceiling.sh" nilaway-baseline.txt
 
-  # Deploy-gate self-test. smoke.sh gates prod promotion (deploy-backend.yml);
-  # its self-test (deploy/smoke_test.sh) drives it with a stubbed curl/docker to
-  # assert the gate passes only on a healthy tier and goes red on each failure
-  # signature. It ran in no CI job, so a change to overseer's log format or the
-  # health contract could silently break the deploy gate and only surface at
-  # promotion time — it nearly did when the collect heartbeat moved INFO->DEBUG
-  # (#1820). Reached on the same paths as the rest of this suite: pr-gate.yml's
-  # `backend` filter is services/go-api/** (which includes deploy/), and the
-  # push trigger above already lists services/go-api/**. A own fast job so a
-  # broken gate surfaces without waiting behind `go test -race`.
   smoke:
     runs-on: ubuntu-latest
     defaults:
@@ -136,11 +74,6 @@ jobs:
         working-directory: services/go-api
     steps:
       - uses: actions/checkout@v4
-      # shellcheck ships on ubuntu-latest; guard so a future image without it
-      # skips the lint rather than failing spuriously (the smoke self-test below
-      # is the load-bearing check). -x follows the sourced deploy/lib.sh, which
-      # is where SC1091/SC2034 otherwise misfire; SC2148 is excluded because it
-      # only flags lib.sh, a sourced library with no shebang by design.
       - name: shellcheck deploy scripts
         run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-shellcheck.sh"
       - name: deploy smoke self-test
@@ -165,26 +98,15 @@ jobs:
         run: bash deploy/caddy-routing_test.sh
       - name: staging sync test (real postgres image)
         run: bash deploy/staging-sync_test.sh
-      # promote-staging builds the real CLI binary and runs it against a real
-      # postgres image plus a filesystem-backed audio store standing in for
-      # the S3 bucket the two tiers share, so Copy is exercised for real.
       - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
       - name: promote-staging test (real postgres image)
         run: bash deploy/promote-staging_test.sh
-      # The other half of the deploy gate: smoke.sh decides whether prod MAY be
-      # promoted, the deploy-backend job graph decides whether it CAN be. A
-      # concurrency regression there makes the prod-approval gate unreachable
-      # (#1807) and is invisible until an operator tries to approve a promotion
-      # and gets an HTTP 422. Structural, so it runs from the repo root.
       - name: deploy workflow self-test
         working-directory: .
         run: bash .github/workflows/deploy-backend_test.sh
-      # The off-box uptime probe (#2929): red on each failed stage (sign-in,
-      # non-200 search, zero results, unset secret), never printing the probe
-      # password or access token, and paging only when the state flips.
       - name: uptime probe self-test
         working-directory: .
         run: |
@@ -196,12 +118,6 @@ jobs:
     defaults:
       run:
         working-directory: services/go-api
-    # pg16 matches prod (deploy/compose.dev.yml). Every Postgres-backed test
-    # (discovery/catalog/playback/acquisition persistence + leader) reads
-    # DATABASE_URL and skips without it, so this container is what makes them
-    # assert instead of skip. The container is necessary but not sufficient: the
-    # sharedtest.RequireIntegration half of them also needs INTEGRATION=1 on the
-    # test step below (#1579).
     services:
       postgres:
         image: postgres:16-alpine
@@ -217,8 +133,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # Throwaway per-run credentials for the ephemeral service container above,
-      # not a secret. Reachable on the runner via the mapped host port.
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
       - uses: actions/checkout@v4
@@ -227,52 +141,23 @@ jobs:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
 
-      # deploy/prod-migrate.sh applies migrations to prod automatically before the
-      # blue-green swap, so CI mirrors that: the zero-padded files apply in numeric
-      # order, ON_ERROR_STOP so a bad migration fails the gate rather than silently
-      # leaving the schema half-built.
       - name: apply migrations
         run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-migrate.sh"
 
-      # INTEGRATION=1 is load-bearing: without it sharedtest.RequireIntegration
-      # skips the Postgres-backed persistence tests, DATABASE_URL or not, so
-      # two regressions merged green (#1570/#1576 lost update, #1578). One run
-      # rather than two, because every test file is always in the build now.
-      # The one test that wants the network (SoundCloud via yt-dlp) skips
-      # itself when yt-dlp is absent, which it is on this runner — if a future
-      # image ships yt-dlp, that test becomes a live-network flake here.
       - name: go test -race (incl. integration tests)
         env:
           CGO_ENABLED: "1"
           INTEGRATION: "1"
         run: go test -race -count=1 -coverprofile=coverage.out ./...
 
-      # The -race step above is not verbose, so it prints no per-test PASS
-      # line for the operator check that CI actually ran the Postgres-backed
-      # tests rather than skipping them; this step re-runs the history repo
-      # tests verbosely so the log carries a `--- PASS:` line for that check.
       - name: integration tests run
         env:
           INTEGRATION: "1"
         run: go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/adapters/persistence/
 
-      # Acquisition selection gate: does the pipeline store the right recording?
-      # Runs the real CoreSteps pipeline against committed goldens and fails on a
-      # drop below cmd/acquisitioneval/baselines.json. Provider-free and offline.
-      # Re-baseline explicitly with -update-baselines; never lower it to go green.
       - name: acquisition selection gate
         run: go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
 
-      # Coverage ratchet: holds the measured baseline so coverage can't silently
-      # regress. Raise MIN when a module gains coverage;
-      # never lower it to make CI green.
-      # Floor is 65 (the original). It was briefly dropped to 62 while the
-      # Postgres-backed tests skipped on a missing DATABASE_URL and deflated
-      # coverage; with the service container and INTEGRATION=1 the measured
-      # total is ~76% (the integration tests themselves are worth only
-      # ~0.6pt of it — they cover paths the unit tests already reach, they earn
-      # their place by running against real Postgres, not by coverage), so 65
-      # leaves a safe margin without chasing the measured ceiling.
       - name: coverage ratchet
         env:
           MIN: 65

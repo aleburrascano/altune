@@ -1,19 +1,3 @@
-# Single required check for main. Path-filtered CI (test-backend, test-mobile)
-# cannot be required directly: a PR that doesn't touch a path never runs that
-# workflow, and a required check that never runs leaves the PR stuck pending
-# forever. This gate always runs on every PR to main, calls only the reusable
-# suites whose paths changed, and ends in one `gate` job that is the branch's
-# sole required status check.
-#
-# It also runs on `merge_group`, so the same single `gate` context satisfies
-# GitHub's merge queue. In the queue we run BOTH suites (the batched commit can
-# touch either side), skipping the path filter — correctness over a few saved
-# minutes on the rare queue build.
-#
-# The reusable suites (test-backend, test-mobile) are ONLY reachable through this
-# gate on a PR — their own `pull_request` triggers were removed so they no longer
-# run a second, unprefixed copy that shares a concurrency group with the called
-# copy and cancels it mid-run (the "gate never finalizes" stall).
 
 name: PR gate
 
@@ -34,8 +18,6 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile || steps.all.outputs.mobile }}
       overseer: ${{ steps.filter.outputs.overseer || steps.all.outputs.overseer }}
     steps:
-      # In the merge queue there is no PR base to diff against, and the batched
-      # commit may touch any side — so select every suite and skip the filter.
       - id: all
         if: ${{ github.event_name == 'merge_group' }}
         run: printf 'backend=true\nmobile=true\noverseer=true\n' >> "$GITHUB_OUTPUT"
@@ -97,8 +79,6 @@ jobs:
       - name: Fail on any dependency cycle
         run: node scripts/check-cycles.mjs
 
-  # A test file belongs to the unit it tests: fail a PR that adds a per-bug or
-  # per-scenario test file for a unit that already has one, or names none.
   test-home:
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
