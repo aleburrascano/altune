@@ -15,7 +15,7 @@ import { useTheme } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
 import { queueMenuOptions } from '../queueMenuOptions';
-import { formatSeconds, type QueueItem } from '../queueItem';
+import { buildUpNextItems, formatSeconds, queueSourceLabel, type QueueItem } from '../queueItem';
 import { QueueRow } from './QueueRow';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
 
@@ -29,33 +29,12 @@ export function QueueSheet(): ReactElement {
   const { skipToIndex, removeFromQueue, moveQueueItem, clearUpcoming } = useQueuePlayback();
   const [menuItem, setMenuItem] = useState<QueueItem | null>(null);
 
-  const sourceLabel = source
-    ? source.kind === 'playlist'
-      ? `Playing from ${source.name}`
-      : source.kind === 'library'
-        ? 'Playing from Library'
-        : 'Playing from search'
-    : 'Queue';
+  const sourceLabel = queueSourceLabel(source);
 
   const currentTrackData =
     currentIndex >= 0 && currentIndex < playOrder.length ? tracks[playOrder[currentIndex]!] : null;
 
-  const upNextItems: QueueItem[] = [];
-  for (let i = currentIndex + 1; i < playOrder.length; i++) {
-    const trackIdx = playOrder[i];
-    if (trackIdx == null) continue;
-    const t = tracks[trackIdx];
-    if (!t) continue;
-    upNextItems.push({
-      trackIndex: trackIdx,
-      queueIndex: i,
-      title: t.title,
-      artist: t.artist,
-      artworkUrl: t.artworkUrl,
-      durationSeconds: t.durationSeconds,
-      featuredArtists: t.featuredArtists,
-    });
-  }
+  const upNextItems = buildUpNextItems(tracks, playOrder, currentIndex);
 
   const handleClear = () => {
     confirmDestructive({
