@@ -171,10 +171,10 @@ function createTransportCommands(
 ): TransportCommands {
   return {
     pause: () => {
-      void ignoringNativeRejection(() => TrackPlayer.pause());
+      void ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.pause()));
     },
     resume: () => {
-      void ignoringNativeRejection(() => TrackPlayer.play());
+      void ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.play()));
     },
     seekTo: (ms) => {
       void reportingQueueFailure(

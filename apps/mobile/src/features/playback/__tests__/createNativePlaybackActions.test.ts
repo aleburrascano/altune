@@ -316,6 +316,51 @@ describe('createNativePlaybackActions', () => {
       );
     });
 
+    it('leaves the player paused when a pause lands during a seek in flight', async () => {
+      const native = createNativePlaybackActions(jest.fn(), true);
+      let releaseSeek = (): void => undefined;
+      (TrackPlayer.seekTo as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseSeek = resolve;
+          }),
+      );
+
+      native.controls.seekTo(1000);
+      await new Promise(setImmediate);
+      native.controls.pause();
+      releaseSeek();
+      await new Promise(setImmediate);
+
+      const play = (TrackPlayer.play as jest.Mock).mock.invocationCallOrder;
+      const pause = (TrackPlayer.pause as jest.Mock).mock.invocationCallOrder;
+      expect(pause).toHaveLength(1);
+      expect(Math.max(...play, 0)).toBeLessThan(pause[0] ?? 0);
+    });
+
+    it('holds a resume until a seek in flight has settled natively', async () => {
+      const native = createNativePlaybackActions(jest.fn());
+      let releaseSeek = (): void => undefined;
+      (TrackPlayer.seekTo as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseSeek = resolve;
+          }),
+      );
+
+      native.controls.seekTo(1000);
+      await new Promise(setImmediate);
+      native.controls.resume();
+      await new Promise(setImmediate);
+
+      expect(__player.calls('play')).toEqual([]);
+
+      releaseSeek();
+      await new Promise(setImmediate);
+
+      expect(__player.calls('play')).toHaveLength(1);
+    });
+
     it('holds a second seek until the first has settled natively', async () => {
       const native = createNativePlaybackActions(jest.fn());
       let releaseFirstSeek = (): void => undefined;
