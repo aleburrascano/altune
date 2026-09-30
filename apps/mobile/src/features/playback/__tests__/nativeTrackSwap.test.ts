@@ -511,4 +511,57 @@ describe('native slot ops that outlived the lock deadline', () => {
       expect(__player.calls('play')).toHaveLength(0);
     });
   });
+
+  describe('repairActiveToStreaming — a load that resolves after the lock deadline', () => {
+    it('reports a PlaybackError for the track instead of leaving it loaded and paused', async () => {
+      usePlaybackErrorStore.getState().clear();
+      const track = previewTrack({
+        source: { kind: 'preview', previewUrl: 'https://cdn.example/preview.mp3' },
+      });
+      const { release, stalled } = holdOpenPastDeadline();
+      player.load!.mockImplementationOnce(async () => {
+        await stalled;
+      });
+
+      const repair = repairActiveToStreaming(track);
+      const repairOutcome = repair.catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      release();
+      await jest.advanceTimersByTimeAsync(1);
+      await repairOutcome;
+
+      const played = __player.calls('play').length > 0;
+      const reported = usePlaybackErrorStore.getState().key === trackKey(track);
+      expect(played || reported).toBe(true);
+    });
+  });
+
+  describe('repairActiveToStreaming — a deadline that passed before the swap flag is touched', () => {
+    it('leaves wasSwappedToLocal unchanged', async () => {
+      const active = libraryTrack({ title: 'Active' });
+      const upcoming = libraryTrack({
+        title: 'Upcoming',
+        source: { kind: 'library', trackId: asTrackId('trk-2') },
+      });
+      const native = [active, upcoming].map((t) => ({ id: trackKey(t), url: 'https://s/x' }));
+      player.getQueue!.mockImplementation(async () => [...native]);
+      player.getActiveTrackIndex!.mockImplementation(async () => 0);
+      await swapUpcomingToLocal(upcoming, 'file:///cache/trk-2.mp3');
+      expect(wasSwappedToLocal(asTrackId('trk-2'))).toBe(true);
+      const { release, stalled } = holdOpenPastDeadline();
+      player.getActiveTrack!.mockImplementationOnce(async () => {
+        await stalled;
+        return undefined;
+      });
+
+      const repairOutcome = repairActiveToStreaming(upcoming).catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      release();
+      await jest.advanceTimersByTimeAsync(1);
+      await repairOutcome;
+
+      expect(wasSwappedToLocal(asTrackId('trk-2'))).toBe(true);
+      expect(__player.calls('load')).toHaveLength(0);
+    });
+  });
 });

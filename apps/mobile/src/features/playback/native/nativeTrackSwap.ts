@@ -50,8 +50,18 @@ async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
 async function loadAndPlay(native: AddTrack, fence: Fence): Promise<void> {
   fence();
   await TrackPlayer.load(native);
-  fence();
+  try {
+    fence();
+  } catch (err) {
+    throw new LoadedWithoutPlayError(err);
+  }
   await TrackPlayer.play();
+}
+
+class LoadedWithoutPlayError extends Error {
+  constructor(cause: unknown) {
+    super('track loaded but the lock deadline passed before play', { cause });
+  }
 }
 
 async function reloadActive(track: PlaybackTrack, native: AddTrack, fence: Fence): Promise<void> {
@@ -59,6 +69,10 @@ async function reloadActive(track: PlaybackTrack, native: AddTrack, fence: Fence
     await loadAndPlay(native, fence);
   } catch (err) {
     if (err instanceof NativeQueueTimeoutError) throw err;
+    if (err instanceof LoadedWithoutPlayError) {
+      reportLoadFailure(track, err, LOAD_FAILED_MESSAGE);
+      return;
+    }
     reportLoadFailure(track, err, LOAD_FAILED_MESSAGE);
   }
 }
@@ -70,6 +84,7 @@ export async function repairActiveToStreaming(track: PlaybackTrack): Promise<voi
     if (isStale(token)) return;
     const activeKey = await activeNativeTrackId();
     if (activeKey !== undefined && activeKey !== trackKey(track)) return;
+    fence();
     if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
     await reloadActive(track, native, fence);
   });
