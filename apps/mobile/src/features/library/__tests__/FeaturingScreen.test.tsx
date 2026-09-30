@@ -16,7 +16,7 @@ jest.mock('@shared/api-client/discovery', () => ({
   searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
 }));
 jest.mock('@shared/api-client/tracks', () => ({
-  listTracksFeaturing: () => mockListTracksFeaturing(),
+  listTracksFeaturing: (fa: unknown) => mockListTracksFeaturing(fa),
   deleteTrack: jest.fn(),
   retryAcquisition: jest.fn(),
   reacquireTrack: jest.fn(),
@@ -308,5 +308,55 @@ describe('the featuring screen opened from the discover tab', () => {
       kind: 'artist',
       title: 'AC/DC & Friends? #1',
     });
+  });
+});
+
+describe('featuring route params', () => {
+  const router = jest.requireMock('expo-router') as {
+    useLocalSearchParams: () => Record<string, unknown>;
+  };
+  const original = router.useLocalSearchParams;
+
+  afterEach(() => {
+    router.useLocalSearchParams = original;
+  });
+
+  it('requests one value per param when the route repeats name and mbid', async () => {
+    router.useLocalSearchParams = () => ({ name: ['a', 'b'], mbid: ['x', 'y'] });
+    render(<FeaturingScreen />, { wrapper });
+
+    await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
+    expect((mockListTracksFeaturing.mock.calls[0] as unknown[])[0]).toEqual({
+      name: 'a',
+      mbid: 'x',
+      deezer_id: null,
+    });
+  });
+
+  it('shows an incomplete-link state and no empty-name search when no param is usable', async () => {
+    router.useLocalSearchParams = () => ({});
+    render(<FeaturingScreen />, { wrapper });
+
+    expect(await screen.findByText(/link is incomplete/)).toBeTruthy();
+    expect(screen.queryByTestId('featuring-explore')).toBeNull();
+    expect(screen.queryByText(/featuring\s+yet/)).toBeNull();
+    expect(mockListTracksFeaturing).not.toHaveBeenCalled();
+  });
+
+  it('tells the user to sign in again when the load is refused with 401', async () => {
+    mockListTracksFeaturing.mockRejectedValue(new ApiError(401, 'unauthorized'));
+    render(<FeaturingScreen />, { wrapper });
+
+    expect(
+      await screen.findByText("Couldn't load tracks. Sign in again, then retry."),
+    ).toBeTruthy();
+  });
+
+  it('keeps the plain retry copy when the load fails on the network', async () => {
+    mockListTracksFeaturing.mockRejectedValue(new NetworkError('transport', 'offline'));
+    render(<FeaturingScreen />, { wrapper });
+
+    expect(await screen.findByText("Couldn't load tracks.")).toBeTruthy();
+    expect(screen.getByText('Retry')).toBeTruthy();
   });
 });

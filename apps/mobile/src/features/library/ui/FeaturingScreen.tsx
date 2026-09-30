@@ -22,25 +22,42 @@ import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useExploreArtist } from '../hooks/useExploreArtist';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTrackMenu } from '../hooks/useTrackMenu';
-import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
+import {
+  parseDeezerIdParam,
+  parseStringParam,
+  useTracksFeaturing,
+} from '../hooks/useTracksFeaturing';
+import { classifyLibraryError, failureTail } from '../state';
 import { TracksList } from './TracksList';
 
 export function FeaturingScreen(): ReactElement {
-  const params = useLocalSearchParams<{ name?: string; mbid?: string; deezer_id?: string }>();
+  const params = useLocalSearchParams<{
+    name?: string | string[];
+    mbid?: string | string[];
+    deezer_id?: string;
+  }>();
   const router = useRouter();
   const segments = useSegments();
   const detailPath = featuringDetailRoute(segments);
 
   const fa: FeaturedArtist = useMemo(
     () => ({
-      name: params.name ?? '',
-      mbid: params.mbid && params.mbid.length > 0 ? params.mbid : null,
+      name: parseStringParam(params.name) ?? '',
+      mbid: parseStringParam(params.mbid),
       deezer_id: parseDeezerIdParam(params.deezer_id),
     }),
     [params.name, params.mbid, params.deezer_id],
   );
+  const linkIsIncomplete = fa.name === '' && fa.mbid === null && fa.deezer_id === null;
 
-  const { data, isLoading, isError, isRefetching, refetch } = useTracksFeaturing(fa);
+  const {
+    data: featuring,
+    error,
+    isLoading,
+    isError,
+    isRefetching,
+    refetch,
+  } = useTracksFeaturing(fa);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition('featuring');
   const playback = usePlayback();
@@ -48,7 +65,8 @@ export function FeaturingScreen(): ReactElement {
   const { explore, exploring } = useExploreArtist();
 
   const goBack = () => goBackOrToLibrary(router);
-  const tracks = data?.items ?? [];
+  const tracks = featuring?.items ?? [];
+  const failure = classifyLibraryError(error);
   const refresh = {
     refreshing: isRefetching,
     onRefresh: () => {
@@ -68,6 +86,21 @@ export function FeaturingScreen(): ReactElement {
       onPress: () => deleteMutation.mutate(track.id),
     }),
   });
+
+  if (linkIsIncomplete) {
+    return (
+      <Screen>
+        <View style={styles.header}>
+          <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
+        </View>
+        <View style={styles.centered}>
+          <Text variant="body" tone="secondary" style={styles.emptyText}>
+            This link is incomplete, so there is no artist to show.
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -95,7 +128,9 @@ export function FeaturingScreen(): ReactElement {
         error={() => (
           <View style={styles.centered}>
             <Text variant="body" tone="secondary">
-              Couldn't load tracks.
+              {failure === 'auth'
+                ? `Couldn't load tracks. ${failureTail(failure)}`
+                : "Couldn't load tracks."}
             </Text>
             <Text variant="label" tone="accent" onPress={() => void refetch()} style={styles.retry}>
               Retry

@@ -4,7 +4,11 @@ import type { ReactNode } from 'react';
 
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
+import {
+  parseDeezerIdParam,
+  parseStringParam,
+  useTracksFeaturing,
+} from '../hooks/useTracksFeaturing';
 
 const mockListTracksFeaturing = jest.fn();
 jest.mock('@shared/api-client/tracks', () => ({
@@ -43,6 +47,19 @@ describe('parseDeezerIdParam', () => {
     '9007199254740993',
   ])('returns null for %p', (raw) => {
     expect(parseDeezerIdParam(raw)).toBeNull();
+  });
+});
+
+describe('parseStringParam', () => {
+  it.each([
+    ['a', 'a'],
+    [['a', 'b'], 'a'],
+  ])('reads %p as %p', (raw, expected) => {
+    expect(parseStringParam(raw)).toBe(expected);
+  });
+
+  it.each([undefined, '', [], ['']])('returns null for %p', (raw) => {
+    expect(parseStringParam(raw)).toBeNull();
   });
 });
 

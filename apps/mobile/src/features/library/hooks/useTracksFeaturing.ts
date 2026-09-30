@@ -15,6 +15,11 @@ export function parseDeezerIdParam(raw: string | undefined): number | null {
   return Number.isSafeInteger(id) ? id : null;
 }
 
+export function parseStringParam(raw: string | string[] | undefined): string | null {
+  const first = Array.isArray(raw) ? raw[0] : raw;
+  return first === undefined || first.length === 0 ? null : first;
+}
+
 function useLoggedFeaturingQueryFailure(error: Error | null, key: string): void {
   useEffect(() => {
     if (error === null) {
@@ -40,5 +45,5 @@ export function useTracksFeaturing(input: FeaturedArtist) {
     fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : 'name'),
   );
 
-  return { data, isLoading, isError, isRefetching, refetch };
+  return { data, error, isLoading, isError, isRefetching, refetch };
 }
