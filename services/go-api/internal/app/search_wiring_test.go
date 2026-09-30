@@ -305,3 +305,33 @@ func hasConsensusProvider(cfg *config.Config, want string) bool {
 	}
 	return false
 }
+
+func TestAllKeysProviderOrder(t *testing.T) {
+	cfg := scrapedProvidersConfig(true)
+	cfg.YtMusicEnabled = true
+	cfg.LastFMAPIKey = "k"
+	cfg.MusicBrainzUserAgent = "ua"
+	cfg.DiscogsToken = "k"
+	cfg.FanartTVAPIKey = "k"
+	cfg.GeniusAccessToken = "k"
+
+	var consensus []string
+	for _, p := range BuildConsensusProviders(cfg, nil) {
+		consensus = append(consensus, p.Name)
+	}
+	assertEqual(t, "consensus providers", consensus,
+		[]string{"lastfm", "musicbrainz", "discogs", "itunes", "ytmusic", "soundcloud"})
+
+	var artwork []string
+	resolvers := reflect.ValueOf(BuildArtworkChain(cfg)).Elem().FieldByName("resolvers")
+	for i := range resolvers.Len() {
+		artwork = append(artwork, typeName(resolvers.Index(i)))
+	}
+	assertEqual(t, "artwork chain", artwork, []string{
+		"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver",
+		"*providers.SpotifyArtworkResolver", "*providers.DiscogsAdapter",
+		"*providers.FanartTvArtworkResolver", "*providers.GeniusArtworkResolver",
+		"*providers.TheAudioDBAdapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
+		"*providers.YouTubeMusicArtworkResolver", "*providers.SoundCloudAPIAdapter",
+	})
+}

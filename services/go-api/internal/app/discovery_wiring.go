@@ -4,12 +4,8 @@ import (
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/phonetics"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
-	"net/http"
 	"time"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
@@ -20,8 +16,6 @@ import (
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
-
-	goredis "github.com/redis/go-redis/v9"
 )
 
 type discoveryWiring struct {
@@ -296,127 +290,4 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		featuredBridge: content.featuredBridge,
 		musicBrainz:    sharedMB,
 	}
-}
-
-func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discoveryService.ConsensusProvider {
-	cf := newClientFactory(transport)
-	var consensusProviders []discoveryService.ConsensusProvider
-	add := func(key discoveryDomain.ProviderKey, provider discoveryDomain.ProviderName, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error)) {
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{Name: string(key), Provider: provider, Fetcher: fetcher})
-	}
-
-	if cfg.HasLastFM() {
-		lfm := providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
-		add(discoveryDomain.ProviderKeyLastFM, discoveryDomain.ProviderLastFM, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return lfm.GetArtistAlbums(ctx, discoveryDomain.ProviderLastFM, artistName)
-		})
-	}
-	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
-		add(discoveryDomain.ProviderKeyMusicBrainz, discoveryDomain.ProviderMusicBrainz, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return mb.ListArtistDiscography(ctx, artistName)
-		})
-	}
-	if cfg.HasDiscogs() {
-		discogs := providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
-		add(discoveryDomain.ProviderKeyDiscogs, discoveryDomain.ProviderDiscogs, discogsConsensusFetcher(discogs))
-	}
-	add(discoveryDomain.ProviderKeyITunes, discoveryDomain.ProviderITunes, albumSearchFetcher(providers.NewITunesAdapter(cf.discovery())))
-	if cfg.HasYouTubeMusic() {
-		ytmusic := providers.NewYouTubeMusicAdapter(cf.roundTripper())
-		add(discoveryDomain.ProviderKeyYTMusic, discoveryDomain.ProviderYouTube, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return ytmusic.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
-		})
-	}
-	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
-		add(discoveryDomain.ProviderKeySoundCloud, discoveryDomain.ProviderSoundCloud, albumSearchFetcher(sc))
-	}
-	return consensusProviders
-}
-
-func albumSearchFetcher(p interface {
-	Search(ctx context.Context, query string, kinds map[discoveryDomain.ResultKind]bool) ([]discoveryDomain.SearchResult, error)
-},
-) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
-	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-		return p.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
-	}
-}
-
-func discogsConsensusFetcher(discogs *providers.DiscogsAdapter) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
-	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-		info, err := discogs.ResolveDiscogsArtist(ctx, artistName, nil)
-		if err != nil || info == nil {
-			return nil, err
-		}
-		releases, err := discogs.FetchArtistReleases(ctx, info.ID)
-		if err != nil {
-			return nil, err
-		}
-		return discogsReleasesToSearchResults(releases), nil
-	}
-}
-
-func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []discoveryDomain.SearchResult {
-	results := make([]discoveryDomain.SearchResult, 0, len(releases))
-	for _, r := range releases {
-		results = append(results, discoveryDomain.SearchResult{
-			Kind:       discoveryDomain.ResultKindAlbum,
-			Title:      r.Title,
-			RecordType: discoveryDomain.RecordType(r.Type),
-			Extras: map[string]any{
-				"year": r.Year,
-			},
-		})
-	}
-	return results
-}
-
-func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
-	return buildArtworkChain(newClientFactory(nil), cfg)
-}
-
-func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
-	var artworkResolvers []discoveryPorts.ArtworkResolver
-	coverArtArchive := providers.NewCoverArtArchiveResolver(cf.discovery())
-	artworkResolvers = append(artworkResolvers, coverArtArchive,
-		providers.NewCoverArtArchiveIdentityResolver(coverArtArchive))
-	if cfg.HasSpotify() {
-		artworkResolvers = append(artworkResolvers, providers.NewSpotifyArtworkResolver(cf.discovery()))
-	}
-	if cfg.HasDiscogs() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent))
-	}
-	if cfg.HasFanartTV() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewFanartTvArtworkResolver(cf.discovery(), cfg.FanartTVAPIKey))
-	}
-	if cfg.HasGenius() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewGeniusArtworkResolver(cf.discovery(), cfg.GeniusAccessToken))
-	}
-	artworkResolvers = append(artworkResolvers,
-		providers.NewTheAudioDBAdapter(cf.discovery()),
-		providers.NewDeezerAdapter(cf.discovery()),
-		providers.NewITunesAdapter(cf.discovery()),
-	)
-	if cfg.HasYouTubeMusic() {
-		artworkResolvers = append(artworkResolvers, providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()))
-	}
-	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
-		artworkResolvers = append(artworkResolvers, sc)
-	}
-	return providers.NewChainedArtworkResolver(artworkResolvers...)
-}
-
-func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.VocabularyStore {
-	if redisClient == nil {
-		return nil
-	}
-	return discoveryCacheAdapters.NewVocabularyStore(
-		redisClient,
-		textnorm.NormalizeForMatch,
-		discoveryCacheAdapters.WithMetaphone(phonetics.MetaphoneKey),
-		discoveryCacheAdapters.WithVocabSignal(cacheSignal()),
-	)
 }
