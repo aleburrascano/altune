@@ -26,14 +26,17 @@ type Job struct {
 	UserID   shared.UserId
 	Kind     JobKind
 	Attempts int
+	Fence    Fence
 }
+
+type Fence int
 
 type JobQueue interface {
 	Enqueue(ctx context.Context, trackID domain.TrackId, kind JobKind, availableAt time.Time) error
 	Claim(ctx context.Context, lease time.Duration) (Job, error)
-	Heartbeat(ctx context.Context, trackID domain.TrackId, fence int, lease time.Duration) error
-	Release(ctx context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error
-	Settle(ctx context.Context, trackID domain.TrackId, fence int) error
+	Heartbeat(ctx context.Context, trackID domain.TrackId, fence Fence, lease time.Duration) error
+	Release(ctx context.Context, trackID domain.TrackId, fence Fence, availableAt time.Time) error
+	Settle(ctx context.Context, trackID domain.TrackId, fence Fence) error
 }
 
 type QueueDepthReader interface {

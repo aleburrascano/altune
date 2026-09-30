@@ -177,7 +177,7 @@ func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Heartbeat(ctx, track.ID, job.Attempts, time.Hour); err != nil {
+	if err := queue.Heartbeat(ctx, track.ID, job.Fence, time.Hour); err != nil {
 		t.Fatalf("Heartbeat = %v, want nil", err)
 	}
 	if until := leaseUntil(t, pool, track.ID); time.Until(until) < 30*time.Minute {
@@ -187,10 +187,10 @@ func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 		t.Errorf("Claim after heartbeat extended the lease = %v, want ErrNoJobAvailable", err)
 	}
 
-	if err := queue.Settle(ctx, track.ID, job.Attempts); err != nil {
+	if err := queue.Settle(ctx, track.ID, job.Fence); err != nil {
 		t.Fatalf("Settle = %v, want nil", err)
 	}
-	if err := queue.Heartbeat(ctx, track.ID, job.Attempts, time.Minute); err == nil {
+	if err := queue.Heartbeat(ctx, track.ID, job.Fence, time.Minute); err == nil {
 		t.Error("Heartbeat after Settle cleared the lease = nil error, want an error")
 	}
 }
@@ -208,7 +208,7 @@ func TestPgxJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 	}
 
 	future := time.Now().Add(time.Hour).UTC().Truncate(time.Millisecond)
-	if err := queue.Release(ctx, track.ID, job.Attempts, future); err != nil {
+	if err := queue.Release(ctx, track.ID, job.Fence, future); err != nil {
 		t.Fatalf("Release = %v, want nil", err)
 	}
 
@@ -216,7 +216,7 @@ func TestPgxJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 		t.Errorf("Claim before the backoff elapses = %v, want ErrNoJobAvailable", err)
 	}
 
-	if err := queue.Release(ctx, track.ID, job.Attempts, time.Now().Add(-time.Second)); err != nil {
+	if err := queue.Release(ctx, track.ID, job.Fence, time.Now().Add(-time.Second)); err != nil {
 		t.Fatalf("Release (immediate retry) = %v, want nil", err)
 	}
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
@@ -304,20 +304,20 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 		t.Fatalf("reclaim did not advance the fence: zombie.Attempts=%d newOwner.Attempts=%d", zombie.Attempts, newOwner.Attempts)
 	}
 
-	if err := queue.Heartbeat(ctx, track.ID, zombie.Attempts, time.Minute); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Heartbeat(ctx, track.ID, zombie.Fence, time.Minute); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("zombie Heartbeat = %v, want ErrLeaseLost", err)
 	}
-	if err := queue.Release(ctx, track.ID, zombie.Attempts, time.Now()); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Release(ctx, track.ID, zombie.Fence, time.Now()); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("zombie Release = %v, want ErrLeaseLost", err)
 	}
-	if err := queue.Settle(ctx, track.ID, zombie.Attempts); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Settle(ctx, track.ID, zombie.Fence); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("zombie Settle = %v, want ErrLeaseLost", err)
 	}
 
-	if err := queue.Heartbeat(ctx, track.ID, newOwner.Attempts, time.Minute); err != nil {
+	if err := queue.Heartbeat(ctx, track.ID, newOwner.Fence, time.Minute); err != nil {
 		t.Errorf("legitimate owner's Heartbeat after zombie calls = %v, want nil (row must be untouched)", err)
 	}
-	if err := queue.Settle(ctx, track.ID, newOwner.Attempts); err != nil {
+	if err := queue.Settle(ctx, track.ID, newOwner.Fence); err != nil {
 		t.Errorf("legitimate owner's Settle after zombie calls = %v, want nil (row must be untouched)", err)
 	}
 }
@@ -336,7 +336,7 @@ func TestPgxJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testin
 	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, time.Now().Add(-time.Second)); err != nil {
 		t.Fatalf("Enqueue while leased = %v, want nil", err)
 	}
-	if err := queue.Settle(ctx, track.ID, owner.Attempts); err != nil {
+	if err := queue.Settle(ctx, track.ID, owner.Fence); err != nil {
 		t.Fatalf("owner Settle = %v, want nil", err)
 	}
 
@@ -363,7 +363,7 @@ func TestPgxJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_status = 'ready' WHERE id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("mark ready: %v", err)
 	}
-	if err := queue.Settle(ctx, track.ID, owner.Attempts); err != nil {
+	if err := queue.Settle(ctx, track.ID, owner.Fence); err != nil {
 		t.Fatalf("Settle = %v, want nil", err)
 	}
 
@@ -395,7 +395,7 @@ func TestPgxJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) 
 	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
 		t.Fatalf("Claim while the owner's lease is live = %v, want ErrNoJobAvailable", err)
 	}
-	if err := queue.Heartbeat(ctx, track.ID, owner.Attempts, time.Minute); err != nil {
+	if err := queue.Heartbeat(ctx, track.ID, owner.Fence, time.Minute); err != nil {
 		t.Errorf("owner Heartbeat after a re-enqueue = %v, want nil", err)
 	}
 }
@@ -469,11 +469,11 @@ func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *te
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
 		t.Errorf("status when claimed = %q, want ready", got)
 	}
-	if err := queue.Heartbeat(ctx, track.ID, job.Attempts, time.Minute); err != nil {
+	if err := queue.Heartbeat(ctx, track.ID, job.Fence, time.Minute); err != nil {
 		t.Errorf("Heartbeat on a ready track's replace job = %v, want nil", err)
 	}
 
-	if err := queue.Settle(ctx, track.ID, job.Attempts); err != nil {
+	if err := queue.Settle(ctx, track.ID, job.Fence); err != nil {
 		t.Fatalf("Settle = %v", err)
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {

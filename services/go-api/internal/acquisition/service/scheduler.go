@@ -466,7 +466,7 @@ func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job 
 }
 
 func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSuccess *time.Time) bool {
-	err := s.queue.Heartbeat(context.Background(), job.TrackID, job.Attempts, s.leaseDuration)
+	err := s.queue.Heartbeat(context.Background(), job.TrackID, job.Fence, s.leaseDuration)
 	if err == nil {
 		*lastSuccess = time.Now()
 		return true
@@ -487,7 +487,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 	defer s.pending.untrack(job.TrackID.String())
 
 	if s.baseCtx.Err() != nil {
-		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, time.Now())
+		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, time.Now())
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
@@ -497,11 +497,11 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
 		availableAt := time.Now().Add(retryBackoff(job.Attempts))
-		err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, availableAt)
+		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, availableAt)
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
-	err := s.queue.Settle(context.Background(), job.TrackID, job.Attempts)
+	err := s.queue.Settle(context.Background(), job.TrackID, job.Fence)
 	s.logQueueOutcome("settle", job.TrackID, err)
 }
 
@@ -509,7 +509,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
 	if job.Attempts >= maxAcquisitionAttempts {
 		s.refuseQueuedRecovering(job)
 	}
-	err := s.queue.Release(context.Background(), job.TrackID, job.Attempts, time.Now().Add(retryBackoff(job.Attempts)))
+	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, time.Now().Add(retryBackoff(job.Attempts)))
 	s.logQueueOutcome("release", job.TrackID, err)
 }
 

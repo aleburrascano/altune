@@ -106,7 +106,7 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	best.leaseUntil = now.Add(lease)
 	best.attempts++
 	best.reenqueued = false
-	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts}, nil
+	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Fence: ports.Fence(best.attempts)}, nil
 }
 
 func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {
@@ -147,28 +147,28 @@ func (q *memJobQueue) findClaimable(now time.Time) (domain.TrackId, *memJob) {
 	return bestID, best
 }
 
-func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence int, lease time.Duration) error {
+func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence ports.Fence, lease time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
 	if !ok {
 		return fmt.Errorf("heartbeat acquisition job: track %s not found", trackID)
 	}
-	if !j.leased || j.attempts != fence {
+	if !j.leased || ports.Fence(j.attempts) != fence {
 		return ports.ErrLeaseLost
 	}
 	j.leaseUntil = time.Now().Add(lease)
 	return nil
 }
 
-func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error {
+func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence ports.Fence, availableAt time.Time) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
 	if !ok {
 		return fmt.Errorf("release acquisition job: track %s not found", trackID)
 	}
-	if j.attempts != fence {
+	if ports.Fence(j.attempts) != fence {
 		return ports.ErrLeaseLost
 	}
 	j.leased = false
@@ -177,14 +177,14 @@ func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence i
 	return nil
 }
 
-func (q *memJobQueue) Settle(_ context.Context, trackID domain.TrackId, fence int) error {
+func (q *memJobQueue) Settle(_ context.Context, trackID domain.TrackId, fence ports.Fence) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
 	if !ok {
 		return nil
 	}
-	if j.attempts != fence {
+	if ports.Fence(j.attempts) != fence {
 		return ports.ErrLeaseLost
 	}
 	if j.reenqueued {

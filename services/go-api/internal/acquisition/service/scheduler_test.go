@@ -934,7 +934,7 @@ func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.
 
 type settleKeepsPendingQueue struct{ *memJobQueue }
 
-func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID domain.TrackId, fence int) error {
+func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
 	return q.Release(ctx, trackID, fence, time.Now())
 }
 
@@ -2253,7 +2253,7 @@ type flakyHeartbeatQueue struct {
 	heartbeatErr error
 }
 
-func (q *flakyHeartbeatQueue) Heartbeat(context.Context, domain.TrackId, int, time.Duration) error {
+func (q *flakyHeartbeatQueue) Heartbeat(context.Context, domain.TrackId, acqports.Fence, time.Duration) error {
 	return q.heartbeatErr
 }
 
@@ -2311,7 +2311,7 @@ func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testi
 }
 
 type releaseRecord struct {
-	fence       int
+	fence       acqports.Fence
 	availableAt time.Time
 }
 
@@ -2320,7 +2320,7 @@ type releaseRecordingQueue struct {
 	releases chan releaseRecord
 }
 
-func (q *releaseRecordingQueue) Release(ctx context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error {
+func (q *releaseRecordingQueue) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, availableAt time.Time) error {
 	q.releases <- releaseRecord{fence: fence, availableAt: availableAt}
 	return q.memJobQueue.Release(ctx, trackID, fence, availableAt)
 }

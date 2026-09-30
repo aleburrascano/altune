@@ -54,10 +54,10 @@ func TestMemJobQueue_HeartbeatWrongFenceReturnsErrLeaseLost(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Heartbeat(context.Background(), trackID, job.Attempts+1, time.Minute); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := q.Heartbeat(context.Background(), trackID, job.Fence+1, time.Minute); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Fatalf("Heartbeat with a stale fence = %v, want ErrLeaseLost", err)
 	}
-	if err := q.Heartbeat(context.Background(), trackID, job.Attempts, time.Minute); err != nil {
+	if err := q.Heartbeat(context.Background(), trackID, job.Fence, time.Minute); err != nil {
 		t.Errorf("Heartbeat with the owning fence = %v, want nil", err)
 	}
 }
@@ -73,7 +73,7 @@ func TestMemJobQueue_ReleaseMakesTheJobClaimableAgain(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Release(context.Background(), trackID, job.Attempts, time.Now()); err != nil {
+	if err := q.Release(context.Background(), trackID, job.Fence, time.Now()); err != nil {
 		t.Fatalf("Release = %v, want nil", err)
 	}
 	if _, err := q.Claim(context.Background(), time.Minute); err != nil {
@@ -92,7 +92,7 @@ func TestMemJobQueue_SettleRemovesTheJob(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Settle(context.Background(), trackID, job.Attempts); err != nil {
+	if err := q.Settle(context.Background(), trackID, job.Fence); err != nil {
 		t.Fatalf("Settle = %v, want nil", err)
 	}
 	if _, ok := q.jobs[trackID]; ok {
@@ -129,7 +129,7 @@ func TestMemJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testin
 	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
 		t.Fatalf("re-Enqueue while leased = %v, want nil (no-op)", err)
 	}
-	if err := q.Settle(context.Background(), trackID, job.Attempts); err != nil {
+	if err := q.Settle(context.Background(), trackID, job.Fence); err != nil {
 		t.Fatalf("Settle = %v, want nil", err)
 	}
 	if _, err := q.Claim(context.Background(), time.Minute); err != nil {
