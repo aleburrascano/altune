@@ -44,7 +44,7 @@ func (c *Config) validate() error {
 }
 
 func (c *Config) validateTransportSecurity() error {
-	if !strings.EqualFold(strings.TrimSpace(c.Env), "production") {
+	if c.normalizedEnv() != "production" {
 		return nil
 	}
 	if err := validateDatabaseTLS(c.DatabaseURL); err != nil {
@@ -114,7 +114,7 @@ func (c *Config) validateRedis() error {
 }
 
 func (c *Config) validateTuning() error {
-	if c.MusicBrainzUserAgent == "" && strings.EqualFold(strings.TrimSpace(c.Env), "production") {
+	if c.MusicBrainzUserAgent == "" && c.normalizedEnv() == "production" {
 		return fmt.Errorf("MUSICBRAINZ_USER_AGENT must be set when ENV=production")
 	}
 	if c.MusicBrainzUserAgent != "" {

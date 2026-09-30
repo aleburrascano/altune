@@ -10,7 +10,7 @@ func (c *Config) IsDevelopment() bool {
 	return c.normalizedEnv() == "development"
 }
 
-var nonProdTestAuthEnvs = map[string]bool{
+var nonProdHookEnvs = map[string]bool{
 	"development": true,
 	"test":        true,
 }
@@ -19,21 +19,21 @@ func (c *Config) TestAuthEnabled() bool {
 	if !c.TestAuthOptIn || c.envDefaulted {
 		return false
 	}
-	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+	return nonProdHookEnvs[c.normalizedEnv()]
 }
 
 func (c *Config) ProviderReplayEnabled() bool {
 	if !c.ProviderReplayOptIn || c.ProviderReplayDir == "" {
 		return false
 	}
-	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+	return nonProdHookEnvs[c.normalizedEnv()]
 }
 
 func (c *Config) AcquisitionFixtureEnabled() bool {
 	if !c.AcquisitionFixtureOptIn {
 		return false
 	}
-	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+	return nonProdHookEnvs[c.normalizedEnv()]
 }
 
 func (c *Config) HasOCIS3() bool {

@@ -1046,6 +1046,36 @@ func TestTestAuthEnabled_RequiresOptInAndNonProdEnv(t *testing.T) {
 	}
 }
 
+func TestNonProdHooks_NormalizeEnv(t *testing.T) {
+	tests := []struct {
+		env  string
+		want bool
+	}{
+		{"development", true},
+		{"Test", true},
+		{"  DEVELOPMENT  ", true},
+		{"production", false},
+		{"staging", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			cfg := &Config{
+				Env:                     tt.env,
+				ProviderReplayOptIn:     true,
+				ProviderReplayDir:       "/tmp/replay",
+				AcquisitionFixtureOptIn: true,
+			}
+			if got := cfg.ProviderReplayEnabled(); got != tt.want {
+				t.Errorf("ProviderReplayEnabled() with Env=%q = %v, want %v", tt.env, got, tt.want)
+			}
+			if got := cfg.AcquisitionFixtureEnabled(); got != tt.want {
+				t.Errorf("AcquisitionFixtureEnabled() with Env=%q = %v, want %v", tt.env, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTestAuthEnabled_ZeroValueFailsClosed(t *testing.T) {
 	if (&Config{}).TestAuthEnabled() {
 		t.Fatal("zero-value Config enabled test auth; must fail closed to DISABLED")
