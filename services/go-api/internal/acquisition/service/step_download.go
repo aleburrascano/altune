@@ -378,6 +378,9 @@ func (s *DownloadStep) verify(
 ) (verificationResult, *downloadRejection) {
 	var result verificationResult
 
+	if s.prober != nil && ac.Track.Duration <= 0 {
+		s.recordSkip(ports.SkipNoDuration)
+	}
 	if s.prober != nil && ac.Track.Duration > 0 {
 		actual, err := s.prober.ProbeDuration(ctx, filePath)
 		switch {
@@ -385,6 +388,7 @@ func (s *DownloadStep) verify(
 			slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 				"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 				"error", logSafeError(err))
+			s.recordSkip(ports.SkipProbeFailed)
 		case !ac.durationAcceptable(actual):
 			slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
 				"track_id", ac.Track.ID,

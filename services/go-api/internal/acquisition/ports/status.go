@@ -20,6 +20,8 @@ const (
 	SkipDecoderUnavailable = "decoder_unavailable"
 	SkipIdentifyFailed     = "identify_failed"
 	SkipPreviewFallback    = "preview_fallback"
+	SkipProbeFailed        = "probe_failed"
+	SkipNoDuration         = "no_duration"
 )
 
 func (v AcquisitionVerification) FullyArmed() bool {

@@ -1614,3 +1614,60 @@ func TestDownloadStep_WindowedAllAttemptsPanickingReturnsErrorNotCrash(t *testin
 		t.Errorf("temp dir should be removed, stat err = %v", statErr)
 	}
 }
+
+func TestDownloadStep_ProbeErrorIsAcceptedAndRecordsAProbeFailedSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadProber(scriptedProber{probeErr: errors.New("probe boom")}), WithStepVerifySkips(rec))
+	ac := downloadContext("", nil)
+	ac.Track.Duration = 200
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if ac.TempPath == "" {
+		t.Error("probe error should still accept the candidate")
+	}
+	if len(rec.gates) != 1 || rec.gates[0] != ports.SkipProbeFailed {
+		t.Errorf("recorded gates = %v, want [%s]", rec.gates, ports.SkipProbeFailed)
+	}
+}
+
+func TestDownloadStep_UnknownDurationIsAcceptedAndRecordsANoDurationSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadProber(scriptedProber{duration: 200}), WithStepVerifySkips(rec))
+	ac := downloadContext("", nil)
+	ac.Track.Duration = 0
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if ac.TempPath == "" {
+		t.Error("unknown duration should still accept the candidate")
+	}
+	if len(rec.gates) != 1 || rec.gates[0] != ports.SkipNoDuration {
+		t.Errorf("recorded gates = %v, want [%s]", rec.gates, ports.SkipNoDuration)
+	}
+}
+
+func TestDownloadStep_SuccessfulProbeRecordsNoSkip(t *testing.T) {
+	rec := &gateRecorder{}
+	step := NewDownloadStep(&fileWritingSearcher{writeFile: true},
+		WithDownloadProber(scriptedProber{duration: 200}), WithStepVerifySkips(rec))
+	ac := downloadContext("", nil)
+	ac.Track.Duration = 200
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if len(rec.gates) != 0 {
+		t.Errorf("recorded gates = %v, want none", rec.gates)
+	}
+}
