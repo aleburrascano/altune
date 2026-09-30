@@ -196,7 +196,6 @@ func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, *testauth.T
 }
 
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
-	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable,

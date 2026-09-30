@@ -305,7 +305,6 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 
 func TestAlertableJobs_PinnedInOrder(t *testing.T) {
 	want := []jobName{
-		jobStalePendingReconcile,
 		jobOrphanedAudioReconcile,
 		jobBehavioralCorpusRefresh,
 		jobDiscographyEventPrune,

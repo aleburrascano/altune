@@ -84,7 +84,6 @@ func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 	want := map[jobName]string{
 		jobEvalMeter:                "eval meter",
 		jobAlertMonitor:             "alert monitor",
-		jobStalePendingReconcile:    "stale pending reconcile",
 		jobOrphanedAudioReconcile:   "orphaned audio reconcile",
 		jobBehavioralCorpusRefresh:  "behavioral corpus refresh",
 		jobVocabularyRefresh:        "vocabulary refresh",
@@ -156,7 +155,6 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 var allJobNameConsts = []jobName{
 	jobEvalMeter,
 	jobAlertMonitor,
-	jobStalePendingReconcile,
 	jobOrphanedAudioReconcile,
 	jobBehavioralCorpusRefresh,
 	jobDiscographyEventPrune,

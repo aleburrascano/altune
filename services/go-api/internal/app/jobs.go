@@ -11,7 +11,6 @@ type jobName string
 const (
 	jobEvalMeter                jobName = "eval meter"
 	jobAlertMonitor             jobName = "alert monitor"
-	jobStalePendingReconcile    jobName = "stale pending reconcile"
 	jobOrphanedAudioReconcile   jobName = "orphaned audio reconcile"
 	jobBehavioralCorpusRefresh  jobName = "behavioral corpus refresh"
 	jobDiscographyEventPrune    jobName = "discography event prune"
@@ -31,7 +30,6 @@ type jobSpec struct {
 var jobTable = []jobSpec{
 	{jobEvalMeter, false},
 	{jobAlertMonitor, false},
-	{jobStalePendingReconcile, true},
 	{jobOrphanedAudioReconcile, true},
 	{jobBehavioralCorpusRefresh, true},
 	{jobDiscographyEventPrune, true},

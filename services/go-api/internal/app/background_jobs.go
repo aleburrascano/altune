@@ -47,16 +47,6 @@ func (a *App) startLoggedJob(
 	slog.Info(string(name)+" started", startedAttrs...)
 }
 
-const stalePendingReconcileInterval = 10 * time.Minute
-
-func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
-	svc := catalogService.NewReconcileStalePendingService(repo)
-	a.startSimpleJob(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
-		_, err := svc.Execute(ctx)
-		return err
-	}, "interval", stalePendingReconcileInterval.String())
-}
-
 const orphanedAudioReconcileInterval = 10 * time.Minute
 
 func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPorts.OrphanedAudioQueue, audioStore catalogPorts.AudioStore) {

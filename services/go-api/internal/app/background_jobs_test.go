@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -139,12 +138,6 @@ type simpleJobLogCase struct {
 func TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob(t *testing.T) {
 	cases := []simpleJobLogCase{
 		{
-			name:         jobStalePendingReconcile,
-			startedAttrs: []any{"interval", stalePendingReconcileInterval.String()},
-			wantStarted:  `level=INFO msg="stale pending reconcile started" interval=` + stalePendingReconcileInterval.String() + "\n",
-			wantFailed:   `level=WARN msg="stale pending reconcile failed" error=boom` + "\n",
-		},
-		{
 			name:         jobOrphanedAudioReconcile,
 			startedAttrs: []any{"interval", orphanedAudioReconcileInterval.String()},
 			wantStarted:  `level=INFO msg="orphaned audio reconcile started" interval=` + orphanedAudioReconcileInterval.String() + "\n",
@@ -180,9 +173,9 @@ func TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob(t *testing.T) {
 
 func TestStartSimpleJob_CountsAFailedRunAsAFailure(t *testing.T) {
 	a := &App{}
-	runFailingSimpleJobOn(t, a, simpleJobLogCase{name: jobStalePendingReconcile})
+	runFailingSimpleJobOn(t, a, simpleJobLogCase{name: jobOrphanedAudioReconcile})
 
-	if failures := a.job(jobStalePendingReconcile).failures.Load(); failures == 0 {
+	if failures := a.job(jobOrphanedAudioReconcile).failures.Load(); failures == 0 {
 		t.Error("a failing simple job did not count toward its failure signal")
 	}
 }
@@ -224,34 +217,6 @@ func flipNamedJob(t *testing.T, a *App, name jobName, action string) {
 	t.Helper()
 	if _, ok := a.SetJobEnabled(name, action == "enable"); !ok {
 		t.Fatalf("SetJobEnabled(%q, %s) reported unknown job", name, action)
-	}
-}
-
-type countingStalePendingFailer struct{ calls atomic.Int64 }
-
-func (f *countingStalePendingFailer) FailStalePending(context.Context, time.Time, string) (int, error) {
-	f.calls.Add(1)
-	return 0, nil
-}
-
-func TestStalePendingReconcile_AdminKillSwitchSuppressesSweep(t *testing.T) {
-	a := &App{}
-	repo := &countingStalePendingFailer{}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel(); a.wg.Wait() })
-
-	a.startStalePendingReconcile(ctx, repo)
-	flipNamedJob(t, a, jobStalePendingReconcile, "disable")
-	for _, job := range a.backgroundStarts {
-		job.start(ctx)
-	}
-
-	h := waitForHealth(t, a, jobStalePendingReconcile, func(h JobHealth) bool { return h.Skipped >= 1 })
-	if h.Enabled {
-		t.Fatalf("job still enabled after admin disable: %+v", h)
-	}
-	if got := repo.calls.Load(); got != 0 {
-		t.Fatalf("disabled stale-pending reconcile swept the repo %d times", got)
 	}
 }
 
