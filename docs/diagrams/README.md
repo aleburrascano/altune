@@ -4,7 +4,7 @@ Mermaid, drawn from the code. When a PR changes a flow drawn here, it updates th
 
 | File | Answers |
 |---|---|
-| [`system.md`](system.md) | Context · Containers |
+| [`system.md`](system.md) | Context · Containers · Components |
 | [`app.md`](app.md) | User flow |
 | [`catalog.md`](catalog.md) | Track acquisition states · Save to play |
 | [`discovery.md`](discovery.md) | Search |
