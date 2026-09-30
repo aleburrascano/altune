@@ -117,8 +117,8 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 			if updated == nil || updated.FailureReason == nil {
 				t.Fatalf("track was not failed: %+v", updated)
 			}
-			code, _, _ := strings.Cut(*updated.FailureReason, domain.FailureDetailSeparator)
-			if code != string(tt.want) {
+			code, _ := domain.SplitFailureReason(*updated.FailureReason)
+			if code != tt.want {
 				t.Errorf("persisted failure code = %q, want %q", code, tt.want)
 			}
 		})
@@ -145,7 +145,7 @@ func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
 		if !code.Known() {
 			t.Errorf("failureReason(%q) = %q, not a catalog failure code", err, code)
 		}
-		reason := string(code) + domain.FailureDetailSeparator + "all 1 candidate rejected (1 identity)"
+		reason := domain.JoinFailureReason(code, "all 1 candidate rejected (1 identity)")
 		if got, want := domain.FailureMessage(&reason), domain.FailureMessage(new(string(code))); got != want {
 			t.Errorf("summary suffix changed message for %q: %q, want %q", code, got, want)
 		}

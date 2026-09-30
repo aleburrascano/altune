@@ -328,14 +328,13 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 }
 
 func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error, ac *AcquisitionContext) string {
-	reason := failureReason(err)
 	summary := summarizeRejections(ac.Rejections)
 	if summary == "" {
-		return reason
+		return failureReason(err)
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
 		"track_id", trackId.String(), "summary", summary)
-	return reason + domain.FailureDetailSeparator + summary
+	return domain.JoinFailureReason(failureCode(err), summary)
 }
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {

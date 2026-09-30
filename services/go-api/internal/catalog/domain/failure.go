@@ -39,12 +39,24 @@ func (c FailureCode) Known() bool {
 	return ok
 }
 
+func JoinFailureReason(code FailureCode, detail string) string {
+	if detail == "" {
+		return string(code)
+	}
+	return string(code) + FailureDetailSeparator + detail
+}
+
+func SplitFailureReason(reason string) (FailureCode, string) {
+	code, detail, _ := strings.Cut(reason, FailureDetailSeparator)
+	return FailureCode(code), detail
+}
+
 func FailureMessage(reason *string) string {
 	if reason == nil {
 		return "Acquisition failed"
 	}
-	code, _, _ := strings.Cut(*reason, FailureDetailSeparator)
-	if msg, ok := failureMessages[FailureCode(code)]; ok {
+	code, _ := SplitFailureReason(*reason)
+	if msg, ok := failureMessages[code]; ok {
 		return msg
 	}
 	return genericFailureMessage
