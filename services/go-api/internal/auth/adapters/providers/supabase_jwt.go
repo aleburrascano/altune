@@ -23,6 +23,8 @@ const supabaseAuthPathSuffix = "/auth/v1"
 
 const maxAccessTokenLifetime = time.Hour
 
+const reasonRevoked auth.TokenRejectReason = "revoked"
+
 var jwksFetchTimeout = 10 * time.Second
 
 type SupabaseJWTVerifier struct {
@@ -36,6 +38,8 @@ type SupabaseJWTVerifier struct {
 	refresher *jwksRefresher
 
 	metrics ports.AuthMetrics
+
+	revoker ports.TokenRevoker
 }
 
 type SupabaseJWTVerifierOption func(*SupabaseJWTVerifier)
@@ -44,6 +48,14 @@ func WithJWKSMetrics(m ports.AuthMetrics) SupabaseJWTVerifierOption {
 	return func(v *SupabaseJWTVerifier) {
 		if m != nil {
 			v.metrics = m
+		}
+	}
+}
+
+func WithTokenRevoker(r ports.TokenRevoker) SupabaseJWTVerifierOption {
+	return func(v *SupabaseJWTVerifier) {
+		if r != nil {
+			v.revoker = r
 		}
 	}
 }
@@ -62,6 +74,7 @@ func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		issuer:   strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix,
 		audience: audience,
 		metrics:  ports.NoopAuthMetrics(),
+		revoker:  ports.NoopTokenRevoker(),
 	}
 	for _, opt := range opts {
 		opt(v)
@@ -143,7 +156,25 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (auth
 		return auth.VerifiedToken{}, err
 	}
 
-	return verifiedToken(token)
+	verified, err := verifiedToken(token)
+	if err != nil {
+		return auth.VerifiedToken{}, err
+	}
+	if err := v.checkRevoked(ctx, verified.UserID, token.IssuedAt()); err != nil {
+		return auth.VerifiedToken{}, err
+	}
+	return verified, nil
+}
+
+func (v *SupabaseJWTVerifier) checkRevoked(ctx context.Context, userID shared.UserId, issuedAt time.Time) error {
+	revoked, err := v.revoker.Revoked(ctx, userID, issuedAt)
+	if err != nil {
+		return fmt.Errorf("check token revocation: %w", err)
+	}
+	if revoked {
+		return &auth.InvalidTokenError{Reason: reasonRevoked, Detail: "token revoked"}
+	}
+	return nil
 }
 
 func verifiedToken(token jwt.Token) (auth.VerifiedToken, error) {

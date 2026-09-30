@@ -8,6 +8,7 @@ import (
 
 	authMetrics "altune/go-api/internal/auth/adapters/metrics"
 	authProviders "altune/go-api/internal/auth/adapters/providers"
+	authPorts "altune/go-api/internal/auth/ports"
 )
 
 func newAuthVerifier(ctx context.Context, cfg *config.Config) (*authProviders.SupabaseJWTVerifier, error) {
@@ -17,6 +18,7 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*authProviders.Su
 		cfg.SupabaseProjectURL,
 		cfg.SupabaseJWTAud,
 		authProviders.WithJWKSMetrics(authMetrics.NewExpvarAuthMetrics()),
+		authProviders.WithTokenRevoker(authPorts.NoopTokenRevoker()),
 	)
 }
 

@@ -3,10 +3,14 @@ package app
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/config"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,6 +18,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 const operatorToken = "operator-token"
@@ -59,5 +66,50 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	}
 	if got.Auth.VerifierUnavailable != before.VerifierUnavailable+1 {
 		t.Errorf("auth.verifier_unavailable_total %d, want %d", got.Auth.VerifierUnavailable, before.VerifierUnavailable+1)
+	}
+}
+
+func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	pub, _ := jwk.FromRaw(key.PublicKey)
+	_ = pub.Set(jwk.KeyIDKey, "k1")
+	_ = pub.Set(jwk.AlgorithmKey, jwa.RS256)
+	set := jwk.NewSet()
+	_ = set.AddKey(pub)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(set)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{SupabaseJWTJWKSURL: srv.URL, SupabaseProjectURL: "https://p.supabase.co", SupabaseJWTAud: "authenticated"}
+	verifier, err := newAuthVerifier(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("newAuthVerifier: %v", err)
+	}
+
+	userID := uuid.New()
+	tok := jwt.New()
+	_ = tok.Set("sub", userID.String())
+	_ = tok.Set("iss", "https://p.supabase.co/auth/v1")
+	_ = tok.Set("aud", "authenticated")
+	_ = tok.Set("iat", time.Now().Add(-time.Minute))
+	_ = tok.Set("exp", time.Now().Add(30*time.Minute))
+	priv, _ := jwk.FromRaw(key)
+	_ = priv.Set(jwk.KeyIDKey, "k1")
+	signed, err := jwt.Sign(tok, jwt.WithKey(jwa.RS256, priv))
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	verified, err := verifier.Verify(context.Background(), string(signed))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if verified.UserID != shared.NewUserId(userID) {
+		t.Errorf("user id %v, want %v", verified.UserID, userID)
 	}
 }

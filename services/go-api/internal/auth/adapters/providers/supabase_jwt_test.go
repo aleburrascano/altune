@@ -3,6 +3,7 @@ package providers
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -1080,4 +1081,47 @@ func TestSupabaseJWTVerifier_VerifyAcceptsAgainOnceKeySetRefreshes(t *testing.T)
 		_, err := verifier.Verify(ctx, token)
 		return err == nil
 	})
+}
+
+type stubRevoker struct {
+	revoked bool
+	err     error
+}
+
+func (s stubRevoker) Revoked(context.Context, shared.UserId, time.Time) (bool, error) {
+	return s.revoked, s.err
+}
+
+func verifyWithRevoker(t *testing.T, opts ...SupabaseJWTVerifierOption) error {
+	t.Helper()
+	f := newTestJWTFixture(t)
+	verifier, err := NewSupabaseJWTVerifier(context.Background(), f.jwksServer.URL, f.projectURL, f.audience, opts...)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	token := f.signToken(t, validClaims(f.issuer, f.audience))
+	_, err = verifier.Verify(context.Background(), token)
+	return err
+}
+
+func TestSupabaseJWTVerifier_RevokedTokenRejected(t *testing.T) {
+	err := verifyWithRevoker(t, WithTokenRevoker(stubRevoker{revoked: true}))
+	assertInvalidTokenReason(t, err, reasonRevoked)
+}
+
+func TestSupabaseJWTVerifier_DefaultRevokerAcceptsToken(t *testing.T) {
+	if err := verifyWithRevoker(t); err != nil {
+		t.Fatalf("Verify with default revoker: %v", err)
+	}
+}
+
+func TestSupabaseJWTVerifier_RevokerErrorIsUnavailableNotInvalid(t *testing.T) {
+	err := verifyWithRevoker(t, WithTokenRevoker(stubRevoker{err: errors.New("store down")}))
+	if err == nil {
+		t.Fatal("expected error when revoker fails, got nil")
+	}
+	var tokenErr *auth.InvalidTokenError
+	if errors.As(err, &tokenErr) {
+		t.Fatalf("revoker failure must be a plain error (503), got InvalidTokenError %v", tokenErr)
+	}
 }
