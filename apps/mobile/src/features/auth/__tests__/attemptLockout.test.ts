@@ -104,7 +104,7 @@ describe('attemptLockout: wrapping an auth call', () => {
 
   it('refuses without calling through once the account is locked out', async () => {
     const attempt = jest.fn().mockResolvedValue(invalidCredentials);
-    const guarded = lockoutOnRepeatedFailure('sign-in', attempt);
+    const guarded = lockoutOnRepeatedFailure('sign-in', attempt, (o) => o.kind === 'error');
 
     for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await guarded('a@b.co');
 
@@ -114,7 +114,7 @@ describe('attemptLockout: wrapping an auth call', () => {
 
   it('ends the run on a terminal state that is not an error', async () => {
     const attempt = jest.fn().mockResolvedValue(invalidCredentials);
-    const guarded = lockoutOnRepeatedFailure('sign-in', attempt);
+    const guarded = lockoutOnRepeatedFailure('sign-in', attempt, (o) => o.kind === 'error');
     for (let i = 0; i < LOCKOUT_AFTER_FAILURES - 1; i += 1) await guarded('a@b.co');
     attempt.mockResolvedValue({ kind: 'ok' });
     await guarded('a@b.co');
@@ -128,7 +128,11 @@ describe('attemptLockout: wrapping an auth call', () => {
   it('passes every argument through to the wrapped call', async () => {
     const attempt = jest.fn().mockResolvedValue({ kind: 'ok' });
 
-    await lockoutOnRepeatedFailure('sign-in', attempt)('a@b.co', 'hunter2');
+    await lockoutOnRepeatedFailure(
+      'sign-in',
+      attempt,
+      (o) => o.kind === 'error',
+    )('a@b.co', 'hunter2');
 
     expect(attempt).toHaveBeenCalledWith('a@b.co', 'hunter2');
   });
@@ -152,5 +156,46 @@ describe('attemptLockout: sign-in and reset-request keep separate runs', () => {
 
     expect(isLockedOut('sign-in', 'a@b.co', START)).toBe(true);
     expect(isLockedOut('reset-request', 'a@b.co', START)).toBe(false);
+  });
+});
+
+describe('attemptLockout: which outcomes count as a failure', () => {
+  const credentialsFailure = { kind: 'error', reason: 'invalid_credentials' } as const;
+  const transportFailure = { kind: 'error', reason: 'network' } as const;
+  const countsCredentials = (outcome: { kind: string; reason?: string }) =>
+    outcome.reason === 'invalid_credentials';
+
+  it('locks after a run of outcomes the predicate counts', async () => {
+    const attempt = jest.fn().mockResolvedValue(credentialsFailure);
+    const guarded = lockoutOnRepeatedFailure('sign-in', attempt, countsCredentials);
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await guarded('a@b.co');
+
+    expect(isLockedOut('sign-in', 'a@b.co')).toBe(true);
+  });
+
+  it('neither records nor clears for an error the predicate does not count', async () => {
+    const attempt = jest.fn().mockResolvedValue(credentialsFailure);
+    const guarded = lockoutOnRepeatedFailure('sign-in', attempt, countsCredentials);
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES - 1; i += 1) await guarded('a@b.co');
+    attempt.mockResolvedValue(transportFailure);
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await guarded('a@b.co');
+    expect(isLockedOut('sign-in', 'a@b.co')).toBe(false);
+
+    attempt.mockResolvedValue(credentialsFailure);
+    await guarded('a@b.co');
+
+    expect(isLockedOut('sign-in', 'a@b.co')).toBe(true);
+  });
+
+  it('clears the run on a success whatever the predicate says', async () => {
+    const attempt = jest.fn().mockResolvedValue(credentialsFailure);
+    const guarded = lockoutOnRepeatedFailure('sign-in', attempt, () => true);
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES - 1; i += 1) await guarded('a@b.co');
+    attempt.mockResolvedValue({ kind: 'ok' });
+    await guarded('a@b.co');
+    attempt.mockResolvedValue(credentialsFailure);
+    await guarded('a@b.co');
+
+    expect(isLockedOut('sign-in', 'a@b.co')).toBe(false);
   });
 });

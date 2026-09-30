@@ -234,3 +234,42 @@ describe('useSignIn: reporting the failure to the anonymous ingest', () => {
     expect(reportedReasons()).toEqual(['invalid_credentials']);
   });
 });
+
+describe('useSignIn: only a wrong password feeds the lockout', () => {
+  const replyFor = (error: object) => ({ data: null, error });
+  const UNCOUNTED = [
+    [
+      'network',
+      replyFor({ name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' }),
+    ],
+    [
+      'email_not_confirmed',
+      replyFor({ name: 'AuthApiError', status: 400, code: 'email_not_confirmed', message: 'no' }),
+    ],
+    [
+      'too_many_attempts',
+      replyFor({
+        name: 'AuthApiError',
+        status: 429,
+        code: 'over_request_rate_limit',
+        message: 'l',
+      }),
+    ],
+  ] as const;
+
+  it.each(UNCOUNTED)('does not lock the sixth attempt after five %s replies', async (_r, reply) => {
+    signInWithPassword.mockResolvedValue(reply);
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await signIn();
+    signInWithPassword.mockClear();
+    await signIn();
+
+    expect(signInWithPassword).toHaveBeenCalledTimes(1);
+  });
+
+  it('still locks the sixth attempt after five invalid_credentials replies', async () => {
+    signInWithPassword.mockResolvedValue(WRONG_PASSWORD);
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await signIn();
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
+  });
+});

@@ -87,27 +87,30 @@ export function lockoutOnRepeatedFailure<
 >(
   action: LockoutAction,
   attempt: (...args: A) => Promise<R>,
+  countsAsFailure: (outcome: R) => boolean,
 ): (...args: A) => Promise<R | LockedOut> {
-  return (...args: A) => guardedCall(action, attempt, args);
+  return (...args: A) => guardedCall(action, attempt, countsAsFailure, args);
 }
 
 async function guardedCall<A extends [string, ...unknown[]], R extends { kind: string }>(
   action: LockoutAction,
   attempt: (...args: A) => Promise<R>,
+  countsAsFailure: (outcome: R) => boolean,
   args: A,
 ): Promise<R | LockedOut> {
   const [email] = args;
   if (isLockedOut(action, email)) return LOCKED_OUT;
-  return settleRun(action, email, await attempt(...args));
+  return settleRun(action, email, await attempt(...args), countsAsFailure);
 }
 
 function settleRun<R extends { kind: string }>(
   action: LockoutAction,
   email: string,
   outcome: R,
+  countsAsFailure: (outcome: R) => boolean,
 ): R {
-  if (outcome.kind === 'error') recordFailedAttempt(action, email);
-  else clearFailedAttempts(action, email);
+  if (outcome.kind !== 'error') clearFailedAttempts(action, email);
+  else if (countsAsFailure(outcome)) recordFailedAttempt(action, email);
   return outcome;
 }
 

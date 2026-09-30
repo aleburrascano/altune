@@ -30,7 +30,11 @@ function failure(error: SupabaseAuthErrorLike) {
 
 export function useResetPassword() {
   const { state, run } = useAsyncAuthAction<ResetRequestResult, [string]>(
-    lockoutOnRepeatedFailure('reset-request', requestReset),
+    lockoutOnRepeatedFailure(
+      'reset-request',
+      requestReset,
+      (outcome) => outcome.kind === 'error' && outcome.reason === 'unknown',
+    ),
   );
 
   return { state, requestReset: run };

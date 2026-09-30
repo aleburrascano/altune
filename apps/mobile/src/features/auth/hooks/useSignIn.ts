@@ -32,13 +32,17 @@ function signInErrorReason(error: SupabaseAuthErrorLike): SignInErrorReason {
 
 export function useSignIn() {
   const { state, run } = useAsyncAuthAction<SignInResult, [string, string]>(
-    lockoutOnRepeatedFailure('sign-in', async (email: string, password: string) => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (!error) return { kind: 'ok' } as const;
-      const reason = signInErrorReason(error);
-      reportSignInFailure(reason);
-      return { kind: 'error', reason } as const;
-    }),
+    lockoutOnRepeatedFailure(
+      'sign-in',
+      async (email: string, password: string) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error) return { kind: 'ok' } as const;
+        const reason = signInErrorReason(error);
+        reportSignInFailure(reason);
+        return { kind: 'error', reason } as const;
+      },
+      (outcome) => outcome.kind === 'error' && outcome.reason === 'invalid_credentials',
+    ),
   );
 
   return { state, signIn: run };

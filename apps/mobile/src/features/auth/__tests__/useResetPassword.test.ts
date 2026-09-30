@@ -190,3 +190,22 @@ describe('useResetPassword: the recovery redirect on native (#2837)', () => {
     });
   });
 });
+
+describe('useResetPassword: only an unknown failure feeds the lockout', () => {
+  const UNCOUNTED = [
+    ['network', { name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' }],
+    [
+      'too_many_attempts',
+      { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'l' },
+    ],
+  ] as const;
+
+  it.each(UNCOUNTED)('does not lock the sixth request after five %s replies', async (_r, error) => {
+    resetPasswordForEmail.mockResolvedValue({ data: null, error });
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) await requestReset();
+    resetPasswordForEmail.mockClear();
+    await requestReset();
+
+    expect(resetPasswordForEmail).toHaveBeenCalledTimes(1);
+  });
+});
