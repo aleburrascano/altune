@@ -2,11 +2,14 @@ import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { inspect } from 'util';
 
+import { Event } from 'react-native-track-player';
+
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { ignoringNativeRejection } from '../native/createNativePlaybackActions';
+import { playbackService } from '../native/service';
 import { repairActiveToStreaming } from '../native/nativeTrackSwap';
 import { _resetPlaybackHealthForTest } from '../playbackHealth';
 import { reportingQueueFailure } from '../queueFailureReport';
@@ -108,5 +111,21 @@ describe('source guard', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('unmapped native playback error log', () => {
+  it('redacts a tokenized URL in the native message', async () => {
+    const { __player } = jest.requireMock('react-native-track-player');
+    await playbackService();
+    const registration = __player
+      .calls('addEventListener')
+      .find(([event]: [unknown]) => event === Event.PlaybackError);
+    registration[1]({
+      code: 'android-audio-track-init-failed',
+      message: leaky().message,
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expectLoggedClean();
   });
 });

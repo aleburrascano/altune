@@ -25,7 +25,7 @@ import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './na
 import { classifyNativePlaybackError } from '../classifyPlaybackError';
 import { clearPlaybackError, reportPlaybackError } from '../playbackErrorStore';
 import { recordAudioRecoveryFailure, recordPlaybackFailure } from '../playbackHealth';
-import { redactedPlaybackFailure } from '../redactPlaybackError';
+import { redactedPlaybackFailure, redactPlaybackErrorMessage } from '../redactPlaybackError';
 import { reportingQueueFailure, reportQueueFailure } from '../queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
@@ -84,14 +84,21 @@ function slidePresignWindow(index: number): Promise<void> {
   );
 }
 
-async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promise<void> {
+async function failedTrackAndKey(): Promise<[PlaybackTrack | null, TrackKey | null]> {
   const key = (await activeNativeTrackId()) ?? null;
   const failed = key !== null ? queueTrackByKey(key) : useQueueStore.getState().currentTrack();
-  const failedKey = key ?? (failed ? trackKey(failed) : null);
+  return [failed, key ?? (failed ? trackKey(failed) : null)];
+}
+
+function recordNativeFailure(event: PlaybackErrorEvent, failedKey: TrackKey | null): void {
+  const { code, message } = event;
   const kind = classifyNativePlaybackError(code ?? '', message ?? '');
   recordPlaybackFailure(kind);
+  if (kind === 'unknown') warnUnmappedPlaybackError(event, failedKey);
   if (failedKey !== null) reportPlaybackError(failedKey, kind, message || 'Playback failed');
+}
 
+async function recoverFailedTrack(failed: PlaybackTrack | null): Promise<void> {
   if (!failed || failed.source.kind !== 'library') return;
   if (!claimRecoveryAttempt(trackKey(failed), Date.now())) return;
   if (wasSwappedToLocal(failed.source.trackId)) {
@@ -99,6 +106,23 @@ async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promi
     return;
   }
   await recoverAudio(failed.source.trackId).catch(warnAudioRecoveryFailed);
+}
+
+async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
+  const [failed, failedKey] = await failedTrackAndKey();
+  recordNativeFailure(event, failedKey);
+  await recoverFailedTrack(failed);
+}
+
+function warnUnmappedPlaybackError(
+  { code, message }: PlaybackErrorEvent,
+  failedKey: TrackKey | null,
+): void {
+  console.warn('[playback] unmapped native error', {
+    code: redactPlaybackErrorMessage(code ?? ''),
+    trackKey: failedKey && redactPlaybackErrorMessage(failedKey),
+    error: redactPlaybackErrorMessage(message ?? ''),
+  });
 }
 
 function warnAudioRecoveryFailed(err: unknown): void {

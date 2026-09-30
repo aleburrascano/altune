@@ -17,6 +17,7 @@ import {
   QUEUE_UPDATE_FAILED_MESSAGE,
 } from '../native/createNativePlaybackActions';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
+import { redactPlaybackErrorMessage } from '../redactPlaybackError';
 import {
   MAX_TRACKED_RECOVERIES,
   RECOVERY_ATTEMPTS_PER_TRACK,
@@ -148,6 +149,52 @@ describe('native PlaybackError handling', () => {
 
       expect(kind).toBe('unknown');
       expect(usePlaybackErrorStore.getState().message).toBe('Playback failed');
+    });
+  });
+
+  describe('playbackService — an unmapped native PlaybackError code is logged', () => {
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    async function fire(code: string, message: string): Promise<PlaybackTrack> {
+      const track = previewTrack();
+      useQueueStore.getState().loadQueue([track], 0, null);
+      const handler = await playbackErrorHandler();
+      handler({ code, message });
+      await new Promise((resolve) => setImmediate(resolve));
+      return track;
+    }
+
+    it('warns once with the code and track key, and keeps the unknown kind', async () => {
+      const track = await fire('android-audio-track-init-failed', 'AudioTrack init failed');
+
+      const ours = warn.mock.calls.filter(
+        ([, detail]) => detail?.trackKey === redactPlaybackErrorMessage(trackKey(track)),
+      );
+      expect(ours).toHaveLength(1);
+      expect(ours[0][1]).toEqual({
+        code: 'android-audio-track-init-failed',
+        trackKey: redactPlaybackErrorMessage(trackKey(track)),
+        error: 'AudioTrack init failed',
+      });
+      expect(usePlaybackErrorStore.getState().kind).toBe('unknown');
+    });
+
+    it('warns for the unmapped code only and leaves a mapped code on its kind', async () => {
+      await fire('android-audio-track-init-failed', 'AudioTrack init failed');
+      await fire('android-io-network-connection-failed', 'Source error');
+
+      const warnedCodes = warn.mock.calls.map(([, detail]) => detail?.code);
+      expect(warnedCodes).toContain('android-audio-track-init-failed');
+      expect(warnedCodes).not.toContain('android-io-network-connection-failed');
+      expect(usePlaybackErrorStore.getState().kind).toBe('network');
     });
   });
 
