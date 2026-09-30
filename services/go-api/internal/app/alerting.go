@@ -29,7 +29,7 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 
 	a.alertMonitor = observeAlert.NewMonitor(notifier, 30*time.Second, conditions...).
 		WithLeadership(a.leaderContext)
-	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
+	a.whenLeaderUnlessDisabled(jobAlertMonitor, a.alertMonitor.Start)
 }
 
 func (a *App) alertNotifier(ctx context.Context) observeAlert.AlertNotifier {

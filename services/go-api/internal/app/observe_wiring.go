@@ -41,7 +41,7 @@ func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
 	a.eventFeed.Start(ctx, tap)
 	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.evalMeterRunner()).
 		WithLeadership(a.leaderContext)
-	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
+	a.whenLeaderUnlessDisabled(jobEvalMeter, a.evalMeter.Start)
 }
 
 func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *observeHandler.Handler) {

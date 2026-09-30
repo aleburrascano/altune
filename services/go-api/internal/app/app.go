@@ -132,6 +132,10 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("provider replay: %w", err)
 	}
 
+	if err := a.applyDisabledJobs(); err != nil {
+		return fmt.Errorf("startup switches: %w", err)
+	}
+
 	disc := a.wireDiscovery(ctx, newClientFactory(clientTransport))
 	a.searchSvc = disc.searchSvc
 	cat, err := a.wireCatalog(tap, disc)
@@ -204,18 +208,26 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 	}
 }
 
-func (a *App) applyStartupSwitches() error {
-	if a.cfg.AcquisitionPaused && a.scheduler != nil {
-		a.scheduler.Pause()
-		slog.Info("acquisition started paused")
-	}
+func (a *App) applyDisabledJobs() error {
 	for _, raw := range a.cfg.DisabledJobs {
 		name := jobName(raw)
 		if !isKnownJobName(name) {
 			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
 		}
-		a.job(name).disabled.Store(true)
-		slog.Info("job disabled at startup", "job", raw)
+		if a.job(name).disabled.CompareAndSwap(false, true) {
+			slog.Info("job disabled at startup", "job", raw)
+		}
+	}
+	return nil
+}
+
+func (a *App) applyStartupSwitches() error {
+	if a.cfg.AcquisitionPaused && a.scheduler != nil {
+		a.scheduler.Pause()
+		slog.Info("acquisition started paused")
+	}
+	if err := a.applyDisabledJobs(); err != nil {
+		return err
 	}
 	for _, raw := range a.cfg.StreamripServices {
 		service := strings.ToLower(strings.TrimSpace(raw))

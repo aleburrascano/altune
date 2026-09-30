@@ -36,6 +36,17 @@ func (a *App) whenLeader(name jobName, start func(context.Context)) {
 	a.backgroundStarts = append(a.backgroundStarts, backgroundJob{name: name, start: start})
 }
 
+func (a *App) whenLeaderUnlessDisabled(name jobName, start func(context.Context)) {
+	jc := a.job(name)
+	a.whenLeader(name, func(ctx context.Context) {
+		if jc.disabled.Load() {
+			jc.skipped.Add(1)
+			return
+		}
+		start(ctx)
+	})
+}
+
 func (a *App) startBackgroundWhenLeader(ctx context.Context) {
 	a.election = leader.NewElection(a.pool, backgroundLockKey)
 	a.election.Start(ctx)

@@ -3,12 +3,15 @@ package app
 import (
 	catalogDomain "altune/go-api/internal/catalog/domain"
 	catalogService "altune/go-api/internal/catalog/service"
+	discoveryPorts "altune/go-api/internal/discovery/ports"
+	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -168,4 +171,54 @@ func TestShutdown_InFlightRequestContextSurvivesLifecycleCancel(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("handler did not finish")
 	}
+}
+
+func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
+	store := &countingBehavioralStore{}
+	consumer := discoveryService.NewSatisfactionConsumer(store)
+	searchSvc := discoveryService.NewService(nil, nil, discoveryService.WithBehavioralRanking(consumer))
+	a := &App{cfg: &config.Config{
+		BehavioralRankingEnabled: true,
+		DisabledJobs:             []string{"behavioral ranking refresh"},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() { cancel(); a.wg.Wait() })
+
+	if err := a.applyDisabledJobs(); err != nil {
+		t.Fatalf("applyDisabledJobs: %v", err)
+	}
+	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
+	waitForHealth(t, a, jobBehavioralRankingRefresh, func(h JobHealth) bool { return h.Skipped >= 1 })
+
+	if got := store.calls.Load(); got != 0 {
+		t.Fatalf("RefreshBehavioralScores ran %d times, want 0 while disabled", got)
+	}
+}
+
+func TestWhenLeaderUnlessDisabled_DisabledMonitorsNeverStart(t *testing.T) {
+	for _, name := range []jobName{jobAlertMonitor, jobEvalMeter} {
+		t.Run(string(name), func(t *testing.T) {
+			a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
+			var started atomic.Bool
+			a.whenLeaderUnlessDisabled(name, func(context.Context) { started.Store(true) })
+			if err := a.applyDisabledJobs(); err != nil {
+				t.Fatalf("applyDisabledJobs: %v", err)
+			}
+
+			for _, job := range a.backgroundStarts {
+				job.start(context.Background())
+			}
+
+			if started.Load() {
+				t.Fatalf("%s started despite DISABLED_JOBS", name)
+			}
+		})
+	}
+}
+
+type countingBehavioralStore struct{ calls atomic.Int64 }
+
+func (s *countingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discoveryPorts.BehavioralSignal, error) {
+	s.calls.Add(1)
+	return nil, nil
 }
