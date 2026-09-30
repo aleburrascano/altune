@@ -27,7 +27,7 @@ func (s *PgxOutcomeStore) Record(ctx context.Context, o ports.AcquisitionOutcome
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	_, err := s.pool.Exec(ctx, recordOutcomeSQL, o.TrackID, o.Outcome, o.Reason, o.ElapsedMs)
+	_, err := s.pool.Exec(ctx, recordOutcomeSQL, o.TrackID, string(o.Outcome), o.Reason, o.ElapsedMs)
 	if err != nil {
 		return fmt.Errorf("record outcome: %w", err)
 	}

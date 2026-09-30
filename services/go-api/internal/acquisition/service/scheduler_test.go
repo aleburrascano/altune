@@ -327,8 +327,8 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 	wg.Wait()
 
 	_, recent := scheduler.log.snapshot()
-	if len(recent) != 1 || recent[0].State != JobFailed {
-		t.Fatalf("recent jobs = %+v, want exactly one %s job", recent, JobFailed)
+	if len(recent) != 1 || recent[0].State != acqports.JobFailed {
+		t.Fatalf("recent jobs = %+v, want exactly one %s job", recent, acqports.JobFailed)
 	}
 	if strings.Contains(recent[0].Reason, cookieJarPath) {
 		t.Errorf("job reason = %q, still names the cookie file %q", recent[0].Reason, cookieJarPath)
@@ -458,8 +458,8 @@ func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 
 	close(acq.release)
 	settled := awaitSettledJob(t, scheduler, queued.String())
-	if settled.State != JobSucceeded {
-		t.Errorf("queued job state = %q, want %q (it must run once a worker frees up)", settled.State, JobSucceeded)
+	if settled.State != acqports.JobSucceeded {
+		t.Errorf("queued job state = %q, want %q (it must run once a worker frees up)", settled.State, acqports.JobSucceeded)
 	}
 	if got := acq.calls.Load(); got != 2 {
 		t.Errorf("acquirer executions = %d, want 2 (both jobs eventually run)", got)
@@ -1053,8 +1053,8 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 		t.Fatalf("schedule after Resume = %v, want nil", err)
 	}
 	settled := awaitSettledJob(t, scheduler, paused.String())
-	if settled.State != JobSucceeded {
-		t.Errorf("resumed job state = %q, want %q (kill switch must be reversible)", settled.State, JobSucceeded)
+	if settled.State != acqports.JobSucceeded {
+		t.Errorf("resumed job state = %q, want %q (kill switch must be reversible)", settled.State, acqports.JobSucceeded)
 	}
 }
 
@@ -1126,8 +1126,8 @@ func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 		t.Fatalf("schedule after Resume = %v, want nil", err)
 	}
 	settled := awaitSettledJob(t, scheduler, queued.String())
-	if settled.State != JobSucceeded {
-		t.Errorf("resumed job state = %q, want %q", settled.State, JobSucceeded)
+	if settled.State != acqports.JobSucceeded {
+		t.Errorf("resumed job state = %q, want %q", settled.State, acqports.JobSucceeded)
 	}
 	wg.Wait()
 }
@@ -1612,8 +1612,8 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		if outcome.TrackID != trackId.String() {
 			t.Errorf("track id = %q, want %q", outcome.TrackID, trackId.String())
 		}
-		if outcome.Outcome != JobSucceeded {
-			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobSucceeded)
+		if outcome.Outcome != acqports.JobSucceeded {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, acqports.JobSucceeded)
 		}
 		if outcome.ElapsedMs < 0 {
 			t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
@@ -1646,8 +1646,8 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		if outcome.TrackID != track.ID.String() {
 			t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
 		}
-		if outcome.Outcome != JobFailed {
-			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobFailed)
+		if outcome.Outcome != acqports.JobFailed {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, acqports.JobFailed)
 		}
 		if outcome.Reason == "" {
 			t.Error("reason is empty, want the acquisition failure reason")
@@ -1673,8 +1673,8 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 
 		outcome := assertExactlyOneOutcome(t, recorder.calls)
 		wg.Wait()
-		if outcome.Outcome != JobFailed {
-			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobFailed)
+		if outcome.Outcome != acqports.JobFailed {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, acqports.JobFailed)
 		}
 		if outcome.Reason != "panic" {
 			t.Errorf("reason = %q, want %q", outcome.Reason, "panic")
@@ -1720,16 +1720,16 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		if !ok {
 			t.Fatalf("no outcome recorded for the running track %q, got %v", running.String(), byTrackID)
 		}
-		if runningOutcome.Outcome != JobSucceeded {
-			t.Errorf("running track outcome = %q, want %q", runningOutcome.Outcome, JobSucceeded)
+		if runningOutcome.Outcome != acqports.JobSucceeded {
+			t.Errorf("running track outcome = %q, want %q", runningOutcome.Outcome, acqports.JobSucceeded)
 		}
 
 		outcome, ok := byTrackID[queued.String()]
 		if !ok {
 			t.Fatalf("no outcome recorded for the queued track %q, got %v", queued.String(), byTrackID)
 		}
-		if outcome.Outcome != JobSucceeded {
-			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobSucceeded)
+		if outcome.Outcome != acqports.JobSucceeded {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, acqports.JobSucceeded)
 		}
 		if outcome.ElapsedMs < 0 {
 			t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
@@ -1756,8 +1756,8 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		wg.Wait()
 
 		_, recent := scheduler.log.snapshot()
-		if len(recent) != 1 || recent[0].State != JobSucceeded {
-			t.Fatalf("recent jobs = %+v, want exactly one %s job (a Record error must not change the job's result)", recent, JobSucceeded)
+		if len(recent) != 1 || recent[0].State != acqports.JobSucceeded {
+			t.Fatalf("recent jobs = %+v, want exactly one %s job (a Record error must not change the job's result)", recent, acqports.JobSucceeded)
 		}
 	})
 
@@ -1944,8 +1944,8 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 	if outcome.TrackID != track.ID.String() {
 		t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
 	}
-	if outcome.Outcome != JobCancelled {
-		t.Errorf("outcome = %q, want %q (a job cut mid-run by shutdown is released for retry, not failed)", outcome.Outcome, JobCancelled)
+	if outcome.Outcome != acqports.JobCancelled {
+		t.Errorf("outcome = %q, want %q (a job cut mid-run by shutdown is released for retry, not failed)", outcome.Outcome, acqports.JobCancelled)
 	}
 	if outcome.Reason != "shutdown" {
 		t.Errorf("reason = %q, want %q", outcome.Reason, "shutdown")
@@ -1988,8 +1988,8 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 	if only.TrackID != running.ID.String() {
 		t.Fatalf("recorded track = %q, want the running track %q (the queued job was never claimed)", only.TrackID, running.ID.String())
 	}
-	if only.Outcome != JobCancelled {
-		t.Errorf("outcome = %q, want %q", only.Outcome, JobCancelled)
+	if only.Outcome != acqports.JobCancelled {
+		t.Errorf("outcome = %q, want %q", only.Outcome, acqports.JobCancelled)
 	}
 	if only.Reason != "shutdown" {
 		t.Errorf("reason = %q, want %q", only.Reason, "shutdown")
@@ -2084,8 +2084,8 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
 	wg.Wait()
 
-	if outcome.Outcome != JobFailed {
-		t.Fatalf("outcome = %q, want %q", outcome.Outcome, JobFailed)
+	if outcome.Outcome != acqports.JobFailed {
+		t.Fatalf("outcome = %q, want %q", outcome.Outcome, acqports.JobFailed)
 	}
 	if strings.Contains(outcome.Reason, cookieJarPath) {
 		t.Errorf("recorded reason = %q, still names the cookie file %q", outcome.Reason, cookieJarPath)
@@ -2171,8 +2171,8 @@ func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 	}
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
 	wg.Wait()
-	if outcome.TrackID != trackId.String() || outcome.Outcome != JobSucceeded {
-		t.Errorf("recorded (%q, %q), want (%q, %q)", outcome.TrackID, outcome.Outcome, trackId.String(), JobSucceeded)
+	if outcome.TrackID != trackId.String() || outcome.Outcome != acqports.JobSucceeded {
+		t.Errorf("recorded (%q, %q), want (%q, %q)", outcome.TrackID, outcome.Outcome, trackId.String(), acqports.JobSucceeded)
 	}
 }
 
@@ -2220,8 +2220,8 @@ func TestBackgroundScheduler_NilOutcomeRecorder_LeavesTheJobUntouched(t *testing
 	wg.Wait()
 
 	status := scheduler.Status()
-	if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != JobSucceeded {
-		t.Errorf("status = succeeded %d, recent %+v, want one %s job", status.Succeeded, status.Recent, JobSucceeded)
+	if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != acqports.JobSucceeded {
+		t.Errorf("status = succeeded %d, recent %+v, want one %s job", status.Succeeded, status.Recent, acqports.JobSucceeded)
 	}
 }
 
@@ -2392,8 +2392,8 @@ func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 	if err := scheduler.Schedule(context.Background(), user, accepted, ""); err != nil {
 		t.Fatalf("schedule after Resume = %v, want nil", err)
 	}
-	if settled := awaitSettledJob(t, scheduler, accepted.String()); settled.State != JobSucceeded {
-		t.Errorf("post-resume job state = %q, want %q", settled.State, JobSucceeded)
+	if settled := awaitSettledJob(t, scheduler, accepted.String()); settled.State != acqports.JobSucceeded {
+		t.Errorf("post-resume job state = %q, want %q", settled.State, acqports.JobSucceeded)
 	}
 }
 

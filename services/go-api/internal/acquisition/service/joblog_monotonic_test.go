@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"testing"
 	"time"
 )
@@ -24,7 +25,7 @@ func TestJobLog_ElapsedImmuneToWallClockJump(t *testing.T) {
 		clk.wall = base.Add(-time.Minute)
 		clk.elapsed = 2 * time.Second
 
-		l.complete("trk-1", JobSucceeded, "")
+		l.complete("trk-1", ports.JobSucceeded, "")
 
 		_, recent := l.snapshot()
 		if len(recent) != 1 {

@@ -4,7 +4,7 @@ import "context"
 
 type AcquisitionOutcome struct {
 	TrackID   string
-	Outcome   string
+	Outcome   JobState
 	Reason    string
 	ElapsedMs int64
 }

@@ -11,6 +11,16 @@ type AcquisitionVerification struct {
 	FingerprintVerified bool
 }
 
+type JobState string
+
+const (
+	JobQueued    JobState = "queued"
+	JobRunning   JobState = "running"
+	JobSucceeded JobState = "succeeded"
+	JobFailed    JobState = "failed"
+	JobCancelled JobState = "cancelled"
+)
+
 type VerifySkipRecorder interface {
 	RecordVerifySkip(gate string)
 }
@@ -35,7 +45,7 @@ type JobRecord struct {
 	Album          string
 	SourceURL      string
 	ResolvedSource string
-	State          string
+	State          JobState
 	Stage          string
 	ScheduledAt    time.Time
 	ElapsedMs      int64

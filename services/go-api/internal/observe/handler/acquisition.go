@@ -75,7 +75,7 @@ func newJobRecordDTOs(jobs []acqPorts.JobRecord) []jobRecordDTO {
 			Album:          j.Album,
 			SourceURL:      redactSourceURL(j.SourceURL),
 			ResolvedSource: j.ResolvedSource,
-			State:          j.State,
+			State:          string(j.State),
 			Stage:          j.Stage,
 			ScheduledAt:    j.ScheduledAt.UTC(),
 			ElapsedMs:      j.ElapsedMs,

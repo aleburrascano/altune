@@ -405,19 +405,19 @@ func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key
 
 func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
 	if err != nil && s.baseCtx.Err() != nil {
-		record := s.log.complete(key, JobCancelled, "shutdown")
+		record := s.log.complete(key, ports.JobCancelled, "shutdown")
 		s.recordOutcome(ctx, record)
 		slog.WarnContext(ctx, "background acquisition cancelled for shutdown", "track_id", key)
 		return
 	}
 	if err != nil {
 		reason := logSafeError(err)
-		record := s.log.complete(key, JobFailed, reason)
+		record := s.log.complete(key, ports.JobFailed, reason)
 		s.recordOutcome(ctx, record)
 		slog.ErrorContext(ctx, "background acquisition failed", "track_id", key, "error", reason)
 		return
 	}
-	record := s.log.complete(key, JobSucceeded, "")
+	record := s.log.complete(key, ports.JobSucceeded, "")
 	s.recordOutcome(ctx, record)
 }
 
@@ -534,7 +534,7 @@ func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID doma
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
-	record := s.log.complete(key, JobFailed, "panic")
+	record := s.log.complete(key, ports.JobFailed, "panic")
 	s.recordOutcome(jobCtx, record)
 	slog.ErrorContext(jobCtx, "acquisition_panic",
 		"track_id", key,

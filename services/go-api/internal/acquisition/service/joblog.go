@@ -10,14 +10,6 @@ import (
 
 const recentJobCap = 20
 
-const (
-	JobQueued    = "queued"
-	JobRunning   = "running"
-	JobSucceeded = "succeeded"
-	JobFailed    = "failed"
-	JobCancelled = "cancelled"
-)
-
 type jobLog struct {
 	mu        sync.Mutex
 	jobs      map[string]*ports.JobRecord
@@ -41,7 +33,7 @@ func (l *jobLog) register(trackID, sourceURL string) {
 	l.jobs[trackID] = &ports.JobRecord{
 		TrackID:     trackID,
 		SourceURL:   sourceURL,
-		State:       JobQueued,
+		State:       ports.JobQueued,
 		ScheduledAt: l.now(),
 	}
 	l.mu.Unlock()
@@ -50,7 +42,7 @@ func (l *jobLog) register(trackID, sourceURL string) {
 func (l *jobLog) markRunning(trackID string) {
 	l.mu.Lock()
 	if j := l.jobs[trackID]; j != nil {
-		j.State = JobRunning
+		j.State = ports.JobRunning
 	}
 	l.mu.Unlock()
 }
@@ -63,16 +55,16 @@ func (l *jobLog) update(trackID string, fn func(*ports.JobRecord)) {
 	l.mu.Unlock()
 }
 
-func (l *jobLog) countCompletion(state string) {
+func (l *jobLog) countCompletion(state ports.JobState) {
 	switch state {
-	case JobSucceeded:
+	case ports.JobSucceeded:
 		l.succeeded.Add(1)
-	case JobFailed:
+	case ports.JobFailed:
 		l.failed.Add(1)
 	}
 }
 
-func (l *jobLog) complete(trackID, state, reason string) ports.JobRecord {
+func (l *jobLog) complete(trackID string, state ports.JobState, reason string) ports.JobRecord {
 	l.countCompletion(state)
 
 	l.mu.Lock()

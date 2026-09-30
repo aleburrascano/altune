@@ -71,7 +71,7 @@ func TestPgxOutcomeStore_RecordsFieldsAndServerTimestamp(t *testing.T) {
 			t.Fatalf("track %s: got %d rows, want 1", c.TrackID, len(rows))
 		}
 		got := rows[0]
-		if got.outcome != c.Outcome || got.reason != c.Reason || got.elapsedMs != c.ElapsedMs {
+		if got.outcome != string(c.Outcome) || got.reason != c.Reason || got.elapsedMs != c.ElapsedMs {
 			t.Errorf("track %s: row = %+v, want outcome=%q reason=%q elapsedMs=%d", c.TrackID, got, c.Outcome, c.Reason, c.ElapsedMs)
 		}
 		if got.completedAt.Before(before) || got.completedAt.After(after) {
@@ -125,7 +125,7 @@ func TestPgxOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
 
 	for _, outcome := range []string{"", "Succeeded", "FAILED", "canceled", " succeeded", "succeeded "} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: outcome, ElapsedMs: 1}); err == nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: ports.JobState(outcome), ElapsedMs: 1}); err == nil {
 			t.Errorf("Record(outcome=%q) = nil, want an error", outcome)
 		}
 		if rows := queryOutcomeRows(t, pool, trackID); len(rows) != 0 {
