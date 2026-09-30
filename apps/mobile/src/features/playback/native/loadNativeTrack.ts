@@ -15,7 +15,7 @@ import { ensurePlayerSetup } from './initPlayer';
 import { onNativeQueueTimeout, withNativeQueue, type Fence } from './nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { forgetAllSwaps } from './nativeTrackSwap';
-import { claimLoad, currentLoadToken, isStale } from '../loadToken';
+import { claimLoad, currentLoadToken, isStale, type LoadToken } from '../loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import {
   MAX_PRESIGN,
@@ -119,13 +119,13 @@ function tracksNativeHolds(
   return tracks.slice(0, activeIndex + 1 + NATIVE_QUEUE_WINDOW);
 }
 
-async function rollbackUnlessStale(token: number, fence: Fence): Promise<void> {
+async function rollbackUnlessStale(token: LoadToken, fence: Fence): Promise<void> {
   if (isStale(token)) return;
   fence();
   await clearNativeQueue().catch(() => undefined);
 }
 
-async function addAllOrRollback(tracks: AddTrack[], token: number, fence: Fence): Promise<void> {
+async function addAllOrRollback(tracks: AddTrack[], token: LoadToken, fence: Fence): Promise<void> {
   try {
     await TrackPlayer.add(tracks);
   } catch (err) {
@@ -138,17 +138,17 @@ interface StartPlan {
   idx: number;
   startPositionMs: number;
   autoplay: boolean;
-  token: number;
+  token: LoadToken;
 }
 
-async function skipTo(idx: number, token: number, fence: Fence): Promise<boolean> {
+async function skipTo(idx: number, token: LoadToken, fence: Fence): Promise<boolean> {
   if (idx <= 0) return true;
   fence();
   await TrackPlayer.skip(idx);
   return !isStale(token);
 }
 
-async function seekToStart(ms: number, token: number, fence: Fence): Promise<boolean> {
+async function seekToStart(ms: number, token: LoadToken, fence: Fence): Promise<boolean> {
   if (ms <= 0) return true;
   fence();
   await TrackPlayer.seekTo(ms / 1000);
@@ -225,7 +225,7 @@ function liveTailAfter(keyNow: string | undefined): readonly PlaybackTrack[] | n
 
 interface RequestedTail {
   upcoming: readonly PlaybackTrack[];
-  token: number;
+  token: LoadToken;
 }
 
 let requestedTail: RequestedTail | null = null;
@@ -298,7 +298,7 @@ async function detachUpcoming(fence: Fence): Promise<AddTrack[]> {
 
 async function replaceUpcomingOrRestore(
   window: AddTrack[],
-  token: number,
+  token: LoadToken,
   fence: Fence,
 ): Promise<boolean> {
   const previous = await detachUpcoming(fence);
@@ -326,7 +326,11 @@ function windowFor(inputs: TailInputs, keyNow: string | undefined): AddTrack[] {
   return tail.slice(0, NATIVE_QUEUE_WINDOW).map(inputs.build);
 }
 
-async function applyTailLocked(inputs: TailInputs, token: number, fence: Fence): Promise<boolean> {
+async function applyTailLocked(
+  inputs: TailInputs,
+  token: LoadToken,
+  fence: Fence,
+): Promise<boolean> {
   if (isStale(token)) return false;
   const keyNow = await activeNativeTrackId();
   if (isStale(token)) return false;
@@ -335,7 +339,7 @@ async function applyTailLocked(inputs: TailInputs, token: number, fence: Fence):
 
 async function rebuildNativeTail(
   upcoming: readonly PlaybackTrack[],
-  token: number,
+  token: LoadToken,
 ): Promise<boolean> {
   await ensurePlayerSetup();
   const inputs = await tailInputs(upcoming);
