@@ -3293,6 +3293,18 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       warn.mockRestore();
     });
 
+    it('does not resolve a previous account download that survived a partial claim', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      __fs.seedFile(OWNER_URI, 'user-a');
+      seedReadyDownload();
+      __fs.failNext('delete', new Error('file is locked'));
+
+      claimPinnedDownloads('user-b');
+
+      expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
+      warn.mockRestore();
+    });
+
     it('clears a stale partial-removal outcome when a new account claims the downloads', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       __fs.seedFile(OWNER_URI, 'user-a');
