@@ -53,27 +53,6 @@ func (p Pipeline) withUpdateTrack(s stage[afterStore, afterUpdate]) Pipeline {
 	return p
 }
 
-func (p Pipeline) withDownloadLimiter(l *DownloadLimiter) Pipeline {
-	if step, ok := p.download.(*DownloadStep); ok {
-		WithStepDownloadLimiter(l)(step)
-	}
-	return p
-}
-
-func (p Pipeline) withConfidenceFloor(floor float64) Pipeline {
-	if step, ok := p.download.(*DownloadStep); ok {
-		WithConfidenceFloor(floor)(step)
-	}
-	return p
-}
-
-func (p Pipeline) withVerifySkips(r ports.VerifySkipRecorder) Pipeline {
-	if step, ok := p.download.(*DownloadStep); ok {
-		WithStepVerifySkips(r)(step)
-	}
-	return p
-}
-
 type StepError struct {
 	Step string
 	Err  error

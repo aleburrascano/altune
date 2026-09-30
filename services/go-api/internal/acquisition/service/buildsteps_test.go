@@ -73,7 +73,7 @@ func TestCoreSteps_StopsAfterStore(t *testing.T) {
 	rep := &recordingReporter{}
 	ctx := withJobReporter(context.Background(), rep)
 
-	core := CoreSteps(svc.sources, svc.audioTagger, svc.audioStore, svc.audioProber, svc.identifier)
+	core := CoreSteps(svc.sources, svc.audioTagger, svc.audioStore, svc.audioProber, svc.identifier, nil)
 	if err := RunPipeline(ctx, core, ac); err != nil {
 		t.Fatalf("pipeline: %v", err)
 	}

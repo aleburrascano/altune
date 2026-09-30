@@ -35,7 +35,7 @@ func Run(ctx context.Context, kase Case) Outcome {
 	}
 	resolveIdentity(ctx, kase, p, ac)
 
-	steps := service.CoreSteps(service.NewSourceRegistry(p.sources()...), nil, p, p, p)
+	steps := service.CoreSteps(service.NewSourceRegistry(p.sources()...), nil, p, p, p, nil)
 	runErr := service.RunPipeline(ctx, steps, ac)
 	service.CleanupTemp(ctx, ac)
 	return outcomeOf(kase, ac, runErr, p.clock)

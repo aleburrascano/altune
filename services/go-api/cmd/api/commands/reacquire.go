@@ -83,7 +83,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 	}
 
 	sources := acqService.NewSourceRegistry(ytdlp.NewSource(searcher))
-	steps := acqService.CoreSteps(sources, id3.NewTagger(), audioStore, prober, nil,
+	steps := acqService.CoreSteps(sources, id3.NewTagger(), audioStore, prober, nil, nil,
 		acqService.WithStoreKeyPrefix(cfg.AudioKeyPrefix))
 
 	fixed, skipped := 0, 0
