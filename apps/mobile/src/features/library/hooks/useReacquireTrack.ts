@@ -29,7 +29,7 @@ function reportFailedReacquire(queryClient: QueryClient) {
     const failure = classifyLibraryError(error);
     if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
     logTrackMutationFailure('re-acquire track', reacquireEndpoint, trackId, error);
-    alertLibraryFailure('Re-acquire failed', REACQUIRE_FAILED, failure);
+    alertLibraryFailure('library.reacquire', 'Re-acquire failed', REACQUIRE_FAILED, failure);
   };
 }
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { showAlert } from '@shared/ui/dialog/dialog';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { useAppMutation } from '@shared/query/useAppMutation';
+import { showFailureAlert } from '@shared/ui';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
@@ -206,7 +206,11 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
   if (deleted > 0) invalidateLibraryDerived(queryClient);
   failures.forEach(logBulkFailure);
   if (cancelled || deleted === requested) return;
-  showAlert('Delete failed', bulkFailureMessage(requested, deleted, failures));
+  showFailureAlert({
+    surface: 'library.delete_tracks',
+    title: 'Delete failed',
+    message: bulkFailureMessage(requested, deleted, failures),
+  });
 }
 
 const LOGGED_TRACK_IDS = 20;
@@ -225,6 +229,7 @@ function recoverFailedBulkRun(queryClient: QueryClient) {
     void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
     logBulkRunFailure(error, trackIds);
     alertLibraryFailure(
+      'library.delete_tracks',
       'Delete failed',
       'Could not remove these tracks.',
       classifyLibraryError(error),

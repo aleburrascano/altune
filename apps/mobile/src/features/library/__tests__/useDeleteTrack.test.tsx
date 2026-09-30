@@ -37,7 +37,10 @@ jest.mock('@shared/api-client/tracks', () => ({
   retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
   reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
 }));
-jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
+jest.mock('@shared/telemetry/userTelemetry', () => ({
+  recordUserAction: jest.fn(),
+  recordFailureShown: jest.fn(),
+}));
 
 let alertSpy: jest.SpyInstance;
 let warnSpy: jest.SpyInstance;

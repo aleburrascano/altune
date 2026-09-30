@@ -22,6 +22,7 @@ function reportExploreFailure(artist: string, error: unknown): void {
     ...failureLogFields(error),
   });
   alertLibraryFailure(
+    'library.explore_artist',
     'Search failed',
     `Could not search for ${artist}.`,
     classifyLibraryError(error),

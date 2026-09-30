@@ -72,6 +72,7 @@ export function useTracksView({
   const loadAllOrWarn = () =>
     tracksState.loadAll((failure, loaded) =>
       alertLibraryFailure(
+        'library.load_all',
         'Playing loaded tracks only',
         `Could not load your whole library. Playing the ${loaded} tracks loaded so far.`,
         failure,

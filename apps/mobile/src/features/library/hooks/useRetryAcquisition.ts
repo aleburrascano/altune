@@ -54,7 +54,7 @@ function recoverFailedRetry(queryClient: QueryClient) {
     if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
     logTrackMutationFailure('retry acquisition', retryEndpoint, trackId, error);
     restorePrior(queryClient, trackId, context);
-    alertLibraryFailure('Retry failed', 'Could not restart acquisition.', failure);
+    alertLibraryFailure('library.retry', 'Retry failed', 'Could not restart acquisition.', failure);
   };
 }
 

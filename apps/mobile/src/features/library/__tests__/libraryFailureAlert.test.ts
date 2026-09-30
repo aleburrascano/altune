@@ -18,7 +18,12 @@ describe('alertLibraryFailure — one alert, titled as given, the lead then the 
     ['not-found', 'Could not remove the track. Please try again.'],
     ['unknown', 'Could not remove the track. Please try again.'],
   ] as const)('a %s failure shows "%s"', (failure, message) => {
-    alertLibraryFailure('Delete failed', 'Could not remove the track.', failure);
+    alertLibraryFailure(
+      'library.delete_track',
+      'Delete failed',
+      'Could not remove the track.',
+      failure,
+    );
 
     expect(showAlertMock.mock.calls).toEqual([['Delete failed', message]]);
   });

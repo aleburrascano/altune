@@ -58,7 +58,12 @@ function undoFailedRemoval(queryClient: QueryClient) {
     if (failure === 'not-found') return unpin(trackId);
     logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
-    alertLibraryFailure('Delete failed', 'Could not remove the track.', failure);
+    alertLibraryFailure(
+      'library.delete_track',
+      'Delete failed',
+      'Could not remove the track.',
+      failure,
+    );
   };
 }
 
