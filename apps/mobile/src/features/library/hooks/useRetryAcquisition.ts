@@ -1,10 +1,7 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import { useAppMutation } from '@shared/query/useAppMutation';
-
 import type { TrackId } from '@shared/api-client/ids';
 import { isSafeId } from '@shared/api-client/ids';
-import { retryAcquisition } from '@shared/api-client/tracks';
 import {
   acquisitionOf,
   toPending,
@@ -13,12 +10,11 @@ import {
 import {
   recordRetryRequest,
   recordRetryTapped,
-  retryFailureOutcome,
   type RetryEntryPoint,
   type RetrySkipReason,
 } from '@shared/acquisition/acquisitionTelemetry';
 import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCachePatch';
-import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
@@ -52,31 +48,14 @@ function restorePrior(queryClient: QueryClient, trackId: TrackId, { prior }: Pri
   }
 }
 
-function recoverFailedRetry(queryClient: QueryClient, entryPoint: RetryEntryPoint | undefined) {
+function recoverFailedRetry(queryClient: QueryClient) {
   return (error: Error, trackId: TrackId, context: PriorAcquisition): void => {
-    recordRetryRequest(trackId, entryPoint, retryFailureOutcome(error));
     const failure = classifyLibraryError(error);
     if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
     logTrackMutationFailure('retry acquisition', retryEndpoint, trackId, error);
     restorePrior(queryClient, trackId, context);
     alertLibraryFailure('Retry failed', 'Could not restart acquisition.', failure);
   };
-}
-
-function sendRetry(trackId: TrackId, entryPoint: RetryEntryPoint | undefined): Promise<void> {
-  recordRetryRequest(trackId, entryPoint, { kind: 'sent' });
-  return retryAcquisition(trackId).then((response) => {
-    recordRetryRequest(trackId, entryPoint, { kind: 'succeeded' });
-    return response;
-  });
-}
-
-function retryOptions(queryClient: QueryClient, entryPoint: RetryEntryPoint | undefined) {
-  return guardedMutationOptions({
-    mutationFn: (trackId: TrackId) => sendRetry(trackId, entryPoint),
-    onMutate: markPending(queryClient),
-    onError: recoverFailedRetry(queryClient, entryPoint),
-  });
 }
 
 function skipReason(trackId: TrackId, isInFlight: InFlightCheck): RetrySkipReason | undefined {
@@ -106,11 +85,12 @@ function guardedMutate(entryPoint: EntryPoint, run: TrackMutation<void, RetryCon
 
 function useRetryRun(entryPoint: EntryPoint) {
   const queryClient = useQueryClient();
-  const mutation = useAppMutation({
+  const mutation = useSharedRetryAcquisition({
     action: 'library.retry',
-    trackIdOf: (trackId: TrackId) => trackId,
+    entryPoint,
     mutationKey: trackMutationKeys.retryAcquisition,
-    ...retryOptions(queryClient, entryPoint),
+    onMutate: markPending(queryClient),
+    onError: recoverFailedRetry(queryClient),
   });
   return useOneRunPerTrack(mutation, trackMutationKeys.retryAcquisition);
 }
