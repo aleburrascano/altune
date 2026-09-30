@@ -1130,3 +1130,29 @@ func TestRankAndCollect_MustHold8_UnplayableCandidatesAreRejectedBeforeRanking(t
 		t.Fatalf("rejected = %v, want drm then preview", rejected)
 	}
 }
+
+func TestLogCandidateEvaluated_CarriesScoresAndCandidateAttributes(t *testing.T) {
+	buf := captureJSONLog(t)
+	track := TrackRef{ID: "t1", Title: "Song", Artist: "Artist", Duration: 200}
+	c := ports.AudioCandidate{Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50}
+
+	entry := scoreCandidate(track, c, 100)
+	logCandidateEvaluated(context.Background(), track, entry)
+
+	rec := findLogRecord(t, buf, "candidate_evaluated")
+	want := map[string]any{
+		"track_id": "t1", "source": "youtube",
+		"candidate_title": "Song", "candidate_channel": "Artist - Topic",
+		"candidate_duration": float64(200), "candidate_views": float64(50),
+		"qualifier_distance": float64(0), "is_topic": true,
+		"artist_match": true, "feature_match": true, "track_artist": "Artist",
+	}
+	for k, v := range want {
+		if rec[k] != v {
+			t.Errorf("%s = %v, want %v", k, rec[k], v)
+		}
+	}
+	if rec["identity_score"] == nil || rec["metadata_rank"] == nil {
+		t.Errorf("missing score attributes: %v", rec)
+	}
+}

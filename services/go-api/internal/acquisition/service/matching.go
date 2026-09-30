@@ -401,7 +401,20 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 	return maxViews
 }
 
-func logCandidateEvaluated(ctx context.Context, track TrackRef, c ports.AudioCandidate, ident, meta float64, qualDist int, artMatch, featMatch bool) {
+func scoreCandidate(track TrackRef, c ports.AudioCandidate, maxViews int64) candidateEntry {
+	return candidateEntry{
+		ident:         identityScore(track.Title, track.Artist, c.Title),
+		meta:          metadataRank(c, track.Duration, maxViews),
+		durationDelta: durationDelta(track.Duration, c.Duration),
+		qualDistance:  qualifierDistance(track.Title, c.Title),
+		artistMatch:   artistMatchesChannel(track.Artist, c.Channel),
+		featMatch:     featureMatch(track.Title, c.Title),
+		candidate:     c,
+	}
+}
+
+func logCandidateEvaluated(ctx context.Context, track TrackRef, e candidateEntry) {
+	c := e.candidate
 	slog.InfoContext(ctx, "candidate_evaluated",
 		"track_id", track.ID,
 		"source", c.Source,
@@ -409,12 +422,12 @@ func logCandidateEvaluated(ctx context.Context, track TrackRef, c ports.AudioCan
 		"candidate_channel", c.Channel,
 		"candidate_duration", c.Duration,
 		"candidate_views", c.ViewCount,
-		"identity_score", math.Round(ident*10)/10,
-		"metadata_rank", math.Round(meta*1000)/1000,
-		"qualifier_distance", qualDist,
+		"identity_score", math.Round(e.ident*10)/10,
+		"metadata_rank", math.Round(e.meta*1000)/1000,
+		"qualifier_distance", e.qualDistance,
 		"is_topic", isTopicChannel(c.Channel),
-		"artist_match", artMatch,
-		"feature_match", featMatch,
+		"artist_match", e.artistMatch,
+		"feature_match", e.featMatch,
 		"track_artist", track.Artist,
 	)
 }
@@ -450,35 +463,20 @@ func classifyCandidates(
 			rejected = append(rejected, unplayableRejection(c))
 			continue
 		}
-		ident := identityScore(track.Title, track.Artist, c.Title)
-		meta := metadataRank(c, track.Duration, maxViews)
-		artMatch := artistMatchesChannel(track.Artist, c.Channel)
-		featMatch := featureMatch(track.Title, c.Title)
-		qualDist := qualifierDistance(track.Title, c.Title)
-
-		logCandidateEvaluated(ctx, track, c, ident, meta, qualDist, artMatch, featMatch)
-
-		entry := candidateEntry{
-			ident:         ident,
-			meta:          meta,
-			durationDelta: durationDelta(track.Duration, c.Duration),
-			qualDistance:  qualDist,
-			artistMatch:   artMatch,
-			featMatch:     featMatch,
-			candidate:     c,
-		}
+		entry := scoreCandidate(track, c, maxViews)
+		logCandidateEvaluated(ctx, track, entry)
 
 		if c.Resolved {
 			resolved = append(resolved, entry)
 			continue
 		}
-		if ident < identityMin && !artMatch {
+		if entry.ident < identityMin && !entry.artistMatch {
 			rejected = append(rejected, CandidateRejection{
 				URL:    c.URL,
 				Title:  c.Title,
 				Source: c.Source,
 				Stage:  RejectionIdentity,
-				Reason: fmt.Sprintf("identity %.0f below threshold %.0f", ident, identityMin),
+				Reason: fmt.Sprintf("identity %.0f below threshold %.0f", entry.ident, identityMin),
 			})
 			continue
 		}
