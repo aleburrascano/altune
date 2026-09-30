@@ -73,7 +73,7 @@ func (s *Service) searchProvider(
 	}()
 
 	timeout := defaultProviderTimeout
-	if tp, ok := p.(interface{ SearchTimeout() time.Duration }); ok {
+	if tp, ok := p.(ports.SearchTimeouter); ok {
 		timeout = tp.SearchTimeout()
 	}
 	provCtx, cancel := context.WithTimeout(ctx, timeout)

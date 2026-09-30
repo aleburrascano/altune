@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -286,6 +287,23 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 		if tt.got != tt.want {
 			t.Errorf("%s SearchTimeout = %v, want %v", tt.name, tt.got, tt.want)
 		}
+	}
+}
+
+func TestAdaptersImplementSearchTimeouter(t *testing.T) {
+	adapters := []ports.SearchTimeouter{
+		(*YouTubeMusicAdapter)(nil),
+		(*AmazonMusicAdapter)(nil),
+		(*SoundCloudAPIAdapter)(nil),
+		(*SoundCloudAdapter)(nil),
+		(*SpotifyAdapter)(nil),
+		(*ITunesAdapter)(nil),
+		(*AppleMusicAdapter)(nil),
+		(*LastFmAdapter)(nil),
+		(*MusicBrainzAdapter)(nil),
+	}
+	if len(adapters) != 9 {
+		t.Errorf("SearchTimeouter adapters = %d, want 9", len(adapters))
 	}
 }
 
