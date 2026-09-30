@@ -51,9 +51,13 @@ type BatchContext = {
   failed: DeleteAttempt[];
 };
 
+export function deleteOne(trackId: TrackId): Promise<void> {
+  return deleteTrack(trackId);
+}
+
 async function deleteTrackForBulk(trackId: TrackId, onDeleted: OnDeleted): Promise<DeleteAttempt> {
   try {
-    await deleteTrack(trackId);
+    await deleteOne(trackId);
   } catch (error) {
     if (classifyLibraryError(error) !== 'not-found') return { trackId, error };
   }

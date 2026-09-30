@@ -3,7 +3,6 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
-import { deleteTrack } from '@shared/api-client/tracks';
 import { forgetTrack } from '@shared/events/forgetTrack';
 import {
   captureTrackPlacements,
@@ -19,6 +18,7 @@ import {
 } from '@shared/acquisition/trackStatusStore';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 
+import { deleteOne } from './useDeleteTracks';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { alertLibraryFailure } from '../libraryFailureAlert';
 import { classifyLibraryError } from '../state';
@@ -64,7 +64,7 @@ function undoFailedRemoval(queryClient: QueryClient) {
 
 function deleteTrackOptions(queryClient: QueryClient) {
   return guardedMutationOptions({
-    mutationFn: (trackId: TrackId) => deleteTrack(trackId),
+    mutationFn: deleteOne,
     onMutate: removeOptimistically(queryClient),
     onSuccess: confirmRemoval(queryClient),
     onError: undoFailedRemoval(queryClient),

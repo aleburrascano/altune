@@ -13,6 +13,7 @@ import type * as ForgetTrackModule from '@shared/events/forgetTrack';
 import {
   BULK_DELETE_CONCURRENCY,
   BULK_DELETE_DEADLINE_MS,
+  deleteOne,
   useDeleteTracks,
 } from '../hooks/useDeleteTracks';
 import {
@@ -507,5 +508,13 @@ describe('useDeleteTracks — a failed run names the affected tracks', () => {
       expect.objectContaining({ requested: 25, trackIds: ids.slice(0, 20) }),
     );
     expect(invalidatedKeys(spy)).toContainEqual(['library', 'tracks']);
+  });
+
+  it('deleteOne sends one delete request for the track', async () => {
+    mockDeleteTrack.mockResolvedValue(undefined);
+
+    await deleteOne(asTrackId('t9'));
+
+    expect(mockDeleteTrack).toHaveBeenCalledWith('t9', undefined);
   });
 });
