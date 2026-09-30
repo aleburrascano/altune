@@ -29,8 +29,17 @@ function serverOwnedRoutes(appDir: string): string[] {
   });
 }
 
+const createdDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of createdDirs.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 function fixtureAppDir(routeFiles: string[]): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mh03-'));
+  createdDirs.push(root);
   for (const routeFile of routeFiles) {
     fs.mkdirSync(path.dirname(path.join(root, routeFile)), { recursive: true });
     fs.writeFileSync(path.join(root, routeFile), '');
