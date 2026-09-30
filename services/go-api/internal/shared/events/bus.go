@@ -129,19 +129,14 @@ func (b *InProcessBus) Publish(_ context.Context, userId shared.UserId, eventTyp
 		us.ringLen++
 	}
 
-	subs := make([]chan Event, 0, len(us.subscribers))
 	for _, ch := range us.subscribers {
-		subs = append(subs, ch)
-	}
-	us.mu.Unlock()
-
-	for _, ch := range subs {
 		select {
 		case ch <- evt:
 		default:
 			b.recordDropForFullSubscriber(userId, eventType, evt.ID)
 		}
 	}
+	us.mu.Unlock()
 }
 
 func (b *InProcessBus) recordIssuedID(id uint64) {

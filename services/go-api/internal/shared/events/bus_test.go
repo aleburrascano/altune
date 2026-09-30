@@ -3,6 +3,7 @@ package events
 import (
 	"altune/go-api/internal/shared"
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -166,6 +167,39 @@ func subscribeDuringEviction(bus *InProcessBus, user shared.UserId, out chan sub
 		case sub := <-out:
 			out <- sub
 		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+func TestPublish_ConcurrentSameUserDeliversIDsInOrder(t *testing.T) {
+	const publishers = 4
+	const perPublisher = subscriberChanSize / publishers
+	const rounds = 300
+	bus := NewInProcessBus()
+	user := shared.NewUserId(uuid.New())
+	ch, cancel := bus.Subscribe(user)
+	defer cancel()
+
+	var last uint64
+	for range rounds {
+		var wg sync.WaitGroup
+		for range publishers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for range perPublisher {
+					bus.Publish(context.Background(), user, "e", nil)
+				}
+			}()
+		}
+		wg.Wait()
+
+		for range publishers * perPublisher {
+			evt := <-ch
+			if evt.ID <= last {
+				t.Fatalf("received id %d after %d, want strictly increasing", evt.ID, last)
+			}
+			last = evt.ID
 		}
 	}
 }
