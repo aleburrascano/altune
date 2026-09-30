@@ -192,7 +192,7 @@ like Deezer):
   (track/album/artist via `/search`), `Resolve` (`ArtworkResolver`, **now 1500px hero** via
   `iTunesHeroArtworkSize`; search-list thumbnails at `iTunesListArtworkSize` = 600), `LookupAlbum`
   (album-contamination consensus → verdict + `artistId`), `upscaleArtwork` (the
-  `100x100`→`NxN` URL rewrite), `stripITunesTypeSuffix`. Maps `previewUrl`/`duration`/`genre` into
+  `100x100`→`NxN` URL rewrite). Maps `previewUrl`/`duration`/`genre` into
   `extras`.
 - Wired in `internal/app/search_wiring.go`: `buildArtworkChain` appends iTunes **after** the
   MBID-keyed sources (CAA → Fanart → Genius → TheAudioDB → Deezer → **iTunes** → YouTube →
