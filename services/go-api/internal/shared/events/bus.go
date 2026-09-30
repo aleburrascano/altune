@@ -20,6 +20,7 @@ type userState struct {
 	ring        []Event
 	ringHead    int
 	ringLen     int
+	firstID     uint64
 	nextID      uint64
 	subscribers map[uint64]chan Event
 	subCounter  uint64
@@ -77,6 +78,7 @@ func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
 	us := &userState{
 		ring:        make([]Event, b.ringCap),
 		subscribers: make(map[uint64]chan Event),
+		firstID:     b.highestIssuedID.Load(),
 		nextID:      b.highestIssuedID.Load(),
 		lastActive:  b.now(),
 	}
@@ -186,6 +188,20 @@ func (b *InProcessBus) LatestID(userId shared.UserId) uint64 {
 	us.mu.RLock()
 	defer us.mu.RUnlock()
 	return us.nextID
+}
+
+func (b *InProcessBus) ResumeGapped(userId shared.UserId, afterID uint64) bool {
+	if afterID == 0 {
+		return false
+	}
+	v, ok := b.users.Load(userId.String())
+	if !ok {
+		return true
+	}
+	us := v.(*userState)
+	us.mu.RLock()
+	defer us.mu.RUnlock()
+	return afterID < us.firstID
 }
 
 func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {

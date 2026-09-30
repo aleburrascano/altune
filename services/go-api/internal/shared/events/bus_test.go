@@ -245,3 +245,53 @@ func TestLatestID_TracksLastPublishedIDEvenWhenSubscriberDropped(t *testing.T) {
 		t.Fatalf("LatestID = %d, want %d", bus.LatestID(uid), want)
 	}
 }
+
+func TestResumeGapped_AfterIdleEvictionWithNothingPublished_ReportsGap(t *testing.T) {
+	current := time.Unix(0, 0).UTC()
+	bus := newBus(func() time.Time { return current }, testFloorPath(t))
+	user := shared.NewUserId(uuid.New())
+	bus.Publish(context.Background(), user, "before", nil)
+	lastSeenID := bus.Replay(user, 0)[0].ID
+
+	current = current.Add(userIdleTTL + time.Minute)
+	bus.Publish(context.Background(), shared.NewUserId(uuid.New()), "trigger", nil)
+	if _, ok := bus.users.Load(user.String()); ok {
+		t.Fatalf("precondition: idle user was not evicted")
+	}
+
+	if !bus.ResumeGapped(user, lastSeenID) {
+		t.Fatalf("ResumeGapped(after %d) = false after eviction, want true", lastSeenID)
+	}
+	_, cancel := bus.Subscribe(user)
+	defer cancel()
+	if !bus.ResumeGapped(user, lastSeenID) {
+		t.Fatalf("ResumeGapped(after %d) = false on the recreated state, want true", lastSeenID)
+	}
+}
+
+func TestResumeGapped_AfterRestart_ReportsGap(t *testing.T) {
+	floorPath := testFloorPath(t)
+	user := shared.NewUserId(uuid.New())
+	old := restartAt(time.Unix(1_700_000_000, 0).UTC(), floorPath)
+	old.Publish(context.Background(), user, "before", nil)
+	lastSeenID := old.Replay(user, 0)[0].ID
+
+	restarted := restartAt(time.Unix(1_700_000_000, 0).UTC(), floorPath)
+	if !restarted.ResumeGapped(user, lastSeenID) {
+		t.Fatalf("ResumeGapped(after %d) = false after restart, want true", lastSeenID)
+	}
+}
+
+func TestResumeGapped_CaughtUpOrFresh_ReportsNoGap(t *testing.T) {
+	bus := newBus(time.Now, testFloorPath(t))
+	user := shared.NewUserId(uuid.New())
+	bus.Publish(context.Background(), user, "e", nil)
+	lastSeenID := bus.Replay(user, 0)[0].ID
+
+	if bus.ResumeGapped(user, lastSeenID) {
+		t.Fatalf("ResumeGapped(after %d) = true for a caught-up client", lastSeenID)
+	}
+	if bus.ResumeGapped(shared.NewUserId(uuid.New()), 0) {
+		t.Fatalf("ResumeGapped(after 0) = true, want false: nothing was ever seen")
+	}
+}

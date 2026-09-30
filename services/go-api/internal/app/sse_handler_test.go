@@ -992,3 +992,24 @@ func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
 		t.Fatal("rejected request held a connection slot")
 	}
 }
+
+func TestSSEHandler_ResumeAfterUserStateLostResyncsWithNothingPublished(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, bus, uid)
+	restarted := events.NewInProcessBus()
+
+	srv := newTestSSEServer(t, restarted, uid, time.Hour)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	readUntil(t, bufio.NewReader(resp.Body), func(l string) bool { return l == "event: resync" })
+}

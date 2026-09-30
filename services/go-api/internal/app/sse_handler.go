@@ -283,7 +283,7 @@ func (h *sseHandler) replay(conn *sseConn, afterID uint64) (replayOutcome, error
 		return h.resyncOutOfRange(conn, afterID)
 	}
 	replayed := h.bus.Replay(conn.userId, afterID)
-	if replayGapped(replayed, afterID) {
+	if h.bus.ResumeGapped(conn.userId, afterID) || replayGapped(replayed, afterID) {
 		return replayOutcome{dedupThroughID: afterID}, conn.writeResync()
 	}
 	outcome := replayOutcome{dedupThroughID: afterID, deliveredThroughID: afterID}

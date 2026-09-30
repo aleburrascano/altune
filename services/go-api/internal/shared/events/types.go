@@ -48,6 +48,7 @@ func (noopPublisher) Publish(context.Context, shared.UserId, string, map[string]
 type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
 	Replay(userId shared.UserId, afterID uint64) []Event
+	ResumeGapped(userId shared.UserId, afterID uint64) bool
 	HighestIssuedID() uint64
 	LatestID(userId shared.UserId) uint64
 }
