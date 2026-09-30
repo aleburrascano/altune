@@ -1236,4 +1236,58 @@ describe('a tail rebuild that outlived the lock deadline', () => {
       expect(__player.calls('add')).toHaveLength(0);
     });
   });
+
+  describe('the timeout reconcile against a hung native player', () => {
+    function hangRemove(): void {
+      player.removeUpcomingTracks!.mockImplementation(() => new Promise<void>(() => undefined));
+    }
+
+    it('issues at most one removeUpcomingTracks across six more deadlines', async () => {
+      useQueueStore.getState().loadQueue([A, B, C], 0, null);
+      modelNativePlayer([A, B, C], 0);
+      hangRemove();
+
+      withNativeQueue(() => new Promise<void>(() => undefined)).catch(() => undefined);
+      for (let i = 0; i < 7; i += 1) {
+        await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      }
+
+      expect(__player.calls('removeUpcomingTracks').length).toBeLessThanOrEqual(1);
+    });
+
+    it('queues one reconcile when several ops time out together', async () => {
+      useQueueStore.getState().loadQueue([A, B, C], 0, null);
+      modelNativePlayer([A, B, C], 0);
+      hangRemove();
+
+      for (let i = 0; i < 3; i += 1) {
+        withNativeQueue(() => new Promise<void>(() => undefined)).catch(() => undefined);
+      }
+      for (let i = 0; i < 8; i += 1) {
+        await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      }
+
+      expect(__player.calls('removeUpcomingTracks').length).toBeLessThanOrEqual(1);
+    });
+
+    it('reconciles again for an op that times out after native recovers', async () => {
+      useQueueStore.getState().loadQueue([A, B, C], 0, null);
+      modelNativePlayer([A, B, C], 0);
+      hangRemove();
+      withNativeQueue(() => new Promise<void>(() => undefined)).catch(() => undefined);
+      for (let i = 0; i < 3; i += 1) {
+        await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      }
+      const callsWhileHung = __player.calls('removeUpcomingTracks').length;
+
+      modelNativePlayer([A, B, C], 0);
+      withNativeQueue(() => new Promise<void>(() => undefined)).catch(() => undefined);
+      for (let i = 0; i < 3; i += 1) {
+        await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      }
+
+      expect(callsWhileHung).toBeLessThanOrEqual(1);
+      expect(__player.calls('removeUpcomingTracks').length).toBeGreaterThan(callsWhileHung);
+    });
+  });
 });

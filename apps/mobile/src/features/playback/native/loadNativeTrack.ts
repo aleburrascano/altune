@@ -175,12 +175,20 @@ export async function insertNativeTrackNext(track: PlaybackTrack, position: numb
   });
 }
 
+let reconcileInFlight = false;
+
 async function reconcileUpcomingFromStore(): Promise<void> {
+  if (reconcileInFlight) return;
   const state = useQueueStore.getState();
   const ordered = orderedQueueTracks(state);
   if (ordered.length === 0) return;
-  if ((await activeNativeTrackId()) === undefined) return;
-  await rebuildNativeTail(ordered.slice(state.currentIndex + 1), currentLoadToken());
+  reconcileInFlight = true;
+  try {
+    if ((await activeNativeTrackId()) === undefined) return;
+    await rebuildNativeTail(ordered.slice(state.currentIndex + 1), currentLoadToken());
+  } finally {
+    reconcileInFlight = false;
+  }
 }
 
 onNativeQueueTimeout(() => {
