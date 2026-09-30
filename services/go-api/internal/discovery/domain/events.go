@@ -5,22 +5,6 @@ import (
 	"time"
 )
 
-type SearchPerformed struct {
-	OccurredAt time.Time
-	UserId     shared.UserId
-	Query      string
-	QueryNorm  string
-}
-
-type ResultClicked struct {
-	OccurredAt      time.Time
-	UserId          shared.UserId
-	QueryNorm       string
-	ResultSignature string
-	Position        int
-	Confidence      Confidence
-}
-
 type EventType int
 
 const (
