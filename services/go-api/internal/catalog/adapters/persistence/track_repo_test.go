@@ -618,6 +618,41 @@ func TestPgxTrackRepo_ListOwnedTrackRefs_BoundedByLimit(t *testing.T) {
 	}
 }
 
+func TestPgxTrackRepo_ListOwnedTrackRefs_PagesPastPageSize(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	prev := ownedTrackRefsPageSize
+	ownedTrackRefsPageSize = 2
+	t.Cleanup(func() { ownedTrackRefsPageSize = prev })
+
+	const inserted = 5
+	want := map[string]bool{}
+	for i := 0; i < inserted; i++ {
+		track := newTestTrackForDB(t, userId)
+		cleanupTrack(t, pool, track.ID, userId)
+		if _, _, err := repo.Add(ctx, track); err != nil {
+			t.Fatalf("Add track %d: %v", i, err)
+		}
+		want[track.ID.String()] = true
+	}
+
+	refs, err := repo.ListOwnedTrackRefs(ctx, userId)
+	if err != nil {
+		t.Fatalf("ListOwnedTrackRefs() error = %v", err)
+	}
+	if len(refs) != inserted {
+		t.Fatalf("len(refs) = %d, want %d (all tracks past the page size)", len(refs), inserted)
+	}
+	for _, ref := range refs {
+		if !want[ref.ID] {
+			t.Errorf("unexpected ref %s", ref.ID)
+		}
+	}
+}
+
 type countingPool struct {
 	count   int
 	err     error

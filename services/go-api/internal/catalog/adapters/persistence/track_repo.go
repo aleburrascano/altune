@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -351,27 +352,58 @@ func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId sha
 	return track, nil
 }
 
-var maxOwnedTrackRefs = domain.MaxLibraryPageSize
+var maxOwnedTrackRefs = 50_000
+
+var ownedTrackRefsPageSize = domain.MaxLibraryPageSize
 
 func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	ctx context.Context,
 	userId shared.UserId,
+) ([]domain.OwnedTrackRef, error) {
+	refs := []domain.OwnedTrackRef{}
+	after := uuid.Nil
+	for len(refs) < maxOwnedTrackRefs {
+		limit := min(ownedTrackRefsPageSize, maxOwnedTrackRefs-len(refs))
+		page, err := r.listOwnedTrackRefsPage(ctx, userId, after, limit)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, page...)
+		if len(page) < limit {
+			return refs, nil
+		}
+		if after, err = uuid.Parse(page[len(page)-1].ID); err != nil {
+			return nil, fmt.Errorf("parse owned track ref id: %w", err)
+		}
+	}
+	slog.Warn("owned track refs truncated at ceiling", "user_id", userId.UUID(), "ceiling", maxOwnedTrackRefs)
+	return refs, nil
+}
+
+func (r *PgxTrackRepository) listOwnedTrackRefsPage(
+	ctx context.Context,
+	userId shared.UserId,
+	after uuid.UUID,
+	limit int,
 ) ([]domain.OwnedTrackRef, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, title, artist, acquisition_status, track_number
-		FROM tracks WHERE user_id = $1
+		FROM tracks WHERE user_id = $1 AND id > $2
 		ORDER BY id
-		LIMIT $2`,
-		userId.UUID(), maxOwnedTrackRefs,
+		LIMIT $3`,
+		userId.UUID(), after, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list owned track refs: %w", err)
 	}
 	defer rows.Close()
+	return scanOwnedTrackRefs(rows)
+}
 
+func scanOwnedTrackRefs(rows pgx.Rows) ([]domain.OwnedTrackRef, error) {
 	refs := []domain.OwnedTrackRef{}
 	for rows.Next() {
 		var ref domain.OwnedTrackRef
