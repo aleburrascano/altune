@@ -29,12 +29,14 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-web-browser', () => ({
   maybeCompleteAuthSession: jest.fn(),
   openAuthSessionAsync: jest.fn(),
+  dismissAuthSession: jest.fn(),
 }));
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
+const dismissAuthSession = WebBrowser.dismissAuthSession as unknown as jest.Mock;
 const mockComplete = completeAuthIntent as jest.Mock;
 
 const REDIRECT_URL = 'altune://auth/callback?code=abc';
@@ -194,6 +196,26 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       jest.advanceTimersByTime(OAUTH_BROWSER_TIMEOUT_MS - AUTH_ACTION_TIMEOUT_MS);
       await call;
     });
+    expect(result.current.state).toEqual({ kind: 'cancelled' });
+  });
+
+  it('dismisses the auth session once when the browser wait times out', async () => {
+    dismissAuthSession.mockReset();
+    openAuthSessionAsync.mockReturnValue(neverSettles());
+    const { result } = renderHook(() => useOAuth());
+
+    let call!: Promise<void>;
+    act(() => {
+      call = result.current.signInWith('google');
+    });
+    await flushPendingWork();
+    expect(dismissAuthSession).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(OAUTH_BROWSER_TIMEOUT_MS);
+      await call;
+    });
+    expect(dismissAuthSession).toHaveBeenCalledTimes(1);
     expect(result.current.state).toEqual({ kind: 'cancelled' });
   });
 

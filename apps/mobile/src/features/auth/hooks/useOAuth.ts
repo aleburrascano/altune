@@ -4,7 +4,7 @@ import { useNavigator } from '@shared/navigation';
 
 import { withAuthDeadline } from '../authDeadline';
 import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
-import { openAuthSession } from '../native/authBrowser';
+import { dismissAuthSession, openAuthSession } from '../native/authBrowser';
 import {
   failureReason,
   OAUTH_BROWSER_TIMEOUT_MS,
@@ -42,7 +42,10 @@ async function redirectFromBrowser(authorizationUrl: string): Promise<string | n
       OAUTH_BROWSER_TIMEOUT_MS,
     );
   } catch (err) {
-    if (err instanceof NetworkError && err.failure === 'timeout') return null;
+    if (err instanceof NetworkError && err.failure === 'timeout') {
+      dismissAuthSession();
+      return null;
+    }
     throw err;
   }
   return session.type === 'success' && session.url ? session.url : null;

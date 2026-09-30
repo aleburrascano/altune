@@ -8,3 +8,11 @@ export function openAuthSession(
 ): Promise<{ type: string; url?: string }> {
   return WebBrowser.openAuthSessionAsync(url, redirectUrl);
 }
+
+export function dismissAuthSession(): void {
+  try {
+    WebBrowser.dismissAuthSession();
+  } catch {
+    return;
+  }
+}
