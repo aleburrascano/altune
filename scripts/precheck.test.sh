@@ -361,7 +361,7 @@ run_script --lint
 expect_rc 0
 expect_out "precheck: lint green, tests left to CI"
 
-CASE="a failing nocomments diff fails precheck, and it runs though the PR touches no shell"
+CASE="a failing nocomments check fails precheck, and it runs though the PR touches no shell"
 new_repo
 (
     cd "$WORK/repo" || exit 1
@@ -374,10 +374,10 @@ new_repo
 )
 run_script
 expect_rc 1
-expect_out "FAIL  no new comments (nocomments)"
+expect_out "FAIL  no comments (whole tree)"
 expect_out "added.txt:1"
 
-CASE="a clean nocomments diff keeps precheck green"
+CASE="a clean nocomments check keeps precheck green"
 new_repo
 (
     cd "$WORK/repo" || exit 1
@@ -390,7 +390,7 @@ new_repo
 )
 run_script
 expect_rc 0
-expect_out "ok    no new comments (nocomments)"
+expect_out "ok    no comments (whole tree)"
 
 add_mobile_stubs() {
     mkdir -p "$WORK/bin" "$WORK/home"

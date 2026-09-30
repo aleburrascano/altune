@@ -222,7 +222,7 @@ fi
 
 if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then
   go_pin services/go-api
-  check "no new comments (nocomments)" services/go-api go run ./scripts/nocomments diff "$base"
+  check "no comments (whole tree)" services/go-api go run ./scripts/nocomments check ../..
 fi
 
 [ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"; exit 1; }

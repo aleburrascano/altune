@@ -381,6 +381,22 @@ func TestWalkSkipsNodeModulesVendorAndGit(t *testing.T) {
 	}
 }
 
+func TestWalkSkipsSymlinkedDirectories(t *testing.T) {
+	dir := t.TempDir()
+	target := t.TempDir()
+	writeFile(t, target, "a.sh", "echo hi # x\n")
+	if err := os.Symlink(target, filepath.Join(dir, "linked")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	var stdout strings.Builder
+	code := run([]string{"check", dir}, &stdout)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
+	}
+}
+
 func TestStripReportsCountsAndASecondStripChangesNothing(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "a.sh", "#!/bin/sh\necho a # x\necho b # y\n")

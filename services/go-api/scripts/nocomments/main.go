@@ -419,6 +419,9 @@ func walkTarget(path string, d fs.DirEntry, err error, targets *[]target) error 
 	if d.IsDir() {
 		return skipUnwanted(d)
 	}
+	if !d.Type().IsRegular() {
+		return nil
+	}
 	k, ok, err := matchKind(path)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
