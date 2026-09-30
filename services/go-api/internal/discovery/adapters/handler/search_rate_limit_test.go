@@ -168,8 +168,8 @@ func TestUserRateLimiter_WindowSlidesAndIdleUsersArePruned(t *testing.T) {
 	if wait != 30*time.Second {
 		t.Fatalf("wait = %v, want 30s (until the first request leaves the window)", wait)
 	}
-	if got := retryAfterSeconds(wait); got != 30 {
-		t.Fatalf("Retry-After = %d, want 30", got)
+	if got := httputil.RetryAfterSeconds(wait); got != "30" {
+		t.Fatalf("Retry-After = %q, want %q", got, "30")
 	}
 
 	now = now.Add(30 * time.Second)
@@ -187,14 +187,14 @@ func TestUserRateLimiter_WindowSlidesAndIdleUsersArePruned(t *testing.T) {
 }
 
 func TestRetryAfterSeconds_RoundsUpToAtLeastOne(t *testing.T) {
-	for wait, want := range map[time.Duration]int{
-		0:                       1,
-		time.Millisecond:        1,
-		time.Second:             1,
-		1500 * time.Millisecond: 2,
+	for wait, want := range map[time.Duration]string{
+		0:                       "1",
+		time.Millisecond:        "1",
+		time.Second:             "1",
+		1500 * time.Millisecond: "2",
 	} {
-		if got := retryAfterSeconds(wait); got != want {
-			t.Errorf("retryAfterSeconds(%v) = %d, want %d", wait, got, want)
+		if got := httputil.RetryAfterSeconds(wait); got != want {
+			t.Errorf("RetryAfterSeconds(%v) = %q, want %q", wait, got, want)
 		}
 	}
 }

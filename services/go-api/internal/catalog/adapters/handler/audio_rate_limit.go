@@ -4,9 +4,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/httputil"
-	"math"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -139,14 +137,10 @@ func (l *audioRateLimiter) middleware(next http.Handler) http.Handler {
 		}
 		allowed, wait := l.allow(userId.String())
 		if !allowed {
-			w.Header().Set("Retry-After", audioRetryAfterSeconds(wait))
+			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
 			httputil.HandleServiceError(w, r, l.refused)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func audioRetryAfterSeconds(wait time.Duration) string {
-	return strconv.Itoa(max(1, int(math.Ceil(wait.Seconds()))))
 }

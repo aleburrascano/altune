@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -40,7 +39,7 @@ type authFailureRequest struct {
 func (l *userRateLimiter) clientMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if wait, admitted := l.admit(auth.ClientKey(r)); !admitted {
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(wait)))
+			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
 			httputil.HandleServiceError(w, r, rateLimitedError{})
 			return
 		}

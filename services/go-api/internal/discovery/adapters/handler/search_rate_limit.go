@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -101,15 +100,10 @@ func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 			return
 		}
 		if wait, admitted := l.admit(userID.String()); !admitted {
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(wait)))
+			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
 			httputil.HandleServiceError(w, r, rateLimitedError{})
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func retryAfterSeconds(wait time.Duration) int {
-	secs := int((wait + time.Second - 1) / time.Second)
-	return max(secs, 1)
 }

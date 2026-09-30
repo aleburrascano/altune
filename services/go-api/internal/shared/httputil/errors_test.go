@@ -10,7 +10,23 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestRetryAfterSeconds_RoundsUpToAtLeastOne(t *testing.T) {
+	for wait, want := range map[time.Duration]string{
+		0:                       "1",
+		time.Nanosecond:         "1",
+		500 * time.Millisecond:  "1",
+		time.Second:             "1",
+		1200 * time.Millisecond: "2",
+		30 * time.Second:        "30",
+	} {
+		if got := RetryAfterSeconds(wait); got != want {
+			t.Errorf("RetryAfterSeconds(%v) = %q, want %q", wait, got, want)
+		}
+	}
+}
 
 type codedTestError struct {
 	msg    string

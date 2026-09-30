@@ -68,8 +68,12 @@ func setRetryAfter(h http.Header, err error) {
 		return
 	}
 	if wait := retryable.RetryAfter(); wait > 0 {
-		h.Set("Retry-After", strconv.FormatInt(int64(math.Ceil(wait.Seconds())), 10))
+		h.Set("Retry-After", RetryAfterSeconds(wait))
 	}
+}
+
+func RetryAfterSeconds(wait time.Duration) string {
+	return strconv.Itoa(max(1, int(math.Ceil(wait.Seconds()))))
 }
 
 func resolveDetail(err error, se StatusError) string {
