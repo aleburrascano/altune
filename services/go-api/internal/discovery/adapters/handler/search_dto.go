@@ -142,7 +142,7 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		Title:           sr.Title,
 		Subtitle:        sr.Subtitle,
 		ImageURL:        sr.ImageURL,
-		ArtworkSource:   sr.ArtworkSource,
+		ArtworkSource:   sr.ArtworkSource.String(),
 		Confidence:      sr.Confidence.String(),
 		ResultSignature: domain.SignatureOf(sr),
 		FavoriteKey:     domain.FavoriteKeyOf(sr),

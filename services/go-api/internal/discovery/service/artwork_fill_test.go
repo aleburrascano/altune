@@ -495,7 +495,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		noCache    bool
 		wantPath   string
 		wantURL    string
-		wantSource string
+		wantSource domain.ProviderKey
 		wantXref   map[string]string
 		wantCalls  []string
 	}{

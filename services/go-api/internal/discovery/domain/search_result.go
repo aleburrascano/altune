@@ -16,7 +16,7 @@ type SearchResult struct {
 	Title          string
 	Subtitle       string
 	ImageURL       string
-	ArtworkSource  string
+	ArtworkSource  ProviderKey
 	Confidence     Confidence
 	Sources        []SourceRef
 	Popularity     float64

@@ -73,7 +73,7 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	return a
 }
 
-func bestArtwork(a, b domain.SearchResult) (url, source string) {
+func bestArtwork(a, b domain.SearchResult) (url string, source domain.ProviderKey) {
 	if artworkConfidenceRank(b) > artworkConfidenceRank(a) {
 		return b.ImageURL, b.ArtworkSource
 	}

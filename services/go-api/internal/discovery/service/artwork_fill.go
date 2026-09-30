@@ -176,7 +176,7 @@ func defaultArtworkSource(result *domain.SearchResult) {
 	if result.ArtworkSource != "" || len(result.Sources) == 0 {
 		return
 	}
-	result.ArtworkSource = result.Sources[0].Provider.String()
+	result.ArtworkSource = result.Sources[0].Provider.Key()
 }
 
 func (a *ArtworkFiller) lookupMBID(ctx context.Context, result *domain.SearchResult) (mbid string, fromDurable bool) {
@@ -227,7 +227,7 @@ func (a *ArtworkFiller) lookupArtworkCache(ctx context.Context, result *domain.S
 	}
 	if usableArtwork(cachedURL) {
 		result.ImageURL = cachedURL
-		result.ArtworkSource = cachedSource.String()
+		result.ArtworkSource = cachedSource
 		return artworkStageCacheHit, true
 	}
 	if result.Kind != domain.ResultKindArtist {
@@ -258,7 +258,7 @@ func applyResolvedArtwork(result *domain.SearchResult, url string, source domain
 		return
 	}
 	result.ImageURL = url
-	result.ArtworkSource = source.String()
+	result.ArtworkSource = source
 }
 
 func setArtworkPath(r *domain.SearchResult, path string) {

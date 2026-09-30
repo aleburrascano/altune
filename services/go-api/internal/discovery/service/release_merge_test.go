@@ -125,7 +125,7 @@ func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 }
 
 func TestMergeReleases_adoptedArtworkKeepsItsSourceTag(t *testing.T) {
-	withArtworkSource := func(s string) func(*domain.SearchResult) {
+	withArtworkSource := func(s domain.ProviderKey) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.ArtworkSource = s }
 	}
 	groups := []ReleaseGroup{
