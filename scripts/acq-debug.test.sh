@@ -32,6 +32,24 @@ run_script() {
     RC=$?
 }
 
+stub_audit_tools() {
+    cat >"$WORK/bin/psql" <<'STUBPSQL'
+#!/usr/bin/env bash
+sep=$(printf '\t')
+while [ $# -gt 0 ]; do
+    [ "$1" = -F ] && sep=$2
+    shift
+done
+cat >/dev/null
+printf 'id1%s%s%s%s%shttps://youtube.com/x\n' "$sep" "$ROW_TITLE" "$sep" "$ROW_ARTIST" "$sep"
+STUBPSQL
+    printf '#!/bin/sh\nexit 22\n' >"$WORK/bin/curl"
+    printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/sleep"
+    printf '#!/bin/sh\nprintf "#!/bin/sh\\ncat\\n" > "$3"\nchmod +x "$3"\n' >"$WORK/bin/go"
+    chmod +x "$WORK/bin/psql" "$WORK/bin/curl" "$WORK/bin/sleep" "$WORK/bin/go"
+    printf 'DATABASE_URL=postgres://stub\n' >"$WORK/checkout/services/go-api/.env.production"
+}
+
 fail() {
     printf 'FAIL: %s\n      %s\n' "$CASE" "$1"
     FAILURES=$((FAILURES + 1))
@@ -135,6 +153,20 @@ run_script sql "delete from tracks"
 expect_rc 3
 expect_err "acq-debug: sql only runs SELECT / WITH / EXPLAIN / SHOW / TABLE / VALUES"
 expect_no_out
+
+CASE="audit-qualifiers with an empty artist keeps the url in column 4"
+new_stub_bin
+stub_audit_tools
+ROW_TITLE=T ROW_ARTIST= run_script audit-qualifiers
+expect_rc 0
+[ "$(cat "$WORK/out.log")" = "$(printf 'id1\tT\t\thttps://youtube.com/x\t')" ] || fail "columns shifted: $(cat "$WORK/out.log")"
+
+CASE="audit-qualifiers with an empty title keeps the artist in column 3 and the url in column 4"
+new_stub_bin
+stub_audit_tools
+ROW_TITLE= ROW_ARTIST=A run_script audit-qualifiers
+expect_rc 0
+[ "$(cat "$WORK/out.log")" = "$(printf 'id1\t\tA\thttps://youtube.com/x\t')" ] || fail "columns shifted: $(cat "$WORK/out.log")"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

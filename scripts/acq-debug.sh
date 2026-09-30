@@ -167,12 +167,13 @@ audit-qualifiers)
     curl -sfG --max-time 10 --data-urlencode "url=$1" --data-urlencode format=json "$endpoint" |
       sed -nE 's/.*"title" *: *"(([^"\\]|\\.)*)".*/\1/p' | tr -d '\t\r\n'
   }
-  db -A -t -F "$(printf '\t')" -v limit="$limit" <<'SQL' |
-SELECT id, replace(title, E'\t', ' '), replace(artist, E'\t', ' '), audio_source_url
+  field_sep=$(printf '\037')
+  db -A -t -F "$field_sep" -v limit="$limit" <<'SQL' |
+SELECT id, translate(title, E'\t\037', '  '), translate(artist, E'\t\037', '  '), audio_source_url
   FROM tracks WHERE acquisition_status = 'ready' AND audio_source_url <> ''
  ORDER BY added_at DESC LIMIT :limit;
 SQL
-  while IFS="$(printf '\t')" read -r id title artist url; do
+  while IFS="$field_sep" read -r id title artist url; do
     printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$title" "$artist" "$url" "$(oembed_title "$url")"
     sleep 0.5
   done
