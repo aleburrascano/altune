@@ -235,3 +235,51 @@ func TestRingBuffer_SubscribeRejectsPastCeiling(t *testing.T) {
 	}
 	cancels = append(cancels, cancel)
 }
+
+type recordingHandler struct{ messages []string }
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.messages = append(h.messages, r.Message)
+	return nil
+}
+func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(string) slog.Handler      { return h }
+
+func TestRingHandler_BoundsStoredMessageAndAttrWithMarker(t *testing.T) {
+	logger, ring := newCaptureLogger(t, 10)
+	huge := strings.Repeat("é", 512*1024)
+
+	logger.Error(huge, "error", huge)
+
+	rec := ring.Snapshot()[0]
+	for name, text := range map[string]string{"msg": rec.Message, "error": rec.Attrs["error"]} {
+		if len(text) > ringTextCapBytes+64 {
+			t.Errorf("%s stored %d bytes, want bounded", name, len(text))
+		}
+		if !strings.Contains(text, "…[truncated ") || !strings.HasSuffix(text, "]") {
+			t.Errorf("%s lacks truncation marker: %.40q", name, text[max(0, len(text)-40):])
+		}
+		if strings.ToValidUTF8(text, "") != text {
+			t.Errorf("%s is not valid UTF-8", name)
+		}
+	}
+}
+
+func TestRingHandler_ShortRecordStoredUnchangedAndInnerGetsFullText(t *testing.T) {
+	ring := NewRingBuffer(10)
+	inner := &recordingHandler{}
+	logger := slog.New(newRingHandler(inner, ring))
+	long := strings.Repeat("x", 1<<20)
+
+	logger.Info("short message", "k", "short value")
+	logger.Info(long)
+
+	snap := ring.Snapshot()
+	if snap[0].Message != "short message" || snap[0].Attrs["k"] != "short value" {
+		t.Errorf("short record altered: %+v", snap[0])
+	}
+	if inner.messages[1] != long {
+		t.Errorf("inner handler got %d bytes, want %d", len(inner.messages[1]), len(long))
+	}
+}
