@@ -64,6 +64,33 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
   });
 });
 
+describe('useClearSearchHistory when the clear fails', () => {
+  it('keeps the history items when the delete and the refetch both fail', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const items = [{ query: 'first' }, { query: 'second' }];
+    queryClient.setQueryData(discoveryKeys.history, { items });
+    queryClient.setQueryDefaults(discoveryKeys.history, {
+      queryFn: () => Promise.reject(new Error('refetch failed')),
+    });
+    jest.mocked(clearSearchHistory).mockReset();
+    jest.mocked(clearSearchHistory).mockRejectedValue(new Error('boom'));
+
+    const hook = renderHook(() => useClearSearchHistory(), {
+      wrapper: makeWrapper(queryClient),
+    });
+    act(() => {
+      hook.result.current.mutate();
+    });
+    await waitFor(() => expect(hook.result.current.isError).toBe(true));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items });
+    hook.unmount();
+  });
+});
+
 describe('settings mutations retry transient failures', () => {
   function makeClient() {
     return new QueryClient();
