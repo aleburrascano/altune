@@ -549,6 +549,7 @@ func TestMiddleware_CountsEveryRejectionAndOutage(t *testing.T) {
 		{"malformed header", "Basic abc", nil, http.StatusUnauthorized, []string{string(ReasonMalformed)}, 0},
 		{"invalid token", "Bearer t", &InvalidTokenError{Reason: ReasonSignatureInvalid}, http.StatusUnauthorized, []string{string(ReasonSignatureInvalid)}, 0},
 		{"verifier unavailable", "Bearer t", unavailableErr, http.StatusServiceUnavailable, nil, 1},
+		{"failed key refresh after signature rejection", "Bearer t", errors.Join(errors.New("refresh JWKS after signature rejection"), unavailableErr), http.StatusServiceUnavailable, nil, 1},
 		{"valid token", "Bearer t", nil, http.StatusOK, nil, 0},
 	}
 

@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"altune/go-api/internal/auth"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -179,7 +178,7 @@ func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
 	serveOversized.Store(true)
 	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
 	_, err = verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience)))
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertVerifierUnavailable(t, err)
 	if got := metrics.jwksFailures.Load(); got != 1 {
 		t.Errorf("JWKSFetchFailed after an oversized JWKS body: got %d, want 1", got)
 	}

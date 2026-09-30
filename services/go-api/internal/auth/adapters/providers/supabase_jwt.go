@@ -210,7 +210,10 @@ func isSignatureRejection(err error) bool {
 
 func (v *SupabaseJWTVerifier) retryAfterKeyRefresh(ctx context.Context, tokenStr string, rejection error) (jwt.Token, error) {
 	if err := v.refresher.RefreshIfStale(ctx); err != nil {
-		return nil, rejection
+		if errors.Is(err, errJWKSRefreshRecent) {
+			return nil, rejection
+		}
+		return nil, fmt.Errorf("refresh JWKS after signature rejection: %w", err)
 	}
 	keySet, err := v.cache.Get(ctx, v.jwksURL)
 	if err != nil {

@@ -117,6 +117,17 @@ func assertInvalidTokenReason(t *testing.T, err error, want auth.TokenRejectReas
 	}
 }
 
+func assertVerifierUnavailable(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a verifier-unavailable error, got nil")
+	}
+	var tokenErr *auth.InvalidTokenError
+	if errors.As(err, &tokenErr) {
+		t.Fatalf("a failed key refresh was reported as a token rejection (%q): %v", tokenErr.Reason, err)
+	}
+}
+
 func TestSupabaseJWTVerifier_ValidToken(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)
@@ -762,7 +773,7 @@ func TestSupabaseJWTVerifier_FailedUnknownKidRefreshKeepsCachedKeys(t *testing.T
 	jwks.hits.Store(0)
 	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
 	_, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience)))
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertVerifierUnavailable(t, err)
 	if got := jwks.hits.Load(); got != 1 {
 		t.Fatalf("JWKS fetches: got %d, want 1 failed forced refresh", got)
 	}
@@ -771,6 +782,49 @@ func TestSupabaseJWTVerifier_FailedUnknownKidRefreshKeepsCachedKeys(t *testing.T
 	if _, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
 		t.Fatalf("a failed forced refresh evicted the cached key set: %v", err)
 	}
+}
+
+func TestSupabaseJWTVerifier_UnknownKidDuringRefreshBackoffIsUnavailable(t *testing.T) {
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+	f.jwksServer = jwks.server
+	verifier := f.newVerifier(t)
+
+	jwks.down.Store(true)
+	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
+	token := f.signToken(t, validClaims(f.issuer, f.audience))
+	_, err := verifier.Verify(context.Background(), token)
+	assertVerifierUnavailable(t, err)
+	jwks.hits.Store(0)
+
+	_, err = verifier.Verify(context.Background(), token)
+	assertVerifierUnavailable(t, err)
+	if !errors.Is(err, errJWKSRefreshBackoff) {
+		t.Fatalf("second Verify: got %v, want errJWKSRefreshBackoff", err)
+	}
+	if got := jwks.hits.Load(); got != 0 {
+		t.Fatalf("JWKS fetches during backoff: got %d, want 0", got)
+	}
+}
+
+func TestSupabaseJWTVerifier_UnknownKidInsideRecentRefreshWindowIsRejected(t *testing.T) {
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+	f.jwksServer = jwks.server
+	verifier := f.newVerifier(t)
+
+	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
+	token := f.signToken(t, validClaims(f.issuer, f.audience))
+	_, err := verifier.Verify(context.Background(), token)
+	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+
+	jwks.down.Store(true)
+	_, err = verifier.Verify(context.Background(), token)
+	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
 }
 
 func TestSupabaseJWTVerifier_RefreshPublishingNoKeysKeepsCachedKeys(t *testing.T) {
@@ -787,7 +841,7 @@ func TestSupabaseJWTVerifier_RefreshPublishingNoKeysKeepsCachedKeys(t *testing.T
 	jwks.publishNoKeys()
 	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
 	_, err = verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience)))
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertVerifierUnavailable(t, err)
 
 	f.privateKey, f.keyID = keyA, "key-a"
 	if _, err := verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
