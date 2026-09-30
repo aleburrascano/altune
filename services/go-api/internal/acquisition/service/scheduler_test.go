@@ -1176,10 +1176,10 @@ type recordedProgress struct {
 	payload map[string]any
 }
 
-func (p *recordingProgressPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, payload map[string]any) {
+func (p *recordingProgressPublisher) Publish(_ context.Context, _ shared.UserId, eventType events.EventType, payload map[string]any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.events = append(p.events, recordedProgress{typ: eventType, payload: payload})
+	p.events = append(p.events, recordedProgress{typ: string(eventType), payload: payload})
 }
 
 func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
@@ -1265,31 +1265,25 @@ func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *te
 
 type recordingPublisher struct {
 	mu     sync.Mutex
-	byType map[string]int
-	last   map[string]map[string]any
+	byType map[events.EventType]int
+	last   map[events.EventType]map[string]any
 }
 
 func newRecordingPublisher() *recordingPublisher {
-	return &recordingPublisher{byType: make(map[string]int), last: make(map[string]map[string]any)}
+	return &recordingPublisher{byType: make(map[events.EventType]int), last: make(map[events.EventType]map[string]any)}
 }
 
-func (p *recordingPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, payload map[string]any) {
+func (p *recordingPublisher) Publish(_ context.Context, _ shared.UserId, eventType events.EventType, payload map[string]any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.byType[eventType]++
 	p.last[eventType] = payload
 }
 
-func (p *recordingPublisher) count(eventType string) int {
+func (p *recordingPublisher) count(eventType events.EventType) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.byType[eventType]
-}
-
-func (p *recordingPublisher) payload(eventType string) map[string]any {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.last[eventType]
 }
 
 type holdOneTrackRepo struct {

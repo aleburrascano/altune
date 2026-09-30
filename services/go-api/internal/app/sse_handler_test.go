@@ -336,7 +336,7 @@ func (b *busWithOverflowingSubscriber) Subscribe(userId shared.UserId) (<-chan e
 	ch, cancel := b.InProcessBus.Subscribe(userId)
 	b.once.Do(func() {
 		for i := 0; i < b.burst; i++ {
-			b.Publish(context.Background(), b.uid, fmt.Sprintf("burst-%d", i), map[string]any{"i": i})
+			b.Publish(context.Background(), b.uid, events.EventType(fmt.Sprintf("burst-%d", i)), map[string]any{"i": i})
 		}
 	})
 	return ch, cancel

@@ -19,20 +19,20 @@ import (
 
 type ctxRecordingPublisher struct {
 	mu     sync.Mutex
-	onLive map[string]bool
+	onLive map[events.EventType]bool
 }
 
 func newCtxRecordingPublisher() *ctxRecordingPublisher {
-	return &ctxRecordingPublisher{onLive: make(map[string]bool)}
+	return &ctxRecordingPublisher{onLive: make(map[events.EventType]bool)}
 }
 
-func (p *ctxRecordingPublisher) Publish(ctx context.Context, _ shared.UserId, eventType string, _ map[string]any) {
+func (p *ctxRecordingPublisher) Publish(ctx context.Context, _ shared.UserId, eventType events.EventType, _ map[string]any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onLive[eventType] = ctx.Err() == nil
 }
 
-func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType string) bool {
+func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType events.EventType) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.onLive[eventType]

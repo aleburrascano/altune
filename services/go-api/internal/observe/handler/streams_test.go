@@ -176,7 +176,7 @@ func TestStreamEvents_ForwardsEachPublishedEventAsADataFrame(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "event-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), shared.NewUserId(uuid.New()), marker, map[string]any{"track_id": "trk-1"})
+	fx.tap.Publish(context.Background(), shared.NewUserId(uuid.New()), events.EventType(marker), map[string]any{"track_id": "trk-1"})
 
 	fields := decodeFrame(t, conn.awaitData(t, marker))
 	if string(fields["type"]) != `"`+marker+`"` || string(fields["subject"]) != `"trk-1"` {
@@ -207,7 +207,7 @@ func TestStreamEvents_FrameCarriesTheUserDigestNeverTheRawID(t *testing.T) {
 	user := shared.NewUserId(uuid.New())
 
 	marker := "private-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), user, marker, map[string]any{"query": "my private query"})
+	fx.tap.Publish(context.Background(), user, events.EventType(marker), map[string]any{"query": "my private query"})
 
 	frame := conn.awaitData(t, marker)
 	if strings.Contains(frame, user.String()) || strings.Contains(frame, "my private query") {
@@ -226,7 +226,7 @@ func TestStreamEvents_FrameCarriesTheOriginatingCorrID(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "corr-" + uuid.NewString()
-	fx.tap.Publish(withCorrelation("evt-corr-1"), shared.NewUserId(uuid.New()), marker, nil)
+	fx.tap.Publish(withCorrelation("evt-corr-1"), shared.NewUserId(uuid.New()), events.EventType(marker), nil)
 
 	if frame := conn.awaitData(t, marker); !strings.Contains(frame, `"corr_id":"evt-corr-1"`) {
 		t.Errorf("frame %s lacks the originating corr_id", frame)
@@ -409,9 +409,9 @@ func TestStreams_KeepForwardingAfterTheFirstFrame(t *testing.T) {
 	user := shared.NewUserId(uuid.New())
 
 	first, second := "first-"+uuid.NewString(), "second-"+uuid.NewString()
-	fx.tap.Publish(context.Background(), user, first, nil)
+	fx.tap.Publish(context.Background(), user, events.EventType(first), nil)
 	conn.awaitData(t, first)
-	fx.tap.Publish(context.Background(), user, second, nil)
+	fx.tap.Publish(context.Background(), user, events.EventType(second), nil)
 
 	conn.awaitData(t, second)
 }
@@ -619,8 +619,10 @@ func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 	srv := httptest.NewServer(streamRouter(fx.deps, httputil.WriteDeadline(routeDeadline), httputil.RequestLogger))
 	t.Cleanup(srv.Close)
 	emit := map[string]func(string){
-		"/events/stream": func(marker string) { fx.tap.Publish(context.Background(), shared.NewUserId(uuid.New()), marker, nil) },
-		"/logs/stream":   func(marker string) { slog.Error(marker) },
+		"/events/stream": func(marker string) {
+			fx.tap.Publish(context.Background(), shared.NewUserId(uuid.New()), events.EventType(marker), nil)
+		},
+		"/logs/stream": func(marker string) { slog.Error(marker) },
 	}
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {

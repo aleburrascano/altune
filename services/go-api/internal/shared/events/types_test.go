@@ -1,10 +1,14 @@
 package events
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 type publishedType struct {
 	constant string
-	value    string
+	value    EventType
 	wire     string
 }
 
@@ -28,7 +32,7 @@ var publishedTypes = []publishedType{
 
 func TestEventTypes_CarryTheWireValuesClientsSubscribeTo(t *testing.T) {
 	for _, pt := range publishedTypes {
-		if pt.value != pt.wire {
+		if string(pt.value) != pt.wire {
 			t.Errorf("%s = %q, want %q: deployed clients subscribe to the wanted value",
 				pt.constant, pt.value, pt.wire)
 		}
@@ -36,7 +40,7 @@ func TestEventTypes_CarryTheWireValuesClientsSubscribeTo(t *testing.T) {
 }
 
 func TestEventTypes_NoTwoEventTypesShareAWireValue(t *testing.T) {
-	definedBy := make(map[string]string, len(publishedTypes))
+	definedBy := make(map[EventType]string, len(publishedTypes))
 	for _, pt := range publishedTypes {
 		if first, taken := definedBy[pt.value]; taken {
 			t.Errorf("%s and %s both publish %q; a subscriber cannot tell the two apart",
@@ -44,5 +48,15 @@ func TestEventTypes_NoTwoEventTypesShareAWireValue(t *testing.T) {
 			continue
 		}
 		definedBy[pt.value] = pt.constant
+	}
+}
+
+func TestEvent_MarshalsTheTypedNameAsTheBareWireString(t *testing.T) {
+	raw, err := json.Marshal(Event{Type: TypeTrackDeleted})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"type":"track_deleted"`) {
+		t.Errorf("marshalled event = %s, want it to carry \"type\":\"track_deleted\"", raw)
 	}
 }

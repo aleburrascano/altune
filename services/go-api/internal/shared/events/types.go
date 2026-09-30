@@ -6,44 +6,46 @@ import (
 	"time"
 )
 
+type EventType string
+
 const (
-	TypeTrackAddedToLibrary      = "track_added_to_library"
-	TypeTrackDeleted             = "track_deleted"
-	TypeTrackAcquisitionStarted  = "track_acquisition_started"
-	TypeTrackAcquisitionProgress = "track_acquisition_progress"
+	TypeTrackAddedToLibrary      EventType = "track_added_to_library"
+	TypeTrackDeleted             EventType = "track_deleted"
+	TypeTrackAcquisitionStarted  EventType = "track_acquisition_started"
+	TypeTrackAcquisitionProgress EventType = "track_acquisition_progress"
 
-	TypeTrackAcquisitionCompleted = "track_acquisition_completed"
-	TypeTrackAcquisitionFailed    = "track_acquisition_failed"
-	TypeTrackReplaceFailed        = "track_replace_failed"
+	TypeTrackAcquisitionCompleted EventType = "track_acquisition_completed"
+	TypeTrackAcquisitionFailed    EventType = "track_acquisition_failed"
+	TypeTrackReplaceFailed        EventType = "track_replace_failed"
 
-	TypeTrackAddedToPlaylist      = "track_added_to_playlist"
-	TypeTracksAddedToPlaylist     = "tracks_added_to_playlist"
-	TypeTrackRemovedFromPlaylist  = "track_removed_from_playlist"
-	TypeTracksRemovedFromPlaylist = "tracks_removed_from_playlist"
+	TypeTrackAddedToPlaylist      EventType = "track_added_to_playlist"
+	TypeTracksAddedToPlaylist     EventType = "tracks_added_to_playlist"
+	TypeTrackRemovedFromPlaylist  EventType = "track_removed_from_playlist"
+	TypeTracksRemovedFromPlaylist EventType = "tracks_removed_from_playlist"
 
-	TypePlaylistCreated   = "playlist_created"
-	TypePlaylistDeleted   = "playlist_deleted"
-	TypePlaylistRenamed   = "playlist_renamed"
-	TypePlaylistReordered = "playlist_reordered"
+	TypePlaylistCreated   EventType = "playlist_created"
+	TypePlaylistDeleted   EventType = "playlist_deleted"
+	TypePlaylistRenamed   EventType = "playlist_renamed"
+	TypePlaylistReordered EventType = "playlist_reordered"
 )
 
 type Event struct {
 	ID        uint64         `json:"id"`
-	Type      string         `json:"type"`
+	Type      EventType      `json:"type"`
 	UserID    shared.UserId  `json:"-"`
 	Payload   map[string]any `json:"payload"`
 	Timestamp time.Time      `json:"timestamp"`
 }
 
 type Publisher interface {
-	Publish(ctx context.Context, userId shared.UserId, eventType string, payload map[string]any)
+	Publish(ctx context.Context, userId shared.UserId, eventType EventType, payload map[string]any)
 }
 
 func NoopPublisher() Publisher { return noopPublisher{} }
 
 type noopPublisher struct{}
 
-func (noopPublisher) Publish(context.Context, shared.UserId, string, map[string]any) {}
+func (noopPublisher) Publish(context.Context, shared.UserId, EventType, map[string]any) {}
 
 type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())

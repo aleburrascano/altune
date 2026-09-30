@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"log/slog"
 	"net/http/httptest"
 	"reflect"
@@ -43,7 +44,7 @@ func TestContract_EventFrameCarriesEveryKeyOverseerDecodes(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "contract-" + uuid.NewString()
-	fx.tap.Publish(withCorrelation("contract-corr"), shared.NewUserId(uuid.New()), marker, map[string]any{"track_id": "trk-1"})
+	fx.tap.Publish(withCorrelation("contract-corr"), shared.NewUserId(uuid.New()), events.EventType(marker), map[string]any{"track_id": "trk-1"})
 
 	assertFrameCarriesEveryKey(t, conn.awaitData(t, marker), reflect.TypeOf(overseerEvent{}))
 }

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"context"
 	"errors"
 	"reflect"
@@ -692,8 +693,8 @@ func (r ownerBlindReadRepo) GetTrackOrder(_ context.Context, id domain.PlaylistI
 
 type recordingPublisher struct{ types []string }
 
-func (p *recordingPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, _ map[string]any) {
-	p.types = append(p.types, eventType)
+func (p *recordingPublisher) Publish(_ context.Context, _ shared.UserId, eventType events.EventType, _ map[string]any) {
+	p.types = append(p.types, string(eventType))
 }
 
 func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.T) {
@@ -816,20 +817,20 @@ type recordingPlaylistPublisher struct {
 	}
 }
 
-func (p *recordingPlaylistPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, payload map[string]any) {
+func (p *recordingPlaylistPublisher) Publish(_ context.Context, _ shared.UserId, eventType events.EventType, payload map[string]any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.events = append(p.events, struct {
 		typ     string
 		payload map[string]any
-	}{eventType, payload})
+	}{string(eventType), payload})
 }
 
-func (p *recordingPlaylistPublisher) last(typ string) map[string]any {
+func (p *recordingPlaylistPublisher) last(typ events.EventType) map[string]any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for i := len(p.events) - 1; i >= 0; i-- {
-		if p.events[i].typ == typ {
+		if p.events[i].typ == string(typ) {
 			return p.events[i].payload
 		}
 	}

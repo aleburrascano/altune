@@ -35,13 +35,13 @@ func New(inner events.Publisher) *Tap {
 	return &Tap{inner: inner}
 }
 
-func (t *Tap) Publish(ctx context.Context, userId shared.UserId, eventType string, payload map[string]any) {
+func (t *Tap) Publish(ctx context.Context, userId shared.UserId, eventType events.EventType, payload map[string]any) {
 	t.inner.Publish(ctx, userId, eventType, payload)
 
 	t.mu.Lock()
 	if t.ch != nil {
 		select {
-		case t.ch <- TapEvent{Type: eventType, Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
+		case t.ch <- TapEvent{Type: string(eventType), Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
 		default:
 			t.dropped.Add(1)
 		}

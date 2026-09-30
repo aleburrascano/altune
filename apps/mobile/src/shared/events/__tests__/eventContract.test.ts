@@ -18,7 +18,7 @@ function findGoApiRoot(): string | null {
 const GO_API_ROOT = findGoApiRoot();
 
 const PUBLISH_EVENT_TYPE_ARG = /\.Publish\(\s*[\w.]+,\s*[\w.]+,\s*([^,\s]+)\s*,/g;
-const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*=\s*"([a-zA-Z_]+)"/gm;
+const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*(?:[A-Za-z_.]\w*\s*)?=\s*"([a-zA-Z_]+)"/gm;
 const SSE_LITERAL_EVENT_LINE = /"event:\s*([a-zA-Z_]+)\\n/g;
 const QUOTED_LITERAL = /^"([a-zA-Z_]+)"$/;
 const EXPORTED_CONSTANT = /^(?:\w+\.)?([A-Z]\w*)$/;

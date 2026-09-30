@@ -111,7 +111,7 @@ func (b *InProcessBus) lockLiveUser(userId shared.UserId) *userState {
 	}
 }
 
-func (b *InProcessBus) Publish(_ context.Context, userId shared.UserId, eventType string, payload map[string]any) {
+func (b *InProcessBus) Publish(_ context.Context, userId shared.UserId, eventType EventType, payload map[string]any) {
 	us := b.lockLiveUser(userId)
 
 	us.lastActive = b.now()
@@ -125,20 +125,27 @@ func (b *InProcessBus) Publish(_ context.Context, userId shared.UserId, eventTyp
 		Timestamp: time.Now().UTC(),
 	}
 
+	b.appendToRing(us, evt)
+	b.fanOut(us, userId, evt)
+	us.mu.Unlock()
+}
+
+func (b *InProcessBus) appendToRing(us *userState, evt Event) {
 	us.ring[us.ringHead] = evt
 	us.ringHead = (us.ringHead + 1) % b.ringCap
 	if us.ringLen < b.ringCap {
 		us.ringLen++
 	}
+}
 
+func (b *InProcessBus) fanOut(us *userState, userId shared.UserId, evt Event) {
 	for _, ch := range us.subscribers {
 		select {
 		case ch <- evt:
 		default:
-			b.recordDropForFullSubscriber(userId, eventType, evt.ID)
+			b.recordDropForFullSubscriber(userId, evt.Type, evt.ID)
 		}
 	}
-	us.mu.Unlock()
 }
 
 func (b *InProcessBus) recordIssuedID(id uint64) {
@@ -154,7 +161,7 @@ func (b *InProcessBus) recordIssuedID(id uint64) {
 	}
 }
 
-func (b *InProcessBus) recordDropForFullSubscriber(userId shared.UserId, eventType string, eventID uint64) {
+func (b *InProcessBus) recordDropForFullSubscriber(userId shared.UserId, eventType EventType, eventID uint64) {
 	total := b.dropped.Add(1)
 	slog.Warn("events.subscriber_dropped",
 		"user_id", userId.String(), "event_type", eventType,
