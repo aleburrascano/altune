@@ -910,6 +910,7 @@ func TestLookup_ContextCancelAbortsTheRetryAfterWait(t *testing.T) {
 func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
 	for header, want := range map[string]time.Duration{
 		"2": 2 * time.Second, "60": 5 * time.Second, "": time.Second, "soon": time.Second, "0": 0,
+		"10000000000": 5 * time.Second, "18446744073": 5 * time.Second,
 	} {
 		if got := retryAfter(header); got != want {
 			t.Errorf("retryAfter(%q) = %v, want %v", header, got, want)

@@ -222,7 +222,7 @@ func retryAfter(header string) time.Duration {
 	if err != nil || seconds < 0 {
 		return defaultRetryAfter
 	}
-	return min(time.Duration(seconds)*time.Second, maxRetryAfter)
+	return time.Duration(min(seconds, int(maxRetryAfter/time.Second))) * time.Second
 }
 
 type clusterResponse struct {
