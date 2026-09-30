@@ -625,3 +625,25 @@ func TestWireCatalogFingerprintVerifiedStaysFalseUntilALookupSucceeds(t *testing
 		t.Error("Verified() = false after a successful lookup, want true")
 	}
 }
+
+func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
+	a := &App{cfg: &config.Config{
+		YtMusicEnabled: true,
+		MusicDir:       t.TempDir(),
+		OCIS3Endpoint:  "https://objectstorage.example.com",
+		OCIS3Bucket:    "audio",
+	}}
+
+	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	if err == nil {
+		t.Fatal("wireCatalog with 2 of 4 OCI keys and MUSIC_DIR: want error, got nil")
+	}
+	for _, want := range []string{"OCI_S3_ACCESS_KEY", "OCI_S3_SECRET_KEY"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err.Error(), want)
+		}
+	}
+	if wired.scheduler != nil {
+		t.Error("scheduler must not be wired when the audio store fails")
+	}
+}

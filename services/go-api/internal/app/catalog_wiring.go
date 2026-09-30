@@ -334,6 +334,9 @@ func (a *App) streamripSourcesFor(services []string) []acqPorts.AudioSource {
 }
 
 func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
+	if missing := len(missingOCIS3Keys(a.cfg)); missing > 0 && missing < ociS3ConfigKeys {
+		return nil, missingAudioStoreError(a.cfg)
+	}
 	if a.cfg.HasOCIS3() {
 		store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
 			Endpoint:  a.cfg.OCIS3Endpoint,
@@ -370,7 +373,7 @@ func (a *App) scopeAudioStore(store catalogPorts.AudioStore) catalogPorts.AudioS
 
 const ociS3ConfigKeys = 4
 
-func missingAudioStoreError(cfg *config.Config) error {
+func missingOCIS3Keys(cfg *config.Config) []string {
 	var missing []string
 	if cfg.OCIS3Endpoint == "" {
 		missing = append(missing, "OCI_S3_ENDPOINT")
@@ -384,6 +387,11 @@ func missingAudioStoreError(cfg *config.Config) error {
 	if cfg.OCIS3Bucket == "" {
 		missing = append(missing, "OCI_S3_BUCKET")
 	}
+	return missing
+}
+
+func missingAudioStoreError(cfg *config.Config) error {
+	missing := missingOCIS3Keys(cfg)
 	if len(missing) > 0 && len(missing) < ociS3ConfigKeys {
 		return fmt.Errorf(
 			"audio store: incomplete OCI S3 configuration, missing %s (set these for object storage, or set MUSIC_DIR for a filesystem store)",
