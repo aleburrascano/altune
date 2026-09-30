@@ -261,11 +261,11 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 }));
 
-let survivorsBelongToPreviousUser = false;
+let previousUserSurvivors: ReadonlySet<string> = new Set();
 
 onSignOut(() => {
   usePinnedStore.getState().unpinAll();
-  survivorsBelongToPreviousUser = false;
+  previousUserSurvivors = new Set();
   usePinnedStore.setState({ lastUnpinAll: undefined });
 });
 
@@ -278,13 +278,16 @@ onKillSwitchChange((loop, enabled) => {
 
 export function claimPinnedDownloads(userId: string): void {
   if (readOwner() === userId) {
-    survivorsBelongToPreviousUser = false;
+    previousUserSurvivors = new Set();
     return;
   }
   const outcome = usePinnedStore.getState().unpinAll();
   usePinnedStore.setState({ lastUnpinAll: undefined });
-  survivorsBelongToPreviousUser = outcome === 'partial';
-  if (survivorsBelongToPreviousUser) return;
+  if (outcome === 'partial') {
+    previousUserSurvivors = new Set(Object.keys(usePinnedStore.getState().entries));
+    return;
+  }
+  previousUserSurvivors = new Set();
   writeOwner(userId);
 }
 
@@ -295,7 +298,7 @@ function versionDisagrees(localVersion?: string, expectedVersion?: string): bool
 }
 
 export function resolvePinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
-  if (survivorsBelongToPreviousUser) return undefined;
+  if (previousUserSurvivors.has(trackId)) return undefined;
   const entry = usePinnedStore.getState().entries[trackId];
   if (entry?.status !== 'ready') return undefined;
   if (versionDisagrees(entry.version, expectedVersion)) {
