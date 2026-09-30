@@ -20,6 +20,7 @@ const (
 	jobDeletedIdentityErasure   jobName = "deleted identity erasure"
 	jobAcquisitionSourceCanary  jobName = "acquisition source canary"
 	jobStreamRecovery           jobName = "stream recovery"
+	jobAcquisitionPrune         jobName = "acquisition prune"
 )
 
 var knownJobNames = []jobName{
@@ -34,6 +35,7 @@ var knownJobNames = []jobName{
 	jobDeletedIdentityErasure,
 	jobAcquisitionSourceCanary,
 	jobStreamRecovery,
+	jobAcquisitionPrune,
 }
 
 func isKnownJobName(name jobName) bool {

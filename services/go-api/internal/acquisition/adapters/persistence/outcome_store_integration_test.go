@@ -267,3 +267,33 @@ func TestPgxOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 		t.Errorf("20 concurrent Record calls left %d rows, want 20", len(rows))
 	}
 }
+
+func TestPgxOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewer(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	oldTrack, newTrack := uuid.NewString(), uuid.NewString()
+
+	for _, seed := range []struct {
+		trackID string
+		age     string
+	}{{oldTrack, "91 days"}, {newTrack, "89 days"}} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms, completed_at) VALUES ($1, 'failed', 'no_match', 10, now() - $2::interval)`,
+			seed.trackID, seed.age); err != nil {
+			t.Fatalf("seed outcome: %v", err)
+		}
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	if got := queryOutcomeRows(t, pool, oldTrack); len(got) != 0 {
+		t.Errorf("old outcomes after Prune = %v, want none", got)
+	}
+	if got := queryOutcomeRows(t, pool, newTrack); len(got) != 1 {
+		t.Errorf("recent outcomes after Prune = %d, want 1", len(got))
+	}
+}

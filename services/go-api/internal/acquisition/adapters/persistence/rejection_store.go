@@ -114,3 +114,38 @@ func (s *PgxRejectionStore) ActiveKeys(ctx context.Context, trackID string, sinc
 
 	return scanActiveKeys(rows)
 }
+
+const RejectionRetention = 60 * 24 * time.Hour
+
+const pruneBatchSize = 1000
+
+const pruneRejectionsSQL = `
+DELETE FROM acquisition_rejections
+WHERE ctid IN (
+	SELECT ctid FROM acquisition_rejections
+	WHERE rejected_at < $1
+	LIMIT $2)`
+
+func pruneInBatches(ctx context.Context, pool *pgxpool.Pool, sql string, cutoff time.Time) (int64, error) {
+	var total int64
+	for {
+		batchCtx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+		tag, err := pool.Exec(batchCtx, sql, cutoff, pruneBatchSize)
+		cancel()
+		if err != nil {
+			return total, err
+		}
+		total += tag.RowsAffected()
+		if tag.RowsAffected() < pruneBatchSize {
+			return total, nil
+		}
+	}
+}
+
+func (s *PgxRejectionStore) Prune(ctx context.Context, now time.Time) (int64, error) {
+	pruned, err := pruneInBatches(ctx, s.pool, pruneRejectionsSQL, now.UTC().Add(-RejectionRetention))
+	if err != nil {
+		return pruned, fmt.Errorf("prune acquisition rejections: %w", err)
+	}
+	return pruned, nil
+}

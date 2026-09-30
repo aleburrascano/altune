@@ -167,6 +167,33 @@ func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRe
 	}, "interval", discographyPruneInterval.String())
 }
 
+const acquisitionPruneInterval = 24 * time.Hour
+
+type acquisitionRetentionPruner interface {
+	Prune(ctx context.Context, now time.Time) (int64, error)
+}
+
+func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections acquisitionRetentionPruner) {
+	a.startLoggedJob(ctx, jobAcquisitionPrune, acquisitionPruneInterval, func(ctx context.Context) error {
+		now := time.Now().UTC()
+		outcomesPruned, err := outcomes.Prune(ctx, now)
+		if err != nil {
+			slog.WarnContext(ctx, "acquisition outcome prune failed", "error", err)
+			return err
+		}
+		rejectionsPruned, err := rejections.Prune(ctx, now)
+		if err != nil {
+			slog.WarnContext(ctx, "acquisition rejection prune failed", "error", err)
+			return err
+		}
+		if outcomesPruned+rejectionsPruned > 0 {
+			slog.InfoContext(ctx, "acquisition rows pruned",
+				"outcome_rows", outcomesPruned, "rejection_rows", rejectionsPruned)
+		}
+		return nil
+	}, "interval", acquisitionPruneInterval.String())
+}
+
 func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discoveryPorts.VocabularyStore) {
 	if vocabStore == nil {
 		return

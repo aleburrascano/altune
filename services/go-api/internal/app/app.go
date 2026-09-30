@@ -1,6 +1,7 @@
 package app
 
 import (
+	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
 	"altune/go-api/internal/observe/evalmeter"
@@ -195,6 +196,11 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable,
 		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
+	if a.pool != nil {
+		a.startAcquisitionPrune(ctx,
+			acqPersistence.NewPgxOutcomeStore(a.pool),
+			acqPersistence.NewPgxRejectionStore(a.pool))
+	}
 }
 
 func (a *App) applyStartupSwitches() error {

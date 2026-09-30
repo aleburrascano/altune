@@ -375,3 +375,62 @@ func TestPgxRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *testing.T
 		t.Errorf("ActiveKeys(...) = %v, want two keys", keys)
 	}
 }
+
+func TestPgxRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxRejectionStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+
+	for _, seed := range []struct {
+		key string
+		age string
+	}{{"ancient", "61 days"}, {"inside-lookback", "45 days"}, {"fresh", "1 day"}} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, $2, 'no_match', now() - $3::interval)`,
+			trackID, seed.key, seed.age); err != nil {
+			t.Fatalf("seed rejection %s: %v", seed.key, err)
+		}
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	keys, err := store.ActiveKeys(ctx, trackID, time.Now().Add(-90*24*time.Hour))
+	if err != nil {
+		t.Fatalf("ActiveKeys(...) = %v, want nil", err)
+	}
+	if len(keys) != 2 || keys[0] != "fresh" || keys[1] != "inside-lookback" {
+		t.Errorf("keys after Prune = %v, want [fresh inside-lookback]", keys)
+	}
+}
+
+func TestPgxRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxRejectionStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+	total := pruneBatchSize + 5
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at)
+		 SELECT $1, 'k' || g, 'no_match', now() - interval '100 days' FROM generate_series(1, $2) g`,
+		trackID, total); err != nil {
+		t.Fatalf("seed rejections: %v", err)
+	}
+
+	if _, err := store.Prune(ctx, time.Now()); err != nil {
+		t.Fatalf("Prune(...) = %v, want nil", err)
+	}
+
+	var left int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM acquisition_rejections WHERE track_id = $1`, trackID).Scan(&left); err != nil {
+		t.Fatalf("count rejections: %v", err)
+	}
+	if left != 0 {
+		t.Errorf("rejections left after Prune = %d, want 0", left)
+	}
+}

@@ -408,3 +408,63 @@ func TestStartDiscographyPrune_LogsTheOldTextOnEachFailurePath(t *testing.T) {
 		})
 	}
 }
+
+type stubAcquisitionPruner struct {
+	ran    chan struct{}
+	pruned int64
+	err    error
+}
+
+func (s stubAcquisitionPruner) Prune(context.Context, time.Time) (int64, error) {
+	select {
+	case s.ran <- struct{}{}:
+	default:
+	}
+	return s.pruned, s.err
+}
+
+func TestStartAcquisitionPrune_LogsACountOnlyWhenRowsWereRemoved(t *testing.T) {
+	const removedLog = `level=INFO msg="acquisition rows pruned" outcome_rows=3 rejection_rows=2` + "\n"
+	cases := []struct {
+		name       string
+		outcomes   int64
+		rejections int64
+		wantLogged bool
+	}{
+		{name: "rows removed", outcomes: 3, rejections: 2, wantLogged: true},
+		{name: "nothing removed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &App{}
+			ran := make(chan struct{}, 2)
+			logged := runStartedJob(t, a, ran, func(ctx context.Context) {
+				a.startAcquisitionPrune(ctx,
+					stubAcquisitionPruner{ran: ran, pruned: tc.outcomes},
+					stubAcquisitionPruner{ran: ran, pruned: tc.rejections})
+			})
+			if got := strings.Contains(logged, removedLog); got != tc.wantLogged {
+				t.Errorf("prune log present = %v, want %v in\n%s", got, tc.wantLogged, logged)
+			}
+		})
+	}
+}
+
+func TestStartAcquisitionPrune_FailingPruneCountsTowardItsFailureSignal(t *testing.T) {
+	a := &App{}
+	ran := make(chan struct{}, 1)
+
+	logged := runStartedJob(t, a, ran, func(ctx context.Context) {
+		a.startAcquisitionPrune(ctx,
+			stubAcquisitionPruner{ran: ran, err: errors.New("boom")},
+			stubAcquisitionPruner{ran: ran})
+	})
+
+	want := `level=WARN msg="acquisition outcome prune failed" error=boom` + "\n"
+	if !strings.Contains(logged, want) {
+		t.Errorf("want %q in\n%s", want, logged)
+	}
+	if a.job(jobAcquisitionPrune).failures.Load() == 0 {
+		t.Error("a failing prune did not count toward its failure signal")
+	}
+}

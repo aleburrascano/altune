@@ -151,6 +151,7 @@ var alertableJobs = []jobName{
 	jobBehavioralRankingRefresh,
 	jobDeletedIdentityErasure,
 	jobAcquisitionSourceCanary,
+	jobAcquisitionPrune,
 }
 
 func (a *App) jobConditions(names []jobName) []observeAlert.Condition {
