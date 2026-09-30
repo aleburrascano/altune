@@ -4,8 +4,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
-	"sort"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -26,7 +24,7 @@ func (c *searchResultCache) enabled(queryNorm string) bool {
 func (c *searchResultCache) get(
 	ctx context.Context,
 	queryNorm string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 ) ([]domain.SearchResult, bool) {
 	if !c.enabled(queryNorm) {
 		return nil, false
@@ -37,7 +35,7 @@ func (c *searchResultCache) get(
 func (c *searchResultCache) set(
 	ctx context.Context,
 	queryNorm string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 	ranked []domain.SearchResult,
 ) {
 	if !c.enabled(queryNorm) {
@@ -50,7 +48,7 @@ func (c *searchResultCache) heldSlate(
 	ctx context.Context,
 	searchId uuid.UUID,
 	queryNorm string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 ) ([]domain.SearchResult, bool) {
 	if c.heldSlates == nil || searchId == uuid.Nil {
 		return nil, false
@@ -62,7 +60,7 @@ func (c *searchResultCache) holdSlate(
 	ctx context.Context,
 	searchId uuid.UUID,
 	queryNorm string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 	ranked []domain.SearchResult,
 ) {
 	if c.heldSlates == nil || searchId == uuid.Nil || len(ranked) == 0 {
@@ -74,16 +72,11 @@ func (c *searchResultCache) holdSlate(
 func (c *searchResultCache) heldSlateKey(
 	searchId uuid.UUID,
 	queryNorm string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 ) string {
 	return "slate|" + searchId.String() + "|" + c.key(queryNorm, kinds)
 }
 
-func (c *searchResultCache) key(queryNorm string, kinds map[domain.ResultKind]bool) string {
-	ks := make([]string, 0, len(kinds))
-	for k := range kinds {
-		ks = append(ks, k.String())
-	}
-	sort.Strings(ks)
-	return queryNorm + "|" + strings.Join(ks, ",")
+func (c *searchResultCache) key(queryNorm string, kinds domain.ResultKindSet) string {
+	return queryNorm + "|" + kinds.Key()
 }

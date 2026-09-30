@@ -2,13 +2,14 @@ package domain
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
 
 type SearchQuery struct {
 	Raw    string
-	Kinds  map[ResultKind]bool
+	Kinds  ResultKindSet
 	Limit  int
 	Offset int
 }
@@ -17,7 +18,7 @@ const MaxSearchQueryRunes = 200
 
 const MaxSearchQueryTokens = 32
 
-func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQuery, error) {
+func NewSearchQuery(raw string, kinds ResultKindSet, limit int) (*SearchQuery, error) {
 	if raw == "" {
 		return nil, fmt.Errorf("raw query cannot be empty")
 	}
@@ -42,7 +43,7 @@ func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQu
 
 const MaxSearchOffset = 200
 
-func NewPagedSearchQuery(raw string, kinds map[ResultKind]bool, limit, offset int) (*SearchQuery, error) {
+func NewPagedSearchQuery(raw string, kinds ResultKindSet, limit, offset int) (*SearchQuery, error) {
 	q, err := NewSearchQuery(raw, kinds, limit)
 	if err != nil {
 		return nil, err
@@ -52,4 +53,27 @@ func NewPagedSearchQuery(raw string, kinds map[ResultKind]bool, limit, offset in
 	}
 	q.Offset = offset
 	return q, nil
+}
+
+type ResultKindSet map[ResultKind]bool
+
+func AllKinds() ResultKindSet {
+	return ResultKindSet{
+		ResultKindTrack:  true,
+		ResultKindAlbum:  true,
+		ResultKindArtist: true,
+	}
+}
+
+func (s ResultKindSet) Has(k ResultKind) bool {
+	return s[k]
+}
+
+func (s ResultKindSet) Key() string {
+	ks := make([]string, 0, len(s))
+	for k := range s {
+		ks = append(ks, k.String())
+	}
+	sort.Strings(ks)
+	return strings.Join(ks, ",")
 }

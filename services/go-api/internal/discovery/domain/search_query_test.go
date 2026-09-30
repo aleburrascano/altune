@@ -153,3 +153,38 @@ func TestNewSearchQuery_TokenCap(t *testing.T) {
 		t.Fatalf("NewPagedSearchQuery(%d words) err = %v, want word-cap error", MaxSearchQueryTokens+1, err)
 	}
 }
+
+func TestSearchQueryKinds_Key(t *testing.T) {
+	tests := []struct {
+		name  string
+		kinds map[ResultKind]bool
+		want  string
+	}{
+		{"single track", map[ResultKind]bool{ResultKindTrack: true}, "track"},
+		{"sorted regardless of insertion", map[ResultKind]bool{ResultKindTrack: true, ResultKindArtist: true, ResultKindAlbum: true}, "album,artist,track"},
+		{"false-valued key still present", map[ResultKind]bool{ResultKindTrack: true, ResultKindAlbum: false}, "album,track"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := NewSearchQuery("radiohead", tt.kinds, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := q.Kinds.Key(); got != tt.want {
+				t.Errorf("Key() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAllKinds_HasEveryKind(t *testing.T) {
+	kinds := AllKinds()
+	for _, k := range []ResultKind{ResultKindTrack, ResultKindAlbum, ResultKindArtist} {
+		if !kinds.Has(k) {
+			t.Errorf("AllKinds() missing %v", k)
+		}
+	}
+	if got := kinds.Key(); got != "album,artist,track" {
+		t.Errorf("Key() = %q", got)
+	}
+}

@@ -20,7 +20,7 @@ var ErrAllProvidersFailed = errors.New("all providers failed")
 func (s *Service) fanOut(
 	ctx context.Context,
 	searchQuery string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 ) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
 	results := make([][]domain.SearchResult, len(s.providers))
 	statuses := make([]domain.ProviderSearchResponse, len(s.providers))
@@ -59,7 +59,7 @@ func (s *Service) searchProvider(
 	call breakerCall,
 	p ports.SearchProvider,
 	searchQuery string,
-	kinds map[domain.ResultKind]bool,
+	kinds domain.ResultKindSet,
 ) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
 	settled := false
 	defer func() {

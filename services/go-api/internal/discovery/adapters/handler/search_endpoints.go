@@ -257,15 +257,22 @@ func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (uuid.UUID, 
 	return id, true
 }
 
-func parseKinds(csv string) (map[domain.ResultKind]bool, error) {
+func parseKinds(csv string) (domain.ResultKindSet, error) {
 	if csv == "" {
-		return map[domain.ResultKind]bool{
-			domain.ResultKindTrack:  true,
-			domain.ResultKindAlbum:  true,
-			domain.ResultKindArtist: true,
-		}, nil
+		return domain.AllKinds(), nil
 	}
-	kinds := make(map[domain.ResultKind]bool)
+	kinds, invalid := parseKindTokens(csv)
+	if len(invalid) > 0 {
+		return nil, fmt.Errorf("invalid kinds: %s", strings.Join(invalid, ", "))
+	}
+	if len(kinds) == 0 {
+		return domain.AllKinds(), nil
+	}
+	return kinds, nil
+}
+
+func parseKindTokens(csv string) (domain.ResultKindSet, []string) {
+	kinds := make(domain.ResultKindSet)
 	var invalid []string
 	for _, s := range strings.Split(csv, ",") {
 		s = strings.TrimSpace(s)
@@ -279,15 +286,5 @@ func parseKinds(csv string) (map[domain.ResultKind]bool, error) {
 			kinds[k] = true
 		}
 	}
-	if len(invalid) > 0 {
-		return nil, fmt.Errorf("invalid kinds: %s", strings.Join(invalid, ", "))
-	}
-	if len(kinds) == 0 {
-		return map[domain.ResultKind]bool{
-			domain.ResultKindTrack:  true,
-			domain.ResultKindAlbum:  true,
-			domain.ResultKindArtist: true,
-		}, nil
-	}
-	return kinds, nil
+	return kinds, invalid
 }
