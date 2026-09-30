@@ -27,3 +27,6 @@ yarn-error.*
 reports/
 
 doctor-report.json
+
+e2e/test-results/
+playwright-report/

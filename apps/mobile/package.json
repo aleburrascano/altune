@@ -81,6 +81,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
+    "@playwright/test": "^1.63.0",
     "@react-native/jest-preset": "^0.86.3",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/jest-runner": "^9.6.1",
