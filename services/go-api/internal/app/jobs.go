@@ -23,19 +23,39 @@ const (
 	jobAcquisitionPrune         jobName = "acquisition prune"
 )
 
-var knownJobNames = []jobName{
-	jobEvalMeter,
-	jobAlertMonitor,
-	jobStalePendingReconcile,
-	jobOrphanedAudioReconcile,
-	jobBehavioralCorpusRefresh,
-	jobDiscographyEventPrune,
-	jobVocabularyRefresh,
-	jobBehavioralRankingRefresh,
-	jobDeletedIdentityErasure,
-	jobAcquisitionSourceCanary,
-	jobStreamRecovery,
-	jobAcquisitionPrune,
+type jobSpec struct {
+	name      jobName
+	alertable bool
+}
+
+var jobTable = []jobSpec{
+	{jobEvalMeter, false},
+	{jobAlertMonitor, false},
+	{jobStalePendingReconcile, true},
+	{jobOrphanedAudioReconcile, true},
+	{jobBehavioralCorpusRefresh, true},
+	{jobDiscographyEventPrune, true},
+	{jobVocabularyRefresh, true},
+	{jobBehavioralRankingRefresh, true},
+	{jobDeletedIdentityErasure, true},
+	{jobAcquisitionSourceCanary, true},
+	{jobStreamRecovery, false},
+	{jobAcquisitionPrune, true},
+}
+
+var (
+	knownJobNames = jobNamesWhere(func(jobSpec) bool { return true })
+	alertableJobs = jobNamesWhere(func(spec jobSpec) bool { return spec.alertable })
+)
+
+func jobNamesWhere(keep func(jobSpec) bool) []jobName {
+	names := make([]jobName, 0, len(jobTable))
+	for _, spec := range jobTable {
+		if keep(spec) {
+			names = append(names, spec.name)
+		}
+	}
+	return names
 }
 
 func isKnownJobName(name jobName) bool {

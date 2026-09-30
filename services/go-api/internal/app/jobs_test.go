@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -149,5 +150,34 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 	}
 	if len(sched.TrackIds) != 1 {
 		t.Fatalf("re-enabled stream recovery scheduled %d re-acquisitions, want 1", len(sched.TrackIds))
+	}
+}
+
+var allJobNameConsts = []jobName{
+	jobEvalMeter,
+	jobAlertMonitor,
+	jobStalePendingReconcile,
+	jobOrphanedAudioReconcile,
+	jobBehavioralCorpusRefresh,
+	jobDiscographyEventPrune,
+	jobVocabularyRefresh,
+	jobBehavioralRankingRefresh,
+	jobDeletedIdentityErasure,
+	jobAcquisitionSourceCanary,
+	jobStreamRecovery,
+	jobAcquisitionPrune,
+}
+
+func TestKnownJobNames_PinnedToEveryConst(t *testing.T) {
+	if !reflect.DeepEqual(knownJobNames, allJobNameConsts) {
+		t.Fatalf("knownJobNames = %v, want %v", knownJobNames, allJobNameConsts)
+	}
+	for _, name := range allJobNameConsts {
+		if !isKnownJobName(name) {
+			t.Fatalf("job %q not known", name)
+		}
+	}
+	if isKnownJobName("no such job") {
+		t.Fatal("unregistered name reported known")
 	}
 }

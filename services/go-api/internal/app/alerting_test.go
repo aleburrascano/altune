@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -298,5 +299,35 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 
 	if got := cond.Eval(ctx); got == nil {
 		t.Fatal("unreadable identity store for consecutive runs produced no alert")
+	}
+}
+
+func TestAlertableJobs_PinnedInOrder(t *testing.T) {
+	want := []jobName{
+		jobStalePendingReconcile,
+		jobOrphanedAudioReconcile,
+		jobBehavioralCorpusRefresh,
+		jobDiscographyEventPrune,
+		jobVocabularyRefresh,
+		jobBehavioralRankingRefresh,
+		jobDeletedIdentityErasure,
+		jobAcquisitionSourceCanary,
+		jobAcquisitionPrune,
+	}
+	if !reflect.DeepEqual(alertableJobs, want) {
+		t.Fatalf("alertableJobs = %v, want %v", alertableJobs, want)
+	}
+}
+
+func TestAlertableJobs_ExclusionsAreExplicit(t *testing.T) {
+	excluded := map[jobName]bool{jobEvalMeter: true, jobAlertMonitor: true, jobStreamRecovery: true}
+	alertable := map[jobName]bool{}
+	for _, name := range alertableJobs {
+		alertable[name] = true
+	}
+	for _, name := range allJobNameConsts {
+		if alertable[name] == excluded[name] {
+			t.Fatalf("job %q alertable=%v excluded=%v: exactly one must hold", name, alertable[name], excluded[name])
+		}
 	}
 }

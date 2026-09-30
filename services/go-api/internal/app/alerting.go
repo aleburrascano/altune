@@ -142,18 +142,6 @@ func (c *coverageCheck) evalQueryFailing(context.Context) *observeAlert.Alert {
 
 const jobFailureEscalation = 3
 
-var alertableJobs = []jobName{
-	jobStalePendingReconcile,
-	jobOrphanedAudioReconcile,
-	jobBehavioralCorpusRefresh,
-	jobDiscographyEventPrune,
-	jobVocabularyRefresh,
-	jobBehavioralRankingRefresh,
-	jobDeletedIdentityErasure,
-	jobAcquisitionSourceCanary,
-	jobAcquisitionPrune,
-}
-
 func (a *App) jobConditions(names []jobName) []observeAlert.Condition {
 	conditions := make([]observeAlert.Condition, 0, len(names))
 	for _, name := range names {
