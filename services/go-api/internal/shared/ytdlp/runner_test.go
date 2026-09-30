@@ -17,20 +17,16 @@ func withBinary(t *testing.T, name string) {
 	t.Cleanup(func() { binaryName = prev })
 }
 
-func TestDumpJSON_CapsCapturedOutput(t *testing.T) {
+func TestDumpJSON_KeepsLinesWhenOnlyStderrOverflows(t *testing.T) {
 	withBinary(t, "sh")
 	over := execcmd.MaxCaptureBytes + 4096
 
-	lines, _, err := DumpJSON(context.Background(), []string{"-c", fmt.Sprintf("head -c %d /dev/zero", over)})
-	if !errors.Is(err, execcmd.ErrOutputTruncated) {
-		t.Fatalf("err = %v, want ErrOutputTruncated", err)
+	lines, _, err := DumpJSON(context.Background(), []string{"-c", fmt.Sprintf(`printf '{"a":1}\n{"b":2}\n'; head -c %d /dev/zero 1>&2`, over)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	total := 0
-	for _, l := range lines {
-		total += len(l)
-	}
-	if total > execcmd.MaxCaptureBytes {
-		t.Fatalf("stdout not capped: got %d bytes, cap %d", total, execcmd.MaxCaptureBytes)
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2", len(lines))
 	}
 }
 

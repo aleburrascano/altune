@@ -18,7 +18,7 @@ func Run(ctx context.Context, name string, args ...string) (stdout, stderr strin
 	return stdout, stderr, err
 }
 
-func RunCapture(ctx context.Context, name string, args ...string) (stdout, stderr string, truncated bool, err error) {
+func RunCapture(ctx context.Context, name string, args ...string) (stdout, stderr string, stdoutTruncated bool, err error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	setProcessGroup(cmd)
 	cmd.WaitDelay = orphanWaitDelay
@@ -29,7 +29,7 @@ func RunCapture(ctx context.Context, name string, args ...string) (stdout, stder
 
 	err = cmd.Run()
 	killProcessGroup(cmd)
-	return stdoutBuf.String(), stderrBuf.String(), stdoutBuf.dropped || stderrBuf.dropped, err
+	return stdoutBuf.String(), stderrBuf.String(), stdoutBuf.dropped, err
 }
 
 func RunWithTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (stdout, stderr string, err error) {

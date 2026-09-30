@@ -9,11 +9,11 @@ import (
 var binaryName = "yt-dlp"
 
 func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
-	stdout, capturedStderr, truncated, runErr := execcmd.RunCapture(ctx, binaryName, args...)
+	stdout, capturedStderr, stdoutTruncated, runErr := execcmd.RunCapture(ctx, binaryName, args...)
 	if runErr != nil {
 		return nil, capturedStderr, runErr
 	}
-	if truncated {
+	if stdoutTruncated {
 		return nil, capturedStderr, execcmd.ErrOutputTruncated
 	}
 	return nonEmptyLines(stdout), "", nil

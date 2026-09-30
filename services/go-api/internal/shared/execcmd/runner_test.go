@@ -49,3 +49,24 @@ func TestRun_StillReturnsCutOutputWithoutError(t *testing.T) {
 		t.Fatalf("got len %d err %v, want %d nil", len(stdout), err, MaxCaptureBytes)
 	}
 }
+
+func TestRunCapture_DoesNotFlagStdoutOfExactlyTheCap(t *testing.T) {
+	stdout, _, truncated, err := RunCapture(context.Background(), "sh", "-c", fmt.Sprintf("head -c %d /dev/zero", MaxCaptureBytes))
+	if err != nil || truncated {
+		t.Fatalf("got truncated=%v err=%v, want false nil", truncated, err)
+	}
+	if len(stdout) != MaxCaptureBytes {
+		t.Fatalf("stdout length %d, want %d", len(stdout), MaxCaptureBytes)
+	}
+}
+
+func TestRunCapture_DoesNotFlagStdoutWhenOnlyStderrOverflows(t *testing.T) {
+	over := MaxCaptureBytes + 4096
+	stdout, stderr, truncated, err := RunCapture(context.Background(), "sh", "-c", fmt.Sprintf("echo hi; head -c %d /dev/zero 1>&2", over))
+	if err != nil || truncated {
+		t.Fatalf("got truncated=%v err=%v, want false nil", truncated, err)
+	}
+	if stdout != "hi\n" || len(stderr) != MaxCaptureBytes {
+		t.Fatalf("got stdout %q stderr len %d, want %q and %d", stdout, len(stderr), "hi\n", MaxCaptureBytes)
+	}
+}
