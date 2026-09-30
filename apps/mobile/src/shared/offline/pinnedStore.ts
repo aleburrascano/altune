@@ -275,9 +275,9 @@ onKillSwitchChange((loop, enabled) => {
 
 export function claimPinnedDownloads(userId: string): void {
   if (readOwner() === userId) return;
-  usePinnedStore.getState().unpinAll();
-  saveIndex({});
-  usePinnedStore.setState({ entries: {}, lastUnpinAll: undefined });
+  const outcome = usePinnedStore.getState().unpinAll();
+  usePinnedStore.setState({ lastUnpinAll: undefined });
+  if (outcome === 'partial') return;
   writeOwner(userId);
 }
 

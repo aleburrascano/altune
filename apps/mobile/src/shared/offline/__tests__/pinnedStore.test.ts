@@ -3277,7 +3277,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       expect(__fs.readFile(OWNER_URI)).toBe('user-b');
     });
 
-    it('never adopts another account download whose file failed to delete', () => {
+    it('keeps another account download whose file failed to delete tracked and does not switch the owner', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
@@ -3285,9 +3285,11 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
 
       claimPinnedDownloads('user-b');
 
-      expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
-      expect(usePinnedStore.getState().entries).toEqual({});
-      expect(__fs.readFile(OWNER_URI)).toBe('user-b');
+      expect(usePinnedStore.getState().entries).toEqual({
+        t1: { trackId: asTrackId('t1'), status: 'ready', uri: AUDIO_URI },
+      });
+      expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
+      expect(__fs.readFile(OWNER_URI)).toBe('user-a');
       warn.mockRestore();
     });
 
@@ -3324,6 +3326,26 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       runSignOutCleanups();
 
       expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
+      warn.mockRestore();
+    });
+
+    it('keeps tracking a previous account download whose file failed to delete, and retries the claim next launch', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      __fs.seedFile(OWNER_URI, 'user-a');
+      seedReadyDownload();
+      __fs.failNext('delete', new Error('file is locked'));
+
+      claimPinnedDownloads('user-b');
+
+      expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
+      expect(Object.keys(usePinnedStore.getState().entries)).toEqual(['t1']);
+      expect(__fs.readFile(OWNER_URI)).toBe('user-a');
+
+      claimPinnedDownloads('user-b');
+
+      expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
+      expect(usePinnedStore.getState().entries).toEqual({});
+      expect(__fs.readFile(OWNER_URI)).toBe('user-b');
       warn.mockRestore();
     });
 
