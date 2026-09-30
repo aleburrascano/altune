@@ -476,3 +476,42 @@ func (r *orderedTrackRepo) ReplaceFeaturedArtists(ctx context.Context, id domain
 	}
 	return r.TrackRepo.ReplaceFeaturedArtists(ctx, id, userId, feats)
 }
+
+type stallsAfterFirstResolver struct {
+	calls int
+}
+
+func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]domain.FeaturedArtist, error) {
+	r.calls++
+	if r.calls > 1 {
+		<-ctx.Done()
+	}
+	return nil, nil
+}
+
+func TestBackfill_TimeBudgetSpent_TruncatesAndSkipsCooldown(t *testing.T) {
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	repo := newNumberedTrackRepo(t, userId, 3)
+	svc := NewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, WithBackfillTimeBudget(50*time.Millisecond))
+
+	start := time.Now()
+	res, err := svc.Execute(ctx, userId, 0)
+	if err != nil {
+		t.Fatalf("a spent time budget must not fail the run, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Execute took %v; the time budget did not bound the run", elapsed)
+	}
+	if !res.Truncated || res.NextOffset != 1 || res.Scanned != 1 {
+		t.Fatalf("result = %+v, want truncated with scanned 1 and next offset 1", res)
+	}
+
+	resumed, err := svc.Execute(ctx, userId, res.NextOffset)
+	if errors.Is(err, ErrBackfillCoolingDown) {
+		t.Fatalf("resume after a budget-truncated run was refused: %v", err)
+	}
+	if err != nil || resumed == nil {
+		t.Fatalf("resume: %+v, %v", resumed, err)
+	}
+}

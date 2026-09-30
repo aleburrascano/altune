@@ -44,11 +44,13 @@ func (a *backfillAdmission) admit(userId shared.UserId) error {
 	return nil
 }
 
-func (a *backfillAdmission) release(userId shared.UserId) {
+func (a *backfillAdmission) release(userId shared.UserId, startCooldown bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.running, userId)
-	a.lastFinished[userId] = a.now()
+	if startCooldown {
+		a.lastFinished[userId] = a.now()
+	}
 }
 
 func (a *backfillAdmission) pruneExpired() {

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -170,4 +171,46 @@ func (r *listFailsAfterFirstPage) ListForUser(
 	r.served = true
 	tracks, _, err := r.TrackRepo.ListForUser(ctx, userId, limit, offset)
 	return tracks, len(tracks) + 1, err
+}
+
+type stallsAfterFirstResolver struct {
+	calls int
+}
+
+func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]domain.FeaturedArtist, error) {
+	r.calls++
+	if r.calls > 1 {
+		<-ctx.Done()
+	}
+	return nil, nil
+}
+
+func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(t *testing.T) {
+	trackRepo := catalogtest.NewTrackRepo()
+	for _, title := range []string{"One", "Two", "Three"} {
+		trackRepo.Seed(makeTrack(testUserId, title, "Artist", "Album"))
+	}
+	featured := NewFeaturedArtistHandler(
+		service.NewBackfillFeaturedService(trackRepo, trackRepo, &stallsAfterFirstResolver{},
+			service.WithBackfillTimeBudget(50*time.Millisecond)),
+		service.NewListFeaturingService(trackRepo),
+	)
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(verifyAsTestUser))
+	router.Route("/tracks", featured.Routes)
+
+	start := time.Now()
+	first := serve(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("response took %v, want it inside the budget", elapsed)
+	}
+	assertStatus(t, first, http.StatusOK)
+	var body backfillResponse
+	decodeJSON(t, first, &body)
+	if !body.Truncated || body.NextOffset <= 0 {
+		t.Fatalf("response = %+v, want truncated with next offset past the start", body)
+	}
+
+	resumed := serve(t, router, http.MethodPost, "/tracks/featured-backfill?offset=1", nil)
+	assertStatus(t, resumed, http.StatusOK)
 }
