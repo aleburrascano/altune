@@ -197,7 +197,12 @@ export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTrack
   return parseListTracksResponse(await apiFetch<unknown>(withQuery('/v1/tracks/featuring', qs)));
 }
 
-export type BackfillFeaturedResult = { scanned: number; updated: number };
+export type BackfillFeaturedResult = {
+  scanned: number;
+  updated: number;
+  truncated: boolean;
+  nextOffset: number;
+};
 
 function parseBackfillFeaturedResult(
   value: unknown,
@@ -207,12 +212,16 @@ function parseBackfillFeaturedResult(
   const scanned = asCount(r.scanned, `${at}.scanned`);
   const updated = asCount(r.updated, `${at}.updated`);
   if (updated > scanned) throw new ContractError(`${at}.updated`, 'exceeds scanned');
-  return { scanned, updated };
+  const truncated = asBoolean(r.truncated, `${at}.truncated`);
+  const nextOffset = asCount(r.next_offset, `${at}.next_offset`);
+  return { scanned, updated, truncated, nextOffset };
 }
 
-export async function backfillFeaturedArtists(): Promise<BackfillFeaturedResult> {
+export async function backfillFeaturedArtists(offset?: number): Promise<BackfillFeaturedResult> {
+  const qs = new URLSearchParams();
+  if (offset != null) qs.set('offset', String(offset));
   return parseBackfillFeaturedResult(
-    await apiFetch<unknown>('/v1/tracks/featured-backfill', { method: 'POST' }),
+    await apiFetch<unknown>(withQuery('/v1/tracks/featured-backfill', qs), { method: 'POST' }),
   );
 }
 

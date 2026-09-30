@@ -377,10 +377,15 @@ describe('backfillFeaturedArtists', () => {
   it('POSTs the backfill endpoint and resolves the scanned/updated counts', async () => {
     __http.reply('POST /v1/tracks/featured-backfill', {
       status: 200,
-      json: { scanned: 120, updated: 8 },
+      json: { scanned: 120, updated: 8, truncated: false, next_offset: 120 },
     });
 
-    await expect(backfillFeaturedArtists()).resolves.toEqual({ scanned: 120, updated: 8 });
+    await expect(backfillFeaturedArtists()).resolves.toEqual({
+      scanned: 120,
+      updated: 8,
+      truncated: false,
+      nextOffset: 120,
+    });
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/featured-backfill');
   });
@@ -402,10 +407,15 @@ describe('backfillFeaturedArtists', () => {
   it('accepts a zero-count run', async () => {
     __http.reply('POST /v1/tracks/featured-backfill', {
       status: 200,
-      json: { scanned: 0, updated: 0 },
+      json: { scanned: 0, updated: 0, truncated: false, next_offset: 0 },
     });
 
-    await expect(backfillFeaturedArtists()).resolves.toEqual({ scanned: 0, updated: 0 });
+    await expect(backfillFeaturedArtists()).resolves.toEqual({
+      scanned: 0,
+      updated: 0,
+      truncated: false,
+      nextOffset: 0,
+    });
   });
 });
 
@@ -603,5 +613,32 @@ describe('wire parsing', () => {
         parseListTracksResponse({ items: 'nope', total: 0, limit: 0, offset: 0, has_more: false }),
       ).toThrow(ContractError);
     });
+  });
+});
+
+describe('backfillFeaturedArtists paging', () => {
+  it('sends the start offset and parses truncated and next_offset', async () => {
+    __http.reply('POST /v1/tracks/featured-backfill', {
+      status: 200,
+      json: { scanned: 10000, updated: 3, truncated: true, next_offset: 20000 },
+    });
+
+    await expect(backfillFeaturedArtists(10000)).resolves.toEqual({
+      scanned: 10000,
+      updated: 3,
+      truncated: true,
+      nextOffset: 20000,
+    });
+    expect(__http.last().path).toBe('/v1/tracks/featured-backfill');
+    expect(new URLSearchParams(__http.last().query).get('offset')).toBe('10000');
+  });
+
+  it('rejects a body without the paging fields with a ContractError', async () => {
+    __http.reply('POST /v1/tracks/featured-backfill', {
+      status: 200,
+      json: { scanned: 1, updated: 1 },
+    });
+
+    await expect(backfillFeaturedArtists()).rejects.toBeInstanceOf(ContractError);
   });
 });

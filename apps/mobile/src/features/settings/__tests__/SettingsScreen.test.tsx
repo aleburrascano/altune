@@ -98,7 +98,9 @@ describe('settings mutation failures', () => {
   });
 
   it('backfill: a successful run still reports Done with the counts', async () => {
-    jest.mocked(backfillFeaturedArtists).mockResolvedValue({ updated: 2, scanned: 9 });
+    jest
+      .mocked(backfillFeaturedArtists)
+      .mockResolvedValue({ updated: 2, scanned: 9, truncated: false, nextOffset: 9 });
     render(<SettingsScreen />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));

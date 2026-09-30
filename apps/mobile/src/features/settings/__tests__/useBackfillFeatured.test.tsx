@@ -2,8 +2,8 @@ import type { Session } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/api-client';
-import { backfillFeaturedArtists } from '@shared/api-client/tracks';
+import { ApiError, NetworkError } from '@shared/api-client';
+import { backfillFeaturedArtists, type BackfillFeaturedResult } from '@shared/api-client/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
@@ -210,7 +210,7 @@ describe('settings mutations racing a sign-out', () => {
   it("a backfill A started does not invalidate B's library cache when it resolves after the switch", async () => {
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    const pending = deferred<{ scanned: number; updated: number }>();
+    const pending = deferred<BackfillFeaturedResult>();
     jest.mocked(backfillFeaturedArtists).mockReturnValue(pending.promise);
 
     const backfill = renderHook(() => useBackfillFeatured(), {
@@ -232,7 +232,7 @@ describe('settings mutations racing a sign-out', () => {
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
 
     await act(async () => {
-      pending.resolve({ scanned: 10, updated: 3 });
+      pending.resolve({ scanned: 10, updated: 3, truncated: false, nextOffset: 10 });
       await pending.promise;
     });
     await act(async () => {
@@ -246,5 +246,89 @@ describe('settings mutations racing a sign-out', () => {
     expect(queryClient.getQueryData(tracksKey)).toEqual(['track-of-b']);
 
     session.unmount();
+  });
+});
+
+describe('backfill over a library larger than one server call', () => {
+  const page = (over: object) => ({
+    scanned: 0,
+    updated: 0,
+    truncated: false,
+    nextOffset: 0,
+    ...over,
+  });
+
+  beforeEach(() => {
+    jest.mocked(backfillFeaturedArtists).mockReset();
+  });
+
+  it('follows next_offset until the server stops truncating and sums the counts', async () => {
+    let releaseSecond!: (value: ReturnType<typeof page>) => void;
+    jest
+      .mocked(backfillFeaturedArtists)
+      .mockResolvedValueOnce(
+        page({ scanned: 10000, updated: 3, truncated: true, nextOffset: 10000 }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseSecond = resolve;
+        }),
+      );
+
+    const hook = renderHook(() => useBackfillFeatured(), {
+      wrapper: makeWrapper(new QueryClient()),
+    });
+    act(() => {
+      hook.result.current.mutate();
+    });
+
+    await waitFor(() => expect(backfillFeaturedArtists).toHaveBeenCalledTimes(2));
+    expect(backfillFeaturedArtists).toHaveBeenNthCalledWith(1, undefined);
+    expect(backfillFeaturedArtists).toHaveBeenNthCalledWith(2, 10000);
+    expect(hook.result.current.status).toBe('pending');
+
+    await act(async () => {
+      releaseSecond(page({ scanned: 40, updated: 1 }));
+    });
+    await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+    expect(hook.result.current.data).toMatchObject({ scanned: 10040, updated: 4 });
+    hook.unmount();
+  });
+
+  it('fails instead of looping when next_offset does not advance', async () => {
+    jest
+      .mocked(backfillFeaturedArtists)
+      .mockResolvedValue(page({ scanned: 5, truncated: true, nextOffset: 0 }));
+
+    const hook = renderHook(() => useBackfillFeatured(), {
+      wrapper: makeWrapper(new QueryClient()),
+    });
+    act(() => {
+      hook.result.current.mutate();
+    });
+
+    await waitFor(() => expect(hook.result.current.isError).toBe(true));
+    expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1);
+    hook.unmount();
+  });
+
+  it('does not re-POST after a client timeout', async () => {
+    jest.useFakeTimers();
+    jest.mocked(backfillFeaturedArtists).mockRejectedValue(new NetworkError('timeout', 'slow'));
+
+    const hook = renderHook(() => useBackfillFeatured(), {
+      wrapper: makeWrapper(new QueryClient()),
+    });
+    act(() => {
+      hook.result.current.mutate();
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(60_000);
+    });
+
+    expect(hook.result.current.isError).toBe(true);
+    expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1);
+    hook.unmount();
+    jest.useRealTimers();
   });
 });

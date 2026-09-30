@@ -32,7 +32,9 @@ describe('LibraryCard', () => {
   });
 
   it('presses the row and reports Done with the counts on success', async () => {
-    jest.mocked(backfillFeaturedArtists).mockResolvedValue({ updated: 2, scanned: 9 });
+    jest
+      .mocked(backfillFeaturedArtists)
+      .mockResolvedValue({ updated: 2, scanned: 9, truncated: false, nextOffset: 9 });
     render(<LibraryCard />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));

@@ -348,7 +348,9 @@ describe('settings mutations racing a sign-out', () => {
   it('within one session the backfill and clear-history cache effects still apply', async () => {
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    jest.mocked(backfillFeaturedArtists).mockResolvedValue({ scanned: 1, updated: 1 });
+    jest
+      .mocked(backfillFeaturedArtists)
+      .mockResolvedValue({ scanned: 1, updated: 1, truncated: false, nextOffset: 1 });
     jest.mocked(clearSearchHistory).mockRejectedValue(new Error('boom'));
     const tracksKey = [...libraryKeys.tracksPrefix, 'a'];
     queryClient.setQueryData(tracksKey, ['track-of-a']);
