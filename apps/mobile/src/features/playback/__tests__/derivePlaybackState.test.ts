@@ -17,9 +17,7 @@ function input(overrides: Partial<DerivePlaybackStateInput> = {}): DerivePlaybac
   return {
     track: TRACK,
     failure: null,
-    isBuffering: false,
-    isEnded: false,
-    isPlaying: false,
+    phase: 'paused',
     positionMs: 1234,
     durationMs: 5000,
     ...overrides,
@@ -28,9 +26,7 @@ function input(overrides: Partial<DerivePlaybackStateInput> = {}): DerivePlaybac
 
 describe('derivePlaybackState — status precedence', () => {
   it('is idle with a null track, ignoring every other signal', () => {
-    const state = derivePlaybackState(
-      input({ track: null, isPlaying: true, isBuffering: true, failure: OFFLINE }),
-    );
+    const state = derivePlaybackState(input({ track: null, phase: 'playing', failure: OFFLINE }));
 
     expect(state.status).toBe('idle');
     expect(state.track).toBeNull();
@@ -40,20 +36,20 @@ describe('derivePlaybackState — status precedence', () => {
     expect(state.errorKind).toBeNull();
   });
 
-  it('is error when a failure is present, even while buffering, ended, and playing', () => {
-    const state = derivePlaybackState(
-      input({ failure: OFFLINE, isBuffering: true, isEnded: true, isPlaying: true }),
-    );
+  it('is error when a failure is present, whatever the phase', () => {
+    for (const phase of ['loading', 'playing', 'paused', 'ended'] as const) {
+      const state = derivePlaybackState(input({ failure: OFFLINE, phase }));
 
-    expect(state.status).toBe('error');
-    expect(state.track).toBe(TRACK);
-    expect(state.errorMessage).toBe(OFFLINE.message);
-    expect(state.positionMs).toBe(0);
-    expect(state.durationMs).toBe(0);
+      expect(state.status).toBe('error');
+      expect(state.track).toBe(TRACK);
+      expect(state.errorMessage).toBe(OFFLINE.message);
+      expect(state.positionMs).toBe(0);
+      expect(state.durationMs).toBe(0);
+    }
   });
 
-  it('is loading when buffering wins over ended and playing', () => {
-    const state = derivePlaybackState(input({ isBuffering: true, isEnded: true, isPlaying: true }));
+  it('is loading in the loading phase', () => {
+    const state = derivePlaybackState(input({ phase: 'loading' }));
 
     expect(state.status).toBe('loading');
     expect(state.positionMs).toBe(1234);
@@ -62,16 +58,16 @@ describe('derivePlaybackState — status precedence', () => {
     expect(state.errorKind).toBeNull();
   });
 
-  it('is ended when ended wins over playing, pinning position to duration', () => {
-    const state = derivePlaybackState(input({ isEnded: true, isPlaying: true, positionMs: 10 }));
+  it('is ended in the ended phase, pinning position to duration', () => {
+    const state = derivePlaybackState(input({ phase: 'ended', positionMs: 10 }));
 
     expect(state.status).toBe('ended');
     expect(state.positionMs).toBe(5000);
     expect(state.durationMs).toBe(5000);
   });
 
-  it('is playing when nothing else applies and isPlaying is true', () => {
-    const state = derivePlaybackState(input({ isPlaying: true }));
+  it('is playing in the playing phase', () => {
+    const state = derivePlaybackState(input({ phase: 'playing' }));
 
     expect(state.status).toBe('playing');
     expect(state.positionMs).toBe(1234);
@@ -79,8 +75,8 @@ describe('derivePlaybackState — status precedence', () => {
     expect(state.errorMessage).toBeNull();
   });
 
-  it('is paused when nothing else applies and isPlaying is false', () => {
-    const state = derivePlaybackState(input({ isPlaying: false }));
+  it('is paused in the paused phase', () => {
+    const state = derivePlaybackState(input({ phase: 'paused' }));
 
     expect(state.status).toBe('paused');
     expect(state.positionMs).toBe(1234);

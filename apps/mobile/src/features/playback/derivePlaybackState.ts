@@ -2,12 +2,12 @@ import type { PlaybackState, PlaybackTrack } from '@shared/playback/types';
 
 import type { RedactedPlaybackFailure } from './redactPlaybackError';
 
+export type PlayerPhase = 'loading' | 'playing' | 'paused' | 'ended';
+
 export interface DerivePlaybackStateInput {
   track: PlaybackTrack | null;
   failure: RedactedPlaybackFailure | null;
-  isBuffering: boolean;
-  isEnded: boolean;
-  isPlaying: boolean;
+  phase: PlayerPhase;
   positionMs: number;
   durationMs: number;
 }
@@ -24,7 +24,7 @@ const IDLE: PlaybackState = {
 const NO_FAILURE = { errorMessage: null, errorKind: null } as const;
 
 export function derivePlaybackState(input: DerivePlaybackStateInput): PlaybackState {
-  const { track, failure, isBuffering, isEnded, isPlaying, positionMs, durationMs } = input;
+  const { track, failure, phase, positionMs, durationMs } = input;
 
   if (!track) return IDLE;
   if (failure) {
@@ -37,11 +37,13 @@ export function derivePlaybackState(input: DerivePlaybackStateInput): PlaybackSt
       errorKind: failure.kind,
     };
   }
-  if (isBuffering) return { status: 'loading', track, positionMs, durationMs, ...NO_FAILURE };
-  if (isEnded) return { status: 'ended', track, positionMs: durationMs, durationMs, ...NO_FAILURE };
+  if (phase === 'loading')
+    return { status: 'loading', track, positionMs, durationMs, ...NO_FAILURE };
+  if (phase === 'ended')
+    return { status: 'ended', track, positionMs: durationMs, durationMs, ...NO_FAILURE };
 
   return {
-    status: isPlaying ? 'playing' : 'paused',
+    status: phase,
     track,
     positionMs,
     durationMs,

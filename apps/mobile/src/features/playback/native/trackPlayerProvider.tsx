@@ -16,7 +16,7 @@ import {
   createNativePlaybackActions,
   ignoringNativeRejection,
 } from './createNativePlaybackActions';
-import { derivePlaybackState } from '../derivePlaybackState';
+import { derivePlaybackState, type PlayerPhase } from '../derivePlaybackState';
 import { ensurePlayerSetup } from './initPlayer';
 import { usePlaybackErrorFor } from '../playbackErrorStore';
 import { usePlaybackPosition } from './usePlaybackPosition';
@@ -28,6 +28,12 @@ const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   all: RepeatMode.Queue,
   one: RepeatMode.Track,
 };
+
+function phaseOf(tpState: State | undefined): PlayerPhase {
+  if (tpState === State.Buffering || tpState === State.Loading) return 'loading';
+  if (tpState === State.Ended) return 'ended';
+  return tpState === State.Playing ? 'playing' : 'paused';
+}
 
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
@@ -43,8 +49,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const tpState = playbackState.state;
   const isPlaying = tpState === State.Playing;
-  const isBuffering = tpState === State.Buffering || tpState === State.Loading;
-  const isEnded = tpState === State.Ended;
+  const phase = phaseOf(tpState);
 
   const [native] = useState(() => createNativePlaybackActions(setTrack, isPlaying));
   useEffect(() => {
@@ -56,13 +61,11 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
       derivePlaybackState({
         track,
         failure,
-        isBuffering,
-        isEnded,
-        isPlaying,
+        phase,
         positionMs,
         durationMs,
       }),
-    [track, failure, isEnded, isPlaying, isBuffering, positionMs, durationMs],
+    [track, failure, phase, positionMs, durationMs],
   );
 
   usePlaybackSignals({

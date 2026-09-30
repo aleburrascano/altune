@@ -49,13 +49,8 @@ function listenToAudio(player: WebAudioPlayer): () => void {
   };
 }
 
-function stateOf({ phase, ...shown }: WebPlayback): PlaybackState {
-  return derivePlaybackState({
-    ...shown,
-    isBuffering: phase === 'loading',
-    isEnded: phase === 'ended',
-    isPlaying: phase === 'playing',
-  });
+function stateOf(playback: WebPlayback): PlaybackState {
+  return derivePlaybackState(playback);
 }
 
 function attachPlayer(player: WebAudioPlayer): () => void {
