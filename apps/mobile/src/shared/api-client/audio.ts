@@ -1,6 +1,6 @@
 import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
-import { ApiError, ContractError } from '@shared/errors';
+import { ApiError, ContractError, HTTP_UNAUTHORIZED } from '@shared/errors';
 import { idPathSegment, parseTrackId, type TrackId } from './ids';
 import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
 import { asArray, asHttpsUrl, asRecord, asString, nullableString } from './wireDecoders';
@@ -8,10 +8,8 @@ import { startDeadline } from '@shared/deadline/deadline';
 
 const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';
 
-const SESSION_REJECTED = 401;
-
 function isSessionRefusal(error: unknown): boolean {
-  return error instanceof ApiError && error.status === SESSION_REJECTED;
+  return error instanceof ApiError && error.status === HTTP_UNAUTHORIZED;
 }
 
 export function audioStreamUrl(trackId: TrackId): string {

@@ -1,3 +1,9 @@
+export const HTTP_UNAUTHORIZED = 401;
+
+export function isServerFaultStatus(status: number): boolean {
+  return status >= 500;
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -55,7 +61,7 @@ export function isTelemetryGated(error: unknown): boolean {
 
 export function isRetryable(error: unknown): boolean {
   if (error instanceof NetworkError) return true;
-  if (error instanceof ApiError) return error.status === 429 || error.status >= 500;
+  if (error instanceof ApiError) return error.status === 429 || isServerFaultStatus(error.status);
   return false;
 }
 

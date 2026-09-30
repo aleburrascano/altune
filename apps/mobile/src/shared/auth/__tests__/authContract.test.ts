@@ -108,9 +108,15 @@ function deriveVerifierUnavailableStatus(source: string): number {
 }
 
 function deriveMobileSessionExpiredStatus(source: string): number {
-  const match = /if \(response\.status === (\d+)\) markSessionExpired\(sentWith\);/.exec(source);
+  const match = /if \(response\.status === (\w+)\) markSessionExpired\(sentWith\);/.exec(source);
   expect(match).not.toBeNull();
-  return Number(match![1]);
+  const errorsSource = fs.readFileSync(
+    path.join(REPO_ROOT!, 'apps', 'mobile', 'src', 'shared', 'errors.ts'),
+    'utf8',
+  );
+  const constant = new RegExp(`export const ${match![1]} = (\\d+);`).exec(errorsSource);
+  expect(constant).not.toBeNull();
+  return Number(constant![1]);
 }
 
 describe('cross-surface 401 contract, derived from services/go-api/internal/auth/middleware.go at test time', () => {

@@ -1,5 +1,6 @@
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
 import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
+import { HTTP_UNAUTHORIZED } from '@shared/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 export const HEARTBEAT_WATCHDOG_MS = 60_000;
@@ -8,7 +9,6 @@ export const MAX_RESPONSE_BYTES = 512 * 1024;
 const BASE_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 const MAX_RETRY_AFTER_MS = 5 * 60_000;
-const UNAUTHORIZED = 401;
 
 export interface ServerEvent {
   id: string;
@@ -272,7 +272,7 @@ export class SSEClient {
         this.scheduleReconnect();
         return;
       }
-      if (xhr.status === UNAUTHORIZED) markSessionExpired(sentWith);
+      if (xhr.status === HTTP_UNAUTHORIZED) markSessionExpired(sentWith);
       this.onError(new SSEHttpError(xhr.status, correlationId));
       this.scheduleReconnect(retryAfterMs(xhr.getResponseHeader('Retry-After'), Date.now()));
     };

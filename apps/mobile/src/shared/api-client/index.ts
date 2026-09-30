@@ -8,6 +8,7 @@ import type { Deadline } from '@shared/deadline/deadline';
 import {
   ApiError,
   ContractError,
+  HTTP_UNAUTHORIZED,
   NetworkError,
   isAbort,
   isSessionFetchFailure,
@@ -71,7 +72,7 @@ export async function authorization(
   const accessToken = stored.session?.access_token;
   if (error != null || accessToken == null) {
     throw new ApiError(
-      401,
+      HTTP_UNAUTHORIZED,
       `API ${path} requires a session: ${error?.message ?? 'no active session'}`,
       undefined,
       correlationId,
@@ -175,7 +176,7 @@ async function receive<T>(
   correlationId: string | undefined,
   sentWith: CredentialStamp,
 ): Promise<T> {
-  if (response.status === 401) markSessionExpired(sentWith);
+  if (response.status === HTTP_UNAUTHORIZED) markSessionExpired(sentWith);
   if (!response.ok) {
     throw new ApiError(
       response.status,

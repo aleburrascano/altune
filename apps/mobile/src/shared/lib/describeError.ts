@@ -1,4 +1,4 @@
-import type { ContractError } from '@shared/errors';
+import { isServerFaultStatus, type ContractError } from '@shared/errors';
 
 import { isNetworkError } from './isNetworkError';
 
@@ -12,7 +12,7 @@ export const RETRY_TAIL = 'Please try again.';
 function isServerError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const status = (err as Error & { status?: unknown }).status;
-  return typeof status === 'number' && status >= 500;
+  return typeof status === 'number' && isServerFaultStatus(status);
 }
 
 const CONTRACT_ERROR_NAME: ContractError['name'] = 'ContractError';
