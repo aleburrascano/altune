@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
-import { Text, radius, spacing, useTheme } from '@shared/ui';
+import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup } from '@shared/api-client/library';
 import { LibraryGrid } from './LibraryGrid';
@@ -39,7 +39,7 @@ export function AlbumsGrid({
       renderItem={({ item }) => (
         <Pressable
           testID={`library-album-${item.key}`}
-          style={({ pressed }) => [styles.gridItem, pressed ? styles.pressed : null]}
+          style={({ pressed }) => [styles.gridItem, pressedStyle(pressed)]}
           onPress={() => onAlbumPress(item)}
           accessibilityRole="button"
           accessibilityLabel={`${item.album} by ${item.artist}`}
@@ -68,7 +68,6 @@ export function AlbumsGrid({
 
 const styles = StyleSheet.create({
   gridItem: { flex: 1, marginBottom: spacing.lg },
-  pressed: { opacity: 0.7 },
   cover: {
     width: '100%',
     aspectRatio: 1,

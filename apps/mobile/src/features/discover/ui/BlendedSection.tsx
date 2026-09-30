@@ -2,14 +2,13 @@ import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
-import { Card, Text, radius, spacing, useTheme, useWideWebLayout } from '@shared/ui';
+import { Card, Text, pressedStyle, radius, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
 import { DiscoverRow } from './DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from './ResultsList';
 import { SectionLabel } from './SectionLabel';
 import { TopResultCard } from './TopResultCard';
-import { pressedStyle } from './pressedStyle';
 import { kindLabel } from '../kindLabel';
 import { resultKey } from '../resultKey';
 

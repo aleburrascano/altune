@@ -4,7 +4,7 @@ import { Shuffle } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import { Text, spacing, useWideWebLayout, useTheme } from '@shared/ui';
+import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { Selection } from '../hooks/useSelection';
@@ -55,7 +55,7 @@ function ShuffleAllButton({ onPress }: { onPress: () => void }): ReactElement {
       style={({ pressed }) => [
         styles.shuffleAll,
         { backgroundColor: theme.color.surface1, borderColor: theme.color.border },
-        pressed ? styles.pressed : null,
+        pressedStyle(pressed),
       ]}
       accessibilityRole="button"
       accessibilityLabel="Shuffle whole library"
@@ -143,5 +143,4 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
-  pressed: { opacity: 0.7 },
 });

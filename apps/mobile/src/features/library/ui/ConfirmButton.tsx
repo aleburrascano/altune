@@ -2,7 +2,15 @@ import type { ComponentProps, ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { countLabel } from '@shared/lib/format';
-import { Text, minInteractiveHeight, radius, spacing, useTheme, type Theme } from '@shared/ui';
+import {
+  Text,
+  minInteractiveHeight,
+  pressedStyle,
+  radius,
+  spacing,
+  useTheme,
+  type Theme,
+} from '@shared/ui';
 
 type ConfirmButtonProps = {
   playlistName: string;
@@ -34,11 +42,7 @@ function confirmBackground(theme: Theme, canConfirm: boolean): string {
 
 function confirmStyle(theme: Theme, canConfirm: boolean, pressed: boolean) {
   const background = confirmBackground(theme, canConfirm);
-  return [
-    styles.confirm,
-    { backgroundColor: background },
-    pressed && canConfirm ? styles.pressed : null,
-  ];
+  return [styles.confirm, { backgroundColor: background }, pressedStyle(pressed && canConfirm)];
 }
 
 function confirmPressableProps(
@@ -85,5 +89,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     borderRadius: radius.full,
   },
-  pressed: { opacity: 0.7 },
 });

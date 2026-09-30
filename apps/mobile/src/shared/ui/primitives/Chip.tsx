@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { tapFeedback } from '../haptics';
 import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
+import { pressedStyle } from './pressedStyle';
 import { Text } from './Text';
 
 export type ChipProps = {
@@ -48,7 +49,7 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
         accessibilityLabel={label}
         accessibilityState={{ selected }}
         hitSlop={8}
-        style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+        style={({ pressed }) => pressedStyle(pressed)}
       >
         {body}
       </Pressable>

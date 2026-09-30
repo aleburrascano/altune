@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
 
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 
 import type { SortKey } from '../sort';
@@ -37,7 +37,7 @@ export function SortControl({
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={`Sort by ${activeLabel}`}
-        style={({ pressed }) => [styles.sort, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [styles.sort, pressedStyle(pressed)]}
       >
         <Text variant="label">{activeLabel}</Text>
         <ChevronDown size={14} color={theme.color.textPrimary} />
@@ -65,5 +65,4 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   sort: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 32 },
-  pressed: { opacity: 0.7 },
 });

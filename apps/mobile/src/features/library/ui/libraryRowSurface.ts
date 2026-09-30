@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
 
-import { spacing, type Theme } from '@shared/ui';
+import { pressedStyle, spacing, type Theme } from '@shared/ui';
 
 export function rowSurfaceStyle(
   theme: Theme,
@@ -11,7 +11,7 @@ export function rowSurfaceStyle(
     styles.row,
     { borderBottomColor: theme.color.border },
     highlight,
-    pressed ? styles.pressed : null,
+    pressedStyle(pressed),
   ];
 }
 
@@ -21,5 +21,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  pressed: { opacity: 0.7 },
 });

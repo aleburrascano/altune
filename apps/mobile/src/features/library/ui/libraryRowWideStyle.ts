@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { spacing, type Theme } from '@shared/ui';
+import { pressedStyle, spacing, type Theme } from '@shared/ui';
 
 type WideRowPressableState = {
   pressed: boolean;
@@ -22,7 +22,7 @@ function wideRowHoverStyle({ theme, isPlaying, state }: WideRowArgs) {
   return [
     state.hovered ? { backgroundColor: theme.color.surface2 } : null,
     isPlaying ? { backgroundColor: theme.color.accentTint } : null,
-    state.pressed ? styles.pressed : null,
+    pressedStyle(state.pressed),
   ];
 }
 
@@ -47,5 +47,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderWidth: 2,
   },
-  pressed: { opacity: 0.7 },
 });

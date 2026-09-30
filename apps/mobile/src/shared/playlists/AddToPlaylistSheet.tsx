@@ -15,7 +15,7 @@ import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
 import { CreatePlaylistModal } from './CreatePlaylistModal';
 import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations';
@@ -112,7 +112,7 @@ export function AddToPlaylistSheet({
         style={({ pressed }) => [
           styles.playlistRow,
           { borderBottomColor: theme.color.border },
-          pressed ? styles.pressed : null,
+          pressedStyle(pressed),
         ]}
       >
         <View style={[styles.playlistIcon, { backgroundColor: theme.color.surface2 }]}>
@@ -182,7 +182,7 @@ export function AddToPlaylistSheet({
             style={({ pressed }) => [
               styles.playlistRow,
               { borderBottomColor: theme.color.border },
-              pressed ? styles.pressed : null,
+              pressedStyle(pressed),
             ]}
           >
             <View style={[styles.createIcon, { backgroundColor: theme.color.accent }]}>
@@ -254,7 +254,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  pressed: { opacity: 0.7 },
   createIcon: {
     width: 40,
     height: 40,

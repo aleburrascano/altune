@@ -11,7 +11,7 @@ import {
   type DownloadPhase,
 } from '@shared/acquisition/downloadStore';
 import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { radius } from '@shared/ui/theme/tokens';
@@ -88,7 +88,7 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
         style={({ pressed }) => [
           styles.bar,
           { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border },
-          pressed ? styles.pressed : null,
+          pressedStyle(pressed),
         ]}
       >
         <Artwork
@@ -140,7 +140,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  pressed: { opacity: 0.7 },
   body: { flex: 1, gap: spacing.xs },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   heading: { flex: 1 },

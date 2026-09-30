@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
+import { pressedStyle } from './pressedStyle';
 import { Text } from './Text';
 import { useTheme } from '../theme/useTheme';
 import { radius, spacing } from '../theme/tokens';
@@ -72,7 +73,7 @@ export function ActionSheet({
               style={({ pressed }) => [
                 styles.option,
                 { borderBottomColor: theme.color.border },
-                pressed ? styles.pressed : null,
+                pressedStyle(pressed),
               ]}
             >
               <Text variant="body" {...(opt.tone === 'danger' ? { tone: 'danger' } : {})}>
@@ -88,7 +89,7 @@ export function ActionSheet({
           style={({ pressed }) => [
             styles.cancelBtn,
             { backgroundColor: theme.color.surface2 },
-            pressed ? styles.pressed : null,
+            pressedStyle(pressed),
           ]}
         >
           <Text variant="bodyStrong">Cancel</Text>
@@ -121,7 +122,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  pressed: { opacity: 0.7 },
   cancelBtn: {
     paddingVertical: spacing.md,
     borderRadius: radius.md,

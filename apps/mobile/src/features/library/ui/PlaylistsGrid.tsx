@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
-import { Text, radius, spacing, useTheme } from '@shared/ui';
+import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 
 import { LibraryGrid } from './LibraryGrid';
 import { PlaylistCover } from './PlaylistCover';
@@ -42,7 +42,7 @@ export function PlaylistsGrid({
           <Pressable
             testID="library-create-playlist"
             onPress={onCreatePress}
-            style={({ pressed }) => [styles.cell, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [styles.cell, pressedStyle(pressed)]}
             accessibilityRole="button"
             accessibilityLabel="Create new playlist"
           >
@@ -72,7 +72,7 @@ export function PlaylistsGrid({
         <Pressable
           testID={`library-playlist-${playlist.id}`}
           onPress={() => onPlaylistPress(playlist)}
-          style={({ pressed }) => [styles.cell, pressed ? styles.pressed : null]}
+          style={({ pressed }) => [styles.cell, pressedStyle(pressed)]}
           accessibilityRole="button"
           accessibilityLabel={`${playlist.name}, ${playlist.track_count} tracks`}
         >
@@ -105,7 +105,6 @@ export function PlaylistsGrid({
 
 const styles = StyleSheet.create({
   cell: { flex: 1, marginBottom: spacing.lg },
-  pressed: { opacity: 0.7 },
   name: { marginTop: spacing.xs },
   createCover: {
     borderRadius: radius.sm,

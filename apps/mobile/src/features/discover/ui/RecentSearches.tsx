@@ -2,10 +2,9 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
-import { Chip, Text, spacing, useTheme } from '@shared/ui';
+import { Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
 import { SectionLabel } from './SectionLabel';
-import { pressedStyle } from './pressedStyle';
 import type { SearchHistoryItem } from '@shared/api-client/discovery';
 
 const HISTORY_LABEL_MAX_CHARS = 40;

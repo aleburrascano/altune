@@ -7,6 +7,7 @@ export { Card } from './Card';
 export type { CardProps } from './Card';
 export { Row } from './Row';
 export type { RowProps } from './Row';
+export { PRESSED_OPACITY, pressedStyle } from './pressedStyle';
 export { Chip } from './Chip';
 export type { ChipProps } from './Chip';
 export { Banner } from './Banner';

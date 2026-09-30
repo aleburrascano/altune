@@ -2,14 +2,13 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
 
-import { Row, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Row, Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { FavoriteButton } from '@shared/favorites';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { pressedStyle } from './pressedStyle';
 import { resultSecondaryLine } from '../resultSecondaryLine';
 import { usePreviewPlayback } from '../hooks/usePreviewPlayback';
 
