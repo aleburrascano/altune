@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"altune/go-api/internal/shared/execcmd"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -21,8 +22,8 @@ func TestDumpJSON_CapsCapturedOutput(t *testing.T) {
 	over := execcmd.MaxCaptureBytes + 4096
 
 	lines, _, err := DumpJSON(context.Background(), []string{"-c", fmt.Sprintf("head -c %d /dev/zero", over)})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, execcmd.ErrOutputTruncated) {
+		t.Fatalf("err = %v, want ErrOutputTruncated", err)
 	}
 	total := 0
 	for _, l := range lines {
@@ -30,6 +31,19 @@ func TestDumpJSON_CapsCapturedOutput(t *testing.T) {
 	}
 	if total > execcmd.MaxCaptureBytes {
 		t.Fatalf("stdout not capped: got %d bytes, cap %d", total, execcmd.MaxCaptureBytes)
+	}
+}
+
+func TestDumpJSON_ReportsTruncatedOutputAndReturnsNoLines(t *testing.T) {
+	withBinary(t, "sh")
+	over := execcmd.MaxCaptureBytes + 4096
+
+	lines, _, err := DumpJSON(context.Background(), []string{"-c", fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'a'", over)})
+	if !errors.Is(err, execcmd.ErrOutputTruncated) {
+		t.Fatalf("err = %v, want ErrOutputTruncated", err)
+	}
+	if lines != nil {
+		t.Fatalf("expected no lines, got %d", len(lines))
 	}
 }
 

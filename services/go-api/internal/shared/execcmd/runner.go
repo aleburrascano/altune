@@ -2,15 +2,23 @@ package execcmd
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"time"
 )
 
 const MaxCaptureBytes = 8 << 20
 
+var ErrOutputTruncated = errors.New("execcmd: captured output exceeded the cap")
+
 const orphanWaitDelay = 2 * time.Second
 
 func Run(ctx context.Context, name string, args ...string) (stdout, stderr string, err error) {
+	stdout, stderr, _, err = RunCapture(ctx, name, args...)
+	return stdout, stderr, err
+}
+
+func RunCapture(ctx context.Context, name string, args ...string) (stdout, stderr string, truncated bool, err error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	setProcessGroup(cmd)
 	cmd.WaitDelay = orphanWaitDelay
@@ -21,7 +29,7 @@ func Run(ctx context.Context, name string, args ...string) (stdout, stderr strin
 
 	err = cmd.Run()
 	killProcessGroup(cmd)
-	return stdoutBuf.String(), stderrBuf.String(), err
+	return stdoutBuf.String(), stderrBuf.String(), stdoutBuf.dropped || stderrBuf.dropped, err
 }
 
 func RunWithTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (stdout, stderr string, err error) {
