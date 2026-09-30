@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
 
 import { toCreateTrackRequest } from '../save-cache';
@@ -124,7 +125,8 @@ function _runBatch(
 ): Promise<BatchOutcome<DiscoveryResult>> {
   const saveOne = (track: DiscoveryResult): Promise<unknown> =>
     args.save.mutateAsync(toCreateTrackRequest(enrichAlbumTrack(track, args.album)));
-  return runBounded(pending, SAVE_ALL_CONCURRENCY, saveOne);
+  const epoch = currentSessionEpoch();
+  return runBounded(pending, SAVE_ALL_CONCURRENCY, saveOne, () => isSameSession(epoch));
 }
 
 function _startBatch(

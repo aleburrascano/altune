@@ -6,6 +6,9 @@ import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { enqueueCritical } from '@shared/telemetry/outbox';
+
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
@@ -198,5 +201,48 @@ describe('logging a failed save', () => {
         }),
       );
     });
+  });
+});
+
+describe('a save in flight at sign-out', () => {
+  it('leaves the status store and outbox untouched when it resolves afterwards', async () => {
+    const queryClient = createTestQueryClient({ mutations: true });
+    let resolveSave: (track: TrackResponse) => void = () => undefined;
+    mockCreateTrack.mockReset();
+    mockCreateTrack.mockReturnValue(
+      new Promise<TrackResponse>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    useTrackStatusStore.getState().reset();
+    (enqueueCritical as jest.Mock).mockClear();
+
+    const { result } = renderHook(() => useSaveTrack(), {
+      wrapper: createWrapper(queryClient),
+    });
+    let pendingSave: Promise<unknown> = Promise.resolve();
+    act(() => {
+      pendingSave = result.current
+        .mutateAsync({ title: 'Idioteque', artist: 'Radiohead' } as never)
+        .catch(() => undefined);
+    });
+    act(() => {
+      runSignOutCleanups();
+    });
+    const statusesAfterSignOut = useTrackStatusStore.getState().statuses;
+    await act(async () => {
+      resolveSave({
+        id: asTrackId('server-1'),
+        title: 'Idioteque',
+        artist: 'Radiohead',
+        acquisition_status: 'pending',
+      } as TrackResponse);
+      await pendingSave;
+    });
+
+    expect(useTrackStatusStore.getState().statuses).toBe(statusesAfterSignOut);
+    expect(enqueueCritical).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'library_add' }),
+    );
   });
 });

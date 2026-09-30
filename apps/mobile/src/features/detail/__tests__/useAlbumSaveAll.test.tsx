@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+
 import { useAlbumSaveAll } from '../hooks/useAlbumSaveAll';
 import { SAVE_ALL_CONCURRENCY } from '../save-all';
 
@@ -123,5 +125,32 @@ describe('useAlbumSaveAll', () => {
     });
 
     expect(dbl.mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('useAlbumSaveAll across sign-out', () => {
+  it('stops issuing saves for queued tracks once the session ends', async () => {
+    const dbl = saveDouble();
+    const { result } = renderHook(() =>
+      useAlbumSaveAll({
+        album,
+        candidates: Array.from({ length: 8 }, (_, i) => track(i)),
+        libraryComplete: true,
+        save: dbl.save,
+      }),
+    );
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+    expect(dbl.mutateAsync).toHaveBeenCalledTimes(SAVE_ALL_CONCURRENCY);
+
+    await act(async () => {
+      runSignOutCleanups();
+      await settleAll(dbl);
+    });
+
+    expect(dbl.mutateAsync).toHaveBeenCalledTimes(SAVE_ALL_CONCURRENCY);
   });
 });

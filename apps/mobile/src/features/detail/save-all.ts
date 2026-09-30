@@ -10,11 +10,13 @@ export async function runBounded<T>(
   items: readonly T[],
   limit: number,
   worker: (item: T) => Promise<unknown>,
+  shouldContinue: () => boolean = () => true,
 ): Promise<BatchOutcome<T>> {
   const queue = [...items];
   const succeeded: T[] = [];
   const failed: T[] = [];
   const drain = async (): Promise<void> => {
+    if (!shouldContinue()) return;
     const item = queue.shift();
     if (item === undefined) return;
     await worker(item).then(
