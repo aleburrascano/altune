@@ -436,7 +436,10 @@ describe('getAllTracks', () => {
   it('returns the single page when the server says there is no more', async () => {
     __http.reply('GET /v1/tracks', page([{ id: 'a' }, { id: 'b' }], 0, 2, false));
 
-    await expect(getAllTracks({})).resolves.toHaveLength(2);
+    await expect(getAllTracks({})).resolves.toMatchObject({
+      items: [{ id: 'a' }, { id: 'b' }],
+      truncated: false,
+    });
     expect(__http.countFor('GET /v1/tracks')).toBe(1);
   });
 
@@ -446,7 +449,7 @@ describe('getAllTracks', () => {
 
     const all = await getAllTracks({});
 
-    expect(all.map((t) => t.id)).toEqual(['a', 'b', 'c']);
+    expect(all.items.map((t) => t.id)).toEqual(['a', 'b', 'c']);
     expect(__http.countFor('GET /v1/tracks')).toBe(2);
     expect(new URLSearchParams(__http.requests[1].query).get('offset')).toBe('2');
   });
@@ -462,7 +465,7 @@ describe('getAllTracks', () => {
   it('stops on an empty page even when the server still claims has_more, rather than looping forever', async () => {
     __http.reply('GET /v1/tracks', page([], 0, 99, true));
 
-    await expect(getAllTracks({})).resolves.toEqual([]);
+    await expect(getAllTracks({})).resolves.toEqual({ items: [], truncated: false });
     expect(__http.countFor('GET /v1/tracks')).toBe(1);
   });
 
@@ -473,7 +476,7 @@ describe('getAllTracks', () => {
 
     const all = await getAllTracks({});
 
-    expect(all).toHaveLength(MAX_ALL_TRACKS);
+    expect(all.items).toHaveLength(MAX_ALL_TRACKS);
     expect(__http.countFor('GET /v1/tracks')).toBe(MAX_ALL_TRACKS / 2000);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('[library]'), expect.anything());
     warn.mockRestore();
@@ -640,5 +643,56 @@ describe('backfillFeaturedArtists paging', () => {
     });
 
     await expect(backfillFeaturedArtists()).rejects.toBeInstanceOf(ContractError);
+  });
+});
+
+describe('getAllTracks truncation and cancellation', () => {
+  function fullPage(offset: number) {
+    return {
+      status: 200,
+      json: {
+        items: Array.from({ length: 2000 }, (_, i) =>
+          trackResponse({ id: asTrackId(`t${offset + i}`) }),
+        ),
+        total: 1_000_000,
+        limit: 2000,
+        offset,
+        has_more: true,
+      },
+    };
+  }
+
+  it('reports truncated: true when the server has more than MAX_ALL_TRACKS rows', async () => {
+    __http.reply('GET /v1/tracks', fullPage(0));
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await getAllTracks({});
+
+    expect(result.truncated).toBe(true);
+    expect(result.items).toHaveLength(MAX_ALL_TRACKS);
+  });
+
+  it('reports truncated: false when the library fits under the cap', async () => {
+    __http.reply('GET /v1/tracks', {
+      status: 200,
+      json: {
+        items: [trackResponse({ id: asTrackId('a') })],
+        total: 1,
+        limit: 2000,
+        offset: 0,
+        has_more: false,
+      },
+    });
+
+    await expect(getAllTracks({})).resolves.toMatchObject({ truncated: false });
+  });
+
+  it('stops paging before the next request once the signal is aborted', async () => {
+    const controller = new AbortController();
+    __http.reply('GET /v1/tracks', fullPage(0));
+    controller.abort();
+
+    await expect(getAllTracks({ signal: controller.signal })).rejects.toBeDefined();
+    expect(__http.countFor('GET /v1/tracks')).toBe(0);
   });
 });

@@ -174,7 +174,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
       queryClient
         .fetchQuery({
           queryKey: libraryKeys.tracksAll(query, sort),
-          queryFn: () => getAllTracks({ q: query, sort }),
+          queryFn: async ({ signal }) => (await getAllTracks({ q: query, sort, signal })).items,
           staleTime: 0,
           gcTime: 0,
         })

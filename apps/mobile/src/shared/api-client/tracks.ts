@@ -155,15 +155,18 @@ export const MAX_ALL_TRACKS = 10_000;
 export async function getAllTracks(params: {
   q?: string;
   sort?: LibrarySort;
-}): Promise<TrackResponse[]> {
+  signal?: AbortSignal;
+}): Promise<{ items: TrackResponse[]; truncated: boolean }> {
+  const { signal, ...filter } = params;
   const items: TrackResponse[] = [];
   while (items.length < MAX_ALL_TRACKS) {
-    const page = await getTracks({ ...params, limit: MAX_PAGE, offset: items.length });
+    signal?.throwIfAborted();
+    const page = await getTracks({ ...filter, limit: MAX_PAGE, offset: items.length }, signal);
     items.push(...page.items);
-    if (!page.has_more || page.items.length === 0) return items;
+    if (!page.has_more || page.items.length === 0) return { items, truncated: false };
   }
   console.warn('[library] whole-library fetch hit its cap; truncating', { cap: MAX_ALL_TRACKS });
-  return items.slice(0, MAX_ALL_TRACKS);
+  return { items: items.slice(0, MAX_ALL_TRACKS), truncated: true };
 }
 
 export function makeIdempotencyKey(): string {

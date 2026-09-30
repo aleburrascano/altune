@@ -110,7 +110,7 @@ describe('useLibraryTracks loadAll', () => {
 
   it('resolves the full library when the fetch succeeds', async () => {
     const all = [...loaded, { id: asTrackId('c') }];
-    mockGetAllTracks.mockResolvedValue(all);
+    mockGetAllTracks.mockResolvedValue({ items: all, truncated: false });
     const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
     await waitFor(() => expect(result.current.tracks).toHaveLength(2));
 
@@ -194,7 +194,9 @@ describe('useLibraryTracks loadAll refetch', () => {
       offset: 0,
       has_more: false,
     });
-    mockGetAllTracks.mockResolvedValueOnce([a, b]).mockResolvedValueOnce([a]);
+    mockGetAllTracks
+      .mockResolvedValueOnce({ items: [a, b], truncated: false })
+      .mockResolvedValueOnce({ items: [a], truncated: false });
     const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
     await waitFor(() => expect(result.current.tracks).toHaveLength(1));
 
@@ -386,5 +388,36 @@ describe('useLibraryTracks pending poll', () => {
     );
     expect(cached).toBeDefined();
     expect(cached?.pages.flatMap((p) => p.items)[3]?.acquisition_status).toBe('pending');
+  });
+});
+
+describe('useLibraryTracks loadAll cancellation', () => {
+  function wrapper({ children }: { children: ReactNode }) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  }
+
+  it('passes the query signal to the whole-library fetch and unwraps its items', async () => {
+    const a = { id: asTrackId('a') };
+    mockGetTracks.mockResolvedValue({
+      items: [a],
+      total: 1,
+      limit: 200,
+      offset: 0,
+      has_more: false,
+    });
+    mockGetAllTracks.mockReset().mockResolvedValue({ items: [a], truncated: false });
+    const { result } = renderHook(() => useLibraryTracks('q', 'recent', true), { wrapper });
+    await waitFor(() => expect(result.current.tracks).toHaveLength(1));
+
+    let resolved: unknown;
+    await act(async () => {
+      resolved = await result.current.loadAll();
+    });
+
+    expect(resolved).toEqual([a]);
+    expect(mockGetAllTracks).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'q', signal: expect.any(AbortSignal) }),
+    );
   });
 });

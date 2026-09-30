@@ -120,7 +120,10 @@ describe('restoring the saved queue', () => {
     useQueueStore.getState().clearQueue();
     mockedGetQueueState.mockReset();
     mockedGetTracks.mockReset();
-    mockedGetAllTracks.mockReset().mockResolvedValue(['x', 'y'].map((id) => trackResponse(id)));
+    mockedGetAllTracks.mockReset().mockResolvedValue({
+      items: ['x', 'y'].map((id) => trackResponse(id)),
+      truncated: false,
+    });
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -261,9 +264,9 @@ describe('restoring the saved queue', () => {
     }
 
     it('clears the placeholder it showed when the library fetch comes back empty', async () => {
-      let resolveLibrary!: (tracks: TrackResponse[]) => void;
+      let resolveLibrary!: (result: { items: TrackResponse[]; truncated: boolean }) => void;
       mockedGetAllTracks.mockReturnValue(
-        new Promise<TrackResponse[]>((resolve) => {
+        new Promise<{ items: TrackResponse[]; truncated: boolean }>((resolve) => {
           resolveLibrary = resolve;
         }),
       );
@@ -272,7 +275,7 @@ describe('restoring the saved queue', () => {
       await settleRestore();
       expect(useQueueStore.getState().currentTrack()?.title).toBe('Title y');
 
-      resolveLibrary([]);
+      resolveLibrary({ items: [], truncated: false });
       await settlePendingWork();
 
       expectNothingPlaying();
@@ -280,7 +283,10 @@ describe('restoring the saved queue', () => {
     });
 
     it('clears the placeholder when no saved track is ready to rebuild from', async () => {
-      mockedGetAllTracks.mockResolvedValue(['x', 'y'].map((id) => trackResponse(id, 'pending')));
+      mockedGetAllTracks.mockResolvedValue({
+        items: ['x', 'y'].map((id) => trackResponse(id, 'pending')),
+        truncated: false,
+      });
 
       await restore(savedWithCurrentTrack());
 
@@ -324,7 +330,7 @@ describe('restoring the saved queue', () => {
 
     it('restores every saved track when the library spans more than one page', async () => {
       const tracks = libraryTracks(LIBRARY_SIZE);
-      mockedGetAllTracks.mockResolvedValue(tracks);
+      mockedGetAllTracks.mockResolvedValue({ items: tracks, truncated: false });
       mockedGetTracks.mockResolvedValue({ items: tracks.slice(0, LIBRARY_PAGE), has_more: true });
 
       await restore(savedWholeLibrary(tracks, LIBRARY_SIZE - 1));
@@ -338,7 +344,7 @@ describe('restoring the saved queue', () => {
     it('warns with the count of saved tracks the library read did not return', async () => {
       const tracks = libraryTracks(LIBRARY_SIZE);
       const firstPage = tracks.slice(0, LIBRARY_PAGE);
-      mockedGetAllTracks.mockResolvedValue(firstPage);
+      mockedGetAllTracks.mockResolvedValue({ items: firstPage, truncated: false });
       mockedGetTracks.mockResolvedValue({ items: firstPage, has_more: true });
 
       await restore(savedWholeLibrary(tracks, 0));
@@ -400,7 +406,9 @@ describe('a restore whose native load fails', () => {
   beforeEach(() => {
     useQueueStore.getState().clearQueue();
     usePlaybackErrorStore.getState().clear();
-    (getAllTracks as jest.Mock).mockReset().mockResolvedValue(['x', 'y'].map(trackResponse));
+    (getAllTracks as jest.Mock)
+      .mockReset()
+      .mockResolvedValue({ items: ['x', 'y'].map(trackResponse), truncated: false });
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -410,7 +418,10 @@ describe('a restore whose native load fails', () => {
 
   describe('useQueueResume restore, saved current track unavailable', () => {
     it('resumes at 0 when the saved current track is gone from the library', async () => {
-      (getAllTracks as jest.Mock).mockResolvedValue(['x', 'z'].map((id) => trackResponse(id)));
+      (getAllTracks as jest.Mock).mockResolvedValue({
+        items: ['x', 'z'].map((id) => trackResponse(id)),
+        truncated: false,
+      });
       (getQueueState as jest.Mock).mockResolvedValue({
         ...wire,
         track_ids: ['x', 'y', 'z'],
@@ -872,7 +883,10 @@ describe('saving the queue state', () => {
       useQueueStore.getState().clearQueue();
       modelNativePlayer();
       (getQueueState as jest.Mock).mockResolvedValue(body);
-      (getAllTracks as jest.Mock).mockResolvedValue(['x', 'y', 'z'].map(trackResponse));
+      (getAllTracks as jest.Mock).mockResolvedValue({
+        items: ['x', 'y', 'z'].map(trackResponse),
+        truncated: false,
+      });
       renderHook(() => useQueueResume());
       await flush();
       await flush();
@@ -961,5 +975,40 @@ describe('a save issued while another drains', () => {
         expect(last.position_ms).toBe(99_000);
       },
     );
+  });
+});
+
+describe('restoring a saved queue when the library read hit its cap', () => {
+  const saved = {
+    track_ids: ['x', 'past-cap'],
+    current_index: 0,
+    position_ms: 5000,
+    shuffled: false,
+    repeat_mode: 'off',
+    source: { kind: 'playlist', playlist_id: 'p1', name: 'Chill' },
+    natural_order: ['x', 'past-cap'],
+  };
+
+  beforeEach(() => {
+    useQueueStore.getState().clearQueue();
+    (getQueueState as jest.Mock).mockReset().mockResolvedValue(saved);
+    (getAllTracks as jest.Mock)
+      .mockReset()
+      .mockResolvedValue({ items: [{ id: 'x' }] as TrackResponse[], truncated: true });
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('does not rebuild a queue that silently lacks a saved track past the cap', async () => {
+    renderHook(() => useQueueResume());
+    await act(async () => {
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+    });
+
+    expect(useQueueStore.getState().tracks).toHaveLength(0);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('hit its cap'));
   });
 });

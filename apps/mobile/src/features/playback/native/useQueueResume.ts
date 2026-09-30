@@ -92,6 +92,14 @@ function userTookOver(owned: number): boolean {
   return useQueueStore.getState().generation !== owned;
 }
 
+function savedTracksMissingFrom(
+  saved: QueueStateResponse,
+  home: readonly TrackResponse[],
+): boolean {
+  const present = new Set<string>(home.map((t) => t.id));
+  return [...saved.natural_order, ...saved.track_ids].some((id) => !present.has(id));
+}
+
 function warnOnSavedTracksMissingFromLibrary(
   saved: QueueStateResponse,
   trackMap: ReadonlyMap<string, TrackResponse>,
@@ -174,9 +182,13 @@ async function restoreSavedQueue(
     }
 
     stage = 'tracks';
-    const home = await getAllTracks({});
+    const { items: home, truncated } = await getAllTracks({});
     if (!home.length) return;
     if (userTookOver(owned)) return;
+    if (truncated && savedTracksMissingFrom(saved, home)) {
+      console.warn('[playback] library read hit its cap and lacks saved tracks; not restoring');
+      return;
+    }
 
     stage = 'rebuild';
     const rebuilt = rebuildSavedQueue(saved, home);

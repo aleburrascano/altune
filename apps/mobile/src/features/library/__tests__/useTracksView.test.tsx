@@ -173,9 +173,10 @@ describe('playing a row from a library larger than the whole-library cap', () =>
       offset: 0,
       has_more: false,
     });
-    mockGetAllTracks
-      .mockReset()
-      .mockResolvedValue(Array.from({ length: CAP }, (_, i) => track(`cap${i}`)));
+    mockGetAllTracks.mockReset().mockResolvedValue({
+      items: Array.from({ length: CAP }, (_, i) => track(`cap${i}`)),
+      truncated: false,
+    });
     function Screen() {
       const selection = useSelection();
       const { view } = useTracksView({
