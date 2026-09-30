@@ -6,9 +6,7 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
 import {
-  rebuildFromNaturalOrder,
-  rebuildFromPlayOrderAlone,
-  rebuildOnFirstWorkingRung,
+  rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 
@@ -107,19 +105,24 @@ describe('showSavedTrackWhileRehydrating', () => {
   });
 });
 
-describe('rebuildFromNaturalOrder', () => {
+describe('natural-order rung', () => {
   const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
     m.get(id)?.acquisition_status === 'ready';
 
-  it('returns false without a saved natural order', () => {
+  it('skips the natural rung without a saved natural order', () => {
     const m = mapOf(track('a'));
-    expect(rebuildFromNaturalOrder(saved({ track_ids: ['a'] }), m, isReadyIn(m), null)).toBe(false);
+    const s = saved({ track_ids: ['a'] });
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, isReadyIn(m), null).rung).toBe(
+      'play_order',
+    );
   });
 
-  it('returns false when no natural-order track is still ready', () => {
+  it('exhausts when no natural-order track is still ready', () => {
     const m = mapOf(track('a', 'failed'));
     const s = saved({ track_ids: ['a'], natural_order: ['a'] });
-    expect(rebuildFromNaturalOrder(s, m, isReadyIn(m), null)).toBe(false);
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, isReadyIn(m), null).rung).toBe(
+      'exhausted',
+    );
   });
 
   it('restores the shuffled play order over the natural order, skipping unready tracks', () => {
@@ -130,7 +133,10 @@ describe('rebuildFromNaturalOrder', () => {
       current_index: 2,
       shuffled: true,
     });
-    expect(rebuildFromNaturalOrder(s, m, isReadyIn(m), { kind: 'library' })).toBe(true);
+    const outcome = rebuildOnFirstWorkingRungReportingCurrent(s, m, isReadyIn(m), {
+      kind: 'library',
+    });
+    expect(outcome.rung).toBe('natural');
     const state = useQueueStore.getState();
     expect(state.tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))).toEqual([
       'a',
@@ -144,16 +150,23 @@ describe('rebuildFromNaturalOrder', () => {
   });
 });
 
-describe('rebuildFromPlayOrderAlone', () => {
-  it('returns false when no saved track is ready', () => {
+describe('play-order rung', () => {
+  const neverReady = () => false;
+
+  it('exhausts when no saved track is ready', () => {
     const m = mapOf(track('a', 'pending'));
-    expect(rebuildFromPlayOrderAlone(saved({ track_ids: ['a', 'zz'] }), m, null)).toBe(false);
+    const s = saved({ track_ids: ['a', 'zz'] });
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, neverReady, null).rung).toBe(
+      'exhausted',
+    );
   });
 
   it('loads the ready tracks in saved order and follows the current track by identity', () => {
     const m = mapOf(track('a'), track('b', 'failed'), track('c'));
     const s = saved({ track_ids: ['a', 'b', 'c'], current_index: 2 });
-    expect(rebuildFromPlayOrderAlone(s, m, null)).toBe(true);
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, neverReady, null).rung).toBe(
+      'play_order',
+    );
     const state = useQueueStore.getState();
     expect(orderedIds()).toEqual(['a', 'c']);
     expect(state.currentTrack()?.title).toBe('Track c');
@@ -162,14 +175,15 @@ describe('rebuildFromPlayOrderAlone', () => {
 
   it('marks the queue shuffled when the saved state was shuffled', () => {
     const m = mapOf(track('a'), track('b'));
-    expect(
-      rebuildFromPlayOrderAlone(saved({ track_ids: ['b', 'a'], shuffled: true }), m, null),
-    ).toBe(true);
+    const s = saved({ track_ids: ['b', 'a'], shuffled: true });
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, neverReady, null).rung).toBe(
+      'play_order',
+    );
     expect(useQueueStore.getState().shuffled).toBe(true);
   });
 });
 
-describe('rebuildOnFirstWorkingRung', () => {
+describe('rebuildOnFirstWorkingRungReportingCurrent', () => {
   const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
     m.get(id)?.acquisition_status === 'ready';
 
@@ -185,7 +199,9 @@ describe('rebuildOnFirstWorkingRung', () => {
     const m = mapOf(track('a'), track('b'));
     const s = saved({ natural_order: ['a', 'b'], track_ids: ['b', 'a'], shuffled: true });
 
-    expect(rebuildOnFirstWorkingRung(s, m, isReadyIn(m), null)).toBe('natural');
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, isReadyIn(m), null).rung).toBe(
+      'natural',
+    );
 
     expect(orderedIds()).toEqual(['b', 'a']);
     expect(reportedTally()).toMatchObject({
@@ -199,7 +215,9 @@ describe('rebuildOnFirstWorkingRung', () => {
     const m = mapOf(track('a'), track('b'));
     const s = saved({ natural_order: [], track_ids: ['b', 'a'] });
 
-    expect(rebuildOnFirstWorkingRung(s, m, isReadyIn(m), null)).toBe('play_order');
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, isReadyIn(m), null).rung).toBe(
+      'play_order',
+    );
 
     expect(orderedIds()).toEqual(['b', 'a']);
     expect(reportedTally()).toMatchObject({
@@ -213,7 +231,9 @@ describe('rebuildOnFirstWorkingRung', () => {
     const m = mapOf(track('a', 'pending'));
     const s = saved({ natural_order: ['a'], track_ids: ['a'] });
 
-    expect(rebuildOnFirstWorkingRung(s, m, isReadyIn(m), null)).toBe('exhausted');
+    expect(rebuildOnFirstWorkingRungReportingCurrent(s, m, isReadyIn(m), null).rung).toBe(
+      'exhausted',
+    );
 
     expect(useQueueStore.getState().tracks).toHaveLength(0);
     expect(reportedTally()).toMatchObject({

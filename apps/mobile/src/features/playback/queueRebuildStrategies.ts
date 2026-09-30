@@ -40,15 +40,6 @@ export function rebuildOnFirstWorkingRungReportingCurrent(
   return recordedOutcome(natural, playOrder);
 }
 
-export function rebuildOnFirstWorkingRung(
-  saved: QueueStateResponse,
-  trackMap: Map<string, TrackResponse>,
-  isReady: (id: string) => boolean,
-  source: QueueSource | null,
-): QueueRebuildRung {
-  return rebuildOnFirstWorkingRungReportingCurrent(saved, trackMap, isReady, source).rung;
-}
-
 function recordedRung(rung: QueueRebuildRung): QueueRebuildRung {
   recordQueueRebuildOutcome(rung);
   return rung;
@@ -58,15 +49,6 @@ function recordedOutcome(natural: Attempt | null, playOrder: Attempt | null): Ru
   const rung = natural ? 'natural' : playOrder ? 'play_order' : 'exhausted';
   const found = (natural ?? playOrder)?.currentFound ?? false;
   return { rung: recordedRung(rung), currentFound: found };
-}
-
-export function rebuildFromNaturalOrder(
-  saved: QueueStateResponse,
-  trackMap: Map<string, TrackResponse>,
-  isReady: (id: string) => boolean,
-  source: QueueSource | null,
-): boolean {
-  return attemptNaturalOrder(saved, trackMap, isReady, source) !== null;
 }
 
 interface Attempt {
@@ -112,14 +94,6 @@ function restoreNatural(
   const tracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
   useQueueStore.getState().restoreQueue({ ...queue, tracks, source });
   return { currentFound: found };
-}
-
-export function rebuildFromPlayOrderAlone(
-  saved: QueueStateResponse,
-  trackMap: Map<string, TrackResponse>,
-  source: QueueSource | null,
-): boolean {
-  return attemptPlayOrderAlone(saved, trackMap, source) !== null;
 }
 
 function attemptPlayOrderAlone(

@@ -72,8 +72,6 @@
     "src/features/playback/native/queueFailureReport.ts:QUEUE_UPDATE_FAILED_MESSAGE",
     "src/features/playback/native/queueFailureReport.ts:QUEUE_OUT_OF_SYNC_MESSAGE",
     "src/features/playback/native/queueFailureReport.ts:classifyNativeQueueFailure",
-    "src/features/playback/queueRebuildStrategies.ts:rebuildFromNaturalOrder",
-    "src/features/playback/queueRebuildStrategies.ts:rebuildFromPlayOrderAlone",
     "src/features/playback/queueStateWire.ts:asAcquisitionStatus",
     "src/features/playback/signals.ts:LISTEN_THRESHOLD_MS",
     "src/features/playback/signals.ts:listenThresholdMs",
