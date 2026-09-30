@@ -56,12 +56,27 @@ func attrWithoutSensitiveMembers(prefix string, a slog.Attr) (safe slog.Attr, su
 		members := withoutSensitiveLeaves(key, val.Group())
 		return slog.Attr{Key: a.Key, Value: slog.GroupValue(members...)}, len(members) > 0
 	}
-	return slog.Attr{Key: a.Key, Value: scrubbedValue(val)}, !isSensitiveLeaf(key, val)
+	return slog.Attr{Key: a.Key, Value: scrubbedValue(a.Key, val)}, !isSensitiveLeaf(key, val)
 }
 
-func scrubbedValue(v slog.Value) slog.Value {
+func carriesFailureText(key string, v slog.Value) bool {
+	switch strings.ToLower(key) {
+	case "error", "err", "panic", "stack":
+		return true
+	}
+	if v.Kind() != slog.KindAny {
+		return false
+	}
+	_, isErr := v.Any().(error)
+	return isErr
+}
+
+func scrubbedValue(key string, v slog.Value) slog.Value {
 	text := v.String()
 	scrubbed := scrubSecrets(text)
+	if carriesFailureText(key, v) {
+		scrubbed = redact.LogText(scrubbed)
+	}
 	if scrubbed == text {
 		return v
 	}

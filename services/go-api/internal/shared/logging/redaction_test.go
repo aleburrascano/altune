@@ -1,6 +1,9 @@
 package logging
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"strings"
 	"testing"
 )
@@ -85,5 +88,34 @@ func TestRedaction_KeepsNonSecretLookalikeKeys(t *testing.T) {
 		if _, ok := snap[0].Attrs[want]; !ok {
 			t.Errorf("non-secret attr %q was over-redacted", want)
 		}
+	}
+}
+
+func TestRedaction_MasksPathsInFailureTextOnly(t *testing.T) {
+	logger, ring := newCaptureLogger(t, 10)
+
+	logger.Error("acquire.failed",
+		"error", &fs.PathError{Op: "open", Path: "/srv/music/x.flac", Err: errors.New("nope")},
+		"panic", "boom at /home/ubuntu/secret/x.go",
+		"stack", "goroutine 1:\n\t/home/ubuntu/secret/x.go:12 +0x1",
+		"cause", fmt.Errorf("wrap: %w", &fs.PathError{Op: "read", Path: "/srv/music/y.flac", Err: errors.New("bad")}),
+		"path", "/v1/feedback",
+	)
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("snapshot len = %d, want 1", len(snap))
+	}
+	attrs := snap[0].Attrs
+	for _, k := range []string{"error", "panic", "stack", "cause"} {
+		if strings.Contains(attrs[k], "/srv/") || strings.Contains(attrs[k], "/home/") {
+			t.Errorf("path leaked in %q = %q", k, attrs[k])
+		}
+		if !strings.Contains(attrs[k], "[REDACTED]") {
+			t.Errorf("%q = %q, want a masked path", k, attrs[k])
+		}
+	}
+	if attrs["path"] != "/v1/feedback" {
+		t.Errorf("path = %q, want /v1/feedback unchanged", attrs["path"])
 	}
 }
