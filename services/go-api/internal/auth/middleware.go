@@ -2,6 +2,7 @@ package auth
 
 import (
 	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"log/slog"
@@ -126,10 +127,10 @@ func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Req
 
 func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
 	rej.metrics.TokenRejected(string(reason))
-	rejectToken(w, r, reason, detail, err)
+	writeUnauthorized(w, r, reason, detail, err)
 }
 
-func rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
+func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
 	attrs := []any{
 		"reason", string(reason),
 		"detail", detail,
@@ -146,4 +147,13 @@ func rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReaso
 		Detail: detail,
 		Reason: string(reason),
 	})
+}
+
+func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
+	id, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w, r, ReasonMissing, "authentication required", nil)
+		return shared.UserId{}, false
+	}
+	return id, true
 }

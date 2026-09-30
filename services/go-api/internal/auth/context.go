@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
-	"net/http"
 	"time"
 )
 
@@ -40,13 +39,4 @@ func UntilTokenExpiry(ctx context.Context) (context.Context, context.CancelFunc)
 func UserIDFromContext(ctx context.Context) (shared.UserId, bool) {
 	id, ok := ctx.Value(userIDKey).(shared.UserId)
 	return id, ok
-}
-
-func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
-	id, ok := UserIDFromContext(r.Context())
-	if !ok {
-		rejectToken(w, r, ReasonMissing, "authentication required", nil)
-		return shared.UserId{}, false
-	}
-	return id, true
 }
