@@ -23,9 +23,6 @@ const (
 	inspectCacheTTL    = 24 * time.Hour
 	inspectCacheMax    = 500
 
-	unplayableDRM     = "drm"
-	unplayablePreview = "preview"
-
 	previewDurationSlack = 0.5
 	previewFlatMargin    = 5.0
 )
@@ -94,10 +91,10 @@ func inspectionFromInfo(info inspectedInfo) inspection {
 
 func (i inspection) unplayableFor(flatDuration float64) string {
 	if i.PreviewFormat || i.isPreviewDuration(flatDuration) {
-		return unplayablePreview
+		return ports.UnplayablePreview
 	}
 	if i.AudioFormats > 0 && i.EncryptedAudio == i.AudioFormats {
-		return unplayableDRM
+		return ports.UnplayableDRM
 	}
 	return ""
 }

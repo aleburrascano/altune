@@ -18,8 +18,8 @@ const (
 	RejectionIdentity     RejectionStage = "identity"
 	RejectionQualifier    RejectionStage = "qualifier"
 	RejectionDownload     RejectionStage = "download"
-	RejectionDRM          RejectionStage = "drm"
-	RejectionPreview      RejectionStage = "preview"
+	RejectionDRM          RejectionStage = ports.UnplayableDRM
+	RejectionPreview      RejectionStage = ports.UnplayablePreview
 	RejectionDuration     RejectionStage = "duration"
 	RejectionUndecodable  RejectionStage = "undecodable"
 	RejectionFingerprint  RejectionStage = "fingerprint"
@@ -120,4 +120,11 @@ func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, ac *
 		return
 	}
 	ac.PriorRejectedKeys = keys
+}
+
+func unplayableStage(reason string) RejectionStage {
+	if reason == ports.UnplayablePreview {
+		return RejectionPreview
+	}
+	return RejectionDRM
 }

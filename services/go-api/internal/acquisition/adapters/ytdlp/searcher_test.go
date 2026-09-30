@@ -590,3 +590,30 @@ func TestYtDlpAudioSearcher_DownloadPreview_RequestsOnlyTheLeadingSectionBeforeT
 		t.Fatalf("argv = %q, want --download-sections *0-130 before --", argv)
 	}
 }
+
+func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t *testing.T) {
+	drm := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
+		{FormatID: "hls_aac_160k_encrypted", VCodec: "none", HasDRM: true},
+	}})
+	cases := []struct {
+		name       string
+		inspection inspection
+		want       string
+	}{
+		{"drm", drm, "drm"},
+		{"preview", inspection{Duration: 30}, "preview"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := withRunner(nil)
+			s.inspect = staticInspection(tc.inspection)
+			candidates := []ports.AudioCandidate{{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}}
+
+			s.MarkUnplayable(context.Background(), candidates)
+
+			if got := candidates[0].Unplayable; got != tc.want {
+				t.Fatalf("Unplayable = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

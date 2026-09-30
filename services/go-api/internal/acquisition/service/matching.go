@@ -434,7 +434,7 @@ func unplayableRejection(c ports.AudioCandidate) CandidateRejection {
 		URL:    c.URL,
 		Title:  c.Title,
 		Source: c.Source,
-		Stage:  RejectionStage(c.Unplayable),
+		Stage:  unplayableStage(c.Unplayable),
 		Reason: "soundcloud " + c.Unplayable,
 	}
 }

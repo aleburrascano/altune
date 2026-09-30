@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	UnplayableDRM     = "drm"
+	UnplayablePreview = "preview"
+)
+
 type AudioCandidate struct {
 	Title      string
 	Duration   float64
