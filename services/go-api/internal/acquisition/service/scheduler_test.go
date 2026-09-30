@@ -935,7 +935,7 @@ func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.
 type settleKeepsPendingQueue struct{ *memJobQueue }
 
 func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
-	return q.Release(ctx, trackID, fence, time.Now())
+	return q.Release(ctx, trackID, fence, 0)
 }
 
 func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *testing.T) {
@@ -2345,8 +2345,8 @@ func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testi
 }
 
 type releaseRecord struct {
-	fence       acqports.Fence
-	availableAt time.Time
+	fence acqports.Fence
+	delay time.Duration
 }
 
 type releaseRecordingQueue struct {
@@ -2354,9 +2354,9 @@ type releaseRecordingQueue struct {
 	releases chan releaseRecord
 }
 
-func (q *releaseRecordingQueue) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, availableAt time.Time) error {
-	q.releases <- releaseRecord{fence: fence, availableAt: availableAt}
-	return q.memJobQueue.Release(ctx, trackID, fence, availableAt)
+func (q *releaseRecordingQueue) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, delay time.Duration) error {
+	q.releases <- releaseRecord{fence: fence, delay: delay}
+	return q.memJobQueue.Release(ctx, trackID, fence, delay)
 }
 
 func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsTheTrackPending(t *testing.T) {
@@ -2374,7 +2374,6 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	before := time.Now()
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
@@ -2388,8 +2387,8 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	if released.fence != 1 {
 		t.Errorf("released fence = %d, want 1", released.fence)
 	}
-	if wait := released.availableAt.Sub(before); wait < retryBackoff(1) || wait > retryBackoff(1)+5*time.Second {
-		t.Errorf("released availableAt is %v after scheduling, want about %v", wait, retryBackoff(1))
+	if released.delay != retryBackoff(1) {
+		t.Errorf("released delay = %v, want %v", released.delay, retryBackoff(1))
 	}
 	stored := repo.tracks[track.ID.String()+":"+userId.String()]
 	if stored.AcquisitionStatus != domain.AcquisitionPending {
@@ -2467,11 +2466,11 @@ type conflictingQueue struct {
 	gate      chan struct{}
 }
 
-func (q *conflictingQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind acqports.JobKind, at time.Time) error {
+func (q *conflictingQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind acqports.JobKind, delay time.Duration) error {
 	if n := q.enqueues.Add(1); q.rejectAll || n > 1 {
 		return acqports.ErrJobKindConflict
 	}
-	return q.memJobQueue.Enqueue(ctx, trackID, kind, at)
+	return q.memJobQueue.Enqueue(ctx, trackID, kind, delay)
 }
 
 func (q *conflictingQueue) Claim(ctx context.Context, lease time.Duration) (acqports.Job, error) {
@@ -2542,5 +2541,29 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 	defer repo.mu.Unlock()
 	if repo.corrID != "corr-first" {
 		t.Errorf("claimed job ran under correlation id %q, want %q", repo.corrID, "corr-first")
+	}
+}
+
+func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhead(t *testing.T) {
+	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+	close(acq.release)
+	var wg sync.WaitGroup
+	skewed := func(s *BackgroundAcquisitionScheduler) {
+		s.now = func() time.Time { return time.Now().Add(time.Hour) }
+	}
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		WithJobQueue(newMemJobQueue(nil)), skewed)
+	t.Cleanup(func() {
+		scheduler.Shutdown(context.Background())
+	})
+	trackID := domain.NewTrackId()
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackID, ""); err != nil {
+		t.Fatalf("Schedule = %v, want nil", err)
+	}
+
+	settled := awaitSettledJob(t, scheduler, trackID.String())
+	if settled.State != acqports.JobSucceeded {
+		t.Errorf("job state = %q, want %q (claimability follows the queue clock, not the scheduler's)", settled.State, acqports.JobSucceeded)
 	}
 }

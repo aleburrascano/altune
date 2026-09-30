@@ -26,7 +26,7 @@ func TestMemJobQueue_EnqueueThenClaimReturnsTheJobAndLeasesIt(t *testing.T) {
 	userID := shared.NewUserId(uuid.New())
 	q.rememberUser(trackID, userID)
 
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v, want nil", err)
 	}
 
@@ -46,7 +46,7 @@ func TestMemJobQueue_EnqueueThenClaimReturnsTheJobAndLeasesIt(t *testing.T) {
 func TestMemJobQueue_HeartbeatWrongFenceReturnsErrLeaseLost(t *testing.T) {
 	q := newMemJobQueue(nil)
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	job, err := q.Claim(context.Background(), time.Minute)
@@ -65,7 +65,7 @@ func TestMemJobQueue_HeartbeatWrongFenceReturnsErrLeaseLost(t *testing.T) {
 func TestMemJobQueue_ReleaseMakesTheJobClaimableAgain(t *testing.T) {
 	q := newMemJobQueue(nil)
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	job, err := q.Claim(context.Background(), time.Minute)
@@ -73,7 +73,7 @@ func TestMemJobQueue_ReleaseMakesTheJobClaimableAgain(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Release(context.Background(), trackID, job.Fence, time.Now()); err != nil {
+	if err := q.Release(context.Background(), trackID, job.Fence, 0); err != nil {
 		t.Fatalf("Release = %v, want nil", err)
 	}
 	if _, err := q.Claim(context.Background(), time.Minute); err != nil {
@@ -84,7 +84,7 @@ func TestMemJobQueue_ReleaseMakesTheJobClaimableAgain(t *testing.T) {
 func TestMemJobQueue_SettleRemovesTheJob(t *testing.T) {
 	q := newMemJobQueue(nil)
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	job, err := q.Claim(context.Background(), time.Minute)
@@ -103,14 +103,14 @@ func TestMemJobQueue_SettleRemovesTheJob(t *testing.T) {
 func TestMemJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 	q := newMemJobQueue(nil)
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	if _, err := q.Claim(context.Background(), time.Minute); err != nil {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindReplace, time.Now()); !errors.Is(err, ports.ErrJobKindConflict) {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindReplace, 0); !errors.Is(err, ports.ErrJobKindConflict) {
 		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestMemJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 func TestMemJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testing.T) {
 	q := newMemJobQueue(nil)
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	job, err := q.Claim(context.Background(), time.Minute)
@@ -126,7 +126,7 @@ func TestMemJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testin
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, time.Now()); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("re-Enqueue while leased = %v, want nil (no-op)", err)
 	}
 	if err := q.Settle(context.Background(), trackID, job.Fence); err != nil {
@@ -141,7 +141,7 @@ func TestMemJobQueue_ClaimReclaimsAJobWhoseLeaseExpired(t *testing.T) {
 	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, clock); err != nil {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	first, err := q.Claim(context.Background(), time.Minute)
@@ -169,7 +169,7 @@ func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
 	ctx := context.Background()
 	trackID := domain.NewTrackId()
-	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, clock); err != nil {
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
 	var stale ports.Job
@@ -182,7 +182,7 @@ func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 		clock = clock.Add(2 * time.Minute)
 	}
 
-	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, clock); err != nil {
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("re-Enqueue = %v", err)
 	}
 	job, err := q.Claim(ctx, time.Minute)
@@ -195,5 +195,31 @@ func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 	}
 	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
+	}
+}
+
+func TestMemJobQueue_ReleaseWithADelayIsClaimableOnlyOnceTheQueueClockPassesIt(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
+	ctx := context.Background()
+	trackID := domain.NewTrackId()
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	job, err := q.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+	if err := q.Release(ctx, trackID, job.Fence, 10*time.Second); err != nil {
+		t.Fatalf("Release = %v", err)
+	}
+
+	clock = clock.Add(9 * time.Second)
+	if _, err := q.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+		t.Fatalf("Claim before the delay elapsed = %v, want ErrNoJobAvailable", err)
+	}
+	clock = clock.Add(time.Second)
+	if _, err := q.Claim(ctx, time.Minute); err != nil {
+		t.Fatalf("Claim after the delay elapsed = %v, want the job", err)
 	}
 }

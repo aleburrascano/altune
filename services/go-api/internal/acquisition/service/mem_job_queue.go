@@ -55,9 +55,10 @@ func (q *memJobQueue) rememberUser(trackID domain.TrackId, userID shared.UserId)
 	q.pendingUsers[trackID] = userID
 }
 
-func (q *memJobQueue) Enqueue(_ context.Context, trackID domain.TrackId, kind ports.JobKind, availableAt time.Time) error {
+func (q *memJobQueue) Enqueue(_ context.Context, trackID domain.TrackId, kind ports.JobKind, delay time.Duration) error {
 	q.mu.Lock()
 	j := q.jobOrNew(trackID)
+	availableAt := q.now().Add(delay)
 	if held, err := q.enqueueLive(j, kind, availableAt); held {
 		return err
 	}
@@ -171,7 +172,7 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence
 	return nil
 }
 
-func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence ports.Fence, availableAt time.Time) error {
+func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence ports.Fence, delay time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -182,7 +183,7 @@ func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence p
 		return ports.ErrLeaseLost
 	}
 	j.leased = false
-	j.availableAt = availableAt
+	j.availableAt = q.now().Add(delay)
 	j.reenqueued = false
 	return nil
 }

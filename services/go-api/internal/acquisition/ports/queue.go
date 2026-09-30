@@ -33,10 +33,10 @@ type Job struct {
 type Fence int
 
 type JobQueue interface {
-	Enqueue(ctx context.Context, trackID domain.TrackId, kind JobKind, availableAt time.Time) error
+	Enqueue(ctx context.Context, trackID domain.TrackId, kind JobKind, delay time.Duration) error
 	Claim(ctx context.Context, lease time.Duration) (Job, error)
 	Heartbeat(ctx context.Context, trackID domain.TrackId, fence Fence, lease time.Duration) error
-	Release(ctx context.Context, trackID domain.TrackId, fence Fence, availableAt time.Time) error
+	Release(ctx context.Context, trackID domain.TrackId, fence Fence, delay time.Duration) error
 	Settle(ctx context.Context, trackID domain.TrackId, fence Fence) error
 }
 

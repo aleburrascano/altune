@@ -246,7 +246,7 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 	alreadyTracked := s.pending.track(key)
 	s.primeEnqueue(ctx, trackId, userId, key, alreadyTracked)
 
-	if err := s.queue.Enqueue(ctx, trackId, kind, s.now()); err != nil {
+	if err := s.queue.Enqueue(ctx, trackId, kind, 0); err != nil {
 		return s.handleEnqueueError(ctx, key, trackId, kind, alreadyTracked, err)
 	}
 	return s.finishEnqueue(ctx, trackId, userId, kind)
@@ -490,7 +490,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 	defer s.pending.untrack(job.TrackID.String())
 
 	if s.baseCtx.Err() != nil {
-		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, s.now())
+		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, 0)
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
@@ -499,8 +499,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 		return
 	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
-		availableAt := s.now().Add(retryBackoff(job.Run))
-		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, availableAt)
+		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, retryBackoff(job.Run))
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
@@ -512,7 +511,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
 	if job.Run >= maxAcquisitionAttempts {
 		s.refuseQueuedRecovering(job)
 	}
-	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, s.now().Add(retryBackoff(job.Run)))
+	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, retryBackoff(job.Run))
 	s.logQueueOutcome("release", job.TrackID, err)
 }
 

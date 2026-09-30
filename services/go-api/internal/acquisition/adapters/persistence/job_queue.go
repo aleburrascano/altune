@@ -35,7 +35,7 @@ SET acquisition_status = CASE
 		ELSE 'pending'
 	END,
 	acquisition_job_kind = $2,
-	acquisition_available_at = $3,
+	acquisition_available_at = now() + make_interval(secs => $3),
 	acquisition_lease_until = CASE
 		WHEN (acquisition_status = 'pending' OR acquisition_available_at IS NOT NULL)
 			AND acquisition_lease_until >= now() THEN acquisition_lease_until
@@ -52,11 +52,11 @@ WHERE id = $1
 
 const jobKindForLeasedTrackSQL = `SELECT acquisition_job_kind FROM tracks WHERE id = $1`
 
-func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind ports.JobKind, availableAt time.Time) error {
+func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind ports.JobKind, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), availableAt)
+	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds())
 	if err != nil {
 		return fmt.Errorf("enqueue acquisition job: %w", err)
 	}
@@ -185,14 +185,14 @@ func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID domain.TrackId, fen
 
 const releaseJobSQL = `
 UPDATE tracks
-SET acquisition_lease_until = NULL, acquisition_available_at = $3
+SET acquisition_lease_until = NULL, acquisition_available_at = now() + make_interval(secs => $3)
 WHERE id = $1 AND acquisition_attempts = $2`
 
-func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, fence ports.Fence, availableAt time.Time) error {
+func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, fence ports.Fence, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	tag, err := q.pool.Exec(ctx, releaseJobSQL, trackID.UUID(), int(fence), availableAt)
+	tag, err := q.pool.Exec(ctx, releaseJobSQL, trackID.UUID(), int(fence), delay.Seconds())
 	if err != nil {
 		return fmt.Errorf("release acquisition job: %w", err)
 	}
