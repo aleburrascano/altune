@@ -2,8 +2,12 @@ package config
 
 import "strings"
 
+func (c *Config) normalizedEnv() string {
+	return strings.ToLower(strings.TrimSpace(c.Env))
+}
+
 func (c *Config) IsDevelopment() bool {
-	return c.Env == "development"
+	return c.normalizedEnv() == "development"
 }
 
 var nonProdTestAuthEnvs = map[string]bool{

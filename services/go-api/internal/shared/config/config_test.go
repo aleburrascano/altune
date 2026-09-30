@@ -1304,6 +1304,66 @@ func TestLoad_AudioKeyPrefixAllowedOutsideProduction(t *testing.T) {
 	}
 }
 
+func TestValidate_AudioKeyPrefixRequiresKnownNonProdEnv(t *testing.T) {
+	tests := []struct {
+		env     string
+		wantErr bool
+	}{
+		{env: "prod", wantErr: true},
+		{env: "prd", wantErr: true},
+		{env: "live", wantErr: true},
+		{env: "Production", wantErr: true},
+		{env: "production", wantErr: true},
+		{env: "   ", wantErr: true},
+		{env: "development", wantErr: false},
+		{env: "Test", wantErr: false},
+		{env: " STAGING ", wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"ENV":                    tt.env,
+				"AUDIO_KEY_PREFIX":       "staging/",
+				"MUSICBRAINZ_USER_AGENT": "altune/1.0 (ops@altune.app)",
+			}))
+			_, err := Load()
+			if err != nil && !tt.wantErr {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for ENV=%q with AUDIO_KEY_PREFIX", tt.env)
+				}
+				if !searchString(err.Error(), "AUDIO_KEY_PREFIX") {
+					t.Errorf("expected error to name AUDIO_KEY_PREFIX, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidate_AudioKeyPrefixRefusedWhenEnvEmpty(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cfg.Env = ""
+	cfg.AudioKeyPrefix = "staging/"
+	if err := cfg.validate(); err == nil || !searchString(err.Error(), "AUDIO_KEY_PREFIX") {
+		t.Fatalf("expected AUDIO_KEY_PREFIX error for empty ENV, got: %v", err)
+	}
+}
+
+func TestConfig_IsDevelopmentNormalizesEnv(t *testing.T) {
+	for _, env := range []string{"Development", " development "} {
+		cfg := &Config{Env: env}
+		if !cfg.IsDevelopment() {
+			t.Errorf("IsDevelopment() = false for ENV=%q", env)
+		}
+	}
+}
+
 func TestLoad_AlertWebhookURLOptionalAndTrimmed(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	cfg, err := Load()
