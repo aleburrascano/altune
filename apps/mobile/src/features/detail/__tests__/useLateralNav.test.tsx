@@ -98,3 +98,51 @@ describe('useLateralNav navigateTo on a hit', () => {
     expect(readDetailHandoff(href.params.handoff)?.result).toBe(firstResult);
   });
 });
+
+describe('useLateralNav after a pick or a failure', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('releases the search lock after a pick so a second navigateTo looks up again', async () => {
+    const queryFn = jest.fn(() => Promise.resolve([{ id: 'artist-1' }]));
+    mockResolveEntityQuery.mockImplementation((_kind: string, query: string) => ({
+      queryKey: ['resolve-entity', 'artist', query, 1],
+      queryFn,
+    }));
+
+    const { result } = renderHook(() => useLateralNav('/discover/detail'), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+
+    await act(async () => {
+      await result.current.navigateTo('Boom', 'artist');
+    });
+    expect(result.current.state).toBe('idle');
+
+    await act(async () => {
+      await result.current.navigateTo('Other', 'artist');
+    });
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(mockPush).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a user-facing message when the lookup rejects', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockResolveEntityQuery.mockReturnValue({
+      queryKey: ['resolve-entity', 'artist', 'Boom', 1],
+      queryFn: () => Promise.reject(new Error('transport failed')),
+    });
+
+    const { result } = renderHook(() => useLateralNav('/discover/detail'), {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
+
+    await act(async () => {
+      await result.current.navigateTo('Boom', 'artist');
+    });
+
+    expect(result.current.error).toBe("Couldn't search, try again");
+    warnSpy.mockRestore();
+  });
+});

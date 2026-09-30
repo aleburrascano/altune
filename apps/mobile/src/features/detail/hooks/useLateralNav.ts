@@ -16,7 +16,7 @@ export type LateralNavHandle = {
 };
 
 type View = { state: LateralNavState; error: string | null };
-type Outcome = { picked: DiscoveryResult } | { message: string | null };
+type Outcome = { picked: DiscoveryResult } | { message: string };
 type Task = () => Promise<Outcome>;
 type OnPicked = (picked: DiscoveryResult) => void;
 type Gate = {
@@ -27,6 +27,7 @@ type Gate = {
 
 const IDLE: View = { state: 'idle', error: null };
 const SEARCHING: View = { state: 'searching', error: null };
+const SEARCH_FAILED_MESSAGE = "Couldn't search, try again";
 
 function notFoundMessage(kind: DiscoveryKind, query: string): string {
   const kindLabel = kind === 'artist' ? 'Artist' : 'Album';
@@ -48,7 +49,7 @@ async function lookup(qc: QueryClient, query: string, kind: DiscoveryKind): Prom
     return picked === undefined ? { message: notFoundMessage(kind, query) } : { picked };
   } catch (error) {
     warnFetchFailed(query, kind, error);
-    return { message: null };
+    return { message: SEARCH_FAILED_MESSAGE };
   }
 }
 
@@ -58,8 +59,11 @@ async function runSearch(gate: Gate, task: Task, onPicked: OnPicked): Promise<vo
   gate.busy.current = true;
   gate.setView(SEARCHING);
   const outcome = await task();
-  if ('picked' in outcome) return onPicked(outcome.picked);
   gate.busy.current = false;
+  if ('picked' in outcome) {
+    gate.setView(IDLE);
+    return onPicked(outcome.picked);
+  }
   gate.setView({ state: 'idle', error: outcome.message });
 }
 
