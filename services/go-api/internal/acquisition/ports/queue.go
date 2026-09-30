@@ -36,6 +36,10 @@ type JobQueue interface {
 	Settle(ctx context.Context, trackID domain.TrackId, fence int) error
 }
 
+type QueueDepthReader interface {
+	PendingDepth(ctx context.Context) (pending int, oldestAge time.Duration, err error)
+}
+
 type JobNotifier interface {
 	Listen(ctx context.Context, wake chan<- struct{})
 }

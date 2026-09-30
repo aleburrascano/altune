@@ -22,6 +22,7 @@ type PgxJobQueue struct {
 }
 
 var _ ports.JobQueue = (*PgxJobQueue)(nil)
+var _ ports.QueueDepthReader = (*PgxJobQueue)(nil)
 
 func NewPgxJobQueue(pool *pgxpool.Pool) *PgxJobQueue {
 	return &PgxJobQueue{pool: pool}
@@ -81,6 +82,28 @@ func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID domain.Tra
 		return ports.ErrJobKindConflict
 	}
 	return nil
+}
+
+const pendingDepthSQL = `
+SELECT count(*),
+	COALESCE(EXTRACT(EPOCH FROM now() - min(acquisition_available_at) FILTER (WHERE acquisition_available_at <= now())), 0)::float8
+FROM tracks
+WHERE acquisition_available_at IS NOT NULL
+	AND (acquisition_status = 'pending' OR acquisition_job_kind = 'replace')
+	AND (acquisition_lease_until IS NULL OR acquisition_lease_until < now())`
+
+func (q *PgxJobQueue) PendingDepth(ctx context.Context) (int, time.Duration, error) {
+	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
+	var (
+		pending    int
+		oldestSecs float64
+	)
+	if err := q.pool.QueryRow(ctx, pendingDepthSQL).Scan(&pending, &oldestSecs); err != nil {
+		return 0, 0, fmt.Errorf("read acquisition pending depth: %w", err)
+	}
+	return pending, time.Duration(oldestSecs * float64(time.Second)), nil
 }
 
 const claimJobSQL = `

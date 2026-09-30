@@ -557,3 +557,34 @@ func TestPgxJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) 
 		t.Errorf("status = %q, want pending until the attempt cap", got)
 	}
 }
+
+func TestPgxJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+
+	baselinePending, _, err := queue.PendingDepth(ctx)
+	if err != nil {
+		t.Fatalf("baseline PendingDepth = %v", err)
+	}
+	insertPendingTrack(t, pool, time.Now().Add(-10*time.Minute))
+	insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+	insertPendingTrack(t, pool, time.Now().Add(time.Hour))
+	leased := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_lease_until = now() + interval '2 minutes' WHERE id = $1`, leased.ID.UUID()); err != nil {
+		t.Fatalf("lease track: %v", err)
+	}
+
+	pending, oldest, err := queue.PendingDepth(ctx)
+	if err != nil {
+		t.Fatalf("PendingDepth = %v", err)
+	}
+	if pending-baselinePending != 3 {
+		t.Errorf("pending grew by %d, want 3 (two due plus one scheduled, leased excluded)", pending-baselinePending)
+	}
+	if oldest < 10*time.Minute {
+		t.Errorf("oldest age = %v, want at least 10m", oldest)
+	}
+}

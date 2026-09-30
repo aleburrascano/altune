@@ -28,6 +28,7 @@ type memJob struct {
 }
 
 var _ ports.JobQueue = (*memJobQueue)(nil)
+var _ ports.QueueDepthReader = (*memJobQueue)(nil)
 
 func newMemJobQueue(wake chan<- struct{}) *memJobQueue {
 	return &memJobQueue{
@@ -106,6 +107,27 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	best.attempts++
 	best.reenqueued = false
 	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts}, nil
+}
+
+func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	now := time.Now()
+	pending := 0
+	var oldest time.Time
+	for _, j := range q.jobs {
+		if j.leased && now.Before(j.leaseUntil) {
+			continue
+		}
+		pending++
+		if !now.Before(j.availableAt) && (oldest.IsZero() || j.availableAt.Before(oldest)) {
+			oldest = j.availableAt
+		}
+	}
+	if oldest.IsZero() {
+		return pending, 0, nil
+	}
+	return pending, now.Sub(oldest), nil
 }
 
 func (q *memJobQueue) findClaimable(now time.Time) (domain.TrackId, *memJob) {

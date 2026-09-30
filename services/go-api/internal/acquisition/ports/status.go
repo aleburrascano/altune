@@ -42,15 +42,16 @@ type JobRecord struct {
 }
 
 type AcquisitionStatus struct {
-	InFlight      int
-	Succeeded     uint64
-	Failed        uint64
-	Rejected      uint64
-	VerifySkipped uint64
-	Paused        bool
-	QueueDepth    int
-	QueueCapacity int
-	Verification  AcquisitionVerification
-	ActiveJobs    []JobRecord
-	Recent        []JobRecord
+	InFlight         int
+	Succeeded        uint64
+	Failed           uint64
+	Rejected         uint64
+	VerifySkipped    uint64
+	Paused           bool
+	QueueDepth       int
+	OldestPendingAge time.Duration
+	QueueCapacity    int
+	Verification     AcquisitionVerification
+	ActiveJobs       []JobRecord
+	Recent           []JobRecord
 }

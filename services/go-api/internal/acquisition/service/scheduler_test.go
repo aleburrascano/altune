@@ -2396,3 +2396,32 @@ func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 		t.Errorf("post-resume job state = %q, want %q", settled.State, JobSucceeded)
 	}
 }
+
+type backlogQueue struct {
+	*memJobQueue
+	pending   int
+	oldestAge time.Duration
+}
+
+func (q backlogQueue) PendingDepth(context.Context) (int, time.Duration, error) {
+	return q.pending, q.oldestAge, nil
+}
+
+func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) {
+	var wg sync.WaitGroup
+	queue := backlogQueue{memJobQueue: newMemJobQueue(nil), pending: 5, oldestAge: 90 * time.Second}
+	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 2), WithJobQueue(queue))
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
+	s.inflightCount.Add(2)
+
+	got := s.Status()
+	if got.QueueDepth != 5 {
+		t.Errorf("QueueDepth = %d, want 5 pending jobs", got.QueueDepth)
+	}
+	if got.InFlight != 2 {
+		t.Errorf("InFlight = %d, want 2", got.InFlight)
+	}
+	if got.OldestPendingAge != 90*time.Second {
+		t.Errorf("OldestPendingAge = %v, want 90s", got.OldestPendingAge)
+	}
+}
