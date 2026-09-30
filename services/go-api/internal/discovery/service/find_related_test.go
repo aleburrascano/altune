@@ -106,6 +106,39 @@ func TestFindRelated_TrackWithAlbumTriggersLibraryLookup(t *testing.T) {
 	}
 }
 
+func TestFindRelated_LibraryArtworkOnlyKeepsHTTPS(t *testing.T) {
+	cases := map[string]string{
+		"https://example.com/art.jpg": "https://example.com/art.jpg",
+		"http://example.com/art.jpg":  "",
+		"javascript:alert(1)":         "",
+	}
+	for artwork, want := range cases {
+		t.Run(artwork, func(t *testing.T) {
+			art := artwork
+			querier := &fakeRelationshipQuerier{
+				albumResults: []ports.RelatedTrackMatch{
+					{Title: "Sibling Track", Artist: "Same Artist", Album: "The Album", ArtworkURL: &art},
+				},
+			}
+			svc := NewFindRelatedService(querier, nil, nil)
+			main := trackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist", nil)
+			main.Album = "The Album"
+
+			got := svc.Execute(context.Background(), newUser(), []domain.SearchResult{main})
+
+			for _, g := range got {
+				if g.Relationship == "library_matches" {
+					if len(g.Items) != 1 || g.Items[0].ImageURL != want {
+						t.Fatalf("items = %+v, want one item with ImageURL %q", g.Items, want)
+					}
+					return
+				}
+			}
+			t.Fatal("expected a library_matches group")
+		})
+	}
+}
+
 func TestFindRelated_TrackWithDeezerAlbumIDTriggersAlbumTracks(t *testing.T) {
 	albumProvider := &fakeAlbumProvider{
 		tracks: []domain.SearchResult{

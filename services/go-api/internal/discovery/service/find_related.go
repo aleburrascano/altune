@@ -348,7 +348,7 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 	for _, m := range matches {
 		imageURL := ""
 		if m.ArtworkURL != nil {
-			imageURL = *m.ArtworkURL
+			imageURL = domain.SafeImageURL(*m.ArtworkURL)
 		}
 		results = append(results, domain.SearchResult{
 			Kind:       domain.ResultKindTrack,
