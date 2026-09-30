@@ -2,6 +2,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
+import { showAlert } from '@shared/ui/dialog/dialog';
 import { completeAuthIntent } from '../completeAuthIntent';
 import { useAuthDeepLink } from '../hooks/useAuthDeepLink';
 
@@ -10,6 +11,7 @@ jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
+jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
 jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
@@ -155,5 +157,75 @@ describe('useAuthDeepLink: native completes a delivered url event (#2924 probe)'
     });
 
     expect(mockComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useAuthDeepLink: a failed link is shown to the user (#686)', () => {
+  const addEventListener = Linking.addEventListener as unknown as jest.Mock;
+  const alert = showAlert as jest.Mock;
+
+  beforeEach(() => {
+    getInitialURL.mockReset().mockResolvedValue(null);
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+    addEventListener.mockClear();
+    alert.mockClear();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  async function deliverUrlEvent(url: string): Promise<void> {
+    renderHook(() => useAuthDeepLink());
+    await act(async () => {
+      await flushMacrotask();
+    });
+    const handler = addEventListener.mock.calls[0][1] as (event: { url: string }) => void;
+    await act(async () => {
+      handler({ url });
+      await flushMacrotask();
+    });
+  }
+
+  it('alerts that an expired link did not work', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'gotrue_rejected' });
+
+    await deliverUrlEvent(RECOVERY_LINK);
+
+    expect(alert).toHaveBeenCalledWith("This link didn't work", expect.stringContaining('expired'));
+  });
+
+  it('alerts to try again when the exchange throws', async () => {
+    mockComplete.mockRejectedValue(new Error('timeout'));
+
+    await deliverUrlEvent(RECOVERY_LINK);
+
+    expect(alert).toHaveBeenCalledWith("Couldn't open that link", expect.stringContaining('again'));
+  });
+
+  it('does not alert for a completed link', async () => {
+    await deliverUrlEvent(RECOVERY_LINK);
+
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('catches a rejected getInitialURL without an unhandled rejection', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    getInitialURL.mockRejectedValue(new Error('linking unavailable'));
+
+    renderHook(() => useAuthDeepLink());
+    await act(async () => {
+      await flushMacrotask();
+    });
+    await flushMacrotask();
+
+    expect(console.warn).toHaveBeenCalledWith('[auth] initial url read failed', {
+      name: 'Error',
+      message: 'linking unavailable',
+    });
+    expect(unhandled).not.toHaveBeenCalled();
+    process.off('unhandledRejection', unhandled);
   });
 });

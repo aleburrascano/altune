@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
+import { showAlert } from '@shared/ui/dialog/dialog';
 import { type AuthIntentResult, completeAuthIntent } from '../completeAuthIntent';
 import { thrownErrorDetail } from '../errorDetail';
 import { initialUrl, subscribeUrl } from '../native/linkEvents';
@@ -18,6 +19,10 @@ function reportRefusedLink(kind: LinkKind, outcome: AuthIntentResult): void {
     cause: outcome.cause,
     error: outcome.error,
   });
+  showAlert(
+    "This link didn't work",
+    'It may have expired or already been used. Request a new one from the sign-in screen.',
+  );
 }
 
 async function reportFailedExchange(
@@ -28,6 +33,7 @@ async function reportFailedExchange(
     reportRefusedLink(kind, await exchange);
   } catch (err) {
     console.warn('[auth] deep link exchange threw', { intent: kind, ...thrownErrorDetail(err) });
+    showAlert("Couldn't open that link", 'Check your connection and try opening the link again.');
   }
 }
 
@@ -45,7 +51,11 @@ export function useAuthDeepLink(): void {
       void reportFailedExchange(intent.kind, completeAuthIntent(intent, router, supabase.auth));
     };
 
-    void initialUrl().then(handle);
+    initialUrl()
+      .then(handle)
+      .catch((err: unknown) => {
+        console.warn('[auth] initial url read failed', thrownErrorDetail(err));
+      });
     const unsubscribe = subscribeUrl(handle);
 
     return () => {
