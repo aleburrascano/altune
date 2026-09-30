@@ -1,7 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
-import type { AuthErrorReason } from '../errorReason';
+import type { SignInFailureReason } from '../errorReason';
 import { reportSignInFailure } from '../reportSignInFailure';
 import {
   isInvalidCredentialsError,
@@ -12,18 +12,13 @@ import {
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
-type SignInErrorReason = Extract<
-  AuthErrorReason,
-  'invalid_credentials' | 'email_not_confirmed' | 'network' | 'unknown' | 'too_many_attempts'
->;
-
 type SignInResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'ok' }
-  | { kind: 'error'; reason: SignInErrorReason };
+  | { kind: 'error'; reason: SignInFailureReason };
 
-function signInErrorReason(error: SupabaseAuthErrorLike): SignInErrorReason {
+function signInErrorReason(error: SupabaseAuthErrorLike): SignInFailureReason {
   return classifyAuthError(error, [
     [isUnconfirmedEmailError, 'email_not_confirmed'],
     [isInvalidCredentialsError, 'invalid_credentials'],

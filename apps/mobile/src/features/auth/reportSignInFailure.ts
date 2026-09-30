@@ -2,12 +2,7 @@ import { apiBase } from '@shared/api-client';
 import { appVersion } from '@shared/device/device';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
-import type { AuthErrorReason } from './errorReason';
-
-type SignInFailureReason = Extract<
-  AuthErrorReason,
-  'invalid_credentials' | 'email_not_confirmed' | 'network' | 'too_many_attempts' | 'unknown'
->;
+import type { SignInFailureReason } from './errorReason';
 
 const REPORT_TIMEOUT_MS = 5_000;
 

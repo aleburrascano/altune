@@ -7,6 +7,16 @@ export type AuthErrorReason =
   | 'already_registered'
   | 'too_many_attempts';
 
+export type TransientAuthReason = Extract<
+  AuthErrorReason,
+  'network' | 'unknown' | 'too_many_attempts'
+>;
+
+export type SignInFailureReason = Extract<
+  AuthErrorReason,
+  'invalid_credentials' | 'email_not_confirmed' | 'network' | 'unknown' | 'too_many_attempts'
+>;
+
 export const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
 
 export const INVALID_SIGN_IN_COPY = 'Email or password is incorrect.';

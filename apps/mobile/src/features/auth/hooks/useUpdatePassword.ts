@@ -7,7 +7,7 @@ import {
   supabaseErrorDetail,
   thrownErrorDetail,
 } from '../errorDetail';
-import type { AuthErrorReason } from '../errorReason';
+import type { TransientAuthReason } from '../errorReason';
 import { classifyAuthError, isWeakPasswordError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
@@ -18,10 +18,7 @@ type UpdatePasswordResult =
   | { kind: 'ok'; othersRevoked: boolean }
   | {
       kind: 'error';
-      reason: Extract<
-        AuthErrorReason,
-        'weak_password' | 'network' | 'unknown' | 'too_many_attempts'
-      >;
+      reason: TransientAuthReason | 'weak_password';
     };
 
 const REVOKE_OTHERS_TIMEOUT_MS = 5_000;

@@ -1,7 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
-import type { AuthErrorReason } from '../errorReason';
+import type { TransientAuthReason } from '../errorReason';
 import { authRedirectUrl } from '../authRedirect';
 import { classifyAuthError, type SupabaseAuthErrorLike } from '../supabaseAuthError';
 
@@ -13,7 +13,7 @@ type ResetRequestResult =
   | { kind: 'sent' }
   | {
       kind: 'error';
-      reason: Extract<AuthErrorReason, 'network' | 'unknown' | 'too_many_attempts'>;
+      reason: TransientAuthReason;
     };
 
 async function requestReset(email: string) {

@@ -1,6 +1,6 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import type { AuthErrorReason } from '../errorReason';
+import type { TransientAuthReason } from '../errorReason';
 import { authRedirectUrl } from '../authRedirect';
 import {
   classifyAuthError,
@@ -17,10 +17,7 @@ type SignUpResult =
   | { kind: 'awaiting-confirmation' }
   | {
       kind: 'error';
-      reason: Extract<
-        AuthErrorReason,
-        'already_registered' | 'weak_password' | 'network' | 'unknown' | 'too_many_attempts'
-      >;
+      reason: TransientAuthReason | 'weak_password' | 'already_registered';
     };
 
 type SettledSignUp = Exclude<SignUpResult, { kind: 'idle' | 'pending' }>;

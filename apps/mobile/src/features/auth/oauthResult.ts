@@ -1,6 +1,6 @@
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
-import type { AuthErrorReason } from './errorReason';
+import type { TransientAuthReason } from './errorReason';
 import { classifyAuthError, type SupabaseAuthErrorLike } from './supabaseAuthError';
 
 export type OAuthProvider = 'google';
@@ -12,7 +12,7 @@ export type OAuthResult =
   | { kind: 'cancelled' }
   | {
       kind: 'error';
-      reason: Extract<AuthErrorReason, 'network' | 'unknown' | 'too_many_attempts'>;
+      reason: TransientAuthReason;
     };
 
 export type OAuthOutcome = Exclude<OAuthResult, { kind: 'idle' } | { kind: 'pending' }>;
