@@ -12,7 +12,7 @@ import { ignoringNativeRejection } from '../native/createNativePlaybackActions';
 import { playbackService } from '../native/service';
 import { repairActiveToStreaming } from '../native/nativeTrackSwap';
 import { _resetPlaybackHealthForTest } from '../playbackHealth';
-import { reportingQueueFailure } from '../queueFailureReport';
+import { reportingQueueFailure } from '../native/queueFailureReport';
 import { warnPlayback } from '../redactPlaybackError';
 
 import { libraryTrack } from './fixtures';

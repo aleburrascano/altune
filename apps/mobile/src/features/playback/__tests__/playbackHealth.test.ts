@@ -8,7 +8,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { prefetchNext } from '../native/audioPrefetch';
-import { reportQueueFailure } from '../native/createNativePlaybackActions';
+import { reportQueueFailure } from '../native/queueFailureReport';
 import { loadNativeQueue } from '../native/loadNativeTrack';
 import { forgetAllSwaps } from '../native/nativeTrackSwap';
 import {

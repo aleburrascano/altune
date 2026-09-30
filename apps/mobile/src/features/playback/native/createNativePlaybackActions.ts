@@ -15,16 +15,9 @@ import {
 import { claimSessionReset } from '../loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { clearPlaybackError, reportLoadFailure } from '../playbackErrorStore';
-import { nativeErrorCode, reportingQueueFailure } from '../queueFailureReport';
+import { nativeErrorCode, reportingQueueFailure } from './queueFailureReport';
 import { redactedPlaybackFailure, warnPlayback } from '../redactPlaybackError';
 import { seekPreservingPlayback } from './seekControls';
-
-export {
-  classifyNativeQueueFailure,
-  QUEUE_OUT_OF_SYNC_MESSAGE,
-  QUEUE_UPDATE_FAILED_MESSAGE,
-  reportQueueFailure,
-} from '../queueFailureReport';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;

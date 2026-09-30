@@ -26,7 +26,7 @@ import { classifyNativePlaybackError } from '../classifyPlaybackError';
 import { clearPlaybackError, reportPlaybackError } from '../playbackErrorStore';
 import { recordAudioRecoveryFailure, recordPlaybackFailure } from '../playbackHealth';
 import { redactedPlaybackFailure, redactPlaybackErrorMessage } from '../redactPlaybackError';
-import { reportingQueueFailure, reportQueueFailure } from '../queueFailureReport';
+import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();

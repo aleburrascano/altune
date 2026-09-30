@@ -15,7 +15,7 @@ import { setSignedInUser } from '@shared/session/signOutCleanup';
 import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
-} from '../native/createNativePlaybackActions';
+} from '../native/queueFailureReport';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { redactPlaybackErrorMessage } from '../redactPlaybackError';
 import {

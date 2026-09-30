@@ -5,16 +5,16 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import {
-  classifyNativeQueueFailure,
-  createNativePlaybackActions,
-  QUEUE_OUT_OF_SYNC_MESSAGE,
-  QUEUE_UPDATE_FAILED_MESSAGE,
-} from '../native/createNativePlaybackActions';
+import { createNativePlaybackActions } from '../native/createNativePlaybackActions';
 import { swapUpcomingToLocal, wasSwappedToLocal } from '../native/nativeTrackSwap';
 import { NativeQueueTimeoutError, withNativeQueue } from '../native/nativeQueueLock';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
-import { reportingQueueFailure } from '../queueFailureReport';
+import {
+  classifyNativeQueueFailure,
+  QUEUE_OUT_OF_SYNC_MESSAGE,
+  QUEUE_UPDATE_FAILED_MESSAGE,
+  reportingQueueFailure,
+} from '../native/queueFailureReport';
 
 import { previewTrack } from './fixtures';
 
