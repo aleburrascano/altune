@@ -10,7 +10,9 @@ import (
 )
 
 type Config struct {
-	Env      string `env:"ENV" envDefault:"development"`
+	envDefaulted bool
+
+	Env      string `env:"ENV"`
 	LogLevel string `env:"LOG_LEVEL" envDefault:"INFO"`
 
 	TestAuthOptIn bool `env:"TEST_AUTH_ENABLED" envDefault:"false"`
@@ -118,6 +120,10 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) normalize() {
+	if c.Env == "" {
+		c.Env = "development"
+		c.envDefaulted = true
+	}
 	c.SupabaseJWTAud = strings.TrimSpace(c.SupabaseJWTAud)
 	c.AlertWebhookURL = strings.TrimSpace(c.AlertWebhookURL)
 	for i, origin := range c.CORSOrigins {

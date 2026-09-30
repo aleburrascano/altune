@@ -1615,3 +1615,27 @@ func TestLoad_SilentDefaultSettingsAccepted(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_TestAuthClosedWhenEnvNotSetExplicitly(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		want bool
+	}{
+		{"ENV absent", map[string]string{"TEST_AUTH_ENABLED": "true"}, false},
+		{"ENV explicit development", map[string]string{"TEST_AUTH_ENABLED": "true", "ENV": "development"}, true},
+		{"ENV explicit test", map[string]string{"TEST_AUTH_ENABLED": "true", "ENV": "test"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(tc.env))
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := cfg.TestAuthEnabled(); got != tc.want {
+				t.Errorf("TestAuthEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

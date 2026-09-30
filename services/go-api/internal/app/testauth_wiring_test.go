@@ -5,11 +5,14 @@ import (
 	"altune/go-api/internal/auth/adapters/testauth"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,5 +183,18 @@ func TestWiring_NonProdLoginIssuesAcceptedTestUserToken(t *testing.T) {
 
 	if rec := do(t, dev, http.MethodGet, "/whoami", "garbage"); rec.Code != http.StatusUnauthorized {
 		t.Errorf("garbage token in non-prod: got %d, want 401", rec.Code)
+	}
+}
+
+func TestMountTestLogin_WarnsWhenBackdoorIsMounted(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	buildRouter(t, &config.Config{Env: "development", TestAuthOptIn: true})
+
+	if out := buf.String(); !strings.Contains(out, "level=WARN") || !strings.Contains(out, "/test/login") {
+		t.Fatalf("log = %q, want a WARN naming /test/login", out)
 	}
 }

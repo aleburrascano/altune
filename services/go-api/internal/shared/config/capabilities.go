@@ -16,7 +16,7 @@ var nonProdTestAuthEnvs = map[string]bool{
 }
 
 func (c *Config) TestAuthEnabled() bool {
-	if !c.TestAuthOptIn {
+	if !c.TestAuthOptIn || c.envDefaulted {
 		return false
 	}
 	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
