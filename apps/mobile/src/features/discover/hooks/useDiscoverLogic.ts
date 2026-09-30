@@ -14,7 +14,7 @@ import { useClearSearchHistory } from './useClearSearchHistory';
 import { useResultTap } from './useResultTap';
 import { useSuggestionVisibility } from './useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
-import { _correctionForResponse, _resultsIncompleteForState, _viewForState } from '../state';
+import { correctionForResponse, resultsIncompleteForState, viewForState } from '../state';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
@@ -95,8 +95,8 @@ export function useDiscoverLogic(): DiscoverLogic {
     error: searchError,
     isUnavailable,
   };
-  const resultsIncomplete = _resultsIncompleteForState(hookState);
-  const correction = _correctionForResponse(searchData);
+  const resultsIncomplete = resultsIncompleteForState(hookState);
+  const correction = correctionForResponse(searchData);
   const trimmedInput = search.inputValue.trim();
   const isSearchPending = isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
@@ -129,7 +129,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     showSuggestions: suggestionVisibility.showSuggestions,
     suggestionItems,
     onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
-    view: _viewForState(hookState),
+    view: viewForState(hookState),
     resultsIncomplete,
     searchData,
     historyItems: history.data?.items ?? [],

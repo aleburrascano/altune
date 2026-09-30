@@ -11,7 +11,7 @@ import { FilteredResults } from './FilteredResults';
 import { IncompleteResultsBanner } from './IncompleteResultsBanner';
 import { RefreshFailedNotice } from './RefreshFailedNotice';
 import { RecentSearches } from './RecentSearches';
-import { _searchAnnouncement, asyncViewForDiscoverView } from '../state';
+import { searchAnnouncement, asyncViewForDiscoverView } from '../state';
 import type {
   DiscoveryResult,
   ResultSection,
@@ -100,7 +100,7 @@ function ReadyBody(props: DiscoverBodyProps): ReactElement {
 
 export function DiscoverBody(props: DiscoverBodyProps): ReactElement {
   const count = props.searchData?.results.length ?? 0;
-  useAnnounceChange(_searchAnnouncement(props.view, count, props.resultsIncomplete));
+  useAnnounceChange(searchAnnouncement(props.view, count, props.resultsIncomplete));
   if (props.view === 'unavailable') return <DiscoverUnavailable />;
   return (
     <AsyncSection view={asyncViewForDiscoverView(props.view)} {...slotsFor(props)}>
