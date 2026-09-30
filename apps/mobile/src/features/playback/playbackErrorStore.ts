@@ -5,7 +5,12 @@ import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback/types';
 
 import { classifyPlaybackFailure } from './classifyPlaybackError';
-import { redactPlaybackErrorMessage, type RedactedPlaybackFailure } from './redactPlaybackError';
+import { recordPlaybackFailure } from './playbackHealth';
+import {
+  redactPlaybackErrorMessage,
+  type RedactedPlaybackFailure,
+  warnPlayback,
+} from './redactPlaybackError';
 
 interface PlaybackErrorState {
   key: TrackKey | null;
@@ -36,7 +41,10 @@ export function reportLoadFailure(
   err: unknown,
   message: string = loadFailureMessage(err),
 ): void {
-  reportPlaybackError(trackKey(track), classifyPlaybackFailure(err), message);
+  const kind = classifyPlaybackFailure(err);
+  warnPlayback('track load failed', { kind }, err);
+  recordPlaybackFailure(kind);
+  reportPlaybackError(trackKey(track), kind, message);
 }
 
 export function clearPlaybackError(): void {

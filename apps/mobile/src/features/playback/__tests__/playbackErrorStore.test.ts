@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { ApiError, NetworkError } from '@shared/errors';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
@@ -9,13 +10,17 @@ import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAs
 import { classifyNativePlaybackError, classifyPlaybackFailure } from '../classifyPlaybackError';
 import {
   clearPlaybackError,
+  reportLoadFailure,
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
 } from '../playbackErrorStore';
+import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
 import { canRetryPlaybackError } from '../retryPolicy';
 
 import { libraryTrack } from './fixtures';
+
+jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
 const FAILED_KEY = trackKey(libraryTrack());
 const OTHER_KEY = trackKey(
@@ -225,5 +230,43 @@ describe('classifyPlaybackFailure — a rejected load maps to a typed kind', () 
     expect(classifyPlaybackFailure({ code: 42 })).toBe('unknown');
     expect(classifyPlaybackFailure('not an error')).toBe('unknown');
     expect(classifyPlaybackFailure(null)).toBe('unknown');
+  });
+});
+
+describe('reportLoadFailure — one log line and one health count per load failure', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    _resetPlaybackHealthForTest();
+    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('logs one redacted [playback] warn and still sets the store', () => {
+    reportLoadFailure(libraryTrack(), new Error('boom https://x.test/a?token=abc.def'), 'Custom');
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[playback] track load failed', {
+      kind: 'unknown',
+      error: { kind: 'unknown', message: expect.not.stringMatching(/abc\.def/) },
+    });
+    expect(usePlaybackErrorStore.getState().key).toBe(FAILED_KEY);
+    expect(usePlaybackErrorStore.getState().kind).toBe('unknown');
+    expect(usePlaybackErrorStore.getState().message).toBe('Custom');
+  });
+
+  it('counts the classified kind once in the playback health tally', () => {
+    reportLoadFailure(libraryTrack(), new NetworkError('timeout', 'timed out'));
+    flushPlaybackHealth();
+
+    expect(recordEvent).toHaveBeenCalledTimes(1);
+    expect(recordEvent).toHaveBeenCalledWith({
+      type: 'playback_health',
+      payload: expect.objectContaining({ playback_failed_network: 1 }),
+    });
   });
 });
