@@ -40,7 +40,20 @@ func (c *Config) validate() error {
 	if err := c.validateTransportSecurity(); err != nil {
 		return err
 	}
+	if err := c.validateAlerting(); err != nil {
+		return err
+	}
 	return c.validateRedis()
+}
+
+func (c *Config) validateAlerting() error {
+	if c.AlertZeroResultThreshold < 0 {
+		return fmt.Errorf("ALERT_ZERO_RESULT_THRESHOLD must be >= 0, got %d", c.AlertZeroResultThreshold)
+	}
+	if c.AlertWebhookURL == "" {
+		return nil
+	}
+	return validateSecureURL("ALERT_WEBHOOK_URL", c.AlertWebhookURL)
 }
 
 func (c *Config) validateTransportSecurity() error {

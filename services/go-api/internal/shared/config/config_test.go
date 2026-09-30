@@ -1669,3 +1669,49 @@ func TestLoad_TestAuthClosedWhenEnvNotSetExplicitly(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_AlertingSettingsRejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "webhook without scheme", key: "ALERT_WEBHOOK_URL", value: "hooks.example.com/x"},
+		{name: "webhook with typo scheme", key: "ALERT_WEBHOOK_URL", value: "htp://x"},
+		{name: "webhook plain http remote", key: "ALERT_WEBHOOK_URL", value: "http://hooks.example.com/x"},
+		{name: "negative threshold", key: "ALERT_ZERO_RESULT_THRESHOLD", value: "-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{tt.key: tt.value}))
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for %s=%q", tt.key, tt.value)
+			}
+			if !searchString(err.Error(), tt.key) {
+				t.Errorf("expected error to name %s, got: %v", tt.key, err)
+			}
+		})
+	}
+}
+
+func TestLoad_AlertingSettingsAccepted(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{name: "empty webhook and zero threshold", env: map[string]string{"ALERT_WEBHOOK_URL": "", "ALERT_ZERO_RESULT_THRESHOLD": "0"}},
+		{name: "https webhook and positive threshold", env: map[string]string{"ALERT_WEBHOOK_URL": "https://hooks.example.com/x", "ALERT_ZERO_RESULT_THRESHOLD": "5"}},
+		{name: "loopback http webhook", env: map[string]string{"ALERT_WEBHOOK_URL": "http://localhost:9000/x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(tt.env))
+
+			if _, err := Load(); err != nil {
+				t.Fatalf("expected load to succeed, got: %v", err)
+			}
+		})
+	}
+}
