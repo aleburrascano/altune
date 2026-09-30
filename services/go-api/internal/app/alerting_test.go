@@ -188,6 +188,7 @@ func TestBuildDependencyCondition(t *testing.T) {
 	}{
 		{"auth only down names auth", observeHandler.DependencyHealth{DB: observeHandler.DepUp, Redis: observeHandler.DepUp, Auth: observeHandler.DepDown}, "dependencies down: auth"},
 		{"db only down names db", observeHandler.DependencyHealth{DB: observeHandler.DepDown, Redis: observeHandler.DepUp, Auth: observeHandler.DepUp}, "dependencies down: db"},
+		{"redis only down names redis", observeHandler.DependencyHealth{DB: observeHandler.DepUp, Redis: observeHandler.DepDown, Auth: observeHandler.DepUp}, "dependencies down: redis"},
 		{"all down names all", observeHandler.DependencyHealth{DB: observeHandler.DepDown, Redis: observeHandler.DepDown, Auth: observeHandler.DepDown}, "dependencies down: db redis auth"},
 	}
 	for _, tc := range cases {

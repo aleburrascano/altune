@@ -68,7 +68,7 @@ const defaultDependencyProbeTimeout = 2 * time.Second
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := a.healthCache.get(func() observeHandler.DependencyHealth { return a.dependencyHealth(context.WithoutCancel(r.Context())) })
-	if health.Healthy() {
+	if health.DB != observeHandler.DepDown {
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": buildCommit})
 		return
 	}

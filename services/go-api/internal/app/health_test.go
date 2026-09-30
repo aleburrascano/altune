@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type stubAuthChecker struct {
@@ -219,5 +221,51 @@ func TestHandleHealth_ReportsVersion(t *testing.T) {
 	}
 	if degradedBody.Version != buildCommit {
 		t.Errorf("version: got %q, want %q", degradedBody.Version, buildCommit)
+	}
+}
+
+func healthStatusFor(t *testing.T, a *App) int {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	a.handleHealth(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	return rec.Code
+}
+
+func TestHandleHealth_StaysOKWhenOnlyRedisIsDown(t *testing.T) {
+	redis := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	defer redis.Close()
+	a := &App{
+		dbHealth:        func(context.Context) database.HealthStatus { return database.HealthStatus{OK: true} },
+		redisClient:     redis,
+		authVerifier:    stubAuthChecker{},
+		depProbeTimeout: time.Second,
+	}
+
+	if got := healthStatusFor(t, a); got != http.StatusOK {
+		t.Errorf("status: got %d, want %d", got, http.StatusOK)
+	}
+}
+
+func TestHandleHealth_StaysOKWhenOnlyAuthIsStale(t *testing.T) {
+	a := &App{
+		dbHealth:     func(context.Context) database.HealthStatus { return database.HealthStatus{OK: true} },
+		authVerifier: stubAuthChecker{err: errors.New("jwks stale")},
+	}
+
+	if got := healthStatusFor(t, a); got != http.StatusOK {
+		t.Errorf("status: got %d, want %d", got, http.StatusOK)
+	}
+}
+
+func TestHandleHealth_Fails503WhenDBDownDespiteOthersUp(t *testing.T) {
+	a := &App{
+		dbHealth: func(context.Context) database.HealthStatus {
+			return database.HealthStatus{OK: false, Err: errors.New("boom")}
+		},
+		authVerifier: stubAuthChecker{},
+	}
+
+	if got := healthStatusFor(t, a); got != http.StatusServiceUnavailable {
+		t.Errorf("status: got %d, want %d", got, http.StatusServiceUnavailable)
 	}
 }
