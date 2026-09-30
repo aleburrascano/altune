@@ -18,12 +18,17 @@ type ForgetDeletedIdentitiesService struct {
 	identities ports.DeletedIdentityLister
 	queue      *QueueService
 	metrics    ports.ErasureSweepMetrics
+	reaper     ports.ErasedStateReaper
 }
 
 type ForgetDeletedIdentitiesOption func(*ForgetDeletedIdentitiesService)
 
 func WithErasureSweepMetrics(m ports.ErasureSweepMetrics) ForgetDeletedIdentitiesOption {
 	return func(s *ForgetDeletedIdentitiesService) { s.metrics = m }
+}
+
+func WithErasedStateReaper(r ports.ErasedStateReaper) ForgetDeletedIdentitiesOption {
+	return func(s *ForgetDeletedIdentitiesService) { s.reaper = r }
 }
 
 func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, queue *QueueService, opts ...ForgetDeletedIdentitiesOption) *ForgetDeletedIdentitiesService {
@@ -37,6 +42,9 @@ func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, q
 func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, error) {
 	forgotten := 0
 	var failures []error
+	if err := s.reapErasedStates(ctx); err != nil {
+		failures = append(failures, err)
+	}
 	for range maxDeletedIdentityBatchesPerRun {
 		owners, err := s.identities.ListOwnersWithoutIdentity(ctx, deletedIdentityBatch)
 		if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
@@ -58,6 +66,20 @@ func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, erro
 	}
 	logDeletedIdentitySweep(ctx, forgotten)
 	return forgotten, errors.Join(failures...)
+}
+
+func (s *ForgetDeletedIdentitiesService) reapErasedStates(ctx context.Context) error {
+	if s.reaper == nil {
+		return nil
+	}
+	reaped, err := s.reaper.ReapErasedStates(ctx)
+	if err != nil {
+		return fmt.Errorf("reap erased queue states: %w", err)
+	}
+	if reaped > 0 {
+		slog.InfoContext(ctx, "playback.erased_queue_states_reaped", "rows", reaped)
+	}
+	return nil
 }
 
 func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) (int, []error) {

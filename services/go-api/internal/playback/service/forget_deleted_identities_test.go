@@ -333,3 +333,63 @@ func TestForgetDeletedIdentities_UnreadableIdentityStoreFailsTheRun(t *testing.T
 		t.Errorf("forgotten=%d idle=%d, want 0 and 1", forgotten, spy.idle)
 	}
 }
+
+type reaperSpy struct {
+	calls int
+	err   error
+}
+
+func (r *reaperSpy) ReapErasedStates(_ context.Context) (int64, error) {
+	r.calls++
+	return 0, r.err
+}
+
+func TestForgetDeletedIdentities_ReapsWhenNoOwnerIsOrphaned(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	reaper := &reaperSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasedStateReaper(reaper))
+
+	if _, err := svc.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if reaper.calls != 1 {
+		t.Errorf("reaper ran %d times, want 1 even with no orphaned owners", reaper.calls)
+	}
+}
+
+func TestForgetDeletedIdentities_ReapsWhenIdentityStoreIsUnavailable(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	reaper := &reaperSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasedStateReaper(reaper))
+
+	if _, err := svc.Execute(context.Background()); !errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
+	}
+
+	if reaper.calls != 1 {
+		t.Errorf("reaper ran %d times, want 1 while the identity store is down", reaper.calls)
+	}
+}
+
+func TestForgetDeletedIdentities_ReapFailureDoesNotStopTheErasure(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	deleted := saveQueueOf(t, NewQueueService(repo, &fakeNowPlaying{}), identities, "search:x")
+	identities.deleteAccount(deleted)
+	dbDown := errors.New("connection refused")
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}),
+		WithErasedStateReaper(&reaperSpy{err: dbDown}))
+
+	forgotten, err := svc.Execute(context.Background())
+
+	if forgotten != 1 {
+		t.Errorf("forgot %d accounts after a reap failure, want 1", forgotten)
+	}
+	if !errors.Is(err, dbDown) {
+		t.Errorf("Execute = %v, want the reap failure reported", err)
+	}
+}

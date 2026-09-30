@@ -874,3 +874,39 @@ func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 		t.Fatalf("erased queue state came back: %+v; a save inside the grace recreated it", got)
 	}
 }
+
+func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	ctx := context.Background()
+	old, recent := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
+	dropQueueStateOnCleanup(t, pool, old)
+	dropQueueStateOnCleanup(t, pool, recent)
+	for id, age := range map[shared.UserId]int64{old: int64(erasureFenceWindow.Seconds()) + 60, recent: 60} {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO playback_queue_state (user_id, updated_at, erased_at)
+			 VALUES ($1, clock_timestamp(), clock_timestamp() - $2::bigint * interval '1 second')`,
+			id.UUID(), age)
+		if err != nil {
+			t.Fatalf("seed tombstone: %v", err)
+		}
+	}
+
+	if _, err := NewPgxQueueStateRepository(pool).ReapErasedStates(ctx); err != nil {
+		t.Fatalf("ReapErasedStates: %v", err)
+	}
+
+	count := func(id shared.UserId) int {
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM playback_queue_state WHERE user_id = $1`, id.UUID()).Scan(&n); err != nil {
+			t.Fatalf("count: %v", err)
+		}
+		return n
+	}
+	if n := count(old); n != 0 {
+		t.Errorf("tombstone past the window survived (%d rows)", n)
+	}
+	if n := count(recent); n != 1 {
+		t.Errorf("tombstone inside the window has %d rows, want 1", n)
+	}
+}

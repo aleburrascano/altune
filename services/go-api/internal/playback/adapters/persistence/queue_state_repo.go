@@ -251,6 +251,19 @@ func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shar
 	})
 }
 
+func (r *PgxQueueStateRepository) ReapErasedStates(ctx context.Context) (int64, error) {
+	var reaped int64
+	err := r.runOp(ctx, "reap_erased_states", shared.UserId{}, func(opCtx context.Context) error {
+		tag, err := r.pool.Exec(opCtx,
+			`DELETE FROM playback_queue_state
+		 WHERE erased_at < clock_timestamp() - $1::bigint * interval '1 second'`,
+			int64(erasureFenceWindow.Seconds()))
+		reaped = tag.RowsAffected()
+		return err
+	})
+	return reaped, err
+}
+
 type scannedRow struct {
 	trackIds     []string
 	currentIdx   int

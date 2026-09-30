@@ -25,7 +25,8 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) playbackWi
 		handler: newQueueHandler(queueSvc, metrics),
 		forgetDeletedIdentities: playbackService.NewForgetDeletedIdentitiesService(
 			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool), queueSvc,
-			playbackService.WithErasureSweepMetrics(metrics)),
+			playbackService.WithErasureSweepMetrics(metrics),
+			playbackService.WithErasedStateReaper(queueStateRepo)),
 	}
 }
 

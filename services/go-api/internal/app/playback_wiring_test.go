@@ -182,3 +182,18 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 			before.EnrichmentFailures, after.EnrichmentFailures, before.NowPlayingLookupTimeouts, after.NowPlayingLookupTimeouts)
 	}
 }
+
+func TestWirePlayback_SweepReapsErasedQueueStates(t *testing.T) {
+	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
+	if err != nil {
+		t.Fatalf("pgxpool.New: %v", err)
+	}
+	pool.Close()
+	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
+
+	_, err = a.wirePlayback(nil).forgetDeletedIdentities.Execute(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "reap erased queue states") {
+		t.Fatalf("Execute error = %v, want it to carry the reap failure, proving the reaper is wired", err)
+	}
+}
