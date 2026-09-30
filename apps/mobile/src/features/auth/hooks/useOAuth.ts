@@ -9,15 +9,16 @@ import {
   failureReason,
   OAUTH_BROWSER_TIMEOUT_MS,
   thrownFailure,
-  useOAuthFlow,
   type OAuthFailure,
   type OAuthOutcome,
   type OAuthProvider,
-} from '../oauthRequest';
+} from '../oauthResult';
 import { authRedirectUrl, parseAuthLink } from '../parseAuthLink';
 import { reportSignInFailure } from '../reportSignInFailure';
 
-export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthRequest';
+import { useOAuthFlow } from './useOAuthFlow';
+
+export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthResult';
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
 

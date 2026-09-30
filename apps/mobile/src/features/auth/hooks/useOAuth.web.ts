@@ -6,16 +6,17 @@ import { withAuthDeadline } from '../authDeadline';
 import {
   failureReason,
   thrownFailure,
-  useOAuthFlow,
   type OAuthFailure,
   type OAuthProvider,
-} from '../oauthRequest';
+} from '../oauthResult';
 import { authRedirectUrl } from '../parseAuthLink';
 import { reportSignInFailure } from '../reportSignInFailure';
 
+import { useOAuthFlow } from './useOAuthFlow';
+
 WebBrowser.maybeCompleteAuthSession();
 
-export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthRequest';
+export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthResult';
 
 async function redirectToProvider(provider: OAuthProvider): Promise<OAuthFailure | null> {
   const { error } = await withAuthDeadline(
