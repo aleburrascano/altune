@@ -37,7 +37,7 @@ func NewFindRelatedService(
 		querier:        querier,
 		albumProvider:  albumProvider,
 		artistProvider: artistProvider,
-		memo:           newRelatedMemo(relatedMemoTTL),
+		memo:           newRelatedMemo(relatedMemoTTL, time.Now),
 	}
 }
 
@@ -253,12 +253,13 @@ type relatedMemoEntry struct {
 
 type relatedMemo struct {
 	ttl     time.Duration
+	now     func() time.Time
 	mu      sync.Mutex
 	entries map[relatedMemoKey]relatedMemoEntry
 }
 
-func newRelatedMemo(ttl time.Duration) *relatedMemo {
-	return &relatedMemo{ttl: ttl, entries: map[relatedMemoKey]relatedMemoEntry{}}
+func newRelatedMemo(ttl time.Duration, now func() time.Time) *relatedMemo {
+	return &relatedMemo{ttl: ttl, now: now, entries: map[relatedMemoKey]relatedMemoEntry{}}
 }
 
 func (m *relatedMemo) items(key relatedMemoKey) ([]domain.SearchResult, bool) {
@@ -268,7 +269,7 @@ func (m *relatedMemo) items(key relatedMemoKey) ([]domain.SearchResult, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	entry, memoized := m.entries[key]
-	if !memoized || time.Now().After(entry.expiresAt) {
+	if !memoized || m.now().After(entry.expiresAt) {
 		return nil, false
 	}
 	return entry.items, true
@@ -284,13 +285,13 @@ func (m *relatedMemo) remember(key relatedMemoKey, items []domain.SearchResult) 
 		m.dropExpired()
 	}
 	if len(m.entries) < relatedMemoMaxEntries {
-		m.entries[key] = relatedMemoEntry{items: items, expiresAt: time.Now().Add(m.ttl)}
+		m.entries[key] = relatedMemoEntry{items: items, expiresAt: m.now().Add(m.ttl)}
 	}
 	return items
 }
 
 func (m *relatedMemo) dropExpired() {
-	now := time.Now()
+	now := m.now()
 	for key, entry := range m.entries {
 		if now.After(entry.expiresAt) {
 			delete(m.entries, key)

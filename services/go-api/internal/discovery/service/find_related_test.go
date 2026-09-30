@@ -731,3 +731,20 @@ func TestFindRelated_PartialArtistAlbumsStillYieldsGroup(t *testing.T) {
 		t.Errorf("groups = %+v, want one artist_albums group with the partial album", got)
 	}
 }
+
+func TestRelatedMemo_ItemsExpireAfterTTLOnTheInjectedClock(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	memo := newRelatedMemo(time.Hour, func() time.Time { return now })
+	key := relatedMemoKey{subject: "humble"}
+	memo.remember(key, []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)})
+
+	now = now.Add(time.Hour - time.Second)
+	if _, memoized := memo.items(key); !memoized {
+		t.Fatal("entry inside its ttl was not served")
+	}
+
+	now = now.Add(2 * time.Second)
+	if _, memoized := memo.items(key); memoized {
+		t.Error("entry past its ttl was still served")
+	}
+}

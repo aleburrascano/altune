@@ -10,12 +10,34 @@ import (
 	"time"
 )
 
+type breakerClock struct {
+	mu  sync.Mutex
+	cur time.Time
+}
+
+func newBreakerClock() *breakerClock {
+	return &breakerClock{cur: time.Unix(1_700_000_000, 0)}
+}
+
+func (c *breakerClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cur
+}
+
+func (c *breakerClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cur = c.cur.Add(d)
+}
+
 func tripToHalfOpenWindow(cb *CircuitBreaker, provider domain.ProviderName) {
 	for i := 0; i < failureThreshold; i++ {
 		cb.RecordFailure(provider)
 	}
 	cb.mu.Lock()
-	cb.getOrCreate(provider).lastFailedAt = time.Now().Add(-openDuration - time.Second)
+	real := cb.now
+	cb.now = func() time.Time { return real().Add(openDuration + time.Second) }
 	cb.mu.Unlock()
 }
 
@@ -100,7 +122,8 @@ func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 }
 
 func TestCircuitBreaker_HalfOpen(t *testing.T) {
-	cb := NewCircuitBreaker()
+	clock := newBreakerClock()
+	cb := newCircuitBreaker(clock.Now)
 
 	for i := 0; i < 5; i++ {
 		cb.RecordFailure(domain.ProviderDeezer)
@@ -110,10 +133,7 @@ func TestCircuitBreaker_HalfOpen(t *testing.T) {
 		t.Fatal("expected circuit to be open")
 	}
 
-	cb.mu.Lock()
-	entry := cb.circuits[domain.ProviderDeezer]
-	entry.lastFailedAt = time.Now().Add(-31 * time.Second)
-	cb.mu.Unlock()
+	clock.advance(openDuration + time.Second)
 
 	if !cb.AllowRequest(domain.ProviderDeezer) {
 		t.Error("expected half-open circuit to allow probe request after timeout")
@@ -121,16 +141,14 @@ func TestCircuitBreaker_HalfOpen(t *testing.T) {
 }
 
 func TestCircuitBreaker_ResetsOnSuccess(t *testing.T) {
-	cb := NewCircuitBreaker()
+	clock := newBreakerClock()
+	cb := newCircuitBreaker(clock.Now)
 
 	for i := 0; i < 5; i++ {
 		cb.RecordFailure(domain.ProviderDeezer)
 	}
 
-	cb.mu.Lock()
-	entry := cb.circuits[domain.ProviderDeezer]
-	entry.lastFailedAt = time.Now().Add(-31 * time.Second)
-	cb.mu.Unlock()
+	clock.advance(openDuration + time.Second)
 
 	cb.AllowRequest(domain.ProviderDeezer)
 
@@ -179,14 +197,13 @@ func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 }
 
 func TestCircuitBreaker_HalfOpenAdmitsExactlyOneConcurrentProbe(t *testing.T) {
-	cb := NewCircuitBreaker()
+	clock := newBreakerClock()
+	cb := newCircuitBreaker(clock.Now)
 
 	for i := 0; i < 5; i++ {
 		cb.RecordFailure(domain.ProviderDeezer)
 	}
-	cb.mu.Lock()
-	cb.circuits[domain.ProviderDeezer].lastFailedAt = time.Now().Add(-31 * time.Second)
-	cb.mu.Unlock()
+	clock.advance(openDuration + time.Second)
 
 	const n = 16
 	var wg sync.WaitGroup
@@ -208,16 +225,14 @@ func TestCircuitBreaker_HalfOpenAdmitsExactlyOneConcurrentProbe(t *testing.T) {
 }
 
 func TestCircuitBreaker_FailureAfterHalfOpenReopens(t *testing.T) {
-	cb := NewCircuitBreaker()
+	clock := newBreakerClock()
+	cb := newCircuitBreaker(clock.Now)
 
 	for i := 0; i < 5; i++ {
 		cb.RecordFailure(domain.ProviderDeezer)
 	}
 
-	cb.mu.Lock()
-	entry := cb.circuits[domain.ProviderDeezer]
-	entry.lastFailedAt = time.Now().Add(-31 * time.Second)
-	cb.mu.Unlock()
+	clock.advance(openDuration + time.Second)
 
 	cb.AllowRequest(domain.ProviderDeezer)
 
@@ -267,8 +282,12 @@ func TestCircuitBreaker_ReleaseProbeIsNoOpOutsideHalfOpen(t *testing.T) {
 }
 
 func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
-	cb := NewCircuitBreaker()
-	tripToHalfOpenWindow(cb, domain.ProviderDeezer)
+	clock := newBreakerClock()
+	cb := newCircuitBreaker(clock.Now)
+	for i := 0; i < failureThreshold; i++ {
+		cb.RecordFailure(domain.ProviderDeezer)
+	}
+	clock.advance(openDuration + time.Second)
 
 	if !cb.AllowRequest(domain.ProviderDeezer) {
 		t.Fatal("expected the half-open probe to be admitted")
@@ -277,9 +296,7 @@ func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
 		t.Fatal("expected rejection while the probe lease is live")
 	}
 
-	cb.mu.Lock()
-	cb.getOrCreate(domain.ProviderDeezer).probeStartedAt = time.Now().Add(-probeLease - time.Second)
-	cb.mu.Unlock()
+	clock.advance(probeLease + time.Second)
 
 	if !cb.AllowRequest(domain.ProviderDeezer) {
 		t.Fatal("expected an expired probe lease to admit a new probe")
@@ -290,7 +307,8 @@ func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
 }
 
 func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
-	cb := NewCircuitBreaker()
+	clock := newBreakerClock()
+	cb := newCircuitBreaker(clock.Now)
 	p := domain.ProviderDeezer
 
 	hammer := func(n int, f func()) {
@@ -316,9 +334,7 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 		t.Fatalf("status = %v, want circuit_open", cb.GetStatus(p))
 	}
 
-	cb.mu.Lock()
-	cb.circuits[p].lastFailedAt = time.Now().Add(-openDuration - time.Second)
-	cb.mu.Unlock()
+	clock.advance(openDuration + time.Second)
 	var admitted int32
 	var mu sync.Mutex
 	hammer(16, func() {
@@ -347,9 +363,7 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 		t.Fatal("breaker must re-open after a fresh failure threshold")
 	}
 
-	cb.mu.Lock()
-	cb.circuits[p].lastFailedAt = time.Now().Add(-openDuration - time.Second)
-	cb.mu.Unlock()
+	clock.advance(openDuration + time.Second)
 	if !cb.AllowRequest(p) {
 		t.Fatal("aged-open breaker must admit the probe")
 	}

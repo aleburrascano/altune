@@ -32,11 +32,17 @@ type circuitEntry struct {
 
 type CircuitBreaker struct {
 	mu       sync.Mutex
+	now      func() time.Time
 	circuits map[domain.ProviderName]*circuitEntry
 }
 
 func NewCircuitBreaker() *CircuitBreaker {
+	return newCircuitBreaker(time.Now)
+}
+
+func newCircuitBreaker(now func() time.Time) *CircuitBreaker {
 	return &CircuitBreaker{
+		now:      now,
 		circuits: make(map[domain.ProviderName]*circuitEntry),
 	}
 }
@@ -51,17 +57,17 @@ func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
 	case CircuitClosed:
 		return true
 	case CircuitOpen:
-		if time.Since(entry.lastFailedAt) > openDuration {
+		if cb.now().Sub(entry.lastFailedAt) > openDuration {
 			entry.state = CircuitHalfOpen
 			entry.probing = true
-			entry.probeStartedAt = time.Now()
+			entry.probeStartedAt = cb.now()
 			slog.Warn("circuit breaker half-open (probing recovery)",
 				"provider", provider.String())
 			return true
 		}
 		return false
 	case CircuitHalfOpen:
-		if entry.probing && time.Since(entry.probeStartedAt) <= probeLease {
+		if entry.probing && cb.now().Sub(entry.probeStartedAt) <= probeLease {
 			return false
 		}
 		if entry.probing {
@@ -69,7 +75,7 @@ func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
 				"provider", provider.String())
 		}
 		entry.probing = true
-		entry.probeStartedAt = time.Now()
+		entry.probeStartedAt = cb.now()
 		return true
 	}
 	return true
@@ -95,7 +101,7 @@ func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
 
 	entry := cb.getOrCreate(provider)
 	entry.failures++
-	entry.lastFailedAt = time.Now()
+	entry.lastFailedAt = cb.now()
 	entry.probing = false
 
 	if entry.state != CircuitOpen && (entry.state == CircuitHalfOpen || entry.failures >= failureThreshold) {
