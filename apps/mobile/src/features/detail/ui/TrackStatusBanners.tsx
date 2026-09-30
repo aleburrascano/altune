@@ -40,7 +40,7 @@ function SaveFailureBanner({ saveFailure }: { saveFailure: SaveFailure }): React
     if (trackId !== undefined) recordFailureShownOnce(trackId, message);
   }, [trackId, message]);
   return (
-    <Banner testID="detail-save-error" {...dangerBannerProps}>
+    <Banner testID="detail-save-error" surface="detail.save" {...dangerBannerProps}>
       {saveFailureBanner(saveFailure)}
     </Banner>
   );
@@ -48,7 +48,7 @@ function SaveFailureBanner({ saveFailure }: { saveFailure: SaveFailure }): React
 
 function LateralErrorBanner({ error }: { error: string }): ReactElement {
   return (
-    <Banner testID="detail-lateral-error" {...dangerBannerProps}>
+    <Banner testID="detail-lateral-error" surface="detail.lateral_nav" {...dangerBannerProps}>
       {error}
     </Banner>
   );

@@ -19,7 +19,7 @@ export function AuthErrorBanner({
 }): ReactElement | null {
   if (state.kind !== 'error') return null;
   return (
-    <Banner testID={testID} tone="danger">
+    <Banner testID={testID} tone="danger" surface="auth.error">
       {authErrorText(state.reason, generic)}
     </Banner>
   );

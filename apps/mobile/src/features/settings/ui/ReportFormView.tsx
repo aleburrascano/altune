@@ -55,7 +55,12 @@ export function ReportFormView({
       </Text>
 
       {failure !== null ? (
-        <Banner tone="danger" testID="report-issue-error" style={styles.banner}>
+        <Banner
+          tone="danger"
+          surface="settings.report_issue"
+          testID="report-issue-error"
+          style={styles.banner}
+        >
           {failure}
         </Banner>
       ) : null}
