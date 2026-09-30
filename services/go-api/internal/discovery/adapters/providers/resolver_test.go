@@ -346,3 +346,57 @@ func TestAmazonMusicSessionResolver_staleInvalidateNoops(t *testing.T) {
 		t.Fatal("invalidate with the failed session did not clear the cache")
 	}
 }
+
+type persistentAuthMarker interface{ PersistentAuthFailure() bool }
+
+func newRetryTestResolver() *cachedResolver[string] {
+	var n atomic.Int32
+	return &cachedResolver[string]{
+		validFn: nonEmpty,
+		resolveFn: func(context.Context) (string, time.Time, error) {
+			return strings.Repeat("c", int(n.Add(1))), time.Time{}, nil
+		},
+	}
+}
+
+func TestWithAuthRetry_authFailureAfterRefreshIsPersistent(t *testing.T) {
+	r := newRetryTestResolver()
+	_, err := withAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
+		return 0, http.StatusUnauthorized, httpStatusError{status: http.StatusUnauthorized}
+	})
+	var marker persistentAuthMarker
+	if !errors.As(err, &marker) || !marker.PersistentAuthFailure() {
+		t.Fatalf("err = %v, want a persistent auth failure", err)
+	}
+}
+
+func TestWithAuthRetry_refreshThatFixesItIsNotAFailure(t *testing.T) {
+	r := newRetryTestResolver()
+	var calls int
+	got, err := withAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
+		calls++
+		if calls == 1 {
+			return 0, http.StatusUnauthorized, httpStatusError{status: http.StatusUnauthorized}
+		}
+		return 7, http.StatusOK, nil
+	})
+	if err != nil || got != 7 {
+		t.Fatalf("got %d, %v; want 7, nil", got, err)
+	}
+}
+
+func TestWithAuthRetry_nonAuthFailureOnRetryIsNotPersistentAuth(t *testing.T) {
+	r := newRetryTestResolver()
+	var calls int
+	_, err := withAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
+		calls++
+		if calls == 1 {
+			return 0, http.StatusForbidden, httpStatusError{status: http.StatusForbidden}
+		}
+		return 0, http.StatusInternalServerError, httpStatusError{status: http.StatusInternalServerError}
+	})
+	var marker persistentAuthMarker
+	if errors.As(err, &marker) {
+		t.Fatalf("err = %v, want no persistent auth marker", err)
+	}
+}

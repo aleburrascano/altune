@@ -92,6 +92,14 @@ type transportError interface {
 	Timeout() bool
 }
 
+type persistentAuthFailure interface {
+	PersistentAuthFailure() bool
+}
+
+type badPayload interface {
+	BadPayload() bool
+}
+
 const (
 	statusTooManyRequests = 429
 	statusServerErrorMin  = 500
@@ -100,6 +108,14 @@ const (
 func isProviderHealthFailure(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
 		return false
+	}
+	var auth persistentAuthFailure
+	if errors.As(err, &auth) && auth.PersistentAuthFailure() {
+		return true
+	}
+	var payload badPayload
+	if errors.As(err, &payload) && payload.BadPayload() {
+		return true
 	}
 	var status httpStatusCoder
 	if errors.As(err, &status) {

@@ -22,6 +22,22 @@ func (e httpStatusError) Error() string { return fmt.Sprintf("http status %d", e
 
 func (e httpStatusError) HTTPStatus() int { return e.status }
 
+type persistentAuthError struct{ cause error }
+
+func (e persistentAuthError) Error() string { return e.cause.Error() }
+
+func (e persistentAuthError) Unwrap() error { return e.cause }
+
+func (persistentAuthError) PersistentAuthFailure() bool { return true }
+
+type badPayloadError struct{ cause error }
+
+func (e badPayloadError) Error() string { return e.cause.Error() }
+
+func (e badPayloadError) Unwrap() error { return e.cause }
+
+func (badPayloadError) BadPayload() bool { return true }
+
 func isAuthStatus(status int) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden
 }
@@ -100,7 +116,7 @@ func getJSONWithStatus(ctx context.Context, client *http.Client, rawURL string, 
 		return resp.StatusCode, httpStatusError{status: resp.StatusCode}
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst); err != nil {
-		return resp.StatusCode, err
+		return resp.StatusCode, badPayloadError{cause: err}
 	}
 	return resp.StatusCode, nil
 }
@@ -143,7 +159,7 @@ func postJSON(ctx context.Context, client *http.Client, rawURL string, body []by
 		return resp.StatusCode, httpStatusError{status: resp.StatusCode}
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst); err != nil {
-		return resp.StatusCode, err
+		return resp.StatusCode, badPayloadError{cause: err}
 	}
 	return resp.StatusCode, nil
 }

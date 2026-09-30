@@ -254,3 +254,40 @@ func (p *countingRelatedProvider) GetRelatedTracks(context.Context, domain.Provi
 	p.calls.Add(1)
 	return []domain.SearchResult{breakerTrack(domain.ProviderSoundCloud, "1")}, nil
 }
+
+type persistentAuthErr struct{ statusErr }
+
+func (persistentAuthErr) PersistentAuthFailure() bool { return true }
+
+type badPayloadErr struct{ error }
+
+func (badPayloadErr) BadPayload() bool { return true }
+
+func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		wantOpen bool
+	}{
+		{"persistent auth failure", fmt.Errorf("top tracks: %w", persistentAuthErr{401}), true},
+		{"bad payload on a 200", badPayloadErr{errors.New("invalid character '<'")}, true},
+		{"bare 401", statusErr(401), false},
+		{"bare 403", statusErr(403), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cb := NewCircuitBreaker()
+			p := &fakeArtistContentProvider{getTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+				return nil, tc.err
+			}}
+			content := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
+				WithContentCircuitBreaker(cb))
+			for i := 0; i < failureThreshold; i++ {
+				_, _ = content.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", "", 10)
+			}
+			if open := cb.GetStatus(domain.ProviderDeezer) == domain.ProviderStatusCircuitOpen; open != tc.wantOpen {
+				t.Errorf("circuit open = %v, want %v", open, tc.wantOpen)
+			}
+		})
+	}
+}

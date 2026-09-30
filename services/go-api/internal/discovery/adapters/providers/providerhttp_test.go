@@ -421,3 +421,30 @@ func TestPostJSON_oversizedBodyIsRejected(t *testing.T) {
 		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), providerBodyCap)
 	}
 }
+
+func TestGetJSON_malformedBodyIsMarkedBadPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html>not json</html>`))
+	}))
+	defer srv.Close()
+
+	var dst map[string]any
+	err := getJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	marker, ok := err.(interface{ BadPayload() bool })
+	if !ok || !marker.BadPayload() {
+		t.Fatalf("err = %v, want a bad payload error", err)
+	}
+}
+
+func TestGetJSON_bare403IsNotMarkedPersistent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	var dst map[string]any
+	err := getJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	if _, marked := err.(interface{ PersistentAuthFailure() bool }); err == nil || marked {
+		t.Fatalf("err = %v, want a plain 403 without the persistent marker", err)
+	}
+}

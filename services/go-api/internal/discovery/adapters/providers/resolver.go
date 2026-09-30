@@ -103,7 +103,11 @@ func withAuthRetry[T comparable, R any](
 			var zero R
 			return zero, err
 		}
-		res, _, err = do(ctx, cred)
+		var retryStatus int
+		res, retryStatus, err = do(ctx, cred)
+		if err != nil && isAuthStatus(retryStatus) {
+			err = persistentAuthError{cause: err}
+		}
 	}
 	return res, err
 }
