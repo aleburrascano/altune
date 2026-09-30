@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 )
 
 type TrackRepo struct {
@@ -15,13 +14,12 @@ type TrackRepo struct {
 
 	claimable map[string]bool
 
-	ErrOnAdd       error
-	ErrOnCount     error
-	ErrOnGetBy     error
-	ErrOnList      error
-	ErrOnUpdate    error
-	ErrOnDelete    error
-	ErrOnFailStale error
+	ErrOnAdd    error
+	ErrOnCount  error
+	ErrOnGetBy  error
+	ErrOnList   error
+	ErrOnUpdate error
+	ErrOnDelete error
 
 	EnforceVersionCAS bool
 
@@ -44,7 +42,6 @@ var (
 	_ ports.TrackLookup              = (*TrackRepo)(nil)
 	_ ports.LibraryLensRepository    = (*TrackRepo)(nil)
 	_ ports.FeaturedArtistRepository = (*TrackRepo)(nil)
-	_ ports.StalePendingFailer       = (*TrackRepo)(nil)
 )
 
 func NewTrackRepo() *TrackRepo {
@@ -317,26 +314,6 @@ func (r *TrackRepo) ListTracksFeaturing(_ context.Context, userId shared.UserId,
 		}
 	}
 	return out, nil
-}
-
-func (r *TrackRepo) FailStalePending(_ context.Context, cutoff time.Time, reason string) (int, error) {
-	if r.ErrOnFailStale != nil {
-		return 0, r.ErrOnFailStale
-	}
-	n := 0
-	for _, t := range r.Tracks {
-		if t.AcquisitionStatus != domain.AcquisitionPending {
-			continue
-		}
-		if t.AcquisitionStartedAt == nil || !t.AcquisitionStartedAt.Before(cutoff) {
-			continue
-		}
-		if err := t.MarkFailed(reason); err != nil {
-			return n, err
-		}
-		n++
-	}
-	return n, nil
 }
 
 func (r *TrackRepo) Seed(track *domain.Track) {

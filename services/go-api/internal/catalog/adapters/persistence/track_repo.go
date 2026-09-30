@@ -253,27 +253,6 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.Time, reason string) (int, error) {
-	ctx, cancel := withDBTimeout(ctx)
-	defer cancel()
-
-	tag, err := r.pool.Exec(ctx,
-		`UPDATE tracks
-		 SET acquisition_status=$3, failure_reason=$2, acquisition_started_at=NULL
-		 WHERE acquisition_status=$4
-		   AND acquisition_started_at IS NOT NULL
-		   AND acquisition_started_at < $1
-		   AND acquisition_attempts > 0
-		   AND (acquisition_lease_until IS NULL OR acquisition_lease_until < now())`,
-		cutoff, reason,
-		domain.AcquisitionFailed.String(), domain.AcquisitionPending.String(),
-	)
-	if err != nil {
-		return 0, fmt.Errorf("fail stale pending acquisitions: %w", err)
-	}
-	return int(tag.RowsAffected()), nil
-}
-
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()

@@ -21,17 +21,16 @@ func TestApplyOptions_AppliesInOrderAndReturnsSamePointer(t *testing.T) {
 }
 
 func TestApplyOptions_NoOptionsKeepsDefaults(t *testing.T) {
-	s := NewReconcileStalePendingService(nil)
-	if s.grace != DefaultStalePendingGrace {
-		t.Fatalf("grace = %v, want default %v", s.grace, DefaultStalePendingGrace)
+	s := NewAudioURLService(nil, nil)
+	if s.ttl != audioURLTTL {
+		t.Fatalf("ttl = %v, want default %v", s.ttl, audioURLTTL)
 	}
 }
 
 func TestApplyOptions_ANilClockKeepsTheWallClock(t *testing.T) {
 	clocks := map[string]func() time.Time{
-		"audio url":     NewAudioURLService(nil, nil, WithAudioURLClock(nil)).now,
-		"stale pending": NewReconcileStalePendingService(nil, WithStalePendingClock(nil)).now,
-		"add track":     NewAddTrackService(nil, WithAddTrackClock(nil)).now,
+		"audio url": NewAudioURLService(nil, nil, WithAudioURLClock(nil)).now,
+		"add track": NewAddTrackService(nil, WithAddTrackClock(nil)).now,
 	}
 
 	before := time.Now()
@@ -43,8 +42,8 @@ func TestApplyOptions_ANilClockKeepsTheWallClock(t *testing.T) {
 }
 
 func TestApplyOptions_ConstructorOptionOverridesDefault(t *testing.T) {
-	s := NewReconcileStalePendingService(nil, func(s *ReconcileStalePendingService) { s.grace = time.Second })
-	if s.grace != time.Second {
-		t.Fatalf("grace = %v, want 1s", s.grace)
+	s := NewAudioURLService(nil, nil, func(s *AudioURLService) { s.ttl = time.Second })
+	if s.ttl != time.Second {
+		t.Fatalf("ttl = %v, want 1s", s.ttl)
 	}
 }
