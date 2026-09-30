@@ -116,6 +116,20 @@ func TestIsSecretKey_keepsNonSecretLookalikeNames(t *testing.T) {
 	}
 }
 
+func TestSecretsInBody_masksExactNameAndMarkerCredentials(t *testing.T) {
+	got := SecretsInBody(`{"client_id":"a","jwt":"b","pwd":"c","key":"d","keywords":"kw","author":"au","dedup_key":"dk"}`)
+	for _, leaked := range []string{`"a"`, `"b"`, `"c"`, `"d"`} {
+		if strings.Contains(got, leaked) {
+			t.Errorf("credential value %s leaked: %s", leaked, got)
+		}
+	}
+	for _, kept := range []string{`"kw"`, `"au"`, `"dk"`} {
+		if !strings.Contains(got, kept) {
+			t.Errorf("non-secret value %s was masked: %s", kept, got)
+		}
+	}
+}
+
 func TestSecretsInBodyMasksCredentialAfterStrayClosingByte(t *testing.T) {
 	for _, body := range []string{
 		`{"a":1}] "password":"hunter2"`,

@@ -8,8 +8,11 @@ var secretParamRe = regexp.MustCompile(
 	`(?i)([?&](?:api_key|apikey|access_token|client_secret|token|secret|password|pwd|key|auth|totp|totpserver|client_id)=)[^&\s"'\\]*`,
 )
 
+var bearerRe = regexp.MustCompile(`(?i)\bbearer\s+[^\s"'\\]+`)
+
 func Secrets(s string) string {
 	s = secretParamRe.ReplaceAllString(s, "${1}"+Mask)
+	s = bearerRe.ReplaceAllString(s, "Bearer "+Mask)
 	return maskedKeyedFields(maskedKeyedParams(s))
 }
 

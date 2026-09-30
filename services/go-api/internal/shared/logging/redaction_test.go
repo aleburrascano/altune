@@ -3,7 +3,10 @@ package logging
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log/slog"
+	"os"
 	"strings"
 	"testing"
 )
@@ -66,6 +69,34 @@ func TestRingHandler_RedactsCredentialURLInErrorAttr(t *testing.T) {
 	}
 	if snap[0].Attrs["attempt"] != "3" {
 		t.Errorf("non-sensitive attr dropped: attempt = %q, want 3", snap[0].Attrs["attempt"])
+	}
+}
+
+func TestSetup_dropsAuthorizationAndJWTAttrsFromRingAndStdout(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	realStdout := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = realStdout })
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ring := Setup("info", false)
+	slog.Info("outbound", "authorization", "Bearer abc123secret", "jwt", "eyJjwtvalue", "path", "/x")
+	w.Close()
+	out, _ := io.ReadAll(r)
+
+	if strings.Contains(string(out), "abc123secret") || strings.Contains(string(out), "eyJjwtvalue") {
+		t.Errorf("credential reached stdout: %s", out)
+	}
+	for _, rec := range ring.Snapshot() {
+		for k, v := range rec.Attrs {
+			if strings.Contains(v, "abc123secret") || strings.Contains(v, "eyJjwtvalue") {
+				t.Errorf("credential leaked into ring attr %q = %q", k, v)
+			}
+		}
 	}
 }
 

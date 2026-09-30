@@ -37,6 +37,17 @@ func TestSecrets_masksValuesKeepsShape(t *testing.T) {
 	}
 }
 
+func TestSecrets_masksLeadingFormParamAndBearerToken(t *testing.T) {
+	got := Secrets("auth=abc&q=1")
+	if strings.Contains(got, "abc") || !strings.Contains(got, "q=1") {
+		t.Errorf("leading form param not masked cleanly: %q", got)
+	}
+	got = Secrets("upstream sent Authorization: Bearer eyJhbGciOi.payload.sig rejected")
+	if strings.Contains(got, "eyJhbGciOi") || !strings.Contains(got, "rejected") {
+		t.Errorf("bearer token leaked or text lost: %q", got)
+	}
+}
+
 func TestSecrets_masksSoundCloudClientID(t *testing.T) {
 	const clientID = "ScrapedClientIdValue0123456789AB"
 	in := `soundcloud api-v2: Get "https://api-v2.soundcloud.com/users/1/toptracks?client_id=` + clientID + `&limit=50": dial tcp: refused`
