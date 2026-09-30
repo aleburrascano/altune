@@ -189,8 +189,12 @@ function requestFlush(): Promise<void> {
   return flushOutbox();
 }
 
+const RETRYABLE_CLIENT_STATUSES: ReadonlySet<number> = new Set([401, 408, 429]);
+
 function isPermanentlyRejected(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 400;
+  if (!(error instanceof ApiError)) return false;
+  const clientError = error.status >= 400 && error.status < 500;
+  return clientError && !RETRYABLE_CLIENT_STATUSES.has(error.status);
 }
 
 type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline' | 'gated';

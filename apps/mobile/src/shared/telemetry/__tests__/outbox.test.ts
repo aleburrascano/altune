@@ -738,6 +738,35 @@ describe('Regression: a permanently rejected entry must not block the queue behi
   });
 });
 
+describe('Regression: every non-transient 4xx is a permanent rejection', () => {
+  it.each([403, 404, 413, 422])('drops an entry the server rejects with %i', async (status) => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ search_id: 'a' }));
+
+    recordEventMock.mockReset();
+    recordEventMock.mockRejectedValue(new ApiError(status, 'rejected'));
+
+    await flushOutbox();
+
+    expect(lastPersisted()).toEqual([]);
+  });
+
+  it.each([401, 408, 429, 500, 503])(
+    'retries an entry whose send fails with %i',
+    async (status) => {
+      recordEventMock.mockRejectedValue(new Error('send unavailable'));
+      await enqueueCritical(event({ search_id: 'a' }));
+
+      recordEventMock.mockReset();
+      recordEventMock.mockRejectedValue(new ApiError(status, 'try later'));
+
+      await flushOutbox();
+
+      expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a']);
+    },
+  );
+});
+
 describe('Security: entries are owned by the user who queued them', () => {
   it('tags an entry with the current owner on disk but strips the tag from what is sent', async () => {
     setOutboxOwner('user-a');
@@ -822,7 +851,7 @@ describe('Regression: a persistently failing entry never starves the entries que
   it.each([
     ['a 5xx', new ApiError(503, 'unavailable')],
     ['an expired-token 401', new ApiError(401, 'jwt expired')],
-    ['a 403', new ApiError(403, 'forbidden')],
+    ['a 429', new ApiError(429, 'rate limited')],
     ['an unclassified error', new Error('boom')],
   ])(
     'attempts and delivers every later entry while %s keeps the head entry queued',
