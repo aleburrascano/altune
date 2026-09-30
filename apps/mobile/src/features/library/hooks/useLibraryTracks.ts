@@ -13,6 +13,7 @@ import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types
 import { libraryKeys } from '@shared/lib/query-keys';
 
 import { failureLogFields } from '../failureLogFields';
+import { classifyLibraryError, type LibraryFailure } from '../state';
 import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 
@@ -31,6 +32,19 @@ const mergePage = (old: TracksData | undefined, fresh: ListTracksResponse) =>
 const logPollFailure = (offset: number, cause: unknown) => {
   console.warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
 };
+
+type FallbackHandler = (failure: LibraryFailure, loaded: number) => void;
+
+function loadedPagesOnFailure(tracks: TrackResponse[], onFallback: FallbackHandler | undefined) {
+  return (error: unknown): TrackResponse[] => {
+    console.warn('[library] whole-library fetch failed; using loaded pages', {
+      loaded: tracks.length,
+      ...failureLogFields(error),
+    });
+    onFallback?.(classifyLibraryError(error), tracks.length);
+    return tracks;
+  };
+}
 
 interface PollTarget {
   queryClient: QueryClient;
@@ -156,7 +170,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
       fetchNextPage,
       refetch,
     }),
-    loadAll: (): Promise<TrackResponse[]> =>
+    loadAll: (onFallback?: FallbackHandler): Promise<TrackResponse[]> =>
       queryClient
         .fetchQuery({
           queryKey: libraryKeys.tracksAll(query, sort),
@@ -164,12 +178,6 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           staleTime: 0,
           gcTime: 0,
         })
-        .catch((error: unknown) => {
-          console.warn('[library] whole-library fetch failed; using loaded pages', {
-            loaded: tracks.length,
-            ...failureLogFields(error),
-          });
-          return tracks;
-        }),
+        .catch(loadedPagesOnFailure(tracks, onFallback)),
   };
 }

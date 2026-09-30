@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react';
+
 import type { TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
@@ -5,6 +7,7 @@ import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
+import { alertLibraryFailure } from '../libraryFailureAlert';
 import { useLibraryTracks } from './useLibraryTracks';
 import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
@@ -31,6 +34,26 @@ type TracksView = {
   shuffleWholeLibrary: () => Promise<void>;
 };
 
+async function runOnce(
+  inFlight: { current: boolean },
+  setRunning: (running: boolean) => void,
+  action: () => Promise<void>,
+): Promise<void> {
+  if (inFlight.current) return;
+  setRunning(true);
+  await action().finally(() => setRunning(false));
+}
+
+function useExclusive() {
+  const inFlight = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const setRunning = (running: boolean) => {
+    inFlight.current = running;
+    setBusy(running);
+  };
+  return { busy, run: (action: () => Promise<void>) => runOnce(inFlight, setRunning, action) };
+}
+
 export function useTracksView({
   query,
   sort,
@@ -44,18 +67,31 @@ export function useTracksView({
 }: TracksViewDeps): TracksView {
   const tracksState = useLibraryTracks(query, sort, isActive);
 
-  const playWholeLibraryFrom = async (track: TrackResponse): Promise<void> => {
-    const whole = await tracksState.loadAll();
-    const all = whole.some((t) => t.id === track.id) ? whole : tracksState.tracks;
-    const { playable, startIndex } = buildPlayableQueue(all, track.id);
-    queue.playFromList(playable, startIndex, { kind: 'library' });
-  };
+  const { busy: wholeLibraryBusy, run: exclusively } = useExclusive();
 
-  const shuffleWholeLibrary = async (): Promise<void> => {
-    const all = await tracksState.loadAll();
-    const { playable } = buildPlayableQueue(all, '');
-    queue.shuffleFromList(playable, { kind: 'library' });
-  };
+  const loadAllOrWarn = () =>
+    tracksState.loadAll((failure, loaded) =>
+      alertLibraryFailure(
+        'Playing loaded tracks only',
+        `Could not load your whole library. Playing the ${loaded} tracks loaded so far.`,
+        failure,
+      ),
+    );
+
+  const playWholeLibraryFrom = (track: TrackResponse): Promise<void> =>
+    exclusively(async () => {
+      const whole = await loadAllOrWarn();
+      const all = whole.some((t) => t.id === track.id) ? whole : tracksState.tracks;
+      const { playable, startIndex } = buildPlayableQueue(all, track.id);
+      queue.playFromList(playable, startIndex, { kind: 'library' });
+    });
+
+  const shuffleWholeLibrary = (): Promise<void> =>
+    exclusively(async () => {
+      const all = await loadAllOrWarn();
+      const { playable } = buildPlayableQueue(all, '');
+      queue.shuffleFromList(playable, { kind: 'library' });
+    });
 
   const refresh: ListRefresh = {
     refreshing: tracksState.isRefetching,
@@ -85,6 +121,7 @@ export function useTracksView({
           emptyLabel={'No tracks yet'}
           refresh={refresh}
           paging={paging}
+          shuffleBusy={wholeLibraryBusy}
           onShuffleAll={() => void shuffleWholeLibrary()}
           onPlay={(track) => void playWholeLibraryFrom(track)}
           onPress={onTrackPress}

@@ -19,6 +19,12 @@ jest.mock('@shared/api-client/tracks', () => ({
   getAllTracks: (params: unknown) => mockGetAllTracks(params),
 }));
 
+const mockShowAlert = jest.fn();
+
+jest.mock('@shared/ui/dialog/dialog', () => ({
+  showAlert: (title: string, message: string) => mockShowAlert(title, message),
+}));
+
 const noop = () => undefined;
 
 function WarmUpTracksScreen() {
@@ -200,6 +206,113 @@ describe('playing a row from a library larger than the whole-library cap', () =>
       number,
     ];
     expect(playable[startIndex]?.source.trackId).toBe('tapped');
+    client.clear();
+  });
+});
+
+describe('whole-library play and shuffle', () => {
+  const track = (id: string) =>
+    ({
+      id: asTrackId(id),
+      title: `Title ${id}`,
+      artist: 'An Artist',
+      album: null,
+      duration_seconds: 180,
+      added_at: '2026-01-01T00:00:00Z',
+      acquisition_status: 'ready',
+      artwork_url: null,
+    }) as unknown as TrackResponse;
+
+  function renderLibrary(queue: unknown) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mockGetTracks.mockReset().mockResolvedValue({
+      items: ['a', 'b'].map(track),
+      total: 5,
+      limit: 2,
+      offset: 0,
+      has_more: true,
+    });
+    function Screen() {
+      const selection = useSelection();
+      const { view } = useTracksView({
+        query: '',
+        sort: 'recent',
+        isActive: true,
+        selection,
+        queue: queue as never,
+        playback: {} as never,
+        retryMutation: { isInFlight: () => false } as never,
+        onTrackPress: noop,
+        onTrackMore: noop,
+      });
+      return <>{view.content}</>;
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Screen />
+      </QueryClientProvider>,
+    );
+    return client;
+  }
+
+  function pendingWholeLibrary(): (tracks: TrackResponse[]) => void {
+    let finish: (tracks: TrackResponse[]) => void = noop;
+    mockGetAllTracks.mockReset().mockReturnValue(
+      new Promise<TrackResponse[]>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    return (tracks) => finish(tracks);
+  }
+
+  it('tells the user only the loaded tracks play when the whole-library fetch fails', async () => {
+    const shuffleFromList = jest.fn();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(noop);
+    mockGetAllTracks.mockReset().mockRejectedValue(new Error('offline'));
+    mockShowAlert.mockClear();
+    const client = renderLibrary({ shuffleFromList });
+    await waitFor(() => expect(screen.getByTestId('library-shuffle-all')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('library-shuffle-all'));
+
+    await waitFor(() => expect(shuffleFromList).toHaveBeenCalledTimes(1));
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('Playing the 2 tracks loaded so far'),
+    );
+    warn.mockRestore();
+    client.clear();
+  });
+
+  it('shows a busy control and shuffles once when Shuffle All is tapped twice', async () => {
+    const shuffleFromList = jest.fn();
+    const finish = pendingWholeLibrary();
+    const client = renderLibrary({ shuffleFromList });
+    await waitFor(() => expect(screen.getByTestId('library-shuffle-all')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('library-shuffle-all'));
+    fireEvent.press(screen.getByTestId('library-shuffle-all'));
+    await waitFor(() => expect(screen.getByTestId('library-shuffle-all-busy')).toBeTruthy());
+    finish(['a', 'b', 'c'].map(track));
+
+    await waitFor(() => expect(shuffleFromList).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('library-shuffle-all-busy')).toBeNull());
+    expect(mockGetAllTracks).toHaveBeenCalledTimes(1);
+    client.clear();
+  });
+
+  it('plays once when a row is tapped twice while the whole library loads', async () => {
+    const playFromList = jest.fn();
+    const finish = pendingWholeLibrary();
+    const client = renderLibrary({ playFromList });
+    await waitFor(() => expect(screen.getByTestId('library-row-a')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('library-row-a'));
+    fireEvent.press(screen.getByTestId('library-row-a'));
+    finish(['a', 'b', 'c'].map(track));
+
+    await waitFor(() => expect(playFromList).toHaveBeenCalledTimes(1));
+    expect(mockGetAllTracks).toHaveBeenCalledTimes(1);
     client.clear();
   });
 });

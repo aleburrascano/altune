@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
 import { Shuffle } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
@@ -19,13 +19,16 @@ type TracksListHeaderProps = {
   isWide: boolean;
   showShuffle: boolean;
   onShuffleAll: (() => void) | undefined;
+  shuffleBusy: boolean;
 };
 
 function TracksListHeader(props: TracksListHeaderProps): ReactElement {
-  const { isWide, showShuffle, onShuffleAll } = props;
+  const { isWide, showShuffle, onShuffleAll, shuffleBusy } = props;
   return (
     <>
-      {showShuffle && onShuffleAll != null ? <ShuffleAllButton onPress={onShuffleAll} /> : null}
+      {showShuffle && onShuffleAll != null ? (
+        <ShuffleAllButton onPress={onShuffleAll} busy={shuffleBusy} />
+      ) : null}
       {isWide && showShuffle ? <WideTrackHeader /> : null}
     </>
   );
@@ -43,25 +46,38 @@ type TracksListProps = {
   isPlaying: (trackId: TrackId) => boolean;
   paging?: ListPaging;
   onShuffleAll?: () => void;
+  shuffleBusy?: boolean;
   selection?: Selection;
 };
 
-function ShuffleAllButton({ onPress }: { onPress: () => void }): ReactElement {
+function ShuffleAllIcon({ busy }: { busy: boolean }): ReactElement {
   const theme = useTheme();
+  if (busy) return <ActivityIndicator testID="library-shuffle-all-busy" size="small" />;
+  return <Shuffle size={16} color={theme.color.textPrimary} />;
+}
+
+const shuffleAllStatic = {
+  testID: 'library-shuffle-all',
+  accessibilityRole: 'button',
+  accessibilityLabel: 'Shuffle whole library',
+  accessibilityHint: 'Plays every track in your library in random order',
+} as const;
+
+function shuffleAllProps(onPress: () => void, busy: boolean) {
+  return { ...shuffleAllStatic, onPress, disabled: busy, accessibilityState: { busy } };
+}
+
+function useShuffleAllStyle() {
+  const theme = useTheme();
+  const colors = { backgroundColor: theme.color.surface1, borderColor: theme.color.border };
+  return ({ pressed }: { pressed: boolean }) => [styles.shuffleAll, colors, pressedStyle(pressed)];
+}
+
+function ShuffleAllButton({ onPress, busy }: { onPress: () => void; busy: boolean }): ReactElement {
+  const style = useShuffleAllStyle();
   return (
-    <Pressable
-      testID="library-shuffle-all"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.shuffleAll,
-        { backgroundColor: theme.color.surface1, borderColor: theme.color.border },
-        pressedStyle(pressed),
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel="Shuffle whole library"
-      accessibilityHint="Plays every track in your library in random order"
-    >
-      <Shuffle size={16} color={theme.color.textPrimary} />
+    <Pressable {...shuffleAllProps(onPress, busy)} style={style}>
+      <ShuffleAllIcon busy={busy} />
       <Text variant="label">Shuffle all</Text>
     </Pressable>
   );
@@ -79,6 +95,7 @@ export function TracksList({
   isPlaying,
   paging,
   onShuffleAll,
+  shuffleBusy = false,
   selection,
 }: TracksListProps): ReactElement {
   const isWide = useWideWebLayout();
@@ -97,6 +114,7 @@ export function TracksList({
           isWide={isWide}
           showShuffle={tracks.length > 0}
           onShuffleAll={onShuffleAll}
+          shuffleBusy={shuffleBusy}
         />
       }
       ListFooterComponent={
