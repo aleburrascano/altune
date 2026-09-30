@@ -200,3 +200,88 @@ func assertNoSpans(out []byte, k kind) error {
 	}
 	return nil
 }
+
+func runInDir(t *testing.T, verb, name, content string) (int, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	writeFile(t, dir, name, content)
+	var out strings.Builder
+	code := run([]string{verb, dir}, &out)
+	return code, out.String(), dir
+}
+
+func TestYamlCheckReportsTheCommentBehindALeadingBOM(t *testing.T) {
+	code, out, dir := runInDir(t, "check", "a.yml", "\xEF\xBB\xBF# c\na: 1\n")
+	if code != 1 || !strings.Contains(out, filepath.Join(dir, "a.yml")+":1") {
+		t.Fatalf("exit = %d, output:\n%s", code, out)
+	}
+}
+
+func TestYamlStripKeepsTheLeadingBOM(t *testing.T) {
+	code, out, dir := runInDir(t, "strip", "a.yml", "\xEF\xBB\xBF# c\na: 1\n")
+	got, err := os.ReadFile(filepath.Join(dir, "a.yml"))
+	if err != nil || code != 0 || string(got) != "\xEF\xBB\xBFa: 1\n" {
+		t.Fatalf("exit = %d, err = %v, file = %q, output:\n%s", code, err, got, out)
+	}
+}
+
+func TestYamlCheckSeesACommentAfterAQuoteStartingAPlainContinuation(t *testing.T) {
+	code, out, dir := runInDir(t, "check", "a.yml", "a: foo\n  'bar\nb: 1 # c\n")
+	if code != 1 || !strings.Contains(out, filepath.Join(dir, "a.yml")+":3") {
+		t.Fatalf("exit = %d, output:\n%s", code, out)
+	}
+}
+
+func TestYamlCheckRejectsAQuoteLeftOpenAtEndOfFile(t *testing.T) {
+	code, out, _ := runInDir(t, "check", "a.yml", "a: 'foo\n")
+	if code != 2 || !strings.Contains(out, "unterminated quoted scalar") {
+		t.Fatalf("exit = %d, output:\n%s", code, out)
+	}
+}
+
+func TestYamlCheckAcceptsAContinuationLineStartingWithABlockIndicator(t *testing.T) {
+	for _, line := range []string{"  |bar", "  >bar"} {
+		code, out, _ := runInDir(t, "check", "a.yml", "a: foo\n"+line+"\nb: 1\n")
+		if code != 0 {
+			t.Fatalf("%q: exit = %d, output:\n%s", line, code, out)
+		}
+	}
+}
+
+func stripWorkflow(t *testing.T, src string) (int, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	workflows := filepath.Join(dir, ".gitea", "workflows")
+	if err := os.MkdirAll(workflows, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, workflows, "w.yml", src)
+	var out strings.Builder
+	code := run([]string{"strip", dir}, &out)
+	got, err := os.ReadFile(filepath.Join(workflows, "w.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code, out.String(), string(got)
+}
+
+func TestWorkflowStripRefusesToChangeARunBlocksIndent(t *testing.T) {
+	head := "jobs:\n  b:\n    steps:\n      - run: |\n"
+	for name, body := range map[string]string{
+		"deeper line then shallower": "          # only\n            echo hi\n          echo there\n",
+		"only the deeper line":       "          # only\n            echo hi\n",
+	} {
+		code, out, got := stripWorkflow(t, head+body)
+		if code == 0 || got != head+body || !strings.Contains(out, "content indent 10") {
+			t.Fatalf("%s: exit = %d, file = %q, output:\n%s", name, code, got, out)
+		}
+	}
+}
+
+func TestWorkflowStripRefusesARunBlockHoldingOnlyComments(t *testing.T) {
+	src := "jobs:\n  b:\n    steps:\n      - run: |\n          # a\n          # b\n"
+	code, out, got := stripWorkflow(t, src)
+	if code == 0 || got != src || !strings.Contains(out, "only comments") {
+		t.Fatalf("exit = %d, file = %q, output:\n%s", code, got, out)
+	}
+}

@@ -11,6 +11,8 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+const yamlUTF8BOM = "\xEF\xBB\xBF"
+
 func init() {
 	register(workflowKind)
 	register(yamlKind)
@@ -68,6 +70,8 @@ type yamlScanner struct {
 	inDouble    bool
 	flow        int
 	scalarStart bool
+	plainOpen   bool
+	plainParent int
 	sawKey      bool
 	entryCol    int
 	parent      int
@@ -86,11 +90,18 @@ func yamlScan(src []byte) ([]span, []yamlBlock, error) {
 	}
 	sc := &yamlScanner{src: src}
 	number := 0
-	for start := 0; start < len(src) && sc.err == nil; {
+	start := 0
+	if bytes.HasPrefix(src, []byte(yamlUTF8BOM)) {
+		start = len(yamlUTF8BOM)
+	}
+	for start < len(src) && sc.err == nil {
 		number++
 		end := lineEndOffset(src, start)
 		sc.scanLine(yamlLine{start, contentEnd(src, start, end), number})
 		start = end + 1
+	}
+	if sc.err == nil && (sc.inSingle || sc.inDouble) {
+		sc.err = errors.New("unterminated quoted scalar at end of file")
 	}
 	if sc.err != nil {
 		return nil, nil, sc.err
@@ -172,6 +183,16 @@ func (sc *yamlScanner) consumeBody(ln yamlLine) bool {
 
 func (sc *yamlScanner) scanLineHead(ln yamlLine) int {
 	i := skipBlanks(sc.src, ln.start, ln.end)
+	if sc.plainOpen && sc.flow == 0 {
+		if i >= ln.end {
+			return i
+		}
+		if i-ln.start > sc.plainParent {
+			sc.scalarStart = false
+			return i
+		}
+		sc.plainOpen = false
+	}
 	sc.parent = -1
 	sc.sawKey = false
 	if sc.flow == 0 {
@@ -281,6 +302,9 @@ func (sc *yamlScanner) skipWord(ln yamlLine, i int) int {
 }
 
 func (sc *yamlScanner) stepText(ln yamlLine, i int) int {
+	if !sc.plainOpen && sc.flow == 0 {
+		sc.plainOpen, sc.plainParent = true, sc.parent
+	}
 	sc.scalarStart = false
 	switch sc.src[i] {
 	case ':':
@@ -299,6 +323,7 @@ func (sc *yamlScanner) stepText(ln yamlLine, i int) int {
 
 func (sc *yamlScanner) markKey() {
 	sc.scalarStart = true
+	sc.plainOpen = false
 	if !sc.sawKey && sc.flow == 0 {
 		sc.parent = sc.entryCol
 	}
@@ -580,7 +605,40 @@ func yamlSame(before, after []byte) error {
 }
 
 func workflowSame(before, after []byte) error {
+	if err := blockIndentsSame(before, after); err != nil {
+		return err
+	}
 	return yamlTreesSame(before, after, true)
+}
+
+func blockIndentKept(b, a yamlBlock) error {
+	switch {
+	case b.first > 0 && a.first == 0:
+		return fmt.Errorf("block at line %d holds only comments; stripping would empty it", b.header)
+	case b.first > 0 && a.indent != b.indent:
+		return fmt.Errorf("block at line %d has content indent %d; stripping its first line would change it to %d", b.header, b.indent, a.indent)
+	}
+	return nil
+}
+
+func blockIndentsSame(before, after []byte) error {
+	_, beforeBlocks, err := yamlScan(before)
+	if err != nil {
+		return fmt.Errorf("scan original: %w", err)
+	}
+	_, afterBlocks, err := yamlScan(after)
+	if err != nil {
+		return fmt.Errorf("scan stripped: %w", err)
+	}
+	if len(beforeBlocks) != len(afterBlocks) {
+		return fmt.Errorf("stripped YAML has %d block scalars, source has %d", len(afterBlocks), len(beforeBlocks))
+	}
+	for i, b := range beforeBlocks {
+		if err := blockIndentKept(b, afterBlocks[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func yamlTreesSame(before, after []byte, workflow bool) error {

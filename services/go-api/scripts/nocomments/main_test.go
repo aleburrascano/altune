@@ -687,3 +687,29 @@ func TestRunDiffReportsLaterViolationsAfterAParseError(t *testing.T) {
 		}
 	}
 }
+
+func TestStripReplacesTheFileAtomicallyKeepingItsMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.yml")
+	writeFile(t, dir, "a.yml", "a: 1 # c\n")
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	code := run([]string{"strip", dir}, &out)
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(dir)
+	if code != 0 || os.SameFile(before, after) || after.Mode() != before.Mode() || len(entries) != 1 {
+		t.Fatalf("exit = %d, sameFile = %v, mode %v -> %v, entries = %d, output:\n%s",
+			code, os.SameFile(before, after), before.Mode(), after.Mode(), len(entries), out.String())
+	}
+}
