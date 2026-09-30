@@ -515,3 +515,31 @@ func TestBackfill_TimeBudgetSpent_TruncatesAndSkipsCooldown(t *testing.T) {
 		t.Fatalf("resume: %+v, %v", resumed, err)
 	}
 }
+
+type stallingListRepo struct {
+	*catalogtest.TrackRepo
+}
+
+func (r *stallingListRepo) ListForUser(ctx context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
+	<-ctx.Done()
+	return nil, 0, ctx.Err()
+}
+
+func TestBackfill_TimeBudgetSpentInsideListing_TruncatesAndSkipsCooldown(t *testing.T) {
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	repo := &stallingListRepo{TrackRepo: catalogtest.NewTrackRepo()}
+	svc := NewBackfillFeaturedService(repo, repo, fakeResolver{}, WithBackfillTimeBudget(50*time.Millisecond))
+
+	res, err := svc.Execute(ctx, userId, 7)
+	if err != nil {
+		t.Fatalf("a budget spent inside the listing must not fail the run, got %v", err)
+	}
+	if !res.Truncated || res.NextOffset != 7 {
+		t.Fatalf("result = %+v, want truncated with next offset 7", res)
+	}
+
+	if _, err := svc.Execute(ctx, userId, res.NextOffset); errors.Is(err, ErrBackfillCoolingDown) {
+		t.Fatalf("resume after a budget-truncated run was refused: %v", err)
+	}
+}

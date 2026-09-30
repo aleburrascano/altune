@@ -106,6 +106,9 @@ func (s *BackfillFeaturedService) runPages(ctx context.Context, userId shared.Us
 		}
 		tracks, total, err := s.trackRepo.ListForUser(ctx, userId, backfillPageSize, res.NextOffset)
 		if err != nil {
+			if isBudgetSpent(ctx) {
+				return errBackfillBudgetSpent
+			}
 			return fmt.Errorf("list tracks for backfill: %w", err)
 		}
 		if err := s.backfillPage(ctx, userId, tracks, res); err != nil {
