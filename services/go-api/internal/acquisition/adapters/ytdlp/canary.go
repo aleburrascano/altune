@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const cookieCopyDirPattern = ports.TempDirPrefix + "cookies-*"
+
 const canaryTimeout = 60 * time.Second
 
 const soundCloudPreviewDuration = 30.0
@@ -85,15 +87,22 @@ func CopyToTempFile(sourcePath, pattern string) (path string, cleanup func(), er
 	}
 	defer func() { _ = source.Close() }()
 
-	dst, err := os.CreateTemp("", pattern)
+	dir, err := os.MkdirTemp("", cookieCopyDirPattern)
 	if err != nil {
+		return "", func() {}, err
+	}
+	removeDir := func() { _ = os.RemoveAll(dir) }
+
+	dst, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		removeDir()
 		return "", func() {}, err
 	}
 	defer func() { _ = dst.Close() }()
 
 	if _, err := io.Copy(dst, source); err != nil {
-		_ = os.Remove(dst.Name())
+		removeDir()
 		return "", func() {}, err
 	}
-	return dst.Name(), func() { _ = os.Remove(dst.Name()) }, nil
+	return dst.Name(), removeDir, nil
 }

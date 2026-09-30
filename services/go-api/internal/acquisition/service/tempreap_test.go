@@ -76,3 +76,18 @@ func backdate(t *testing.T, path string, age time.Duration) {
 		t.Fatalf("backdate %s: %v", path, err)
 	}
 }
+
+func TestSweepStaleTempDirsReapsAgedCookieCopyDirKeepsFresh(t *testing.T) {
+	tempRoot := useTempRoot(t)
+	aged := agedDir(t, tempRoot, tempDirPrefix+"cookies-aged", maxLiveTempAge+time.Hour)
+	fresh := agedDir(t, tempRoot, tempDirPrefix+"cookies-fresh", time.Minute)
+
+	SweepStaleTempDirs()
+
+	if _, err := os.Stat(aged); !os.IsNotExist(err) {
+		t.Errorf("aged cookie copy dir: Stat err = %v, want not-exist", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("fresh cookie copy dir was removed: %v", err)
+	}
+}

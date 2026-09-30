@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 	"time"
 )
 
-const tempDirPrefix = "altune-acquire-"
+const tempDirPrefix = ports.TempDirPrefix
 
 const maxLiveTempAge = acquireTimeout + 15*time.Minute
 

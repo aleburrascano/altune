@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"os"
 	"path/filepath"
@@ -227,5 +228,26 @@ func TestCanary_SelectsFormatsTheSameWayDownloadDoes(t *testing.T) {
 
 	if got, want := formatFlag(t, canaryArgs), formatFlag(t, downloadArgs); got != want {
 		t.Errorf("canary -f %q, want the download's selector %q so a format outage shows up as dark", got, want)
+	}
+}
+
+func TestCopyToTempFile_LivesInAReapableDirectoryRemovedByCleanup(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(source, []byte("jar"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	path, cleanup, err := CopyToTempFile(source, "copy-*.txt")
+	if err != nil {
+		t.Fatalf("CopyToTempFile() = %v, want nil", err)
+	}
+
+	dir := filepath.Dir(path)
+	if !strings.HasPrefix(filepath.Base(dir), ports.TempDirPrefix) {
+		t.Errorf("copy dir = %q, want a name starting with %q", filepath.Base(dir), ports.TempDirPrefix)
+	}
+	cleanup()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("copy dir %q still exists after cleanup, Stat err = %v", dir, err)
 	}
 }
