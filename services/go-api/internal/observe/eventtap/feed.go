@@ -64,3 +64,7 @@ func (f *Feed) record(evt TapEvent) {
 func (f *Feed) Subscribe() (<-chan TapEvent, func(), error) {
 	return f.broadcaster.subscribe()
 }
+
+func (f *Feed) Dropped() uint64 {
+	return f.broadcaster.dropped.Load()
+}

@@ -3,6 +3,7 @@ package eventtap
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 )
 
 const MaxSubscribers = 16
@@ -18,6 +19,7 @@ type broadcaster struct {
 	nextSub int
 	maxSubs int
 	closed  bool
+	dropped atomic.Uint64
 }
 
 func newBroadcaster(maxSubs int) *broadcaster {
@@ -31,6 +33,7 @@ func (b *broadcaster) broadcast(evt TapEvent) {
 		select {
 		case ch <- evt:
 		default:
+			b.dropped.Add(1)
 		}
 	}
 }

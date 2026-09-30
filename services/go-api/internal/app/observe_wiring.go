@@ -77,6 +77,11 @@ type eventBusStats struct {
 	Dropped uint64 `json:"dropped_total"`
 }
 
+type eventTapStats struct {
+	TapDropped  uint64 `json:"tap_dropped_total"`
+	FeedDropped uint64 `json:"feed_dropped_total"`
+}
+
 func (a *App) liveMetrics() observeHandler.LiveMetrics {
 	m := liveMetricsSnapshot()
 	m["db_pool"] = database.ReadPoolStats(a.pool)
@@ -94,6 +99,15 @@ func (a *App) liveMetrics() observeHandler.LiveMetrics {
 	if a.alertMonitor != nil {
 		m["alert_monitor"] = a.alertMonitor.Status()
 	}
+
+	var tapStats eventTapStats
+	if a.eventTap != nil {
+		tapStats.TapDropped = a.eventTap.Dropped()
+	}
+	if a.eventFeed != nil {
+		tapStats.FeedDropped = a.eventFeed.Dropped()
+	}
+	m["event_tap"] = tapStats
 	return m
 }
 

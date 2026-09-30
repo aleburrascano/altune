@@ -552,3 +552,40 @@ func TestMeterResult_CarriesEveryScorecardField(t *testing.T) {
 		t.Errorf("meterResult = %+v, want %+v", got, want)
 	}
 }
+
+func TestObserveLiveMetrics_ReportsEventTapAndFeedDrops(t *testing.T) {
+	tap := eventtap.New(events.NewInProcessBus())
+	feed := eventtap.NewFeed()
+	ctx, stop := context.WithCancel(context.Background())
+	feed.Start(ctx, tap)
+	t.Cleanup(func() {
+		stop()
+		feed.Shutdown(context.Background())
+	})
+	_, cancel, err := feed.Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cancel)
+	user := shared.NewUserId(uuid.New())
+	deadline := time.Now().Add(5 * time.Second)
+	for feed.Dropped() == 0 && time.Now().Before(deadline) {
+		tap.Publish(context.Background(), user, "flood", nil)
+	}
+	if feed.Dropped() == 0 {
+		t.Fatal("precondition: an unread subscriber never overflowed, so the feed dropped nothing")
+	}
+	a := &App{eventFeed: feed, eventTap: tap}
+	var out struct {
+		EventTap eventTapStats `json:"event_tap"`
+	}
+	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.EventTap.FeedDropped == 0 {
+		t.Errorf("event_tap.feed_dropped_total = 0, want the feed's drops")
+	}
+	if out.EventTap.TapDropped != tap.Dropped() {
+		t.Errorf("event_tap.tap_dropped_total = %d, want the tap's %d", out.EventTap.TapDropped, tap.Dropped())
+	}
+}

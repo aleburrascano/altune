@@ -338,3 +338,18 @@ func TestFeed_SubscribeRacingStopEitherRefusesOrLaterCloses(t *testing.T) {
 		}
 	}
 }
+
+func TestFeed_OverflowingSubscriberRaisesDropped(t *testing.T) {
+	f := NewFeed()
+	_, cancel, err := f.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cancel()
+	for i := 0; i < feedSubSize+5; i++ {
+		f.record(TapEvent{Type: "flood", Timestamp: time.Now().UTC()})
+	}
+	if got := f.Dropped(); got != 5 {
+		t.Errorf("Dropped() = %d, want 5", got)
+	}
+}
