@@ -24,35 +24,6 @@ func RankWith(entities []Entity, queryNorm string, opts RankOptions) []domain.Se
 	return rankWith(entities, queryNorm, opts.config())
 }
 
-type ScoredResult struct {
-	Result      domain.SearchResult
-	Relevance   float64
-	Prominence  float64
-	Behavioral  float64
-	Popularity  float64
-	RRF         float64
-	MultiSource bool
-	Demoted     bool
-}
-
-func RankExplain(entities []Entity, queryNorm string, opts RankOptions) []ScoredResult {
-	scored := rankScored(entities, queryNorm, opts.config())
-	out := make([]ScoredResult, len(scored))
-	for i, s := range scored {
-		out[i] = ScoredResult{
-			Result:      s.result,
-			Relevance:   s.relevance,
-			Prominence:  s.prominence,
-			Behavioral:  s.behavioral,
-			Popularity:  s.pop,
-			RRF:         s.rrf,
-			MultiSource: s.multi,
-			Demoted:     s.demoted,
-		}
-	}
-	return out
-}
-
 func Reshape(ranked []domain.SearchResult) []domain.SearchResult {
 	return CollapseArtistDuplicates(EnforceDiversity(ranked))
 }

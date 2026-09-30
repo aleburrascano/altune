@@ -51,11 +51,6 @@ func ReplayCorpus(corpus BehavioralCorpus, ranking CandidateRanking, topK int) R
 	return score
 }
 
-func BuildRanking(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) CandidateRanking {
-	ranking, _ := BuildRankingCountingFailures(ctx, corpus, searcher)
-	return ranking
-}
-
 func BuildRankingCountingFailures(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) (CandidateRanking, int) {
 	ranking := CandidateRanking{}
 	failed := 0

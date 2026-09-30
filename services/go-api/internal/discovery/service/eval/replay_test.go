@@ -90,7 +90,7 @@ func TestBuildRanking_OrdersBySearchResultAndDedupesQueries(t *testing.T) {
 		{Query: "adele hello", ResultSignature: "irrelevant-second-entry-same-query", Polarity: -1},
 	}}
 
-	ranking := BuildRanking(context.Background(), corpus, searcher)
+	ranking, _ := BuildRankingCountingFailures(context.Background(), corpus, searcher)
 
 	if searcher.calls["adele hello"] != 1 {
 		t.Fatalf("expected the query to be searched once despite two corpus entries, got %d calls", searcher.calls["adele hello"])
@@ -116,7 +116,7 @@ func TestReplayCorpus_EndToEndAgainstBuiltRanking(t *testing.T) {
 		{Query: "adele hello", ResultSignature: goodSig, Polarity: 1},
 	}}
 
-	ranking := BuildRanking(context.Background(), corpus, searcher)
+	ranking, _ := BuildRankingCountingFailures(context.Background(), corpus, searcher)
 	score := ReplayCorpus(corpus, ranking, 3)
 
 	if score.Positives != 1 || score.Found != 1 {
@@ -147,7 +147,7 @@ func TestBuildRanking_PrefersStampedSignatureOverDerived(t *testing.T) {
 		{Query: "adele hello", ResultSignature: "stamped-adele-hello", Polarity: 1},
 	}}
 
-	ranking := BuildRanking(context.Background(), corpus, searcher)
+	ranking, _ := BuildRankingCountingFailures(context.Background(), corpus, searcher)
 	score := ReplayCorpus(corpus, ranking, 3)
 
 	if derived := domain.ResultSignature(result); derived == result.Signature {

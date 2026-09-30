@@ -328,9 +328,7 @@ Two eval-gated experimental rungs, both default-off:
   bare-name artist rises above a same-name track) without touching track-vs-track
   order.
 
-`RankExplain`/`ScoredResult` runs the identical `rankScored` core but keeps each
-result's scoring provenance, so Overseer's rank explainer can never
-drift from production order. Experiment inputs cross the package boundary as an
+Experiment inputs cross the package boundary as an
 exported `RankOptions` mapped onto the internal `rankConfig` at a single site, so
 the offline eval and the operator re-run compose the *same* flag-gated stages.
 

@@ -302,46 +302,6 @@ func TestRankWith_BehavioralScoresMapAppliedBySignature(t *testing.T) {
 	}
 }
 
-func TestRankExplain_SameOrderAsRankWith(t *testing.T) {
-	trk := withISRC(deezerTrack("Boston", "Augustana", 40), "III")
-	artist := artistWithFans("Boston", 4_000_000)
-	tail := track("Boston Remix Boston", "reuploader", domain.ProviderSoundCloud, nil)
-	other := deezerTrack("Boston Nights", "Someone", 70)
-	entities := []Entity{ent(trk), ent(artist), ent(tail), ent(other)}
-
-	opts := RankOptions{
-		TailDemotion:        true,
-		CrossKindProminence: true,
-		Behavioral:          map[string]float64{domain.ResultSignature(other): 1.5},
-	}
-	ranked := RankWith(entities, "boston", opts)
-	explained := RankExplain(entities, "boston", opts)
-
-	if len(ranked) != len(explained) {
-		t.Fatalf("lengths differ: ranked %d, explained %d", len(ranked), len(explained))
-	}
-	for i := range ranked {
-		if ranked[i].Title != explained[i].Result.Title || ranked[i].Subtitle != explained[i].Result.Subtitle {
-			t.Errorf("position %d: ranked %q/%q vs explained %q/%q",
-				i, ranked[i].Title, ranked[i].Subtitle, explained[i].Result.Title, explained[i].Result.Subtitle)
-		}
-	}
-
-	byTitle := map[string]ScoredResult{}
-	for _, s := range explained {
-		byTitle[s.Result.Title+"|"+s.Result.Subtitle] = s
-	}
-	if !byTitle["Boston Remix Boston|reuploader"].Demoted {
-		t.Error("UGC single-source result must be flagged Demoted in the explain output")
-	}
-	if byTitle["Boston|"].Prominence <= 0 {
-		t.Error("prominent artist must carry a positive Prominence in the explain output")
-	}
-	if byTitle["Boston Nights|Someone"].Behavioral != 1.5 {
-		t.Errorf("Behavioral = %v, want the supplied 1.5", byTitle["Boston Nights|Someone"].Behavioral)
-	}
-}
-
 func TestRankPipelineNoReshape_SkipsListShaping(t *testing.T) {
 	group := []domain.SearchResult{}
 	for _, title := range []string{"Humble A", "Humble B", "Humble C", "Humble D", "Humble E", "Humble F"} {
