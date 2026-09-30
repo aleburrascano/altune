@@ -3,11 +3,17 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
+import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { showAlert } from '@shared/ui/dialog/dialog';
 import * as webDialog from '@shared/ui/dialog/dialog.web';
 
 import { useOptimisticMutation } from '../useOptimisticMutation';
+
+jest.mock('@shared/telemetry/userTelemetry', () => ({
+  ...jest.requireActual('@shared/telemetry/userTelemetry'),
+  recordFailureShown: jest.fn(),
+}));
 
 jest.mock('@shared/ui/dialog/dialog', () => {
   const actual = jest.requireActual('@shared/ui/dialog/dialog');
@@ -547,5 +553,34 @@ describe('useOptimisticMutation(): alerting on web', () => {
     });
 
     expect(windowAlert).toHaveBeenCalledWith('Failed\n\nCould not add 4.');
+  });
+});
+
+describe('useOptimisticMutation(): failure_shown surface', () => {
+  it('records the mutation action as the surface when the rollback alert shows', async () => {
+    jest.mocked(recordFailureShown).mockClear();
+    const queryClient = newClient();
+    queryClient.setQueryData(KEY, { count: 1 });
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          action: 'test.surface',
+          queryKey: KEY,
+          mutationFn: failing,
+          applyOptimistic: bump,
+          revertOptimistic: unbump,
+          alertOnError: (by: number) => ({ title: 'Failed', message: `Could not add ${by}.` }),
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await expect(result.current.mutateAsync(4)).rejects.toThrow('boom');
+    });
+
+    expect(jest.mocked(recordFailureShown).mock.calls).toEqual([
+      [{ surface: 'test.surface', message: 'Could not add 4.' }],
+    ]);
   });
 });

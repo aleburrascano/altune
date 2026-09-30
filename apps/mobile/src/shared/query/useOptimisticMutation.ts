@@ -6,7 +6,7 @@ import {
 } from '@shared/session/guardedMutation';
 import { isSameSession } from '@shared/session/sessionEpoch';
 import { useAppMutation } from '@shared/query/useAppMutation';
-import { showAlert } from '@shared/ui/dialog/dialog';
+import { showFailureAlert } from '@shared/ui';
 
 type ErrorAlert = { title: string; message: string };
 
@@ -51,12 +51,13 @@ function onlyInTheStartingSession<TData, TVariables, TCache>(
 }
 
 function alertAfterRollback<TVariables>(
+  action: string,
   alertOnError: ((variables: TVariables) => ErrorAlert) | undefined,
   variables: TVariables,
 ): void {
   if (!alertOnError) return;
   const { title, message } = alertOnError(variables);
-  showAlert(title, message);
+  showFailureAlert({ surface: action, title, message });
 }
 
 export function useOptimisticMutation<TData, TVariables, TCache>(
@@ -109,7 +110,7 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     onError: (_error, variables, context) => {
       if (!isSameSession(context?.epoch)) return;
       rollback(variables, context);
-      alertAfterRollback(alertOnError, variables);
+      alertAfterRollback(options.action, alertOnError, variables);
     },
     onSettled: (_data, _error, variables, context) => {
       if (!isSameSession(context?.epoch)) return undefined;

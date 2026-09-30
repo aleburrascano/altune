@@ -24,8 +24,14 @@ import { playlistKeys } from '@shared/lib/query-keys';
 import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import * as playlistsApi from '@shared/api-client/playlists';
+import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
+
+jest.mock('@shared/telemetry/userTelemetry', () => ({
+  ...jest.requireActual('@shared/telemetry/userTelemetry'),
+  recordFailureShown: jest.fn(),
+}));
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -1874,5 +1880,80 @@ describe('after sign-out', () => {
       expect(alertSpy).not.toHaveBeenCalled();
       expect(queryClient.getQueryData(playlistKeys.list)).toEqual(USER_B_PLAYLISTS);
     });
+  });
+});
+
+describe('failure_shown surfaces recorded by the playlist mutations', () => {
+  const recorded = jest.mocked(recordFailureShown);
+  const surfacesOf = () => recorded.mock.calls.map(([payload]) => payload.surface);
+  const okCreated = (id: string, name: string) => ({
+    id,
+    name,
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  });
+
+  beforeEach(() => recorded.mockClear());
+
+  it('records playlist.create when creating fails', async () => {
+    __http.reply('POST /v1/playlists', { status: 500 });
+    const { result } = renderHook(() => useCreatePlaylist(), {
+      wrapper: createWrapper(newClient()),
+    });
+
+    await act(async () => {
+      await expect(result.current.mutateAsync('Focus')).rejects.toThrow();
+    });
+
+    expect(surfacesOf()).toEqual(['playlist.create']);
+  });
+
+  it('records playlist.create_with_tracks when the add fails and the create is rolled back', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: okCreated('p1', 'Focus') });
+    __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(newClient()),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
+    });
+
+    expect(surfacesOf()).toEqual(['playlist.create_with_tracks']);
+  });
+
+  it('records playlist.add_tracks.already_there when tracks were already in the playlist', async () => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 1, skipped: 1 },
+    });
+    const { result } = renderHook(() => useAddTracksToPlaylist(), {
+      wrapper: createWrapper(newClient()),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
+    });
+
+    expect(surfacesOf()).toEqual(['playlist.add_tracks.already_there']);
+  });
+
+  it('records playlist.delete when deleting fails', async () => {
+    __http.fail('DELETE /v1/playlists/p1');
+    const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('p1')), {
+      wrapper: createWrapper(newClient()),
+    });
+
+    await act(async () => {
+      await expect(result.current.mutateAsync()).rejects.toThrow();
+    });
+
+    expect(surfacesOf()).toEqual(['playlist.delete']);
   });
 });

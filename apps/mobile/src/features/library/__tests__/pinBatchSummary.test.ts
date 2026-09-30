@@ -1,8 +1,10 @@
+import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 import { showAlert } from '@shared/ui/dialog/dialog';
 
 import { reportPinBatch, reportStorageFull, reportUnpinBatch } from '../pinBatchSummary';
 
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
+jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
 
 const showAlertMock = jest.mocked(showAlert);
 
@@ -35,6 +37,21 @@ describe('pin batch summaries alert through the dialog port', () => {
         'Not enough storage',
         'Downloads are paused because storage is full. Remove some downloads or free up space, then try again.',
       ],
+    ]);
+  });
+});
+
+describe('pin batch summaries record failure_shown', () => {
+  it('records one surface per summary', () => {
+    jest.mocked(recordFailureShown).mockClear();
+    reportPinBatch({ requested: 3, failed: 2, refused: null } as never);
+    reportUnpinBatch({ requested: 4, failed: 1 } as never);
+    reportStorageFull();
+
+    expect(jest.mocked(recordFailureShown).mock.calls.map(([f]) => f.surface)).toEqual([
+      'library.pin_batch',
+      'library.unpin_batch',
+      'library.storage_full',
     ]);
   });
 });

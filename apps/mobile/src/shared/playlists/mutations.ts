@@ -19,7 +19,7 @@ import {
   guardedMutationOptions,
   isSameSession,
 } from '@shared/session/signOutCleanup';
-import { showAlert } from '@shared/ui/dialog/dialog';
+import { showFailureAlert } from '@shared/ui';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
@@ -84,7 +84,11 @@ async function createWithTracks({
 }
 
 function alertCreateFailed(): void {
-  showAlert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
+  showFailureAlert({
+    surface: 'playlist.create',
+    title: 'Error',
+    message: `Could not create the playlist. ${RETRY_TAIL}`,
+  });
 }
 
 function alertCreatedWithTracks(
@@ -92,7 +96,7 @@ function alertCreatedWithTracks(
   { trackIds }: CreateWithTracksVariables,
 ) {
   const alert = createWithTracksAlert(created, trackIds.length);
-  if (alert !== null) showAlert(alert.title, alert.message);
+  if (alert !== null) showFailureAlert({ surface: 'playlist.create_with_tracks', ...alert });
 }
 
 function refreshPlaylistsInSameSession(queryClient: QueryClient) {
@@ -183,7 +187,11 @@ export function useAddTracksToPlaylist() {
         const name = queryClient
           .getQueryData<PlaylistList>(playlistKeys.list)
           ?.items.find((p) => p.id === playlistId)?.name;
-        showAlert('Note', alreadyThereMessage(trackIds.length - outcome.added, name));
+        showFailureAlert({
+          surface: 'playlist.add_tracks.already_there',
+          title: 'Note',
+          message: alreadyThereMessage(trackIds.length - outcome.added, name),
+        });
       }
     },
     alertOnError: ({ trackIds }) => ({
@@ -218,7 +226,11 @@ function forgetDeletedPlaylist(queryClient: QueryClient, playlistId: PlaylistId)
 }
 
 function alertDeleteFailed(): void {
-  showAlert('Delete failed', `Could not delete the playlist. ${RETRY_TAIL}`);
+  showFailureAlert({
+    surface: 'playlist.delete',
+    title: 'Delete failed',
+    message: `Could not delete the playlist. ${RETRY_TAIL}`,
+  });
 }
 
 export function useDeletePlaylist(playlistId: PlaylistId) {
