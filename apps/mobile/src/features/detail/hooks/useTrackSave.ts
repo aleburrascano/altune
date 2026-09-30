@@ -57,7 +57,12 @@ function useLatch(): Guarded {
   return (action) => {
     if (held.current) return;
     held.current = true;
-    action({ onSettled: () => void (held.current = false) });
+    try {
+      action({ onSettled: () => void (held.current = false) });
+    } catch (error) {
+      held.current = false;
+      throw error;
+    }
   };
 }
 

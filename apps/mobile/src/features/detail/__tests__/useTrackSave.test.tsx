@@ -6,6 +6,9 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { ApiError } from '@shared/errors';
 
+import { enqueueCritical } from '@shared/telemetry/outbox';
+
+import { toCreateTrackRequest } from '../save-cache';
 import { ownedTrack } from '../hooks/useOwnedTrack';
 import { useTrackSave } from '../hooks/useTrackSave';
 import { createTestQueryClient, createWrapper } from './support/queryHarness';
@@ -18,6 +21,10 @@ jest.mock('@shared/api-client/tracks', () => ({
   retryAcquisition: (trackId: unknown) => mockRetryAcquisition(trackId),
 }));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+jest.mock('../save-cache', () => ({
+  ...jest.requireActual('../save-cache'),
+  toCreateTrackRequest: jest.fn(jest.requireActual('../save-cache').toCreateTrackRequest),
+}));
 
 let wrapper: ReturnType<typeof createWrapper>;
 
@@ -301,5 +308,36 @@ describe('useTrackSave double tap', () => {
     });
 
     await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(2));
+  });
+
+  it('dispatches a create again after building the create request throws', async () => {
+    mockCreateTrack.mockReturnValue(new Promise(() => undefined));
+    jest.mocked(toCreateTrackRequest).mockImplementationOnce(() => {
+      throw new Error('bad request build');
+    });
+    const { result } = renderHook(() => useTrackSave(track(), null), { wrapper });
+
+    expect(() => result.current.onSave()).toThrow('bad request build');
+    act(() => {
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(mockCreateTrack).toHaveBeenCalledTimes(1));
+  });
+
+  it('retries again after the retry telemetry throws', async () => {
+    mockRetryAcquisition.mockReturnValue(new Promise(() => undefined));
+    jest.mocked(enqueueCritical).mockImplementationOnce(() => {
+      throw new Error('outbox down');
+    });
+    const owned = ownedTrack(asTrackId('server-1'), 'failed', 'network error');
+    const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
+
+    expect(() => result.current.onSave()).toThrow('outbox down');
+    act(() => {
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
   });
 });
