@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -555,6 +556,38 @@ func TestPgxJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) 
 	}
 	if got := acquisitionStatus(t, pool, track.ID); got != "pending" {
 		t.Errorf("status = %q, want pending until the attempt cap", got)
+	}
+}
+
+func TestPgxJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	ctx := context.Background()
+	insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
+		t.Fatalf("disable seqscan: %v", err)
+	}
+	rows, err := tx.Query(ctx, "EXPLAIN "+claimJobSQL, 30.0)
+	if err != nil {
+		t.Fatalf("explain claim: %v", err)
+	}
+	defer rows.Close()
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatalf("scan plan: %v", err)
+		}
+		plan.WriteString(line + "\n")
+	}
+	if !strings.Contains(plan.String(), "idx_tracks_acquisition_available_at_scheduled") {
+		t.Errorf("claim plan does not use the scheduled available_at index:\n%s", plan.String())
 	}
 }
 
