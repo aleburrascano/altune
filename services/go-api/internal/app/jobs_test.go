@@ -181,3 +181,19 @@ func TestKnownJobNames_PinnedToEveryConst(t *testing.T) {
 		t.Fatal("unregistered name reported known")
 	}
 }
+
+func TestJobControlAdmit_CountsSkipOnlyWhenDisabled(t *testing.T) {
+	jc := &jobControl{}
+	if !jc.admit() || jc.skipped.Load() != 0 {
+		t.Fatalf("enabled job: admit must pass without counting a skip, skipped=%d", jc.skipped.Load())
+	}
+	jc.disabled.Store(true)
+	for range 2 {
+		if jc.admit() {
+			t.Fatal("disabled job must not be admitted")
+		}
+	}
+	if got := jc.skipped.Load(); got != 2 {
+		t.Fatalf("skipped = %d, want 2", got)
+	}
+}

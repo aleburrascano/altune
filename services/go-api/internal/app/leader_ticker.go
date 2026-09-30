@@ -39,8 +39,7 @@ func (a *App) whenLeader(name jobName, start func(context.Context)) {
 func (a *App) whenLeaderUnlessDisabled(name jobName, start func(context.Context)) {
 	jc := a.job(name)
 	a.whenLeader(name, func(ctx context.Context) {
-		if jc.disabled.Load() {
-			jc.skipped.Add(1)
+		if !jc.admit() {
 			return
 		}
 		start(ctx)
@@ -75,16 +74,24 @@ func jobRunBudget(interval time.Duration) time.Duration {
 	return interval / jobRunBudgetFraction
 }
 
+type jobRun struct {
+	control *jobControl
+	name    jobName
+	budget  time.Duration
+}
+
+func (a *App) jobRun(name jobName, interval time.Duration) jobRun {
+	return jobRun{control: a.job(name), name: name, budget: jobRunBudget(interval)}
+}
+
 func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
-	jc := a.job(name)
-	budget := jobRunBudget(interval)
-	a.loopEvery(ctx, interval, func() { a.tick(ctx, jc, name, budget, fn) })
+	run := a.jobRun(name, interval)
+	a.loopEvery(ctx, interval, func() { a.tick(ctx, run, fn) })
 }
 
 func (a *App) startEveryInstanceTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
-	jc := a.job(name)
-	budget := jobRunBudget(interval)
-	a.loopEvery(ctx, interval, func() { a.tickEveryInstance(ctx, jc, name, budget, fn) })
+	run := a.jobRun(name, interval)
+	a.loopEvery(ctx, interval, func() { a.tickEveryInstance(ctx, run, fn) })
 }
 
 func (a *App) loopEvery(ctx context.Context, interval time.Duration, run func()) {
@@ -105,17 +112,15 @@ func (a *App) loopEvery(ctx context.Context, interval time.Duration, run func())
 	}()
 }
 
-func (a *App) tickEveryInstance(ctx context.Context, jc *jobControl, name jobName, budget time.Duration, fn func(context.Context) error) {
-	if jc.disabled.Load() {
-		jc.skipped.Add(1)
+func (a *App) tickEveryInstance(ctx context.Context, run jobRun, fn func(context.Context) error) {
+	if !run.control.admit() {
 		return
 	}
-	a.runJob(ctx, jc, name, budget, fn)
+	a.runJob(ctx, run, fn)
 }
 
-func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, budget time.Duration, fn func(context.Context) error) {
-	if jc.disabled.Load() {
-		jc.skipped.Add(1)
+func (a *App) tick(ctx context.Context, run jobRun, fn func(context.Context) error) {
+	if !run.control.admit() {
 		return
 	}
 	leaderCtx, release, ok := a.leaderContext(ctx)
@@ -123,21 +128,21 @@ func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, budget tim
 		return
 	}
 	defer release()
-	a.runJob(leaderCtx, jc, name, budget, fn)
+	a.runJob(leaderCtx, run, fn)
 }
 
-func (a *App) runJob(parent context.Context, jc *jobControl, name jobName, budget time.Duration, fn func(context.Context) error) {
-	jobCtx, cancel := context.WithTimeoutCause(parent, budget, errJobRunBudgetExceeded)
+func (a *App) runJob(parent context.Context, run jobRun, fn func(context.Context) error) {
+	jobCtx, cancel := context.WithTimeoutCause(parent, run.budget, errJobRunBudgetExceeded)
 	defer cancel()
 	var err error
-	if r := recoverJob(name, func() { err = fn(jobCtx) }); r != nil {
+	if r := recoverJob(run.name, func() { err = fn(jobCtx) }); r != nil {
 		err = fmt.Errorf("panic: %v", r)
 	}
 	if err != nil && errors.Is(context.Cause(jobCtx), errJobRunBudgetExceeded) {
 		slog.Warn("background job run exceeded its budget; canceled",
-			"job", name, "budget", budget.String(), "error", err)
+			"job", run.name, "budget", run.budget.String(), "error", err)
 	}
-	jc.record(err)
+	run.control.record(err)
 }
 
 func (a *App) leaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {

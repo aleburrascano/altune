@@ -76,6 +76,14 @@ type jobControl struct {
 	lastFailure atomic.Int64
 }
 
+func (jc *jobControl) admit() bool {
+	if jc.disabled.Load() {
+		jc.skipped.Add(1)
+		return false
+	}
+	return true
+}
+
 func (jc *jobControl) record(err error) {
 	now := time.Now().UnixNano()
 	if err != nil {
@@ -114,11 +122,7 @@ func (a *App) job(name jobName) *jobControl {
 func (a *App) jobSwitch(name jobName) func() bool {
 	jc := a.job(name)
 	return func() bool {
-		if jc.disabled.Load() {
-			jc.skipped.Add(1)
-			return false
-		}
-		return true
+		return jc.admit()
 	}
 }
 
