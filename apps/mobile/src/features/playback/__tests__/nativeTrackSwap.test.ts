@@ -212,6 +212,45 @@ describe('swapping an upcoming slot to a cached file', () => {
     });
   });
 
+  describe('swapUpcomingToLocal — the outcome it reports', () => {
+    it('reports skipped when the track is not an upcoming slot', async () => {
+      player.getQueue.mockResolvedValueOnce([{ id: 'library:other' }]);
+
+      await expect(swapUpcomingToLocal(libraryTrack(), 'file:///cache/a.mp3')).resolves.toBe(
+        'skipped',
+      );
+    });
+
+    it('reports swapped when the local file is added', async () => {
+      const track = libraryTrack({ title: 'Track trk-1' });
+      player.getQueue.mockResolvedValueOnce([{ id: 'library:active' }, { id: trackKey(track) }]);
+
+      await expect(swapUpcomingToLocal(track, 'file:///cache/trk-1.mp3')).resolves.toBe('swapped');
+    });
+
+    it('reports streaming and warns redacted when the local add fails', async () => {
+      const track = previewTrack({ title: 'A Preview' });
+      player.getQueue.mockResolvedValueOnce([{ id: 'library:active' }, { id: trackKey(track) }]);
+      player.add.mockRejectedValueOnce(new Error('local add failed'));
+
+      await expect(swapUpcomingToLocal(track, 'file:///cache/p.mp3')).resolves.toBe('streaming');
+
+      expect(warn).toHaveBeenCalledWith(
+        '[playback] swap local add failed',
+        expect.objectContaining({ trackId: trackKey(track) }),
+      );
+    });
+
+    it('reports failed when the streaming add fails too', async () => {
+      const track = previewTrack({ title: 'A Preview' });
+      player.getQueue.mockResolvedValueOnce([{ id: 'library:active' }, { id: trackKey(track) }]);
+      player.add.mockRejectedValueOnce(new Error('local add failed'));
+      player.add.mockRejectedValueOnce(new Error('streaming add failed'));
+
+      await expect(swapUpcomingToLocal(track, 'file:///cache/p.mp3')).resolves.toBe('failed');
+    });
+  });
+
   describe('swapUpcomingToLocal — when both re-adds of the emptied slot fail', () => {
     it('holds the original entry again, leaving native aligned with the queue store', async () => {
       const active = libraryTrack({ title: 'Now Playing' });

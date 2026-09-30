@@ -7,11 +7,13 @@ import { asTrackId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import * as audioCache from '../native/audioCache';
 import { MAX_PREFETCH_FILE_BYTES, cacheDir, findCached } from '../native/audioCache';
 import { PREFETCH_STALL_TIMEOUT_MS, evictCached, prefetchNext } from '../native/audioPrefetch';
 import { forgetAllSwaps, wasSwappedToLocal } from '../native/nativeTrackSwap';
+import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
 
 import { libraryTrack } from './fixtures';
 
@@ -29,6 +31,8 @@ jest.mock('@shared/api-client/audio', () => ({
   ...jest.requireActual('@shared/api-client/audio'),
   fetchAudioUrls: jest.fn(),
 }));
+
+jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
 const realFetchAudioUrls: typeof fetchAudioUrls = jest.requireActual(
   '@shared/api-client/audio',
@@ -960,6 +964,79 @@ describe('a download left unfinished by a killed app', () => {
       expect(cachedNames()).toEqual([]);
       expect(queue.map((entry) => entry.url)).not.toContain(FINAL_URI);
       expect(wasSwappedToLocal(asTrackId('t1'))).toBe(false);
+    });
+  });
+});
+
+describe('prefetch health tally', () => {
+  const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
+  const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
+  const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+
+  function track(trackId: string): PlaybackTrack {
+    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
+  }
+
+  function tally(): Record<string, number> {
+    flushPlaybackHealth();
+    const [event] = recordEventMock.mock.calls[0] ?? [];
+    return (event as { payload: Record<string, number> } | undefined)?.payload ?? {};
+  }
+
+  async function prefetchWithUpcomingSlot(): Promise<void> {
+    const [active, next] = [track('t0'), track('t1')];
+    useQueueStore.getState().loadQueue([active, next], 0, null);
+    player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
+    await prefetchNext(0);
+  }
+
+  beforeEach(() => {
+    forgetAllSwaps();
+    _resetPlaybackHealthForTest();
+    useQueueStore.getState().clearQueue();
+    recordEventMock.mockReset().mockResolvedValue(undefined);
+    fetchUrls.mockReset();
+    fetchUrls.mockImplementation(async (ids) =>
+      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
+    );
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('prefetchNext — swap outcome tally', () => {
+    it('counts one prefetch_ok when the downloaded file is swapped in', async () => {
+      await prefetchWithUpcomingSlot();
+
+      expect(tally()).toMatchObject({ prefetch_ok: 1, prefetch_failed_swap: 0 });
+    });
+
+    it('counts no prefetch_ok when the upcoming slot is gone', async () => {
+      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      player.getQueue.mockResolvedValue([]);
+
+      await prefetchNext(0);
+
+      expect(tally()).not.toHaveProperty('prefetch_ok', 1);
+    });
+
+    it('counts a failed swap when the local add fails and it falls back to streaming', async () => {
+      player.add.mockRejectedValueOnce(new Error('local add failed'));
+
+      await prefetchWithUpcomingSlot();
+
+      expect(tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
+    });
+
+    it('counts a failed swap when the streaming add fails too', async () => {
+      player.add.mockRejectedValueOnce(new Error('local add failed'));
+      player.add.mockRejectedValueOnce(new Error('streaming add failed'));
+
+      await prefetchWithUpcomingSlot();
+
+      expect(tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
     });
   });
 });

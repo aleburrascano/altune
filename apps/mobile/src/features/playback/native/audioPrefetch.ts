@@ -18,7 +18,7 @@ import {
   extFromUrl,
   findCached,
 } from './audioCache';
-import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
+import { forgetSwap, swapUpcomingToLocal, type SwapOutcome } from './nativeTrackSwap';
 import { warnPlayback } from '../redactPlaybackError';
 import {
   recordPrefetchOutcome,
@@ -151,14 +151,20 @@ async function resolveAudio(
   return resolved;
 }
 
+function recordSwapOutcome(outcome: SwapOutcome): void {
+  if (outcome === 'skipped') return;
+  recordPrefetchOutcome(outcome === 'swapped' ? 'ok' : 'swap');
+}
+
 async function swapCachedHit(next: PlaybackTrack, uri: string): Promise<void> {
+  let outcome: SwapOutcome = 'skipped';
   try {
-    await swapUpcomingToLocal(next, uri);
+    outcome = await swapUpcomingToLocal(next, uri);
     evictAgainstLiveQueue();
   } catch (err) {
     throw new StageFailure('swap', err);
   }
-  recordPrefetchOutcome('ok');
+  recordSwapOutcome(outcome);
 }
 
 function downloadFailed(
@@ -207,14 +213,15 @@ function queueSnapshot(trackId: TrackId) {
 }
 
 async function swapDownloaded(trackId: TrackId, file: File): Promise<void> {
+  let outcome: SwapOutcome = 'skipped';
   try {
     const q = queueSnapshot(trackId);
-    if (q.stillNext) await swapUpcomingToLocal(q.stillNext, file.uri);
+    if (q.stillNext) outcome = await swapUpcomingToLocal(q.stillNext, file.uri);
     evict(q.ordered, q.index);
   } catch (err) {
     throw new StageFailure('swap', err);
   }
-  recordPrefetchOutcome('ok');
+  recordSwapOutcome(outcome);
 }
 
 interface ClaimedPrefetch {

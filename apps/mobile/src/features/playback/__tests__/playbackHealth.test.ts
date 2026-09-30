@@ -113,7 +113,9 @@ describe('playback health metric', () => {
   });
 
   it('records a successful prefetch', async () => {
-    useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+    const [active, next] = [track('t0'), track('t1')];
+    useQueueStore.getState().loadQueue([active, next], 0, null);
+    player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
     await prefetchNext(0);
     flushPlaybackHealth();

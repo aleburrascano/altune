@@ -90,14 +90,16 @@ async function upcomingSlotOf(key: string, fence: Fence): Promise<UpcomingSlot |
   return entry == null ? null : { index, entry };
 }
 
-export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
-  await withNativeQueue(async (fence) => {
+export type SwapOutcome = 'swapped' | 'streaming' | 'failed' | 'skipped';
+
+export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<SwapOutcome> {
+  return withNativeQueue(async (fence): Promise<SwapOutcome> => {
     const slot = await upcomingSlotOf(trackKey(track), fence);
-    if (slot === null) return;
+    if (slot === null) return 'skipped';
 
     fence();
     await TrackPlayer.remove(slot.index);
-    await refillSlot({ slot, track, uri }, fence);
+    return refillSlot({ slot, track, uri }, fence);
   });
 }
 
@@ -107,13 +109,19 @@ interface Refill {
   uri: string;
 }
 
-async function refillSlot(job: Refill, fence: Fence): Promise<void> {
-  if (await refilledWithLocalFile(job, fence)) return;
+async function refillSlot(job: Refill, fence: Fence): Promise<SwapOutcome> {
+  if (await refilledWithLocalFile(job, fence)) return 'swapped';
+  return refillStreamingOrRestore(job, fence);
+}
+
+async function refillStreamingOrRestore(job: Refill, fence: Fence): Promise<SwapOutcome> {
   try {
     await refillStreaming(job, fence);
+    return 'streaming';
   } catch (err) {
     await restoreSlot(job.slot, fence);
     reportLoadFailure(job.track, err, LOAD_FAILED_MESSAGE);
+    return 'failed';
   }
 }
 
@@ -127,7 +135,8 @@ async function refilledWithLocalFile({ slot, track, uri }: Refill, fence: Fence)
   fence();
   try {
     await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), slot.index);
-  } catch {
+  } catch (err) {
+    warnPlayback('swap local add failed', { trackId: trackKey(track) }, err);
     return false;
   }
   if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
