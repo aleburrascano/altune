@@ -14,3 +14,5 @@ In order: list releases newest first, roll back, release a tarball by hand, and 
 A build that fails on an inline script hash names a `sha256`: add it to that tier's `script-src` in `deploy/Caddyfile`.
 
 On a new VM, run `mkdir -p "$WEB_ROOT"` as the deploy user before `docker compose -f deploy/compose.prod.yml up -d caddy`.
+
+To run `npx expo export -p web` locally, copy `apps/mobile/.env.example` to `apps/mobile/.env` and fill it in. `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` come from the staging Supabase project's dashboard (Project Settings, API): the project URL and the publishable anon key. `EXPO_PUBLIC_API_URL` is `http://localhost:8000` for a local go-api, or the staging host. The export fails at start-up when the Supabase pair is unset.

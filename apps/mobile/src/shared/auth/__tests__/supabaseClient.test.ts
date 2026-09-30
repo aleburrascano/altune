@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createElement } from 'react';
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -666,6 +668,23 @@ describe('required configuration', () => {
       expect(() => require('../supabaseClient')).not.toThrow();
       const { supabase } = require('../supabaseClient') as { supabase: unknown };
       expect(supabase).toBeDefined();
+    });
+  });
+
+  describe('the documented environment', () => {
+    it('lists every EXPO_PUBLIC variable the web export needs in apps/mobile/.env.example', () => {
+      const example = readFileSync(join(__dirname, '../../../../.env.example'), 'utf8');
+
+      const keys = example
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => line.split('=')[0]);
+
+      expect(keys).toEqual([
+        'EXPO_PUBLIC_SUPABASE_URL',
+        'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+        'EXPO_PUBLIC_API_URL',
+      ]);
     });
   });
 });
