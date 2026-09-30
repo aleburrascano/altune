@@ -512,6 +512,24 @@ describe('AlbumDetailBody: the Save N pill', () => {
     expect(within(pill).getByText('Saving…')).toBeTruthy();
     expect(pill.props.accessibilityState?.disabled).toBe(true);
   });
+
+  it('shows how many tracks could not be saved while More is collapsed', async () => {
+    __http.reset();
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    __http.reply(ALBUM_TRACKS, {
+      status: 200,
+      json: { ...ALBUM_TRACKS_ITEMS.json, provider_name: 'deezer', status: 'ok' },
+    });
+    __http.reply('POST /v1/tracks', { status: 500, json: { code: 'internal' } });
+    mockUnownedCount(1);
+    renderBody();
+
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await screen.findByTestId('detail-tracklist');
+    fireEvent.press(screen.getByTestId('detail-save-all'));
+
+    expect(await screen.findByText("1 couldn't be saved")).toBeTruthy();
+  });
 });
 
 describe('AlbumDetailBody: the facts row', () => {

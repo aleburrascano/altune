@@ -1,6 +1,10 @@
 import { type ReactElement } from 'react';
 
+import { View } from 'react-native';
+
 import { Play } from 'lucide-react-native';
+
+import { Text } from '@shared/ui/primitives/Text';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
@@ -47,6 +51,25 @@ function albumSecondary(album: AlbumDetailState) {
   );
 }
 
+function SaveAllFailure({ album }: { album: AlbumDetailState }): ReactElement | null {
+  const failed = album.lastBatch?.failed ?? 0;
+  if (failed === 0) return null;
+  return (
+    <Text variant="body" tone="danger" testID="detail-save-all-failed">
+      {`${failed} couldn't be saved`}
+    </Text>
+  );
+}
+
+function albumActions(album: AlbumDetailState) {
+  return (
+    <View>
+      <DetailActions primary={albumPrimaryAction(album)} secondary={albumSecondary(album)} />
+      <SaveAllFailure album={album} />
+    </View>
+  );
+}
+
 function albumFacts(album: AlbumDetailState, discoveryResult: DiscoveryResult, mbYear?: number) {
   return (
     <DetailFacts
@@ -65,9 +88,7 @@ type ScaffoldArgs = {
 function scaffoldContentProps({ album, discoveryResult, mbYear }: ScaffoldArgs) {
   return {
     facts: albumFacts(album, discoveryResult, mbYear),
-    actions: (
-      <DetailActions primary={albumPrimaryAction(album)} secondary={albumSecondary(album)} />
-    ),
+    actions: albumActions(album),
   };
 }
 
