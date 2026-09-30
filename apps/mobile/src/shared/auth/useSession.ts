@@ -9,6 +9,7 @@ import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
 import { renewSessionCredentials } from './sessionExpired';
 import { supabase } from './supabaseClient';
+import { isTestAuthEnabled, testAuthBootSettled } from './testAuthBoot';
 
 export type SessionState =
   { status: 'loading' } | { status: 'signed-in'; session: Session } | { status: 'signed-out' };
@@ -31,11 +32,13 @@ export function useSession(): SessionState {
 
   useEffect(() => {
     let active = true;
+    let holdingSignedOut = isTestAuthEnabled();
     registerIdentityListeners();
 
     function apply(incoming: Session | null): void {
       if (!active) return;
       const session = incoming?.user != null ? incoming : null;
+      if (session === null && holdingSignedOut) return;
       const userId = session?.user.id ?? null;
       if (seededRef.current && userIdRef.current !== userId) {
         forgetPreviousUsersLocalData(queryClient);
@@ -46,8 +49,13 @@ export function useSession(): SessionState {
       setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
     }
 
-    void supabase.auth
-      .getSession()
+    const initialSession = holdingSignedOut
+      ? testAuthBootSettled().then(() => {
+          holdingSignedOut = false;
+          return supabase.auth.getSession();
+        })
+      : supabase.auth.getSession();
+    void initialSession
       .then(({ data }) => {
         apply(data.session);
       })

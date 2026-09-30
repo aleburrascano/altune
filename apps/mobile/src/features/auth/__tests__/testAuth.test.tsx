@@ -11,6 +11,7 @@ import {
   type TestLoginResponse,
 } from '../testAuth';
 import { supabase } from '@shared/auth/supabaseClient';
+import { markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 import { useSession } from '@shared/auth/useSession';
 
 jest.mock('@supabase/supabase-js', () => require('../../../../jest/doubles/supabase-js.js'));
@@ -211,6 +212,7 @@ describe('injectTestSession — driving the real Supabase store', () => {
 describe('the injected token yields an authed session through useSession', () => {
   it('useSession observes signed-in for the test user after the token is injected', async () => {
     await injectTestSession(buildTestSession(loginResponse()));
+    markTestAuthBootSettled();
     const queryClient = new QueryClient();
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

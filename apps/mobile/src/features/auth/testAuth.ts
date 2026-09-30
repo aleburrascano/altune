@@ -2,6 +2,9 @@ import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
 import { apiBase } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
+import { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
+
+export { isTestAuthEnabled };
 
 const TEST_LOGIN_PATH = '/test/login';
 
@@ -26,10 +29,6 @@ function assertSessionStoreShape(store: SessionStore): void {
         'path must be updated for this @supabase/supabase-js version',
     );
   }
-}
-
-export function isTestAuthEnabled(): boolean {
-  return __DEV__ === true && process.env.EXPO_PUBLIC_TEST_AUTH === '1';
 }
 
 function assertTestAuthEnabled(): void {
@@ -106,7 +105,11 @@ export async function bootstrapTestAuth(): Promise<boolean> {
   if (!isTestAuthEnabled()) {
     return false;
   }
-  const login = await fetchTestLoginToken();
-  await injectTestSession(buildTestSession(login));
-  return true;
+  try {
+    const login = await fetchTestLoginToken();
+    await injectTestSession(buildTestSession(login));
+    return true;
+  } finally {
+    markTestAuthBootSettled();
+  }
 }

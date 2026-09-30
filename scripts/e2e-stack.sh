@@ -105,8 +105,9 @@ start_api() {
 }
 
 export_and_serve_web() {
+  mkdir -p "$state/metro-tmp"
   (cd "$root/apps/mobile" && rm -rf dist \
-    && EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
+    && TMPDIR="$state/metro-tmp" EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
       EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:1 EXPO_PUBLIC_SUPABASE_ANON_KEY=e2e-anon-key \
       npx expo export -p web --dev)
   start_detached web python3 -m http.server "$web_port" --bind 127.0.0.1 --directory "$root/apps/mobile/dist"
