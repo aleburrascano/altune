@@ -287,7 +287,7 @@ describe('useDebouncedSearch treats explicit actions as history-saving submits',
       result.current.setQuery('radiohead');
     });
     act(() => {
-      result.current.setInputValue('r');
+      result.current.onChangeText('r');
     });
     act(() => {
       result.current.onSubmit();

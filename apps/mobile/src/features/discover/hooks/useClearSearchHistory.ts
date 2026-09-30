@@ -12,7 +12,7 @@ import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useGatedDiscoverCall } from './discoverFetchGate';
 
-export type ClearSearchHistory = {
+type ClearSearchHistory = {
   clear: () => void;
   error: Error | null;
 };

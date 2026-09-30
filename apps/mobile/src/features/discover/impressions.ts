@@ -1,6 +1,6 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-export type ImpressionRow = {
+type ImpressionRow = {
   result_signature: string;
   position: number;
   provider: string | null;

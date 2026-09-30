@@ -17,7 +17,6 @@ type UseDebouncedSearchReturn = {
   onSubmit: () => void;
   onClear: () => void;
   setQuery: (query: string) => void;
-  setInputValue: (value: string) => void;
 };
 
 export function useDebouncedSearch({
@@ -112,6 +111,5 @@ export function useDebouncedSearch({
     onSubmit,
     onClear,
     setQuery,
-    setInputValue,
   };
 }

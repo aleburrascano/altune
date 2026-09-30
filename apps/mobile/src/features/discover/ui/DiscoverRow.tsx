@@ -12,7 +12,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { resultSecondaryLine } from '../resultSecondaryLine';
 import { usePreviewPlayback } from '../hooks/usePreviewPlayback';
 
-export type DiscoverRowProps = {
+type DiscoverRowProps = {
   result: DiscoveryResult;
   position: number;
   onPress: (result: DiscoveryResult, position: number) => void;

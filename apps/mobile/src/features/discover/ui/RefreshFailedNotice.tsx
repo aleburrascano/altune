@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
 
-export const REFRESH_FAILED_MESSAGE = "Couldn't refresh, showing earlier results";
+const REFRESH_FAILED_MESSAGE = "Couldn't refresh, showing earlier results";
 
 function NoticeText(): ReactElement {
   return (
