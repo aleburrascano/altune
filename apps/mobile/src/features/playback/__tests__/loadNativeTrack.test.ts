@@ -72,6 +72,9 @@ function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): vo
 beforeEach(() => {
   for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
   fetchUrls.mockImplementation(realFetchAudioUrls);
+  markPresignedFrom(0, 0);
+  useQueueStore.getState().clearQueue();
+  forgetAllSwaps();
 });
 
 describe('loadNativeQueue rollback of a failed add', () => {
