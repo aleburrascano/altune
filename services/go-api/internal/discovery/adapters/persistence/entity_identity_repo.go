@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -41,8 +43,27 @@ func (s *PgxIdentityStore) PersistBridges(
 		return fmt.Errorf("marshal xref: %w", err)
 	}
 
+	batch := bridgeBatch(kind, mbid, xref, blob)
+	if batch.Len() == 0 {
+		return nil
+	}
+
+	br := s.pool.SendBatch(ctx, batch)
+	for range batch.Len() {
+		if _, err := br.Exec(); err != nil {
+			return errors.Join(fmt.Errorf("persist identity bridge: %w", err), br.Close())
+		}
+	}
+	if err := br.Close(); err != nil {
+		return fmt.Errorf("close identity bridge batch: %w", err)
+	}
+	return nil
+}
+
+func bridgeBatch(kind domain.ResultKind, mbid string, xref map[string]string, blob []byte) *pgx.Batch {
 	batch := &pgx.Batch{}
-	for provider, externalID := range xref {
+	for _, provider := range slices.Sorted(maps.Keys(xref)) {
+		externalID := xref[provider]
 		if provider == "" || externalID == "" {
 			continue
 		}
@@ -56,18 +77,7 @@ func (s *PgxIdentityStore) PersistBridges(
 			provider, externalID, kind.String(), mbid, blob,
 		)
 	}
-	if batch.Len() == 0 {
-		return nil
-	}
-
-	br := s.pool.SendBatch(ctx, batch)
-	defer br.Close()
-	for range batch.Len() {
-		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("persist identity bridge: %w", err)
-		}
-	}
-	return nil
+	return batch
 }
 
 func (s *PgxIdentityStore) LookupByProviderID(

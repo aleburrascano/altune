@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -125,5 +126,22 @@ func TestPgxIdentityStore_LookupByProviderIDs_CorruptXrefWarnsAndKeepsHit(t *tes
 	}
 	if !strings.Contains(logs.String(), "identity.xref_corrupt") {
 		t.Errorf("corrupt xref not logged at Warn: %q", logs.String())
+	}
+}
+
+func TestPgxIdentityStore_PersistBridges_QueuesRowsInSortedProviderOrder(t *testing.T) {
+	xref := map[string]string{"spotify": "s1", "deezer": "d1", "apple": "a1", "tidal": "t1", "itunes": "i1", "lastfm": "l1"}
+
+	for range 20 {
+		batch := bridgeBatch(domain.ResultKindArtist, "mbid-1", xref, []byte("{}"))
+
+		var got []string
+		for _, q := range batch.QueuedQueries {
+			got = append(got, fmt.Sprint(q.Arguments[0]))
+		}
+		want := []string{"apple", "deezer", "itunes", "lastfm", "spotify", "tidal"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("queued provider order = %v, want %v", got, want)
+		}
 	}
 }
