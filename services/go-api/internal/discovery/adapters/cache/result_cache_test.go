@@ -24,7 +24,7 @@ func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
 			Subtitle: "Cached Artist",
 			ImageURL: "https://img/1.jpg",
 			MBID:     "mbid-1",
-			Xref:     map[string]string{"deezer": "42"},
+			Xref:     map[domain.ProviderKey]string{"deezer": "42"},
 			Sources: []domain.SourceRef{
 				{Provider: domain.ProviderDeezer, ExternalID: "42", URL: "https://deezer/42"},
 			},

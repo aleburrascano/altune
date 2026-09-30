@@ -29,7 +29,7 @@ func newIdentityStamper(
 type learnedBridge struct {
 	kind domain.ResultKind
 	mbid string
-	ids  map[string]string
+	ids  map[domain.ProviderKey]string
 }
 
 func (s *IdentityStamper) stamp(ctx context.Context, perProvider [][]domain.SearchResult) {

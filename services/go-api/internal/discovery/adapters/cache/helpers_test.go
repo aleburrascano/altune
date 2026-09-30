@@ -53,7 +53,7 @@ func unreachableRedisClient(t *testing.T) *goredis.Client {
 
 type recordingIdentityStore struct {
 	mbid  string
-	xref  map[string]string
+	xref  map[domain.ProviderKey]string
 	found bool
 
 	persistCalls    int
@@ -62,12 +62,12 @@ type recordingIdentityStore struct {
 	invalidateErr   error
 }
 
-func (f *recordingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[string]string) error {
+func (f *recordingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
 	f.persistCalls++
 	return nil
 }
 
-func (f *recordingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
+func (f *recordingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
 	f.lookupCalls++
 	return f.mbid, f.xref, f.found
 }

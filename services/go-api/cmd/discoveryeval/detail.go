@@ -40,7 +40,7 @@ var _ discoveryPorts.IdentityStore = (*seededIdentityStore)(nil)
 
 type identityRow struct {
 	mbid string
-	xref map[string]string
+	xref map[domain.ProviderKey]string
 }
 
 type seededIdentityStore struct {
@@ -55,7 +55,7 @@ func seedStore(goldens []discoveryEval.DetailGolden) *seededIdentityStore {
 	return s
 }
 
-func (s *seededIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[string]string) error {
+func (s *seededIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
 	return nil
 }
 
@@ -63,7 +63,7 @@ func (s *seededIdentityStore) Invalidate(context.Context, domain.ResultKind, dom
 	return nil
 }
 
-func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	if kind != domain.ResultKindArtist {
 		return "", nil, false
 	}

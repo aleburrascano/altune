@@ -23,8 +23,8 @@ func NewIdentityVerifier(
 	return &IdentityVerifier{anchor: anchor, providers: providers, memo: newVerifyMemo(6*time.Hour, time.Now)}
 }
 
-func verifiableEdge(key string) (domain.ProviderName, bool) {
-	provider, ok := domain.ProviderKey(key).ProviderName()
+func verifiableEdge(key domain.ProviderKey) (domain.ProviderName, bool) {
+	provider, ok := key.ProviderName()
 	switch {
 	case !ok:
 		return domain.ProviderUnknown, false
@@ -36,7 +36,7 @@ func verifiableEdge(key string) (domain.ProviderName, bool) {
 	return domain.ProviderUnknown, false
 }
 
-func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKind, mbid string, xref map[string]string) (map[string]string, bool) {
+func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKind, mbid string, xref map[domain.ProviderKey]string) (map[domain.ProviderKey]string, bool) {
 	if v == nil || v.anchor == nil || mbid == "" || kind != domain.ResultKindArtist || len(xref) == 0 {
 		return xref, true
 	}
@@ -51,26 +51,33 @@ func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKin
 
 	out := maps.Clone(xref)
 	for key, id := range xref {
-		provider, ok := verifiableEdge(key)
-		if !ok || id == "" {
-			continue
-		}
-		p := v.providers[provider]
-		if p == nil {
-			continue
-		}
-		albums, err := p.GetArtistAlbums(ctx, provider, id)
-		if err != nil || len(albums) == 0 {
-			continue
-		}
-		if !groupMatchesAnchor(ReleaseGroup{Releases: albums}, mbSet) {
+		if !v.edgeMatches(ctx, mbid, key, id, mbSet) {
 			delete(out, key)
-			slog.InfoContext(ctx, "identity.verify_dropped_edge",
-				"mbid", mbid, "provider", provider.String(), "external_id", id)
 		}
 	}
 	v.memo.mark(mbid)
 	return out, true
+}
+
+func (v *IdentityVerifier) edgeMatches(ctx context.Context, mbid string, key domain.ProviderKey, id string, mbSet map[string]bool) bool {
+	provider, ok := verifiableEdge(key)
+	if !ok || id == "" {
+		return true
+	}
+	p := v.providers[provider]
+	if p == nil {
+		return true
+	}
+	albums, err := p.GetArtistAlbums(ctx, provider, id)
+	if err != nil || len(albums) == 0 {
+		return true
+	}
+	if groupMatchesAnchor(ReleaseGroup{Releases: albums}, mbSet) {
+		return true
+	}
+	slog.InfoContext(ctx, "identity.verify_dropped_edge",
+		"mbid", mbid, "provider", provider.String(), "external_id", id)
+	return false
 }
 
 func (v *IdentityVerifier) Forget(mbid string) {

@@ -251,7 +251,7 @@ func identityClaims(r domain.SearchResult) map[string]bool {
 		if id == "" {
 			continue
 		}
-		if p, err := domain.ParseProviderName(name); err == nil {
+		if p, ok := name.ProviderName(); ok {
 			claims[sourceKey(p, id)] = true
 		}
 	}

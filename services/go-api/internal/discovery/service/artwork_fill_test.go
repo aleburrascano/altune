@@ -141,17 +141,17 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 
 type fakeIdentityStore struct {
 	mbid      string
-	xref      map[string]string
+	xref      map[domain.ProviderKey]string
 	lookups   int32
 	persisted int32
 }
 
-func (f *fakeIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, _ string, _ map[string]string) error {
+func (f *fakeIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, _ string, _ map[domain.ProviderKey]string) error {
 	atomic.AddInt32(&f.persisted, 1)
 	return nil
 }
 
-func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) (string, map[string]string, bool) {
+func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) (string, map[domain.ProviderKey]string, bool) {
 	atomic.AddInt32(&f.lookups, 1)
 	if f.mbid == "" {
 		return "", nil, false
@@ -165,7 +165,7 @@ func (f *fakeIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _
 
 func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	resolver := &capturingArtworkResolver{url: "https://caa/right-face.jpg"}
-	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
+	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[domain.ProviderKey]string{"discogs": "123"}}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService(
 		[]ports.SearchProvider{p},
@@ -202,7 +202,7 @@ func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context,
 
 func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
 	resolver := &fakeIdentityAwareResolver{url: "https://caa/right.jpg"}
-	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
+	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[domain.ProviderKey]string{"discogs": "123"}}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService(
 		[]ports.SearchProvider{p},
@@ -269,11 +269,11 @@ type countingIdentityStore struct {
 	singleCalls int
 }
 
-func (s *countingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[string]string) error {
+func (s *countingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
 	return nil
 }
 
-func (s *countingIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+func (s *countingIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	s.mu.Lock()
 	s.singleCalls++
 	s.mu.Unlock()
@@ -290,7 +290,7 @@ func knownIdentity(ref ports.IdentityRef) (ports.IdentityHit, bool) {
 	if err != nil || n%2 != 0 {
 		return ports.IdentityHit{}, false
 	}
-	return ports.IdentityHit{MBID: "mbid-" + ref.ExternalID, Xref: map[string]string{"discogs": "d" + ref.ExternalID}}, true
+	return ports.IdentityHit{MBID: "mbid-" + ref.ExternalID, Xref: map[domain.ProviderKey]string{"discogs": "d" + ref.ExternalID}}, true
 }
 
 type batchingIdentityStore struct {
@@ -359,7 +359,7 @@ func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 	f := newArtworkFiller(&fakeArtworkResolver{}, nil, store, nil)
 	results := fiftyArtlessResults()[:3]
 	results[0].ImageURL = "https://provider/art.jpg"
-	results[1].Xref = map[string]string{"spotify": "s1"}
+	results[1].Xref = map[domain.ProviderKey]string{"spotify": "s1"}
 
 	f.fill(context.Background(), results)
 
@@ -391,15 +391,15 @@ func (l *stageLog) add(s string) { l.calls = append(l.calls, s) }
 type scriptedIdentityStore struct {
 	log  *stageLog
 	mbid string
-	xref map[string]string
+	xref map[domain.ProviderKey]string
 	ok   bool
 }
 
-func (s *scriptedIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[string]string) error {
+func (s *scriptedIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
 	return nil
 }
 
-func (s *scriptedIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+func (s *scriptedIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	s.log.add("durable:" + provider.String() + "/" + externalID)
 	return s.mbid, s.xref, s.ok
 }
@@ -463,10 +463,10 @@ func (r *scriptedResolver) ResolveTagged(_ context.Context, _ domain.ResultKind,
 	return r.nameURL, "name-src", nil
 }
 
-func sortedXrefKeys(m map[string]string) []string {
+func sortedXrefKeys(m map[domain.ProviderKey]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
-		keys = append(keys, k)
+		keys = append(keys, string(k))
 	}
 	for i := 1; i < len(keys); i++ {
 		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
@@ -496,7 +496,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		wantPath   string
 		wantURL    string
 		wantSource domain.ProviderKey
-		wantXref   map[string]string
+		wantXref   map[domain.ProviderKey]string
 		wantCalls  []string
 	}{
 		{
@@ -529,14 +529,14 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			name: "durable hit supplies mbid and xref, skips index, cache hit wins",
 			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc},
 			st: stages{
-				durable: &scriptedIdentityStore{ok: true, mbid: "dur", xref: map[string]string{"discogs": "1"}},
+				durable: &scriptedIdentityStore{ok: true, mbid: "dur", xref: map[domain.ProviderKey]string{"discogs": "1"}},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
 				cache:   &scriptedArtworkCache{found: true, url: "https://c.jpg", source: "caa"},
 			},
 			wantPath:   "cache",
 			wantURL:    "https://c.jpg",
 			wantSource: "caa",
-			wantXref:   map[string]string{"discogs": "1"},
+			wantXref:   map[domain.ProviderKey]string{"discogs": "1"},
 			wantCalls:  []string{"durable:deezer/42", "cache.get:dur"},
 		},
 		{
@@ -569,7 +569,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		},
 		{
 			name: "existing xref skips the durable store",
-			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc, Xref: map[string]string{"spotify": "s"}},
+			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc, Xref: map[domain.ProviderKey]string{"spotify": "s"}},
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
 				index:   &scriptedMBIDIndex{},
@@ -579,7 +579,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			wantPath:   "identity",
 			wantURL:    "https://id.jpg",
 			wantSource: "id-src",
-			wantXref:   map[string]string{"spotify": "s"},
+			wantXref:   map[domain.ProviderKey]string{"spotify": "s"},
 			wantCalls:  []string{"index:" + key, "cache.get:", "resolve.identity:|spotify", "cache.set:|https://id.jpg|id-src|identity"},
 		},
 		{

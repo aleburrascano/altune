@@ -30,7 +30,7 @@ type ArtworkFiller struct {
 }
 
 type identityLookup interface {
-	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[string]string, ok bool)
+	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[domain.ProviderKey]string, ok bool)
 }
 
 func newArtworkFiller(
@@ -113,7 +113,7 @@ func durableIdentityRef(r domain.SearchResult) ports.IdentityRef {
 
 type prefetchedIdentities map[ports.IdentityRef]ports.IdentityHit
 
-func (p prefetchedIdentities) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+func (p prefetchedIdentities) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	hit, ok := p[ports.IdentityRef{Kind: kind, Provider: provider, ExternalID: externalID}]
 	return hit.MBID, maps.Clone(hit.Xref), ok
 }

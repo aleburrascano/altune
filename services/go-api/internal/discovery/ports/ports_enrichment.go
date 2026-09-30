@@ -19,7 +19,7 @@ type EnrichmentCache interface {
 }
 
 type IdentityBridge interface {
-	ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[string]string, bool)
+	ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[domain.ProviderKey]string, bool)
 }
 
 type NameKeyedCache[T any] interface {

@@ -26,15 +26,15 @@ func NewRedisIdentityStore(inner ports.IdentityStore, client *goredis.Client, op
 }
 
 type identityEntry struct {
-	MBID string            `json:"mbid"`
-	Xref map[string]string `json:"xref"`
+	MBID string                        `json:"mbid"`
+	Xref map[domain.ProviderKey]string `json:"xref"`
 }
 
 func (s *RedisIdentityStore) PersistBridges(
 	ctx context.Context,
 	kind domain.ResultKind,
 	mbid string,
-	xref map[string]string,
+	xref map[domain.ProviderKey]string,
 ) error {
 	if err := s.inner.PersistBridges(ctx, kind, mbid, xref); err != nil {
 		return err
@@ -73,7 +73,7 @@ func (s *RedisIdentityStore) LookupByProviderID(
 	ctx context.Context,
 	kind domain.ResultKind,
 	provider domain.ProviderKey, externalID string,
-) (string, map[string]string, bool) {
+) (string, map[domain.ProviderKey]string, bool) {
 	if provider == "" || externalID == "" {
 		return "", nil, false
 	}

@@ -68,7 +68,7 @@ func TestRedisEnrichmentCache_PositiveRoundTrip(t *testing.T) {
 		Rating:      4.3,
 		RatingVotes: 120,
 		PrimaryType: "Album",
-		ExternalIDs: map[string]string{"deezer": "111", "discogs": "222"},
+		ExternalIDs: map[domain.ProviderKey]string{"deezer": "111", "discogs": "222"},
 		ArtworkURL:  "https://caa/img.jpg",
 	}
 	if err := cache.Set(ctx, domain.ResultKindAlbum, mbid, in); err != nil {

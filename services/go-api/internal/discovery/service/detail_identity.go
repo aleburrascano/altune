@@ -35,7 +35,7 @@ func resolveArtistIdentity(
 		if id == "" {
 			continue
 		}
-		if pn, ok := domain.ProviderKey(name).ProviderName(); ok {
+		if pn, ok := name.ProviderName(); ok {
 			identity.ProviderIDs[pn] = id
 		}
 	}

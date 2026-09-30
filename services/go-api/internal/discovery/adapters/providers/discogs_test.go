@@ -267,7 +267,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		adapter := newTestDiscogsAdapter(server)
 		overrideDiscogsBaseURL(adapter, server.URL)
 		url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if err != nil {
 			t.Fatalf("ResolveByIdentity: %v", err)
 		}
@@ -289,7 +289,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		adapter := newTestDiscogsAdapter(server)
 		overrideDiscogsBaseURL(adapter, server.URL)
 		url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if err != nil || url != "https://img/only.jpg" {
 			t.Errorf("(%q, %v), want the first image", url, err)
 		}
@@ -305,7 +305,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		adapter := newTestDiscogsAdapter(server)
 		overrideDiscogsBaseURL(adapter, server.URL)
 		url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindAlbum,
-			ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if err != nil || url != "" {
 			t.Errorf("(%q, %v), want (\"\", nil)", url, err)
 		}
@@ -322,7 +322,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		overrideDiscogsBaseURL(adapter, server.URL)
 		for _, id := range []ports.ArtworkIdentity{
 			{},
-			{ExternalIDs: map[string]string{"discogs": "not-a-number"}},
+			{ExternalIDs: map[domain.ProviderKey]string{"discogs": "not-a-number"}},
 		} {
 			url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist, id)
 			if err != nil || url != "" {
@@ -340,7 +340,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		adapter := newTestDiscogsAdapter(server)
 		overrideDiscogsBaseURL(adapter, server.URL)
 		url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
 			t.Errorf("(%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
@@ -423,7 +423,7 @@ func TestDiscogsAdapter_ResolveByIdentity_DetailFailureIsArtworkUnavailable(t *t
 	overrideDiscogsBaseURL(adapter, srv.URL)
 
 	url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 	if url != "" {
 		t.Errorf("url = %q, want empty on a detail failure", url)
 	}
@@ -571,7 +571,7 @@ func TestDiscogsAdapter_ResolveByIdentity_RateLimitIsArtworkUnavailable(t *testi
 	overrideDiscogsBaseURL(adapter, srv.URL)
 
 	url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
@@ -588,7 +588,7 @@ func TestDiscogsAdapter_ResolveByIdentity_UnknownArtistIsAVerifiedMiss(t *testin
 	overrideDiscogsBaseURL(adapter, srv.URL)
 
 	url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 	if err != nil || url != "" {
 		t.Errorf("ResolveByIdentity on 404 = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -607,7 +607,7 @@ func TestDiscogsAdapter_ResolveByIdentity_ZeroDiscogsIDIsASilentMissWithNoReques
 
 	for _, raw := range []string{"0", "", " 38", "38abc"} {
 		url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
-			ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": raw}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": raw}})
 		if err != nil || url != "" {
 			t.Errorf("discogs id %q: (%q, %v), want (\"\", nil)", raw, url, err)
 		}

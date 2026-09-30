@@ -29,11 +29,11 @@ type TaggingArtworkResolver interface {
 
 type ArtworkIdentity struct {
 	MBID        string
-	ExternalIDs map[string]string
+	ExternalIDs map[domain.ProviderKey]string
 }
 
 func (id ArtworkIdentity) ExternalID(key domain.ProviderKey) string {
-	return id.ExternalIDs[key.String()]
+	return id.ExternalIDs[key]
 }
 
 func (id ArtworkIdentity) HasLinks() bool {
@@ -63,8 +63,8 @@ type MBIDIndex interface {
 }
 
 type IdentityStore interface {
-	PersistBridges(ctx context.Context, kind domain.ResultKind, mbid string, xref map[string]string) error
-	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[string]string, ok bool)
+	PersistBridges(ctx context.Context, kind domain.ResultKind, mbid string, xref map[domain.ProviderKey]string) error
+	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[domain.ProviderKey]string, ok bool)
 	Invalidate(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) error
 }
 
@@ -76,7 +76,7 @@ type IdentityRef struct {
 
 type IdentityHit struct {
 	MBID string
-	Xref map[string]string
+	Xref map[domain.ProviderKey]string
 }
 
 type BatchIdentityLookup interface {

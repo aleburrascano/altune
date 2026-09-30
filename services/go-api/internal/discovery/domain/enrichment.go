@@ -8,7 +8,7 @@ type MBEnrichment struct {
 	RatingVotes    int
 	PrimaryType    string
 	SecondaryTypes []string
-	ExternalIDs    map[string]string
+	ExternalIDs    map[ProviderKey]string
 	ArtworkURL     string
 }
 
@@ -16,7 +16,7 @@ func EmptyEnrichment() MBEnrichment {
 	return MBEnrichment{
 		Genres:         []string{},
 		SecondaryTypes: []string{},
-		ExternalIDs:    map[string]string{},
+		ExternalIDs:    map[ProviderKey]string{},
 	}
 }
 

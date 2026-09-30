@@ -13,11 +13,11 @@ type fakeInnerIdentityStore struct {
 	invalidateErr error
 }
 
-func (f *fakeInnerIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[string]string) error {
+func (f *fakeInnerIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
 	return nil
 }
 
-func (f *fakeInnerIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
+func (f *fakeInnerIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
 	return "", nil, false
 }
 
@@ -52,11 +52,11 @@ func TestRedisIdentityStore_PersistBridges_DropsCachedEntries(t *testing.T) {
 	mbid := fmt.Sprintf("qa-idmbid-%s", t.Name())
 	extDeezer := fmt.Sprintf("dz-%s", t.Name())
 	extSpotify := fmt.Sprintf("sp-%s", t.Name())
-	xref := map[string]string{"deezer": extDeezer, "spotify": extSpotify}
+	xref := map[domain.ProviderKey]string{"deezer": extDeezer, "spotify": extSpotify}
 	inner := &recordingIdentityStore{mbid: mbid, xref: xref, found: true}
 	store := NewRedisIdentityStore(inner, client)
 	ctx := context.Background()
-	keys := map[string]string{
+	keys := map[domain.ProviderKey]string{
 		"deezer":  identityKey(domain.ResultKindArtist, "deezer", extDeezer),
 		"spotify": identityKey(domain.ResultKindArtist, "spotify", extSpotify),
 	}
@@ -101,7 +101,7 @@ func TestRedisIdentityStore_Lookup_ReadThroughBackfill(t *testing.T) {
 	client := testRedisClient(t)
 	extID := fmt.Sprintf("dz-backfill-%s", t.Name())
 	inner := &recordingIdentityStore{
-		mbid: "qa-mbid-backfill", xref: map[string]string{"deezer": extID}, found: true,
+		mbid: "qa-mbid-backfill", xref: map[domain.ProviderKey]string{"deezer": extID}, found: true,
 	}
 	store := NewRedisIdentityStore(inner, client)
 	ctx := context.Background()
@@ -135,7 +135,7 @@ func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.
 	client := testRedisClient(t)
 	extID := fmt.Sprintf("dz-inval-%s", t.Name())
 	inner := &recordingIdentityStore{
-		mbid: "qa-mbid-inval", xref: map[string]string{"deezer": extID}, found: true,
+		mbid: "qa-mbid-inval", xref: map[domain.ProviderKey]string{"deezer": extID}, found: true,
 	}
 	store := NewRedisIdentityStore(inner, client)
 	ctx := context.Background()
@@ -164,12 +164,12 @@ func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.
 
 func TestRedisIdentityStore_NilClient_DelegatesToInner(t *testing.T) {
 	inner := &recordingIdentityStore{
-		mbid: "mbid-1", xref: map[string]string{"deezer": "9"}, found: true,
+		mbid: "mbid-1", xref: map[domain.ProviderKey]string{"deezer": "9"}, found: true,
 	}
 	store := NewRedisIdentityStore(inner, nil)
 	ctx := context.Background()
 
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "mbid-1", map[string]string{"deezer": "9"}); err != nil {
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "mbid-1", map[domain.ProviderKey]string{"deezer": "9"}); err != nil {
 		t.Fatalf("PersistBridges: %v", err)
 	}
 	if inner.persistCalls != 1 {
@@ -204,13 +204,13 @@ func TestIdentityKey_ByteIdenticalAcrossProviderKey(t *testing.T) {
 
 type mergingIdentityStore struct {
 	mbid string
-	xref map[string]string
+	xref map[domain.ProviderKey]string
 }
 
-func (m *mergingIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, mbid string, xref map[string]string) error {
+func (m *mergingIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, mbid string, xref map[domain.ProviderKey]string) error {
 	m.mbid = mbid
 	if m.xref == nil {
-		m.xref = map[string]string{}
+		m.xref = map[domain.ProviderKey]string{}
 	}
 	for provider, id := range xref {
 		m.xref[provider] = id
@@ -218,7 +218,7 @@ func (m *mergingIdentityStore) PersistBridges(_ context.Context, _ domain.Result
 	return nil
 }
 
-func (m *mergingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
+func (m *mergingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
 	return m.mbid, m.xref, m.mbid != ""
 }
 
@@ -235,7 +235,7 @@ func TestRedisIdentityStore_PersistBridges_NarrowerXrefKeepsMergedUnion(t *testi
 	extDeezer := fmt.Sprintf("dz-%s", t.Name())
 	extSpotify := fmt.Sprintf("sp-%s", t.Name())
 	extITunes := fmt.Sprintf("it-%s", t.Name())
-	full := map[string]string{"deezer": extDeezer, "spotify": extSpotify, "itunes": extITunes}
+	full := map[domain.ProviderKey]string{"deezer": extDeezer, "spotify": extSpotify, "itunes": extITunes}
 	cleanKeys(t, client,
 		identityKey(domain.ResultKindArtist, "deezer", extDeezer),
 		identityKey(domain.ResultKindArtist, "spotify", extSpotify),
@@ -245,7 +245,7 @@ func TestRedisIdentityStore_PersistBridges_NarrowerXrefKeepsMergedUnion(t *testi
 	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, full); err != nil {
 		t.Fatalf("PersistBridges full: %v", err)
 	}
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, map[string]string{"deezer": extDeezer}); err != nil {
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, map[domain.ProviderKey]string{"deezer": extDeezer}); err != nil {
 		t.Fatalf("PersistBridges subset: %v", err)
 	}
 
@@ -262,7 +262,7 @@ func TestRedisIdentityStore_PersistBridges_RedisDelFailureStillReturnsNil(t *tes
 	inner := &recordingIdentityStore{}
 	store := NewRedisIdentityStore(inner, unreachableRedisClient(t))
 
-	err := store.PersistBridges(context.Background(), domain.ResultKindArtist, "mbid-1", map[string]string{"deezer": "9"})
+	err := store.PersistBridges(context.Background(), domain.ResultKindArtist, "mbid-1", map[domain.ProviderKey]string{"deezer": "9"})
 	if err != nil {
 		t.Fatalf("PersistBridges = %v, want nil when Redis DEL fails", err)
 	}
@@ -276,7 +276,7 @@ type midLookupIdentityStore struct {
 	beforeReturn func()
 }
 
-func (f *midLookupIdentityStore) LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+func (f *midLookupIdentityStore) LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	mbid, xref, ok := f.recordingIdentityStore.LookupByProviderID(ctx, kind, provider, externalID)
 	f.beforeReturn()
 	return mbid, xref, ok
@@ -286,7 +286,7 @@ func TestRedisIdentityStore_Lookup_DoesNotBackfillStaleValueAfterConcurrentWrite
 	kind := domain.ResultKindAlbum
 	cases := map[string]func(store *RedisIdentityStore, extID string){
 		"persist_bridges": func(store *RedisIdentityStore, extID string) {
-			_ = store.PersistBridges(context.Background(), kind, "new-mbid", map[string]string{"deezer": extID})
+			_ = store.PersistBridges(context.Background(), kind, "new-mbid", map[domain.ProviderKey]string{"deezer": extID})
 		},
 		"invalidate": func(store *RedisIdentityStore, extID string) {
 			_ = store.Invalidate(context.Background(), kind, "deezer", extID)
@@ -299,7 +299,7 @@ func TestRedisIdentityStore_Lookup_DoesNotBackfillStaleValueAfterConcurrentWrite
 			key := identityKey(kind, "deezer", extID)
 			cleanKeys(t, client, key, identityGenKey(key))
 			inner := &midLookupIdentityStore{
-				recordingIdentityStore: recordingIdentityStore{mbid: "old-mbid", xref: map[string]string{"deezer": extID}, found: true},
+				recordingIdentityStore: recordingIdentityStore{mbid: "old-mbid", xref: map[domain.ProviderKey]string{"deezer": extID}, found: true},
 			}
 			store := NewRedisIdentityStore(inner, client)
 			inner.beforeReturn = func() {

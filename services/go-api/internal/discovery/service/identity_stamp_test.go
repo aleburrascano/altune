@@ -7,10 +7,10 @@ import (
 )
 
 type fakeIdentityBridge struct {
-	byMBID map[string]map[string]string
+	byMBID map[string]map[domain.ProviderKey]string
 }
 
-func (f *fakeIdentityBridge) ExternalIDs(_ context.Context, _ domain.ResultKind, mbid string) (map[string]string, bool) {
+func (f *fakeIdentityBridge) ExternalIDs(_ context.Context, _ domain.ResultKind, mbid string) (map[domain.ProviderKey]string, bool) {
 	ids, ok := f.byMBID[mbid]
 	return ids, ok
 }
@@ -21,7 +21,7 @@ func withMBID(r domain.SearchResult, mbid string) domain.SearchResult {
 }
 
 func TestStampIdentities_StampsBridgedIDs(t *testing.T) {
-	fb := &fakeIdentityBridge{byMBID: map[string]map[string]string{
+	fb := &fakeIdentityBridge{byMBID: map[string]map[domain.ProviderKey]string{
 		"mbid-1": {"deezer": "555"},
 	}}
 	s := NewService(nil, NewCircuitBreaker(), WithIdentityBridge(fb))

@@ -467,9 +467,9 @@ func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
 
 func identityFanOutWithErr(errFor func(domain.ProviderName) error, opts ...ArtistContentOption) *GetArtistContentService {
 	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
-	xref := make(map[string]string, len(everyContentProvider))
+	xref := make(map[domain.ProviderKey]string, len(everyContentProvider))
 	for _, name := range everyContentProvider {
-		xref[name.String()] = "id-" + name.String()
+		xref[name.Key()] = "id-" + name.String()
 		providers[name] = &fakeArtistContentProvider{
 			getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				if err := errFor(pn); err != nil {
@@ -583,7 +583,7 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 			domain.ProviderDiscogs: unreachable,
 			domain.ProviderYouTube: unreachable,
 		},
-		WithContentIdentityStore(&fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1"}}),
+		WithContentIdentityStore(&fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1"}}),
 		WithContentCircuitBreaker(cb),
 	)
 

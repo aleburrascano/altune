@@ -108,17 +108,17 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 }
 
 type EnrichmentResponseDTO struct {
-	MBID           string            `json:"mbid"`
-	Genres         []string          `json:"genres"`
-	Year           int               `json:"year"`
-	Rating         float64           `json:"rating"`
-	RatingVotes    int               `json:"rating_votes"`
-	PrimaryType    string            `json:"primary_type"`
-	SecondaryTypes []string          `json:"secondary_types"`
-	ExternalIDs    map[string]string `json:"external_ids"`
-	ArtworkURL     string            `json:"artwork_url"`
-	HasContent     bool              `json:"has_content"`
-	Degraded       bool              `json:"degraded"`
+	MBID           string                        `json:"mbid"`
+	Genres         []string                      `json:"genres"`
+	Year           int                           `json:"year"`
+	Rating         float64                       `json:"rating"`
+	RatingVotes    int                           `json:"rating_votes"`
+	PrimaryType    string                        `json:"primary_type"`
+	SecondaryTypes []string                      `json:"secondary_types"`
+	ExternalIDs    map[domain.ProviderKey]string `json:"external_ids"`
+	ArtworkURL     string                        `json:"artwork_url"`
+	HasContent     bool                          `json:"has_content"`
+	Degraded       bool                          `json:"degraded"`
 }
 
 func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
@@ -132,7 +132,7 @@ func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
 	}
 	ids := e.ExternalIDs
 	if ids == nil {
-		ids = map[string]string{}
+		ids = map[domain.ProviderKey]string{}
 	}
 	return EnrichmentResponseDTO{
 		MBID:           e.MBID,

@@ -30,7 +30,7 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 
 	store := NewPgxIdentityStore(pool)
 	mbid := "0a68f3b5-79c2-4f81-a7bc-ebc977602e86"
-	xref := map[string]string{"deezer": "234701081", "discogs": "987654"}
+	xref := map[domain.ProviderKey]string{"deezer": "234701081", "discogs": "987654"}
 
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id IN ('234701081','987654')`)
 
@@ -61,7 +61,7 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 	}
 
 	newMBID := "11111111-2222-3333-4444-555555555555"
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, newMBID, map[string]string{"deezer": "234701081"}); err != nil {
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, newMBID, map[domain.ProviderKey]string{"deezer": "234701081"}); err != nil {
 		t.Fatalf("re-PersistBridges: %v", err)
 	}
 	gotMBID, gotXref, _ := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "234701081")
@@ -136,7 +136,7 @@ func TestPgxIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
 		id := batchTestIDPrefix + strconv.Itoa(i)
 		refs[i] = ports.IdentityRef{Kind: domain.ResultKindTrack, Provider: domain.ProviderKeyDeezer, ExternalID: id}
 		if i%2 == 0 {
-			if err := store.PersistBridges(ctx, domain.ResultKindTrack, "mbid-"+id, map[string]string{"deezer": id, "discogs": "d" + id}); err != nil {
+			if err := store.PersistBridges(ctx, domain.ResultKindTrack, "mbid-"+id, map[domain.ProviderKey]string{"deezer": id, "discogs": "d" + id}); err != nil {
 				t.Fatalf("seed %s: %v", id, err)
 			}
 		}
@@ -185,7 +185,7 @@ func TestPgxIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
 	cleanup()
 	t.Cleanup(cleanup)
 
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "artist-mbid", map[string]string{"deezer": id}); err != nil {
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "artist-mbid", map[domain.ProviderKey]string{"deezer": id}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	artist := ports.IdentityRef{Kind: domain.ResultKindArtist, Provider: domain.ProviderKeyDeezer, ExternalID: id}

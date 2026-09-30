@@ -5,19 +5,20 @@ import (
 	"fmt"
 	"strings"
 
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
 )
 
 type DetailGolden struct {
-	Name              string            `json:"name"`
-	MBID              string            `json:"mbid"`
-	SeedProvider      string            `json:"seed_provider"`
-	SeedID            string            `json:"seed_id"`
-	Identity          map[string]string `json:"identity"`
-	ExpectedAlbums    []string          `json:"expected_albums"`
-	ExpectedTopTracks []string          `json:"expected_top_tracks"`
-	ForbiddenSources  []string          `json:"forbidden_sources"`
-	ForbiddenTitles   []string          `json:"forbidden_titles"`
+	Name              string                        `json:"name"`
+	MBID              string                        `json:"mbid"`
+	SeedProvider      string                        `json:"seed_provider"`
+	SeedID            string                        `json:"seed_id"`
+	Identity          map[domain.ProviderKey]string `json:"identity"`
+	ExpectedAlbums    []string                      `json:"expected_albums"`
+	ExpectedTopTracks []string                      `json:"expected_top_tracks"`
+	ForbiddenSources  []string                      `json:"forbidden_sources"`
+	ForbiddenTitles   []string                      `json:"forbidden_titles"`
 }
 
 type DetailItem struct {

@@ -98,7 +98,7 @@ func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
 		Title:   "Che",
 		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-1", URL: "https://mb/1"}},
 		MBID:    "mbid-che-1",
-		Xref:    map[string]string{"itunes": "5468295"},
+		Xref:    map[domain.ProviderKey]string{"itunes": "5468295"},
 	}
 	mb2 := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
@@ -225,7 +225,7 @@ func TestMerge_IdentityBridge(t *testing.T) {
 		Title:   "Ye",
 		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-ye"}},
 		MBID:    "mbid-ye",
-		Xref:    map[string]string{"deezer": "230"},
+		Xref:    map[domain.ProviderKey]string{"deezer": "230"},
 	}
 	dz := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
@@ -260,7 +260,7 @@ func TestMerge_IdentityBridge(t *testing.T) {
 
 	t.Run("a non-matching stated id does not merge", func(t *testing.T) {
 		wrong := mb
-		wrong.Xref = map[string]string{"deezer": "999"}
+		wrong.Xref = map[domain.ProviderKey]string{"deezer": "999"}
 		entities := Merge([][]domain.SearchResult{{wrong}, {dz}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 — a mismatched stated id must not merge", len(entities))
@@ -608,7 +608,7 @@ func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {
 
 func TestMerge_BridgeTierMergesCrossProvider(t *testing.T) {
 	mb := withMBID(res(domain.ResultKindTrack, "Bridge Recording One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
-	mb.Xref = map[string]string{"deezer": "555"}
+	mb.Xref = map[domain.ProviderKey]string{"deezer": "555"}
 	dz := domain.SearchResult{
 		Kind:     domain.ResultKindTrack,
 		Title:    "Totally Different Title",

@@ -60,7 +60,7 @@ func (c *RedisEnrichmentCache) SetNegative(ctx context.Context, kind domain.Resu
 	return c.client.Set(ctx, enrichmentNegKey(kind, nameKey), redisNegSentinel, enrichmentNegativeTTL).Err()
 }
 
-func (c *RedisEnrichmentCache) ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[string]string, bool) {
+func (c *RedisEnrichmentCache) ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[domain.ProviderKey]string, bool) {
 	if c.disabled() || mbid == "" {
 		return nil, false
 	}

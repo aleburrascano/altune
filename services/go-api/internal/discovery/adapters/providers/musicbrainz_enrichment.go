@@ -172,37 +172,43 @@ func sortedGenres(genres []mbGenre) []string {
 	return out
 }
 
-func externalIDsFromRelations(relations []mbRelation) map[string]string {
-	ids := map[string]string{}
-	put := func(key domain.ProviderKey, raw string) {
-		if _, exists := ids[key.String()]; exists {
-			return
-		}
-		if id := lastPathSegment(raw); id != "" {
-			ids[key.String()] = id
-		}
-	}
+func externalIDsFromRelations(relations []mbRelation) map[domain.ProviderKey]string {
+	ids := map[domain.ProviderKey]string{}
 	for _, rel := range relations {
-		res := rel.URL.Resource
-		switch rel.Type {
-		case "discogs":
-			put(domain.ProviderKeyDiscogs, res)
-		case "wikidata":
-			put(domain.ProviderKeyWikidata, res)
-		case "soundcloud":
-			put(domain.ProviderKeySoundCloud, res)
-		case "free streaming", "streaming", "purchase for download":
-			switch {
-			case strings.Contains(res, "open.spotify.com"):
-				put(domain.ProviderKeySpotify, res)
-			case strings.Contains(res, "deezer.com"):
-				put(domain.ProviderKeyDeezer, res)
-			case strings.Contains(res, "music.apple.com"):
-				put(domain.ProviderKeyITunes, res)
-			}
+		key, ok := relationKey(rel)
+		if !ok {
+			continue
+		}
+		if _, exists := ids[key]; exists {
+			continue
+		}
+		if id := lastPathSegment(rel.URL.Resource); id != "" {
+			ids[key] = id
 		}
 	}
 	return ids
+}
+
+func relationKey(rel mbRelation) (domain.ProviderKey, bool) {
+	res := rel.URL.Resource
+	switch rel.Type {
+	case "discogs":
+		return domain.ProviderKeyDiscogs, true
+	case "wikidata":
+		return domain.ProviderKeyWikidata, true
+	case "soundcloud":
+		return domain.ProviderKeySoundCloud, true
+	case "free streaming", "streaming", "purchase for download":
+		switch {
+		case strings.Contains(res, "open.spotify.com"):
+			return domain.ProviderKeySpotify, true
+		case strings.Contains(res, "deezer.com"):
+			return domain.ProviderKeyDeezer, true
+		case strings.Contains(res, "music.apple.com"):
+			return domain.ProviderKeyITunes, true
+		}
+	}
+	return "", false
 }
 
 func lastPathSegment(raw string) string {

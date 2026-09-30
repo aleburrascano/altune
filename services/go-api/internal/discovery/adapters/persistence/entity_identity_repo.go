@@ -33,7 +33,7 @@ func (s *PgxIdentityStore) PersistBridges(
 	ctx context.Context,
 	kind domain.ResultKind,
 	mbid string,
-	xref map[string]string,
+	xref map[domain.ProviderKey]string,
 ) error {
 	if mbid == "" || len(xref) == 0 {
 		return nil
@@ -60,7 +60,7 @@ func (s *PgxIdentityStore) PersistBridges(
 	return nil
 }
 
-func bridgeBatch(kind domain.ResultKind, mbid string, xref map[string]string, blob []byte) *pgx.Batch {
+func bridgeBatch(kind domain.ResultKind, mbid string, xref map[domain.ProviderKey]string, blob []byte) *pgx.Batch {
 	batch := &pgx.Batch{}
 	for _, provider := range slices.Sorted(maps.Keys(xref)) {
 		externalID := xref[provider]
@@ -84,7 +84,7 @@ func (s *PgxIdentityStore) LookupByProviderID(
 	ctx context.Context,
 	kind domain.ResultKind,
 	provider domain.ProviderKey, externalID string,
-) (string, map[string]string, bool) {
+) (string, map[domain.ProviderKey]string, bool) {
 	if provider == "" || externalID == "" {
 		return "", nil, false
 	}
@@ -175,14 +175,14 @@ func scanIdentityHits(ctx context.Context, rows pgx.Rows, requested map[identity
 	return hits, rows.Err()
 }
 
-func decodeXref(ctx context.Context, mbid string, blob []byte) map[string]string {
-	xref := map[string]string{}
+func decodeXref(ctx context.Context, mbid string, blob []byte) map[domain.ProviderKey]string {
+	xref := map[domain.ProviderKey]string{}
 	if len(blob) == 0 {
 		return xref
 	}
 	if err := json.Unmarshal(blob, &xref); err != nil {
 		slog.WarnContext(ctx, "identity.xref_corrupt", "mbid", mbid, "error", err)
-		return map[string]string{}
+		return map[domain.ProviderKey]string{}
 	}
 	return xref
 }

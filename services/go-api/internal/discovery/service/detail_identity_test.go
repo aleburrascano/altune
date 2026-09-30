@@ -9,7 +9,7 @@ import (
 func TestResolveArtistIdentity_bridged_fansOutIdsPlusSeed(t *testing.T) {
 	store := &fakeIdentityStore{
 		mbid: "mbid-che",
-		xref: map[string]string{
+		xref: map[domain.ProviderKey]string{
 			"spotify":    "spot-che",
 			"applemusic": "apple-che",
 		},

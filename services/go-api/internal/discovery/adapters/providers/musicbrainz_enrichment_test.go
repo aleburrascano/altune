@@ -84,7 +84,7 @@ func TestMusicBrainzAdapter_Lookup_Artist(t *testing.T) {
 	if e.Rating != 4.3 || e.RatingVotes != 18 {
 		t.Errorf("rating = %v/%d, want 4.3/18", e.Rating, e.RatingVotes)
 	}
-	wantIDs := map[string]string{
+	wantIDs := map[domain.ProviderKey]string{
 		"discogs":    "1539549",
 		"wikidata":   "Q130798",
 		"spotify":    "2YZyLoL8N0Wb9xBt1NhZWg",

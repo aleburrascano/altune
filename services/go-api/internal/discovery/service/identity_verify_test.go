@@ -51,7 +51,7 @@ func TestIdentityVerifier_dropsMisbridgedEdge(t *testing.T) {
 		domain.ProviderSpotify: spotify,
 	})
 
-	in := map[string]string{"deezer": "wrong-id", "spotify": "right-id", "discogs": "123"}
+	in := map[domain.ProviderKey]string{"deezer": "wrong-id", "spotify": "right-id", "discogs": "123"}
 	out, ok := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-1", in)
 
 	if !ok {
@@ -79,7 +79,7 @@ func TestIdentityVerifier_failOpenTooFewReleaseGroups(t *testing.T) {
 	})
 	v := NewIdentityVerifier(anchor, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer})
 
-	out, ok := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-2", map[string]string{"deezer": "x"})
+	out, ok := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-2", map[domain.ProviderKey]string{"deezer": "x"})
 	if !ok || out["deezer"] != "x" {
 		t.Errorf("fail-open expected (too few release-groups), got %v ok=%v", out, ok)
 	}
@@ -92,7 +92,7 @@ func TestIdentityVerifier_fetchErrorKeepsEdge(t *testing.T) {
 	})
 	v := NewIdentityVerifier(anchor, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer})
 
-	out, ok := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-3", map[string]string{"deezer": "x"})
+	out, ok := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-3", map[domain.ProviderKey]string{"deezer": "x"})
 	if !ok || out["deezer"] != "x" {
 		t.Errorf("a fetch error must keep the edge (fail-open), got %v ok=%v", out, ok)
 	}
@@ -105,7 +105,7 @@ func TestIdentityVerifier_memoSkipsSecondVerification(t *testing.T) {
 	})
 	v := NewIdentityVerifier(anchor, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer})
 
-	in := map[string]string{"deezer": "x"}
+	in := map[domain.ProviderKey]string{"deezer": "x"}
 	_, ok1 := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-4", in)
 	out2, ok2 := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-4", in)
 	if anchor.calls != 1 {
@@ -121,12 +121,12 @@ func TestIdentityVerifier_memoSkipsSecondVerification(t *testing.T) {
 
 type recordingIdentityStore struct {
 	mu           sync.Mutex
-	persisted    []map[string]string
+	persisted    []map[domain.ProviderKey]string
 	hadDeadline  bool
 	deadlineSeen bool
 }
 
-func (f *recordingIdentityStore) PersistBridges(ctx context.Context, _ domain.ResultKind, _ string, xref map[string]string) error {
+func (f *recordingIdentityStore) PersistBridges(ctx context.Context, _ domain.ResultKind, _ string, xref map[domain.ProviderKey]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.persisted = append(f.persisted, xref)
@@ -135,7 +135,7 @@ func (f *recordingIdentityStore) PersistBridges(ctx context.Context, _ domain.Re
 	return nil
 }
 
-func (f *recordingIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) (string, map[string]string, bool) {
+func (f *recordingIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) (string, map[domain.ProviderKey]string, bool) {
 	return "", nil, false
 }
 
@@ -152,7 +152,7 @@ func TestStampIdentities_MemoHitDoesNotRePersistRawXref(t *testing.T) {
 		domain.ProviderDeezer: deezer,
 	})
 	store := &recordingIdentityStore{}
-	bridge := &fakeIdentityBridge{byMBID: map[string]map[string]string{
+	bridge := &fakeIdentityBridge{byMBID: map[string]map[domain.ProviderKey]string{
 		"mbid-artist": {"deezer": "wrong-id", "discogs": "123"},
 	}}
 	svc := NewService(nil, NewCircuitBreaker(),
@@ -194,7 +194,7 @@ func TestIdentityVerifier_ForgetReVerifies(t *testing.T) {
 	})
 	v := NewIdentityVerifier(anchor, map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer})
 
-	in := map[string]string{"deezer": "x"}
+	in := map[domain.ProviderKey]string{"deezer": "x"}
 	if _, ok := v.VerifyXref(context.Background(), domain.ResultKindArtist, "mbid-6", in); !ok {
 		t.Fatal("first verification must be persistable")
 	}
@@ -213,14 +213,14 @@ type failingIdentityStore struct {
 	attempts int
 }
 
-func (f *failingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[string]string) error {
+func (f *failingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
 	return errors.New("pg down")
 }
 
-func (f *failingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
+func (f *failingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[domain.ProviderKey]string, bool) {
 	return "", nil, false
 }
 
@@ -232,7 +232,7 @@ func TestStampIdentities_PersistFailureUnmarksVerifyMemo(t *testing.T) {
 	anchor := &fakeMBAnchor{titles: []string{"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"}}
 	verifier := NewIdentityVerifier(anchor, nil)
 	store := &failingIdentityStore{}
-	bridge := &fakeIdentityBridge{byMBID: map[string]map[string]string{
+	bridge := &fakeIdentityBridge{byMBID: map[string]map[domain.ProviderKey]string{
 		"mbid-artist": {"discogs": "123"},
 	}}
 	svc := NewService(nil, NewCircuitBreaker(),
@@ -300,7 +300,7 @@ func TestVerifyMemo_SweepKeepsEntriesInsideTheirTTL(t *testing.T) {
 func TestIdentityVerifier_nonArtistKindUntouched(t *testing.T) {
 	anchor := &fakeMBAnchor{titles: []string{"A", "B", "C", "D", "E"}}
 	v := NewIdentityVerifier(anchor, nil)
-	in := map[string]string{"deezer": "x"}
+	in := map[domain.ProviderKey]string{"deezer": "x"}
 	out, ok := v.VerifyXref(context.Background(), domain.ResultKindAlbum, "mbid-5", in)
 	if !ok || out["deezer"] != "x" || anchor.calls != 0 {
 		t.Errorf("album-kind identity must be untouched (verification is artist-only)")
@@ -309,7 +309,7 @@ func TestIdentityVerifier_nonArtistKindUntouched(t *testing.T) {
 
 func TestVerifiableEdge(t *testing.T) {
 	tests := []struct {
-		key    string
+		key    domain.ProviderKey
 		want   domain.ProviderName
 		wantOK bool
 	}{

@@ -25,7 +25,7 @@ func TestMBEnrichment_IsZero(t *testing.T) {
 		want bool
 	}{
 		{"empty", EmptyEnrichment(), true},
-		{"mbid only", MBEnrichment{MBID: "abc", Genres: []string{}, SecondaryTypes: []string{}, ExternalIDs: map[string]string{}}, false},
+		{"mbid only", MBEnrichment{MBID: "abc", Genres: []string{}, SecondaryTypes: []string{}, ExternalIDs: map[ProviderKey]string{}}, false},
 		{"genres only", MBEnrichment{Genres: []string{"hip hop"}}, false},
 		{"artwork only", MBEnrichment{ArtworkURL: "https://x/y.jpg"}, false},
 		{"year only", MBEnrichment{Year: 2017}, false},

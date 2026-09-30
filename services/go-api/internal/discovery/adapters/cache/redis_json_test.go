@@ -49,7 +49,7 @@ func TestCaches_UnreachableRedis_ReadsDegrade(t *testing.T) {
 
 	t.Run("identity lookup falls through to the durable store", func(t *testing.T) {
 		inner := &recordingIdentityStore{
-			mbid: "mbid-2", xref: map[string]string{"spotify": "s1"}, found: true,
+			mbid: "mbid-2", xref: map[domain.ProviderKey]string{"spotify": "s1"}, found: true,
 		}
 		store := NewRedisIdentityStore(inner, client)
 		mbid, _, ok := store.LookupByProviderID(ctx, domain.ResultKindAlbum, "spotify", "s1")

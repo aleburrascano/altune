@@ -224,7 +224,7 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged(t *testing.T) {
 	chain := NewChainedArtworkResolver(nameOnly, failing, identity)
 	url, source, err := chain.ResolveWithIdentityTagged(
 		context.Background(), domain.ResultKindArtist, "Che", "",
-		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}},
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}},
 	)
 	if err != nil {
 		t.Fatalf("ResolveWithIdentityTagged: %v", err)
@@ -380,7 +380,7 @@ func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *
 
 	chain := NewChainedArtworkResolver(discogsAdapterOn500)
 	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindArtist, "Artist", "",
-		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 
 	if url != "" {
 		t.Errorf("url = %q, want empty when discogs fails", url)

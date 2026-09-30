@@ -23,7 +23,7 @@ type SearchResult struct {
 	ISRC           string
 	MBID           string
 	UPC            string
-	Xref           map[string]string
+	Xref           map[ProviderKey]string
 	Year           int
 	ReleaseDate    string
 	TrackCount     int

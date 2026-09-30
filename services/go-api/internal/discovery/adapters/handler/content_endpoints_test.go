@@ -160,13 +160,15 @@ func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	}
 }
 
-type stubIdentityStore struct{ xref map[string]string }
+type stubIdentityStore struct {
+	xref map[discdomain.ProviderKey]string
+}
 
-func (s stubIdentityStore) PersistBridges(context.Context, discdomain.ResultKind, string, map[string]string) error {
+func (s stubIdentityStore) PersistBridges(context.Context, discdomain.ResultKind, string, map[discdomain.ProviderKey]string) error {
 	return nil
 }
 
-func (s stubIdentityStore) LookupByProviderID(context.Context, discdomain.ResultKind, discdomain.ProviderKey, string) (string, map[string]string, bool) {
+func (s stubIdentityStore) LookupByProviderID(context.Context, discdomain.ResultKind, discdomain.ProviderKey, string) (string, map[discdomain.ProviderKey]string, bool) {
 	return "mbid-artist", s.xref, true
 }
 
@@ -208,10 +210,10 @@ func identityContentRouter(down map[discdomain.ProviderName]bool) chi.Router {
 		discdomain.ProviderAppleMusic, discdomain.ProviderSpotify,
 	}
 	providers := make(map[discdomain.ProviderName]ports.ArtistContentProvider, len(all))
-	xref := make(map[string]string, len(all))
+	xref := make(map[discdomain.ProviderKey]string, len(all))
 	for _, pn := range all {
 		providers[pn] = partialContentProvider{provider: pn, down: down[pn]}
-		xref[pn.String()] = "id-" + pn.String()
+		xref[pn.Key()] = "id-" + pn.String()
 	}
 	svc := service.NewGetArtistContentService(providers,
 		service.WithContentIdentityStore(stubIdentityStore{xref: xref}))

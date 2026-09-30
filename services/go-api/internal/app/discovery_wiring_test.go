@@ -193,7 +193,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 
 	e := discoveryDomain.EmptyEnrichment()
 	e.MBID = "mbid-artist-1"
-	e.ExternalIDs = map[string]string{"discogs": "38"}
+	e.ExternalIDs = map[discoveryDomain.ProviderKey]string{"discogs": "38"}
 	enr := &enrichRealChainFakeEnricher{enrichment: e}
 	svc := discoveryEnrich.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
 

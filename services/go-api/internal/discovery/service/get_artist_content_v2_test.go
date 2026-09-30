@@ -52,7 +52,7 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 	namesake := consensusProvider("lastfm", "Wrong Che Single")
 	consensus := NewConsensusService([]ConsensusProvider{namesake})
 
-	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1", "itunes": "i1"}}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: deezer,
@@ -132,7 +132,7 @@ func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 			}, nil
 		},
 	}
-	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1", "itunes": "i1"}}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: deezer,
@@ -171,7 +171,7 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 			return nil, ctx.Err()
 		},
 	}
-	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1", "itunes": "i1"}}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: fast,
@@ -214,7 +214,7 @@ func failOnceThenEmptyProvider() *fakeArtistContentProvider {
 }
 
 func fallbackPartialService(p *fakeArtistContentProvider) *GetArtistContentService {
-	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1"}}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1"}}
 	return NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 		WithContentIdentityStore(store),
@@ -280,7 +280,7 @@ func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 			return []domain.SearchResult{trackFrom(domain.ProviderITunes, "i-real", "Real Song", "Che")}, nil
 		},
 	}
-	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1", "itunes": "i1"}}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: deezer,
