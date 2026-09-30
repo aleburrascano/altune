@@ -106,6 +106,34 @@ func TestApplyStartupSwitches_DisabledJobsUnknownNameFailsStartup(t *testing.T) 
 	}
 }
 
+func TestApplyStartupSwitches_StreamripServices(t *testing.T) {
+	tests := []struct {
+		name     string
+		services []string
+		wantErr  string
+	}{
+		{"typo names variable and entry", []string{"qobuz", "tidall"}, "STREAMRIP_SERVICES"},
+		{"typo entry is quoted", []string{"tidall"}, `"tidall"`},
+		{"mixed case padded and empty accepted", []string{"Tidal", " qobuz ", ""}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &App{cfg: &config.Config{StreamripServices: tt.services}}
+
+			err := a.applyStartupSwitches()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("applyStartupSwitches: unexpected error %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("applyStartupSwitches error = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestShutdown_InFlightRequestContextSurvivesLifecycleCancel(t *testing.T) {
 	lifecycle, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})

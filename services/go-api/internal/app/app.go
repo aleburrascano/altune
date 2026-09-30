@@ -2,6 +2,7 @@ package app
 
 import (
 	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
+	"altune/go-api/internal/acquisition/adapters/streamrip"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
 	"altune/go-api/internal/observe/evalmeter"
@@ -215,6 +216,12 @@ func (a *App) applyStartupSwitches() error {
 		}
 		a.job(name).disabled.Store(true)
 		slog.Info("job disabled at startup", "job", raw)
+	}
+	for _, raw := range a.cfg.StreamripServices {
+		service := strings.ToLower(strings.TrimSpace(raw))
+		if service != "" && !streamrip.Supported(service) {
+			return fmt.Errorf("STREAMRIP_SERVICES: unsupported service %q", raw)
+		}
 	}
 	return nil
 }

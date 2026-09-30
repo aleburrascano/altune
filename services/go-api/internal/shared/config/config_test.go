@@ -345,6 +345,51 @@ func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
 	}
 }
 
+func TestLoad_RejectsNonPositiveDrainBudget(t *testing.T) {
+	for _, value := range []string{"0", "-5"} {
+		t.Run(value, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"ACQUISITION_DRAIN_BUDGET_SECONDS": value}))
+
+			_, err := Load()
+			if err == nil || !searchString(err.Error(), "ACQUISITION_DRAIN_BUDGET_SECONDS") {
+				t.Fatalf("Load error = %v, want it to name ACQUISITION_DRAIN_BUDGET_SECONDS", err)
+			}
+		})
+	}
+}
+
+func TestLoad_YtDLPCookieFile(t *testing.T) {
+	present := t.TempDir() + "/cookies.txt"
+	if err := os.WriteFile(present, []byte("# jar"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{"empty accepted", "", false},
+		{"readable accepted", present, false},
+		{"missing rejected", t.TempDir() + "/absent.txt", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"YTDLP_COOKIE_FILE": tt.path}))
+
+			_, err := Load()
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("Load: unexpected error %v", err)
+				}
+				return
+			}
+			if err == nil || !searchString(err.Error(), "YTDLP_COOKIE_FILE") {
+				t.Fatalf("Load error = %v, want it to name YTDLP_COOKIE_FILE", err)
+			}
+		})
+	}
+}
+
 func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	cfg, err := Load()
@@ -433,7 +478,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
-		"ACQUISITION_CONCURRENCY",
+		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"GITEA_ISSUE_URL", "GITEA_ISSUE_REPO", "GITEA_ISSUE_TOKEN", "EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
 	}

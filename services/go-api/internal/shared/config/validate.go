@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"unicode"
@@ -127,6 +128,12 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionDownloadConcurrency < 1 {
 		return fmt.Errorf("ACQUISITION_DOWNLOAD_CONCURRENCY must be >= 1, got %d", c.AcquisitionDownloadConcurrency)
 	}
+	if c.AcquisitionDrainBudgetSeconds < 1 {
+		return fmt.Errorf("ACQUISITION_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.AcquisitionDrainBudgetSeconds)
+	}
+	if err := c.validateCookieFile(); err != nil {
+		return err
+	}
 	if !isUnitFraction(c.ExplorationRate) {
 		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
 	}
@@ -134,6 +141,17 @@ func (c *Config) validateTuning() error {
 		return fmt.Errorf("ACQUISITION_CONFIDENCE_FLOOR must be between 0 and 1, got %v", c.AcquisitionConfidenceFloor)
 	}
 	return nil
+}
+
+func (c *Config) validateCookieFile() error {
+	if c.YtDLPCookieFile == "" {
+		return nil
+	}
+	f, err := os.Open(c.YtDLPCookieFile)
+	if err != nil {
+		return fmt.Errorf("YTDLP_COOKIE_FILE is not readable: %w", err)
+	}
+	return f.Close()
 }
 
 var knownLogLevels = map[string]bool{"DEBUG": true, "INFO": true, "WARN": true, "WARNING": true, "ERROR": true}
