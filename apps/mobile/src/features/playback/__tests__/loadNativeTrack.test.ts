@@ -20,7 +20,7 @@ import { claimLoad } from '../loadToken';
 import { NATIVE_QUEUE_OP_TIMEOUT_MS, withNativeQueue } from '../native/nativeQueueLock';
 import { forgetAllSwaps } from '../native/nativeTrackSwap';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
-import { NATIVE_QUEUE_WINDOW } from '../presignWindow';
+import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '../presignWindow';
 import { playbackService, resetPlaybackForSignOut } from '../native/service';
 
 import { libraryTrack, previewTrack } from './fixtures';
@@ -1021,6 +1021,10 @@ describe('reorderUpcomingNative against the live store queue', () => {
   });
 
   describe('refreshUpcomingPresign only marks the window when the rebuild applied', () => {
+    beforeEach(() => {
+      markPresignedFrom(0, 0);
+    });
+
     function library(count: number): PlaybackTrack[] {
       return Array.from({ length: count }, (_, i) => track(`p${i}`));
     }

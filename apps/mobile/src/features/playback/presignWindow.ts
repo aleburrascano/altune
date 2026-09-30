@@ -12,14 +12,12 @@ export function markPresignedFrom(startIndex: number, available: number): void {
   presignedThrough = startIndex + Math.min(MAX_PRESIGN, available) - 1;
 }
 
-export async function refreshUpcomingPresign(
+export async function extendPresignWindow(
   currentIndex: number,
   reorderUpcoming: (upcoming: readonly PlaybackTrack[]) => Promise<boolean>,
 ): Promise<void> {
-  if (currentIndex < 0) return;
-  if (presignedThrough - currentIndex > PRESIGN_REFRESH_MARGIN) return;
-  const s = useQueueStore.getState();
-  const upcoming = orderedQueueTracks(s).slice(currentIndex + 1);
+  if (currentIndex < 0 || presignedThrough - currentIndex > PRESIGN_REFRESH_MARGIN) return;
+  const upcoming = orderedQueueTracks(useQueueStore.getState()).slice(currentIndex + 1);
   if (upcoming.length === 0) return;
   if (!(await reorderUpcoming(upcoming))) return;
   markPresignedFrom(currentIndex + 1, upcoming.length);

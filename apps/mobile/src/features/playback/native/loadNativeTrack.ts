@@ -21,7 +21,7 @@ import {
   MAX_PRESIGN,
   NATIVE_QUEUE_WINDOW,
   markPresignedFrom,
-  refreshUpcomingPresign as slidePresignWindow,
+  extendPresignWindow,
 } from '../presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
@@ -347,7 +347,7 @@ async function rebuildNativeTail(
 }
 
 export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
-  return slidePresignWindow(currentIndex, reorderUpcomingApplied);
+  return extendPresignWindow(currentIndex, reorderUpcomingApplied);
 }
 
 function isInsideNativeWindow(queuePosition: number): boolean {
