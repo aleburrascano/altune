@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/observe/eventtap"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
@@ -29,9 +30,12 @@ import (
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 
+	catalogDomain "altune/go-api/internal/catalog/domain"
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 
+	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
+	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
@@ -49,12 +53,14 @@ type catalogWiring struct {
 	reacquireH        *acqHandler.ReacquireHandler
 	ytDlpSearcher     *ytdlp.YtDlpAudioSearcher
 	ytDlpAvailable    bool
+	scheduler         *acqService.BackgroundAcquisitionScheduler
 }
 
 type audioSourcesStaging struct {
 	audioStore     catalogPorts.AudioStore
 	trackRepo      *persistence.PgxTrackRepository
 	scheduler      catalogPorts.AcquisitionScheduler
+	background     *acqService.BackgroundAcquisitionScheduler
 	ytDlpSearcher  *ytdlp.YtDlpAudioSearcher
 	ytDlpAvailable bool
 }
@@ -77,22 +83,21 @@ type catalogServicesStaging struct {
 
 func (a *App) wireCatalog(
 	tap *eventtap.Tap,
-	featuredBridge *discoverybridge.FeaturedResolver,
-	searchSvc *discoveryService.Service,
+	disc discoveryWiring,
 ) (catalogWiring, error) {
 	acqService.SweepStaleTempDirs()
 
-	audio, err := a.wireAudioSources(tap, searchSvc)
+	audio, err := a.wireAudioSources(tap, disc)
 	if err != nil {
 		return catalogWiring{}, err
 	}
-	services := a.wireCatalogServices(tap, featuredBridge, audio)
+	services := a.wireCatalogServices(tap, disc.featuredBridge, audio)
 	return a.wireCatalogHandlers(audio, services), nil
 }
 
 func (a *App) wireAudioSources(
 	tap *eventtap.Tap,
-	searchSvc *discoveryService.Service,
+	disc discoveryWiring,
 ) (audioSourcesStaging, error) {
 	audioStore, err := a.buildAudioStore()
 	if err != nil {
@@ -113,8 +118,8 @@ func (a *App) wireAudioSources(
 		ytDlpAvailable: tools.YtDlp,
 	}
 	if len(audioSources) > 0 && audioStore != nil {
-		bgScheduler := a.buildAcquisitionScheduler(tap, searchSvc, trackRepo, audioStore, audioSources, tools)
-		a.scheduler = bgScheduler
+		bgScheduler := a.buildAcquisitionScheduler(tap, disc, trackRepo, audioStore, audioSources, tools)
+		staging.background = bgScheduler
 		staging.scheduler = bgScheduler
 	}
 	return staging, nil
@@ -122,7 +127,7 @@ func (a *App) wireAudioSources(
 
 func (a *App) buildAcquisitionScheduler(
 	tap *eventtap.Tap,
-	searchSvc *discoveryService.Service,
+	disc discoveryWiring,
 	trackRepo *persistence.PgxTrackRepository,
 	audioStore catalogPorts.AudioStore,
 	audioSources []acqPorts.AudioSource,
@@ -141,13 +146,13 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 		acqService.WithRejectionStore(acqPersistence.NewPgxRejectionStore(a.pool)),
 	}
-	if searchSvc != nil {
+	if disc.searchSvc != nil {
 		var resolverOpts []func(*acqDiscoveryBridge.RecordingResolver)
-		if a.musicBrainz != nil {
-			resolverOpts = append(resolverOpts, acqDiscoveryBridge.WithISRCAuthority(a.musicBrainz))
+		if disc.musicBrainz != nil {
+			resolverOpts = append(resolverOpts, acqDiscoveryBridge.WithISRCAuthority(disc.musicBrainz))
 		}
 		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
-			acqDiscoveryBridge.NewRecordingResolver(searchSvc, resolverOpts...)))
+			acqDiscoveryBridge.NewRecordingResolver(disc.searchSvc, resolverOpts...)))
 	}
 	lookups := &lookupTracker{}
 	if a.cfg.AcoustIDAPIKey != "" {
@@ -239,7 +244,7 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	if audio.scheduler != nil {
 		cooldowns := acqPersistence.NewFallbackCooldownStore(acqPersistence.NewPgxCooldownStore(a.pool))
 		retryH = acqHandler.NewRetryHandler(audio.trackRepo, audio.scheduler, acqService.NewRetryAdmission(cooldowns))
-		reacquireH = acqHandler.NewReacquireHandler(audio.trackRepo, a.scheduler, acqService.NewReacquireAdmission(cooldowns))
+		reacquireH = acqHandler.NewReacquireHandler(audio.trackRepo, audio.background, acqService.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{
@@ -256,6 +261,7 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		reacquireH:        reacquireH,
 		ytDlpSearcher:     audio.ytDlpSearcher,
 		ytDlpAvailable:    audio.ytDlpAvailable,
+		scheduler:         audio.background,
 	}
 }
 
@@ -386,5 +392,46 @@ func missingAudioStoreError(cfg *config.Config) error {
 	}
 	return fmt.Errorf(
 		"audio store: no backend configured; set MUSIC_DIR for a filesystem store, or all of OCI_S3_ENDPOINT, OCI_S3_ACCESS_KEY, OCI_S3_SECRET_KEY, OCI_S3_BUCKET for object storage",
+	)
+}
+
+type catalogOwnedTrackLister struct {
+	repo *persistence.PgxTrackRepository
+}
+
+func (l catalogOwnedTrackLister) ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]discoveryPorts.OwnedTrack, error) {
+	refs, err := l.repo.ListOwnedTrackRefs(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	tracks := make([]discoveryPorts.OwnedTrack, 0, len(refs))
+	for _, ref := range refs {
+		tracks = append(tracks, discoveryPorts.OwnedTrack{
+			TrackID:           ref.ID,
+			Title:             ref.Title,
+			Artist:            ref.Artist,
+			AcquisitionStatus: ref.AcquisitionStatus,
+			TrackNumber:       ref.TrackNumber,
+		})
+	}
+	return tracks, nil
+}
+
+type catalogTrackNumberSetter struct {
+	svc *catalogService.SetTrackNumberService
+}
+
+func (s catalogTrackNumberSetter) Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error) {
+	id, err := catalogDomain.ParseTrackId(trackId)
+	if err != nil {
+		return false, fmt.Errorf("parse track id: %w", err)
+	}
+	return s.svc.Execute(ctx, userId, id, trackNumber)
+}
+
+func newOwnershipEnrichment(cat catalogWiring) *discoveryService.OwnershipEnrichmentService {
+	return discoveryService.NewOwnershipEnrichmentService(
+		discoveryCatalogBridge.NewOwnershipReader(catalogOwnedTrackLister{repo: cat.trackRepo}),
+		discoveryCatalogBridge.NewTrackNumberWriter(catalogTrackNumberSetter{svc: cat.setTrackNumberSvc}),
 	)
 }

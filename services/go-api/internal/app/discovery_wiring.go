@@ -28,6 +28,7 @@ type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
 	searchSvc      *discoveryService.Service
 	featuredBridge *discoverybridge.FeaturedResolver
+	musicBrainz    *providers.MusicBrainzAdapter
 }
 
 type discoveryContentStaging struct {
@@ -247,7 +248,6 @@ func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.
 
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
 	sharedMB := buildMusicBrainzAdapter(cf, a.cfg)
-	a.musicBrainz = sharedMB
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 
@@ -265,7 +265,6 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		vocabStore,
 		a.searchActivityOptions()...,
 	)
-	a.searchSvc = searchSvc
 	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB, searchSvc.CircuitBreaker())
 	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
@@ -295,6 +294,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		handler:        discoveryH,
 		searchSvc:      searchSvc,
 		featuredBridge: content.featuredBridge,
+		musicBrainz:    sharedMB,
 	}
 }
 

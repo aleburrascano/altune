@@ -167,7 +167,7 @@ func productionRouter(t *testing.T) *chi.Mux {
 	}
 	t.Cleanup(pool.Close)
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(nil, nil, nil)
+	cat, err := a.wireCatalog(nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}

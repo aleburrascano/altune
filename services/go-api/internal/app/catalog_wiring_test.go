@@ -51,14 +51,14 @@ func TestWireCatalogSchedulerGating(t *testing.T) {
 				sem: make(chan struct{}, 1),
 			}
 
-			got, err := a.wireCatalog(nil, nil, nil)
+			got, err := a.wireCatalog(nil, discoveryWiring{})
 			if err != nil {
 				t.Fatalf("wireCatalog: %v", err)
 			}
 
 			assertCatalogHandlersBuilt(t, got)
-			if (a.scheduler != nil) != tt.wantScheduler {
-				t.Errorf("a.scheduler set = %v, want %v", a.scheduler != nil, tt.wantScheduler)
+			if (got.scheduler != nil) != tt.wantScheduler {
+				t.Errorf("got.scheduler set = %v, want %v", got.scheduler != nil, tt.wantScheduler)
 			}
 			if (got.retryH != nil) != tt.wantScheduler {
 				t.Errorf("retryH set = %v, want %v", got.retryH != nil, tt.wantScheduler)
@@ -73,10 +73,11 @@ func TestWireCatalogSchedulerGating(t *testing.T) {
 func TestWireCatalogFailsWithoutAudioStore(t *testing.T) {
 	a := &App{cfg: &config.Config{YtMusicEnabled: true}}
 
-	if _, err := a.wireCatalog(nil, nil, nil); err == nil {
+	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	if err == nil {
 		t.Fatal("wireCatalog with no audio store config: want error, got nil")
 	}
-	if a.scheduler != nil {
+	if wired.scheduler != nil {
 		t.Error("scheduler must not be wired when the audio store fails")
 	}
 }
@@ -95,18 +96,19 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 		a.sem <- struct{}{}
 	}
 
-	if _, err := a.wireCatalog(nil, nil, nil); err != nil {
+	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	if a.scheduler == nil {
+	if wired.scheduler == nil {
 		t.Fatal("scheduler must be wired with a source configured")
 	}
-	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
+	t.Cleanup(func() { wired.scheduler.Shutdown(context.Background()) })
 
 	userA := shared.NewUserId(uuid.New())
 	const pastOldGlobalDepth = concurrency*4 + 5
 	for i := 0; i < pastOldGlobalDepth; i++ {
-		if err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
+		if err := wired.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule %d of %d for one user: err = %v, want nil (the queue has no depth limit)", i+1, pastOldGlobalDepth, err)
 		}
 	}
@@ -127,22 +129,23 @@ func TestWireCatalogDoesNotCapPerPrincipalQueue(t *testing.T) {
 		a.sem <- struct{}{}
 	}
 
-	if _, err := a.wireCatalog(nil, nil, nil); err != nil {
+	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	if a.scheduler == nil {
+	if wired.scheduler == nil {
 		t.Fatal("scheduler must be wired with a source configured")
 	}
-	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
+	t.Cleanup(func() { wired.scheduler.Shutdown(context.Background()) })
 
 	userA := shared.NewUserId(uuid.New())
 	for i := 0; i < principalCap+2; i++ {
-		if err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
+		if err := wired.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule %d past userA's old share: err = %v, want nil (the cap no longer refuses)", i+1, err)
 		}
 	}
 
-	if err := a.scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := wired.scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule for second principal: err = %v, want nil", err)
 	}
 }
@@ -432,13 +435,14 @@ func TestWireCatalogProbesStreamripBinary(t *testing.T) {
 				sem: make(chan struct{}, 1),
 			}
 
-			if _, err := a.wireCatalog(nil, nil, nil); err != nil {
+			wired, err := a.wireCatalog(nil, discoveryWiring{})
+			if err != nil {
 				t.Fatalf("wireCatalog: %v", err)
 			}
-			if a.scheduler == nil {
+			if wired.scheduler == nil {
 				t.Fatal("scheduler not wired")
 			}
-			if got := a.scheduler.Status().Verification.Streamrip; got != tt.want {
+			if got := wired.scheduler.Status().Verification.Streamrip; got != tt.want {
 				t.Errorf("Verification.Streamrip = %v, want %v", got, tt.want)
 			}
 		})
@@ -488,7 +492,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		sem:  make(chan struct{}, 1),
 		pool: pool,
 	}
-	cat, err := a.wireCatalog(nil, nil, nil)
+	cat, err := a.wireCatalog(nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -573,15 +577,16 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 		pool: pool,
 	}
 	tap := eventtap.New(events.NewInProcessBus())
-	if _, err := a.wireCatalog(tap, nil, nil); err != nil {
+	wired, err := a.wireCatalog(tap, discoveryWiring{})
+	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	if a.scheduler == nil {
+	if wired.scheduler == nil {
 		t.Fatal("scheduler not wired")
 	}
-	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
+	t.Cleanup(func() { wired.scheduler.Shutdown(context.Background()) })
 
-	if err := a.scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
+	if err := wired.scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 

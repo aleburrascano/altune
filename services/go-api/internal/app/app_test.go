@@ -53,18 +53,20 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 		sem: make(chan struct{}, 1),
 	}
 
-	if _, err := a.wireCatalog(nil, nil, nil); err != nil {
+	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	if a.scheduler == nil {
+	if wired.scheduler == nil {
 		t.Fatal("scheduler not wired, cannot assert pause")
 	}
+	a.scheduler = wired.scheduler
 
 	if err := a.applyStartupSwitches(); err != nil {
 		t.Fatalf("applyStartupSwitches: %v", err)
 	}
 
-	if !a.scheduler.Status().Paused {
+	if !wired.scheduler.Status().Paused {
 		t.Fatal("Status().Paused = false, want true after ACQUISITION_PAUSED=true")
 	}
 }

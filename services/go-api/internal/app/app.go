@@ -1,10 +1,10 @@
 package app
 
 import (
-	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/testauth"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
@@ -24,13 +24,6 @@ import (
 	acqService "altune/go-api/internal/acquisition/service"
 	observeAlert "altune/go-api/internal/observe/alert"
 
-	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
-	catalogDomain "altune/go-api/internal/catalog/domain"
-	catalogService "altune/go-api/internal/catalog/service"
-
-	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
-
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
@@ -53,7 +46,6 @@ type App struct {
 	scheduler       *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh    *discoveryService.VocabularyRefreshService
 	searchSvc       *discoveryService.Service
-	musicBrainz     *providers.MusicBrainzAdapter
 	eventBus        *events.InProcessBus
 	eventTap        *eventtap.Tap
 	alertMonitor    *observeAlert.Monitor
@@ -129,28 +121,9 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) setup(ctx context.Context) error {
-	var err error
-
-	a.pool, err = database.NewPool(ctx, a.cfg.DatabaseURL, a.cfg.DBPoolMaxConns)
+	verifier, testAuth, err := a.connectInfra(ctx)
 	if err != nil {
-		return fmt.Errorf("database: %w", err)
-	}
-	a.dbHealth = func(ctx context.Context) database.HealthStatus {
-		return database.CheckHealth(ctx, a.pool)
-	}
-
-	a.lifecycleDone = ctx.Done()
-	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
-
-	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
-	if err != nil {
-		return fmt.Errorf("auth: %w", err)
-	}
-	a.authVerifier = supaVerifier
-
-	testAuth, verifier, err := buildTestAuthVerifier(a.cfg, supaVerifier)
-	if err != nil {
-		return fmt.Errorf("test auth: %w", err)
+		return err
 	}
 
 	a.eventBus = events.NewInProcessBus()
@@ -161,21 +134,19 @@ func (a *App) setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("provider replay: %w", err)
 	}
-	clients := newClientFactory(clientTransport)
 
-	disc := a.wireDiscovery(ctx, clients)
-	cat, err := a.wireCatalog(tap, disc.featuredBridge, disc.searchSvc)
+	disc := a.wireDiscovery(ctx, newClientFactory(clientTransport))
+	a.searchSvc = disc.searchSvc
+	cat, err := a.wireCatalog(tap, disc)
 	if err != nil {
 		return fmt.Errorf("catalog: %w", err)
 	}
+	a.scheduler = cat.scheduler
 	if err := a.applyStartupSwitches(); err != nil {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 	playback := a.wirePlayback(cat.trackRepo)
-	disc.handler.WithOwnershipEnrichment(discoveryService.NewOwnershipEnrichmentService(
-		discoveryCatalogBridge.NewOwnershipReader(catalogOwnedTrackLister{repo: cat.trackRepo}),
-		discoveryCatalogBridge.NewTrackNumberWriter(catalogTrackNumberSetter{svc: cat.setTrackNumberSvc}),
-	))
+	disc.handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
 
 	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler, a.wireFeedback())
 	if testAuth != nil {
@@ -183,17 +154,52 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	a.startAlertMonitor(ctx)
 	a.wireObserve(ctx, r, verifier, tap)
+	a.startCatalogJobs(ctx, cat, playback)
+	a.startBackgroundWhenLeader(ctx)
 
+	a.server = a.newServer(ctx, r)
+	return nil
+}
+
+func (a *App) connectDatastores(ctx context.Context) error {
+	var err error
+	a.pool, err = database.NewPool(ctx, a.cfg.DatabaseURL, a.cfg.DBPoolMaxConns)
+	if err != nil {
+		return fmt.Errorf("database: %w", err)
+	}
+	a.dbHealth = func(ctx context.Context) database.HealthStatus {
+		return database.CheckHealth(ctx, a.pool)
+	}
+
+	a.lifecycleDone = ctx.Done()
+	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
+	return nil
+}
+
+func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, *testauth.TestAuth, error) {
+	if err := a.connectDatastores(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("auth: %w", err)
+	}
+	a.authVerifier = supaVerifier
+
+	testAuth, verifier, err := buildTestAuthVerifier(a.cfg, supaVerifier)
+	if err != nil {
+		return nil, nil, fmt.Errorf("test auth: %w", err)
+	}
+	return verifier, testAuth, nil
+}
+
+func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable,
 		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
-	a.startBackgroundWhenLeader(ctx)
-
-	a.server = a.newServer(ctx, r)
-
-	return nil
 }
 
 func (a *App) applyStartupSwitches() error {
@@ -235,38 +241,4 @@ func (a *App) cleanup(closePool bool) {
 			slog.Error("redis client close error", "error", err)
 		}
 	}
-}
-
-type catalogOwnedTrackLister struct {
-	repo *catalogPersistence.PgxTrackRepository
-}
-
-func (l catalogOwnedTrackLister) ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]discoveryPorts.OwnedTrack, error) {
-	refs, err := l.repo.ListOwnedTrackRefs(ctx, userId)
-	if err != nil {
-		return nil, err
-	}
-	tracks := make([]discoveryPorts.OwnedTrack, 0, len(refs))
-	for _, ref := range refs {
-		tracks = append(tracks, discoveryPorts.OwnedTrack{
-			TrackID:           ref.ID,
-			Title:             ref.Title,
-			Artist:            ref.Artist,
-			AcquisitionStatus: ref.AcquisitionStatus,
-			TrackNumber:       ref.TrackNumber,
-		})
-	}
-	return tracks, nil
-}
-
-type catalogTrackNumberSetter struct {
-	svc *catalogService.SetTrackNumberService
-}
-
-func (s catalogTrackNumberSetter) Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error) {
-	id, err := catalogDomain.ParseTrackId(trackId)
-	if err != nil {
-		return false, fmt.Errorf("parse track id: %w", err)
-	}
-	return s.svc.Execute(ctx, userId, id, trackNumber)
 }
