@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"unsafe"
 
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/js"
@@ -49,28 +50,42 @@ func jsSourceBuffer(src []byte) []byte {
 	return buf
 }
 
+var errRegexStartNotLocated = errors.New("regex literal start not found in source buffer")
+
 type regexCollector struct {
 	buf    []byte
 	starts map[int]bool
+	err    error
 }
 
 func (c *regexCollector) Enter(n js.INode) js.IVisitor {
 	lit, ok := n.(*js.LiteralExpr)
 	if ok && lit.TokenType == js.RegExpToken && len(lit.Data) > 0 {
-		c.starts[offsetOf(c.buf, &lit.Data[0])] = true
+		c.record(lit.Data)
 	}
 	return c
 }
 
 func (c *regexCollector) Exit(js.INode) {}
 
-func offsetOf(buf []byte, first *byte) int {
-	for i := range buf {
-		if &buf[i] == first {
-			return i
-		}
+func (c *regexCollector) record(literal []byte) {
+	offset, ok := offsetOf(c.buf, literal)
+	if !ok {
+		c.err = errRegexStartNotLocated
+		return
 	}
-	return -1
+	c.starts[offset] = true
+}
+
+func offsetOf(buf, tail []byte) (int, bool) {
+	if len(buf) == 0 || len(tail) == 0 {
+		return 0, false
+	}
+	offset := uintptr(unsafe.Pointer(&tail[0])) - uintptr(unsafe.Pointer(&buf[0]))
+	if offset >= uintptr(len(buf)) {
+		return 0, false
+	}
+	return int(offset), true
 }
 
 func jsRegexStarts(src []byte) (map[int]bool, error) {
@@ -81,6 +96,9 @@ func jsRegexStarts(src []byte) (map[int]bool, error) {
 	}
 	collector := &regexCollector{buf: buf, starts: map[int]bool{}}
 	js.Walk(collector, tree)
+	if collector.err != nil {
+		return nil, collector.err
+	}
 	return collector.starts, nil
 }
 
@@ -113,7 +131,17 @@ func nextJSToken(lexer *js.Lexer, input *parse.Input, regexStarts map[int]bool) 
 	if tokenType == js.ErrorToken {
 		return scanToken{}, lexer.Err()
 	}
+	if isHTMLLikeComment(tokenType, tokenBytes) {
+		return scanToken{}, fmt.Errorf("HTML-like comment token at offset %d is code in a module", start)
+	}
 	return scanToken{jsTokenClass(tokenType), tokenBytes, start}, nil
+}
+
+func isHTMLLikeComment(tokenType js.TokenType, tokenBytes []byte) bool {
+	if tokenType != js.CommentToken && tokenType != js.CommentLineTerminatorToken {
+		return false
+	}
+	return bytes.HasPrefix(tokenBytes, []byte("<!--")) || bytes.HasPrefix(tokenBytes, []byte("-->"))
 }
 
 func jsTokenClass(tokenType js.TokenType) tokenClass {

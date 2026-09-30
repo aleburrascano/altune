@@ -136,7 +136,15 @@ func strip(src []byte, k kind) ([]byte, int, error) {
 	if err := k.same(src, out); err != nil {
 		return nil, 0, err
 	}
-	return out, len(spans), nil
+	return out, distinctLines(spans), nil
+}
+
+func distinctLines(spans []span) int {
+	seen := map[int]bool{}
+	for _, s := range spans {
+		seen[s.line] = true
+	}
+	return len(seen)
 }
 
 func deleteSpans(src []byte, spans []span) []byte {

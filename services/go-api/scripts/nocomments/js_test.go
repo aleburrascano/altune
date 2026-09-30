@@ -136,3 +136,19 @@ func TestJsCommentsFailsOnAnUnterminatedBlockComment(t *testing.T) {
 func TestJsCommentsRepoWideTrackedFiles(t *testing.T) {
 	assertStripsToACleanEquivalent(t, jsKind, trackedFilesMatching(t, jsKind))
 }
+
+func TestJsCommentsFailsClosedOnAnHTMLLikeCommentToken(t *testing.T) {
+	if _, err := jsComments([]byte("x = a<!--b; // c\n")); err == nil {
+		t.Fatal("jsComments accepted an HTML-like comment token")
+	}
+}
+
+func TestOffsetOfLocatesASubsliceAndRejectsAForeignOne(t *testing.T) {
+	buf := make([]byte, 10, 11)
+	if got, ok := offsetOf(buf, buf[4:6:6]); !ok || got != 4 {
+		t.Fatalf("offsetOf = %d, %v; want 4, true", got, ok)
+	}
+	if _, ok := offsetOf(buf, make([]byte, 2)); ok {
+		t.Fatal("offsetOf accepted a slice outside the buffer")
+	}
+}

@@ -713,3 +713,33 @@ func TestStripReplacesTheFileAtomicallyKeepingItsMode(t *testing.T) {
 			code, os.SameFile(before, after), before.Mode(), after.Mode(), len(entries), out.String())
 	}
 }
+
+func TestStripLeavesAnHTMLLikeCommentFileUntouchedAndExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	src := "x = a<!--b; // c\n"
+	writeFile(t, dir, "q.mjs", src)
+
+	var stdout strings.Builder
+	code := run([]string{"strip", dir}, &stdout)
+
+	got, err := os.ReadFile(filepath.Join(dir, "q.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code == 0 || string(got) != src {
+		t.Fatalf("exit = %d, file = %q; want non-zero and unchanged", code, got)
+	}
+}
+
+func TestCheckAndStripCountTwoCommentsOnOneLineTheSame(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.js", "a; /* x */ b; /* y */\n")
+
+	var checkOut, stripOut strings.Builder
+	run([]string{"check", dir}, &checkOut)
+	run([]string{"strip", dir}, &stripOut)
+
+	if !strings.Contains(checkOut.String(), "comment violations: 1\n") || !strings.Contains(stripOut.String(), "stripped 1 comments in 1 files") {
+		t.Fatalf("check:\n%s\nstrip:\n%s", checkOut.String(), stripOut.String())
+	}
+}
