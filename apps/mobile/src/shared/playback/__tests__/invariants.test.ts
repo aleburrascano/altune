@@ -84,7 +84,8 @@ describe('canPlay.ts is the only place playability is checked', () => {
 describe('the restart threshold has exactly one definition', () => {
   it.each([
     path.join(SRC_DIR, 'features', 'playback', 'ui', 'FullPlayer.tsx'),
-    path.join(SRC_DIR, 'features', 'playback', 'service.ts'),
+    path.join(SRC_DIR, 'features', 'playback', 'native', 'service.ts'),
+    path.join(SRC_DIR, 'features', 'playback', 'web', 'webControls.ts'),
   ])('%s derives from the shared constant instead of restating its value', (file) => {
     const source = fs.readFileSync(file, 'utf8');
 
