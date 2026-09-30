@@ -147,7 +147,7 @@ function claimConsumption(
   const consumption = { credential, outcome };
   activeConsumption = consumption;
   void releaseUnlessSessionEstablished(consumption);
-  return outcome;
+  return withAuthDeadline(outcome);
 }
 
 async function releaseUnlessSessionEstablished(consumption: CredentialConsumption): Promise<void> {
@@ -187,9 +187,9 @@ export async function completeAuthIntent(
     return spendCredential(intent, router, auth);
   }
   if (activeConsumption?.credential === credential) {
-    return outcomeOfWinningDelivery(activeConsumption);
+    return withAuthDeadline(outcomeOfWinningDelivery(activeConsumption));
   }
-  return claimConsumption(credential, withAuthDeadline(spendCredential(intent, router, auth)));
+  return claimConsumption(credential, spendCredential(intent, router, auth));
 }
 
 export function _resetConsumedCredentialForTest(): void {

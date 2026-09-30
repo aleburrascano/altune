@@ -22,8 +22,11 @@ export function useAsyncAuthAction<
     if (inFlight.current) return;
     inFlight.current = true;
     setState({ kind: 'pending' } as S);
+    let started: Promise<unknown> = Promise.resolve();
     try {
-      setState(await withAuthDeadline(attempt(...args)));
+      const work = attempt(...args);
+      started = work;
+      setState(await withAuthDeadline(work));
     } catch (err) {
       const reason = isNetworkError(err) ? 'network' : 'unknown';
       if (reason === 'unknown') {
@@ -31,7 +34,10 @@ export function useAsyncAuthAction<
       }
       setState({ kind: 'error', reason } as unknown as S);
     } finally {
-      inFlight.current = false;
+      const release = () => {
+        inFlight.current = false;
+      };
+      started.then(release, release);
     }
   }
 

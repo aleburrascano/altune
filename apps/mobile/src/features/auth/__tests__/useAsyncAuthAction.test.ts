@@ -131,6 +131,42 @@ describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)',
   });
 });
 
+describe('useAsyncAuthAction: the in-flight guard outlives the deadline', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('shows network at the deadline yet refuses a second attempt until the first settles', async () => {
+    const { attempt, settleWith } = deferredAttempt();
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    await act(async () => {
+      const first = result.current.run();
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await first;
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(attempt).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleWith({ kind: 'ok' });
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(attempt).toHaveBeenCalledTimes(2);
+  });
+});
+
 const UNRECOGNIZED_FAILURE_LOG = '[auth] an auth action failed for an unrecognized reason';
 
 async function stateAfterRejectionWith(thrown: unknown): Promise<Result> {

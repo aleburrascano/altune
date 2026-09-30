@@ -600,6 +600,82 @@ describe('spending a one-time credential once', () => {
   });
 });
 
+describe('a verification that outlives the auth deadline', () => {
+  const auth = {
+    exchangeCodeForSession: jest.fn(),
+    verifyOtp: jest.fn(),
+  };
+  const router = { replace: jest.fn() };
+  const url = 'altune://auth/recovery?token_hash=slow-recovery&type=recovery';
+
+  function slowVerification() {
+    let settle!: (value: unknown) => void;
+    auth.verifyOtp.mockReturnValueOnce(new Promise((resolve) => (settle = resolve)));
+    return (value: unknown) => settle(value);
+  }
+
+  async function pastDeadline() {
+    const timedOut = completeAuthIntent(parseAuthLink(url), router, auth).catch(() => undefined);
+    await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+    await timedOut;
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    auth.verifyOtp.mockReset();
+    router.replace.mockReset();
+    _resetConsumedCredentialForTest();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  describe('completeAuthIntent: guarding a spend the deadline abandoned (#448)', () => {
+    it('dedupes a re-delivered link within its own deadline without a second verifyOtp', async () => {
+      slowVerification();
+      await pastDeadline();
+
+      const redelivered = completeAuthIntent(parseAuthLink(url), router, auth);
+      const outcome = expect(redelivered).rejects.toMatchObject({ failure: 'timeout' });
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await outcome;
+
+      expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns deduped to a re-delivery once the slow verification succeeds', async () => {
+      const settle = slowVerification();
+      await pastDeadline();
+
+      settle({ data: { user: { id: 'user-a' }, session: {} }, error: null });
+      await jest.advanceTimersByTimeAsync(0);
+      const redelivered = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+      expect(redelivered).toEqual({ kind: 'deduped' });
+      expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases the credential for a retry when the slow verification later fails', async () => {
+      const settle = slowVerification();
+      await pastDeadline();
+      void completeAuthIntent(parseAuthLink(url), router, auth).catch(() => undefined);
+      expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
+
+      settle({ data: {}, error: { name: 'AuthApiError', status: 500 } });
+      await jest.advanceTimersByTimeAsync(0);
+      auth.verifyOtp.mockResolvedValueOnce({
+        data: { user: { id: 'user-a' }, session: {} },
+        error: null,
+      });
+      const retry = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+      expect(retry).toEqual({ kind: 'success' });
+      expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
 describe('an exchange that never settles', () => {
   const auth = {
     exchangeCodeForSession: jest.fn(),
@@ -636,7 +712,7 @@ describe('an exchange that never settles', () => {
       expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
     });
 
-    it('abandons a stalled code exchange at the auth deadline and re-spends the retapped link', async () => {
+    it('holds the claim on a stalled code exchange past the deadline and does not re-spend the retapped link', async () => {
       auth.exchangeCodeForSession.mockReturnValueOnce(neverSettles());
       const url = 'altune://auth/callback?code=stalled-then-retapped';
 
@@ -644,25 +720,36 @@ describe('an exchange that never settles', () => {
         completeAuthIntent(parseAuthLink(url), router, auth),
       ).rejects.toMatchObject({ name: 'NetworkError', failure: 'timeout' });
       await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
-      const retry = completeAuthIntent(parseAuthLink(url), router, auth);
-
-      expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(2);
-      await expect(retry).resolves.toEqual({ kind: 'success' });
       await stalledRejection;
+      const retry = expect(
+        completeAuthIntent(parseAuthLink(url), router, auth),
+      ).rejects.toMatchObject({
+        name: 'NetworkError',
+        failure: 'timeout',
+      });
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await retry;
+
+      expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
     });
 
-    it('abandons a stalled recovery verification at the auth deadline and re-verifies the retapped link', async () => {
-      auth.verifyOtp
-        .mockReturnValueOnce(neverSettles())
-        .mockResolvedValueOnce({ data: { user: { id: 'user-a' }, session: {} }, error: null });
+    it('holds the claim on a stalled recovery verification past the deadline and does not re-verify the retapped link', async () => {
+      auth.verifyOtp.mockReturnValueOnce(neverSettles());
       const url = 'altune://auth/recovery?token_hash=stalled-recovery&type=recovery';
 
       void completeAuthIntent(parseAuthLink(url), router, auth).catch(() => undefined);
       await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
-      const retry = completeAuthIntent(parseAuthLink(url), router, auth);
+      const retry = expect(
+        completeAuthIntent(parseAuthLink(url), router, auth),
+      ).rejects.toMatchObject({
+        name: 'NetworkError',
+        failure: 'timeout',
+      });
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await retry;
 
-      expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
-      await expect(retry).resolves.toEqual({ kind: 'success' });
+      expect(auth.verifyOtp).toHaveBeenCalledTimes(1);
+      expect(router.replace).not.toHaveBeenCalled();
     });
   });
 });

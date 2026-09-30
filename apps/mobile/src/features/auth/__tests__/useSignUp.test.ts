@@ -1,4 +1,7 @@
 import { Platform } from 'react-native';
+import { act, renderHook } from '@testing-library/react-native';
+
+import { AUTH_ACTION_TIMEOUT_MS } from '../authDeadline';
 
 import { useSignUp } from '../hooks/useSignUp';
 
@@ -120,6 +123,34 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
     });
 
     expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+});
+
+describe('useSignUp: a retry after a timed-out first call', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('does not reach signUp a second time while the first call is unsettled', async () => {
+    supabaseSignUp.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(useSignUp);
+
+    await act(async () => {
+      const first = result.current.signUp('a@b.co', 'pw');
+      await jest.advanceTimersByTimeAsync(AUTH_ACTION_TIMEOUT_MS);
+      await first;
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+
+    await act(async () => {
+      await result.current.signUp('a@b.co', 'pw');
+    });
+
+    expect(supabaseSignUp).toHaveBeenCalledTimes(1);
   });
 });
 
