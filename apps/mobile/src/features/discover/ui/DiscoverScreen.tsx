@@ -68,6 +68,8 @@ export function DiscoverScreen(): ReactElement {
           nextPageFailed={d.nextPageFailed}
           onRetryNextPage={d.onRetryNextPage}
           clearHistoryFailed={d.clearHistoryFailed}
+          historyFailed={d.historyFailed}
+          onRetryHistory={d.onRetryHistory}
           refreshFailed={d.refreshFailed}
         />
       </DismissKeyboardArea>

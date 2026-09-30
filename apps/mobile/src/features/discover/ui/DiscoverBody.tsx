@@ -52,6 +52,8 @@ interface DiscoverBodyProps {
   nextPageFailed?: boolean | undefined;
   onRetryNextPage?: (() => void) | undefined;
   clearHistoryFailed?: boolean | undefined;
+  historyFailed?: boolean | undefined;
+  onRetryHistory?: (() => void) | undefined;
   refreshFailed?: boolean | undefined;
 }
 

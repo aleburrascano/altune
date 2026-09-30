@@ -157,6 +157,41 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
   });
 });
 
+describe('useDiscoverLogic reports a failed history load', () => {
+  it('exposes historyFailed when the history request rejects', async () => {
+    mockSuggest.mockResolvedValue({ suggestions: [] });
+    mockHistory.mockRejectedValue(new ApiError(500, 'history down'));
+
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+
+    await waitFor(() => expect(result.current.historyFailed).toBe(true));
+  });
+
+  it('refetches history and recovers when retry succeeds', async () => {
+    mockSuggest.mockResolvedValue({ suggestions: [] });
+    mockHistory.mockRejectedValueOnce(new ApiError(500, 'history down'));
+    mockHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
+
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    await waitFor(() => expect(result.current.historyFailed).toBe(true));
+
+    act(() => result.current.onRetryHistory());
+
+    await waitFor(() => expect(result.current.historyFailed).toBe(false));
+    expect(result.current.historyItems).toEqual([{ query: 'radiohead' }]);
+  });
+
+  it('does not flag a failure when history loads', async () => {
+    mockSuggest.mockResolvedValue({ suggestions: [] });
+    mockHistory.mockResolvedValue({ items: [] });
+
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(result.current.historyFailed).toBe(false);
+  });
+});
+
 describe('useDiscoverLogic keeps the history list when clearing it fails', () => {
   it('restores the history items after a failed clear', async () => {
     mockSuggest.mockResolvedValue({ suggestions: [] });

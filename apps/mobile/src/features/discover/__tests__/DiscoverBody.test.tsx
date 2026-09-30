@@ -123,6 +123,51 @@ describe('clear history failure', () => {
   });
 });
 
+describe('history load failure', () => {
+  function renderHistory(historyFailed: boolean, onRetryHistory = jest.fn()) {
+    render(
+      <DiscoverBody
+        view="empty-no-query"
+        searchData={undefined}
+        historyItems={[]}
+        filter="all"
+        onFilterChange={jest.fn()}
+        onHistoryTap={jest.fn()}
+        onResultTap={jest.fn()}
+        impression={{
+          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+          onViewableItemsChanged: jest.fn(),
+        }}
+        onRetry={jest.fn()}
+        onEndReached={jest.fn()}
+        isFetchingNextPage={false}
+        onRefresh={jest.fn()}
+        isRefreshing={false}
+        correction={null}
+        onSearchOriginal={jest.fn()}
+        onClearHistory={jest.fn()}
+        historyFailed={historyFailed}
+        onRetryHistory={onRetryHistory}
+      />,
+    );
+  }
+
+  it('shows the failure row instead of the empty state and retries on tap', () => {
+    const onRetryHistory = jest.fn();
+    renderHistory(true, onRetryHistory);
+    expect(screen.getByTestId('discover-history-error')).toBeTruthy();
+    expect(screen.queryByText('Search music to get started.')).toBeNull();
+    fireEvent.press(screen.getByTestId('discover-history-retry'));
+    expect(onRetryHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('still shows the empty state for a successful empty history', () => {
+    renderHistory(false);
+    expect(screen.getByText('Search music to get started.')).toBeTruthy();
+    expect(screen.queryByTestId('discover-history-error')).toBeNull();
+  });
+});
+
 function albumResult(index: number) {
   return resultFixture({
     kind: 'album',

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
-import { Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
+import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
 import { SectionLabel } from './SectionLabel';
 import type { SearchHistoryItem } from '@shared/api-client/discovery';
@@ -14,6 +14,8 @@ interface RecentSearchesProps {
   onHistoryTap: (item: SearchHistoryItem) => void;
   onClearHistory: () => void;
   clearHistoryFailed?: boolean | undefined;
+  historyFailed?: boolean | undefined;
+  onRetryHistory?: (() => void) | undefined;
 }
 
 type ChipsProps = Pick<RecentSearchesProps, 'historyItems' | 'onHistoryTap'>;
@@ -99,7 +101,21 @@ function HistoryChips(props: ChipsProps): ReactElement {
   );
 }
 
+function HistoryFailed({ onRetry }: { onRetry?: (() => void) | undefined }): ReactElement {
+  return (
+    <View testID="discover-history-error" style={styles.emptyCenter}>
+      <Text variant="body" tone="secondary" style={styles.emptyText}>
+        Couldn't load recent searches.
+      </Text>
+      <Button testID="discover-history-retry" label="Retry" onPress={() => onRetry?.()} />
+    </View>
+  );
+}
+
 function HistoryContent(props: RecentSearchesProps): ReactElement {
+  if (props.historyItems.length === 0 && props.historyFailed === true) {
+    return <HistoryFailed onRetry={props.onRetryHistory} />;
+  }
   if (props.historyItems.length === 0) return <NoHistory />;
   return (
     <>

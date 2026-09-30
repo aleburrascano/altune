@@ -12,7 +12,11 @@ import { useDiscoverFetchEnabled } from './discoverFetchGate';
 export function useSearchHistory() {
   const isHistoryEnabled = useDiscoverFetchEnabled();
 
-  const { data, error } = useQuery<DiscoverySearchHistoryResponse>({
+  const {
+    data: response,
+    error,
+    refetch,
+  } = useQuery<DiscoverySearchHistoryResponse>({
     queryKey: discoveryKeys.history,
     queryFn: () => listSearchHistory({ limit: 10 }),
     enabled: isHistoryEnabled,
@@ -20,5 +24,5 @@ export function useSearchHistory() {
 
   useReportQueryFailure(error, 'history');
 
-  return { data, error };
+  return { data: response, error, refetch };
 }

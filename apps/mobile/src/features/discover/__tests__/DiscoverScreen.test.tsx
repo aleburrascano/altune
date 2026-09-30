@@ -72,6 +72,8 @@ function mockDiscoverLogic(): DiscoverLogic {
     onRetryNextPage: jest.fn(),
     clearHistoryFailed: false,
     refreshFailed: false,
+    historyFailed: false,
+    onRetryHistory: jest.fn(),
   };
 }
 

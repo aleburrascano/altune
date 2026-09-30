@@ -58,6 +58,8 @@ export type DiscoverLogic = {
   nextPageFailed: boolean;
   onRetryNextPage: () => void;
   clearHistoryFailed: boolean;
+  historyFailed: boolean;
+  onRetryHistory: () => void;
   refreshFailed: boolean;
 };
 
@@ -159,6 +161,10 @@ export function useDiscoverLogic(): DiscoverLogic {
       if (!isFetchingNextPage && !isRefreshing) void fetchNextPage({ cancelRefetch: false });
     },
     clearHistoryFailed: clearHistory.error !== null,
+    historyFailed: history.error !== null && history.data === undefined,
+    onRetryHistory: () => {
+      void history.refetch();
+    },
     refreshFailed,
   };
 }
