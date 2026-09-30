@@ -5,21 +5,6 @@ import (
 	"strings"
 )
 
-var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe", " - Remix"}
-
-func stripITunesTypeSuffix(name string) string {
-	lower := strings.ToLower(name)
-	if len(lower) != len(name) {
-		return name
-	}
-	for _, suffix := range itunesTypeSuffixes {
-		if strings.HasSuffix(lower, strings.ToLower(suffix)) {
-			return strings.TrimSpace(name[:len(name)-len(suffix)])
-		}
-	}
-	return name
-}
-
 func stripAlbumTypeSuffix(title string) string {
 	for _, suffix := range []string{" - Single", " - EP"} {
 		if len(title) >= len(suffix) && strings.EqualFold(title[len(title)-len(suffix):], suffix) {

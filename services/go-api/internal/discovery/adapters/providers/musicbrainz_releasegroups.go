@@ -159,13 +159,3 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 	a.releaseMemo.put(mbid, all)
 	return all, nil
 }
-
-func extractCreditedMBID(rg mbReleaseGroup) string {
-	if len(rg.ArtistCredit) == 0 {
-		return ""
-	}
-	if rg.ArtistCredit[0].Artist == nil {
-		return ""
-	}
-	return rg.ArtistCredit[0].Artist.ID
-}

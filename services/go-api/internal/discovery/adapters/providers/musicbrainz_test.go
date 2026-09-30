@@ -574,16 +574,6 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles_emptyMBIDNoRequest(t *testing.T) 
 	}
 }
 
-func TestExtractCreditedMBID_missingCredit(t *testing.T) {
-	if got := extractCreditedMBID(mbReleaseGroup{}); got != "" {
-		t.Errorf("no artist-credit: got %q, want empty", got)
-	}
-	rg := mbReleaseGroup{ArtistCredit: []mbArtistRef{{Name: "Che"}}}
-	if got := extractCreditedMBID(rg); got != "" {
-		t.Errorf("credit without artist link: got %q, want empty", got)
-	}
-}
-
 func TestMusicBrainzAdapter_Search_malformedJSONIsError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
