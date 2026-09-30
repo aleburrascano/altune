@@ -82,3 +82,28 @@ func TestFailureThrottle_RefilledClientsArePrunedBeforeEvictingPenalisedOnes(t *
 		t.Fatal("penalised client was evicted in favour of pruning a refilled one")
 	}
 }
+
+func TestFailureThrottle_ExhaustedClientSurvivesEvictionChurn(t *testing.T) {
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	limits := FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 50}
+	throttle := newFailureThrottle(limits, clock.now)
+	for i := range limits.MaxClients - 1 {
+		throttle.admit("client-" + strconv.Itoa(i))
+	}
+	throttle.admit("attacker")
+	throttle.admit("attacker")
+	if _, _, ok := throttle.admit("attacker"); ok {
+		t.Fatal("attacker not exhausted before churn")
+	}
+
+	for i := range 500 {
+		throttle.admit("churn-" + strconv.Itoa(i))
+	}
+
+	if _, _, ok := throttle.admit("attacker"); ok {
+		t.Fatal("exhausted client got a fresh burst after eviction churn")
+	}
+	if got := len(throttle.clients); got > limits.MaxClients {
+		t.Fatalf("tracked clients: got %d, want at most %d", got, limits.MaxClients)
+	}
+}

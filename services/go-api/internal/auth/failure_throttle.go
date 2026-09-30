@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"cmp"
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -78,7 +80,14 @@ func (t *failureThrottle) makeRoom(now time.Time) {
 		}
 	}
 	lowWater := t.limits.MaxClients - max(1, t.limits.MaxClients/10)
-	for key := range t.clients {
+	byTokens := make(map[string]float64, len(t.clients))
+	keys := make([]string, 0, len(t.clients))
+	for key, lim := range t.clients {
+		byTokens[key] = lim.TokensAt(now)
+		keys = append(keys, key)
+	}
+	slices.SortFunc(keys, func(a, b string) int { return cmp.Compare(byTokens[b], byTokens[a]) })
+	for _, key := range keys {
 		if len(t.clients) <= lowWater {
 			return
 		}
