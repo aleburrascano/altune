@@ -8,8 +8,10 @@ import { warnPlayback } from '../redactPlaybackError';
 
 export type NativeQueueFailureKind = 'transient' | 'permanent';
 
+const INDEX_OUT_OF_BOUNDS_CODE = 'index_out_of_bounds';
+
 const PERMANENT_NATIVE_CODES: ReadonlySet<string> = new Set([
-  'index_out_of_bounds',
+  INDEX_OUT_OF_BOUNDS_CODE,
   'no_current_item',
   'player_not_initialized',
   'invalid_track_object',
@@ -25,6 +27,10 @@ const QUEUE_FAILURE_REPORT: Record<
   permanent: { errorKind: 'queue_out_of_sync', message: QUEUE_OUT_OF_SYNC_MESSAGE },
   transient: { errorKind: 'queue_update_failed', message: QUEUE_UPDATE_FAILED_MESSAGE },
 };
+
+export function isIndexOutOfBounds(err: unknown): boolean {
+  return nativeErrorCode(err) === INDEX_OUT_OF_BOUNDS_CODE;
+}
 
 export function nativeErrorCode(err: unknown): string | null {
   if (typeof err !== 'object' || err === null || !('code' in err)) return null;

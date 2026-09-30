@@ -11,6 +11,7 @@ import { NativeQueueTimeoutError, withNativeQueue } from '../native/nativeQueueL
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 import {
   classifyNativeQueueFailure,
+  isIndexOutOfBounds,
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
   reportingQueueFailure,
@@ -481,5 +482,14 @@ describe('reportingQueueFailure — the still-current policy lives once', () => 
     );
 
     expect(usePlaybackErrorStore.getState().key).toBeNull();
+  });
+});
+
+describe('isIndexOutOfBounds', () => {
+  it('is true only for the index_out_of_bounds native code', () => {
+    expect(isIndexOutOfBounds({ code: 'index_out_of_bounds' })).toBe(true);
+    expect(isIndexOutOfBounds({ code: 'no_current_item' })).toBe(false);
+    expect(isIndexOutOfBounds(new Error('index_out_of_bounds'))).toBe(false);
+    expect(isIndexOutOfBounds(null)).toBe(false);
   });
 });

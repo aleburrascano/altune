@@ -15,7 +15,7 @@ import {
 import { claimSessionReset } from '../loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { clearPlaybackError, reportLoadFailure } from '../playbackErrorStore';
-import { nativeErrorCode, reportingQueueFailure } from './queueFailureReport';
+import { isIndexOutOfBounds, reportingQueueFailure } from './queueFailureReport';
 import { redactedPlaybackFailure, warnPlayback } from '../redactPlaybackError';
 import { seekPreservingPlayback } from './seekControls';
 
@@ -107,7 +107,7 @@ async function playQueueIndex(index: number): Promise<void> {
   try {
     await skipToIndexAndPlay(index);
   } catch (err) {
-    if (nativeErrorCode(err) !== 'index_out_of_bounds') throw err;
+    if (!isIndexOutOfBounds(err)) throw err;
     warnPlayback('skip target outside the native queue window; rebuilding', { index }, err);
     const queue = useQueueStore.getState();
     await loadNativeQueue(orderedQueueTracks(queue), index);
@@ -116,7 +116,7 @@ async function playQueueIndex(index: number): Promise<void> {
 
 function removeQueuedIndex(index: number): Promise<void> {
   return withNativeQueue(() => TrackPlayer.remove(index)).catch((err: unknown) => {
-    if (nativeErrorCode(err) !== 'index_out_of_bounds') throw err;
+    if (!isIndexOutOfBounds(err)) throw err;
   });
 }
 
