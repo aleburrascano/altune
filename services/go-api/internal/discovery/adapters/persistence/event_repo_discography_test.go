@@ -160,10 +160,33 @@ func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 	}
 }
 
+func clearSystemNonDiscographyEvents(t *testing.T, store *PgxEventStore) {
+	t.Helper()
+	_, _ = store.pool.Exec(context.Background(),
+		`DELETE FROM discovery_events WHERE user_id = $1 AND event_type IN ('search_performed', 'play')`,
+		shared.SystemUserId())
+}
+
+func TestPgxEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
+	store := NewPgxEventStore(testPool(t))
+	t.Run("eval run", TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt)
+
+	var left int
+	if err := store.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM discovery_events WHERE user_id = $1 AND event_type IN ('search_performed', 'play')`,
+		shared.SystemUserId()).Scan(&left); err != nil {
+		t.Fatalf("count leftovers: %v", err)
+	}
+	if left != 0 {
+		t.Fatalf("system search_performed/play rows left behind = %d, want 0", left)
+	}
+}
+
 func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	t.Cleanup(func() { clearDiscographyObserved(t, store) })
+	t.Cleanup(func() { clearSystemNonDiscographyEvents(t, store) })
 	clearDiscographyObserved(t, store)
 
 	now := time.Now().UTC()
