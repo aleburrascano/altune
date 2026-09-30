@@ -183,7 +183,7 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 	if old == "" || old == ac.AudioRef {
 		return
 	}
-	delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	delCtx, cancel := detachedTimeout(ctx, supersededDeleteBudget)
 	defer cancel()
 	if s.servedByAnotherTrack(delCtx, trackId, old) {
 		return
@@ -265,8 +265,14 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 
 const settleBudget = 10 * time.Second
 
+const supersededDeleteBudget = 30 * time.Second
+
+func detachedTimeout(ctx context.Context, budget time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), budget)
+}
+
 func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), settleBudget)
+	return detachedTimeout(ctx, settleBudget)
 }
 
 func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {

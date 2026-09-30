@@ -145,7 +145,7 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 const rollbackBudget = 30 * time.Second
 
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
-	rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackBudget)
+	rbCtx, cancel := detachedTimeout(ctx, rollbackBudget)
 	defer cancel()
 
 	for i := len(completed) - 1; i >= 0; i-- {

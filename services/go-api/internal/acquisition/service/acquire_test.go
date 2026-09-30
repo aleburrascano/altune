@@ -1119,3 +1119,22 @@ func TestExecute_DefaultFloorStoresTheSameCandidate(t *testing.T) {
 		t.Errorf("status = %v, want ready", track.AcquisitionStatus)
 	}
 }
+
+func TestSettleContext_SurvivesParentCancelWithinBudget(t *testing.T) {
+	parent, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+
+	settle, cancel := settleContext(parent)
+	defer cancel()
+
+	if settle.Err() != nil {
+		t.Fatalf("settle context should outlive a cancelled parent, got %v", settle.Err())
+	}
+	deadline, ok := settle.Deadline()
+	if !ok {
+		t.Fatal("settle context must carry a deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= 0 || remaining > settleBudget {
+		t.Fatalf("deadline should fall within %v, got %v remaining", settleBudget, remaining)
+	}
+}

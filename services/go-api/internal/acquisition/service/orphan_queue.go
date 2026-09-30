@@ -15,7 +15,7 @@ func recordOrphanedAudio(ctx context.Context, q catalogports.OrphanedAudioRecord
 	if q == nil {
 		return
 	}
-	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), orphanRecordTimeout)
+	recordCtx, cancel := detachedTimeout(ctx, orphanRecordTimeout)
 	defer cancel()
 	err := q.RecordOrphanedAudio(recordCtx, catalogports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
 	if err != nil {
