@@ -179,7 +179,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       const entries = { ...s.entries, [trackId]: queuedEntry(trackId) };
       tagChangedEntries(entries, [trackId]);
       saveIndex(entries);
-      return { entries, queue: [...s.queue, trackId] };
+      return { entries, queue: [...s.queue, trackId], lastUnpinAll: undefined };
     });
     runDownloadQueueIfSupported(set, get);
     return 'accepted';
@@ -198,7 +198,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       for (const id of fresh) next[id] = queuedEntry(id);
       tagChangedEntries(next, fresh);
       saveIndex(next);
-      return { entries: next, queue: [...s.queue, ...fresh] };
+      return { entries: next, queue: [...s.queue, ...fresh], lastUnpinAll: undefined };
     });
     const settled = awaitBatchSettled([...new Set(fresh)]);
     runDownloadQueueIfSupported(set, get);
@@ -256,12 +256,15 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     const requeue = Object.values(next)
       .filter((e) => e.status === 'queued')
       .map((e) => e.trackId);
-    set({ entries: next, queue: requeue });
+    set({ entries: next, queue: requeue, lastUnpinAll: undefined });
     if (requeue.length > 0) runDownloadQueueIfSupported(set, get);
   },
 }));
 
-onSignOut(() => void usePinnedStore.getState().unpinAll());
+onSignOut(() => {
+  usePinnedStore.getState().unpinAll();
+  usePinnedStore.setState({ lastUnpinAll: undefined });
+});
 
 onKillSwitchChange((loop, enabled) => {
   if (loop !== 'offlineDownloads' || !enabled) return;
@@ -274,7 +277,7 @@ export function claimPinnedDownloads(userId: string): void {
   if (readOwner() === userId) return;
   usePinnedStore.getState().unpinAll();
   saveIndex({});
-  usePinnedStore.setState({ entries: {} });
+  usePinnedStore.setState({ entries: {}, lastUnpinAll: undefined });
   writeOwner(userId);
 }
 

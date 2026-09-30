@@ -3291,6 +3291,42 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       warn.mockRestore();
     });
 
+    it('clears a stale partial-removal outcome when a new account claims the downloads', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      __fs.seedFile(OWNER_URI, 'user-a');
+      seedReadyDownload();
+      __fs.failNext('delete', new Error('file is locked'));
+
+      claimPinnedDownloads('user-b');
+
+      expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
+      warn.mockRestore();
+    });
+
+    it('clears a stale partial-removal outcome on the next pin', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      seedReadyDownload();
+      __fs.failNext('delete', new Error('file is locked'));
+      usePinnedStore.getState().unpinAll();
+      expect(usePinnedStore.getState().lastUnpinAll).toBe('partial');
+
+      usePinnedStore.getState().pin(asTrackId('t2'));
+
+      expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
+      warn.mockRestore();
+    });
+
+    it('clears a stale partial-removal outcome on sign-out', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      seedReadyDownload();
+      __fs.failNext('delete', new Error('file is locked'));
+
+      runSignOutCleanups();
+
+      expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
+      warn.mockRestore();
+    });
+
     it('treats an unreadable owner record as foreign and deletes the downloads', () => {
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();

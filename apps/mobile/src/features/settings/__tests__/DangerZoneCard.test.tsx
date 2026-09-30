@@ -1,12 +1,16 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { within } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
+import { asTrackId } from '@shared/api-client/ids';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
+
+import { useRemoveDownloads } from '../hooks/useRemoveDownloads';
 import { downloadUsage } from '../downloadStatsModel';
 import type { ClearHistoryState } from '../dangerZoneActions';
 import { DangerZoneCard } from '../ui/DangerZoneCard';
@@ -474,5 +478,24 @@ describe('DangerZoneCard probe: rows across download usage, outcomes and mutatio
     ).toBeTruthy();
     expect(rowOf('settings-clear-search-history').queryByText('Failed')).toBeNull();
     expect(rowOf('settings-remove-downloads').queryByText('Failed')).toBeNull();
+  });
+});
+
+describe('DangerZoneCard downloads row after a stale partial removal', () => {
+  it('shows no Failed status once a new download is pinned', () => {
+    const props = makeProps();
+    function Connected() {
+      const downloads = useRemoveDownloads(props.downloads.stats);
+      return <DangerZoneCard {...props} downloads={downloads} />;
+    }
+    usePinnedStore.setState({ lastUnpinAll: 'partial' });
+    render(<Connected />);
+    expect(screen.getByText('Failed')).toBeTruthy();
+
+    act(() => {
+      usePinnedStore.getState().pin(asTrackId('fresh-track'));
+    });
+
+    expect(screen.queryByText('Failed')).toBeNull();
   });
 });
