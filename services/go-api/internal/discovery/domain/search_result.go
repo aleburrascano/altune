@@ -1,6 +1,9 @@
 package domain
 
-import "altune/go-api/internal/shared/textnorm"
+import (
+	"altune/go-api/internal/shared/textnorm"
+	"net/url"
+)
 
 type SourceRef struct {
 	Provider   ProviderName
@@ -81,7 +84,7 @@ func NewProviderResult(kind ResultKind, title, subtitle, imageURL string, source
 		Kind:       kind,
 		Title:      title,
 		Subtitle:   subtitle,
-		ImageURL:   imageURL,
+		ImageURL:   SafeImageURL(imageURL),
 		Confidence: ConfidenceLow,
 		Sources:    []SourceRef{source},
 		Extras:     extras,
@@ -99,4 +102,12 @@ func SignatureOf(r SearchResult) string {
 		return r.Signature
 	}
 	return ResultSignature(r)
+}
+
+func SafeImageURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return ""
+	}
+	return raw
 }

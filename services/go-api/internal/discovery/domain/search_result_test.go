@@ -114,3 +114,22 @@ func TestSignatureOf(t *testing.T) {
 		t.Errorf("SignatureOf(unstamped) = %q, want derived %q", got, want)
 	}
 }
+
+func TestNewProviderResult_BlanksUnsafeImageURL(t *testing.T) {
+	source := SourceRef{Provider: ProviderDeezer, ExternalID: "1"}
+	cases := map[string]string{
+		"http":       "http://img.example/a.jpg",
+		"javascript": "javascript:alert(1)",
+		"data":       "data:image/png;base64,AAAA",
+		"no host":    "https:///a.jpg",
+		"unparsable": "https://a b\x7f/",
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := NewProviderResult(ResultKindTrack, "T", "S", raw, source, nil)
+			if r.ImageURL != "" {
+				t.Errorf("ImageURL = %q, want empty", r.ImageURL)
+			}
+		})
+	}
+}

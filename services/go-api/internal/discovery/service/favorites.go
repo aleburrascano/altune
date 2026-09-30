@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"slices"
 	"sort"
 	"unicode/utf8"
@@ -54,8 +53,7 @@ func validateFavoriteImageURL(imageURL string) error {
 	if len(imageURL) > maxFavoriteImageURLBytes {
 		return &invalidFavoriteError{msg: fmt.Sprintf("image_url must be at most %d bytes", maxFavoriteImageURLBytes)}
 	}
-	parsed, err := url.Parse(imageURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+	if domain.SafeImageURL(imageURL) == "" {
 		return &invalidFavoriteError{msg: "image_url must be an https URL"}
 	}
 	return nil
