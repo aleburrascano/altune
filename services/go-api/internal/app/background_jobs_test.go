@@ -182,35 +182,107 @@ func TestStartSimpleJob_CountsAFailedRunAsAFailure(t *testing.T) {
 
 func runFailingSimpleJob(t *testing.T, tc simpleJobLogCase) string {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	defer slog.SetDefault(restore)
-
-	runFailingSimpleJobOn(t, &App{}, tc)
-	return buf.String()
+	return captureLogs(func() { runFailingSimpleJobOn(t, &App{}, tc) })
 }
 
 func runFailingSimpleJobOn(t *testing.T, a *App, tc simpleJobLogCase) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	ran := make(chan struct{}, 1)
-	a.startSimpleJob(tc.name, time.Millisecond, func(context.Context) error {
-		select {
-		case ran <- struct{}{}:
-		default:
-		}
-		return errors.New("boom")
-	}, tc.startedAttrs...)
+	startAwaitStop(t, a, ran, func(ctx context.Context) {
+		a.startSimpleJob(tc.name, time.Millisecond, func(context.Context) error {
+			signalRan(ran)
+			return errors.New("boom")
+		}, tc.startedAttrs...)
+	})
+}
 
+func signalRan(ran chan struct{}) {
+	select {
+	case ran <- struct{}{}:
+	default:
+	}
+}
+
+func captureLogs(run func()) string {
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(restore)
+	run()
+	return buf.String()
+}
+
+const jobRanDeadline = 2 * time.Second
+
+type fataler interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
+func startAwaitStop(t *testing.T, a *App, ran chan struct{}, register func(context.Context)) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		a.wg.Wait()
+	}()
+	register(ctx)
 	for _, job := range a.backgroundStarts {
 		job.start(ctx)
 	}
-	<-ran
-	cancel()
-	a.wg.Wait()
+	awaitJobRan(t, a, ran, jobRanDeadline)
+	awaitJobOutcomes(t, a, jobRanDeadline)
+}
+
+func awaitJobOutcomes(t fataler, a *App, deadline time.Duration) {
+	t.Helper()
+	giveUp := time.Now().Add(deadline)
+	for _, job := range a.backgroundStarts {
+		jc := a.job(job.name)
+		for jc.lastSuccess.Load() == 0 && jc.lastFailure.Load() == 0 {
+			if time.Now().After(giveUp) {
+				t.Fatalf("job %q ran but recorded no outcome within %s", job.name, deadline)
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func awaitJobRan(t fataler, a *App, ran chan struct{}, deadline time.Duration) {
+	t.Helper()
+	select {
+	case <-ran:
+	case <-time.After(deadline):
+		names := make([]string, 0, len(a.backgroundStarts))
+		for _, job := range a.backgroundStarts {
+			names = append(names, string(job.name))
+		}
+		t.Fatalf("job %v never ran within %s", names, deadline)
+	}
+}
+
+type recordingFataler struct{ messages []string }
+
+func (r *recordingFataler) Helper() {}
+
+func (r *recordingFataler) Fatalf(format string, args ...any) {
+	r.messages = append(r.messages, fmt.Sprintf(format, args...))
+}
+
+func TestAwaitJobRan_FailsNamingTheJobWhenItsBodyNeverRuns(t *testing.T) {
+	a := &App{}
+	a.startSimpleJob(jobVocabularyRefresh, time.Hour, func(context.Context) error { return nil })
+	rec := &recordingFataler{}
+
+	logged := captureLogs(func() { awaitJobRan(rec, a, make(chan struct{}), 10*time.Millisecond) })
+
+	if len(rec.messages) != 1 || !strings.Contains(rec.messages[0], string(jobVocabularyRefresh)) {
+		t.Errorf("want one failure naming %q, got %v", jobVocabularyRefresh, rec.messages)
+	}
+	if logged != "" {
+		t.Errorf("unexpected log output %q", logged)
+	}
 }
 
 func flipNamedJob(t *testing.T, a *App, name jobName, action string) {
@@ -261,10 +333,7 @@ func TestBackgroundChartCallsAreCounted(t *testing.T) {
 type failingLabelStore struct{ ran chan struct{} }
 
 func (f failingLabelStore) BehavioralLabels(context.Context, time.Time) ([]discoveryPorts.BehavioralLabel, error) {
-	select {
-	case f.ran <- struct{}{}:
-	default:
-	}
+	signalRan(f.ran)
 	return nil, errors.New("boom")
 }
 
@@ -274,34 +343,18 @@ type failingPruner struct {
 }
 
 func (f failingPruner) PruneDiscographyObserved(context.Context, time.Time) (int64, error) {
-	select {
-	case f.ran <- struct{}{}:
-	default:
-	}
+	signalRan(f.ran)
 	return 0, f.discographyErr
 }
 
 func (f failingPruner) PruneEvents(context.Context, time.Time) (int64, error) {
+	signalRan(f.ran)
 	return 0, f.evtErr
 }
 
 func runStartedJob(t *testing.T, a *App, ran chan struct{}, register func(context.Context)) string {
 	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	defer slog.SetDefault(restore)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	register(ctx)
-	for _, job := range a.backgroundStarts {
-		job.start(ctx)
-	}
-	<-ran
-	cancel()
-	a.wg.Wait()
-	return buf.String()
+	return captureLogs(func() { startAwaitStop(t, a, ran, register) })
 }
 
 func TestStartCorpusRefresh_LogsTheOldTextAndCountsAFailure(t *testing.T) {
@@ -381,10 +434,7 @@ type stubAcquisitionPruner struct {
 }
 
 func (s stubAcquisitionPruner) Prune(context.Context, time.Time) (int64, error) {
-	select {
-	case s.ran <- struct{}{}:
-	default:
-	}
+	signalRan(s.ran)
 	return s.pruned, s.err
 }
 
