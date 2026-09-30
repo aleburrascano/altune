@@ -394,6 +394,41 @@ func TestYtDlpAudioSearcher_Download_RejectsAnOversizeOutput(t *testing.T) {
 	}
 }
 
+func downloadWithScript(t *testing.T, body string) (string, error) {
+	t.Helper()
+	outDir := t.TempDir()
+	binary := filepath.Join(t.TempDir(), "fake-yt-dlp")
+	script := "#!/bin/sh\n" + strings.ReplaceAll(body, "OUT", outDir) + "\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+	return s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
+}
+
+func TestYtDlpAudioSearcher_Download_RejectsWhenNoMP3IsProduced(t *testing.T) {
+	_, err := downloadWithScript(t, "true")
+	if err == nil || !strings.Contains(err.Error(), "no mp3 file produced in ") {
+		t.Fatalf("Download error = %v, want a no-mp3 rejection", err)
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_RejectsAnUndersizeOutput(t *testing.T) {
+	_, err := downloadWithScript(t, "truncate -s 100 OUT/tiny.mp3")
+	want := "downloaded file too small (100 bytes), likely corrupt"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Download error = %v, want %q", err, want)
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_ReturnsTheLargestMP3(t *testing.T) {
+	got, err := downloadWithScript(t, "truncate -s 20K OUT/small.mp3; truncate -s 40K OUT/large.mp3")
+	if err != nil || filepath.Base(got) != "large.mp3" {
+		t.Fatalf("Download = %q, %v, want large.mp3", got, err)
+	}
+}
+
 func hangingBinary(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "yt-dlp")

@@ -267,21 +267,16 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
+	return largestMP3(outDir)
+}
+
+func largestMP3(outDir string) (string, error) {
 	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))
 	if err != nil || len(matches) == 0 {
 		return "", fmt.Errorf("no mp3 file produced in %s", outDir)
 	}
 
-	best, bestSize := "", int64(-1)
-	for _, m := range matches {
-		info, statErr := os.Stat(m)
-		if statErr != nil {
-			continue
-		}
-		if info.Size() > bestSize {
-			best, bestSize = m, info.Size()
-		}
-	}
+	best, bestSize := largestReadable(matches)
 	if best == "" {
 		return "", fmt.Errorf("stat downloaded files in %s", outDir)
 	}
@@ -294,6 +289,20 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	}
 
 	return best, nil
+}
+
+func largestReadable(paths []string) (string, int64) {
+	best, bestSize := "", int64(-1)
+	for _, m := range paths {
+		info, err := os.Stat(m)
+		if err != nil {
+			continue
+		}
+		if info.Size() > bestSize {
+			best, bestSize = m, info.Size()
+		}
+	}
+	return best, bestSize
 }
 
 type ytDlpEntry struct {
