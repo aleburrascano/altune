@@ -100,7 +100,7 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list library albums: %w", err)
+		return nil, fmt.Errorf("list library albums: %w", classifyDBError(err))
 	}
 	defer rows.Close()
 
@@ -109,12 +109,12 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 		var g domain.AlbumGroup
 		var addedAt time.Time
 		if err := rows.Scan(&g.Key, &g.Album, &g.Artist, &g.ArtworkURL, &g.Year, &g.TrackCount, &addedAt); err != nil {
-			return nil, fmt.Errorf("scan library album: %w", err)
+			return nil, fmt.Errorf("scan library album: %w", classifyDBError(err))
 		}
 		g.MostRecentAddedAt = addedAt
 		albums = append(albums, g)
 	}
-	return albums, rows.Err()
+	return albums, classifyDBError(rows.Err())
 }
 
 func (r *PgxLibraryLensRepository) ListArtistsForUser(
@@ -136,7 +136,7 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list library artists: %w", err)
+		return nil, fmt.Errorf("list library artists: %w", classifyDBError(err))
 	}
 	defer rows.Close()
 
@@ -145,12 +145,12 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 		var g domain.ArtistGroup
 		var addedAt time.Time
 		if err := rows.Scan(&g.Key, &g.Artist, &g.ArtworkURL, &g.TrackCount, &addedAt); err != nil {
-			return nil, fmt.Errorf("scan library artist: %w", err)
+			return nil, fmt.Errorf("scan library artist: %w", classifyDBError(err))
 		}
 		g.MostRecentAddedAt = addedAt
 		artists = append(artists, g)
 	}
-	return artists, rows.Err()
+	return artists, classifyDBError(rows.Err())
 }
 
 func trackOrderBy(sort domain.LibrarySort) string {
@@ -189,20 +189,20 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list filtered tracks: %w", err)
+		return nil, 0, fmt.Errorf("list filtered tracks: %w", classifyDBError(err))
 	}
 	tracks, err := collectTracks(rows)
 	rows.Close()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, classifyDBError(err)
 	}
 	total, err := pageTotal(ctx, r.pool, query.Limit, query.Offset, len(tracks),
 		`SELECT count(*)`+where, args[:filterArgs]...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, classifyDBError(err)
 	}
 	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {
-		return nil, 0, err
+		return nil, 0, classifyDBError(err)
 	}
 	return tracks, total, nil
 }

@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/events"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 )
@@ -50,7 +49,7 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 		return nil, err
 	}
 	if err := s.playlistRepo.Create(ctx, playlist); err != nil {
-		return nil, fmt.Errorf("create playlist: %w", err)
+		return nil, wrapRepoError(ctx, "create playlist", err)
 	}
 	slog.InfoContext(ctx, "playlist created",
 		"playlist_id", playlist.ID.String(), "user_id", userId.String())
@@ -64,7 +63,7 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 func (s *PlaylistLifecycleService) requirePlaylistSpace(ctx context.Context, userId shared.UserId) error {
 	held, err := s.playlistRepo.CountForUser(ctx, userId, maxPlaylistsPerUser)
 	if err != nil {
-		return fmt.Errorf("count playlists: %w", err)
+		return wrapRepoError(ctx, "count playlists", err)
 	}
 	if held >= maxPlaylistsPerUser {
 		slog.WarnContext(ctx, "catalog.too_many_playlists", "user_id", userId.String(), "cap", maxPlaylistsPerUser)
@@ -80,7 +79,7 @@ func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserI
 	}
 	result, err := s.playlistRepo.ListForUser(ctx, userId, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("list playlists: %w", err)
+		return nil, wrapRepoError(ctx, "list playlists", err)
 	}
 	return result, nil
 }
@@ -88,7 +87,7 @@ func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserI
 func (s *PlaylistLifecycleService) Get(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId) (*domain.Playlist, []*domain.Track, error) {
 	playlist, tracks, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
-		return nil, nil, fmt.Errorf("get playlist with tracks: %w", err)
+		return nil, nil, wrapRepoError(ctx, "get playlist with tracks", err)
 	}
 	if playlist == nil {
 		return nil, nil, ErrPlaylistNotFound
@@ -99,7 +98,7 @@ func (s *PlaylistLifecycleService) Get(ctx context.Context, userId shared.UserId
 func (s *PlaylistLifecycleService) Delete(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId) error {
 	deleted, err := s.playlistRepo.Delete(ctx, playlistId, userId)
 	if err != nil {
-		return fmt.Errorf("delete playlist: %w", err)
+		return wrapRepoError(ctx, "delete playlist", err)
 	}
 	if !deleted {
 		return ErrPlaylistNotFound
@@ -115,7 +114,7 @@ func (s *PlaylistLifecycleService) Delete(ctx context.Context, userId shared.Use
 func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, name string) (*domain.Playlist, domain.PlaylistSummary, error) {
 	playlist, summary, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
 	if err != nil {
-		return nil, domain.PlaylistSummary{}, fmt.Errorf("rename playlist: %w", err)
+		return nil, domain.PlaylistSummary{}, wrapRepoError(ctx, "rename playlist", err)
 	}
 	if playlist == nil {
 		return nil, domain.PlaylistSummary{}, ErrPlaylistNotFound
@@ -124,7 +123,7 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 		return nil, domain.PlaylistSummary{}, err
 	}
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
-		return nil, domain.PlaylistSummary{}, renameWriteError(err)
+		return nil, domain.PlaylistSummary{}, renameWriteError(ctx, err)
 	}
 	s.events.Publish(ctx, userId, events.TypePlaylistRenamed, map[string]any{
 		"playlist_id": playlistId.String(),
@@ -133,9 +132,9 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 	return playlist, summary, nil
 }
 
-func renameWriteError(err error) error {
+func renameWriteError(ctx context.Context, err error) error {
 	if errors.Is(err, ports.ErrPlaylistNotOwned) {
 		return ErrPlaylistNotFound
 	}
-	return fmt.Errorf("rename playlist: %w", err)
+	return wrapRepoError(ctx, "rename playlist", err)
 }

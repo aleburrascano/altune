@@ -2,8 +2,10 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -580,5 +582,31 @@ func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing
 		if n != 1 {
 			t.Errorf("artist %q returned %d times, want 1", key, n)
 		}
+	}
+}
+
+func TestPgxLibraryRepos_TransientFailuresAreClassified(t *testing.T) {
+	lens := &PgxLibraryLensRepository{pool: deadlinePool{}}
+	featured := &PgxFeaturedArtistRepository{pool: deadlinePool{}}
+	userId := shared.NewUserId(uuid.New())
+	ctx := context.Background()
+	query := domain.LibraryQuery{Limit: 10}
+	fa := domain.NewFeaturedArtistIdentityOnly("SZA", "", 0)
+
+	cases := []struct {
+		name string
+		call func() error
+	}{
+		{"album list", func() error { _, err := lens.ListAlbumsForUser(ctx, userId, query); return err }},
+		{"artist list", func() error { _, err := lens.ListArtistsForUser(ctx, userId, query); return err }},
+		{"filtered tracks", func() error { _, _, err := lens.ListFilteredForUser(ctx, userId, query); return err }},
+		{"tracks featuring", func() error { _, err := featured.ListTracksFeaturing(ctx, userId, fa); return err }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, ports.ErrDBTransient) {
+				t.Fatalf("err = %v, want ports.ErrDBTransient", err)
+			}
+		})
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
-	"fmt"
 )
 
 type ListFeaturingService struct {
@@ -23,7 +22,7 @@ func (s *ListFeaturingService) Execute(
 ) ([]*domain.Track, error) {
 	tracks, err := s.featuredRepo.ListTracksFeaturing(ctx, userId, fa)
 	if err != nil {
-		return nil, fmt.Errorf("list featuring: %w", err)
+		return nil, wrapRepoError(ctx, "list featuring", err)
 	}
 	return tracks, nil
 }

@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"sort"
@@ -1412,6 +1413,51 @@ func TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
 			}
 			if tc.wantFound && !reflect.DeepEqual(order, tc.wantOrder) {
 				t.Fatalf("GetTrackOrder = %v, want %v", order, tc.wantOrder)
+			}
+		})
+	}
+}
+
+type deadlinePool struct{}
+
+var errPoolDeadline = fmt.Errorf("pool call: %w", context.DeadlineExceeded)
+
+func (deadlinePool) Begin(context.Context) (pgx.Tx, error) { return nil, errPoolDeadline }
+
+func (deadlinePool) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errPoolDeadline
+}
+
+func (deadlinePool) QueryRow(context.Context, string, ...any) pgx.Row {
+	return errRow{err: errPoolDeadline}
+}
+
+func (deadlinePool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errPoolDeadline
+}
+
+func TestPgxPlaylistRepo_TransientFailuresAreClassified(t *testing.T) {
+	repo := &PgxPlaylistRepository{pool: deadlinePool{}}
+	userId := shared.NewUserId(uuid.New())
+	playlistId := domain.NewPlaylistId()
+	ctx := context.Background()
+
+	cases := []struct {
+		name string
+		call func() error
+	}{
+		{"list", func() error { _, err := repo.ListForUser(ctx, userId, 10, 0); return err }},
+		{"get with tracks", func() error { _, _, err := repo.GetWithTracks(ctx, playlistId, userId); return err }},
+		{"add track", func() error { return repo.AddTrack(ctx, userId, playlistId, domain.NewTrackId()) }},
+		{"create", func() error { return repo.Create(ctx, newTestPlaylistForDB(t, userId)) }},
+		{"exists", func() error { _, err := repo.Exists(ctx, playlistId, userId); return err }},
+		{"track order", func() error { _, _, err := repo.GetTrackOrder(ctx, playlistId, userId); return err }},
+		{"delete", func() error { _, err := repo.Delete(ctx, playlistId, userId); return err }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, ports.ErrDBTransient) {
+				t.Fatalf("err = %v, want ports.ErrDBTransient", err)
 			}
 		})
 	}

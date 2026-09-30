@@ -41,7 +41,7 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 		`INSERT INTO playlists (id, user_id, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`,
 		playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.CreatedAt, playlist.UpdatedAt,
 	)
-	return err
+	return classifyDBError(err)
 }
 
 func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
@@ -69,7 +69,7 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		userId.UUID(), domain.PreviewArtworkLimit, limit, offset,
 	)
 	if err != nil {
-		return nil, err
+		return nil, classifyDBError(err)
 	}
 	defer rows.Close()
 
@@ -86,7 +86,7 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		)
 		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount, &artwork)
 		if err != nil {
-			return nil, err
+			return nil, classifyDBError(err)
 		}
 		result = append(result, domain.PlaylistWithSummary{
 			Playlist: &domain.Playlist{
@@ -102,7 +102,7 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 			},
 		})
 	}
-	return result, rows.Err()
+	return result, classifyDBError(rows.Err())
 }
 
 func (r *PgxPlaylistRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
@@ -115,7 +115,7 @@ func (r *PgxPlaylistRepository) CountForUser(ctx context.Context, userId shared.
 		userId.UUID(), atMost,
 	).Scan(&held)
 	if err != nil {
-		return 0, err
+		return 0, classifyDBError(err)
 	}
 	return held, nil
 }
@@ -143,7 +143,7 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 		return nil, domain.PlaylistSummary{}, nil
 	}
 	if err != nil {
-		return nil, domain.PlaylistSummary{}, err
+		return nil, domain.PlaylistSummary{}, classifyDBError(err)
 	}
 	playlist := &domain.Playlist{
 		ID:        domain.PlaylistIdFromUUID(pid),
@@ -163,7 +163,7 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 
 	playlist, _, err := r.GetByID(ctx, id, userId)
 	if err != nil || playlist == nil {
-		return nil, nil, err
+		return nil, nil, classifyDBError(err)
 	}
 
 	rows, err := r.pool.Query(ctx,
@@ -176,13 +176,13 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 		id.UUID(), maxPlaylistTracks,
 	)
 	if err != nil {
-		return playlist, nil, err
+		return playlist, nil, classifyDBError(err)
 	}
 	defer rows.Close()
 
 	tracks, err := collectTracks(rows)
 	if err != nil {
-		return playlist, nil, err
+		return playlist, nil, classifyDBError(err)
 	}
 
 	var playlistTracks []domain.PlaylistTrack
@@ -205,7 +205,7 @@ func (r *PgxPlaylistRepository) Delete(ctx context.Context, id domain.PlaylistId
 		id.UUID(), userId.UUID(),
 	)
 	if err != nil {
-		return false, err
+		return false, classifyDBError(err)
 	}
 	return tag.RowsAffected() > 0, nil
 }
@@ -219,7 +219,7 @@ func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Pla
 		playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.UpdatedAt,
 	)
 	if err != nil {
-		return err
+		return classifyDBError(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ports.ErrPlaylistNotOwned
@@ -228,27 +228,35 @@ func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Pla
 }
 
 func (r *PgxPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, fn func(pgx.Tx) error) error {
+	return classifyDBError(r.runOwnedPlaylistLock(ctx, playlistId, userId, fn))
+}
+
+func (r *PgxPlaylistRepository) runOwnedPlaylistLock(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, fn func(pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var one int
-	err = tx.QueryRow(ctx,
-		`SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-		playlistId.UUID(), userId.UUID(),
-	).Scan(&one)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.ErrPlaylistNotOwned
-	}
-	if err != nil {
+	if err := lockOwnedPlaylist(ctx, tx, playlistId, userId); err != nil {
 		return err
 	}
 	if err := fn(tx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func lockOwnedPlaylist(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, userId shared.UserId) error {
+	var one int
+	err := tx.QueryRow(ctx,
+		`SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		playlistId.UUID(), userId.UUID(),
+	).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ErrPlaylistNotOwned
+	}
+	return err
 }
 
 func (r *PgxPlaylistRepository) Exists(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) (bool, error) {
@@ -260,7 +268,7 @@ func (r *PgxPlaylistRepository) Exists(ctx context.Context, playlistId domain.Pl
 		`SELECT EXISTS (SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2)`,
 		playlistId.UUID(), userId.UUID(),
 	).Scan(&exists)
-	return exists, err
+	return exists, classifyDBError(err)
 }
 
 func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) ([]domain.TrackId, bool, error) {
@@ -277,7 +285,7 @@ func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId do
 		playlistId.UUID(), userId.UUID(), maxPlaylistTracks,
 	)
 	if err != nil {
-		return nil, false, err
+		return nil, false, classifyDBError(err)
 	}
 	defer rows.Close()
 
@@ -287,14 +295,14 @@ func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId do
 		found = true
 		var id pgtype.UUID
 		if err := rows.Scan(&id); err != nil {
-			return nil, false, err
+			return nil, false, classifyDBError(err)
 		}
 		if id.Valid {
 			ids = append(ids, domain.TrackIdFromUUID(id.Bytes))
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, false, err
+		return nil, false, classifyDBError(err)
 	}
 	return ids, found, nil
 }

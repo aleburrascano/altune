@@ -37,7 +37,7 @@ func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembership
 func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, op string) error {
 	exists, err := s.playlistRepo.Exists(ctx, playlistId, userId)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return wrapRepoError(ctx, op, err)
 	}
 	if !exists {
 		return ErrPlaylistNotFound
@@ -45,7 +45,7 @@ func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlis
 	return nil
 }
 
-func membershipWriteError(op string, err error) error {
+func membershipWriteError(ctx context.Context, op string, err error) error {
 	if errors.Is(err, ports.ErrPlaylistNotOwned) {
 		return ErrPlaylistNotFound
 	}
@@ -55,7 +55,7 @@ func membershipWriteError(op string, err error) error {
 	if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) || errors.Is(err, domain.ErrPlaylistFull) {
 		return err
 	}
-	return fmt.Errorf("%s: %w", op, err)
+	return wrapRepoError(ctx, op, err)
 }
 
 func trackIdStrings(ids []domain.TrackId) []string {
@@ -73,14 +73,14 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.
 
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
-		return fmt.Errorf("add track to playlist: %w", err)
+		return wrapRepoError(ctx, "add track to playlist", err)
 	}
 	if track == nil {
 		return ErrTrackNotFound
 	}
 
 	if err := s.playlistRepo.AddTrack(ctx, userId, playlistId, trackId); err != nil {
-		return membershipWriteError("add track to playlist", err)
+		return membershipWriteError(ctx, "add track to playlist", err)
 	}
 
 	slog.InfoContext(ctx, "track added to playlist",
@@ -103,7 +103,7 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 
 	candidates, err := s.ownedDistinct(ctx, userId, trackIds)
 	if err != nil {
-		return 0, fmt.Errorf("add tracks to playlist: %w", err)
+		return 0, wrapRepoError(ctx, "add tracks to playlist", err)
 	}
 	if len(candidates) == 0 {
 		return 0, nil
@@ -111,7 +111,7 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 
 	added, err := s.playlistRepo.AddTracks(ctx, userId, playlistId, candidates)
 	if err != nil {
-		return 0, membershipWriteError("add tracks to playlist", err)
+		return 0, membershipWriteError(ctx, "add tracks to playlist", err)
 	}
 	if len(added) == 0 {
 		return 0, nil
@@ -148,7 +148,7 @@ func (s *PlaylistMembershipService) ownedDistinct(ctx context.Context, userId sh
 func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	removed, err := s.playlistRepo.RemoveTrack(ctx, userId, playlistId, trackId)
 	if err != nil {
-		return membershipWriteError("remove track from playlist", err)
+		return membershipWriteError(ctx, "remove track from playlist", err)
 	}
 	if !removed {
 		return nil
@@ -169,7 +169,7 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 
 	removed, err := s.playlistRepo.RemoveTracks(ctx, userId, playlistId, trackIds)
 	if err != nil {
-		return 0, membershipWriteError("remove tracks from playlist", err)
+		return 0, membershipWriteError(ctx, "remove tracks from playlist", err)
 	}
 	if len(removed) == 0 {
 		return 0, nil
@@ -189,7 +189,7 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
 	current, found, err := s.playlistRepo.GetTrackOrder(ctx, playlistId, userId)
 	if err != nil {
-		return fmt.Errorf("reorder playlist: %w", err)
+		return wrapRepoError(ctx, "reorder playlist", err)
 	}
 	if !found {
 		return ErrPlaylistNotFound
@@ -204,7 +204,7 @@ func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.U
 	}
 
 	if err := s.playlistRepo.ReorderTracks(ctx, userId, playlistId, playlist.Tracks); err != nil {
-		return membershipWriteError("reorder playlist", err)
+		return membershipWriteError(ctx, "reorder playlist", err)
 	}
 	s.events.Publish(ctx, userId, events.TypePlaylistReordered, map[string]any{
 		"playlist_id": playlistId.String(),

@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
-	"fmt"
 )
 
 type LibraryLensService struct {
@@ -55,7 +54,7 @@ func (s *LibraryLensService) Albums(
 	}
 	albums, err := s.lensRepo.ListAlbumsForUser(ctx, userId, query)
 	if err != nil {
-		return nil, fmt.Errorf("library albums: %w", err)
+		return nil, wrapRepoError(ctx, "library albums", err)
 	}
 	return albums, nil
 }
@@ -74,7 +73,7 @@ func (s *LibraryLensService) Artists(
 	}
 	artists, err := s.lensRepo.ListArtistsForUser(ctx, userId, query)
 	if err != nil {
-		return nil, fmt.Errorf("library artists: %w", err)
+		return nil, wrapRepoError(ctx, "library artists", err)
 	}
 	return artists, nil
 }

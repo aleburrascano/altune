@@ -199,16 +199,16 @@ func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	sql, args := buildFeaturingQuery(userId.UUID(), featuredIdentityKeys(fa))
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list tracks featuring: %w", err)
+		return nil, fmt.Errorf("list tracks featuring: %w", classifyDBError(err))
 	}
 	defer rows.Close()
 
 	tracks, err := collectTracks(rows)
 	if err != nil {
-		return nil, err
+		return nil, classifyDBError(err)
 	}
 	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {
-		return nil, err
+		return nil, classifyDBError(err)
 	}
 	return tracks, nil
 }
