@@ -7,7 +7,7 @@ if ! git diff --name-only "$base" HEAD | grep -qE '^services/go-api/|^\.gitea/wo
 fi
 env=$(bash .gitea/workflows/ci-postgres.sh)
 cid=$(sed -n 's/^PG_CID=//p' <<<"$env")
-trap 'docker rm -f "$cid" >/dev/null 2>&1' EXIT
+trap 'docker rm -fv "$cid" >/dev/null 2>&1' EXIT
 DATABASE_URL=$(sed -n 's/^DATABASE_URL=//p' <<<"$env")
 export DATABASE_URL INTEGRATION=1
 cd services/go-api

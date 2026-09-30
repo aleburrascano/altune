@@ -69,6 +69,7 @@ grep -q "^API_URL=http://127.0.0.1:[0-9]*$" <<<"$OUT" || { echo "FAIL API_URL sh
 grep -q "^DATABASE_URL=postgres://altune:altune_dev@127.0.0.1:5555/altune" <<<"$OUT" || { echo "FAIL DATABASE_URL should use the mapped port"; fail=1; }
 grep -q "expo export -p web --dev TEST_AUTH=1" "$STUB_LOG" || { echo "FAIL web export should run with --dev and test auth"; fail=1; }
 [ -d "$E2E_STACK_DIR" ] || { echo "FAIL state should exist while the stack is up"; fail=1; }
+[ "$(grep -c '^docker run' "$STUB_LOG")" = "$(grep -c '^docker run .*--label altune-ci=1 ' "$STUB_LOG")" ] || { echo "FAIL every docker run should carry the altune-ci label"; fail=1; }
 
 run up
 check 1 "a second up refuses while the first is running"
@@ -79,6 +80,7 @@ run down
 check 0 "down exits 0"
 [ ! -e "$E2E_STACK_DIR" ] || { echo "FAIL down should remove the state dir"; fail=1; }
 [ "$(grep -c '^docker rm -f' "$STUB_LOG")" = 2 ] || { echo "FAIL down should remove both containers"; fail=1; }
+[ "$(grep -c '^docker rm -fv' "$STUB_LOG")" = 2 ] || { echo "FAIL down should remove both containers with their volumes"; fail=1; }
 for pid in $pids; do
   kill -0 "$pid" 2>/dev/null && { echo "FAIL down should stop process $pid"; fail=1; }
 done
@@ -89,6 +91,7 @@ run up
 check 1 "up exits non-zero when /health never returns 200"
 [ ! -e "$E2E_STACK_DIR" ] || { echo "FAIL a failed up should clean up after itself"; fail=1; }
 grep -q '^docker rm -f' "$STUB_LOG" || { echo "FAIL a failed up should remove its containers"; fail=1; }
+grep -q '^docker rm -fv' "$STUB_LOG" || { echo "FAIL a failed up should remove its containers with their volumes"; fail=1; }
 grep -q "API_URL=" <<<"$OUT" && { echo "FAIL a failed up should not publish API_URL"; fail=1; }
 unset STUB_HEALTH
 

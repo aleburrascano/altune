@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cid=$(docker run -d --rm -e POSTGRES_USER=altune -e POSTGRES_PASSWORD=altune_dev -e POSTGRES_DB=altune -p 127.0.0.1::5432 postgres:16-alpine)
+cid=$(docker run -d --rm --label altune-ci=1 -e POSTGRES_USER=altune -e POSTGRES_PASSWORD=altune_dev -e POSTGRES_DB=altune -p 127.0.0.1::5432 postgres:16-alpine)
 drop_on_failure() {
   local rc=$?
-  [ "$rc" -eq 0 ] || docker rm -f "$cid" >/dev/null 2>&1
+  [ "$rc" -eq 0 ] || docker rm -fv "$cid" >/dev/null 2>&1
   exit "$rc"
 }
 trap drop_on_failure EXIT

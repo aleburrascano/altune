@@ -39,7 +39,7 @@ start_detached() {
 
 start_container() {
   local name=$1; shift
-  docker run -d --rm "$@" >"$state/$name.cid"
+  docker run -d --rm --label altune-ci=1 "$@" >"$state/$name.cid"
 }
 
 host_port_of() {
@@ -134,7 +134,7 @@ stop_pid_file() {
 remove_container_file() {
   local cid
   cid=$(cat "$1" 2>/dev/null) || return 0
-  docker rm -f "$cid" >/dev/null 2>&1 || true
+  docker rm -fv "$cid" >/dev/null 2>&1 || true
 }
 
 down() {

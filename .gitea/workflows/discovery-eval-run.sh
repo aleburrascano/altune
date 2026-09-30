@@ -14,8 +14,8 @@ fi
 mkdir -p tmp
 go build -o ./tmp/discoveryeval ./cmd/discoveryeval
 if [ "$MODE" = correction ]; then
-  cid=$(docker run -d --rm -p 127.0.0.1::6379 redis:7)
-  trap 'docker rm -f "$cid" >/dev/null 2>&1' EXIT
+  cid=$(docker run -d --rm --label altune-ci=1 -p 127.0.0.1::6379 redis:7)
+  trap 'docker rm -fv "$cid" >/dev/null 2>&1' EXIT
   port=$(docker port "$cid" 6379/tcp | head -1 | awk -F: '{print $NF}')
   export REDIS_URL="redis://127.0.0.1:$port"
   for _ in $(seq 30); do docker exec "$cid" redis-cli ping >/dev/null 2>&1 && break; sleep 1; done
