@@ -26,11 +26,11 @@ type ErrorCoder interface {
 	ErrorCode() string
 }
 
-type ClientDetailer interface {
+type clientDetailer interface {
 	ClientDetail() string
 }
 
-type RetryAfterer interface {
+type retryAfterer interface {
 	RetryAfter() time.Duration
 }
 
@@ -63,7 +63,7 @@ func writeStatusError(w http.ResponseWriter, r *http.Request, err error, se Stat
 }
 
 func setRetryAfter(h http.Header, err error) {
-	var retryable RetryAfterer
+	var retryable retryAfterer
 	if !errors.As(err, &retryable) || h.Get("Retry-After") != "" {
 		return
 	}
@@ -77,7 +77,7 @@ func RetryAfterSeconds(wait time.Duration) string {
 }
 
 func resolveDetail(err error, se StatusError) string {
-	var detailer ClientDetailer
+	var detailer clientDetailer
 	if errors.As(err, &detailer) {
 		return detailer.ClientDetail()
 	}

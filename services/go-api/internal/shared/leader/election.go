@@ -62,7 +62,7 @@ func NewElection(pool *pgxpool.Pool, key int64) *Election {
 	}
 }
 
-func (e *Election) IsLeader() bool {
+func (e *Election) isLeader() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.term != nil

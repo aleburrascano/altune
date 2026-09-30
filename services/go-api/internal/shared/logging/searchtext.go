@@ -26,7 +26,7 @@ func SearchTextAttr(text string) slog.Attr {
 	)
 }
 
-func ScrubSearchText(s, text string) string {
+func scrubSearchText(s, text string) string {
 	if strings.TrimSpace(text) == "" {
 		return s
 	}
@@ -40,5 +40,5 @@ func ScrubSearchErr(err error, text string) string {
 	if err == nil {
 		return ""
 	}
-	return ScrubSearchText(err.Error(), text)
+	return scrubSearchText(err.Error(), text)
 }

@@ -41,7 +41,7 @@ func TestScrubSearchErr_RemovesRawAndEscapedForms(t *testing.T) {
 	if !strings.Contains(got, "timeout") {
 		t.Errorf("scrubbing must keep the cause: %s", got)
 	}
-	if ScrubSearchErr(nil, text) != "" || ScrubSearchText("keep", "  ") != "keep" {
+	if ScrubSearchErr(nil, text) != "" || scrubSearchText("keep", "  ") != "keep" {
 		t.Error("nil error and blank text must be no-ops")
 	}
 }

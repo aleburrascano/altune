@@ -34,7 +34,7 @@ func awaitLeader(t *testing.T, e *Election, within time.Duration) bool {
 	t.Helper()
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if e.IsLeader() {
+		if e.isLeader() {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -77,7 +77,7 @@ func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
 	incoming.Start(ctx)
 	t.Cleanup(func() { incoming.Shutdown(ctx) })
 
-	if incoming.IsLeader() {
+	if incoming.isLeader() {
 		t.Fatal("incoming election is leader while the outgoing one still holds the lock")
 	}
 
@@ -302,7 +302,7 @@ func TestElection_VerifyDoesNotFreezeOnStuckPing(t *testing.T) {
 		t.Fatal("verify never returned: a stuck Ping froze the single-goroutine loop")
 	}
 
-	if e.IsLeader() {
+	if e.isLeader() {
 		t.Fatal("verify kept leadership despite an unresponsive connection")
 	}
 	if !fc.released {
@@ -505,7 +505,7 @@ func TestElection_WonLockSettlesBeforeLeadership(t *testing.T) {
 	if !e.holding() {
 		t.Fatal("election did not take the free lock")
 	}
-	if e.IsLeader() {
+	if e.isLeader() {
 		t.Fatal("election claimed leadership inside the settle window")
 	}
 	if _, _, ok := e.LeaderContext(context.Background()); ok {
@@ -513,13 +513,13 @@ func TestElection_WonLockSettlesBeforeLeadership(t *testing.T) {
 	}
 
 	e.tick(context.Background())
-	if e.IsLeader() {
+	if e.isLeader() {
 		t.Fatal("a verify tick inside the settle window granted leadership")
 	}
 
 	time.Sleep(settledIntervals * e.interval)
 	e.tick(context.Background())
-	if !e.IsLeader() {
+	if !e.isLeader() {
 		t.Fatalf("election never settled into leadership %d intervals after winning the lock", settledIntervals)
 	}
 }
@@ -560,7 +560,7 @@ func TestElection_ReleasedLeaderContextDoesNotLeak(t *testing.T) {
 	if !errors.Is(context.Cause(jobCtx), context.Canceled) {
 		t.Fatalf("released context cause = %v, want context.Canceled", context.Cause(jobCtx))
 	}
-	if !e.IsLeader() {
+	if !e.isLeader() {
 		t.Fatal("releasing one job context ended the whole term")
 	}
 }
