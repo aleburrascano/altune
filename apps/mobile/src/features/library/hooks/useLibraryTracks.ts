@@ -32,32 +32,68 @@ const logPollFailure = (offset: number, cause: unknown) => {
   console.warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
 };
 
-function refreshPage(queryClient: QueryClient, query: string, sort: LibrarySort, offset: number) {
+interface PollTarget {
+  queryClient: QueryClient;
+  query: string;
+  sort: LibrarySort;
+  signal: AbortSignal;
+}
+
+async function fetchUnlessSuperseded(target: PollTarget, offset: number) {
+  const { queryClient, query, sort, signal } = target;
   const key = libraryKeys.tracks(query, sort);
-  void getTracks({ limit: TRACKS_PAGE_SIZE, offset, q: query, sort })
-    .then((fresh) => {
-      queryClient.setQueryData<TracksData>(key, (old) => mergePage(old, fresh));
-    })
+  const before = queryClient.getQueryData<TracksData>(key);
+  const fresh = await getTracks({ limit: TRACKS_PAGE_SIZE, offset, q: query, sort }, signal);
+  const superseded = signal.aborted || queryClient.getQueryData<TracksData>(key) !== before;
+  return superseded ? undefined : fresh;
+}
+
+const writeFresh =
+  ({ queryClient, query, sort }: PollTarget) =>
+  (fresh?: ListTracksResponse) =>
+    fresh &&
+    queryClient.setQueryData<TracksData>(libraryKeys.tracks(query, sort), (old) =>
+      mergePage(old, fresh),
+    );
+
+function refreshPage(target: PollTarget, offset: number) {
+  return fetchUnlessSuperseded(target, offset)
+    .then(writeFresh(target))
     .catch((cause: unknown) => {
-      logPollFailure(offset, cause);
+      if (!target.signal.aborted) logPollFailure(offset, cause);
     });
 }
 
-function refreshPending(queryClient: QueryClient, query: string, sort: LibrarySort) {
-  const current = queryClient.getQueryData<TracksData>(libraryKeys.tracks(query, sort));
-  for (const page of current?.pages.filter(hasPending) ?? []) {
-    refreshPage(queryClient, query, sort, page.offset);
+const pendingOffsets = ({ queryClient, query, sort }: PollTarget) =>
+  (queryClient.getQueryData<TracksData>(libraryKeys.tracks(query, sort))?.pages ?? [])
+    .filter(hasPending)
+    .map((page) => page.offset);
+
+async function refreshPending(target: PollTarget) {
+  for (const offset of pendingOffsets(target)) {
+    if (target.signal.aborted) return;
+    await refreshPage(target, offset);
   }
 }
 
 function startPoll(queryClient: QueryClient, query: string, sort: LibrarySort) {
+  const controller = new AbortController();
   let polls = 0;
+  let inFlight = false;
+  const settle = () => {
+    inFlight = false;
+  };
   const timer = setInterval(() => {
     polls += 1;
     if (polls >= MAX_PENDING_POLLS) clearInterval(timer);
-    refreshPending(queryClient, query, sort);
+    if (inFlight) return;
+    inFlight = true;
+    void refreshPending({ queryClient, query, sort, signal: controller.signal }).finally(settle);
   }, PENDING_POLL_MS);
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    controller.abort();
+  };
 }
 
 function usePendingPoll(active: boolean, query: string, sort: LibrarySort) {

@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { asTrackId } from '@shared/api-client/ids';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 import { ApiError } from '@shared/errors';
+import { libraryKeys } from '@shared/lib/query-keys';
 import {
   captureTrackPlacements,
   removeTrackFromCaches,
@@ -336,5 +337,54 @@ describe('useLibraryTracks pending poll', () => {
     status = 'ready';
     await act(() => jest.advanceTimersByTimeAsync(60_000));
     expect(hook.result.current.tracks[3]?.acquisition_status).toBe('ready');
+  });
+
+  function holdNextPoll() {
+    let land: () => void = () => undefined;
+    mockGetTracks.mockImplementationOnce(
+      (params: { limit: number; offset: number }) =>
+        new Promise((resolve) => {
+          land = () => resolve(servePollPage(params));
+        }),
+    );
+    return () => land();
+  }
+
+  it('does not re-insert a track deleted while a poll response was in flight', async () => {
+    const hook = await loadAllPages();
+    const land = holdNextPoll();
+    await act(() => jest.advanceTimersByTimeAsync(60_000));
+    await act(async () => {
+      removeTrackFromCaches(client, asTrackId('t1'));
+    });
+    await act(async () => {
+      land();
+    });
+    await act(() => jest.advanceTimersByTimeAsync(0));
+    expect(hook.result.current.tracks.map((t) => t.id)).not.toContain('t1');
+  });
+
+  it('sends no poll request while the previous one is unsettled', async () => {
+    await loadAllPages();
+    mockGetTracks.mockClear();
+    holdNextPoll();
+    await act(() => jest.advanceTimersByTimeAsync(3 * 60_000));
+    expect(mockGetTracks).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes nothing when the consumer unmounts with a poll in flight', async () => {
+    const hook = await loadAllPages();
+    const land = holdNextPoll();
+    await act(() => jest.advanceTimersByTimeAsync(60_000));
+    status = 'ready';
+    hook.unmount();
+    await act(async () => {
+      land();
+    });
+    const cached = client.getQueryData<{ pages: ListTracksResponse[] }>(
+      libraryKeys.tracks('', 'recent'),
+    );
+    expect(cached).toBeDefined();
+    expect(cached?.pages.flatMap((p) => p.items)[3]?.acquisition_status).toBe('pending');
   });
 });
