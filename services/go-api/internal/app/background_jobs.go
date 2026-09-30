@@ -94,17 +94,22 @@ func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentity
 func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discoveryPorts.DeletedIdentityEraser) error {
 	var erased int64
 	var failures []error
+	var idle int
 	for _, eraser := range erasers {
 		rows, err := eraser.EraseRowsOfDeletedIdentities(ctx)
 		if errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
 			slog.WarnContext(ctx, "discovery.deleted_identity_sweep_idle", "error", err)
-			return nil
+			idle++
+			continue
 		}
 		if err != nil {
 			failures = append(failures, fmt.Errorf("erase discovery rows of deleted identities: %w", err))
 			continue
 		}
 		erased += rows
+	}
+	if idle > 0 && idle == len(erasers) {
+		failures = append(failures, fmt.Errorf("discovery erasure sweep idle, every eraser unavailable: %w", discoveryPorts.ErrIdentityStoreUnavailable))
 	}
 	logDiscoveryErasureSweep(ctx, erased)
 	return errors.Join(failures...)

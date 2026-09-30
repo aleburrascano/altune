@@ -98,6 +98,37 @@ func TestDeletedIdentitySweep_AFailingTableDoesNotSkipTheRest(t *testing.T) {
 	}
 }
 
+func TestDeletedIdentitySweep_UnavailableStoreKeepsEarlierFailuresAndRunsTheRest(t *testing.T) {
+	var calls int
+	erasers := []discoveryPorts.DeletedIdentityEraser{
+		countingEraser{calls: &calls, erasedRows: erasedRows{err: errStoreDown}},
+		countingEraser{calls: &calls, erasedRows: erasedRows{err: discoveryPorts.ErrIdentityStoreUnavailable}},
+		countingEraser{calls: &calls, erasedRows: erasedRows{rows: 4}},
+	}
+
+	err := eraseDiscoveryRowsOfDeletedIdentities(context.Background(), erasers)
+
+	if !errors.Is(err, errStoreDown) {
+		t.Errorf("error = %v, want the earlier failure kept", err)
+	}
+	if calls != 3 {
+		t.Errorf("erasers called = %d, want 3", calls)
+	}
+}
+
+func TestDeletedIdentitySweep_EveryEraserUnavailableIsAFailure(t *testing.T) {
+	erasers := []discoveryPorts.DeletedIdentityEraser{
+		erasedRows{err: discoveryPorts.ErrIdentityStoreUnavailable},
+		erasedRows{err: discoveryPorts.ErrIdentityStoreUnavailable},
+	}
+
+	err := eraseDiscoveryRowsOfDeletedIdentities(context.Background(), erasers)
+
+	if !errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
+		t.Errorf("error = %v, want a permanently idle sweep reported as a failure", err)
+	}
+}
+
 type simpleJobLogCase struct {
 	name         jobName
 	startedAttrs []any
