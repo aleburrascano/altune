@@ -456,3 +456,69 @@ describe('a search backend that never answers reaches the error state quickly', 
     expect(mockSearch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('useDiscoverSearch history saving', () => {
+  function singlePage(): DiscoverySearchResponse {
+    return {
+      query: 'radiohead',
+      query_norm: 'radiohead',
+      search_id: 'search-1',
+      results: [resultFixture()],
+      sections: [],
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 1,
+      offset: 0,
+      has_more: false,
+    };
+  }
+
+  function savedFlags() {
+    return mockSearch.mock.calls.map(([request]) => request.saveHistory);
+  }
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    mockSearch.mockReset().mockImplementation(() => Promise.resolve(singlePage()));
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+  });
+
+  it('saves history on the first request of an explicit submit only, not on a refresh', async () => {
+    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(savedFlags()).toEqual([true, false]);
+  });
+
+  it('does not resend saveHistory on a react-query retry of an explicit search', async () => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } },
+    });
+    mockSearch
+      .mockReset()
+      .mockRejectedValueOnce(new NetworkError('timeout', 'lost response'))
+      .mockImplementation(() => Promise.resolve(singlePage()));
+    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(savedFlags()).toEqual([true, false]);
+  });
+
+  it('never saves history for a non-explicit search', async () => {
+    const { result } = renderHook(() => useDiscoverSearch('radiohead', false), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(savedFlags()).toEqual([false]);
+  });
+});

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -25,7 +25,7 @@ function searchPageRequest(trimmed: string, saveHistory: boolean, pageParam: Sea
     q: trimmed,
     limit: SEARCH_PAGE_SIZE,
     offset: pageParam.offset,
-    saveHistory: pageParam.offset === 0 ? saveHistory : false,
+    saveHistory,
     ...(pageParam.searchId !== undefined ? { searchId: pageParam.searchId } : {}),
   };
 }
@@ -40,10 +40,11 @@ function cancelStaleSearches(queryClient: ReturnType<typeof useQueryClient>, tri
 function searchQueryFn(
   queryClient: ReturnType<typeof useQueryClient>,
   trimmed: string,
-  saveHistory: boolean,
+  claimHistorySave: () => boolean,
 ) {
   return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
     cancelStaleSearches(queryClient, trimmed);
+    const saveHistory = pageParam.offset === 0 && claimHistorySave();
     return searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
   };
 }
@@ -63,7 +64,7 @@ type SearchQueryArgs = {
   queryKey: readonly unknown[];
   queryClient: ReturnType<typeof useQueryClient>;
   trimmed: string;
-  saveHistory: boolean;
+  claimHistorySave: () => boolean;
   isSearchEnabled: boolean;
 };
 
@@ -71,11 +72,21 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
   return useInfiniteQuery({
     queryKey: args.queryKey,
     initialPageParam: firstPageParam,
-    queryFn: searchQueryFn(args.queryClient, args.trimmed, args.saveHistory),
+    queryFn: searchQueryFn(args.queryClient, args.trimmed, args.claimHistorySave),
     getNextPageParam: nextSearchPageParam,
     enabled: args.trimmed.length > 0 && args.isSearchEnabled,
     retry: SEARCH_RETRY_COUNT,
   });
+}
+
+function useHistorySaveOnce(queryKey: readonly unknown[], saveHistory: boolean) {
+  const savedKey = useRef<string | undefined>(undefined);
+  const serialized = JSON.stringify(queryKey);
+  return () => {
+    if (!saveHistory || savedKey.current === serialized) return false;
+    savedKey.current = serialized;
+    return true;
+  };
 }
 
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
@@ -87,6 +98,7 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     () => [...discoveryKeys.search(trimmed), saveHistory],
     [trimmed, saveHistory],
   );
+  const claimHistorySave = useHistorySaveOnce(queryKey, saveHistory);
   const {
     data: infiniteData,
     isLoading,
@@ -97,7 +109,7 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useSearchInfiniteQuery({ queryKey, queryClient, trimmed, saveHistory, isSearchEnabled });
+  } = useSearchInfiniteQuery({ queryKey, queryClient, trimmed, claimHistorySave, isSearchEnabled });
 
   useReportQueryFailure(error, 'search');
 
