@@ -1,8 +1,7 @@
-import type {
-  DefaultError,
-  MutationFunctionContext,
-  UseMutationOptions,
-} from '@tanstack/react-query';
+import { bumpSessionEpoch } from '@shared/session/sessionEpoch';
+
+export { currentSessionEpoch, isSameSession } from '@shared/session/sessionEpoch';
+export { guardedMutationOptions, SessionEndedError } from '@shared/session/guardedMutation';
 
 export type SignOutCleanup = () => void | Promise<void>;
 
@@ -10,7 +9,6 @@ export type IdentityListener = (userId: string | null) => void;
 
 const cleanups = new Set<SignOutCleanup>();
 let signedIn = false;
-let sessionEpoch = 0;
 
 export function onSignOut(cleanup: SignOutCleanup): () => void {
   cleanups.add(cleanup);
@@ -34,7 +32,7 @@ export function notifyIdentityChange(userId: string | null): void {
 }
 
 export function runSignOutCleanups(): void {
-  sessionEpoch += 1;
+  bumpSessionEpoch();
   for (const cleanup of cleanups) {
     try {
       void Promise.resolve(cleanup()).catch(warnCleanupFailed);
@@ -58,94 +56,4 @@ export function hasSignedInUser(): boolean {
 
 export function setSignedInUser(isSignedIn: boolean): void {
   signedIn = isSignedIn;
-}
-
-export function currentSessionEpoch(): number {
-  return sessionEpoch;
-}
-
-export function isSameSession(epoch: number | undefined): boolean {
-  return epoch === sessionEpoch;
-}
-
-const startingSession = new WeakMap<MutationFunctionContext, number>();
-
-export class SessionEndedError extends Error {
-  constructor() {
-    super('the session that started this mutation has ended');
-    this.name = 'SessionEndedError';
-  }
-}
-
-function onlyWhileTheStartingSessionLasts<TData, TVariables>(
-  mutationFn: (variables: TVariables) => Promise<TData>,
-) {
-  return (variables: TVariables, run: MutationFunctionContext): Promise<TData> => {
-    if (!isSameSession(startingSession.get(run))) {
-      return Promise.reject(new SessionEndedError());
-    }
-    return mutationFn(variables);
-  };
-}
-
-type SessionFenced<TContext> = TContext & { epoch: number };
-
-type GuardedMutation<TData, TVariables, TContext extends object> = {
-  mutationFn: (variables: TVariables) => Promise<TData>;
-  onMutate?: (variables: TVariables) => TContext;
-  onSuccess?: (
-    data: TData,
-    variables: TVariables,
-    context: SessionFenced<TContext>,
-  ) => Promise<unknown> | unknown;
-  onError?: (
-    error: DefaultError,
-    variables: TVariables,
-    context: SessionFenced<TContext>,
-  ) => Promise<unknown> | unknown;
-};
-
-export function guardedMutationOptions<
-  TData,
-  TVariables = void,
-  TContext extends object = Record<string, never>,
->({
-  mutationFn,
-  onMutate,
-  onSuccess,
-  onError,
-}: GuardedMutation<TData, TVariables, TContext>): UseMutationOptions<
-  TData,
-  DefaultError,
-  TVariables,
-  SessionFenced<TContext>
-> {
-  return {
-    mutationFn: onlyWhileTheStartingSessionLasts(mutationFn),
-    onMutate: (variables, run) => {
-      const epoch = currentSessionEpoch();
-      startingSession.set(run, epoch);
-      const context = onMutate?.(variables) ?? ({} as TContext);
-      return { ...context, epoch };
-    },
-    ...(onSuccess ? { onSuccess: onlyInTheSameSession(onSuccess) } : {}),
-    ...(onError ? { onError: onlyInTheSameSession(onError) } : {}),
-  };
-}
-
-function onlyInTheSameSession<TSettleArg, TVariables, TContext>(
-  settle: (
-    settleArg: TSettleArg,
-    variables: TVariables,
-    context: SessionFenced<TContext>,
-  ) => Promise<unknown> | unknown,
-) {
-  return (
-    settleArg: TSettleArg,
-    variables: TVariables,
-    context: SessionFenced<TContext> | undefined,
-  ) => {
-    if (!context || !isSameSession(context.epoch)) return undefined;
-    return settle(settleArg, variables, context);
-  };
 }

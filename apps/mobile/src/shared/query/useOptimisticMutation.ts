@@ -1,10 +1,10 @@
 import { useQueryClient, type MutationFunctionContext, type QueryKey } from '@tanstack/react-query';
 
 import {
-  currentSessionEpoch,
-  isSameSession,
-  SessionEndedError,
-} from '@shared/session/signOutCleanup';
+  onlyWhileTheStartingSessionLasts,
+  pinStartingSession,
+} from '@shared/session/guardedMutation';
+import { isSameSession } from '@shared/session/sessionEpoch';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { showAlert } from '@shared/ui/dialog/dialog';
 
@@ -34,23 +34,6 @@ type OptimisticMutationOptions<TData, TVariables, TCache> =
   GuardedOptions<TData, TVariables, TCache> | UnguardedOptions<TData, TVariables, TCache>;
 
 type Snapshot<TCache> = { previous: TCache | undefined; epoch: number };
-
-const startingSession = new WeakMap<MutationFunctionContext, number>();
-
-function pinStartingSession(run: MutationFunctionContext): number {
-  const epoch = currentSessionEpoch();
-  startingSession.set(run, epoch);
-  return epoch;
-}
-
-function onlyWhileTheStartingSessionLasts<TData, TVariables>(
-  mutationFn: (variables: TVariables) => Promise<TData>,
-) {
-  return (variables: TVariables, run: MutationFunctionContext): Promise<TData> =>
-    isSameSession(startingSession.get(run))
-      ? mutationFn(variables)
-      : Promise.reject(new SessionEndedError());
-}
 
 type SuccessCallback<TData, TVariables, TCache> = (
   settled: TData,
