@@ -38,13 +38,14 @@ type querier interface {
 }
 
 type PgxQueueStateRepository struct {
-	pool    querier
-	metrics ports.QueueStateMetrics
-	timeout time.Duration
+	pool      querier
+	metrics   ports.QueueStateMetrics
+	timeout   time.Duration
+	saveGrace time.Duration
 }
 
 func NewPgxQueueStateRepository(pool *pgxpool.Pool, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
-	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics(), timeout: defaultQueueStateOpTimeout}
+	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics(), timeout: defaultQueueStateOpTimeout, saveGrace: defaultQueueStateOpTimeout}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -63,6 +64,19 @@ func withQueueStateOpTimeout(d time.Duration) func(*PgxQueueStateRepository) {
 	return func(r *PgxQueueStateRepository) {
 		r.timeout = d
 	}
+}
+
+func withQueueStateSaveGrace(d time.Duration) func(*PgxQueueStateRepository) {
+	return func(r *PgxQueueStateRepository) {
+		r.saveGrace = d
+	}
+}
+
+func (r *PgxQueueStateRepository) erasureSaveGrace() time.Duration {
+	if r.saveGrace > 0 {
+		return r.saveGrace
+	}
+	return defaultQueueStateOpTimeout
 }
 
 func (r *PgxQueueStateRepository) opTimeout() time.Duration {
@@ -134,7 +148,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 			state.SourceId,
 			state.NaturalOrder,
 			handlingAge{stampedAt: state.UpdatedAt},
-			erasureSaveGrace.Microseconds(),
+			r.erasureSaveGrace().Microseconds(),
 		)
 		return err
 	})
@@ -234,8 +248,6 @@ func (r *PgxQueueStateRepository) GetForUser(
 }
 
 const erasureFenceWindow = 15 * time.Minute
-
-var erasureSaveGrace = defaultQueueStateOpTimeout
 
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
 	return r.runOp(ctx, "delete_for_user", userId, func(opCtx context.Context) error {

@@ -343,7 +343,8 @@ func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxQueueStateRepository(pool)
+	saveGrace := 50 * time.Millisecond
+	repo := NewPgxQueueStateRepository(pool, withQueueStateSaveGrace(saveGrace))
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -352,13 +353,10 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	if err := repo.Upsert(ctx, stateAt(userId, 60000, time.Now())); err != nil {
 		t.Fatalf("Upsert(before the erasure): %v", err)
 	}
-	prevGrace := erasureSaveGrace
-	erasureSaveGrace = 50 * time.Millisecond
-	t.Cleanup(func() { erasureSaveGrace = prevGrace })
 	if err := repo.DeleteForUser(ctx, userId); err != nil {
 		t.Fatalf("DeleteForUser: %v", err)
 	}
-	time.Sleep(2 * erasureSaveGrace)
+	time.Sleep(2 * saveGrace)
 
 	if err := repo.Upsert(ctx, stateAt(userId, 1000, time.Now())); err != nil {
 		t.Fatalf("Upsert(handled after the erasure) = %v, want nil; erasure is not a lockout", err)
