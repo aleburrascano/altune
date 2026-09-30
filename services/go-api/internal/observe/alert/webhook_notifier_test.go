@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +48,29 @@ func TestWebhookNotifier_ErrorsWhenUnreachable(t *testing.T) {
 
 	if err := NewWebhookNotifier(url).Notify(context.Background(), Alert{}); err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
+	}
+}
+
+func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	hookURL := srv.URL + "/hook/SECRET123"
+	srv.Close()
+
+	err := NewWebhookNotifier(hookURL).Notify(context.Background(), Alert{})
+	if err == nil {
+		t.Fatal("Notify to a closed server = nil, want error")
+	}
+	if strings.Contains(err.Error(), "SECRET123") {
+		t.Fatalf("webhook URL leaked into error: %v", err)
+	}
+}
+
+func TestWebhookNotifier_BadURLErrorNeverContainsWebhookURL(t *testing.T) {
+	err := NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), Alert{})
+	if err == nil {
+		t.Fatal("Notify to a malformed URL = nil, want error")
+	}
+	if strings.Contains(err.Error(), "SECRET123") {
+		t.Fatalf("webhook URL leaked into error: %v", err)
 	}
 }

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -17,8 +19,8 @@ type WebhookNotifier struct {
 	client *http.Client
 }
 
-func NewWebhookNotifier(url string) *WebhookNotifier {
-	return &WebhookNotifier{url: url, client: &http.Client{Timeout: webhookTimeout}}
+func NewWebhookNotifier(webhookURL string) *WebhookNotifier {
+	return &WebhookNotifier{url: webhookURL, client: &http.Client{Timeout: webhookTimeout}}
 }
 
 type webhookPayload struct {
@@ -34,12 +36,12 @@ func (n *WebhookNotifier) Notify(ctx context.Context, a Alert) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build alert request: %w", err)
+		return fmt.Errorf("build alert request: %w", withoutURL(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := n.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post alert: %w", err)
+		return fmt.Errorf("post alert: %w", withoutURL(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
@@ -47,4 +49,12 @@ func (n *WebhookNotifier) Notify(ctx context.Context, a Alert) error {
 		return fmt.Errorf("post alert: status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func withoutURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return fmt.Errorf("%s: %w", ue.Op, ue.Err)
+	}
+	return err
 }

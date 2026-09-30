@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -384,6 +386,25 @@ func TestMonitor_SignalPageLogsFiredWithoutBody(t *testing.T) {
 	}
 	if strings.Contains(out, "state down") {
 		t.Fatalf("alert body leaked into log: %s", out)
+	}
+}
+
+func TestMonitor_NotifyFailedLogNeverContainsWebhookURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	hookURL := srv.URL + "/hook/SECRET123"
+	srv.Close()
+	firing := true
+	m := newTestMonitor(NewWebhookNotifier(hookURL), signalCond("k", &firing))
+	var buf bytes.Buffer
+	m.logger = slog.New(slog.NewJSONHandler(&buf, nil))
+	m.tick(context.Background())
+
+	out := buf.String()
+	if !strings.Contains(out, `"msg":"alert.notify_failed"`) {
+		t.Fatalf("no alert.notify_failed line: %s", out)
+	}
+	if strings.Contains(out, "SECRET123") {
+		t.Fatalf("webhook URL leaked into log: %s", out)
 	}
 }
 
