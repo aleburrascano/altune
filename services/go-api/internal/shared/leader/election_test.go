@@ -716,3 +716,30 @@ func TestElection_FailedPingIsLoggedWithCauseAndCounted(t *testing.T) {
 		})
 	}
 }
+
+type pingSignalConn struct {
+	fakeConn
+	pinging chan struct{}
+}
+
+func (c *pingSignalConn) Ping(ctx context.Context) error {
+	close(c.pinging)
+	return c.fakeConn.Ping(ctx)
+}
+
+func TestElection_ShutdownDuringVerifyReleasesLockWithoutLostWarning(t *testing.T) {
+	warnings := captureWarnings(t)
+	conn := &pingSignalConn{fakeConn: fakeConn{pingBlocks: true}, pinging: make(chan struct{})}
+	e := leaderHolding(conn)
+	e.Start(context.Background())
+	<-conn.pinging
+
+	e.Shutdown(context.Background())
+
+	if !conn.unlocked {
+		t.Fatalf("advisory lock not unlocked on a live context (unlock error: %v)", conn.unlockErr)
+	}
+	if strings.Contains(warnings.String(), "leader.lost") {
+		t.Fatalf("shutdown was logged as a lost lease: %s", warnings.String())
+	}
+}

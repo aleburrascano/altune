@@ -206,6 +206,9 @@ func (e *Election) verify(base context.Context) {
 		e.settle(base)
 		return
 	}
+	if base.Err() != nil {
+		return
+	}
 	slog.WarnContext(base, "leader.lost", "key", e.key, "err", err)
 	e.counters.holdsLost.Add(1)
 	e.release(base)
