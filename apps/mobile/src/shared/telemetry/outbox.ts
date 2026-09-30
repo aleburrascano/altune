@@ -2,7 +2,8 @@ import * as Crypto from 'expo-crypto';
 import { AppState } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client';
-import { equalJitterMs, isTelemetryGated } from '@shared/errors';
+import { clampedExponent, equalJitterMs } from '@shared/backoff';
+import { isTelemetryGated } from '@shared/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
@@ -146,7 +147,7 @@ export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
 }
 
 export function flushBackoffMs(failedPasses: number, random: number): number {
-  const exponent = Math.min(Math.max(failedPasses, 1) - 1, 30);
+  const exponent = clampedExponent(failedPasses, 1) - 1;
   return equalJitterMs(FLUSH_BACKOFF_BASE_MS, FLUSH_BACKOFF_CAP_MS, exponent, random);
 }
 
