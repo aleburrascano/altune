@@ -62,22 +62,49 @@ func (s *RedisVocabularyStore) metaphoneCandidatesLogged(ctx context.Context, co
 
 const vocabPhoneticCandidateCap = 64
 
+const vocabTrigramSetReadCap = 512
+
 func (s *RedisVocabularyStore) metaphoneCandidates(
 	ctx context.Context,
 	code string,
 ) (map[string]bool, error) {
-	members, err := s.client.SMembers(ctx, vocabMetaPrefix+code).Result()
+	members, err := s.scanCapped(ctx, vocabMetaPrefix+code, 0, vocabPhoneticCandidateCap)
 	if err != nil {
 		return nil, err
-	}
-	if len(members) > vocabPhoneticCandidateCap {
-		members = members[:vocabPhoneticCandidateCap]
 	}
 	result := make(map[string]bool, len(members))
 	for _, m := range members {
 		result[m] = true
 	}
 	return result, nil
+}
+
+func (s *RedisVocabularyStore) scanCapped(
+	ctx context.Context,
+	key string,
+	cursor uint64,
+	readCap int,
+) ([]string, error) {
+	var members []string
+	for len(members) < readCap {
+		page, next, err := s.client.SScan(ctx, key, cursor, "", int64(readCap)).Result()
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, page...)
+		if next == 0 {
+			break
+		}
+		cursor = next
+	}
+	return capMembers(members, readCap), nil
+}
+
+func capMembers(members []string, readCap int) []string {
+	if len(members) > readCap {
+		return members[:readCap]
+	}
+	return members
 }
 
 const vocabTrigramLookupCap = 64
@@ -98,10 +125,10 @@ func (s *RedisVocabularyStore) trigramCandidates(
 	queryTrigrams []string,
 ) (map[string]int, error) {
 	keys := trigramLookupKeys(queryTrigrams)
-	cmds := make([]*goredis.StringSliceCmd, len(keys))
+	cmds := make([]*goredis.ScanCmd, len(keys))
 	_, pipeErr := s.client.Pipelined(ctx, func(pipe goredis.Pipeliner) error {
 		for i, key := range keys {
-			cmds[i] = pipe.SMembers(ctx, key)
+			cmds[i] = pipe.SScan(ctx, key, 0, "", vocabTrigramSetReadCap)
 		}
 		return nil
 	})
@@ -109,12 +136,25 @@ func (s *RedisVocabularyStore) trigramCandidates(
 		s.signal.failure(ctx, kindVocab, opGet, pipeErr)
 	}
 	candidates := map[string]int{}
-	for _, cmd := range cmds {
-		for _, m := range cmd.Val() {
+	for i, cmd := range cmds {
+		for _, m := range s.trigramMembers(ctx, keys[i], cmd) {
 			candidates[m]++
 		}
 	}
 	return topSharedCandidates(candidates), nil
+}
+
+func (s *RedisVocabularyStore) trigramMembers(ctx context.Context, key string, first *goredis.ScanCmd) []string {
+	page, cursor := first.Val()
+	if cursor == 0 || len(page) >= vocabTrigramSetReadCap {
+		return capMembers(page, vocabTrigramSetReadCap)
+	}
+	rest, err := s.scanCapped(ctx, key, cursor, vocabTrigramSetReadCap-len(page))
+	if err != nil {
+		s.signal.failure(ctx, kindVocab, opGet, err)
+		return page
+	}
+	return append(page, rest...)
 }
 
 type sharedCandidate struct {

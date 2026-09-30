@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -172,13 +174,16 @@ func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testi
 	}
 
 	if got := counter.single["smembers"]; got != 0 {
-		t.Errorf("unpipelined SMEMBERS round trips = %d, want 0 (trigram lookups must be pipelined)", got)
+		t.Errorf("unpipelined SMEMBERS round trips = %d, want 0 (whole-set reads are gone)", got)
+	}
+	if got := counter.pipelinedCmds["smembers"]; got != 0 {
+		t.Errorf("pipelined SMEMBERS = %d, want 0 (whole-set reads are gone)", got)
 	}
 	if counter.pipelines > 1 {
 		t.Errorf("pipelines = %d, want at most 1 for the trigram lookup", counter.pipelines)
 	}
-	if got := counter.pipelinedCmds["smembers"]; got == 0 || got > vocabTrigramLookupCap {
-		t.Errorf("pipelined SMEMBERS = %d, want 1..%d", got, vocabTrigramLookupCap)
+	if got := counter.pipelinedCmds["sscan"]; got == 0 || got > vocabTrigramLookupCap {
+		t.Errorf("pipelined SSCAN = %d, want 1..%d", got, vocabTrigramLookupCap)
 	}
 }
 
@@ -251,6 +256,7 @@ type stubRedis struct {
 	calls      map[string]int
 	roundTrips int
 	mgetKeys   int
+	scanned    int
 }
 
 func newStubRedisClient(t *testing.T) (*goredis.Client, *stubRedis) {
@@ -300,6 +306,8 @@ func (s *stubRedis) apply(cmd goredis.Cmder) {
 		s.entries[redisArg(args[1])] = redisArg(args[2])
 	case "smembers":
 		s.replyMembers(cmd, redisArg(args[1]))
+	case "sscan":
+		s.replyScan(cmd, args)
 	case "mget":
 		s.replyEntries(cmd, args[1:])
 	case "get":
@@ -440,5 +448,47 @@ func TestTrigramLookupKeys_ShortQueryKeepsEveryTrigram(t *testing.T) {
 	}
 	if got[0] != vocabTriPrefix+"meg" {
 		t.Errorf("first key = %q, want %q", got[0], vocabTriPrefix+"meg")
+	}
+}
+
+func (s *stubRedis) replyScan(cmd goredis.Cmder, args []any) {
+	reply, ok := cmd.(*goredis.ScanCmd)
+	if !ok {
+		return
+	}
+	members := make([]string, 0, len(s.sets[redisArg(args[1])]))
+	for member := range s.sets[redisArg(args[1])] {
+		members = append(members, member)
+	}
+	sort.Strings(members)
+	offset, _ := strconv.Atoi(redisArg(args[2]))
+	count, _ := strconv.Atoi(redisArg(args[len(args)-1]))
+	end := min(offset+count, len(members))
+	next := uint64(end)
+	if end == len(members) {
+		next = 0
+	}
+	s.scanned += end - offset
+	reply.SetVal(members[offset:end], next)
+}
+
+func TestFindClosest_HugeTrigramAndMetaphoneSetsAreReadUnderTheCap(t *testing.T) {
+	client, stub := newStubRedisClient(t)
+	store := NewVocabularyStore(client, lowercaseNorm)
+	store.metaphone = func(string) string { return "K" }
+	huge := 10 * vocabTrigramSetReadCap
+	for i := 0; i < huge; i++ {
+		member := fmt.Sprintf("member%05d", i)
+		stub.sadd(vocabTriPrefix+"the", member)
+		stub.sadd(vocabMetaPrefix+"K", member)
+	}
+
+	if _, err := store.FindClosest(context.Background(), "the", 5); err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+
+	limit := vocabTrigramSetReadCap + vocabPhoneticCandidateCap
+	if stub.scanned > limit || stub.calls["smembers"] != 0 {
+		t.Errorf("members read = %d (smembers %d), want at most %d", stub.scanned, stub.calls["smembers"], limit)
 	}
 }
