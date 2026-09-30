@@ -22,7 +22,7 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 			return afterDownload{}, fmt.Errorf("download cancelled: %w", ctxErr)
 		}
 		var window []ports.AudioCandidate
-		window, pending = s.nextWindow(ctx, ac, pending, used)
+		window, pending = s.nextWindow(ctx, ac, pending, used, &failures)
 		if len(window) == 0 {
 			break
 		}
@@ -42,11 +42,16 @@ func (s *DownloadStep) nextWindow(
 	ac *AcquisitionContext,
 	pending []ports.AudioCandidate,
 	used int,
+	failures *downloadFailures,
 ) (window, rest []ports.AudioCandidate) {
 	limit := min(s.width, maxDownloadAttempts-used)
 	for i, candidate := range pending {
 		if len(window) == limit {
 			return window, remainingAfter(ac, pending[i:], used+len(window))
+		}
+		if failures.sourceDead(candidate) {
+			recordSourceDead(ac, candidate)
+			continue
 		}
 		if !ac.candidateDurationPlausible(candidate) {
 			recordImplausibleDuration(ctx, ac, candidate)
@@ -140,7 +145,7 @@ func mergeWindow(ctx context.Context, ac *AcquisitionContext, results []attempt,
 			continue
 		}
 		result.applyTo(ctx, ac)
-		failures.note(result.err())
+		failures.noteAttempt(result)
 		holds.offer(result)
 		won = won || result.status == attemptAccepted
 	}

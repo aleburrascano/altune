@@ -1671,3 +1671,67 @@ func TestDownloadStep_SuccessfulProbeRecordsNoSkip(t *testing.T) {
 		t.Errorf("recorded gates = %v, want none", rec.gates)
 	}
 }
+
+type scriptedSourceFetcher struct {
+	hangURL     string
+	unavailable ports.SourceName
+	mu          sync.Mutex
+	calls       map[ports.SourceName]int
+}
+
+func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+	f.mu.Lock()
+	f.calls[c.Source]++
+	f.mu.Unlock()
+	if c.URL == f.hangURL {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	if c.Source == f.unavailable {
+		return "", &ports.SourceUnavailableError{Source: c.Source, Err: errors.New("HTTP Error 429")}
+	}
+	path := filepath.Join(outDir, "track.mp3")
+	return path, os.WriteFile(path, []byte("audio-bytes"), 0o644)
+}
+
+func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T) {
+	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[ports.SourceName]int{}}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{
+		{URL: "u1", Source: "streamrip"},
+		{URL: "u2", Source: "ytdlp"},
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := NewDownloadStep(fetcher, WithCandidateTimeout(50*time.Millisecond)).Execute(ctx, ac, afterSelect{})
+	if err != nil {
+		t.Fatalf("Execute = %v, want the second source to be stored", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(ac.TempDir) })
+	if ac.Selected == nil || ac.Selected.URL != "u2" {
+		t.Fatalf("selected = %+v, want u2", ac.Selected)
+	}
+}
+
+func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
+	for _, width := range []int{1, 2} {
+		t.Run(fmt.Sprintf("width%d", width), func(t *testing.T) {
+			fetcher := &scriptedSourceFetcher{unavailable: "ytdlp", calls: map[ports.SourceName]int{}}
+			ranked := make([]ports.AudioCandidate, 8)
+			for i := range ranked {
+				ranked[i] = ports.AudioCandidate{URL: fmt.Sprintf("u%d", i), Source: "ytdlp"}
+			}
+			ac := &AcquisitionContext{Ranked: ranked}
+
+			_, err := NewDownloadStep(fetcher, WithVerifyWidth(width)).Execute(context.Background(), ac, afterSelect{})
+
+			if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != domain.FailureSourceUnavailable {
+				t.Fatalf("failure code = %s, want %s", code, domain.FailureSourceUnavailable)
+			}
+			want := width
+			if got := fetcher.calls["ytdlp"]; got != want {
+				t.Errorf("fetch calls = %d, want %d", got, want)
+			}
+		})
+	}
+}

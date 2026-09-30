@@ -13,6 +13,8 @@ import (
 const (
 	maxDownloadAttempts = ports.EnoughCandidates
 	previewSeconds      = 130
+
+	defaultCandidateTimeout = 3 * time.Minute
 )
 
 type candidateFetcher interface {
@@ -31,10 +33,12 @@ type DownloadStep struct {
 	skips      ports.VerifySkipRecorder
 	width      int
 	floor      float64
+
+	candidateTimeout time.Duration
 }
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, width: 1}
+	s := &DownloadStep{fetcher: fetcher, width: 1, candidateTimeout: defaultCandidateTimeout}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -67,6 +71,10 @@ func WithVerifyWidth(n int) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.width = max(n, 1) }
 }
 
+func WithCandidateTimeout(d time.Duration) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.candidateTimeout = d }
+}
+
 func WithConfidenceFloor(floor float64) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.floor = floor }
 }
@@ -97,6 +105,10 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			recordNotAttempted(ac, ac.Ranked[i:])
 			break
 		}
+		if failures.sourceDead(ac.Ranked[i]) {
+			recordSourceDead(ac, ac.Ranked[i])
+			continue
+		}
 		if !ac.candidateDurationPlausible(ac.Ranked[i]) {
 			recordImplausibleDuration(ctx, ac, ac.Ranked[i])
 			continue
@@ -115,7 +127,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			return afterDownload{}, nil
 		}
 		holds.offer(result)
-		failures.note(result.err())
+		failures.noteAttempt(result)
 	}
 
 	return afterDownload{}, s.settle(ctx, ac, &holds, &failures)
@@ -175,6 +187,28 @@ func (a attempt) beats(other attempt) bool {
 
 type downloadFailures struct {
 	last, unavailable error
+	deadSources       map[ports.SourceName]bool
+}
+
+func (f *downloadFailures) noteAttempt(result attempt) {
+	err := result.err()
+	f.note(err)
+	if !ports.IsSourceUnavailable(err) || result.candidate.Source == "" {
+		return
+	}
+	if f.deadSources == nil {
+		f.deadSources = map[ports.SourceName]bool{}
+	}
+	f.deadSources[result.candidate.Source] = true
+}
+
+func (f *downloadFailures) sourceDead(candidate ports.AudioCandidate) bool {
+	return f.deadSources[candidate.Source]
+}
+
+func recordSourceDead(ac *AcquisitionContext, candidate ports.AudioCandidate) {
+	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionNotAttempted,
+		"source reported itself unavailable earlier in this job")
 }
 
 func (f *downloadFailures) note(err error) {
@@ -346,7 +380,9 @@ func (s *DownloadStep) fetchFull(
 	}
 	defer s.limiter.Release()
 
-	filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
+	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
+	defer cancel()
+	filePath, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
@@ -532,7 +568,9 @@ func (s *DownloadStep) fetchPreview(
 		return "", err
 	}
 	defer s.limiter.Release()
-	return previewer.FetchPreview(ctx, candidate, previewDir, previewSeconds)
+	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
+	defer cancel()
+	return previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
 }
 
 func (s *DownloadStep) identify(
