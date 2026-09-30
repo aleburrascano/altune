@@ -62,6 +62,56 @@ describe('fetchWithinAuthDeadline(), the fetch the Supabase client is built with
   });
 });
 
+describe('fetchWithinAuthDeadline() body read', () => {
+  function stalledBodyResponse(signal: AbortSignal): unknown {
+    const stall = (): Promise<never> =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const error = new Error('The operation was aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      });
+    const response = { status: 200, body: {}, arrayBuffer: stall, clone: () => response };
+    return response;
+  }
+
+  it('rejects the body read once the deadline passes after headers arrived', async () => {
+    const fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation((_input, init) =>
+        Promise.resolve(stalledBodyResponse(init?.signal as AbortSignal) as Response),
+      );
+    const response = await fetchWithinAuthDeadline(AUTH_TOKEN_URL, { method: 'POST' });
+    const caught = response.arrayBuffer().catch((error: unknown) => error);
+
+    jest.advanceTimersByTime(AUTH_FETCH_TIMEOUT_MS);
+
+    expect(await caught).toMatchObject({ name: 'AbortError' });
+    expect(jest.getTimerCount()).toBe(0);
+    fetchSpy.mockRestore();
+  });
+
+  it('keeps the status, headers and body of a fast response readable', async () => {
+    const real = new Response('{"access_token":"tok"}', {
+      status: 201,
+      headers: { 'x-trace': 'abc' },
+    });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(real);
+
+    const response = await fetchWithinAuthDeadline(AUTH_TOKEN_URL, { method: 'POST' });
+    const body = await response.text();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get('x-trace')).toBe('abc');
+    expect(body).toBe('{"access_token":"tok"}');
+    expect(jest.getTimerCount()).toBe(0);
+    fetchSpy.mockRestore();
+  });
+});
+
 describe('supabase client construction', () => {
   it('hands the auth SDK the bounded fetch', () => {
     jest.isolateModules(() => {

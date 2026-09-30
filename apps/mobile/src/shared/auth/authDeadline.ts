@@ -20,7 +20,24 @@ export function withinAuthDeadline<T>(work: Promise<T>, what: string, cid?: stri
 
 type FetchInput = Parameters<typeof fetch>[0];
 
+function releaseWhenBodyDrains(response: Response, release: () => void): void {
+  if (response.body == null) {
+    release();
+    return;
+  }
+  response.clone().arrayBuffer().then(release, release);
+}
+
 export function fetchWithinAuthDeadline(input: FetchInput, init?: RequestInit): Promise<Response> {
   const deadline = startDeadline(init?.signal ?? undefined, AUTH_FETCH_TIMEOUT_MS);
-  return fetch(input, { ...init, signal: deadline.signal }).finally(deadline.release);
+  return fetch(input, { ...init, signal: deadline.signal }).then(
+    (response) => {
+      releaseWhenBodyDrains(response, deadline.release);
+      return response;
+    },
+    (error: unknown) => {
+      deadline.release();
+      throw error;
+    },
+  );
 }
