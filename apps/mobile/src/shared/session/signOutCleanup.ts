@@ -37,9 +37,19 @@ export function runSignOutCleanups(): void {
   sessionEpoch += 1;
   for (const cleanup of cleanups) {
     try {
-      void Promise.resolve(cleanup()).catch(() => undefined);
-    } catch {}
+      void Promise.resolve(cleanup()).catch(warnCleanupFailed);
+    } catch (error) {
+      warnCleanupFailed(error);
+    }
   }
+}
+
+const MAX_MESSAGE_LENGTH = 120;
+
+function warnCleanupFailed(error: unknown): void {
+  const name = error instanceof Error ? error.name : 'non-Error';
+  const message = error instanceof Error ? error.message.slice(0, MAX_MESSAGE_LENGTH) : '';
+  console.warn(`[session] sign-out cleanup failed: ${name} ${message}`.trimEnd());
 }
 
 export function hasSignedInUser(): boolean {

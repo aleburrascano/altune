@@ -56,6 +56,30 @@ describe('signOutCleanup registry', () => {
     offs.forEach((off) => off());
   });
 
+  it('warns once per throwing or rejecting cleanup, and still runs the healthy one', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const healthy = jest.fn();
+    const offs = [
+      onSignOut(() => {
+        throw new Error('sync boom');
+      }),
+      onSignOut(() => Promise.reject(new TypeError('async boom'))),
+      onSignOut(healthy),
+    ];
+
+    runSignOutCleanups();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const lines = warn.mock.calls.map((call) => String(call[0]));
+    expect(lines).toHaveLength(2);
+    expect(lines.join('\n')).toMatch(/Error sync boom/);
+    expect(lines.join('\n')).toMatch(/TypeError async boom/);
+    expect(healthy).toHaveBeenCalledTimes(1);
+    offs.forEach((off) => off());
+    warn.mockRestore();
+  });
+
   it('reports whether a user is signed in, defaulting to no one', () => {
     expect(hasSignedInUser()).toBe(false);
     setSignedInUser(true);
