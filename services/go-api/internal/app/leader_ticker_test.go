@@ -403,3 +403,31 @@ func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
 		t.Fatal("registered but not-yet-leading job was reported unknown")
 	}
 }
+
+func TestRunTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
+	e := &fakeElection{}
+	a := &App{election: e}
+	run := a.jobRun("interrupted", time.Hour)
+
+	for range 3 {
+		e.win()
+		started := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			a.tick(context.Background(), run, func(ctx context.Context) error {
+				close(started)
+				<-ctx.Done()
+				return ctx.Err()
+			})
+		}()
+		<-started
+		e.lose()
+		<-done
+	}
+
+	h := findJobHealth(t, a.JobHealth(), "interrupted")
+	if h.Failures != 0 || run.control.consecutive.Load() != 0 || !h.LastFailure.IsZero() {
+		t.Fatalf("leadership-lost runs counted as failures: %+v", h)
+	}
+}

@@ -138,9 +138,15 @@ func (a *App) runJob(parent context.Context, run jobRun, fn func(context.Context
 	if r := recoverJob(run.name, func() { err = fn(jobCtx) }); r != nil {
 		err = fmt.Errorf("panic: %v", r)
 	}
-	if err != nil && errors.Is(context.Cause(jobCtx), errJobRunBudgetExceeded) {
+	overBudget := err != nil && errors.Is(context.Cause(jobCtx), errJobRunBudgetExceeded)
+	if overBudget {
 		slog.Warn("background job run exceeded its budget; canceled",
 			"job", run.name, "budget", run.budget.String(), "error", err)
+	}
+	if err != nil && !overBudget && parent.Err() != nil {
+		slog.Info("background job run interrupted; not counted as a failure",
+			"job", run.name, "cause", context.Cause(parent))
+		return
 	}
 	run.control.record(err)
 }
