@@ -50,7 +50,7 @@
     "src/features/detail/navigation.ts:featuringRouteFor",
     "src/features/detail/navigation.ts:featuringHref",
     "src/features/discover/hooks/useAutocompleteSuggestions.ts:SUGGEST_DEBOUNCE_MS",
-    "src/features/discover/search-state.ts:resetSearchState",
+    "src/features/discover/searchState.ts:resetSearchState",
     "src/features/discover/searchLimits.ts:MIN_QUERY_LENGTH",
     "src/features/discover/ui/BlendedSection.tsx:SECTION_ITEM_CAP",
     "src/features/discover/ui/RefreshFailedNotice.tsx:REFRESH_FAILED_MESSAGE",

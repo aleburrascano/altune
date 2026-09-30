@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-import { getSearchState } from '../search-state';
+import { getSearchState } from '../searchState';
 import { MAX_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
 
 type UseDebouncedSearchOptions = {

@@ -22,7 +22,7 @@ import {
   type ServerEventsClientFactory,
 } from '@shared/events/useServerEvents';
 import { startDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
-import { getSearchState, setSearchState } from '@features/discover/search-state';
+import { getSearchState, setSearchState } from '@features/discover/searchState';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { clearDetailHandoffs, detailHref, readDetailHandoff } from '@shared/lib/detail-handoff';
 import type * as PinnedStoreModule from '@shared/offline/pinnedStore';

@@ -32,10 +32,10 @@ function bannedNounViolations(source: string): string[] {
 }
 
 describe('sanity: this suite is actually scanning the real slice', () => {
-  it('features/discover is found under process.cwd()/src and contains state.ts', () => {
+  it('features/discover is found under process.cwd()/src and contains discoverView.ts', () => {
     const names = listSourceFiles(DISCOVER_DIR).map((file) => path.basename(file));
     expect(names.length).toBeGreaterThan(0);
-    expect(names).toContain('state.ts');
+    expect(names).toContain('discoverView.ts');
   });
 });
 

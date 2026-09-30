@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react-native';
 import { DiscoverBody } from '../ui/DiscoverBody';
 import { resultFixture } from './fixtures';
 
-import type { DiscoverView } from '../state';
+import type { DiscoverView } from '../discoverView';
 import { fireEvent } from '@testing-library/react-native';
 import type { ResultSection } from '@shared/api-client/discovery';
 

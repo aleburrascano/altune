@@ -8,7 +8,7 @@ import { Text, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
-import type { SearchCorrection } from '../state';
+import type { SearchCorrection } from '../discoverView';
 
 export type ResultsCommonProps = {
   onResultTap: (result: DiscoveryResult, position: number) => void;

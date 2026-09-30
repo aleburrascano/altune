@@ -5,7 +5,7 @@ import { FilteredResults } from '../ui/FilteredResults';
 import { resultFixture } from './fixtures';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { SearchCorrection } from '../state';
+import type { SearchCorrection } from '../discoverView';
 import type { ResultsCommonProps } from '../ui/ResultsList';
 
 jest.mock('../hooks/usePreviewPlayback', () => ({

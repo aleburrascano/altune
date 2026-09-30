@@ -12,7 +12,7 @@ import { ApiError, NetworkError } from '@shared/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '../searchLimits';
-import { setSearchState } from '../search-state';
+import { setSearchState } from '../searchState';
 import { DiscoverBody } from '../ui/DiscoverBody';
 import { resultFixture } from './fixtures';
 

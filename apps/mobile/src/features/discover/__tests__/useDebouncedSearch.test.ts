@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { setSearchState } from '../search-state';
+import { setSearchState } from '../searchState';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { MAX_QUERY_LENGTH } from '../searchLimits';
 

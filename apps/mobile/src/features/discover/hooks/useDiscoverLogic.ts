@@ -2,7 +2,7 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
-import { setSearchState } from '../search-state';
+import { setSearchState } from '../searchState';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
 import { isSearchableQuery } from '../searchLimits';
@@ -14,14 +14,14 @@ import { useClearSearchHistory } from './useClearSearchHistory';
 import { useResultTap } from './useResultTap';
 import { useSuggestionVisibility } from './useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
-import { correctionForResponse, resultsIncompleteForState, viewForState } from '../state';
+import { correctionForResponse, resultsIncompleteForState, viewForState } from '../discoverView';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, SearchCorrection } from '../state';
+import type { DiscoverView, SearchCorrection } from '../discoverView';
 import type { ResultsFilter } from './useResultsFilter';
 
 export type DiscoverLogic = {

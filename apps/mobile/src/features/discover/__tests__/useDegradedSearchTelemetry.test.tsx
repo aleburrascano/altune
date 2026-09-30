@@ -10,7 +10,7 @@ import {
 } from '@shared/api-client/discovery';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { setSearchState } from '../search-state';
+import { setSearchState } from '../searchState';
 import { resultFixture } from './fixtures';
 
 jest.mock('@shared/api-client/discovery', () => ({

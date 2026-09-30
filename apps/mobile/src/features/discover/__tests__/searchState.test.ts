@@ -1,12 +1,12 @@
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { getSearchState, resetSearchState, setSearchState } from '../search-state';
-import type * as SearchStateModule from '../search-state';
+import { getSearchState, resetSearchState, setSearchState } from '../searchState';
+import type * as SearchStateModule from '../searchState';
 
 beforeEach(() => {
   setSearchState('', '');
 });
 
-describe('search-state preserves the last query across a detail round trip', () => {
+describe('searchState preserves the last query across a detail round trip', () => {
   it('reads back exactly what was written', () => {
     setSearchState('radiohead', 'radioh');
 
@@ -39,14 +39,14 @@ describe('search-state preserves the last query across a detail round trip', () 
 
   it('defaults both fields to empty strings before anything has been written', () => {
     jest.isolateModules(() => {
-      const fresh: typeof SearchStateModule = require('../search-state');
+      const fresh: typeof SearchStateModule = require('../searchState');
 
       expect(fresh.getSearchState()).toEqual({ query: '', inputValue: '' });
     });
   });
 });
 
-describe('search-state registration with the sign-out registry', () => {
+describe('searchState registration with the sign-out registry', () => {
   it('is reset when the sign-out cleanups run', () => {
     setSearchState('radiohead', 'radiohead');
 

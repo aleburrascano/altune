@@ -18,7 +18,7 @@ import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useSearchHistory } from '../hooks/useSearchHistory';
-import { setSearchState } from '../search-state';
+import { setSearchState } from '../searchState';
 
 jest.mock('@shared/api-client/discovery', () => ({
   searchDiscovery: jest.fn(),

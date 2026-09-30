@@ -11,13 +11,13 @@ import { FilteredResults } from './FilteredResults';
 import { IncompleteResultsBanner } from './IncompleteResultsBanner';
 import { RefreshFailedNotice } from './RefreshFailedNotice';
 import { RecentSearches } from './RecentSearches';
-import { searchAnnouncement, asyncViewForDiscoverView } from '../state';
+import { searchAnnouncement, asyncViewForDiscoverView } from '../discoverView';
 import type {
   DiscoveryResult,
   ResultSection,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, SearchCorrection } from '../state';
+import type { DiscoverView, SearchCorrection } from '../discoverView';
 import type { ResultsFilter } from '../hooks/useResultsFilter';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 

@@ -6,7 +6,7 @@ import {
   asyncViewForDiscoverView,
   type DiscoverHookState,
   type DiscoverView,
-} from '../state';
+} from '../discoverView';
 import { resultFixture } from './fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
