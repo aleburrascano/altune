@@ -91,12 +91,12 @@ const maxFavoriteBodyBytes = 16 << 10
 
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.With(h.searchLimiter.middleware).Get("/search", h.handleSearch)
+	r.With(noStorePerUser, h.searchLimiter.middleware).Get("/search", h.handleSearch)
 	r.With(h.suggestLimiter.middleware).Get("/suggest", h.handleSuggest)
-	r.With(h.historyLimiter.middleware).Get("/search-history", h.handleSearchHistory)
+	r.With(noStorePerUser, h.historyLimiter.middleware).Get("/search-history", h.handleSearchHistory)
 	r.With(h.historyLimiter.middleware).Delete("/search-history", h.handleClearSearchHistory)
 	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
-	r.With(h.favoritesLimiter.middleware).Get("/favorites", h.handleListFavorites)
+	r.With(noStorePerUser, h.favoritesLimiter.middleware).Get("/favorites", h.handleListFavorites)
 	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
 	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
 	r.Group(h.contentRoutes)
@@ -114,6 +114,14 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
+}
+
+func noStorePerUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func requireUser(next http.Handler) http.Handler {

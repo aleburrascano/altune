@@ -802,3 +802,33 @@ func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	}
 	return body.Code
 }
+
+func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
+	searchRouter := buildDiscoveryRouter(&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
+	favoritesRouter := buildFavoritesRouter(nil)
+	tests := []struct {
+		name string
+		path string
+		fav  bool
+	}{
+		{name: "search success", path: "/discovery/search?q=test"},
+		{name: "search validation error", path: "/discovery/search"},
+		{name: "history success", path: "/discovery/search-history"},
+		{name: "favorites success", path: "/discovery/favorites", fav: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := searchRouter
+			if tt.fav {
+				router = favoritesRouter
+			}
+			rec := discServe(t, router, http.MethodGet, tt.path, nil)
+			if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
+				t.Errorf("Cache-Control = %q, want %q (status %d)", got, "private, no-store", rec.Code)
+			}
+			if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+			}
+		})
+	}
+}
