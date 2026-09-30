@@ -32,6 +32,7 @@ type DiscoveryHandler struct {
 	eventLimiter     *userRateLimiter
 	contentLimiter   *userRateLimiter
 	favoritesLimiter *userRateLimiter
+	historyLimiter   *userRateLimiter
 }
 
 type DetailEnrichers struct {
@@ -64,6 +65,7 @@ func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *Discovery
 	h.eventLimiter = newUserRateLimiter(limits.Events, time.Now)
 	h.contentLimiter = newUserRateLimiter(limits.Content, time.Now)
 	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, time.Now)
+	h.historyLimiter = newUserRateLimiter(limits.History, time.Now)
 	return h
 }
 
@@ -91,10 +93,10 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(h.searchLimiter.middleware).Get("/search", h.handleSearch)
 	r.With(h.suggestLimiter.middleware).Get("/suggest", h.handleSuggest)
-	r.Get("/search-history", h.handleSearchHistory)
-	r.Delete("/search-history", h.handleClearSearchHistory)
+	r.With(h.historyLimiter.middleware).Get("/search-history", h.handleSearchHistory)
+	r.With(h.historyLimiter.middleware).Delete("/search-history", h.handleClearSearchHistory)
 	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
-	r.Get("/favorites", h.handleListFavorites)
+	r.With(h.favoritesLimiter.middleware).Get("/favorites", h.handleListFavorites)
 	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
 	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
 	r.Group(h.contentRoutes)

@@ -20,6 +20,7 @@ type DiscoveryRateLimits struct {
 	Events    RequestLimit
 	Content   RequestLimit
 	Favorites RequestLimit
+	History   RequestLimit
 }
 
 var DefaultDiscoveryRateLimits = DiscoveryRateLimits{
@@ -28,6 +29,7 @@ var DefaultDiscoveryRateLimits = DiscoveryRateLimits{
 	Events:    RequestLimit{Max: 300, Window: time.Minute},
 	Content:   RequestLimit{Max: 180, Window: time.Minute},
 	Favorites: RequestLimit{Max: 60, Window: time.Minute},
+	History:   RequestLimit{Max: 60, Window: time.Minute},
 }
 
 type rateLimitedError struct{}

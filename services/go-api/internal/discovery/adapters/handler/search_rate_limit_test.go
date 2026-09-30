@@ -239,3 +239,53 @@ func assertRateLimited(t *testing.T, rec *httptest.ResponseRecorder) {
 		t.Errorf("code = %q, want discovery.rate_limited", resp.Code)
 	}
 }
+
+func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
+	cases := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"list history", http.MethodGet, "/discovery/search-history"},
+		{"clear history", http.MethodDelete, "/discovery/search-history"},
+		{"list favorites", http.MethodGet, "/discovery/favorites"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			historyRepo := &fakeSearchHistoryRepo{}
+			h := NewDiscoveryHandler(DiscoveryServices{
+				History:      service.NewListSearchHistoryService(historyRepo),
+				ClearHistory: service.NewClearSearchHistoryService(historyRepo),
+				Favorites:    service.NewFavoritesService(erroringFavoritesRepo{}),
+			}).WithRateLimits(DiscoveryRateLimits{
+				History:   RequestLimit{Max: 1, Window: time.Hour},
+				Favorites: RequestLimit{Max: 1, Window: time.Hour},
+			})
+			r := chi.NewRouter()
+			r.Use(auth.Middleware(auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+				id := discTestUserId
+				if token == "other" {
+					id = otherTestUserId
+				}
+				return auth.VerifiedToken{UserID: id, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			})))
+			r.Mount("/discovery", h.Routes())
+
+			serve := func(token string) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(tc.method, tc.path, nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				rec := httptest.NewRecorder()
+				r.ServeHTTP(rec, req)
+				return rec
+			}
+
+			if rec := serve("first"); rec.Code == http.StatusTooManyRequests {
+				t.Fatal("first request throttled inside the budget")
+			}
+			assertRateLimited(t, serve("first"))
+			if rec := serve("other"); rec.Code == http.StatusTooManyRequests {
+				t.Fatal("second user throttled by the first user's budget")
+			}
+		})
+	}
+}
