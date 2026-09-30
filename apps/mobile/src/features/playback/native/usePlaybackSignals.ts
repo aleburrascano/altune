@@ -7,6 +7,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { buildTrackPayload, hasCrossedListenThreshold } from '../signals';
+import { progressSecondsToMs, progressSecondsToRoundedMs } from '../time';
 
 const COMPLETION_EPSILON_MS = 2000;
 
@@ -67,13 +68,13 @@ export function usePlaybackSignals(args: {
       const trackIdx = s.playOrder[event.lastIndex];
       const outgoing = trackIdx != null ? s.tracks[trackIdx] : undefined;
       if (!outgoing) return;
-      const dwellMs = Math.round((event.lastPosition ?? 0) * 1000);
+      const dwellMs = progressSecondsToRoundedMs(event.lastPosition ?? 0);
       if (dwellMs <= 0) return;
       const durMs =
         event.lastTrack?.duration != null
-          ? event.lastTrack.duration * 1000
+          ? progressSecondsToMs(event.lastTrack.duration)
           : outgoing.durationSeconds != null
-            ? outgoing.durationSeconds * 1000
+            ? progressSecondsToMs(outgoing.durationSeconds)
             : 0;
       const completed = durMs > 0 && dwellMs >= durMs - COMPLETION_EPSILON_MS;
       handledKeyRef.current = trackKey(outgoing);
@@ -85,7 +86,7 @@ export function usePlaybackSignals(args: {
       const alreadyHandled = handledKeyRef.current === trackKey(ended);
       handledKeyRef.current = null;
       if (alreadyHandled) return;
-      const dwellMs = Math.round((event.position ?? 0) * 1000) || undefined;
+      const dwellMs = progressSecondsToRoundedMs(event.position ?? 0) || undefined;
       emitRef.current('completed', ended, dwellMs);
     }
   });

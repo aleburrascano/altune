@@ -22,6 +22,7 @@ import {
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
 import { warnPlayback } from '../redactPlaybackError';
+import { progressSecondsToRoundedMs } from '../time';
 
 import { useAppStateChange } from '@shared/lifecycle';
 
@@ -30,7 +31,7 @@ const SAVE_INTERVAL_MS = 15_000;
 async function currentPositionMsOrZero(): Promise<number> {
   try {
     const progress = await TrackPlayer.getProgress();
-    return Math.round(progress.position * 1000);
+    return progressSecondsToRoundedMs(progress.position);
   } catch {
     return 0;
   }

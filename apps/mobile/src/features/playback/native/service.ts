@@ -26,6 +26,7 @@ import { classifyNativePlaybackError } from '../classifyPlaybackError';
 import { clearPlaybackError, reportPlaybackError } from '../playbackErrorStore';
 import { recordAudioRecoveryFailure, recordPlaybackFailure } from '../playbackHealth';
 import { redactedPlaybackFailure, redactPlaybackErrorMessage } from '../redactPlaybackError';
+import { progressSecondsToMs } from '../time';
 import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
@@ -146,7 +147,7 @@ function handleRemoteDuck(data: RemoteDuckEvent): void {
 
 async function playPreviousRemotely(): Promise<void> {
   const { position } = await TrackPlayer.getProgress();
-  if (shouldRestartOnPrevious(position * 1000)) {
+  if (shouldRestartOnPrevious(progressSecondsToMs(position))) {
     await TrackPlayer.seekTo(0);
     return;
   }

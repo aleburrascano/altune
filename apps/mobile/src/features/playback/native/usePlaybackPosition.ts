@@ -6,6 +6,8 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { useIsForeground } from '@shared/lifecycle';
 
+import { progressSecondsToMs } from '../time';
+
 export interface PlaybackPosition {
   positionMs: number;
   livePositionMs: number;
@@ -16,7 +18,7 @@ export function usePlaybackPosition(track: PlaybackTrack | null): PlaybackPositi
   const progress = useProgress(500);
   const isForeground = useIsForeground();
 
-  const livePositionMs = progress.position * 1000;
+  const livePositionMs = progressSecondsToMs(progress.position);
   const resumePositionMs = useQueueStore((s) => s.resumePositionMs);
   const displayPositionMs = livePositionMs > 0 ? livePositionMs : resumePositionMs;
   useEffect(() => {
@@ -31,11 +33,11 @@ export function usePlaybackPosition(track: PlaybackTrack | null): PlaybackPositi
     if (!isForeground) setFrozenPositionMs(displayPositionMs);
   }
   const positionMs = isForeground ? displayPositionMs : frozenPositionMs;
-  const rawDurationMs = progress.duration * 1000;
+  const rawDurationMs = progressSecondsToMs(progress.duration);
 
   const trackDurationMs =
     track?.durationSeconds != null && Number.isFinite(track.durationSeconds)
-      ? track.durationSeconds * 1000
+      ? progressSecondsToMs(track.durationSeconds)
       : 0;
 
   const durationMs = rawDurationMs || trackDurationMs;
