@@ -18,6 +18,7 @@ export type ArtistDetailState = {
   hasSources: boolean;
   topTracks: DiscoveryResult[];
   isLoadingTracks: boolean;
+  libraryTracksComplete: boolean;
   isErrorTracks: boolean;
   tracksFailure: ContentFailure | null;
   refetchTracks: () => void;
@@ -125,6 +126,7 @@ export function useArtistDetailState(
     hasSources,
     topTracks,
     isLoadingTracks,
+    libraryTracksComplete: localTracks.complete !== false,
     isErrorTracks: tracksFailure !== null,
     tracksFailure,
     refetchTracks: refetchContent,

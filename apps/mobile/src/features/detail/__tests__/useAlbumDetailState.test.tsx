@@ -361,6 +361,13 @@ describe('saving all with a partial library lookup', () => {
       expect(mockSave.mutateAsync).not.toHaveBeenCalled();
     });
 
+    it('does not start a batch when the library lookup failed', () => {
+      mockUseLibraryTracksForAlbum.mockImplementation(() => Object.assign([], { complete: false }));
+      const hook = renderHook(() => useAlbumDetailState(album, '/discover/detail'));
+      act(() => hook.result.current.onSaveAll());
+      expect(mockSave.mutateAsync).not.toHaveBeenCalled();
+    });
+
     it('saves the unowned tracks once the lookup is complete', () => {
       mockComplete = true;
       const hook = renderHook(() => useAlbumDetailState(album, '/discover/detail'));

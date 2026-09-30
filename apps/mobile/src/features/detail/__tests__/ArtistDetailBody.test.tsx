@@ -567,3 +567,39 @@ describe('ArtistDetailBody: top track and album taps pin the exact router push',
     expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Album 0');
   });
 });
+
+describe('ArtistDetailBody: incomplete library track lookup', () => {
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('warns that the library list may be partial when the lookup has more pages than fetched', async () => {
+    const rows = [libraryTrackRow(0, 'Boards of Canada')];
+    __http.reply(TRACKS, {
+      status: 200,
+      json: { items: rows, total: 1000, limit: 200, offset: 0, has_more: true },
+    });
+    renderLibraryArtistBody();
+
+    expect(await screen.findByTestId('detail-library-tracks-incomplete')).toBeTruthy();
+  });
+
+  it('shows no warning when the lookup is complete', async () => {
+    const rows = [libraryTrackRow(0, 'Boards of Canada')];
+    __http.reply(TRACKS, {
+      status: 200,
+      json: { items: rows, total: 1, limit: 200, offset: 0, has_more: false },
+    });
+    renderLibraryArtistBody();
+
+    await screen.findByTestId('detail-top-track-0');
+    expect(screen.queryByTestId('detail-library-tracks-incomplete')).toBeNull();
+  });
+});

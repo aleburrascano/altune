@@ -24,13 +24,13 @@ async function fetchLookup(q: string, signal?: AbortSignal): Promise<Lookup> {
 
 function useLibraryLookup(search: string): Lookup {
   const trimmed = search.trim();
-  const { data: lookup } = useQuery({
+  const { data: lookup, isError } = useQuery({
     queryKey: libraryKeys.lookup(trimmed),
     queryFn: ({ signal }) => fetchLookup(trimmed, signal),
     enabled: trimmed.length > 0,
     staleTime: 60_000,
   });
-  return lookup ?? { items: [], complete: true };
+  return lookup ?? { items: [], complete: !isError };
 }
 
 function withCompleteness(matches: TrackResponse[], complete: boolean): LibraryMatches {
@@ -53,8 +53,9 @@ export function useLibraryTracksForAlbum(
   return withCompleteness(matches, complete);
 }
 
-export function useLibraryTracksForArtist(artistName: string): TrackResponse[] {
-  const { items: candidates } = useLibraryLookup(artistName);
+export function useLibraryTracksForArtist(artistName: string): LibraryMatches {
+  const { items: candidates, complete } = useLibraryLookup(artistName);
   const artistNorm = normalizeForCompare(artistName);
-  return candidates.filter((t) => normalizeForCompare(t.artist) === artistNorm);
+  const matches = candidates.filter((t) => normalizeForCompare(t.artist) === artistNorm);
+  return withCompleteness(matches, complete);
 }

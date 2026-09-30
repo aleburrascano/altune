@@ -3,6 +3,8 @@ import { View } from 'react-native';
 
 import { Play } from 'lucide-react-native';
 
+import { Text } from '@shared/ui/primitives/Text';
+
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 
@@ -140,10 +142,20 @@ function AboutArtist(props: AboutArtistProps): ReactElement {
   return <AboutArtistWithLastfm {...props} lastfm={props.lastfm} />;
 }
 
+function IncompleteLibraryNotice({ artist }: { artist: ArtistDetailState }): ReactElement | null {
+  if (artist.hasSources || artist.libraryTracksComplete) return null;
+  return (
+    <Text variant="body" tone="tertiary" testID="detail-library-tracks-incomplete">
+      Some of your tracks may be missing from this list.
+    </Text>
+  );
+}
+
 function ArtistDetailContentBody(props: ArtistDetailBodyProps & { artist: ArtistDetailState }) {
   return (
     <>
       <ArtistTopTracks artist={props.artist} artistResult={props.result} />
+      <IncompleteLibraryNotice artist={props.artist} />
       <LibraryAlbums artist={props.artist} />
       <ArtistDiscography artist={props.artist} />
       <AboutArtist lastfm={props.lastfm} lastfmError={props.lastfmError ?? false} />

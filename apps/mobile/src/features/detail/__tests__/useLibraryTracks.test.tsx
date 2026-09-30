@@ -113,3 +113,19 @@ describe('aborting on unmount', () => {
     });
   });
 });
+
+describe('a lookup that cannot be trusted as the whole library', () => {
+  it('reports the album lookup incomplete when the request fails', async () => {
+    __http.fail(TRACKS);
+    const hook = renderHook(() => useLibraryTracksForAlbum('Hits', 'Artist'), { wrapper });
+    await waitFor(() => expect(__http.countFor(TRACKS)).toBeGreaterThan(0));
+    await waitFor(() => expect(hook.result.current.complete).toBe(false));
+  });
+
+  it('reports the artist lookup incomplete at the page ceiling', async () => {
+    __http.reply(TRACKS, page(filler(LOOKUP_LIMIT), true));
+    const hook = renderHook(() => useLibraryTracksForArtist('Artist'), { wrapper });
+    await waitFor(() => expect(__http.countFor(TRACKS)).toBe(LOOKUP_MAX_PAGES));
+    await waitFor(() => expect(hook.result.current.complete).toBe(false));
+  });
+});
