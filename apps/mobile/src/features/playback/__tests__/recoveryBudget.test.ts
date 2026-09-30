@@ -60,6 +60,16 @@ describe('claimRecoveryAttempt', () => {
     expect(grants.every(Boolean)).toBe(true);
   });
 
+  it('forgets a track when the clock goes backwards, restoring its budget', () => {
+    spendBudget(KEY, START);
+
+    const grants = Array.from({ length: RECOVERY_ATTEMPTS_PER_TRACK }, () =>
+      claimRecoveryAttempt(KEY, START - 1),
+    );
+
+    expect(grants.every(Boolean)).toBe(true);
+  });
+
   it('refuses a new key once it tracks the maximum number of failing tracks', () => {
     for (let i = 0; i < MAX_TRACKED_RECOVERIES; i += 1) {
       claimRecoveryAttempt(`library:f${i}` as TrackKey, START);
