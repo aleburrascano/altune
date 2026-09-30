@@ -136,3 +136,30 @@ func TestMemJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testin
 		t.Fatalf("Claim after Settle of a re-enqueued job = %v, want the job still claimable", err)
 	}
 }
+
+func TestMemJobQueue_ClaimReclaimsAJobWhoseLeaseExpired(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
+	trackID := domain.NewTrackId()
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindAcquire, clock); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	first, err := q.Claim(context.Background(), time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+
+	clock = clock.Add(30 * time.Second)
+	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+		t.Fatalf("Claim before expiry = %v, want ErrNoJobAvailable", err)
+	}
+
+	clock = clock.Add(31 * time.Second)
+	second, err := q.Claim(context.Background(), time.Minute)
+	if err != nil {
+		t.Fatalf("Claim after expiry = %v, want the job again", err)
+	}
+	if second.TrackID != trackID || second.Fence == first.Fence {
+		t.Errorf("reclaim = %+v, want same track with a new fence (first %v)", second, first.Fence)
+	}
+}

@@ -15,6 +15,7 @@ type memJobQueue struct {
 	jobs         map[domain.TrackId]*memJob
 	pendingUsers map[domain.TrackId]shared.UserId
 	wake         chan<- struct{}
+	now          func() time.Time
 }
 
 type memJob struct {
@@ -31,10 +32,15 @@ var _ ports.JobQueue = (*memJobQueue)(nil)
 var _ ports.QueueDepthReader = (*memJobQueue)(nil)
 
 func newMemJobQueue(wake chan<- struct{}) *memJobQueue {
+	return newMemJobQueueWithClock(wake, time.Now)
+}
+
+func newMemJobQueueWithClock(wake chan<- struct{}, now func() time.Time) *memJobQueue {
 	return &memJobQueue{
 		jobs:         make(map[domain.TrackId]*memJob),
 		pendingUsers: make(map[domain.TrackId]shared.UserId),
 		wake:         wake,
+		now:          now,
 	}
 }
 
@@ -78,7 +84,7 @@ func (q *memJobQueue) jobOrNew(trackID domain.TrackId) *memJob {
 }
 
 func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt time.Time) (held bool, err error) {
-	if !j.leased || !time.Now().Before(j.leaseUntil) {
+	if !j.leased || !q.now().Before(j.leaseUntil) {
 		return false, nil
 	}
 	running := j.kind
@@ -97,7 +103,7 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	now := time.Now()
+	now := q.now()
 	bestID, best := q.findClaimable(now)
 	if best == nil {
 		return ports.Job{}, ports.ErrNoJobAvailable
@@ -112,7 +118,7 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	now := time.Now()
+	now := q.now()
 	pending := 0
 	var oldest time.Time
 	for _, j := range q.jobs {
@@ -157,7 +163,7 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence
 	if !j.leased || ports.Fence(j.attempts) != fence {
 		return ports.ErrLeaseLost
 	}
-	j.leaseUntil = time.Now().Add(lease)
+	j.leaseUntil = q.now().Add(lease)
 	return nil
 }
 

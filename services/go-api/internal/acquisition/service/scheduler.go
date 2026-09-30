@@ -67,6 +67,7 @@ type BackgroundAcquisitionScheduler struct {
 	skipCount           func() uint64
 	fingerprintVerified func() bool
 	log                 *jobLog
+	now                 func() time.Time
 	outcomes            ports.OutcomeRecorder
 	outcomeWG           sync.WaitGroup
 }
@@ -87,6 +88,7 @@ func NewBackgroundAcquisitionScheduler(
 		stop:              make(chan struct{}),
 		wake:              make(chan struct{}, 1),
 		log:               newJobLog(),
+		now:               time.Now,
 		events:            events.NoopPublisher(),
 		leaseDuration:     defaultLeaseDuration,
 		heartbeatInterval: defaultHeartbeatInterval,
@@ -97,7 +99,7 @@ func NewBackgroundAcquisitionScheduler(
 		opt(s)
 	}
 	if s.queue == nil {
-		s.queue = newMemJobQueue(s.wake)
+		s.queue = newMemJobQueueWithClock(s.wake, s.now)
 	}
 	if s.notifier != nil {
 		s.runnersWG.Add(1)
@@ -244,7 +246,7 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 	alreadyTracked := s.pending.track(key)
 	s.primeEnqueue(ctx, trackId, userId, key, alreadyTracked)
 
-	if err := s.queue.Enqueue(ctx, trackId, kind, time.Now()); err != nil {
+	if err := s.queue.Enqueue(ctx, trackId, kind, s.now()); err != nil {
 		return s.handleEnqueueError(ctx, key, trackId, kind, alreadyTracked, err)
 	}
 	return s.finishEnqueue(ctx, trackId, userId, kind)
@@ -452,7 +454,7 @@ func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job 
 	defer close(done)
 	ticker := time.NewTicker(s.heartbeatInterval)
 	defer ticker.Stop()
-	lastSuccess := time.Now()
+	lastSuccess := s.now()
 	for {
 		select {
 		case <-ctx.Done():
@@ -469,14 +471,14 @@ func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job 
 func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSuccess *time.Time) bool {
 	err := s.queue.Heartbeat(context.Background(), job.TrackID, job.Fence, s.leaseDuration)
 	if err == nil {
-		*lastSuccess = time.Now()
+		*lastSuccess = s.now()
 		return true
 	}
 	if errors.Is(err, ports.ErrLeaseLost) {
 		slog.Warn("acquisition.lease_lost", "track_id", job.TrackID.String())
 		return false
 	}
-	if time.Since(*lastSuccess) >= s.leaseDuration {
+	if s.now().Sub(*lastSuccess) >= s.leaseDuration {
 		slog.Error("acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
 		return false
 	}
@@ -488,7 +490,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 	defer s.pending.untrack(job.TrackID.String())
 
 	if s.baseCtx.Err() != nil {
-		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, time.Now())
+		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, s.now())
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
 	}
@@ -497,7 +499,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) 
 		return
 	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
-		availableAt := time.Now().Add(retryBackoff(job.Attempts))
+		availableAt := s.now().Add(retryBackoff(job.Attempts))
 		err := s.queue.Release(context.Background(), job.TrackID, job.Fence, availableAt)
 		s.logQueueOutcome("release", job.TrackID, err)
 		return
@@ -510,7 +512,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
 	if job.Attempts >= maxAcquisitionAttempts {
 		s.refuseQueuedRecovering(job)
 	}
-	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, time.Now().Add(retryBackoff(job.Attempts)))
+	err := s.queue.Release(context.Background(), job.TrackID, job.Fence, s.now().Add(retryBackoff(job.Attempts)))
 	s.logQueueOutcome("release", job.TrackID, err)
 }
 
