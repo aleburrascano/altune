@@ -16,6 +16,7 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useQueueResume } from '../native/useQueueResume';
 import { loadNativeQueue } from '../native/loadNativeTrack';
+import { _resetPlaybackHealthForTest } from '../playbackHealth';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
 import { libraryTrack, previewTrack } from './fixtures';
@@ -47,6 +48,7 @@ const defaultPlayerImpls = new Map(
 );
 
 beforeEach(() => {
+  _resetPlaybackHealthForTest();
   for (const name of STUBBED_PLAYER_METHODS) {
     nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
   }
