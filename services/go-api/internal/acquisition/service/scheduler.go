@@ -242,7 +242,7 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 
 	key := trackId.String()
 	alreadyTracked := s.pending.track(key)
-	s.primeEnqueue(ctx, trackId, userId, key)
+	s.primeEnqueue(ctx, trackId, userId, key, alreadyTracked)
 
 	if err := s.queue.Enqueue(ctx, trackId, kind, time.Now()); err != nil {
 		return s.handleEnqueueError(ctx, key, trackId, kind, alreadyTracked, err)
@@ -250,11 +250,11 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 	return s.finishEnqueue(ctx, trackId, userId, kind)
 }
 
-func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, key string) {
+func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, key string, alreadyTracked bool) {
 	if mq, ok := s.queue.(*memJobQueue); ok {
 		mq.rememberUser(trackId, userId)
 	}
-	if corrID := logging.CorrelationIDFromContext(ctx); corrID != "" {
+	if corrID := logging.CorrelationIDFromContext(ctx); corrID != "" && !alreadyTracked {
 		s.corrIDs.Store(key, corrID)
 	}
 }
@@ -270,6 +270,7 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId domain.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
 	if !alreadyTracked {
 		s.pending.untrack(key)
+		s.corrIDs.Delete(key)
 	}
 	if errors.Is(err, ports.ErrJobKindConflict) {
 		s.rejected.Add(1)

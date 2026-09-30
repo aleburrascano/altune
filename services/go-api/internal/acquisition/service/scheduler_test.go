@@ -2425,3 +2425,88 @@ func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) 
 		t.Errorf("OldestPendingAge = %v, want 90s", got.OldestPendingAge)
 	}
 }
+
+type conflictingQueue struct {
+	*memJobQueue
+	enqueues  atomic.Int32
+	rejectAll bool
+	gate      chan struct{}
+}
+
+func (q *conflictingQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind acqports.JobKind, at time.Time) error {
+	if n := q.enqueues.Add(1); q.rejectAll || n > 1 {
+		return acqports.ErrJobKindConflict
+	}
+	return q.memJobQueue.Enqueue(ctx, trackID, kind, at)
+}
+
+func (q *conflictingQueue) Claim(ctx context.Context, lease time.Duration) (acqports.Job, error) {
+	select {
+	case <-q.gate:
+		return q.memJobQueue.Claim(ctx, lease)
+	default:
+		return acqports.Job{}, acqports.ErrNoJobAvailable
+	}
+}
+
+func countCorrIDs(s *BackgroundAcquisitionScheduler) int {
+	n := 0
+	s.corrIDs.Range(func(_, _ any) bool { n++; return true })
+	return n
+}
+
+func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *testing.T) {
+	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), rejectAll: true, gate: make(chan struct{})}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	ctx := logging.WithCorrelationID(context.Background(), "corr-rejected")
+	err := scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+
+	if !errors.Is(err, ErrTrackJobInFlight) {
+		t.Fatalf("schedule = %v, want ErrTrackJobInFlight", err)
+	}
+	if got := countCorrIDs(scheduler); got != 0 {
+		t.Errorf("correlation ids retained after a rejected enqueue = %d, want 0", got)
+	}
+}
+
+func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCorrelationID(t *testing.T) {
+	repo := &corrCapturingRepo{fakeTrackRepository: newFakeTrackRepository()}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), gate: make(chan struct{})}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
+		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	userId := shared.NewUserId(uuid.New())
+	trackId := domain.NewTrackId()
+	first := logging.WithCorrelationID(context.Background(), "corr-first")
+	second := logging.WithCorrelationID(context.Background(), "corr-second")
+	if err := scheduler.Schedule(first, userId, trackId, ""); err != nil {
+		t.Fatalf("first schedule: %v", err)
+	}
+	if err := scheduler.Schedule(second, userId, trackId, ""); !errors.Is(err, ErrTrackJobInFlight) {
+		t.Fatalf("second schedule = %v, want ErrTrackJobInFlight", err)
+	}
+	close(queue.gate)
+	wg.Wait()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		repo.mu.Lock()
+		seen := repo.seen
+		repo.mu.Unlock()
+		if seen {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	if repo.corrID != "corr-first" {
+		t.Errorf("claimed job ran under correlation id %q, want %q", repo.corrID, "corr-first")
+	}
+}
