@@ -36,10 +36,14 @@ function fnv1aHex(input: string, basis: number): string {
   return hash.toString(16).padStart(8, '0');
 }
 
+function normalizedAlbum(body: CreateTrackRequest): string {
+  return (body.album ?? '').trim().toLowerCase();
+}
+
 const OPTIMISTIC_ID_PREFIX = 'optimistic-';
 
 export function optimisticTrackId(body: CreateTrackRequest): TrackId {
-  const identity = `${body.title}\u0000${body.artist}`;
+  const identity = `${body.title}\u0000${body.artist}\u0000${normalizedAlbum(body)}`;
   return asTrackId(`${OPTIMISTIC_ID_PREFIX}${fnv1aHex(identity, FNV_OFFSET_BASIS)}`);
 }
 
@@ -52,7 +56,7 @@ export function saveIdempotencyKey(body: CreateTrackRequest): string | undefined
   if (identity === null) {
     return undefined;
   }
-  const album = (body.album ?? '').trim().toLowerCase();
+  const album = normalizedAlbum(body);
   const canonical = `${album.length}:${album}:${identity}`;
   return `save-${fnv1aHex(canonical, FNV_OFFSET_BASIS)}${fnv1aHex(canonical, FNV_PRIME)}`;
 }

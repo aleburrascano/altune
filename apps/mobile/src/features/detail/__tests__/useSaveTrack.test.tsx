@@ -246,3 +246,78 @@ describe('a save in flight at sign-out', () => {
     );
   });
 });
+
+describe('two same-title saves on different albums in flight together', () => {
+  type Settle = { resolve: (track: TrackResponse) => void; reject: (error: Error) => void };
+
+  async function startBoth() {
+    const settles: Record<string, Settle> = {};
+    mockCreateTrack.mockReset();
+    mockCreateTrack.mockImplementation((body) => {
+      const album = (body as { album: string }).album;
+      return new Promise<TrackResponse>((resolve, reject) => {
+        settles[album] = { resolve, reject };
+      });
+    });
+    useTrackStatusStore.getState().reset();
+    const queryClient = createTestQueryClient({ mutations: true });
+    const { result } = renderHook(() => useSaveTrack(), { wrapper: createWrapper(queryClient) });
+    await act(async () => {
+      result.current.mutate({ title: 'Song', artist: 'Artist', album: 'Album' } as never);
+      result.current.mutate({ title: 'Song', artist: 'Artist', album: 'Hits' } as never);
+    });
+    return settles;
+  }
+
+  function savedOn(album: string): TrackResponse {
+    return {
+      id: asTrackId(`server-${album}`),
+      title: 'Song',
+      artist: 'Artist',
+      album,
+      acquisition_status: 'pending',
+    } as TrackResponse;
+  }
+
+  function failedIds(): string[] {
+    const { statuses } = useTrackStatusStore.getState();
+    return Object.keys(statuses).filter(
+      (id) => statuses[id as keyof typeof statuses]?.acquisitionStatus === 'failed',
+    );
+  }
+
+  it.each([
+    ['rejected first', ['Album', 'Hits']],
+    ['rejected last', ['Hits', 'Album']],
+  ])('marks only the rejected save failed when it is %s', async (_label, order) => {
+    const settles = await startBoth();
+    const [first, second] = order as [string, string];
+
+    await act(async () => {
+      settles[first]!.reject(new Error('boom'));
+    });
+    await act(async () => {
+      settles[second]!.resolve(savedOn(second));
+    });
+
+    expect(failedIds()).toHaveLength(1);
+    expect(useTrackStatusStore.getState().statuses[asTrackId(`server-${second}`)]).toBeDefined();
+  });
+
+  it('keeps the survivor placeholder status while the other save fails', async () => {
+    const settles = await startBoth();
+    const pendingBefore = Object.keys(useTrackStatusStore.getState().statuses);
+
+    await act(async () => {
+      settles['Album']!.reject(new Error('boom'));
+    });
+
+    expect(pendingBefore).toHaveLength(2);
+    expect(failedIds()).toHaveLength(1);
+    const statuses = useTrackStatusStore.getState().statuses;
+    const survivors = Object.keys(statuses).filter(
+      (id) => statuses[id as keyof typeof statuses]?.acquisitionStatus === 'pending',
+    );
+    expect(survivors).toHaveLength(1);
+  });
+});

@@ -4,6 +4,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { optimisticTrack, saveIdempotencyKey, toCreateTrackRequest } from '../save-cache';
 import { asTrackId } from '@shared/api-client/ids';
 import { isOptimisticTrackId } from '../save-cache';
+import { optimisticTrackId } from '../save-cache';
 
 type ResultOverrides = {
   title?: string;
@@ -204,5 +205,22 @@ describe('isOptimisticTrackId', () => {
 
   it('does not mistake a server-issued id for a placeholder', () => {
     expect(isOptimisticTrackId(asTrackId('server-1'))).toBe(false);
+  });
+});
+
+describe('optimisticTrackId', () => {
+  const base = { title: 'Song', artist: 'Artist' } as CreateTrackRequest;
+
+  it('separates same-title same-artist saves that differ by album', () => {
+    const onAlbum = optimisticTrackId({ ...base, album: 'Album' });
+    const onCompilation = optimisticTrackId({ ...base, album: 'Greatest Hits' });
+
+    expect(onAlbum).not.toBe(onCompilation);
+  });
+
+  it('gives one id to the same save however the album is cased or padded', () => {
+    expect(optimisticTrackId({ ...base, album: ' ALBUM ' })).toBe(
+      optimisticTrackId({ ...base, album: 'album' }),
+    );
   });
 });
