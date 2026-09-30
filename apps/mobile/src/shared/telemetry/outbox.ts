@@ -230,18 +230,34 @@ export async function flushOutbox(): Promise<void> {
   }
   _flushing = true;
   let retryable = false;
+  const attempted = new Set<string>();
   try {
-    for (const entry of [..._queue]) {
-      if (!flushEnabled()) break;
-      if (!stillOurs(entry)) continue;
-      const outcome = await send(entry);
-      if (outcome === 'sent' || outcome === 'dropped') {
-        commit(_queue.filter((e) => e.event_id !== entry.event_id));
-        continue;
+    let halted = false;
+    while (!halted) {
+      const batch = _queue.filter((e) => !attempted.has(e.event_id));
+      if (batch.length === 0) break;
+      for (const entry of batch) {
+        if (!flushEnabled()) {
+          halted = true;
+          break;
+        }
+        attempted.add(entry.event_id);
+        if (!stillOurs(entry)) continue;
+        const outcome = await send(entry);
+        if (outcome === 'sent' || outcome === 'dropped') {
+          commit(_queue.filter((e) => e.event_id !== entry.event_id));
+          continue;
+        }
+        if (outcome === 'gated') {
+          halted = true;
+          break;
+        }
+        retryable = true;
+        if (outcome === 'offline') {
+          halted = true;
+          break;
+        }
       }
-      if (outcome === 'gated') break;
-      retryable = true;
-      if (outcome === 'offline') break;
     }
   } finally {
     _flushing = false;

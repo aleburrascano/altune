@@ -234,6 +234,62 @@ describe('Reducer: enqueueCritical', () => {
   });
 });
 
+describe('Concurrency: an entry enqueued during an in-flight flush', () => {
+  it('is sent by the same flush cycle with no further trigger', async () => {
+    let releaseFirst: () => void = () => undefined;
+    recordEventMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+
+    const first = enqueueCritical(event({ search_id: 'first' }));
+    const second = enqueueCritical(event({ search_id: 'second' }));
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['first', 'second']);
+    expect(lastPersisted()).toEqual([]);
+  });
+
+  it('never runs two sends concurrently while draining the late entries', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    recordEventMock.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+    });
+
+    await Promise.all([
+      enqueueCritical(event({ search_id: 'a' })),
+      enqueueCritical(event({ search_id: 'b' })),
+      enqueueCritical(event({ search_id: 'c' })),
+    ]);
+
+    expect(sentEntries()).toHaveLength(3);
+    expect(maxInFlight).toBe(1);
+  });
+
+  it('does not re-send a retryable failure in a tight loop', async () => {
+    recordEventMock.mockRejectedValue(new Error('server down'));
+
+    await enqueueCritical(event({ search_id: 'a' }));
+
+    expect(sentEntries()).toHaveLength(1);
+  });
+
+  it('stops at an offline outcome without retrying the entry in the same pass', async () => {
+    recordEventMock.mockRejectedValue(new NetworkError('transport', 'offline'));
+
+    await enqueueCritical(event({ search_id: 'a' }));
+
+    expect(sentEntries()).toHaveLength(1);
+  });
+});
+
 describe('Backpressure: shedding a label-critical entry at the cap is recorded, never silent', () => {
   it('records the drop when enqueuing past MAX_ENTRIES sheds the oldest label-critical entry', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
