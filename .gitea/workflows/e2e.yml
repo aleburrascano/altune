@@ -45,12 +45,13 @@ jobs:
       - name: browser
         if: env.E2E_SKIP != 'true'
         run: cd "$WT/apps/mobile" && npx playwright install chromium
-      - name: stack up
-        if: env.E2E_SKIP != 'true'
-        run: cd "$WT" && bash scripts/e2e-stack.sh up
       - name: journeys
         if: env.E2E_SKIP != 'true'
-        run: cd "$WT/apps/mobile" && npx playwright test -c e2e/playwright.config.ts
+        run: |
+          set -euo pipefail
+          cd "$WT" && bash scripts/e2e-stack.sh up
+          set -a && . "$GITHUB_ENV" && set +a
+          cd apps/mobile && npx playwright test -c e2e/playwright.config.ts
       - name: keep the evidence
         if: failure() && env.E2E_SKIP != 'true'
         run: |
