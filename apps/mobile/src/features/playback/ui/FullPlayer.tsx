@@ -8,6 +8,7 @@ import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
 import { canRetryPlaybackError } from '../retryPolicy';
+import { endedLabel, isPreviewTrack } from './playerStatus';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
@@ -26,7 +27,7 @@ function getStatusDisplay(
 ): { label: string; tone: 'danger' | 'warning' | 'secondary' } {
   if (status === 'error') return { label: 'Error', tone: 'danger' };
   if (status === 'ended') {
-    return { label: isPreview ? 'Preview ended' : 'Finished', tone: 'warning' };
+    return { label: endedLabel(isPreview), tone: 'warning' };
   }
   return {
     label: isPreview ? 'Preview' : 'Now Playing',
@@ -110,7 +111,7 @@ export function FullPlayer() {
     return null;
   }
 
-  const isPreview = track.source.kind === 'preview';
+  const isPreview = isPreviewTrack(track);
 
   const { label: statusLabel, tone: statusTone } = getStatusDisplay(status, isPreview);
 

@@ -3,6 +3,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/types';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { statusFlagsOf } from './playerStatus';
 
 function useQueueTransportState() {
   const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();
@@ -19,14 +20,6 @@ function useQueueTransportState() {
     repeatMode,
     hasNext,
     hasPrevious,
-  };
-}
-
-function statusFlagsOf(playback: PlaybackContextValue) {
-  return {
-    isPlaying: playback.status === 'playing',
-    isEnded: playback.status === 'ended',
-    isError: playback.status === 'error',
   };
 }
 
@@ -54,7 +47,7 @@ function makeOnPlayPause(playback: PlaybackContextValue, isPlaying: boolean, isE
 export function usePlaybackTransport() {
   const playback = usePlayback();
   const queue = useQueueTransportState();
-  const { isPlaying, isEnded, isError } = statusFlagsOf(playback);
+  const { isPlaying, isEnded, isError } = statusFlagsOf(playback.status);
   const onPrevious = makeOnPrevious(playback, queue.skipToPrevious);
   const onPlayPause = makeOnPlayPause(playback, isPlaying, isEnded);
 

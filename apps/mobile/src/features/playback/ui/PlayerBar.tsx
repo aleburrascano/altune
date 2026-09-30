@@ -20,6 +20,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 import { canRetryPlaybackError } from '../retryPolicy';
+import { endedLabel, isPreviewTrack } from './playerStatus';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { TransportControls } from './TransportControls';
@@ -36,12 +37,12 @@ function statusLine(
   artistText: string,
 ) {
   if (isError) return errorMessage ?? 'Playback error';
-  if (isEnded) return isPreview ? 'Preview ended' : 'Finished';
+  if (isEnded) return endedLabel(isPreview);
   return isPreview ? `${artistText} · Preview` : artistText;
 }
 
 function barStatus(transport: Transport) {
-  const isPreview = transport.track!.source.kind === 'preview';
+  const isPreview = isPreviewTrack(transport.track!);
   const artistText = withFeaturing(transport.track!.artist, transport.track!.featuredArtists);
   return statusLine(
     { isError: transport.isError, isEnded: transport.isEnded, isPreview },
@@ -78,43 +79,53 @@ function EmptyBar({ barStyle }: { barStyle: unknown }) {
   );
 }
 
-function BarInfo({ title, status }: { title: string; status: string }) {
+function BarLine({ line }: { line: string }) {
+  return (
+    <Text variant="caption" tone="secondary" numberOfLines={1}>
+      {line}
+    </Text>
+  );
+}
+
+function BarInfo({ title, line }: { title: string; line: string }) {
   return (
     <View style={styles.info}>
       <Text variant="label" numberOfLines={1}>
         {title}
       </Text>
-      <Text variant="caption" tone="secondary" numberOfLines={1}>
-        {status}
-      </Text>
+      <BarLine line={line} />
     </View>
   );
 }
 
-type BarHeaderProps = { track: PlaybackTrack; status: string; onOpenPlayer: () => void };
+type BarHeaderProps = { track: PlaybackTrack; line: string; onOpenPlayer: () => void };
 
 function openPlayerLabel(track: PlaybackTrack) {
   return `Open player: ${track.title} by ${track.artist}`;
 }
 
-function BarHeaderArt({ track, status }: { track: PlaybackTrack; status: string }) {
+function BarHeaderArt({ track, line }: { track: PlaybackTrack; line: string }) {
   return (
     <>
       <Artwork uri={track.artworkUrl} size={44} radius={radius.sm} />
-      <BarInfo title={track.title} status={status} />
+      <BarInfo title={track.title} line={line} />
     </>
   );
 }
 
-function BarHeader({ track, status, onOpenPlayer }: BarHeaderProps) {
+function headerPressable(track: PlaybackTrack, onOpenPlayer: () => void) {
+  return {
+    onPress: onOpenPlayer,
+    style: styles.header,
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: openPlayerLabel(track),
+  };
+}
+
+function BarHeader({ track, line, onOpenPlayer }: BarHeaderProps) {
   return (
-    <Pressable
-      onPress={onOpenPlayer}
-      style={styles.header}
-      accessibilityRole="button"
-      accessibilityLabel={openPlayerLabel(track)}
-    >
-      <BarHeaderArt track={track} status={status} />
+    <Pressable {...headerPressable(track, onOpenPlayer)}>
+      <BarHeaderArt track={track} line={line} />
     </Pressable>
   );
 }
@@ -263,7 +274,7 @@ function BarShell({ state }: { state: ReturnType<typeof usePlayerBarState> }) {
     <View testID="player-bar" style={barStyle}>
       <BarHeader
         track={transport.track!}
-        status={barStatus(transport)}
+        line={barStatus(transport)}
         onOpenPlayer={openPlayer(router)}
       />
       <BarMiddle transport={transport} theme={theme} />

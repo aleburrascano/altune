@@ -14,6 +14,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 import { canRetryPlaybackError } from '../retryPolicy';
+import { endedLabel, isPreviewTrack, statusFlagsOf } from './playerStatus';
 
 export function MiniPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage, errorKind } =
@@ -39,10 +40,8 @@ export function MiniPlayer() {
     return null;
   }
 
-  const isPlaying = status === 'playing';
-  const isError = status === 'error';
-  const isEnded = status === 'ended';
-  const isPreview = track.source.kind === 'preview';
+  const { isPlaying, isError, isEnded } = statusFlagsOf(status);
+  const isPreview = isPreviewTrack(track);
 
   const artistText = withFeaturing(track.artist, track.featuredArtists);
 
@@ -94,9 +93,7 @@ export function MiniPlayer() {
             {isError
               ? (errorMessage ?? 'Playback error')
               : isEnded
-                ? isPreview
-                  ? 'Preview ended'
-                  : 'Finished'
+                ? endedLabel(isPreview)
                 : isPreview
                   ? `${artistText} · Preview`
                   : artistText}
