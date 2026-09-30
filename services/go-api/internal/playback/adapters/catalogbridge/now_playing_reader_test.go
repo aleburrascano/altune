@@ -109,12 +109,8 @@ func TestLookup_EnrichmentFailure_IncrementsMetric(t *testing.T) {
 }
 
 func TestLookup_Timeout_IncrementsBothMetrics(t *testing.T) {
-	prev := nowPlayingLookupTimeout
-	nowPlayingLookupTimeout = 50 * time.Millisecond
-	defer func() { nowPlayingLookupTimeout = prev }()
-
 	m := &recordingMetrics{}
-	reader := NewNowPlayingReader(&blockingTrackReader{}, WithNowPlayingMetrics(m))
+	reader := NewNowPlayingReader(&blockingTrackReader{}, WithNowPlayingMetrics(m), withNowPlayingLookupTimeout(50*time.Millisecond))
 
 	if _, err := reader.Lookup(context.Background(), testUser(), uuid.New().String()); err == nil {
 		t.Fatal("precondition: a stalled catalog lookup must time out with an error")
@@ -129,7 +125,7 @@ func TestLookup_Timeout_IncrementsBothMetrics(t *testing.T) {
 
 func TestLookup_ClientCancellation_RecordsNoMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	reader := NewNowPlayingReader(&blockingTrackReader{}, WithNowPlayingMetrics(m))
+	reader := NewNowPlayingReader(&blockingTrackReader{}, WithNowPlayingMetrics(m), withNowPlayingLookupTimeout(50*time.Millisecond))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -144,11 +140,7 @@ func TestLookup_ClientCancellation_RecordsNoMetric(t *testing.T) {
 }
 
 func TestLookup_DerivesDeadlineWhenDependencyBlocks(t *testing.T) {
-	prev := nowPlayingLookupTimeout
-	nowPlayingLookupTimeout = 50 * time.Millisecond
-	defer func() { nowPlayingLookupTimeout = prev }()
-
-	reader := NewNowPlayingReader(&blockingTrackReader{entered: make(chan struct{})})
+	reader := NewNowPlayingReader(&blockingTrackReader{entered: make(chan struct{})}, withNowPlayingLookupTimeout(50*time.Millisecond))
 
 	done := make(chan error, 1)
 	go func() {
@@ -179,11 +171,7 @@ func (r *recoveringTrackReader) GetByID(ctx context.Context, _ catalogDomain.Tra
 }
 
 func TestLookup_FastFailsAfterSustainedCatalogOutage(t *testing.T) {
-	prev := nowPlayingLookupTimeout
-	nowPlayingLookupTimeout = 50 * time.Millisecond
-	defer func() { nowPlayingLookupTimeout = prev }()
-
-	reader := NewNowPlayingReader(&blockingTrackReader{})
+	reader := NewNowPlayingReader(&blockingTrackReader{}, withNowPlayingLookupTimeout(50*time.Millisecond))
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold; i++ {
@@ -199,18 +187,14 @@ func TestLookup_FastFailsAfterSustainedCatalogOutage(t *testing.T) {
 	if !errors.Is(err, errEnrichmentUnavailable) {
 		t.Fatalf("err = %v, want errEnrichmentUnavailable (breaker open, fast-fail)", err)
 	}
-	if elapsed >= nowPlayingLookupTimeout {
-		t.Fatalf("breaker-open call took %s; expected fast-fail well under the %s timeout", elapsed, nowPlayingLookupTimeout)
+	if elapsed >= reader.timeout {
+		t.Fatalf("breaker-open call took %s; expected fast-fail well under the %s timeout", elapsed, reader.timeout)
 	}
 }
 
 func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
-	prev := nowPlayingLookupTimeout
-	nowPlayingLookupTimeout = 50 * time.Millisecond
-	defer func() { nowPlayingLookupTimeout = prev }()
-
 	catalog := &recoveringTrackReader{healthy: false}
-	reader := NewNowPlayingReader(catalog)
+	reader := NewNowPlayingReader(catalog, withNowPlayingLookupTimeout(50*time.Millisecond))
 	clock := time.Now()
 	reader.breaker.now = func() time.Time { return clock }
 	user := testUser()
@@ -301,12 +285,8 @@ func (r *clientVanishingTrackReader) GetByID(ctx context.Context, _ catalogDomai
 }
 
 func TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker(t *testing.T) {
-	prev := nowPlayingLookupTimeout
-	nowPlayingLookupTimeout = 50 * time.Millisecond
-	defer func() { nowPlayingLookupTimeout = prev }()
-
 	catalog := &recoveringTrackReader{healthy: false}
-	reader := NewNowPlayingReader(catalog)
+	reader := NewNowPlayingReader(catalog, withNowPlayingLookupTimeout(50*time.Millisecond))
 	clock := time.Now()
 	reader.breaker.now = func() time.Time { return clock }
 	user := testUser()
@@ -339,7 +319,7 @@ func TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker(t *testing.T) {
 }
 
 func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
-	reader := NewNowPlayingReader(&blockingTrackReader{})
+	reader := NewNowPlayingReader(&blockingTrackReader{}, withNowPlayingLookupTimeout(50*time.Millisecond))
 	user := testUser()
 
 	for i := 0; i < enrichmentFailureThreshold+2; i++ {
@@ -399,7 +379,7 @@ func (r *staleSuccessReader) GetByID(_ context.Context, _ catalogDomain.TrackId,
 
 func TestLookup_StaleSuccessDoesNotCloseAnOpenBreaker(t *testing.T) {
 	catalog := &staleSuccessReader{firstCallAdmitted: make(chan struct{}), releaseFirstCall: make(chan struct{})}
-	reader := NewNowPlayingReader(catalog)
+	reader := NewNowPlayingReader(catalog, withNowPlayingLookupTimeout(50*time.Millisecond))
 	user := testUser()
 
 	firstDone := make(chan error)

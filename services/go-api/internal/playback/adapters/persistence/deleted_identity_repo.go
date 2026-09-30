@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,11 +21,29 @@ type rowsQuerier interface {
 }
 
 type PgxDeletedIdentityRepository struct {
-	pool rowsQuerier
+	pool    rowsQuerier
+	timeout time.Duration
 }
 
-func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool) *PgxDeletedIdentityRepository {
-	return &PgxDeletedIdentityRepository{pool: pool}
+func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool, opts ...func(*PgxDeletedIdentityRepository)) *PgxDeletedIdentityRepository {
+	r := &PgxDeletedIdentityRepository{pool: pool, timeout: defaultQueueStateOpTimeout}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+func withDeletedIdentityTimeout(d time.Duration) func(*PgxDeletedIdentityRepository) {
+	return func(r *PgxDeletedIdentityRepository) {
+		r.timeout = d
+	}
+}
+
+func (r *PgxDeletedIdentityRepository) opTimeout() time.Duration {
+	if r.timeout > 0 {
+		return r.timeout
+	}
+	return defaultQueueStateOpTimeout
 }
 
 const ownersWithoutIdentitySQL = `
@@ -37,7 +56,7 @@ const ownersWithoutIdentitySQL = `
 	LIMIT $1`
 
 func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Context, limit int) ([]shared.UserId, error) {
-	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	ctx, cancel := context.WithTimeout(ctx, r.opTimeout())
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx, ownersWithoutIdentitySQL, limit)

@@ -13,7 +13,7 @@ import (
 	catalogPorts "altune/go-api/internal/catalog/ports"
 )
 
-var nowPlayingLookupTimeout = 3 * time.Second
+const defaultNowPlayingLookupTimeout = 3 * time.Second
 
 var errEnrichmentUnavailable = errors.New("now-playing enrichment temporarily unavailable")
 
@@ -27,10 +27,11 @@ type NowPlayingReader struct {
 	tracks  trackReader
 	breaker *enrichmentBreaker
 	metrics ports.EnrichmentMetrics
+	timeout time.Duration
 }
 
 func NewNowPlayingReader(tracks trackReader, opts ...func(*NowPlayingReader)) *NowPlayingReader {
-	r := &NowPlayingReader{tracks: tracks, metrics: ports.NoopEnrichmentMetrics()}
+	r := &NowPlayingReader{tracks: tracks, metrics: ports.NoopEnrichmentMetrics(), timeout: defaultNowPlayingLookupTimeout}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -43,6 +44,12 @@ func WithNowPlayingMetrics(m ports.EnrichmentMetrics) func(*NowPlayingReader) {
 		if m != nil {
 			r.metrics = m
 		}
+	}
+}
+
+func withNowPlayingLookupTimeout(d time.Duration) func(*NowPlayingReader) {
+	return func(r *NowPlayingReader) {
+		r.timeout = d
 	}
 }
 
@@ -73,7 +80,7 @@ func (r *NowPlayingReader) Lookup(
 	}
 	defer r.breaker.release(admission)
 
-	callCtx, cancel := context.WithTimeout(ctx, nowPlayingLookupTimeout)
+	callCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	track, err := r.tracks.GetByID(callCtx, id, userId)

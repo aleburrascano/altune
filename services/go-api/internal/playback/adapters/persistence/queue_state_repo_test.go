@@ -138,9 +138,9 @@ func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 }
 
 func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
-	withShortTimeout(t)
 	m := &recordingMetrics{}
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
+	withShortTimeout(repo)
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -449,8 +449,8 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 }
 
 func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	withShortTimeout(t)
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+	withShortTimeout(repo)
 
 	err := runWithGuard(t, func() error {
 		return repo.DeleteForUser(context.Background(), testUser())
@@ -460,11 +460,8 @@ func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	}
 }
 
-func withShortTimeout(t *testing.T) {
-	t.Helper()
-	prev := queueStateOpTimeout
-	queueStateOpTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { queueStateOpTimeout = prev })
+func withShortTimeout(repo *PgxQueueStateRepository) {
+	withQueueStateOpTimeout(50 * time.Millisecond)(repo)
 }
 
 func runWithGuard(t *testing.T, call func() error) error {
@@ -481,8 +478,8 @@ func runWithGuard(t *testing.T, call func() error) error {
 }
 
 func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	withShortTimeout(t)
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+	withShortTimeout(repo)
 
 	err := runWithGuard(t, func() error {
 		return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
@@ -611,9 +608,9 @@ func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 }
 
 func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
-	withShortTimeout(t)
 	m := &recordingMetrics{}
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
+	withShortTimeout(repo)
 
 	err := runWithGuard(t, func() error {
 		return repo.UpdatePosition(context.Background(), testPosition(t))
@@ -627,8 +624,8 @@ func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 }
 
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	withShortTimeout(t)
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+	withShortTimeout(repo)
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -741,8 +738,8 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 		act     func(*testing.T)
 	}{
 		{outcome: "op timeout", act: func(t *testing.T) {
-			withShortTimeout(t)
 			repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+			withShortTimeout(repo)
 			err := runWithGuard(t, func() error {
 				return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
 			})

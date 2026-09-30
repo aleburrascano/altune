@@ -18,7 +18,7 @@ import (
 
 var _ ports.QueueStateRepository = (*PgxQueueStateRepository)(nil)
 
-var queueStateOpTimeout = 3 * time.Second
+const defaultQueueStateOpTimeout = 3 * time.Second
 
 type corruptStoredStateError struct {
 	cause error
@@ -40,10 +40,11 @@ type querier interface {
 type PgxQueueStateRepository struct {
 	pool    querier
 	metrics ports.QueueStateMetrics
+	timeout time.Duration
 }
 
 func NewPgxQueueStateRepository(pool *pgxpool.Pool, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
-	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics()}
+	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics(), timeout: defaultQueueStateOpTimeout}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -58,6 +59,19 @@ func WithQueueStateMetrics(m ports.QueueStateMetrics) func(*PgxQueueStateReposit
 	}
 }
 
+func withQueueStateOpTimeout(d time.Duration) func(*PgxQueueStateRepository) {
+	return func(r *PgxQueueStateRepository) {
+		r.timeout = d
+	}
+}
+
+func (r *PgxQueueStateRepository) opTimeout() time.Duration {
+	if r.timeout > 0 {
+		return r.timeout
+	}
+	return defaultQueueStateOpTimeout
+}
+
 func (r *PgxQueueStateRepository) recordTimeout(parent context.Context, err error) {
 	if errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil {
 		r.metrics.QueueStateOpTimedOut()
@@ -70,7 +84,7 @@ func (r *PgxQueueStateRepository) runOp(
 	userId shared.UserId,
 	run func(opCtx context.Context) error,
 ) error {
-	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	opCtx, cancel := context.WithTimeout(ctx, r.opTimeout())
 	defer cancel()
 
 	err := run(opCtx)
@@ -221,7 +235,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 
 const erasureFenceWindow = 15 * time.Minute
 
-var erasureSaveGrace = queueStateOpTimeout
+var erasureSaveGrace = defaultQueueStateOpTimeout
 
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
 	return r.runOp(ctx, "delete_for_user", userId, func(opCtx context.Context) error {

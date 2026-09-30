@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -50,5 +51,25 @@ func TestListOwnersWithoutIdentity_QueryFailureStaysAFailure(t *testing.T) {
 	}
 	if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
 		t.Error("a failed connection was classified as an absent identity store, so the sweep would idle through an outage")
+	}
+}
+
+type blockingRowsQuerier struct{}
+
+func (blockingRowsQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestListOwnersWithoutIdentity_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
+	repo := &PgxDeletedIdentityRepository{pool: blockingRowsQuerier{}}
+	withDeletedIdentityTimeout(50 * time.Millisecond)(repo)
+
+	err := runWithGuard(t, func() error {
+		_, err := repo.ListOwnersWithoutIdentity(context.Background(), 10)
+		return err
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}
 }
