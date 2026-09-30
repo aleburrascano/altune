@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -203,10 +204,14 @@ func isProviderCredential(name string) bool {
 
 func truncate(s string) string {
 	s = strings.TrimSpace(s)
-	if len(s) > 300 {
-		return s[:300]
+	if len(s) <= 300 {
+		return s
 	}
-	return s
+	cut := 300
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 func largestAudioFile(dir string) (string, error) {

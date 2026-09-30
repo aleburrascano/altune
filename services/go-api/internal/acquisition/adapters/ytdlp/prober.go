@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -122,7 +123,11 @@ func firstLine(s string) string {
 		s = s[:i]
 	}
 	if len(s) > 200 {
-		s = s[:200]
+		cut := 200
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut]
 	}
 	if s == "" {
 		return "decoder produced no diagnostic output"

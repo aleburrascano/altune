@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func identityWith(provider, externalID, url string) ports.RecordingIdentity {
@@ -581,5 +582,26 @@ func TestLargestAudioFile_MissingDirectoryIsAnError(t *testing.T) {
 	got, err := largestAudioFile(missing)
 	if err == nil {
 		t.Fatalf("largestAudioFile(%q) = %q, nil; want an error", missing, got)
+	}
+}
+
+func TestTruncateKeepsValidUTF8WhenRuneCrossesCap(t *testing.T) {
+	in := strings.Repeat("a", 299) + "é" + "tail"
+	got := truncate(in)
+	if !utf8.ValidString(got) {
+		t.Fatalf("invalid UTF-8: %q", got)
+	}
+	if got != strings.Repeat("a", 299) {
+		t.Fatalf("got len %d", len(got))
+	}
+}
+
+func TestTruncateLeavesShortAndASCIIUnchanged(t *testing.T) {
+	in := strings.Repeat("b", 350)
+	if got := truncate(in); got != in[:300] {
+		t.Fatalf("ascii cap changed: len %d", len(got))
+	}
+	if got := truncate("héllo"); got != "héllo" {
+		t.Fatalf("short changed: %q", got)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func fakeFfmpegProber(t *testing.T, script string, decodeTimeout time.Duration) *FfprobeProber {
@@ -134,5 +135,26 @@ func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testi
 	}
 	if len(rec.gates) != 1 || rec.gates[0] != "decoder_unavailable" {
 		t.Errorf("recorded gates = %v, want [decoder_unavailable]", rec.gates)
+	}
+}
+
+func TestFirstLineKeepsValidUTF8WhenRuneCrossesCap(t *testing.T) {
+	in := strings.Repeat("a", 199) + "é" + "tail"
+	got := firstLine(in)
+	if !utf8.ValidString(got) {
+		t.Fatalf("invalid UTF-8: %q", got)
+	}
+	if got != strings.Repeat("a", 199) {
+		t.Fatalf("got len %d", len(got))
+	}
+}
+
+func TestFirstLineLeavesShortAndASCIIUnchanged(t *testing.T) {
+	in := strings.Repeat("b", 250)
+	if got := firstLine(in); got != in[:200] {
+		t.Fatalf("ascii cap changed: len %d", len(got))
+	}
+	if got := firstLine("héllo"); got != "héllo" {
+		t.Fatalf("short changed: %q", got)
 	}
 }
