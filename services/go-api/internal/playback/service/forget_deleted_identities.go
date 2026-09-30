@@ -9,7 +9,10 @@ import (
 	"log/slog"
 )
 
-const deletedIdentityBatch = 500
+const (
+	deletedIdentityBatch            = 500
+	maxDeletedIdentityBatchesPerRun = 20
+)
 
 type ForgetDeletedIdentitiesService struct {
 	identities ports.DeletedIdentityLister
@@ -32,32 +35,46 @@ func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, q
 }
 
 func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, error) {
-	owners, err := s.identities.ListOwnersWithoutIdentity(ctx, deletedIdentityBatch)
-	if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
-		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
-		s.metrics.SweepIdle()
-		return 0, fmt.Errorf("deleted identity sweep idle: %w", ports.ErrIdentityStoreUnavailable)
+	forgotten := 0
+	var failures []error
+	for range maxDeletedIdentityBatchesPerRun {
+		owners, err := s.identities.ListOwnersWithoutIdentity(ctx, deletedIdentityBatch)
+		if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
+			slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
+			s.metrics.SweepIdle()
+			failures = append(failures, fmt.Errorf("deleted identity sweep idle: %w", ports.ErrIdentityStoreUnavailable))
+			break
+		}
+		if err != nil {
+			failures = append(failures, fmt.Errorf("list deleted identities: %w", err))
+			break
+		}
+		erased, batchFailures := s.forgetAll(ctx, owners)
+		forgotten += erased
+		failures = append(failures, batchFailures...)
+		if len(owners) < deletedIdentityBatch || erased == 0 || ctx.Err() != nil {
+			break
+		}
 	}
-	if err != nil {
-		return 0, fmt.Errorf("list deleted identities: %w", err)
-	}
-	return s.forgetAll(ctx, owners)
+	logDeletedIdentitySweep(ctx, forgotten)
+	return forgotten, errors.Join(failures...)
 }
 
-func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) (int, error) {
+func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) (int, []error) {
 	forgotten := 0
+	var failures []error
 	for _, owner := range owners {
 		if err := ctx.Err(); err != nil {
-			return forgotten, fmt.Errorf("forget deleted identities: %w", err)
+			return forgotten, append(failures, fmt.Errorf("forget deleted identities: %w", err))
 		}
 		if err := s.queue.Forget(ctx, owner); err != nil {
-			return forgotten, fmt.Errorf("forget deleted identity: %w", err)
+			failures = append(failures, fmt.Errorf("forget deleted identity: %w", err))
+			continue
 		}
 		forgotten++
 		s.metrics.QueueStateErased(1)
 	}
-	logDeletedIdentitySweep(ctx, forgotten)
-	return forgotten, nil
+	return forgotten, failures
 }
 
 func logDeletedIdentitySweep(ctx context.Context, forgotten int) {

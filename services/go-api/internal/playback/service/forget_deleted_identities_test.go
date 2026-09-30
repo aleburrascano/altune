@@ -173,7 +173,7 @@ func TestForgetDeletedIdentities_FailedErasureStopsTheRun(t *testing.T) {
 	}
 }
 
-func TestForgetDeletedIdentities_ErasesABoundedBatchPerRun(t *testing.T) {
+func TestForgetDeletedIdentities_ErasesABacklogAcrossBatchesInOneRun(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	svc := NewQueueService(repo, &fakeNowPlaying{})
@@ -181,25 +181,98 @@ func TestForgetDeletedIdentities_ErasesABoundedBatchPerRun(t *testing.T) {
 	for range deletedIdentityBatch + overflow {
 		identities.deleteAccount(saveQueueOf(t, svc, identities, "search:pino daniele"))
 	}
-	sweep := newSweep(repo, identities)
 
-	firstRun, err := sweep.Execute(context.Background())
+	forgotten, err := newSweep(repo, identities).Execute(context.Background())
 	if err != nil {
-		t.Fatalf("Execute (first run): %v", err)
-	}
-	secondRun, err := sweep.Execute(context.Background())
-	if err != nil {
-		t.Fatalf("Execute (second run): %v", err)
+		t.Fatalf("Execute: %v", err)
 	}
 
-	if firstRun != deletedIdentityBatch {
-		t.Errorf("first run forgot %d accounts, want a bounded %d", firstRun, deletedIdentityBatch)
-	}
-	if secondRun != overflow {
-		t.Errorf("second run forgot %d accounts, want the %d the first run left", secondRun, overflow)
+	if forgotten != deletedIdentityBatch+overflow {
+		t.Errorf("run forgot %d accounts, want the whole backlog of %d", forgotten, deletedIdentityBatch+overflow)
 	}
 	if len(repo.states) != 0 {
-		t.Errorf("%d deleted accounts still hold queue state after both runs", len(repo.states))
+		t.Errorf("%d deleted accounts still hold queue state after one run", len(repo.states))
+	}
+}
+
+type failingOwnersQueueRepo struct {
+	inMemoryQueueRepo
+	failing map[shared.UserId]error
+}
+
+func (r *failingOwnersQueueRepo) DeleteForUser(ctx context.Context, userId shared.UserId) error {
+	if err := r.failing[userId]; err != nil {
+		return err
+	}
+	return r.inMemoryQueueRepo.DeleteForUser(ctx, userId)
+}
+
+type fixedListing struct {
+	owners []shared.UserId
+	calls  int
+}
+
+func (l *fixedListing) ListOwnersWithoutIdentity(_ context.Context, _ int) ([]shared.UserId, error) {
+	l.calls++
+	return l.owners, nil
+}
+
+func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T) {
+	repo := &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: map[shared.UserId]error{}}
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	svc := NewQueueService(repo, &fakeNowPlaying{})
+	first := saveQueueOf(t, svc, identities, "search:a")
+	failing := saveQueueOf(t, svc, identities, "search:b")
+	last := saveQueueOf(t, svc, identities, "search:c")
+	for _, u := range []shared.UserId{first, failing, last} {
+		identities.deleteAccount(u)
+	}
+	dbDown := errors.New("connection refused")
+	repo.failing[failing] = dbDown
+	sweep := NewForgetDeletedIdentitiesService(identities, svc)
+
+	forgotten, err := sweep.Execute(context.Background())
+
+	if !errors.Is(err, dbDown) {
+		t.Fatalf("Execute = %v, want an error wrapping the failing owner", err)
+	}
+	if forgotten != 2 {
+		t.Errorf("forgot %d accounts, want the 2 healthy ones", forgotten)
+	}
+	if stored, _ := repo.GetForUser(context.Background(), failing); stored == nil {
+		t.Error("the failing owner's state vanished without an erasure")
+	}
+	for _, u := range []shared.UserId{first, last} {
+		if stored, _ := repo.GetForUser(context.Background(), u); stored != nil {
+			t.Errorf("owner %s behind or after the failing one was not erased", u)
+		}
+	}
+}
+
+func TestForgetDeletedIdentities_StopsAtTheCapWhenOwnersKeepFailing(t *testing.T) {
+	dbDown := errors.New("connection refused")
+	owners := make([]shared.UserId, deletedIdentityBatch)
+	failing := map[shared.UserId]error{}
+	for i := range owners {
+		owners[i] = shared.NewUserId(uuid.New())
+		if i > 0 {
+			failing[owners[i]] = dbDown
+		}
+	}
+	listing := &fixedListing{owners: owners}
+	repo := &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: failing}
+	sweep := NewForgetDeletedIdentitiesService(listing, NewQueueService(repo, &fakeNowPlaying{}))
+
+	forgotten, err := sweep.Execute(context.Background())
+
+	if !errors.Is(err, dbDown) {
+		t.Fatalf("Execute = %v, want the failures reported", err)
+	}
+	if listing.calls != maxDeletedIdentityBatchesPerRun {
+		t.Errorf("listed %d batches, want the cap of %d", listing.calls, maxDeletedIdentityBatchesPerRun)
+	}
+	if forgotten != maxDeletedIdentityBatchesPerRun {
+		t.Errorf("forgot %d, want one per capped batch (%d)", forgotten, maxDeletedIdentityBatchesPerRun)
 	}
 }
 
