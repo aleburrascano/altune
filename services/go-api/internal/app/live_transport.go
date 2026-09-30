@@ -33,6 +33,10 @@ var providerRateLimits = map[string]rate.Limit{
 	"auth.deezer.com":            1,
 	"pipe.deezer.com":            3,
 	"theaudiodb.com":             0.5,
+	"music.amazon.com":           2,
+	"music.apple.com":            2,
+	"clienttoken.spotify.com":    2,
+	"soundcloud.com":             2,
 }
 
 const defaultProviderBurst = 4

@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"math/rand/v2"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -321,37 +326,55 @@ func TestLiveTransport_MusicBrainzAllowsNoBurst(t *testing.T) {
 	}
 }
 
-var wiredProviderHosts = []string{
-	"musicbrainz.org",
-	"itunes.apple.com",
-	"ws.audioscrobbler.com",
-	"music.youtube.com",
-	"api.discogs.com",
-	"api.deezer.com",
-	"api-v2.soundcloud.com",
-	"na.web.skill.music.a2z.com",
-	"api-partner.spotify.com",
-	"api.genius.com",
-	"webservice.fanart.tv",
-	"coverartarchive.org",
-	"api.music.apple.com",
-	"open.spotify.com",
-	"auth.deezer.com",
-	"pipe.deezer.com",
-	"theaudiodb.com",
+var notFetchedHosts = map[string]bool{"e-cdns-images.dzcdn.net": true}
+
+var adapterURLHost = regexp.MustCompile(`"https?://([a-zA-Z0-9.-]+)`)
+
+func adapterHosts(t *testing.T) []string {
+	t.Helper()
+	root := filepath.Join("..", "discovery", "adapters")
+	seen := map[string]struct{}{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		src, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		for _, m := range adapterURLHost.FindAllSubmatch(src, -1) {
+			if !notFetchedHosts[string(m[1])] {
+				seen[string(m[1])] = struct{}{}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosts := make([]string, 0, len(seen))
+	for h := range seen {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	return hosts
 }
 
 func TestLiveTransport_EveryWiredProviderHostHasLimiter(t *testing.T) {
 	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
-	for _, h := range wiredProviderHosts {
+	hosts := adapterHosts(t)
+	if len(hosts) == 0 {
+		t.Fatal("found no adapter URL hosts to check")
+	}
+	for _, h := range hosts {
 		if lt.limiter(h) == nil {
-			t.Errorf("wired provider host %q has no rate limit", h)
+			t.Errorf("adapter URL host %q has no rate limit", h)
 		}
 	}
 }
 
 func TestLiveTransport_PacedHostRetries429ThenSucceeds(t *testing.T) {
-	for _, h := range wiredProviderHosts[9:] {
+	for _, h := range adapterHosts(t) {
 		t.Run(h, func(t *testing.T) {
 			rt := &fakeRT{steps: []fakeStep{{status: 429}, {status: 200}}}
 			lt := recordDelays(rt, &[]time.Duration{})
