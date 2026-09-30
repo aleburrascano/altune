@@ -49,7 +49,7 @@ func resolveExpectedCluster(ctx context.Context, identifier ports.AudioIdentifie
 
 	cluster, err := identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition.expected_cluster_failed",
+		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.expected_cluster_failed"),
 			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", logSafeError(err))
 		return
 	}
