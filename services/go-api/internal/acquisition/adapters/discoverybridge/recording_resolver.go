@@ -246,7 +246,7 @@ func toIdentity(res discoverydomain.SearchResult) acqports.RecordingIdentity {
 		if src.ExternalID == "" {
 			continue
 		}
-		identity.Sources = append(identity.Sources, acqports.RecordingSource{
+		identity.Sources = append(identity.Sources, acqports.ProviderRef{
 			Provider:   providerKey(src.Provider),
 			ExternalID: src.ExternalID,
 			URL:        src.URL,
@@ -255,7 +255,7 @@ func toIdentity(res discoverydomain.SearchResult) acqports.RecordingIdentity {
 	return identity
 }
 
-func providerKey(p discoverydomain.ProviderName) string {
+func providerKey(p discoverydomain.ProviderName) acqports.RecordingProvider {
 	switch p {
 	case discoverydomain.ProviderYouTube:
 		return acqports.ProviderYouTube
@@ -264,6 +264,6 @@ func providerKey(p discoverydomain.ProviderName) string {
 	case discoverydomain.ProviderSoundCloud:
 		return acqports.ProviderSoundCloud
 	default:
-		return p.String()
+		return acqports.RecordingProvider(p.String())
 	}
 }

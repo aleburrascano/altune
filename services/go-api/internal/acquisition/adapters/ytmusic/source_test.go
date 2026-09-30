@@ -23,7 +23,7 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 		Artist: "The Weeknd",
 		Identity: ports.RecordingIdentity{
 			Duration: 200,
-			Sources:  []ports.RecordingSource{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
+			Sources:  []ports.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
 		},
 	}
 
@@ -62,7 +62,7 @@ func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 			got, err := src.Find(context.Background(), ports.FindRequest{
 				Title: "Song",
 				Identity: ports.RecordingIdentity{
-					Sources: []ports.RecordingSource{{Provider: "youtube", ExternalID: videoID}},
+					Sources: []ports.ProviderRef{{Provider: "youtube", ExternalID: videoID}},
 				},
 			})
 			if err != nil {
@@ -93,7 +93,7 @@ func TestFind_IgnoresNonYouTubeSources(t *testing.T) {
 		Title:  "T",
 		Artist: "A",
 		Identity: ports.RecordingIdentity{
-			Sources: []ports.RecordingSource{{Provider: "deezer", ExternalID: "999"}},
+			Sources: []ports.ProviderRef{{Provider: "deezer", ExternalID: "999"}},
 		},
 	}
 

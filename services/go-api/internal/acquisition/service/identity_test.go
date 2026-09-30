@@ -6,7 +6,7 @@ import (
 )
 
 func TestRecordingIdentity_SourceFor(t *testing.T) {
-	id := ports.RecordingIdentity{Sources: []ports.RecordingSource{
+	id := ports.RecordingIdentity{Sources: []ports.ProviderRef{
 		{Provider: "deezer", ExternalID: "123"},
 		{Provider: "youtube", ExternalID: "abc"},
 	}}

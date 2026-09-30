@@ -37,7 +37,7 @@ func (s stubSearcher) Execute(context.Context, shared.UserId, *discoverydomain.S
 
 func TestProviderKey_IsByteIdenticalToDiscoveryString(t *testing.T) {
 	for p := discoverydomain.ProviderUnknown; p <= discoverydomain.ProviderSpotify; p++ {
-		if got, want := providerKey(p), p.String(); got != want {
+		if got, want := string(providerKey(p)), p.String(); got != want {
 			t.Errorf("providerKey(%v) = %q, want %q", p, got, want)
 		}
 	}
@@ -62,7 +62,7 @@ func TestResolve_SourcesAreKeyedBySharedProviderConstants(t *testing.T) {
 		t.Fatalf("Resolve: %v", err)
 	}
 
-	for key, wantID := range map[string]string{
+	for key, wantID := range map[acqports.RecordingProvider]string{
 		acqports.ProviderYouTube:    "vid123",
 		acqports.ProviderDeezer:     "3135556",
 		acqports.ProviderSoundCloud: "999",

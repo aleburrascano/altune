@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/execcmd"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -18,9 +19,9 @@ const canaryTimeout = 60 * time.Second
 const soundCloudPreviewDuration = 30.0
 
 const (
-	youtubeCanaryName    = "youtube"
+	youtubeCanaryName    = string(ports.ProviderYouTube)
 	ytMusicCanaryName    = "ytmusic"
-	soundCloudCanaryName = "soundcloud"
+	soundCloudCanaryName = string(ports.ProviderSoundCloud)
 )
 
 type CanarySource struct {

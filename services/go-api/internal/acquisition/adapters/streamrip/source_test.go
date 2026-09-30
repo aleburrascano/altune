@@ -15,7 +15,7 @@ import (
 func identityWith(provider, externalID, url string) ports.RecordingIdentity {
 	return ports.RecordingIdentity{
 		Duration: 200,
-		Sources:  []ports.RecordingSource{{Provider: provider, ExternalID: externalID, URL: url}},
+		Sources:  []ports.ProviderRef{{Provider: ports.RecordingProvider(provider), ExternalID: externalID, URL: url}},
 	}
 }
 

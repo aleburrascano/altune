@@ -26,7 +26,7 @@ const (
 
 var audioExtensions = []string{".flac", ".m4a", ".mp3", ".opus", ".ogg"}
 
-var trackURLs = map[string]string{
+var trackURLs = map[ports.RecordingProvider]string{
 	ports.ProviderTidal:      "https://tidal.com/browse/track/",
 	ports.ProviderDeezer:     "https://www.deezer.com/track/",
 	ports.ProviderQobuz:      "https://open.qobuz.com/track/",
@@ -44,20 +44,20 @@ var (
 )
 
 func Supported(service string) bool {
-	_, ok := trackURLs[service]
+	_, ok := trackURLs[ports.RecordingProvider(service)]
 	return ok
 }
 
 var _ ports.AudioSource = (*Source)(nil)
 
 type Source struct {
-	service      string
+	service      ports.RecordingProvider
 	bin          string
 	fetchTimeout time.Duration
 }
 
 func NewSource(service string) *Source {
-	return &Source{service: service, bin: defaultBin, fetchTimeout: defaultFetchTimeout}
+	return &Source{service: ports.RecordingProvider(service), bin: defaultBin, fetchTimeout: defaultFetchTimeout}
 }
 
 func (s *Source) WithBinary(bin string) *Source {
@@ -93,13 +93,13 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 		Title:      req.Title,
 		Duration:   req.Identity.Duration,
 		URL:        candidateURL,
-		Channel:    s.service + " catalog",
+		Channel:    string(s.service) + " catalog",
 		Categories: []string{"Music"},
 		Resolved:   true,
 	}}, nil
 }
 
-func (s *Source) trackURL(source ports.RecordingSource) string {
+func (s *Source) trackURL(source ports.ProviderRef) string {
 	prefix, ok := trackURLs[s.service]
 	if !ok {
 		return ""
@@ -145,7 +145,7 @@ func isSoundCloudAddress(u *url.URL) bool {
 	return u.Scheme == "https" && u.User == nil && soundCloudHosts[strings.ToLower(u.Host)]
 }
 
-func logUnusableSource(ctx context.Context, service string, source ports.RecordingSource) {
+func logUnusableSource(ctx context.Context, service ports.RecordingProvider, source ports.ProviderRef) {
 	if source.ExternalID == "" && source.URL == "" {
 		return
 	}
