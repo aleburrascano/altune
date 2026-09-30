@@ -83,7 +83,7 @@ func contentServiceOptions(
 ) []discoveryService.Option {
 	opts := baseSearchOptions(cfg, pool)
 	opts = append(opts, explorationSearchOptions(cfg)...)
-	opts = append(opts, contentSearchOptions(w.cf, cfg, pool, redisClient, w.sharedMB)...)
+	opts = append(opts, contentSearchOptions(w.cf, cfg, pool, redisClient, w.sharedMB, w.breaker)...)
 	opts = append(opts, resultCacheSearchOptions(redisClient)...)
 	return append(opts, sharedSearchOptions(w, cfg, redisClient, eventStore, vocabStore)...)
 }
@@ -140,10 +140,14 @@ func contentSearchOptions(
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	sharedMB *providers.MusicBrainzAdapter,
+	breaker *discoveryService.CircuitBreaker,
 ) []discoveryService.Option {
 	deezerContent := providers.NewDeezerAdapter(cf.discovery())
 	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
-	findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
+	findRelatedSvc := discoveryService.NewFindRelatedService(
+		relationshipQuerier, deezerContent, deezerContent,
+		discoveryService.WithFindRelatedCircuitBreaker(breaker),
+	)
 	opts := []discoveryService.Option{
 		discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
 		discoveryService.WithFindRelatedService(findRelatedSvc),

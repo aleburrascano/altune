@@ -748,3 +748,49 @@ func TestRelatedMemo_ItemsExpireAfterTTLOnTheInjectedClock(t *testing.T) {
 		t.Error("entry past its ttl was still served")
 	}
 }
+
+type breakerProbeAlbumProvider struct {
+	calls atomic.Int32
+	err   error
+}
+
+func (c *breakerProbeAlbumProvider) GetAlbumTracks(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	c.calls.Add(1)
+	return nil, c.err
+}
+
+func relatedAlbumTrackQuery() []domain.SearchResult {
+	track := trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	track.DeezerAlbumID = "12345"
+	return []domain.SearchResult{track}
+}
+
+func TestFindRelated_OpenDeezerBreakerSkipsProviderCall(t *testing.T) {
+	cb := NewCircuitBreaker()
+	for range failureThreshold {
+		cb.RecordFailure(domain.ProviderDeezer)
+	}
+	provider := &breakerProbeAlbumProvider{}
+	svc := NewFindRelatedService(nil, provider, nil, WithFindRelatedCircuitBreaker(cb))
+
+	got := svc.Execute(context.Background(), newUser(), relatedAlbumTrackQuery())
+
+	if provider.calls.Load() != 0 || len(got) != 0 {
+		t.Errorf("provider calls = %d, groups = %d; want 0, 0", provider.calls.Load(), len(got))
+	}
+}
+
+func TestFindRelated_DeezerFailureRecordsOnSharedBreaker(t *testing.T) {
+	cb := NewCircuitBreaker()
+	provider := &breakerProbeAlbumProvider{err: context.DeadlineExceeded}
+	svc := NewFindRelatedService(nil, provider, nil, WithFindRelatedCircuitBreaker(cb))
+
+	for range failureThreshold {
+		svc.Execute(context.Background(), newUser(), relatedAlbumTrackQuery())
+	}
+	svc.Execute(context.Background(), newUser(), relatedAlbumTrackQuery())
+
+	if provider.calls.Load() != failureThreshold {
+		t.Errorf("provider calls = %d, want %d then circuit open", provider.calls.Load(), failureThreshold)
+	}
+}

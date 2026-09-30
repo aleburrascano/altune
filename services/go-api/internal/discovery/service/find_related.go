@@ -26,19 +26,31 @@ type FindRelatedService struct {
 	albumProvider  ports.AlbumContentProvider
 	artistProvider ports.ArtistContentProvider
 	memo           *relatedMemo
+	breaker        *CircuitBreaker
+}
+
+type FindRelatedOption func(*FindRelatedService)
+
+func WithFindRelatedCircuitBreaker(cb *CircuitBreaker) FindRelatedOption {
+	return func(s *FindRelatedService) { s.breaker = cb }
 }
 
 func NewFindRelatedService(
 	querier ports.RelationshipQuerier,
 	albumProvider ports.AlbumContentProvider,
 	artistProvider ports.ArtistContentProvider,
+	opts ...FindRelatedOption,
 ) *FindRelatedService {
-	return &FindRelatedService{
+	s := &FindRelatedService{
 		querier:        querier,
 		albumProvider:  albumProvider,
 		artistProvider: artistProvider,
 		memo:           newRelatedMemo(relatedMemoTTL, time.Now),
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *FindRelatedService) Execute(
@@ -102,7 +114,9 @@ func (s *FindRelatedService) dispatchAlbumTracks(fan *relatedFanOut, result doma
 		return
 	}
 	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
-		tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
+		tracks, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
+			return s.albumProvider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
+		})
 		if isPartialResult(err) {
 			return truncateRelated(tracks), nil
 		}
@@ -129,7 +143,9 @@ func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result dom
 		return
 	}
 	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
-		albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
+		albums, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
+			return s.artistProvider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
+		})
 		if isPartialResult(err) {
 			return truncateRelated(albums), nil
 		}
