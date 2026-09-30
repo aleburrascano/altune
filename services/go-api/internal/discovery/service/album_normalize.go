@@ -8,12 +8,16 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
+func titleSubtitleKey(title, subtitle string) string {
+	return textnorm.NormalizeForMatch(title) + "|" + textnorm.NormalizeForMatch(subtitle)
+}
+
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 	seen := make(map[string]int)
 	var deduped []domain.SearchResult
 
 	for _, r := range results {
-		normTitle := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
+		normTitle := titleSubtitleKey(r.Title, r.Subtitle)
 		if idx, ok := seen[normTitle]; ok {
 			if r.TrackCount > deduped[idx].TrackCount {
 				deduped[idx] = r

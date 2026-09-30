@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"sync"
@@ -351,14 +350,14 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.SearchResult) []domain.RelatedGroup {
 	seen := make(map[string]bool, len(organic))
 	for _, r := range organic {
-		seen[textnorm.NormalizeForMatch(r.Title)+"|"+textnorm.NormalizeForMatch(r.Subtitle)] = true
+		seen[titleSubtitleKey(r.Title, r.Subtitle)] = true
 	}
 
 	var filtered []domain.RelatedGroup
 	for _, g := range groups {
 		var items []domain.SearchResult
 		for _, item := range g.Items {
-			key := textnorm.NormalizeForMatch(item.Title) + "|" + textnorm.NormalizeForMatch(item.Subtitle)
+			key := titleSubtitleKey(item.Title, item.Subtitle)
 			if !seen[key] {
 				seen[key] = true
 				items = append(items, item)

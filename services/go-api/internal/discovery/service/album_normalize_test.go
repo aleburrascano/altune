@@ -190,3 +190,20 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+func TestTitleSubtitleKey(t *testing.T) {
+	tests := []struct {
+		name, title, subtitle, want string
+	}{
+		{"both normalized", "OK Computer", "Radiohead", "ok computer|radiohead"},
+		{"empty subtitle", "Kid A", "", "kid a|"},
+		{"empty title", "", "Bjork", "|bjork"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := titleSubtitleKey(tt.title, tt.subtitle); got != tt.want {
+				t.Errorf("titleSubtitleKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
+			}
+		})
+	}
+}
