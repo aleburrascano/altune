@@ -3,7 +3,6 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -414,56 +413,15 @@ func (s *DownloadStep) verify(
 ) (verificationResult, *downloadRejection) {
 	var result verificationResult
 
-	if s.prober != nil && ac.Track.Duration <= 0 {
-		s.recordSkip(ports.SkipNoDuration)
+	duration, probed, rejection := s.verifyDuration(ctx, ac, candidate, filePath)
+	if rejection != nil {
+		return result, rejection
 	}
-	if s.prober != nil && ac.Track.Duration > 0 {
-		actual, err := s.prober.ProbeDuration(ctx, filePath)
-		switch {
-		case err != nil:
-			slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
-				"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-				"error", logSafeError(err))
-			s.recordSkip(ports.SkipProbeFailed)
-		case !ac.durationAcceptable(actual):
-			slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
-				"track_id", ac.Track.ID,
-				"url", candidate.URL,
-				"source", candidate.Source,
-				"actual_duration", actual,
-				"expected_duration", ac.Track.Duration,
-				"authoritative", ac.Identity.Duration > 0,
-			)
-			return result, &downloadRejection{
-				stage:  RejectionDuration,
-				reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, ac.Track.Duration),
-				err: fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
-					candidate.URL, actual, ac.Track.Duration),
-			}
-		default:
-			result.duration = true
-			result.probed = actual
-		}
-	}
+	result.duration = duration
+	result.probed = probed
 
-	if s.prober != nil {
-		if err := s.prober.ValidateDecodable(ctx, filePath); err != nil {
-			if ctx.Err() != nil {
-				return result, &downloadRejection{
-					stage:  RejectionDownload,
-					reason: "decode cancelled",
-					err:    withCancellation(ctx, fmt.Errorf("candidate %q decode cancelled: %w", candidate.URL, err)),
-				}
-			}
-			slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
-				"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-				"error", logSafeError(err))
-			return result, &downloadRejection{
-				stage:  RejectionUndecodable,
-				reason: "audio failed to decode",
-				err:    fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err),
-			}
-		}
+	if rejection := s.verifyDecodable(ctx, ac, candidate, filePath); rejection != nil {
+		return result, rejection
 	}
 
 	if prior != nil {
@@ -478,235 +436,101 @@ func (s *DownloadStep) verify(
 	return result, nil
 }
 
-type identification struct {
-	verdict  AudioVerdict
-	identity bool
-}
-
-func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
-	source, ok := s.fetcher.(previewSource)
-	if !ok || s.identifier == nil || ac.Identity.MBID == "" {
-		return nil, false
-	}
-	return source.PreviewFetcherFor(candidate)
-}
-
-func (s *DownloadStep) previewIdentification(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-) (*identification, *downloadRejection) {
-	previewer, ok := s.previewer(ac, candidate)
-	if !ok {
-		return nil, nil
-	}
-
-	started := time.Now()
-	match, err := s.identifyPreview(ctx, ac, candidate, previewer)
-	if err != nil {
-		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.preview_fallback"),
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"error", logSafeError(err))
-		s.recordSkip(ports.SkipPreviewFallback)
-		return nil, nil
-	}
-
-	verdict := classifyMatch(ac, match, candidate.Duration)
-	logPreviewFingerprint(ctx, ac, candidate, verdict, time.Since(started))
-	judged := verificationResult{verdict: verdict}
-	if rejection := judgeVerdict(ctx, ac, candidate, match, &judged); rejection != nil {
-		return nil, rejection
-	}
-	return &identification{verdict: verdict, identity: judged.identity}, nil
-}
-
-func identifyFailureEvent(err error, fallback string) string {
-	if errors.Is(err, ports.ErrIdentifyThrottled) {
-		return "acquisition.identify_throttled"
-	}
-	return fallback
-}
-
-func logPreviewFingerprint(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	verdict AudioVerdict,
-	elapsed time.Duration,
-) {
-	slog.InfoContext(ctx, "acquisition.preview_fingerprint",
-		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-		"fetch_ms", elapsed.Milliseconds(), "verdict", string(verdict.Kind))
-}
-
-func (s *DownloadStep) identifyPreview(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	previewer ports.PreviewFetcher,
-) (ports.RecordingMatch, error) {
-	previewDir, err := os.MkdirTemp("", tempDirPrefix+"preview-*")
-	if err != nil {
-		return ports.RecordingMatch{}, fmt.Errorf("create preview dir: %w", err)
-	}
-	defer os.RemoveAll(previewDir)
-
-	previewPath, err := s.fetchPreview(ctx, previewer, candidate, previewDir)
-	if err != nil {
-		return ports.RecordingMatch{}, err
-	}
-	return s.identifier.Identify(ctx, previewPath, candidate.Duration)
-}
-
-func (s *DownloadStep) fetchPreview(
-	ctx context.Context,
-	previewer ports.PreviewFetcher,
-	candidate ports.AudioCandidate,
-	previewDir string,
-) (string, error) {
-	if err := s.limiter.Acquire(ctx); err != nil {
-		return "", err
-	}
-	defer s.limiter.Release()
-	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
-	defer cancel()
-	return previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
-}
-
-func (s *DownloadStep) identify(
+func (s *DownloadStep) verifyDuration(
 	ctx context.Context,
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	filePath string,
-	result *verificationResult,
-) *downloadRejection {
-	if s.identifier == nil || ac.Identity.MBID == "" {
-		return nil
+) (bool, float64, *downloadRejection) {
+	if s.prober == nil {
+		return false, 0, nil
 	}
+	if ac.Track.Duration <= 0 {
+		s.recordSkip(ports.SkipNoDuration)
+		return false, 0, nil
+	}
+	return s.probeDuration(ctx, ac, candidate, filePath)
+}
 
-	match, err := s.identifier.Identify(ctx, filePath, 0)
-	if err != nil {
-		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.identify_failed"),
+func (s *DownloadStep) probeDuration(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	filePath string,
+) (bool, float64, *downloadRejection) {
+	actual, err := s.prober.ProbeDuration(ctx, filePath)
+	switch {
+	case err != nil:
+		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
-		s.recordSkip(ports.SkipIdentifyFailed)
-		return nil
-	}
-
-	result.verdict = classifyMatch(ac, match, result.probed)
-	logAudioVerdict(ctx, ac, candidate, result.verdict)
-	return judgeVerdict(ctx, ac, candidate, match, result)
-}
-
-func classifyMatch(ac *AcquisitionContext, match ports.RecordingMatch, probed float64) AudioVerdict {
-	verdict := ClassifyAudio(referenceFor(ac), probed, match.Results)
-	if verdict.Kind == VerdictUnknown && match.Known() && identityAgrees(ac, match) {
-		return AudioVerdict{Kind: VerdictHard, Score: match.Score}
-	}
-	return verdict
-}
-
-func identityAgrees(ac *AcquisitionContext, match ports.RecordingMatch) bool {
-	return match.Matches(ac.Identity.MBID) || match.InCluster(ac.Identity.AcoustIDs)
-}
-
-func referenceFor(ac *AcquisitionContext) AudioReference {
-	mbids := ac.Identity.MBIDs
-	if len(mbids) == 0 {
-		mbids = []string{ac.Identity.MBID}
-	}
-	duration := ac.Identity.Duration
-	if duration == 0 {
-		duration = ac.Track.Duration
-	}
-	return AudioReference{Title: ac.Track.Title, Artist: ac.Track.Artist, Duration: duration, MBIDs: mbids}
-}
-
-const maxLoggedSurviving = 5
-
-func logAudioVerdict(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate, verdict AudioVerdict) {
-	slog.InfoContext(ctx, "acquisition.audio_verdict",
-		"track_id", ac.Track.ID,
-		"candidate_url", candidate.URL,
-		"verdict", string(verdict.Kind),
-		"score", verdict.Score,
-		"surviving", loggedSurviving(verdict.Surviving),
-		"reference_doubted", ac.Identity.ReferenceDoubted,
-	)
-}
-
-func loggedSurviving(surviving []ports.LinkedRecording) []map[string]string {
-	logged := make([]map[string]string, 0, min(len(surviving), maxLoggedSurviving))
-	for _, recording := range surviving[:min(len(surviving), maxLoggedSurviving)] {
-		logged = append(logged, map[string]string{"mbid": recording.MBID, "title": recording.Title})
-	}
-	return logged
-}
-
-func judgeVerdict(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
-	result *verificationResult,
-) *downloadRejection {
-	switch result.verdict.Kind {
-	case VerdictHard, VerdictSoft:
-		result.identity = true
-		return nil
-	case VerdictOtherVersion:
-		return fingerprintRejection(candidate, "other version")
-	case VerdictDifferentSong:
-		return fingerprintRejection(candidate, "different song")
+		s.recordSkip(ports.SkipProbeFailed)
+		return false, 0, nil
+	case !ac.durationAcceptable(actual):
+		return false, 0, durationRejection(ctx, ac, candidate, actual)
 	default:
-		return judgeUnknown(ctx, ac, candidate, match)
+		return true, actual, nil
 	}
 }
 
-func judgeUnknown(
+func durationRejection(
 	ctx context.Context,
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
+	actual float64,
 ) *downloadRejection {
-	switch {
-	case !match.Known():
-		slog.InfoContext(ctx, "acquisition.identify_unknown",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
-		return nil
-	case len(ac.Identity.AcoustIDs) == 0:
-		slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
-			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
-		return nil
-	default:
-		logFingerprintRejected(ctx, ac, candidate, match)
-		return fingerprintRejection(candidate, "different recording")
-	}
-}
-
-func logFingerprintRejected(
-	ctx context.Context,
-	ac *AcquisitionContext,
-	candidate ports.AudioCandidate,
-	match ports.RecordingMatch,
-) {
-	slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
+	slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
 		"track_id", ac.Track.ID,
 		"url", candidate.URL,
 		"source", candidate.Source,
-		"want_mbid", ac.Identity.MBID,
-		"want_acoustids", ac.Identity.AcoustIDs,
-		"got_acoustid", match.AcoustID,
-		"got_mbids", match.MBIDs,
+		"actual_duration", actual,
+		"expected_duration", ac.Track.Duration,
+		"authoritative", ac.Identity.Duration > 0,
 	)
+	return &downloadRejection{
+		stage:  RejectionDuration,
+		reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, ac.Track.Duration),
+		err: fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
+			candidate.URL, actual, ac.Track.Duration),
+	}
 }
 
-func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downloadRejection {
+func (s *DownloadStep) verifyDecodable(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	filePath string,
+) *downloadRejection {
+	if s.prober == nil {
+		return nil
+	}
+	err := s.prober.ValidateDecodable(ctx, filePath)
+	if err == nil {
+		return nil
+	}
+	return decodeRejection(ctx, ac, candidate, err)
+}
+
+func decodeRejection(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	err error,
+) *downloadRejection {
+	if ctx.Err() != nil {
+		return &downloadRejection{
+			stage:  RejectionDownload,
+			reason: "decode cancelled",
+			err:    withCancellation(ctx, fmt.Errorf("candidate %q decode cancelled: %w", candidate.URL, err)),
+		}
+	}
+	slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
+		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
+		"error", logSafeError(err))
 	return &downloadRejection{
-		stage:  RejectionFingerprint,
-		reason: reason,
-		err:    fmt.Errorf("candidate %q rejected by fingerprint: %s", candidate.URL, reason),
+		stage:  RejectionUndecodable,
+		reason: "audio failed to decode",
+		err:    fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err),
 	}
 }
 
