@@ -109,3 +109,17 @@ describe('AlbumMoreTracks: the static failure header', () => {
     expect(screen.queryByTestId('detail-more-from-album-retry')).toBeNull();
   });
 });
+
+describe('AlbumMoreTracks: the save-all outcome', () => {
+  it('shows how many tracks could not be saved after a partial failure', () => {
+    renderMore({ expanded: true, lastBatch: { saved: 1, failed: 2 } });
+
+    expect(screen.getByText("2 couldn't be saved")).toBeTruthy();
+  });
+
+  it('shows no message when the batch fully succeeded', () => {
+    renderMore({ expanded: true, lastBatch: { saved: 3, failed: 0 } });
+
+    expect(screen.queryByText(/couldn't be saved/)).toBeNull();
+  });
+});

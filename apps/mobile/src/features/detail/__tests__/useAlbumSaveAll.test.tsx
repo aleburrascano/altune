@@ -128,6 +128,37 @@ describe('useAlbumSaveAll', () => {
   });
 });
 
+describe('useAlbumSaveAll batch outcome', () => {
+  it('reports saved and failed counts, and a retry sends only the failed tracks', async () => {
+    const failing = new Set(['Track 1', 'Track 2']);
+    const mutateAsync = jest.fn((req: { title: string }) =>
+      failing.has(req.title) ? Promise.reject(new Error('boom')) : Promise.resolve(),
+    );
+    const save = { mutate: jest.fn(), mutateAsync, isPending: false } as never;
+    const candidates = [track(0), track(1), track(2)];
+    const { result } = renderHook(() =>
+      useAlbumSaveAll({ album, candidates, libraryComplete: true, save }),
+    );
+    expect(result.current.lastBatch).toBeNull();
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+    expect(result.current.lastBatch).toEqual({ saved: 1, failed: 2 });
+
+    failing.clear();
+    mutateAsync.mockClear();
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+
+    expect(mutateAsync.mock.calls.map(([req]) => req.title)).toEqual(['Track 1', 'Track 2']);
+    expect(result.current.lastBatch).toEqual({ saved: 2, failed: 0 });
+  });
+});
+
 describe('useAlbumSaveAll across sign-out', () => {
   it('stops issuing saves for queued tracks once the session ends', async () => {
     const dbl = saveDouble();

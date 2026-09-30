@@ -2,11 +2,13 @@ import { type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
+import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { type ContentFailure } from '../content-status';
+import { type LastBatch } from '../hooks/useAlbumSaveAll';
 import { type AlbumDetailState } from '../hooks/useAlbumDetailState';
 
 import { trackSubtitleWithFeaturing } from './formatters';
@@ -26,6 +28,7 @@ type AlbumMoreTracksProps = {
   onToggle: () => void;
   savingAll: boolean;
   onSaveAll: () => void;
+  lastBatch?: LastBatch | null | undefined;
   rowActions: AlbumMoreTracksRowActions;
   failure: ContentFailure | null;
   onRetry: () => void;
@@ -89,10 +92,20 @@ function moreSaveAllProps(props: AlbumMoreTracksProps) {
   };
 }
 
+function SaveAllFailure({ batch }: { batch: LastBatch | null | undefined }): ReactElement | null {
+  if (!batch || batch.failed === 0) return null;
+  return (
+    <Text variant="body" tone="danger" testID="detail-save-all-more-failed">
+      {`${batch.failed} couldn't be saved`}
+    </Text>
+  );
+}
+
 function MoreTracksExpanded(props: AlbumMoreTracksProps): ReactElement {
   return (
     <>
       <MoreTrackRows {...props} />
+      <SaveAllFailure batch={props.lastBatch} />
       <Button {...moreSaveAllProps(props)} />
     </>
   );

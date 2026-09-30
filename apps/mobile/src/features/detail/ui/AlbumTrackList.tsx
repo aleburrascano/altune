@@ -104,7 +104,7 @@ function moreFromAlbumVisibility(album: AlbumDetailState) {
 }
 
 function moreFromAlbumSaveState(album: AlbumDetailState) {
-  return { savingAll: album.savingAll, onSaveAll: album.onSaveAll };
+  return { savingAll: album.savingAll, onSaveAll: album.onSaveAll, lastBatch: album.lastBatch };
 }
 
 function moreFromAlbumRowActions(album: AlbumDetailState) {

@@ -63,7 +63,10 @@ type AlbumSaveAllArgs = {
   save: ReturnType<typeof useSaveTrack>;
 };
 
+export type LastBatch = { saved: number; failed: number };
+
 type AlbumSaveAll = {
+  lastBatch: LastBatch | null;
   savingAll: boolean;
   isSavingInBatch: (track: DiscoveryResult) => boolean;
   onSaveAll: () => void;
@@ -72,15 +75,6 @@ type AlbumSaveAll = {
 function _isClaimed(claims: ReadonlySet<string>, track: DiscoveryResult): boolean {
   const identity = _trackIdentity(track);
   return identity !== null && claims.has(identity);
-}
-
-function _warnIfFailed(album: DiscoveryResult, outcome: BatchOutcome<DiscoveryResult>): void {
-  if (outcome.failed.length === 0) return;
-  console.warn('[detail] save all finished with failures', {
-    album: album.title,
-    saved: outcome.succeeded.length,
-    failed: outcome.failed.length,
-  });
 }
 
 function useBatchLock() {
@@ -104,19 +98,20 @@ function useBatchState() {
   return { savingAll: lock.savingAll, activeRef: lock.activeRef, isSavingInBatch, setBatch };
 }
 
-function useOutcomeRecorder(album: DiscoveryResult) {
+function useOutcomeRecorder() {
   const saved = useRef(new Set<string>());
+  const [lastBatch, setLastBatch] = useState<LastBatch | null>(null);
   const record = (outcome: BatchOutcome<DiscoveryResult>): void => {
     for (const identity of _identitiesOf(outcome.succeeded)) saved.current.add(identity);
-    _warnIfFailed(album, outcome);
+    setLastBatch({ saved: outcome.succeeded.length, failed: outcome.failed.length });
   };
-  return { saved, record };
+  return { saved, lastBatch, record, clear: () => setLastBatch(null) };
 }
 
-function useSaveAllState(album: DiscoveryResult) {
+function useSaveAllState() {
   const batch = useBatchState();
-  const outcomes = useOutcomeRecorder(album);
-  return { ...batch, saved: outcomes.saved, record: outcomes.record };
+  const outcomes = useOutcomeRecorder();
+  return { ...batch, ...outcomes };
 }
 
 function _runBatch(
@@ -134,6 +129,7 @@ function _startBatch(
   args: AlbumSaveAllArgs,
   state: ReturnType<typeof useSaveAllState>,
 ): void {
+  state.clear();
   state.setBatch(pending);
   void _runBatch(pending, args)
     .then(state.record)
@@ -141,11 +137,16 @@ function _startBatch(
 }
 
 export function useAlbumSaveAll(args: AlbumSaveAllArgs): AlbumSaveAll {
-  const state = useSaveAllState(args.album);
+  const state = useSaveAllState();
   const onSaveAll = (): void => {
     if (state.activeRef.current || !args.libraryComplete) return;
     const pending = _notYetSaved(_unownedTracks(args.candidates), state.saved.current);
     if (pending.length > 0) _startBatch(pending, args, state);
   };
-  return { savingAll: state.savingAll, isSavingInBatch: state.isSavingInBatch, onSaveAll };
+  return {
+    lastBatch: state.lastBatch,
+    savingAll: state.savingAll,
+    isSavingInBatch: state.isSavingInBatch,
+    onSaveAll,
+  };
 }

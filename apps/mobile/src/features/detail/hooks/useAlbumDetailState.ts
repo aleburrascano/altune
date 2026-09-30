@@ -11,7 +11,7 @@ import { useAlbumDiscovery } from './useAlbumDiscovery';
 import { useAlbumTracks } from './useAlbumTracks';
 import { useLibraryTracksForAlbum } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
-import { enrichAlbumTrack, useAlbumSaveAll } from './useAlbumSaveAll';
+import { enrichAlbumTrack, useAlbumSaveAll, type LastBatch } from './useAlbumSaveAll';
 import { useOwnedPlayback } from './useOwnedPlayback';
 import { trackExtras } from '../extras-accessors';
 import { normalizeForCompare } from '../text-compare';
@@ -40,6 +40,7 @@ export type AlbumDetailState = {
   discoveryError: boolean;
   discoveryFailure: ContentFailure | null;
   discoveryRefetch: () => void;
+  lastBatch?: LastBatch | null;
   savingAll: boolean;
   isSavingInBatch: (track: DiscoveryResult) => boolean;
   onTrackPress: (track: DiscoveryResult) => void;
@@ -101,7 +102,7 @@ export function useAlbumDetailState(
     openDetail(enrichAlbumTrack(track, album));
   };
 
-  const { savingAll, isSavingInBatch, onSaveAll } = useAlbumSaveAll({
+  const { lastBatch, savingAll, isSavingInBatch, onSaveAll } = useAlbumSaveAll({
     album: album,
     candidates: hasSources ? tracks : [...tracks, ...moreTracks],
     libraryComplete: localTracks.complete !== false,
@@ -134,6 +135,7 @@ export function useAlbumDetailState(
     discoveryRefetch: () => {
       void discovery.refetch();
     },
+    lastBatch,
     savingAll,
     isSavingInBatch,
     onTrackPress,
