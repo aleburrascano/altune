@@ -26,7 +26,7 @@ func newMockStep(name string, executionLog *[]string) *mockStep {
 	return &mockStep{name: name, executionLog: executionLog}
 }
 
-func (s *mockStep) Name() string { return s.name }
+func (s *mockStep) Name() StepName { return StepName(s.name) }
 
 func (s *mockStep) Execute(_ context.Context, _ *AcquisitionContext) error {
 	s.executed = true

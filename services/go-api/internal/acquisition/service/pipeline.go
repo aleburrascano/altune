@@ -20,17 +20,20 @@ type (
 	afterUpdate   struct{}
 )
 
+type StepName string
+
 const (
-	stepNameSearch      = "search"
-	stepNameSelect      = "select"
-	stepNameDownload    = "download"
-	stepNameTag         = "tag"
-	stepNameStore       = "store"
-	stepNameUpdateTrack = "update_track"
+	stepNameSearch      StepName = "search"
+	stepNameSelect      StepName = "select"
+	stepNameDownload    StepName = "download"
+	stepNameTag         StepName = "tag"
+	stepNameStore       StepName = "store"
+	stepNameUpdateTrack StepName = "update_track"
+	stepNamePipeline    StepName = "pipeline"
 )
 
 type undoable interface {
-	Name() string
+	Name() StepName
 	Rollback(ctx context.Context, ac *AcquisitionContext) error
 }
 
@@ -54,7 +57,7 @@ func (p Pipeline) withUpdateTrack(s stage[afterStore, afterUpdate]) Pipeline {
 }
 
 type StepError struct {
-	Step string
+	Step StepName
 	Err  error
 }
 
@@ -73,7 +76,7 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			step := "pipeline"
+			step := stepNamePipeline
 			if run.current != nil {
 				step = run.current.Name()
 			}
@@ -121,7 +124,7 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 	}
 
 	run.current = s
-	run.reporter.stage(s.Name())
+	run.reporter.stage(string(s.Name()))
 	if ac.Selected != nil {
 		run.reporter.source(ac.Selected.URL)
 	}

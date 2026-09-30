@@ -61,7 +61,7 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 			name := tt.step.Name()
 			code := failureCode(&StepError{Step: name, Err: errors.New("boom")})
 
-			if name != tt.wantName {
+			if string(name) != tt.wantName {
 				t.Errorf("Name() = %q, want %q", name, tt.wantName)
 			}
 			if code != tt.wantCode {
@@ -137,7 +137,7 @@ func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
 		errors.New("pipeline cancelled: context canceled"),
 		errors.New("unexpected"),
 	}
-	for _, step := range []string{"search", "select", "download", "tag", "store", "update_track", "unknown"} {
+	for _, step := range []StepName{"search", "select", "download", "tag", "store", "update_track", "unknown"} {
 		errs = append(errs, &StepError{Step: step, Err: errors.New("boom")})
 	}
 	for _, err := range errs {
@@ -169,7 +169,7 @@ func TestSearchAndStoreSteps_GenuineFailure_KeepsStepReason(t *testing.T) {
 }
 
 func TestFailureReason_WrappedContextErrorIsCancellationForEveryStep(t *testing.T) {
-	for _, step := range []string{"search", "select", "download", "tag", "store", "update_track"} {
+	for _, step := range []StepName{"search", "select", "download", "tag", "store", "update_track"} {
 		for _, ctxErr := range []error{context.Canceled, context.DeadlineExceeded} {
 			err := &StepError{Step: step, Err: errors.Join(errors.New("adapter failed"), ctxErr)}
 			if got := failureReason(err); got != string(domain.FailureAcquisitionCancelled) {

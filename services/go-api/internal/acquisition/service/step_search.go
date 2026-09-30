@@ -23,7 +23,7 @@ func NewSearchStep(finder candidateFinder) *SearchStep {
 	return &SearchStep{finder: finder}
 }
 
-func (s *SearchStep) Name() string { return stepNameSearch }
+func (s *SearchStep) Name() StepName { return stepNameSearch }
 
 func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipelineStart) (afterSearch, error) {
 	candidates, outage, err := s.find(ctx, findRequestFor(ac))

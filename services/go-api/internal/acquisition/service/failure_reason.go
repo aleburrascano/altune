@@ -63,7 +63,7 @@ func withCancellation(ctx context.Context, err error) error {
 	return fmt.Errorf("%w (%w)", err, ctxErr)
 }
 
-func reasonForStep(step string) (domain.FailureCode, bool) {
+func reasonForStep(step StepName) (domain.FailureCode, bool) {
 	switch step {
 	case stepNameSearch, stepNameSelect:
 		return domain.FailureNoMatchFound, true

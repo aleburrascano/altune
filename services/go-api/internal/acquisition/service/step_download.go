@@ -78,7 +78,7 @@ func (s *DownloadStep) confidenceFloor() float64 {
 	return s.floor
 }
 
-func (s *DownloadStep) Name() string { return stepNameDownload }
+func (s *DownloadStep) Name() StepName { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
 	if s.width > 1 {
