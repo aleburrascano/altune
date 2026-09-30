@@ -18,16 +18,24 @@ type healthCache struct {
 	mu        sync.Mutex
 	result    observeHandler.DependencyHealth
 	expiresAt time.Time
+	now       func() time.Time
+}
+
+func (c *healthCache) clock() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
 }
 
 func (c *healthCache) get(probe func() observeHandler.DependencyHealth) observeHandler.DependencyHealth {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if time.Now().Before(c.expiresAt) {
+	if c.clock().Before(c.expiresAt) {
 		return c.result
 	}
 	c.result = probe()
-	c.expiresAt = time.Now().Add(healthCacheTTL)
+	c.expiresAt = c.clock().Add(healthCacheTTL)
 	return c.result
 }
 

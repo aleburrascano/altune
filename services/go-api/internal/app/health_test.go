@@ -157,6 +157,29 @@ func TestHandleHealth_ConcurrentRequestsShareOneProbe(t *testing.T) {
 	}
 }
 
+func TestHealthCache_ReprobesOnceClockPassesTTL(t *testing.T) {
+	current := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cache := &healthCache{now: func() time.Time { return current }}
+	probes := 0
+	probe := func() observeHandler.DependencyHealth {
+		probes++
+		return observeHandler.DependencyHealth{}
+	}
+
+	cache.get(probe)
+	current = current.Add(healthCacheTTL - time.Nanosecond)
+	cache.get(probe)
+	if probes != 1 {
+		t.Fatalf("probes just inside TTL: got %d, want 1", probes)
+	}
+
+	current = current.Add(time.Nanosecond)
+	cache.get(probe)
+	if probes != 2 {
+		t.Errorf("probes once TTL elapsed: got %d, want 2", probes)
+	}
+}
+
 func TestHandleHealth_ReportsVersion(t *testing.T) {
 	original := buildCommit
 	buildCommit = "abc123deadbeef"
