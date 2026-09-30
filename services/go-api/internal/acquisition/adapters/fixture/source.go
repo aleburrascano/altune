@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	SourceName     = "fixture"
-	clipSeconds    = 1.032
-	maxClipRepeats = 1200
-	candidateURL   = "https://fixture.invalid/clip.mp3"
-	fetchedName    = "fixture.mp3"
+	SourceName     ports.SourceName = "fixture"
+	clipSeconds                     = 1.032
+	maxClipRepeats                  = 1200
+	candidateURL                    = "https://fixture.invalid/clip.mp3"
+	fetchedName                     = "fixture.mp3"
 )
 
 //go:embed clip.mp3
@@ -27,7 +27,7 @@ type Source struct{}
 
 func NewSource() *Source { return &Source{} }
 
-func (s *Source) Name() string { return SourceName }
+func (s *Source) Name() ports.SourceName { return SourceName }
 
 func (s *Source) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return []ports.AudioCandidate{{

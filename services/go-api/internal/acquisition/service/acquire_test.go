@@ -546,7 +546,7 @@ func (r *committingTrackRepo) committed(id domain.TrackId, userId shared.UserId)
 
 type newAudioSource struct{}
 
-func (newAudioSource) Name() string { return "new-audio" }
+func (newAudioSource) Name() ports.SourceName { return "new-audio" }
 
 func (newAudioSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return []ports.AudioCandidate{{
@@ -1061,7 +1061,7 @@ func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *tes
 
 type unknownTopicSource struct{}
 
-func (unknownTopicSource) Name() string { return "unknown-topic" }
+func (unknownTopicSource) Name() ports.SourceName { return "unknown-topic" }
 
 func (unknownTopicSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return []ports.AudioCandidate{{

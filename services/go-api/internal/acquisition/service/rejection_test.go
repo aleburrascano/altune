@@ -93,7 +93,7 @@ type capturingSource struct {
 	fetched []string
 }
 
-func (c *capturingSource) Name() string { return "capturing" }
+func (c *capturingSource) Name() ports.SourceName { return "capturing" }
 
 func (c *capturingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	offered := []string{

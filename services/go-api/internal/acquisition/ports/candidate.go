@@ -20,7 +20,7 @@ type AudioCandidate struct {
 	Channel    string
 	Categories []string
 	ViewCount  int64
-	Source     string
+	Source     SourceName
 	Resolved   bool
 	Unplayable string
 }

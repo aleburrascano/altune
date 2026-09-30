@@ -92,7 +92,7 @@ func mergeSlotsReportingOutage(
 	)
 }
 
-func stampSource(name string, candidates []ports.AudioCandidate) []ports.AudioCandidate {
+func stampSource(name ports.SourceName, candidates []ports.AudioCandidate) []ports.AudioCandidate {
 	out := make([]ports.AudioCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		c.Source = name

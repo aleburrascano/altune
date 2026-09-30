@@ -281,15 +281,15 @@ func TestAudioSourcesToggle(t *testing.T) {
 	}
 }
 
-func sourceNames(sources []acqPorts.AudioSource) []string {
-	names := make([]string, 0, len(sources))
+func sourceNames(sources []acqPorts.AudioSource) []acqPorts.SourceName {
+	names := make([]acqPorts.SourceName, 0, len(sources))
 	for _, s := range sources {
 		names = append(names, s.Name())
 	}
 	return names
 }
 
-func containsSource(list []string, want string) bool {
+func containsSource(list []acqPorts.SourceName, want acqPorts.SourceName) bool {
 	for _, s := range list {
 		if s == want {
 			return true

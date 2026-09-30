@@ -138,7 +138,7 @@ func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (s
 	return s.downloadPath, s.downloadErr
 }
 
-func (s *fakeAudioSearcher) Name() string { return "fake" }
+func (s *fakeAudioSearcher) Name() acqports.SourceName { return "fake" }
 
 func (s *fakeAudioSearcher) Find(ctx context.Context, _ acqports.FindRequest) ([]acqports.AudioCandidate, error) {
 	return s.Search(ctx, "")

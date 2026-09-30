@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	SourceName     = "ytmusic"
-	identityKey    = ports.ProviderYouTube
-	watchURLPrefix = "https://music.youtube.com/watch?v="
-	catalogChannel = "YouTube Music catalog"
+	SourceName     ports.SourceName = "ytmusic"
+	identityKey                     = ports.ProviderYouTube
+	watchURLPrefix                  = "https://music.youtube.com/watch?v="
+	catalogChannel                  = "YouTube Music catalog"
 )
 
 var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
@@ -30,7 +30,7 @@ func NewSource(fetcher audioFetcher) *Source {
 	return &Source{fetcher: fetcher}
 }
 
-func (s *Source) Name() string { return SourceName }
+func (s *Source) Name() ports.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	source, ok := req.Identity.SourceFor(identityKey)

@@ -5,7 +5,7 @@ import (
 	"context"
 )
 
-const SourceName = "ytdlp"
+const SourceName ports.SourceName = "ytdlp"
 
 var (
 	_ ports.AudioSource    = (*Source)(nil)
@@ -20,7 +20,7 @@ func NewSource(searcher *YtDlpAudioSearcher) *Source {
 	return &Source{searcher: searcher}
 }
 
-func (s *Source) Name() string { return SourceName }
+func (s *Source) Name() ports.SourceName { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	candidates, err := s.searcher.SearchQueries(ctx, ports.SearchQueries(req))

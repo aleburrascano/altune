@@ -30,7 +30,7 @@ func (s *fileWritingSearcher) Search(_ context.Context, _ string) ([]ports.Audio
 	return nil, nil
 }
 
-func (s *fileWritingSearcher) Name() string { return "filewriting" }
+func (s *fileWritingSearcher) Name() ports.SourceName { return "filewriting" }
 
 func (s *fileWritingSearcher) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return nil, nil
@@ -1383,13 +1383,13 @@ func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T
 }
 
 type findOnlySource struct {
-	name       string
+	name       ports.SourceName
 	candidates []ports.AudioCandidate
 	err        error
 	fetchErr   error
 }
 
-func (s findOnlySource) Name() string { return s.name }
+func (s findOnlySource) Name() ports.SourceName { return s.name }
 
 func (s findOnlySource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return s.candidates, s.err

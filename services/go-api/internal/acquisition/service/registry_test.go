@@ -10,7 +10,7 @@ import (
 )
 
 type stubSource struct {
-	name       string
+	name       ports.SourceName
 	found      []ports.AudioCandidate
 	findErr    error
 	panicValue any
@@ -19,7 +19,7 @@ type stubSource struct {
 	fetched    []ports.AudioCandidate
 }
 
-func (s *stubSource) Name() string { return s.name }
+func (s *stubSource) Name() ports.SourceName { return s.name }
 
 func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	if s.panicValue != nil {

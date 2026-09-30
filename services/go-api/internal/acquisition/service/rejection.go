@@ -29,12 +29,12 @@ const (
 type CandidateRejection struct {
 	URL    string
 	Title  string
-	Source string
+	Source ports.SourceName
 	Stage  RejectionStage
 	Reason string
 }
 
-func (ac *AcquisitionContext) recordRejection(url, title, source string, stage RejectionStage, reason string) {
+func (ac *AcquisitionContext) recordRejection(url, title string, source ports.SourceName, stage RejectionStage, reason string) {
 	ac.Rejections = append(ac.Rejections, CandidateRejection{
 		URL:    url,
 		Title:  title,

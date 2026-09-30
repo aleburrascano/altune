@@ -16,8 +16,10 @@ type FindRequest struct {
 	Identity RecordingIdentity
 }
 
+type SourceName string
+
 type AudioSource interface {
-	Name() string
+	Name() SourceName
 
 	Find(ctx context.Context, req FindRequest) ([]AudioCandidate, error)
 
@@ -29,7 +31,7 @@ type PreviewFetcher interface {
 }
 
 type SourceUnavailableError struct {
-	Source string
+	Source SourceName
 	Err    error
 }
 

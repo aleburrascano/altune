@@ -73,7 +73,7 @@ func (s *Source) Available() bool {
 
 func (s *Source) Binary() string { return s.bin }
 
-func (s *Source) Name() string { return "streamrip:" + s.service }
+func (s *Source) Name() ports.SourceName { return "streamrip:" + ports.SourceName(s.service) }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	source, ok := req.Identity.SourceFor(s.service)
