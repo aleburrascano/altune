@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"context"
 	"errors"
 	"log/slog"
 	"math"
@@ -103,7 +104,19 @@ func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Requ
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
 	}
+	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+		rej.rejectClientCancelled(w, r, err)
+		return
+	}
 	rej.rejectVerifierUnavailable(w, r, err)
+}
+
+func (rej rejecter) rejectClientCancelled(w http.ResponseWriter, r *http.Request, err error) {
+	slog.InfoContext(r.Context(), "auth.client_cancelled",
+		"error", err.Error(),
+		"path", r.URL.Path,
+	)
+	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 }
 
 func (rej rejecter) rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {

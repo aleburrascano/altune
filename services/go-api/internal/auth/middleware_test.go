@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -374,6 +375,42 @@ func TestMiddleware_VerifierUnavailableCountsAsFailedAttempt(t *testing.T) {
 	}
 	if rec := serveBearer(handler, "203.0.113.7:1", "t"); rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("status %d, want 429: JWKS-outage attempts must not be free", rec.Code)
+	}
+}
+
+func TestMiddleware_ClientCancelledDuringVerifyIsNotAnOutage(t *testing.T) {
+	logs := captureJSONLog(t)
+	metrics := &recordingMetrics{}
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	cancelled := stubVerifier(shared.UserId{}, fmt.Errorf("fetch JWKS: %w", context.Canceled))
+	next, _ := noopHandler()
+	handler := middleware(cancelled, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+
+	serve := func() *httptest.ResponseRecorder {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
+		req.RemoteAddr = "203.0.113.7:1"
+		req.Header.Set("Authorization", "Bearer t")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := serve(); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status %d, want 503", rec.Code)
+	}
+	if metrics.unavailable != 0 {
+		t.Errorf("VerifierUnavailable calls %d, want 0", metrics.unavailable)
+	}
+	if strings.Contains(logs.String(), `"level":"ERROR"`) {
+		t.Errorf("client cancel logged at ERROR:\n%s", logs.String())
+	}
+	for range testFailureLimits.Burst - 1 {
+		serve()
+	}
+	if rec := serve(); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("status %d after burst, want 429: cancelled attempts still charge the throttle", rec.Code)
 	}
 }
 
