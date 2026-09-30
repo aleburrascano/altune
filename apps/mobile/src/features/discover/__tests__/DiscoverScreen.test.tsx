@@ -36,7 +36,6 @@ jest.mock('../ui/SuggestionsList', () => ({ SuggestionsList: () => null }));
 function mockDiscoverLogic(): DiscoverLogic {
   return {
     inputValue: '',
-    committedQuery: '',
     pending: false,
     onChangeText: jest.fn(),
     onSubmit: jest.fn(),
@@ -61,7 +60,6 @@ function mockDiscoverLogic(): DiscoverLogic {
     onRetry: jest.fn(),
     searchError: null,
     onEndReached: jest.fn(),
-    hasNextPage: false,
     isFetchingNextPage: false,
     onRefresh: jest.fn(),
     isRefreshing: false,

@@ -26,7 +26,6 @@ import type { ResultsFilter } from './useResultsFilter';
 
 export type DiscoverLogic = {
   inputValue: string;
-  committedQuery: string;
   pending: boolean;
   onChangeText: (text: string) => void;
   onSubmit: () => void;
@@ -48,7 +47,6 @@ export type DiscoverLogic = {
   onRetry: () => void;
   searchError: unknown;
   onEndReached: () => void;
-  hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -119,7 +117,6 @@ export function useDiscoverLogic(): DiscoverLogic {
 
   return {
     inputValue: search.inputValue,
-    committedQuery: search.committedQuery,
     pending: isSearchPending,
     onChangeText: suggestionVisibility.onChangeText,
     onSubmit: suggestionVisibility.onSubmit,
@@ -147,7 +144,6 @@ export function useDiscoverLogic(): DiscoverLogic {
         void fetchNextPage({ cancelRefetch: false });
       }
     },
-    hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
     onRefresh: onRetry,
     isRefreshing,

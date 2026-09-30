@@ -371,7 +371,6 @@ describe('useDiscoverLogic history tap', () => {
       result.current.onHistoryTap({ query: 'ab ' } as never);
     });
 
-    await waitFor(() => expect(result.current.committedQuery).toBe('ab'));
     expect(result.current.pending).toBe(false);
   });
 
