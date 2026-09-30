@@ -9,7 +9,7 @@ import {
   type OAuthFailure,
   type OAuthProvider,
 } from '../oauthResult';
-import { authRedirectUrl } from '../parseAuthLink';
+import { authRedirectUrl } from '../authRedirect';
 import { reportSignInFailure } from '../reportSignInFailure';
 
 import { useOAuthFlow } from './useOAuthFlow';

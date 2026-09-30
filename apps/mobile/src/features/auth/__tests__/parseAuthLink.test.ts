@@ -5,17 +5,23 @@ import { Platform } from 'react-native';
 
 import appJson from '../../../../app.json';
 import { completeAuthIntent } from '../completeAuthIntent';
+import type * as AuthRedirectModule from '../authRedirect';
+import { authRedirectUrl } from '../authRedirect';
 import type * as ParseAuthLinkModule from '../parseAuthLink';
-import { CONFIRM_REDIRECT_URL, OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
-import { authRedirectUrl } from '../parseAuthLink';
+import { parseAuthLink } from '../parseAuthLink';
 
-function loadWithExpoScheme(scheme: unknown): typeof ParseAuthLinkModule {
+type LoadedModules = typeof ParseAuthLinkModule & typeof AuthRedirectModule;
+
+function loadWithExpoScheme(scheme: unknown): LoadedModules {
   jest.resetModules();
   jest.doMock('expo-constants', () => ({
     __esModule: true,
     default: { expoConfig: scheme === undefined ? {} : { scheme } },
   }));
-  return require('../parseAuthLink') as typeof ParseAuthLinkModule;
+  return {
+    ...(require('../authRedirect') as typeof AuthRedirectModule),
+    ...(require('../parseAuthLink') as typeof ParseAuthLinkModule),
+  };
 }
 
 afterEach(() => {
@@ -31,8 +37,8 @@ describe('parseAuthLink — the scheme comes from the expo config', () => {
       kind: 'recovery',
       params: { type: 'recovery' },
     });
-    expect(OAUTH_REDIRECT_URL).toBe(`${configured}://auth/callback`);
-    expect(CONFIRM_REDIRECT_URL).toBe(`${configured}://auth/confirm`);
+    expect(authRedirectUrl('callback')).toBe(`${configured}://auth/callback`);
+    expect(authRedirectUrl('confirm')).toBe(`${configured}://auth/confirm`);
   });
 
   it('follows a rebranded scheme instead of the previous one', () => {
@@ -45,13 +51,13 @@ describe('parseAuthLink — the scheme comes from the expo config', () => {
     expect(rebranded.parseAuthLink('altune://auth/recovery?type=recovery')).toEqual({
       kind: 'ignored',
     });
-    expect(rebranded.OAUTH_REDIRECT_URL).toBe('whitelabel://auth/callback');
+    expect(rebranded.authRedirectUrl('callback')).toBe('whitelabel://auth/callback');
   });
 
   it('uses the first scheme when the config declares a list', () => {
     const multiScheme = loadWithExpoScheme(['whitelabel', 'legacy']);
 
-    expect(multiScheme.OAUTH_REDIRECT_URL).toBe('whitelabel://auth/callback');
+    expect(multiScheme.authRedirectUrl('callback')).toBe('whitelabel://auth/callback');
     expect(multiScheme.parseAuthLink('whitelabel://auth/callback?code=xyz')).toEqual({
       kind: 'oauth',
       params: { code: 'xyz' },
@@ -377,9 +383,12 @@ describe('parseAuthLink reads its scheme and web origin through the device port'
       declaredAppScheme: () => 'portscheme',
       webOrigin: () => 'https://port.example',
     }));
-    const loaded = require('../parseAuthLink') as typeof ParseAuthLinkModule;
+    const loaded = {
+      ...(require('../authRedirect') as typeof AuthRedirectModule),
+      ...(require('../parseAuthLink') as typeof ParseAuthLinkModule),
+    };
 
-    expect(loaded.OAUTH_REDIRECT_URL).toBe('portscheme://auth/callback');
+    expect(loaded.authRedirectUrl('callback')).toBe('https://port.example/auth/callback');
     expect(loaded.authRedirectUrl('confirm')).toBe('https://port.example/auth/confirm');
     expect(loaded.parseAuthLink('https://port.example/auth/confirm?type=signup')).toEqual({
       kind: 'confirm',

@@ -1,15 +1,6 @@
-import { declaredAppScheme, webOrigin } from '@shared/device/device';
+import { webOrigin } from '@shared/device/device';
 
-function configuredSchemePrefix(): string {
-  const declared = declaredAppScheme();
-  const primary = Array.isArray(declared) ? declared[0] : declared;
-  if (typeof primary !== 'string' || primary === '') {
-    throw new Error('Missing required Expo config field `scheme` (apps/mobile/app.json)');
-  }
-  return `${primary.toLowerCase()}://`;
-}
-
-const SCHEME = configuredSchemePrefix();
+import { LINK_PATH, SCHEME } from './authRedirect';
 
 const MAX_URL_LENGTH = 4096;
 const MAX_PARAM_PAIRS = 64;
@@ -22,12 +13,6 @@ export type AuthLinkIntent =
   | { kind: 'oauth'; params: AuthLinkParams }
   | { kind: 'ignored' };
 
-const LINK_PATH = {
-  recovery: 'auth/recovery',
-  confirm: 'auth/confirm',
-  oauth: 'auth/callback',
-} as const;
-
 type SpendableLinkKind = Exclude<AuthLinkIntent['kind'], 'ignored'>;
 
 const PATH_TO_KIND: Record<string, SpendableLinkKind> = Object.assign(Object.create(null), {
@@ -35,26 +20,6 @@ const PATH_TO_KIND: Record<string, SpendableLinkKind> = Object.assign(Object.cre
   [LINK_PATH.confirm]: 'confirm',
   [LINK_PATH.oauth]: 'oauth',
 });
-
-export const OAUTH_REDIRECT_URL = `${SCHEME}${LINK_PATH.oauth}`;
-export const CONFIRM_REDIRECT_URL = `${SCHEME}${LINK_PATH.confirm}`;
-export const RECOVERY_REDIRECT_URL = `${SCHEME}${LINK_PATH.recovery}`;
-
-export type AuthRedirectIntent = 'callback' | 'confirm' | 'recovery';
-
-const REDIRECT_PATH_FOR_INTENT: Record<AuthRedirectIntent, string> = {
-  callback: LINK_PATH.oauth,
-  confirm: LINK_PATH.confirm,
-  recovery: LINK_PATH.recovery,
-};
-
-export function authRedirectUrl(intent: AuthRedirectIntent): string {
-  const path = REDIRECT_PATH_FOR_INTENT[intent];
-  const origin = webOrigin();
-  return origin ? `${origin}/${path}` : `${SCHEME}${path}`;
-}
-
-export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
 
 function lookupKind(path: string): SpendableLinkKind | undefined {
   if (!Object.prototype.hasOwnProperty.call(PATH_TO_KIND, path)) {

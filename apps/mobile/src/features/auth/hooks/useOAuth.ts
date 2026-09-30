@@ -3,6 +3,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
 
 import { withAuthDeadline } from '../authDeadline';
+import { authRedirectUrl } from '../authRedirect';
 import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
 import { dismissAuthSession, openAuthSession } from '../native/authBrowser';
 import {
@@ -13,7 +14,7 @@ import {
   type OAuthOutcome,
   type OAuthProvider,
 } from '../oauthResult';
-import { authRedirectUrl, parseAuthLink } from '../parseAuthLink';
+import { parseAuthLink } from '../parseAuthLink';
 import { reportSignInFailure } from '../reportSignInFailure';
 
 import { useOAuthFlow } from './useOAuthFlow';

@@ -5,8 +5,8 @@ import { useSession } from '@shared/auth/useSession';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 
-import { RESET_PASSWORD_ROUTE_SEGMENT } from '../parseAuthLink';
 import { useRecoveryUnlocked } from '../recoveryUnlock';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '../resetPasswordRoute';
 
 import { AuthFullScreenNotice } from './AuthFullScreenNotice';
 import { InvalidRecoveryLinkNotice } from './InvalidRecoveryLinkNotice';

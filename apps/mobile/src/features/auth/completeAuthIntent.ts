@@ -3,12 +3,9 @@ import type { Navigator } from '@shared/navigation';
 
 import { withAuthDeadline } from './authDeadline';
 import { type SupabaseErrorDetail, supabaseErrorDetail, thrownErrorDetail } from './errorDetail';
-import {
-  type AuthLinkIntent,
-  type AuthLinkParams,
-  RESET_PASSWORD_ROUTE_SEGMENT,
-} from './parseAuthLink';
+import type { AuthLinkIntent, AuthLinkParams } from './parseAuthLink';
 import { markRecoveryUnlocked } from './recoveryUnlock';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from './resetPasswordRoute';
 import type { SupabaseAuthErrorLike } from './supabaseAuthError';
 
 type AuthClient = Pick<
