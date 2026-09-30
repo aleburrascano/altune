@@ -5,7 +5,8 @@ export type ApiErrorBody = {
   code?: string;
 };
 
-export type AcquisitionStatus = 'pending' | 'ready' | 'failed';
+export const ACQUISITION_STATUSES = ['pending', 'ready', 'failed'] as const;
+export type AcquisitionStatus = (typeof ACQUISITION_STATUSES)[number];
 
 export type FeaturedArtist = {
   name: string;

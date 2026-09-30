@@ -22,9 +22,9 @@ export const PROVIDER_STATUSES = [
   'circuit_open',
 ] as const;
 
-export type DiscoveryKind = 'artist' | 'album' | 'track';
-export type DiscoveryConfidence = 'high' | 'medium' | 'low';
-export type DiscoveryProviderStatus = 'ok' | 'timeout' | 'error' | 'rate_limited' | 'circuit_open';
+export type DiscoveryKind = (typeof DISCOVERY_KINDS)[number];
+export type DiscoveryConfidence = (typeof DISCOVERY_CONFIDENCES)[number];
+export type DiscoveryProviderStatus = (typeof PROVIDER_STATUSES)[number];
 
 export type DiscoverySource = {
   provider: string;

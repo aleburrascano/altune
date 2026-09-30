@@ -5,13 +5,14 @@ import { apiFetch, apiSend, signalInit } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { withQuery } from './queryString';
-import type {
-  AcquisitionStatus,
-  CreateTrackRequest,
-  FeaturedArtist,
-  ListTracksResponse,
-  TrackAcquisition,
-  TrackResponse,
+import {
+  ACQUISITION_STATUSES,
+  type AcquisitionStatus,
+  type CreateTrackRequest,
+  type FeaturedArtist,
+  type ListTracksResponse,
+  type TrackAcquisition,
+  type TrackResponse,
 } from './types';
 import {
   asCount,
@@ -25,8 +26,6 @@ import {
   nullableNumber,
   nullableString,
 } from './wireDecoders';
-
-const ACQUISITION_STATUSES = ['pending', 'ready', 'failed'] as const;
 
 function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
   const r = asRecord(value, at);
