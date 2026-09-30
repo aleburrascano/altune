@@ -13,7 +13,7 @@ type AuthClient = Pick<
   'exchangeCodeForSession' | 'verifyOtp' | 'getSession'
 >;
 
-export type AuthFailureCause =
+type AuthFailureCause =
   | 'gotrue_rejected'
   | 'no_spendable_credential'
   | 'session_already_active'

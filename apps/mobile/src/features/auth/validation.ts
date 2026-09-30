@@ -7,34 +7,25 @@ export function isValidEmail(email: string): boolean {
   return EMAIL_RE.test(email.trim());
 }
 
-export type PasswordIssue =
-  'too_short' | 'no_lowercase' | 'no_uppercase' | 'no_number' | 'no_symbol';
+type PasswordIssue = 'too_short' | 'no_lowercase' | 'no_uppercase' | 'no_number' | 'no_symbol';
 
-export function validatePassword(password: string): PasswordIssue[] {
-  const issues: PasswordIssue[] = [];
-  if (password.length < 8) {
-    issues.push('too_short');
-  }
-  if (!/[a-z]/.test(password)) {
-    issues.push('no_lowercase');
-  }
-  if (!/[A-Z]/.test(password)) {
-    issues.push('no_uppercase');
-  }
-  if (!/[0-9]/.test(password)) {
-    issues.push('no_number');
-  }
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    issues.push('no_symbol');
-  }
-  return issues;
+const PASSWORD_RULES: readonly (readonly [PasswordIssue, (password: string) => boolean])[] = [
+  ['too_short', (p) => p.length < 8],
+  ['no_lowercase', (p) => !/[a-z]/.test(p)],
+  ['no_uppercase', (p) => !/[A-Z]/.test(p)],
+  ['no_number', (p) => !/[0-9]/.test(p)],
+  ['no_symbol', (p) => !/[^A-Za-z0-9]/.test(p)],
+];
+
+function validatePassword(password: string): PasswordIssue[] {
+  return PASSWORD_RULES.filter(([, failed]) => failed(password)).map(([issue]) => issue);
 }
 
-export function passwordsMatch(password: string, confirm: string): boolean {
+function passwordsMatch(password: string, confirm: string): boolean {
   return confirm.length > 0 && password === confirm;
 }
 
-export type NewPasswordFormState = {
+type NewPasswordFormState = {
   showPasswordError: boolean;
   showConfirmError: boolean;
   valid: boolean;

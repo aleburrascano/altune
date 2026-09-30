@@ -10,7 +10,7 @@ import {
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
-export type SignUpResult =
+type SignUpResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'ok' }

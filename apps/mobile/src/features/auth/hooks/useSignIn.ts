@@ -17,7 +17,7 @@ type SignInErrorReason = Extract<
   'invalid_credentials' | 'email_not_confirmed' | 'network' | 'unknown' | 'too_many_attempts'
 >;
 
-export type SignInResult =
+type SignInResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'ok' }

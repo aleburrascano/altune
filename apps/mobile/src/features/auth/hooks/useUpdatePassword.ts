@@ -12,7 +12,7 @@ import { classifyAuthError, isWeakPasswordError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
-export type UpdatePasswordResult =
+type UpdatePasswordResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'ok'; othersRevoked: boolean }

@@ -4,7 +4,7 @@ import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
 import type { AuthErrorReason } from './errorReason';
 
-export type SignInFailureReason = Extract<
+type SignInFailureReason = Extract<
   AuthErrorReason,
   'invalid_credentials' | 'email_not_confirmed' | 'network' | 'too_many_attempts' | 'unknown'
 >;

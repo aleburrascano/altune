@@ -7,7 +7,7 @@ import { classifyAuthError, type SupabaseAuthErrorLike } from '../supabaseAuthEr
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
-export type ResetRequestResult =
+type ResetRequestResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'sent' }
