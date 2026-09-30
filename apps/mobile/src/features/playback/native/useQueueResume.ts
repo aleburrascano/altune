@@ -21,7 +21,7 @@ import {
   type RungOutcome,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
-import { redactedPlaybackFailure } from '../redactPlaybackError';
+import { warnPlayback } from '../redactPlaybackError';
 
 import { useAppStateChange } from '@shared/lifecycle';
 
@@ -84,7 +84,7 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
       natural_order: libraryIds(s.tracks),
     });
   } catch (err) {
-    console.warn('[playback] failed to save queue state', { error: redactedPlaybackFailure(err) });
+    warnPlayback('failed to save queue state', {}, err);
   }
 }
 
@@ -189,10 +189,7 @@ async function restoreSavedQueue(
     stage = 'native';
     await resumeNativeQueue(resumeMs);
   } catch (err) {
-    console.warn('[playback] failed to restore the saved queue', {
-      stage,
-      error: redactedPlaybackFailure(err),
-    });
+    warnPlayback('failed to restore the saved queue', { stage }, err);
     if (stage === 'native') reportUnbackedRebuild(rebuiltGeneration, err);
   } finally {
     clearUnbackedPlaceholder(placeholderGeneration, stage);

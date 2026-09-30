@@ -39,3 +39,11 @@ export function redactedPlaybackFailure(err: unknown): RedactedPlaybackFailure {
     message: redactPlaybackErrorMessage(failureText(err)),
   };
 }
+
+export function warnPlayback(
+  message: string,
+  context: Record<string, unknown>,
+  err: unknown,
+): void {
+  console.warn(`[playback] ${message}`, { ...context, error: redactedPlaybackFailure(err) });
+}

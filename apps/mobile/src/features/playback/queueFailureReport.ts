@@ -4,7 +4,7 @@ import type { PlaybackErrorKind } from '@shared/playback/types';
 import { NativeQueueTimeoutError } from './native/nativeQueueLock';
 import { reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
-import { redactedPlaybackFailure } from './redactPlaybackError';
+import { warnPlayback } from './redactPlaybackError';
 
 export type NativeQueueFailureKind = 'transient' | 'permanent';
 
@@ -38,12 +38,7 @@ export function classifyNativeQueueFailure(err: unknown): NativeQueueFailureKind
 }
 
 function warnQueueMutationFailed(op: string, kind: NativeQueueFailureKind, err: unknown): void {
-  console.warn('[playback] native queue mutation failed', {
-    op,
-    kind,
-    code: nativeErrorCode(err),
-    error: redactedPlaybackFailure(err),
-  });
+  warnPlayback('native queue mutation failed', { op, kind, code: nativeErrorCode(err) }, err);
 }
 
 export function reportQueueFailure(key: TrackKey | null, op: string, err: unknown): void {

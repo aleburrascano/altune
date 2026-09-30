@@ -19,7 +19,7 @@ import {
   findCached,
 } from './audioCache';
 import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
-import { redactedPlaybackFailure } from '../redactPlaybackError';
+import { warnPlayback } from '../redactPlaybackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
@@ -110,11 +110,7 @@ export function discardPrefetchedAudio(): void {
 }
 
 function tracePrefetchFailure(stage: PrefetchStage, trackId: TrackId, error: unknown): void {
-  console.warn('[playback] prefetch failed', {
-    stage,
-    trackId,
-    error: redactedPlaybackFailure(error),
-  });
+  warnPlayback('prefetch failed', { stage, trackId }, error);
   recordPrefetchOutcome(stage);
 }
 

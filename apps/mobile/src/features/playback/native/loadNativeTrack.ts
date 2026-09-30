@@ -9,7 +9,7 @@ import {
 } from '@shared/api-client/audio';
 import { clamp } from '../clamp';
 import { classifyPlaybackFailure } from '../classifyPlaybackError';
-import { redactedPlaybackFailure } from '../redactPlaybackError';
+import { warnPlayback } from '../redactPlaybackError';
 import { recordPresignOutcome } from '../playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { onNativeQueueTimeout, withNativeQueue, type Fence } from './nativeQueueLock';
@@ -54,10 +54,7 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Res
     recordPresignOutcome(true);
     return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false };
   } catch (err) {
-    console.warn('[playback] presign failed', {
-      trackIds: ids,
-      error: redactedPlaybackFailure(err),
-    });
+    warnPlayback('presign failed', { trackIds: ids }, err);
     recordPresignOutcome(false);
     return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth' };
   }

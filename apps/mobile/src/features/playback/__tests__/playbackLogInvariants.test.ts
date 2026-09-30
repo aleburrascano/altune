@@ -10,6 +10,7 @@ import { ignoringNativeRejection } from '../native/createNativePlaybackActions';
 import { repairActiveToStreaming } from '../native/nativeTrackSwap';
 import { _resetPlaybackHealthForTest } from '../playbackHealth';
 import { reportingQueueFailure } from '../queueFailureReport';
+import { warnPlayback } from '../redactPlaybackError';
 
 import { libraryTrack } from './fixtures';
 
@@ -74,6 +75,17 @@ describe('playback logs redact rejections', () => {
       'add',
       () => Promise.reject(leaky()),
     );
+    expectLoggedClean();
+  });
+});
+
+describe('warnPlayback', () => {
+  it('prefixes the message and puts the redacted failure under error beside the context', () => {
+    warnPlayback('demo failed', { stage: 'x' }, leaky());
+    expect(warn).toHaveBeenCalledWith('[playback] demo failed', {
+      stage: 'x',
+      error: { kind: expect.any(String), message: expect.not.stringMatching(/deadbeef|abc\.def/) },
+    });
     expectLoggedClean();
   });
 });

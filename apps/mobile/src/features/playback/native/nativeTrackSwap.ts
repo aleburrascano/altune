@@ -10,7 +10,7 @@ import { NativeQueueTimeoutError, withNativeQueue, type Fence } from './nativeQu
 import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { reportLoadFailure } from '../playbackErrorStore';
 import { recordPresignOutcome } from '../playbackHealth';
-import { redactedPlaybackFailure } from '../redactPlaybackError';
+import { warnPlayback } from '../redactPlaybackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 
@@ -34,10 +34,7 @@ async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
     recordPresignOutcome(true);
     return resolved?.url ?? null;
   } catch (err) {
-    console.warn('[playback] presign failed', {
-      trackIds: [trackId],
-      error: redactedPlaybackFailure(err),
-    });
+    warnPlayback('presign failed', { trackIds: [trackId] }, err);
     recordPresignOutcome(false);
     return null;
   }
@@ -138,10 +135,7 @@ async function refilledWithLocalFile({ slot, track, uri }: Refill, fence: Fence)
 }
 
 function warnRestoreFailed(entry: Track, err: unknown): void {
-  console.warn('[playback] swap slot restore failed', {
-    trackId: entry.id,
-    error: redactedPlaybackFailure(err),
-  });
+  warnPlayback('swap slot restore failed', { trackId: entry.id }, err);
 }
 
 async function restoreSlot({ index, entry }: UpcomingSlot, fence: Fence): Promise<void> {

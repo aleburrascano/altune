@@ -27,6 +27,7 @@ import {
   redactedPlaybackFailure,
   redactPlaybackErrorMessage,
   type RedactedPlaybackFailure,
+  warnPlayback,
 } from '../redactPlaybackError';
 import { useMediaSession } from '../hooks/useMediaSession';
 import { recordPlaybackFailure } from '../playbackHealth';
@@ -290,7 +291,7 @@ async function resolveSource(source: PlaybackSource): Promise<SourceOutcome> {
 
 function playAudio(player: WebAudioPlayer): void {
   void player.audio.play().catch((err: unknown) => {
-    console.warn('[playback] web play() rejected', { error: redactedPlaybackFailure(err) });
+    warnPlayback('web play() rejected', {}, err);
     syncPhase(player);
   });
 }
