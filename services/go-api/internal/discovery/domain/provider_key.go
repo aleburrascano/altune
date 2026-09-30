@@ -23,24 +23,42 @@ const (
 	ProviderKeyYTMusic         ProviderKey = "ytmusic"
 )
 
-var knownProviderKeys = map[ProviderKey]struct{}{
-	ProviderKeyDeezer:          {},
-	ProviderKeyMusicBrainz:     {},
-	ProviderKeySoundCloud:      {},
-	ProviderKeyLastFM:          {},
-	ProviderKeyITunes:          {},
-	ProviderKeyTheAudioDB:      {},
-	ProviderKeyDiscogs:         {},
-	ProviderKeyYouTube:         {},
-	ProviderKeyAmazonMusic:     {},
-	ProviderKeyAppleMusic:      {},
-	ProviderKeySpotify:         {},
-	ProviderKeyWikidata:        {},
-	ProviderKeyCoverArtArchive: {},
-	ProviderKeyFanart:          {},
-	ProviderKeyGenius:          {},
-	ProviderKeyYTMusic:         {},
+var providerKeys = [...]ProviderKey{
+	ProviderUnknown:     "unknown",
+	ProviderDeezer:      ProviderKeyDeezer,
+	ProviderMusicBrainz: ProviderKeyMusicBrainz,
+	ProviderSoundCloud:  ProviderKeySoundCloud,
+	ProviderLastFM:      ProviderKeyLastFM,
+	ProviderITunes:      ProviderKeyITunes,
+	ProviderTheAudioDB:  ProviderKeyTheAudioDB,
+	ProviderDiscogs:     ProviderKeyDiscogs,
+	ProviderYouTube:     ProviderKeyYouTube,
+	ProviderAmazonMusic: ProviderKeyAmazonMusic,
+	ProviderAppleMusic:  ProviderKeyAppleMusic,
+	ProviderSpotify:     ProviderKeySpotify,
 }
+
+var providerNamesByKey = func() map[ProviderKey]ProviderName {
+	m := make(map[ProviderKey]ProviderName, len(providerKeys))
+	for p := ProviderUnknown + 1; int(p) < len(providerKeys); p++ {
+		m[providerKeys[p]] = p
+	}
+	return m
+}()
+
+var knownProviderKeys = func() map[ProviderKey]struct{} {
+	m := map[ProviderKey]struct{}{
+		ProviderKeyWikidata:        {},
+		ProviderKeyCoverArtArchive: {},
+		ProviderKeyFanart:          {},
+		ProviderKeyGenius:          {},
+		ProviderKeyYTMusic:         {},
+	}
+	for k := range providerNamesByKey {
+		m[k] = struct{}{}
+	}
+	return m
+}()
 
 func ParseProviderKey(s string) (ProviderKey, error) {
 	k := ProviderKey(s)

@@ -72,3 +72,15 @@ func TestProviderKey_ProviderName_NonProviderKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderName_EveryNameRoundTripsToKnownKey(t *testing.T) {
+	for p := ProviderDeezer; p <= ProviderSpotify; p++ {
+		got, err := ParseProviderName(p.String())
+		if err != nil || got != p {
+			t.Errorf("ParseProviderName(%q) = (%v, %v), want %v", p.String(), got, err, p)
+		}
+		if _, ok := knownProviderKeys[p.Key()]; !ok {
+			t.Errorf("%v.Key() = %q not in knownProviderKeys", p, p.Key())
+		}
+	}
+}

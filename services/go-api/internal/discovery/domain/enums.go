@@ -125,63 +125,17 @@ func IsCanonicalContentProvider(p ProviderName) bool {
 }
 
 func (p ProviderName) String() string {
-	switch p {
-	case ProviderUnknown:
-		return "unknown"
-	case ProviderDeezer:
-		return "deezer"
-	case ProviderMusicBrainz:
-		return "musicbrainz"
-	case ProviderSoundCloud:
-		return "soundcloud"
-	case ProviderLastFM:
-		return "lastfm"
-	case ProviderITunes:
-		return "itunes"
-	case ProviderTheAudioDB:
-		return "theaudiodb"
-	case ProviderDiscogs:
-		return "discogs"
-	case ProviderYouTube:
-		return "youtube"
-	case ProviderAmazonMusic:
-		return "amazonmusic"
-	case ProviderAppleMusic:
-		return "applemusic"
-	case ProviderSpotify:
-		return "spotify"
-	default:
-		return "unknown"
+	if p <= ProviderUnknown || int(p) >= len(providerKeys) {
+		return string(providerKeys[ProviderUnknown])
 	}
+	return string(providerKeys[p])
 }
 
 func ParseProviderName(s string) (ProviderName, error) {
-	switch s {
-	case "deezer":
-		return ProviderDeezer, nil
-	case "musicbrainz":
-		return ProviderMusicBrainz, nil
-	case "soundcloud":
-		return ProviderSoundCloud, nil
-	case "lastfm":
-		return ProviderLastFM, nil
-	case "itunes":
-		return ProviderITunes, nil
-	case "theaudiodb":
-		return ProviderTheAudioDB, nil
-	case "discogs":
-		return ProviderDiscogs, nil
-	case "youtube":
-		return ProviderYouTube, nil
-	case "amazonmusic":
-		return ProviderAmazonMusic, nil
-	case "applemusic":
-		return ProviderAppleMusic, nil
-	case "spotify":
-		return ProviderSpotify, nil
-	default:
-		return 0, fmt.Errorf("unknown provider: %s", s)
+	if p, ok := providerNamesByKey[ProviderKey(s)]; ok {
+		return p, nil
 	}
+	return 0, fmt.Errorf("unknown provider: %s", s)
 }
 
 type ProviderStatus int
