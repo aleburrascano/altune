@@ -19,7 +19,7 @@ func TestDoubleMetaphone(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -38,8 +38,8 @@ func TestDoubleMetaphone_PhoneticEquivalence(t *testing.T) {
 	}
 	for _, tt := range pairs {
 		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
-			pA, _ := DoubleMetaphone(tt.a)
-			pB, _ := DoubleMetaphone(tt.b)
+			pA := DoubleMetaphone(tt.a)
+			pB := DoubleMetaphone(tt.b)
 			if pA != pB {
 				t.Errorf("DoubleMetaphone(%q)=%q != DoubleMetaphone(%q)=%q — expected same code",
 					tt.a, pA, tt.b, pB)
@@ -61,7 +61,7 @@ func TestDoubleMetaphone_SilentInitials(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -98,7 +98,7 @@ func TestDoubleMetaphone_Digraphs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -121,7 +121,7 @@ func TestDoubleMetaphone_DoubledLetters(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -148,7 +148,7 @@ func TestDoubleMetaphone_RemainingBranches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -170,7 +170,7 @@ func TestDoubleMetaphone_EncodesOnlyLeadingVowelAndDropsInteriorOnes(t *testing.
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -195,7 +195,7 @@ func TestDoubleMetaphone_NonAlphaAndUnicode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
@@ -216,8 +216,8 @@ func TestDoubleMetaphone_SoundAlikePairs(t *testing.T) {
 	}
 	for _, tt := range pairs {
 		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
-			pA, _ := DoubleMetaphone(tt.a)
-			pB, _ := DoubleMetaphone(tt.b)
+			pA := DoubleMetaphone(tt.a)
+			pB := DoubleMetaphone(tt.b)
 			if pA != pB {
 				t.Errorf("DoubleMetaphone(%q)=%q != DoubleMetaphone(%q)=%q — expected same code",
 					tt.a, pA, tt.b, pB)
@@ -230,9 +230,9 @@ func TestDoubleMetaphone_MaxLengthFour(t *testing.T) {
 	words := []string{"kendrick", "muhammad", "administrator", "supercalifragilistic"}
 	for _, w := range words {
 		t.Run(w, func(t *testing.T) {
-			pri, alt := DoubleMetaphone(w)
-			if len(pri) > 4 || len(alt) > 4 {
-				t.Errorf("DoubleMetaphone(%q) = (%q, %q) — codes must be capped at 4", w, pri, alt)
+			pri := DoubleMetaphone(w)
+			if len(pri) > 4 {
+				t.Errorf("DoubleMetaphone(%q) = %q — code must be capped at 4", w, pri)
 			}
 		})
 	}
@@ -242,10 +242,10 @@ func TestDoubleMetaphone_SameInputAndCasingAlwaysYieldTheSameKey(t *testing.T) {
 	words := []string{"weeknd", "Beyonce", "kendrick lamar", "SMITH"}
 	for _, w := range words {
 		t.Run(w, func(t *testing.T) {
-			p1, a1 := DoubleMetaphone(w)
-			p2, a2 := DoubleMetaphone(w)
-			if p1 != p2 || a1 != a2 {
-				t.Errorf("DoubleMetaphone(%q) unstable: (%q,%q) then (%q,%q)", w, p1, a1, p2, a2)
+			p1 := DoubleMetaphone(w)
+			p2 := DoubleMetaphone(w)
+			if p1 != p2 {
+				t.Errorf("DoubleMetaphone(%q) unstable: %q then %q", w, p1, p2)
 			}
 		})
 	}
@@ -267,21 +267,9 @@ func TestDoubleMetaphone_SimplifiedQuirks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			pri, _ := DoubleMetaphone(tt.input)
+			pri := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
 				t.Errorf("DoubleMetaphone(%q) primary = %q, want pinned %q (%s)", tt.input, pri, tt.primary, tt.note)
-			}
-		})
-	}
-}
-
-func TestDoubleMetaphone_AlternateAlwaysMirrorsPrimary(t *testing.T) {
-	words := []string{"weeknd", "schmidt", "cello", "xavier", "night", "jose"}
-	for _, w := range words {
-		t.Run(w, func(t *testing.T) {
-			pri, alt := DoubleMetaphone(w)
-			if pri != alt {
-				t.Errorf("DoubleMetaphone(%q) = (%q, %q) — alternate expected to mirror primary", w, pri, alt)
 			}
 		})
 	}

@@ -7,31 +7,22 @@ import (
 
 const maxCodeLen = 4
 
-func DoubleMetaphone(s string) (primary, alternate string) {
+func DoubleMetaphone(s string) string {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	if s == "" {
-		return "", ""
+		return ""
 	}
 
-	var pri, alt strings.Builder
-	add := func(code string) {
-		if pri.Len() < maxCodeLen {
-			pri.WriteString(code)
-		}
-		if alt.Len() < maxCodeLen {
-			alt.WriteString(code)
-		}
-	}
-
+	var code strings.Builder
 	runes := []rune(s)
 	cur := cursor{runes: runes, pos: posAfterSilentInitial(runes)}
-	for cur.pos < len(runes) && pri.Len() < maxCodeLen {
-		code, next := codeAt(cur)
-		add(code)
-		cur.pos = next
+	for cur.pos < len(runes) && code.Len() < maxCodeLen {
+		next, end := codeAt(cur)
+		code.WriteString(next)
+		cur.pos = end
 	}
 
-	return pri.String(), alt.String()
+	return code.String()
 }
 
 type cursor struct {
@@ -294,7 +285,7 @@ func MetaphoneKey(term string) string {
 		if cleaned == "" {
 			continue
 		}
-		p, _ := DoubleMetaphone(cleaned)
+		p := DoubleMetaphone(cleaned)
 		if p != "" {
 			codes = append(codes, p)
 		}
