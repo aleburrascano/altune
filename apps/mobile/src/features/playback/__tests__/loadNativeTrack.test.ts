@@ -14,8 +14,8 @@ import {
   loadNativeQueue,
   loadNativeTrack,
   refreshUpcomingPresign,
-  reorderUpcomingNative,
 } from '../native/loadNativeTrack';
+import { reorderUpcomingNative } from '../native/rebuildNativeTail';
 import { claimLoad } from '../loadToken';
 import { NATIVE_QUEUE_OP_TIMEOUT_MS, withNativeQueue } from '../native/nativeQueueLock';
 import { forgetAllSwaps } from '../native/nativeTrackSwap';

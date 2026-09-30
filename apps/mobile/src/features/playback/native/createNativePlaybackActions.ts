@@ -10,8 +10,8 @@ import {
   insertNativeTrackNext,
   loadNativeQueue,
   loadNativeTrack,
-  reorderUpcomingNative,
 } from './loadNativeTrack';
+import { reorderUpcomingNative } from './rebuildNativeTail';
 import { claimSessionReset } from '../loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { clearPlaybackError, reportLoadFailure } from '../playbackErrorStore';
