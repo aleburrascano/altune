@@ -15,7 +15,7 @@ import { useAsyncAuthAction } from './useAsyncAuthAction';
 export type UpdatePasswordResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
-  | { kind: 'ok' }
+  | { kind: 'ok'; othersRevoked: boolean }
   | {
       kind: 'error';
       reason: Extract<
@@ -30,24 +30,34 @@ function reportRevokeFailure(detail: ThrownErrorDetail | SupabaseErrorDetail): v
   console.warn('[auth] revoking the other sessions after a password change failed', detail);
 }
 
-async function revokeOtherSessions(): Promise<void> {
+async function requestRevoke(): Promise<SupabaseErrorDetail | null> {
+  const { error } = await withAuthDeadline(
+    supabase.auth.signOut({ scope: 'others' }),
+    REVOKE_OTHERS_TIMEOUT_MS,
+  );
+  return error ? supabaseErrorDetail(error) : null;
+}
+
+async function revokeOtherSessionsOnce(): Promise<boolean> {
   try {
-    const { error } = await withAuthDeadline(
-      supabase.auth.signOut({ scope: 'others' }),
-      REVOKE_OTHERS_TIMEOUT_MS,
-    );
-    if (error) reportRevokeFailure(supabaseErrorDetail(error));
+    const failure = await requestRevoke();
+    if (failure) reportRevokeFailure(failure);
+    return failure === null;
   } catch (err) {
     reportRevokeFailure(thrownErrorDetail(err));
+    return false;
   }
+}
+
+async function revokeOtherSessions(): Promise<boolean> {
+  return (await revokeOtherSessionsOnce()) || (await revokeOtherSessionsOnce());
 }
 
 export function useUpdatePassword() {
   const { state, run } = useAsyncAuthAction<UpdatePasswordResult, [string]>(async (password) => {
     const { error } = await supabase.auth.updateUser({ password });
     if (!error) {
-      void revokeOtherSessions();
-      return { kind: 'ok' };
+      return { kind: 'ok', othersRevoked: await revokeOtherSessions() };
     }
     return {
       kind: 'error',

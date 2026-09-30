@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
+import { showAlert } from '@shared/ui/dialog/dialog';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
@@ -14,6 +15,9 @@ import { AuthHeroLayout } from './hero/AuthHeroLayout';
 import { FieldError } from './FieldError';
 import { NewPasswordField } from './NewPasswordField';
 
+const OTHERS_NOT_REVOKED_TITLE = 'Password updated';
+const OTHERS_NOT_REVOKED_MESSAGE =
+  "We couldn't sign out your other devices. They may still be signed in.";
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
 
 export function SetNewPasswordScreen(): ReactElement {
@@ -26,10 +30,11 @@ export function SetNewPasswordScreen(): ReactElement {
 
   useEffect(() => {
     if (state.kind === 'ok') {
+      if (!state.othersRevoked) showAlert(OTHERS_NOT_REVOKED_TITLE, OTHERS_NOT_REVOKED_MESSAGE);
       clearRecoveryUnlock();
       router.replace('/library');
     }
-  }, [state.kind, router]);
+  }, [state, router]);
 
   return (
     <AuthHeroLayout testID="set-new-password-screen">

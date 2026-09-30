@@ -1,6 +1,5 @@
 import { act } from '@testing-library/react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '../authDeadline';
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
 
 import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
@@ -52,8 +51,9 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
 
   it('reports ok on success', async () => {
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    signOut.mockResolvedValue({ error: null });
 
-    expect(await updatePassword()).toEqual({ kind: 'ok' });
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: true });
   });
 
   it('signs out the other sessions once after a successful update', async () => {
@@ -82,18 +82,18 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
     expect(signOut).not.toHaveBeenCalled();
   });
 
-  it('stays ok when the other-session signOut resolves an error', async () => {
+  it('reports othersRevoked false when the other-session signOut resolves an error', async () => {
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
     signOut.mockResolvedValue({ error: { name: 'AuthApiError', status: 500, message: 'boom' } });
 
-    expect(await updatePassword()).toEqual({ kind: 'ok' });
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: false });
   });
 
-  it('stays ok when the other-session signOut rejects', async () => {
+  it('reports othersRevoked false when the other-session signOut rejects', async () => {
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
     signOut.mockRejectedValue(new Error('offline'));
 
-    expect(await updatePassword()).toEqual({ kind: 'ok' });
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: false });
   });
 });
 
@@ -110,26 +110,27 @@ describe('useUpdatePassword: the other-session revoke after a committed change',
     warn.mockRestore();
   });
 
-  it('stays ok when the revoke never settles', async () => {
+  const REVOKE_TIMEOUT_MS = 5_000;
+
+  const updateWithStalledRevoke = async () => {
+    const pending = updatePassword();
+    await jest.advanceTimersByTimeAsync(REVOKE_TIMEOUT_MS);
+    await jest.advanceTimersByTimeAsync(REVOKE_TIMEOUT_MS);
+    return pending;
+  };
+
+  it('reports othersRevoked false when the revoke never settles', async () => {
     jest.useFakeTimers();
     signOut.mockReturnValue(new Promise(() => undefined));
 
-    const state = await updatePassword();
-    await act(async () => {
-      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS + 1);
-    });
-
-    expect(state).toEqual({ kind: 'ok' });
+    expect(await updateWithStalledRevoke()).toEqual({ kind: 'ok', othersRevoked: false });
   });
 
   it('logs a stalled revoke once its own deadline passes', async () => {
     jest.useFakeTimers();
     signOut.mockReturnValue(new Promise(() => undefined));
 
-    await updatePassword();
-    await act(async () => {
-      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
-    });
+    await updateWithStalledRevoke();
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('revoking'), {
       name: 'NetworkError',
@@ -222,5 +223,45 @@ describe('a server rate limit', () => {
 
       expect(await run()).toEqual({ kind: 'error', reason: 'network' });
     });
+  });
+});
+
+describe('useUpdatePassword: reporting whether the other sessions were revoked', () => {
+  let warn: jest.SpyInstance;
+  const REVOKE_FAILED = { error: { name: 'AuthApiError', status: 500, message: 'boom' } };
+
+  beforeEach(() => {
+    updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('reports othersRevoked true when both calls succeed', async () => {
+    signOut.mockResolvedValue({ error: null });
+
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: true });
+  });
+
+  it('reports othersRevoked false when the revoke fails twice', async () => {
+    signOut.mockResolvedValue(REVOKE_FAILED);
+
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: false });
+    expect(signOut).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports othersRevoked false when the revoke rejects twice', async () => {
+    signOut.mockRejectedValue(new Error('offline'));
+
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: false });
+  });
+
+  it('retries once and reports othersRevoked true when the second try succeeds', async () => {
+    signOut.mockResolvedValueOnce(REVOKE_FAILED).mockResolvedValueOnce({ error: null });
+
+    expect(await updatePassword()).toEqual({ kind: 'ok', othersRevoked: true });
+    expect(signOut).toHaveBeenCalledTimes(2);
   });
 });
