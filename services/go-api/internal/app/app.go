@@ -226,14 +226,20 @@ func (a *App) applyStartupSwitches() error {
 	return nil
 }
 
+const (
+	serverReadHeaderTimeout = 10 * time.Second
+	serverReadTimeout       = 30 * time.Second
+	serverIdleTimeout       = 120 * time.Second
+)
+
 func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
 		Handler:           handler,
 		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		IdleTimeout:       serverIdleTimeout,
 	}
 }
 

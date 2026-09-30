@@ -43,8 +43,8 @@ func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 	a := &App{searchSvc: svc}
 
 	inFlight := a.shutdownComponent(discoverySearchComponent, 50*time.Millisecond, a.waitSearchBackground)
-	if inFlight.completed {
-		t.Fatal("drain reported completed=true while search background work was still in flight")
+	if inFlight.status != shutdownTimedOut {
+		t.Fatal("drain reported a non-timed-out status while search background work was still in flight")
 	}
 	if inFlight.name != "discovery search" {
 		t.Errorf("outcome name: got %q, want %q", inFlight.name, "discovery search")
@@ -54,7 +54,7 @@ func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 	cancel()
 
 	drained := a.shutdownComponent(discoverySearchComponent, 2*time.Second, a.waitSearchBackground)
-	if !drained.completed {
+	if drained.status != shutdownCompleted {
 		t.Fatal("drain reported completed=false after search background work finished")
 	}
 }
@@ -62,7 +62,7 @@ func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 func TestDrainSearchBackground_NilServiceIsClean(t *testing.T) {
 	a := &App{}
 	clean := a.shutdownComponent(discoverySearchComponent, time.Second, a.waitSearchBackground)
-	if !clean.completed {
+	if clean.status != shutdownCompleted {
 		t.Fatal("drain with no search service reported completed=false")
 	}
 	if clean.name != "discovery search" {
@@ -79,7 +79,7 @@ func TestShutdownComponent_TimeoutSurfacedDistinctly(t *testing.T) {
 		<-ctx.Done()
 	})
 	<-started
-	if slow.completed {
+	if slow.status != shutdownTimedOut {
 		t.Fatal("component that exceeded its budget reported completed=true")
 	}
 	if slow.name != "slow component" {
@@ -87,11 +87,11 @@ func TestShutdownComponent_TimeoutSurfacedDistinctly(t *testing.T) {
 	}
 
 	fast := a.shutdownComponent("fast component", 5*time.Second, func(context.Context) {})
-	if !fast.completed {
+	if fast.status != shutdownCompleted {
 		t.Fatal("component that finished promptly reported completed=false")
 	}
 
-	if slow.completed == fast.completed {
+	if slow.status == fast.status {
 		t.Fatal("timed-out and clean shutdowns are indistinguishable")
 	}
 }
@@ -99,7 +99,7 @@ func TestShutdownComponent_TimeoutSurfacedDistinctly(t *testing.T) {
 func TestDrainBackground_TimeoutVsClean(t *testing.T) {
 	a := &App{}
 	clean := a.shutdownComponent(backgroundTasksComponent, time.Second, a.waitBackground)
-	if !clean.completed {
+	if clean.status != shutdownCompleted {
 		t.Fatal("drain with no outstanding work reported completed=false")
 	}
 
@@ -107,16 +107,16 @@ func TestDrainBackground_TimeoutVsClean(t *testing.T) {
 	defer a.wg.Done()
 
 	timedOut := a.shutdownComponent(backgroundTasksComponent, 20*time.Millisecond, a.waitBackground)
-	if timedOut.completed {
+	if timedOut.status != shutdownTimedOut {
 		t.Fatal("drain that timed out with work still running reported completed=true")
 	}
 }
 
 func TestUnfinishedShutdowns_NamesOnlyIncomplete(t *testing.T) {
 	outcomes := []shutdownOutcome{
-		{name: "alert monitor", completed: true},
-		{name: "acquisition scheduler", completed: false},
-		{name: "background tasks", completed: false},
+		{name: "alert monitor", status: shutdownCompleted},
+		{name: "acquisition scheduler", status: shutdownTimedOut},
+		{name: "background tasks", status: shutdownTimedOut},
 	}
 
 	got := unfinishedShutdowns(outcomes)
@@ -161,10 +161,10 @@ func TestRunShutdownSequence_OrderPinned(t *testing.T) {
 
 	got := make([]string, 0, len(outcomes))
 	for _, o := range outcomes {
-		if !o.completed {
+		if o.status != shutdownCompleted {
 			t.Errorf("component %q did not complete on an empty App", o.name)
 		}
-		got = append(got, o.name)
+		got = append(got, string(o.name))
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("shutdown order:\n got  %v\n want %v", got, want)
@@ -172,7 +172,7 @@ func TestRunShutdownSequence_OrderPinned(t *testing.T) {
 }
 
 func TestShutdownPlan_TimeoutsPinned(t *testing.T) {
-	want := map[string]time.Duration{
+	want := map[componentName]time.Duration{
 		"alert monitor":         2 * time.Second,
 		"event feed":            2 * time.Second,
 		"eval meter":            2 * time.Second,

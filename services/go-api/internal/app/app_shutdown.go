@@ -6,16 +6,25 @@ import (
 	"time"
 )
 
+type componentName string
+
 const (
-	backgroundTasksComponent = "background tasks"
-	leaderElectionComponent  = "leader election"
-	discoverySearchComponent = "discovery search"
-	backgroundDrainTimeout   = 15 * time.Second
-	discoveryDrainTimeout    = 10 * time.Second
-	serverDrainTimeout       = 10 * time.Second
-	observerDrainTimeout     = 2 * time.Second
-	leaderReleaseTimeout     = 3 * time.Second
-	schedulerDrainCap        = 35 * time.Second
+	alertMonitorComponent    componentName = "alert monitor"
+	eventFeedComponent       componentName = "event feed"
+	evalMeterComponent       componentName = "eval meter"
+	schedulerComponent       componentName = "acquisition scheduler"
+	backgroundTasksComponent componentName = "background tasks"
+	leaderElectionComponent  componentName = "leader election"
+	discoverySearchComponent componentName = "discovery search"
+)
+
+const (
+	backgroundDrainTimeout = 15 * time.Second
+	discoveryDrainTimeout  = 10 * time.Second
+	serverDrainTimeout     = 10 * time.Second
+	observerDrainTimeout   = 2 * time.Second
+	leaderReleaseTimeout   = 3 * time.Second
+	schedulerDrainCap      = 35 * time.Second
 
 	shutdownTotalBudget = 80 * time.Second
 )
@@ -40,15 +49,22 @@ func (a *App) drainServer(timeout time.Duration) {
 	}
 }
 
+type shutdownStatus int
+
+const (
+	shutdownCompleted shutdownStatus = iota
+	shutdownTimedOut
+	shutdownSkipped
+)
+
 type shutdownOutcome struct {
-	name      string
-	completed bool
-	skipped   bool
+	name   componentName
+	status shutdownStatus
 }
 
 func leadershipRetained(outcomes []shutdownOutcome) bool {
 	for _, o := range outcomes {
-		if o.name == leaderElectionComponent && o.skipped {
+		if o.name == leaderElectionComponent && o.status == shutdownSkipped {
 			return true
 		}
 	}
@@ -58,14 +74,14 @@ func leadershipRetained(outcomes []shutdownOutcome) bool {
 func unfinishedShutdowns(outcomes []shutdownOutcome) []string {
 	var names []string
 	for _, o := range outcomes {
-		if !o.completed {
-			names = append(names, o.name)
+		if o.status != shutdownCompleted {
+			names = append(names, string(o.name))
 		}
 	}
 	return names
 }
 
-func (a *App) shutdownComponent(name string, timeout time.Duration, fn func(context.Context)) shutdownOutcome {
+func (a *App) shutdownComponent(name componentName, timeout time.Duration, fn func(context.Context)) shutdownOutcome {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	done := make(chan struct{})
@@ -75,40 +91,40 @@ func (a *App) shutdownComponent(name string, timeout time.Duration, fn func(cont
 	}()
 	select {
 	case <-done:
-		return shutdownOutcome{name: name, completed: true}
+		return shutdownOutcome{name: name, status: shutdownCompleted}
 	case <-ctx.Done():
 		slog.Warn("component shutdown exceeded its budget",
-			"component", name, "timeout", timeout.String())
-		return shutdownOutcome{name: name, completed: false}
+			"component", string(name), "timeout", timeout.String())
+		return shutdownOutcome{name: name, status: shutdownTimedOut}
 	}
 }
 
 type componentShutdown struct {
-	name       string
+	name       componentName
 	timeout    time.Duration
 	shutdown   func(context.Context)
-	requires   string
+	requires   componentName
 	blockedMsg string
 }
 
 func (a *App) shutdownPlan() []componentShutdown {
 	return []componentShutdown{
-		{name: "alert monitor", timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
+		{name: alertMonitorComponent, timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
 			if a.alertMonitor != nil {
 				a.alertMonitor.Shutdown(ctx)
 			}
 		}},
-		{name: "event feed", timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
+		{name: eventFeedComponent, timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
 			if a.eventFeed != nil {
 				a.eventFeed.Shutdown(ctx)
 			}
 		}},
-		{name: "eval meter", timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
+		{name: evalMeterComponent, timeout: observerDrainTimeout, shutdown: func(ctx context.Context) {
 			if a.evalMeter != nil {
 				a.evalMeter.Shutdown(ctx)
 			}
 		}},
-		{name: "acquisition scheduler", timeout: a.schedulerDrainTimeout(), shutdown: func(ctx context.Context) {
+		{name: schedulerComponent, timeout: a.schedulerDrainTimeout(), shutdown: func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
 			}
@@ -136,19 +152,19 @@ func (a *App) runShutdownSequence() []shutdownOutcome {
 
 func (a *App) runShutdownPlan(plan []componentShutdown) []shutdownOutcome {
 	outcomes := make([]shutdownOutcome, 0, len(plan))
-	completed := make(map[string]bool, len(plan))
+	completed := make(map[componentName]bool, len(plan))
 	for _, c := range plan {
 		o := a.runPlannedShutdown(c, completed)
-		completed[o.name] = o.completed
+		completed[o.name] = o.status == shutdownCompleted
 		outcomes = append(outcomes, o)
 	}
 	return outcomes
 }
 
-func (a *App) runPlannedShutdown(c componentShutdown, completed map[string]bool) shutdownOutcome {
+func (a *App) runPlannedShutdown(c componentShutdown, completed map[componentName]bool) shutdownOutcome {
 	if c.requires != "" && !completed[c.requires] {
-		slog.Error(c.blockedMsg, "component", c.name, "requires", c.requires)
-		return shutdownOutcome{name: c.name, skipped: true}
+		slog.Error(c.blockedMsg, "component", string(c.name), "requires", string(c.requires))
+		return shutdownOutcome{name: c.name, status: shutdownSkipped}
 	}
 	return a.shutdownComponent(c.name, c.timeout, c.shutdown)
 }
