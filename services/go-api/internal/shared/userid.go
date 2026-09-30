@@ -26,10 +26,6 @@ func AnonymousUserId() UserId {
 	return UserId{value: anonymousUserUUID}
 }
 
-func (u UserId) IsAnonymous() bool {
-	return u.value == anonymousUserUUID
-}
-
 var ErrSystemUserPersonalization = errors.New("shared: the system user id has no personalization data to read or write")
 
 func GuardNotSystem(userId UserId) error {
