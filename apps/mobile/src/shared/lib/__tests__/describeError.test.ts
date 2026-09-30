@@ -39,6 +39,17 @@ describe('describeError — network vs 5xx vs generic', () => {
   });
 });
 
+describe('describeError — a query string cannot masquerade as a transport failure', () => {
+  it('maps a 5xx ApiError whose path contains "network" to the server copy', () => {
+    expect(
+      describeError(new ApiError(500, 'API /v1/discovery/search?q=network returned 500')),
+    ).toEqual({
+      title: 'Something went wrong',
+      body: `Something went wrong on our end. ${RETRY_TAIL}`,
+    });
+  });
+});
+
 describe('describeError — a response this build can no longer decode', () => {
   it('maps a ContractError to an update prompt instead of the generic copy', () => {
     expect(describeError(new ContractError('GET /v1/tracks', 'expected an object'))).toEqual({

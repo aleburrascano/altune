@@ -1,5 +1,6 @@
 import { isNetworkError } from '../isNetworkError';
 import { apiFetch } from '@shared/api-client';
+import { ApiError } from '@shared/errors';
 import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { describeError } from '../describeError';
@@ -136,5 +137,23 @@ describe('the NetworkError the api-client throws', () => {
       error.name = 'ApiError';
       expect(isNetworkError(error)).toBe(false);
     });
+  });
+});
+
+describe('isNetworkError — an ApiError is a server response, never transport', () => {
+  it.each([
+    '/v1/discovery/search?q=network',
+    '/v1/discovery/search?q=fetch',
+    '/v1/discovery/search?q=timeout',
+    '/v1/discovery/search?q=connection',
+  ])('an ApiError for %s is not a network error', (path) => {
+    expect(isNetworkError(new ApiError(500, `API ${path} returned 500`))).toBe(false);
+  });
+
+  it('separates an ApiError from NetworkError and unwrapped transport messages', () => {
+    const apiError = new ApiError(500, 'API /v1/discovery/search?q=network returned 500');
+    expect(isNetworkError(apiError)).toBe(false);
+    expect(isNetworkError(new NetworkError('transport', 'dropped'))).toBe(true);
+    expect(isNetworkError(new Error('fetch failed'))).toBe(true);
   });
 });
