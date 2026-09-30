@@ -4,13 +4,15 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_owner=${STUB_OWNER:-1000} stub_health=${STUB_HEALTH:-healthy}
     local stub_logs=${STUB_LOGS:-}
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/overseer.sh" "$HERE/compose.prod.yml" "$WORK/api/deploy/"
 

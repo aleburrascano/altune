@@ -21,7 +21,7 @@ PL1=50000000-0000-0000-0000-000000000005
 FA1=60000000-0000-0000-0000-000000000006
 
 cleanup() {
-    docker rm -f "$RUN_ID" >/dev/null 2>&1
+    docker rm -fv "$RUN_ID" >/dev/null 2>&1
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -61,7 +61,7 @@ start_postgres() {
     mkdir -p "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/staging-sync.sh" "$WORK/api/deploy/"
     cp -r "$HERE/../migrations" "$WORK/api/migrations"
-    docker run -d --name "$RUN_ID" -e POSTGRES_PASSWORD=pw \
+    docker run -d --label altune-ci=1 --name "$RUN_ID" -e POSTGRES_PASSWORD=pw \
         -v "$WORK/api:/api" "$IMAGE" >/dev/null || exit 1
     local attempt
     for attempt in $(seq 1 60); do

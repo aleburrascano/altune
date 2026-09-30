@@ -18,7 +18,7 @@ T_DUP=20000000-0000-0000-0000-000000000002
 T_KEEP=30000000-0000-0000-0000-000000000003
 
 cleanup() {
-    docker rm -f "$RUN_ID" >/dev/null 2>&1
+    docker rm -fv "$RUN_ID" >/dev/null 2>&1
     rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -30,7 +30,7 @@ sql() {
 start_postgres() {
     mkdir -p "$WORK/api/deploy"
     cp -r "$HERE/../migrations" "$WORK/api/migrations"
-    docker run -d --name "$RUN_ID" -e POSTGRES_PASSWORD=pw -p 127.0.0.1::5432 \
+    docker run -d --label altune-ci=1 --name "$RUN_ID" -e POSTGRES_PASSWORD=pw -p 127.0.0.1::5432 \
         -v "$WORK/api:/api" "$IMAGE" >/dev/null || exit 1
     local attempt
     for attempt in $(seq 1 60); do

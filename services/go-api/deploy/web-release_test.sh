@@ -3,13 +3,15 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 SHA_A=aaaaaaa1
 SHA_B=bbbbbbb2
 SHA_C=ccccccc3
 
 fresh_root() {
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/tarballs"
     : >"$WORK/links.log"
     for tool in ln mv; do

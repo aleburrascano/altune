@@ -3,12 +3,14 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 
 setup_case() {
     local seed=$1 health_ok=$2 public_ok=$3 legacy=$4 seed_at=${5:-deploy/caddy}
     local prod_env=${PROD_ENV-PUBLIC_HEALTH_URL=https://prod.example.test/health}
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"
     cp "$HERE/lib.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
     cp "$HERE/compose.prod.yml" "$HERE/Caddyfile" "$WORK/api/deploy/"

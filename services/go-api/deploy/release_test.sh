@@ -3,12 +3,14 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 SHA=0123456789abcdef0123456789abcdef01234567
 
 setup_case() {
     local failing=${STUB_FAIL:-none}
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/altune/services/go-api/deploy"
     for step in staging prod-migrate blue-green overseer smoke; do
         cat >"$WORK/altune/services/go-api/deploy/$step.sh" <<EOF

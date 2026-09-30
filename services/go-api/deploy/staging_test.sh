@@ -4,6 +4,8 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 
 setup_case() {
@@ -12,7 +14,7 @@ setup_case() {
     local stub_green_healthy=${STUB_GREEN_HEALTHY:-yes} stub_green_stops=${STUB_GREEN_STOPS:-yes}
     local stub_running_blue_healthy=${STUB_RUNNING_BLUE_HEALTHY:-yes}
     local stub_tag_fails=${STUB_TAG_FAILS:-no} stub_signal=${STUB_SIGNAL_DURING_DRILL:-}
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/migrations"
     cp "$HERE/lib.sh" "$HERE/staging.sh" "$HERE/compose.staging.yml" "$WORK/api/deploy/"
     : >"$WORK/api/migrations/001_baseline.sql"

@@ -4,13 +4,15 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_tracks=${STUB_TRACKS:-t} stub_fail=${STUB_MIGRATE_FAIL:-__none__}
     local stub_preapplied=${STUB_PREAPPLIED:-}
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/migrations"
     cp "$HERE/lib.sh" "$HERE/prod-migrate.sh" "$WORK/api/deploy/"
     : >"$WORK/api/migrations/001_baseline.sql"

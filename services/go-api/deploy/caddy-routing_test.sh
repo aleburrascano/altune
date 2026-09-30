@@ -16,7 +16,7 @@ caddy_image() {
 }
 
 cleanup() {
-    docker rm -f "$RUN_ID-edge" "$RUN_ID-stub" >/dev/null 2>&1
+    docker rm -fv "$RUN_ID-edge" "$RUN_ID-stub" >/dev/null 2>&1
     docker network rm "$RUN_ID" >/dev/null 2>&1
     rm -rf "$WORK"
 }
@@ -49,12 +49,12 @@ start_containers() {
     image=$(caddy_image)
     [ -n "$image" ] || { printf 'FAIL: no caddy image in compose.prod.yml\n'; exit 1; }
     mkdir -p "$WORK/web"
-    docker network create "$RUN_ID" >/dev/null || exit 1
-    docker run -d --name "$RUN_ID-stub" --network "$RUN_ID" \
+    docker network create --label altune-ci=1 "$RUN_ID" >/dev/null || exit 1
+    docker run -d --rm --label altune-ci=1 --name "$RUN_ID-stub" --network "$RUN_ID" \
         --network-alias altune-go-api-blue --network-alias altune-staging-go-api-blue \
         --network-alias altune-overseer --network-alias altune-staging-overseer \
         -v "$WORK/stub.Caddyfile:/etc/caddy/Caddyfile:ro" "$image" >/dev/null || exit 1
-    docker run -d --name "$RUN_ID-edge" --network "$RUN_ID" -p 127.0.0.1::443 \
+    docker run -d --rm --label altune-ci=1 --name "$RUN_ID-edge" --network "$RUN_ID" -p 127.0.0.1::443 \
         -v "$WORK/edge.Caddyfile:/etc/caddy/Caddyfile:ro" \
         -v "$HERE/Caddyfile:/etc/caddy/Caddyfile.sites:ro" \
         -v "$WORK/upstream.conf:/etc/caddy/upstream.conf:ro" \

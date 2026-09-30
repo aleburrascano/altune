@@ -4,6 +4,8 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+parent=$(mktemp -d)
+trap 'rm -rf "$parent"' EXIT
 FAILURES=0
 
 setup_case() {
@@ -16,7 +18,7 @@ setup_case() {
     local stub_version=${STUB_VERSION:-deadbeef}
     local stub_health_body=${STUB_HEALTH_BODY:-'{"status":"ok","version":"'"$stub_version"'"}'}
     local expected_commit=${SMOKE_EXPECTED_COMMIT:-}
-    WORK=$(mktemp -d)
+    WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/smoke.sh" "$WORK/api/deploy/"
 
