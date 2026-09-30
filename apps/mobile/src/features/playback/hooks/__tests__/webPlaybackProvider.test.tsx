@@ -984,6 +984,49 @@ describe('WebPlaybackProvider through the queue controls a caller uses', () => {
     expect(playback()).toMatchObject({ status: 'playing', errorKind: null });
   });
 
+  it('discards a next-track prefetch that resolves after stop', async () => {
+    const late = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(Promise.resolve([presignedUrl('trk-1', 1)]));
+    presign.mockReturnValueOnce(late.promise);
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    await act(async () => audio.bufferEnough());
+    act(() => playback().stop());
+    await act(async () => late.resolve([presignedUrl('trk-2', 1)]));
+    presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id, 2)));
+
+    await act(() => playback().play(trackNamed('trk-2')));
+
+    expect(audio.src).toBe(presignedUrl('trk-2', 2).url);
+  });
+
+  it('discards a next-track prefetch that resolves after sign-out', async () => {
+    const late = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(Promise.resolve([presignedUrl('trk-1', 1)]));
+    presign.mockReturnValueOnce(late.promise);
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    await act(async () => audio.bufferEnough());
+    act(() => runSignOutCleanups());
+    await act(async () => late.resolve([presignedUrl('trk-2', 1)]));
+    presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id, 2)));
+
+    await act(() => playback().play(trackNamed('trk-2')));
+
+    expect(audio.src).toBe(presignedUrl('trk-2', 2).url);
+  });
+
+  it('plays a prefetched next track from its cached presign when nothing intervenes', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    await act(async () => audio.bufferEnough());
+    presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id, 2)));
+
+    await playEnd(audio);
+
+    expect(audio.src).toBe(presignedUrl('trk-2', 1).url);
+  });
+
   it('plays the track after a removed next track when the current one ends', async () => {
     const { audio, playback, queue } = renderWebQueue();
     await act(async () => queue().playFromList(album(3), 0, null));

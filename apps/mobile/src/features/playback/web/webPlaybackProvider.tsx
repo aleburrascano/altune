@@ -165,8 +165,10 @@ async function prefetchNextTrack(player: WebAudioPlayer): Promise<void> {
   const key = trackKey(next);
   if (isNextPresignFresh(player, key)) return;
   const issuedAt = player.now();
+  const seq = player.loadSeq;
   const outcome = await resolveSource(next.source);
-  if ('url' in outcome) player.nextPresign = { key, url: outcome.url, issuedAt };
+  if (seq === player.loadSeq && 'url' in outcome)
+    player.nextPresign = { key, url: outcome.url, issuedAt };
 }
 
 function takeNextPresign(player: WebAudioPlayer, track: PlaybackTrack): PendingPresign | null {
