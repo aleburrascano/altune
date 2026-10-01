@@ -37,7 +37,7 @@ jobs:
       run:
         working-directory: services/go-api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so the diff-scoped changed-comments check below can find
           # the PR base and gate only the lines this change added.
@@ -143,7 +143,7 @@ jobs:
       run:
         working-directory: services/go-api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # shellcheck ships on ubuntu-latest; guard so a future image without it
       # skips the lint rather than failing spuriously (the smoke self-test below
       # is the load-bearing check). -x follows the sourced deploy/lib.sh, which
@@ -223,7 +223,7 @@ jobs:
       # not a secret. Reachable on the runner via the mapped host port.
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
