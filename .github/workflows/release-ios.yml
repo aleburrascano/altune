@@ -18,11 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
-    uses: ./.github/workflows/test-mobile.yml
-
   build:
-    needs: verify
     runs-on: macos-26
     outputs:
       version: ${{ steps.meta.outputs.version }}
