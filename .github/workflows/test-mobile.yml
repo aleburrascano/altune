@@ -37,7 +37,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mobile-setup
         with:
           typed-routes: "true"
@@ -50,7 +50,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so the diff-scoped step below can find the merge base and
           # enforce the mechanical style rules only on the lines this PR changed.
@@ -110,7 +110,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history: fallow's health scoring weights git CHURN. Under a
           # depth-1 clone it has none and the numbers drift from a local run.
@@ -139,7 +139,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mobile-setup
       # Persist jest's transform cache across runs.
       - uses: actions/cache@v6
@@ -160,7 +160,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mobile-setup
       - name: expo web export
         env:
@@ -175,7 +175,7 @@ jobs:
       run:
         working-directory: apps/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mobile-setup
       # React-specific quality (react-doctor): security, bugs, performance,
       # maintainability. Errors are zero-tolerance; warnings are a ratchet at the
