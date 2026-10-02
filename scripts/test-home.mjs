@@ -182,7 +182,7 @@ function main() {
   const bad = violations(added, repo);
   if (bad.length) {
     console.log(bad.join("\n"));
-    console.log("test-home: a test file belongs to the unit it tests, not to the ticket (~/.claude/workflow/build/test-conventions.md \"Where a test lives\")");
+    console.log("test-home: a test file belongs to the unit it tests, not to the ticket (~/.claude/workflow/build/testing.md \"Where a test lives\")");
     process.exit(1);
   }
   console.log(`test-home: ${added.length} added file(s), every new test file is its unit's first`);
