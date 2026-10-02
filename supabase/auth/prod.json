@@ -1,0 +1,4 @@
+{
+  "disable_signup": false,
+  "uri_allow_list": "altune://**,https://altune.duckdns.org/auth/**"
+}

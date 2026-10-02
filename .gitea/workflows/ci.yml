@@ -8,6 +8,8 @@ on:
       - "services/overseer/**"
       - "apps/mobile/**"
       - "scripts/uptime/**"
+      - "scripts/supabase-auth*"
+      - "supabase/auth/**"
       - ".gitea/workflows/ci*"
       - ".github/workflows/test-*"
       - ".github/workflows/nilaway*"
@@ -74,6 +76,8 @@ jobs:
           cd "$WT"
           bash scripts/uptime/journey_test.sh
           bash scripts/uptime/check_test.sh
+      - name: supabase auth config self-tests
+        run: cd "$WT" && bash scripts/supabase-auth_test.sh
       - name: clean up
         if: always()
         run: |
