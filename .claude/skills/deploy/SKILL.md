@@ -15,13 +15,13 @@ Prod and staging share one VM, reached as `DEPLOY_USER@DEPLOY_HOST` (they were G
 Prod acts (a prod `release.sh`, `rollback.sh`) run without a human yes (operator decision, 2026-09-27): release to prod only after the same sha is green on staging, and roll back on a failed prod smoke.
 
 Read the sibling for its branch:
-- [staging.md](staging.md) when creating or changing the staging tier, its env, or its data sync.
+- [staging.md](staging.md) when creating or changing the staging tier, its env, or its one-way data copy from prod, and the nightly auth drift check.
 - [overseer.md](overseer.md) when overseer shows `source_down`, `STALE` cost, a token log line, or needs its principal set up.
 - [web.md](web.md) when releasing, rolling back or turning off the web app.
 
 ## 1. Read where the release stands
 
-The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds only `precheck.yml`. So **no CI deploy runs on a push to `main`**: `.github/workflows/deploy-backend.yml` (tests, `deploy-staging`, `smoke-staging`, `approve-prod`, `deploy-prod`) is the GitHub-era pipeline, kept for reference. Gitea has no environment protection rules either, so its `production` approval step has no Gitea equivalent. Every release is the by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM.
+The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds `precheck.yml`, `deploy.yml`, `deploy-web.yml` and `staging-sync.yml`, among others. `.github/workflows/deploy-backend.yml` (tests, `deploy-staging`, `smoke-staging`, `approve-prod`, `deploy-prod`) is the GitHub-era pipeline, kept for reference only. `deploy.yml` releases staging, smokes it, then releases prod on a push to `main`. The by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM, stays for reruns and rollbacks.
 
 Where `main` stands, and what the VM runs:
 

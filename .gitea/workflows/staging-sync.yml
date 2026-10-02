@@ -12,13 +12,28 @@ concurrency:
 env:
   VM: ubuntu@altune.duckdns.org
   VM_KEY: /home/ubuntu/.ssh/altune-prod.key
+  REPO: /home/ubuntu/projects/altune
 
 jobs:
   sync:
     runs-on: host
     timeout-minutes: 40
     steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea || { sleep 5; git -C "$REPO" fetch -q gitea; } || { sleep 5; git -C "$REPO" fetch -q gitea; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
       - name: sync staging from prod
         run: |
           ssh -i "$VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 "$VM" \
             "flock -w 600 ~/.altune-staging.lock bash ~/altune/services/go-api/deploy/staging-sync.sh"
+      - name: supabase auth drift
+        if: always()
+        run: |
+          cd "${WT:?checkout did not run}"
+          bash scripts/supabase-auth.sh diff prod && bash scripts/supabase-auth.sh diff staging
+      - name: clean up
+        if: always()
+        run: |
+          [ -n "${WT:-}" ] || exit 0
+          bash "$WT/.gitea/workflows/ci-cleanup.sh"
