@@ -5,6 +5,7 @@ import { authRedirectUrl } from '../authRedirect';
 import {
   classifyAuthError,
   isAlreadyRegisteredError,
+  isSignupDisabledError,
   isWeakPasswordError,
 } from '../supabaseAuthError';
 
@@ -17,7 +18,7 @@ type SignUpResult =
   | { kind: 'awaiting-confirmation' }
   | {
       kind: 'error';
-      reason: TransientAuthReason | 'weak_password' | 'already_registered';
+      reason: TransientAuthReason | 'weak_password' | 'already_registered' | 'signup_disabled';
     };
 
 type SettledSignUp = Exclude<SignUpResult, { kind: 'idle' | 'pending' }>;
@@ -47,6 +48,7 @@ export function useSignUp() {
           reason: classifyAuthError(error, [
             [isWeakPasswordError, 'weak_password'],
             [isAlreadyRegisteredError, 'already_registered'],
+            [isSignupDisabledError, 'signup_disabled'],
           ]),
         };
       }

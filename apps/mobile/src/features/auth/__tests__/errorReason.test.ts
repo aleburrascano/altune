@@ -2,6 +2,7 @@ import {
   EMAIL_NOT_CONFIRMED_COPY,
   INVALID_SIGN_IN_COPY,
   NETWORK_ERROR_COPY,
+  SIGNUP_DISABLED_COPY,
   TOO_MANY_ATTEMPTS_COPY,
   authErrorText,
   type AuthErrorReason,
@@ -24,6 +25,11 @@ describe('authErrorText: the reasons that need their own words', () => {
 
   it('asks an unconfirmed user for the inbox rather than the password', () => {
     expect(authErrorText('email_not_confirmed', GENERIC)).toBe(EMAIL_NOT_CONFIRMED_COPY);
+  });
+
+  it('says sign-ups are closed rather than blaming the person', () => {
+    expect(authErrorText('signup_disabled', GENERIC)).toBe(SIGNUP_DISABLED_COPY);
+    expect(SIGNUP_DISABLED_COPY).toBe('Sign-ups are closed on staging.');
   });
 
   it('falls back to the caller-supplied copy for every other reason', () => {

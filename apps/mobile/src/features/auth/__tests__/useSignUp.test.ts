@@ -51,6 +51,20 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
     expect(await signUp()).toEqual({ kind: 'error', reason: 'already_registered' });
   });
 
+  it('maps a signup_disabled error to signup_disabled', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 422,
+        code: 'signup_disabled',
+        message: 'Signups not allowed for this instance',
+      },
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'signup_disabled' });
+  });
+
   it('maps the empty-identities anti-enumeration signal to already_registered, not awaiting-confirmation', async () => {
     supabaseSignUp.mockResolvedValue({
       data: { user: { id: 'obfuscated', identities: [] }, session: null },

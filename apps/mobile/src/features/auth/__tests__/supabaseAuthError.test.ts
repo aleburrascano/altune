@@ -1,6 +1,7 @@
 import {
   classifyAuthError,
   isInvalidCredentialsError,
+  isSignupDisabledError,
   isUnconfirmedEmailError,
 } from '../supabaseAuthError';
 
@@ -35,5 +36,12 @@ describe('classifyAuthError', () => {
     expect(
       classifyAuthError({ status: 400 }, [[isInvalidCredentialsError, 'invalid_credentials']]),
     ).toBe('unknown');
+  });
+});
+
+describe('isSignupDisabledError', () => {
+  it('recognises the signup_disabled code and nothing else', () => {
+    expect(isSignupDisabledError({ status: 422, code: 'signup_disabled' })).toBe(true);
+    expect(isSignupDisabledError({ status: 422, code: 'weak_password' })).toBe(false);
   });
 });

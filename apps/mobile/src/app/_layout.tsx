@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { appMutationCache, appQueryCache } from '../shared/query/useAppMutation';
 import { transientRetryOptions } from '../shared/query/retryDelay';
+import { StagingBanner } from '../shared/staging/StagingBanner';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
@@ -107,6 +108,7 @@ export default function RootLayout() {
             <SystemNavigationBar scheme={scheme} />
             <TestAuthBridge />
             <AuthDeepLinkBridge />
+            <StagingBanner />
             <AuthGate>
               <ServerEventsBridge />
               <PlaybackProvider>

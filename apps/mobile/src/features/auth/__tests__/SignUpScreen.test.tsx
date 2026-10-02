@@ -111,6 +111,12 @@ describe('the sign-up screen', () => {
     );
   });
 
+  it('tells the person sign-ups are closed when the server refused the sign-up', () => {
+    renderSignUp({ kind: 'error', reason: 'signup_disabled' });
+
+    expect(screen.getByTestId('auth-error')).toHaveTextContent('Sign-ups are closed on staging.');
+  });
+
   it('replaces the form with the check-email notice once the account is pending', () => {
     renderSignUp({ kind: 'awaiting-confirmation' });
 

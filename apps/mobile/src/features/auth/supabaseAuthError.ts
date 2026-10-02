@@ -38,6 +38,10 @@ export function isAlreadyRegisteredError(error: SupabaseAuthErrorLike): boolean 
   return error.code === 'user_already_exists' || error.code === 'email_exists';
 }
 
+export function isSignupDisabledError(error: SupabaseAuthErrorLike): boolean {
+  return error.code === 'signup_disabled';
+}
+
 type Rung<R extends AuthErrorReason> = readonly [(error: SupabaseAuthErrorLike) => boolean, R];
 
 export function classifyAuthError<R extends AuthErrorReason = never>(
