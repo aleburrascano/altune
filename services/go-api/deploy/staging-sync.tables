@@ -1,0 +1,16 @@
+tracks user
+playlists user
+discovery_search_history user
+discovery_search_clicks user
+playback_queue_state user
+discovery_events user
+featured_artists user
+discovery_favorites user
+playlist_tracks child playlists playlist_id
+track_featured_artists child tracks track_id
+acquisition_cooldowns child tracks track_id
+entity_identity global
+orphaned_audio reset
+acquisition_outcomes skip staging-local telemetry, bigserial id
+acquisition_rejections skip staging-local telemetry, text track_id with no fk
+schema_migrations skip owned by the migration runner

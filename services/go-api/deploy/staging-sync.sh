@@ -8,9 +8,12 @@ PROD_ENV="${PROD_ENV_FILE:-.env.production}"
 STAGING_ENV="${STAGING_ENV_FILE:-.env.staging}"
 IMPORT_SCHEMA=prod_import
 
-USER_TABLES="featured_artists tracks playlists discovery_events discovery_favorites discovery_search_clicks discovery_search_history playback_queue_state"
-CHILD_TABLES="playlist_tracks track_featured_artists acquisition_cooldowns"
-GLOBAL_TABLES="entity_identity"
+MANIFEST=deploy/staging-sync.tables
+MANIFEST_NAME=staging-sync.tables
+TABLE_NAME_RE='^[a-z_0-9]+$'
+
+declare -a MANIFEST_TABLES=()
+declare -A TABLE_RULE TABLE_PARENT TABLE_FK_COLUMN
 
 UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 
@@ -53,13 +56,80 @@ shared_columns() {
     printf '%s' "$out"
 }
 
+manifest_fail() {
+    log "FAILED: $MANIFEST_NAME line $1: $2"
+    exit 1
+}
+
+load_manifest() {
+    local line_no=0 table rule rest parent fk_column extra
+    while read -r table rule rest; do
+        line_no=$((line_no + 1))
+        if [ -z "$table" ] || [[ $table == \#* ]]; then
+            continue
+        fi
+        [[ $table =~ $TABLE_NAME_RE ]] || manifest_fail "$line_no" "bad table name '$table'"
+        [ -z "${TABLE_RULE[$table]:-}" ] || manifest_fail "$line_no" "public.$table is listed twice"
+        case $rule in
+            user | global | reset) ;;
+            skip) [ -n "$rest" ] || manifest_fail "$line_no" "skip needs a reason" ;;
+            child)
+                read -r parent fk_column extra <<<"$rest"
+                [[ $parent =~ $TABLE_NAME_RE && $fk_column =~ $TABLE_NAME_RE && -z "$extra" ]] ||
+                    manifest_fail "$line_no" "child needs '<parent-table> <fk-col>'"
+                [ "${TABLE_RULE[$parent]:-}" = user ] ||
+                    manifest_fail "$line_no" "child parent '$parent' must be a user table listed above it"
+                TABLE_PARENT[$table]=$parent
+                TABLE_FK_COLUMN[$table]=$fk_column ;;
+            *) manifest_fail "$line_no" "unknown rule '$rule'" ;;
+        esac
+        TABLE_RULE[$table]=$rule
+        MANIFEST_TABLES+=("$table")
+    done <"$MANIFEST"
+}
+
+tables_with_rule() {
+    local table
+    for table in "${MANIFEST_TABLES[@]}"; do
+        if [ "${TABLE_RULE[$table]}" = "$1" ]; then
+            printf '%s\n' "$table"
+        fi
+    done
+}
+
+public_tables_sql() {
+    printf '%s\n' "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;"
+}
+
+require_every_table_has_a_rule() {
+    local live_tables table
+    live_tables=$({ public_tables_sql | prod_read; public_tables_sql | staging_sql; } | sort -u)
+    for table in $live_tables; do
+        if [ -z "${TABLE_RULE[$table]:-}" ]; then
+            log "FAILED: public.$table has no rule in $MANIFEST_NAME"
+            exit 1
+        fi
+    done
+    for table in "${MANIFEST_TABLES[@]}"; do
+        if ! printf '%s\n' "$live_tables" | grep -qx "$table"; then
+            log "FAILED: $MANIFEST_NAME lists public.$table, which exists on neither tier"
+            exit 1
+        fi
+    done
+}
+
+synced_tables() {
+    tables_with_rule user
+    tables_with_rule child
+    tables_with_rule global
+}
+
 source_filter() {
-    case $1 in
-        playlist_tracks)
-            printf 'playlist_id IN (SELECT id FROM public.playlists WHERE user_id = ANY(%s))' "$PROD_IDS" ;;
-        track_featured_artists | acquisition_cooldowns)
-            printf 'track_id IN (SELECT id FROM public.tracks WHERE user_id = ANY(%s))' "$PROD_IDS" ;;
-        entity_identity)
+    case ${TABLE_RULE[$1]} in
+        child)
+            printf '%s IN (SELECT id FROM public.%s WHERE user_id = ANY(%s))' \
+                "${TABLE_FK_COLUMN[$1]}" "${TABLE_PARENT[$1]}" "$PROD_IDS" ;;
+        global)
             printf 'true' ;;
         *)
             printf 'user_id = ANY(%s)' "$PROD_IDS" ;;
@@ -76,20 +146,20 @@ import_table() {
 
 swap_sql() {
     local table cols select_cols
-    for table in $USER_TABLES orphaned_audio; do
+    for table in $(tables_with_rule user) $(tables_with_rule reset); do
         printf 'DELETE FROM public.%s WHERE user_id IN (SELECT staging_id FROM %s.user_map);\n' \
             "$table" "$IMPORT_SCHEMA"
     done
-    for table in $GLOBAL_TABLES; do
+    for table in $(tables_with_rule global); do
         printf 'DELETE FROM public.%s;\n' "$table"
     done
-    for table in $USER_TABLES; do
+    for table in $(tables_with_rule user); do
         cols=${TABLE_COLUMNS[$table]}
         select_cols=$(printf '%s' "$cols" | sed -E 's/"([a-z_0-9]+)"/i."\1"/g; s/i\."user_id"/m.staging_id/')
         printf 'INSERT INTO public.%s (%s) SELECT %s FROM %s.%s i JOIN %s.user_map m ON m.prod_id = i.user_id;\n' \
             "$table" "$cols" "$select_cols" "$IMPORT_SCHEMA" "$table" "$IMPORT_SCHEMA"
     done
-    for table in $CHILD_TABLES $GLOBAL_TABLES; do
+    for table in $(tables_with_rule child) $(tables_with_rule global); do
         cols=${TABLE_COLUMNS[$table]}
         printf 'INSERT INTO public.%s (%s) SELECT %s FROM %s.%s;\n' \
             "$table" "$cols" "$cols" "$IMPORT_SCHEMA" "$table"
@@ -111,6 +181,8 @@ if [ "$PROD_URL" = "$STAGING_URL" ] || { [ -n "$PROD_PROJECT" ] && [ "$PROD_PROJ
     exit 1
 fi
 require_psql
+load_manifest
+require_every_table_has_a_rule
 
 staging_accounts=$(staging_sql -c "SELECT id, lower(email) FROM auth.users WHERE email IS NOT NULL")
 prod_accounts=$(printf '%s\n' "SELECT id, lower(email) FROM auth.users WHERE lower(email) = ANY(string_to_array(:'emails', E'\\n'));" |
@@ -148,7 +220,7 @@ staging_sql -c "CREATE SCHEMA $IMPORT_SCHEMA" \
 printf '%s\n' "$USER_MAP" | staging_sql -c "\\copy $IMPORT_SCHEMA.user_map FROM pstdin WITH (DELIMITER '|')"
 
 declare -A TABLE_COLUMNS
-for table in $USER_TABLES $CHILD_TABLES $GLOBAL_TABLES; do
+for table in $(synced_tables); do
     TABLE_COLUMNS[$table]=$(shared_columns "$table")
     if [ -z "${TABLE_COLUMNS[$table]}" ]; then
         log "FAILED: public.$table is missing on one tier"
@@ -158,7 +230,7 @@ for table in $USER_TABLES $CHILD_TABLES $GLOBAL_TABLES; do
 done
 
 swap_sql | staging_sql --single-transaction >/dev/null
-for table in $USER_TABLES $CHILD_TABLES $GLOBAL_TABLES; do
+for table in $(synced_tables); do
     log "  $table: $(staging_sql -c "SELECT count(*) FROM $IMPORT_SCHEMA.$table") rows from prod"
 done
 log "staging synced from prod"

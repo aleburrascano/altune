@@ -59,7 +59,7 @@ STUB
 
 start_postgres() {
     mkdir -p "$WORK/api/deploy"
-    cp "$HERE/lib.sh" "$HERE/staging-sync.sh" "$WORK/api/deploy/"
+    cp "$HERE/lib.sh" "$HERE/staging-sync.sh" "$HERE/staging-sync.tables" "$WORK/api/deploy/"
     cp -r "$HERE/../migrations" "$WORK/api/migrations"
     docker run -d --label altune-ci=1 --name "$RUN_ID" -e POSTGRES_PASSWORD=pw \
         -v "$WORK/api:/api" "$IMAGE" >/dev/null || exit 1
@@ -76,7 +76,8 @@ reset_databases() {
     local db file
     for db in prod staging; do
         sql postgres -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db"
-        sql "$db" -c "CREATE SCHEMA auth" -c "CREATE TABLE auth.users (id uuid PRIMARY KEY, email text)"
+        sql "$db" -c "CREATE SCHEMA auth" -c "CREATE TABLE auth.users (id uuid PRIMARY KEY, email text)" \
+            -c "CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
         for file in $(cd "$WORK/api" && printf '%s\n' migrations/*.sql | sort -V); do
             sql "$db" -f "/api/$file" >/dev/null || { printf 'FAIL: %s did not apply\n' "$file"; exit 1; }
         done
@@ -212,12 +213,148 @@ test_promote_failure_aborts_sync() {
     docker exec "$RUN_ID" rm -f /tmp/docker-exec-should-fail
 }
 
+test_table_without_a_rule_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "CREATE TABLE foo (id int)"
+    check "a prod table with no rule aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the table" 1 "$(grep -c 'FAILED: public.foo has no rule in staging-sync.tables' "$WORK/out")"
+    check "an unruled table leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "an unruled table leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+restore_manifest() {
+    cp "$HERE/staging-sync.tables" "$WORK/api/deploy/staging-sync.tables"
+}
+
+test_staging_only_table_without_a_rule_aborts_sync() {
+    reset_databases
+    write_env
+    sql staging -c "CREATE TABLE bar (id int)"
+    check "a staging-only table with no rule aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the staging-only table" 1 "$(grep -c 'FAILED: public.bar has no rule in staging-sync.tables' "$WORK/out")"
+    check "a staging-only unruled table leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "a staging-only unruled table leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_manifest_line_for_a_table_on_neither_tier_aborts_sync() {
+    reset_databases
+    write_env
+    printf 'ghost_table global\n' >>"$WORK/api/deploy/staging-sync.tables"
+    check "a manifest line naming no table aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the stale line's table" 1 "$(grep -c 'ghost_table' "$WORK/out")"
+    check "a stale manifest line leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "a stale manifest line leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    restore_manifest
+}
+
+test_commented_out_line_is_not_a_rule() {
+    reset_databases
+    write_env
+    printf '# foo user\n#foo global\n' >>"$WORK/api/deploy/staging-sync.tables"
+    sql prod -c "CREATE TABLE foo (id int)"
+    check "a table named only in a comment aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the commented-out table" 1 "$(grep -c 'FAILED: public.foo has no rule in staging-sync.tables' "$WORK/out")"
+    check "a commented-out rule leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    restore_manifest
+}
+
+test_manifest_with_comments_blank_lines_and_tabs_syncs() {
+    reset_databases
+    write_env
+    {
+        printf '# staging sync rules\n\n'
+        sed 's/ /\t/' "$HERE/staging-sync.tables" | sed 's/^\(tracks\)\t/\1   /'
+        printf '\n   \n# trailing comment\n'
+    } >"$WORK/api/deploy/staging-sync.tables"
+    run_sync
+    check "a manifest with comments, blank lines and tabs syncs" 0 "$?"
+    check "a reformatted manifest still re-keys the matched track" "$S1" "$(staging_value "SELECT user_id FROM tracks WHERE id = '$T1'")"
+    check "a reformatted manifest still copies playlist tracks" 1 "$(staging_value "SELECT count(*) FROM playlist_tracks WHERE playlist_id = '$PL1' AND track_id = '$T1'")"
+    restore_manifest
+}
+
+test_skip_tables_are_never_touched() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms) VALUES ('$T1', 'succeeded', 'from-prod', 1)" \
+        -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T1', 'prod-src', 'from-prod')"
+    sql staging -c "INSERT INTO acquisition_outcomes (track_id, outcome, reason, elapsed_ms) VALUES ('$T_STALE', 'failed', 'from-staging', 2)" \
+        -c "INSERT INTO acquisition_rejections (track_id, source_key, reason) VALUES ('$T_STALE', 'staging-src', 'from-staging')"
+    run_sync
+    check "a sync with skip tables exits 0" 0 "$?"
+    check "skipped outcomes keep only staging's rows" "from-staging" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_outcomes")"
+    check "skipped rejections keep only staging's rows" "from-staging" "$(staging_value "SELECT string_agg(reason, ',') FROM acquisition_rejections")"
+}
+
+test_reset_clears_only_matched_users_orphaned_audio() {
+    reset_databases
+    write_env
+    sql staging -c "INSERT INTO orphaned_audio (audio_ref, user_id, track_id) VALUES ('s/matched.mp3', '$S1', '$T_STALE'), ('s/smoke.mp3', '$S2', '$T_SMOKE')"
+    run_sync
+    check "a sync with staging orphaned audio exits 0" 0 "$?"
+    check "reset keeps only the unmatched account's orphaned audio" "s/smoke.mp3" "$(staging_value "SELECT string_agg(audio_ref, ',') FROM orphaned_audio")"
+}
+
+test_manifest_rule_for_a_table_on_one_tier_only_syncs() {
+    reset_databases
+    write_env
+    sql staging -c "CREATE TABLE staging_scratch (id int)" -c "INSERT INTO staging_scratch VALUES (7)"
+    printf 'staging_scratch skip staging-only scratch table\n' >>"$WORK/api/deploy/staging-sync.tables"
+    run_sync
+    check "a ruled table present on one tier only does not abort the sync" 0 "$?"
+    check "a ruled one-tier table still lets the matched track cross" "$S1" "$(staging_value "SELECT user_id FROM tracks WHERE id = '$T1'")"
+    check "a skipped one-tier table keeps its rows" 7 "$(staging_value "SELECT string_agg(id::text, ',') FROM staging_scratch")"
+    restore_manifest
+}
+
+test_missing_manifest_aborts_sync() {
+    reset_databases
+    write_env
+    rm "$WORK/api/deploy/staging-sync.tables"
+    check "a missing manifest aborts the sync" 1 "$(sync_refused)"
+    check "a missing manifest leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "a missing manifest leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    restore_manifest
+}
+
+test_table_with_two_rules_aborts_sync() {
+    reset_databases
+    write_env
+    printf 'tracks global\n' >>"$WORK/api/deploy/staging-sync.tables"
+    check "a table with two rules aborts the sync" 1 "$(sync_refused)"
+    check "a doubly-ruled table leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "a doubly-ruled table never copies the unmatched account's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T2'")"
+    restore_manifest
+}
+
+test_unknown_rule_aborts_sync() {
+    reset_databases
+    write_env
+    sed 's/^entity_identity global$/entity_identity mirror/' "$HERE/staging-sync.tables" >"$WORK/api/deploy/staging-sync.tables"
+    check "an unknown rule aborts the sync" 1 "$(sync_refused)"
+    check "an unknown rule leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "an unknown rule leaves the stale entity cache" "mb-stale" "$(staging_value "SELECT string_agg(mbid, ',') FROM entity_identity")"
+    restore_manifest
+}
+
 start_postgres
 install_docker_stub
 test_sync_copies_matched_account
 test_failed_swap_rolls_back
 test_env_gates
 test_promote_failure_aborts_sync
+test_table_without_a_rule_aborts_sync
+test_staging_only_table_without_a_rule_aborts_sync
+test_manifest_line_for_a_table_on_neither_tier_aborts_sync
+test_commented_out_line_is_not_a_rule
+test_manifest_with_comments_blank_lines_and_tabs_syncs
+test_skip_tables_are_never_touched
+test_reset_clears_only_matched_users_orphaned_audio
+test_manifest_rule_for_a_table_on_one_tier_only_syncs
+test_missing_manifest_aborts_sync
+test_table_with_two_rules_aborts_sync
+test_unknown_rule_aborts_sync
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed; last script output:\n' "$FAILURES"
