@@ -159,7 +159,7 @@ export async function getAllTracks(params: {
   const { signal, ...filter } = params;
   const items: TrackResponse[] = [];
   while (items.length < MAX_ALL_TRACKS) {
-    signal?.throwIfAborted();
+    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
     const page = await getTracks({ ...filter, limit: MAX_PAGE, offset: items.length }, signal);
     items.push(...page.items);
     if (!page.has_more || page.items.length === 0) return { items, truncated: false };

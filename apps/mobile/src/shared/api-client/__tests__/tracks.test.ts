@@ -13,7 +13,7 @@ import {
   parseTrackResponse,
   tryParseTrackResponse,
 } from '../tracks';
-import { ContractError, NetworkError } from '@shared/errors';
+import { ContractError, NetworkError, isAbort } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
@@ -694,5 +694,40 @@ describe('getAllTracks truncation and cancellation', () => {
 
     await expect(getAllTracks({ signal: controller.signal })).rejects.toBeDefined();
     expect(__http.countFor('GET /v1/tracks')).toBe(0);
+  });
+
+  describe('with the React Native AbortController polyfill', () => {
+    function polyfillController(): AbortController {
+      const { AbortController: Polyfill } = require('abort-controller/dist/abort-controller');
+      return new Polyfill();
+    }
+
+    it('returns every item across pages', async () => {
+      const controller = polyfillController();
+      __http.reply('GET /v1/tracks', {
+        status: 200,
+        json: {
+          items: [trackResponse({ id: asTrackId('a') }), trackResponse({ id: asTrackId('b') })],
+          total: 2,
+          limit: 2000,
+          offset: 0,
+          has_more: false,
+        },
+      });
+
+      const all = await getAllTracks({ signal: controller.signal });
+
+      expect(all.items.map((t) => t.id)).toEqual(['a', 'b']);
+    });
+
+    it('rejects an already-aborted signal with an error isAbort accepts', async () => {
+      const controller = polyfillController();
+      controller.abort();
+
+      const error = await getAllTracks({ signal: controller.signal }).catch((e: unknown) => e);
+
+      expect(isAbort(error)).toBe(true);
+      expect(__http.countFor('GET /v1/tracks')).toBe(0);
+    });
   });
 });
