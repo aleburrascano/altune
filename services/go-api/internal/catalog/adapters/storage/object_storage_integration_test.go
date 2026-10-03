@@ -164,53 +164,6 @@ func TestObjectStorageAudioStore_Delete(t *testing.T) {
 	}
 }
 
-func TestObjectStorageAudioStore_Copy(t *testing.T) {
-	store := testObjectStore(t)
-	ctx := context.Background()
-	srcRef := testAudioRef(t) + "-src"
-	dstRef := testAudioRef(t) + "-dst"
-
-	t.Cleanup(func() {
-		_ = store.Delete(context.Background(), srcRef)
-		_ = store.Delete(context.Background(), dstRef)
-	})
-
-	content := []byte("fake audio data for object-storage copy test")
-	dir := t.TempDir()
-	srcPath := filepath.Join(dir, "source.opus")
-	if err := os.WriteFile(srcPath, content, 0o644); err != nil {
-		t.Fatalf("write source file: %v", err)
-	}
-	if err := store.Store(ctx, srcPath, srcRef); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
-
-	if err := store.Copy(ctx, srcRef, dstRef); err != nil {
-		t.Fatalf("Copy: %v", err)
-	}
-
-	rc, _, err := store.Stream(ctx, dstRef)
-	if err != nil {
-		t.Fatalf("Stream copied object: %v", err)
-	}
-	defer rc.Close()
-	got, err := io.ReadAll(rc)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if string(got) != string(content) {
-		t.Errorf("copied content mismatch: got %d bytes, want %d bytes", len(got), len(content))
-	}
-
-	exists, err := store.Exists(ctx, srcRef)
-	if err != nil {
-		t.Fatalf("Exists source after copy: %v", err)
-	}
-	if !exists {
-		t.Error("Copy removed the source object; it must leave it in place")
-	}
-}
-
 func TestObjectStorageAudioStore_ListWithAge(t *testing.T) {
 	store := testObjectStore(t)
 	ctx := context.Background()

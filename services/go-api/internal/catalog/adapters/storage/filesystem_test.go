@@ -289,55 +289,6 @@ func TestFilesystemAudioStore_ListWithAge_MissingPrefixIsEmpty(t *testing.T) {
 	}
 }
 
-func TestFilesystemAudioStore_Copy(t *testing.T) {
-	dir := t.TempDir()
-	store := NewFilesystemAudioStore(dir)
-	ctx := context.Background()
-
-	src := filepath.Join(t.TempDir(), "src.opus")
-	content := []byte("copy-me")
-	if err := os.WriteFile(src, content, 0o644); err != nil {
-		t.Fatalf("write source: %v", err)
-	}
-	if err := store.Store(ctx, src, "staging/u1/a/song.opus"); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
-
-	if err := store.Copy(ctx, "staging/u1/a/song.opus", "u2/a/song.opus"); err != nil {
-		t.Fatalf("Copy: %v", err)
-	}
-
-	rc, _, err := store.Stream(ctx, "u2/a/song.opus")
-	if err != nil {
-		t.Fatalf("Stream copied ref: %v", err)
-	}
-	defer rc.Close()
-	got, err := io.ReadAll(rc)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if string(got) != string(content) {
-		t.Errorf("copied content: got %q, want %q", got, content)
-	}
-
-	exists, err := store.Exists(ctx, "staging/u1/a/song.opus")
-	if err != nil {
-		t.Fatalf("Exists source after copy: %v", err)
-	}
-	if !exists {
-		t.Error("Copy removed the source ref; it must leave it in place")
-	}
-}
-
-func TestFilesystemAudioStore_Copy_MissingSource(t *testing.T) {
-	dir := t.TempDir()
-	store := NewFilesystemAudioStore(dir)
-
-	if err := store.Copy(context.Background(), "no-such-src.opus", "dst.opus"); err == nil {
-		t.Fatal("expected error copying a missing source ref, got nil")
-	}
-}
-
 func TestFilesystemAudioStore_CancelledContextDoesNotTouchDisk(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFilesystemAudioStore(dir)

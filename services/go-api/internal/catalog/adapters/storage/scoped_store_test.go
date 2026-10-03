@@ -60,19 +60,6 @@ func (f *scopedFakeAgeListingStore) ListWithAge(_ context.Context, _ string) ([]
 	return f.ages, nil
 }
 
-type scopedFakeCopyingStore struct {
-	*scopedFakeStore
-	copiedFrom []string
-	copiedTo   []string
-}
-
-func (f *scopedFakeCopyingStore) Copy(_ context.Context, srcRef, dstRef string) error {
-	f.copiedFrom = append(f.copiedFrom, srcRef)
-	f.copiedTo = append(f.copiedTo, dstRef)
-	f.stored[dstRef] = true
-	return nil
-}
-
 func TestScopedAudioStore_DeleteOutsidePrefixIsNoop(t *testing.T) {
 	inner := newScopedFakeStore()
 	inner.stored["prod-user/a/b/c.mp3"] = true
@@ -205,44 +192,5 @@ func TestScopedAudioStore_ListWithAgeOutsidePrefixErrors(t *testing.T) {
 	}
 	if _, err := lister.ListWithAge(context.Background(), "prod-user/"); err == nil {
 		t.Fatal("expected an error listing outside the prefix")
-	}
-}
-
-func TestScopedAudioStore_NoCopierWhenInnerDoesNotCopy(t *testing.T) {
-	store := NewScopedAudioStore(newScopedFakeStore(), "staging/")
-	if _, ok := store.(ports.AudioCopier); ok {
-		t.Fatal("expected no AudioCopier when the wrapped store does not copy")
-	}
-}
-
-func TestScopedAudioStore_ForwardsCopyInsidePrefix(t *testing.T) {
-	inner := &scopedFakeCopyingStore{scopedFakeStore: newScopedFakeStore()}
-	store := NewScopedAudioStore(inner, "staging/")
-
-	copier, ok := store.(ports.AudioCopier)
-	if !ok {
-		t.Fatal("expected the scoped store to satisfy ports.AudioCopier")
-	}
-	if err := copier.Copy(context.Background(), "staging/u/a.mp3", "staging/u/b.mp3"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(inner.copiedFrom) != 1 || inner.copiedFrom[0] != "staging/u/a.mp3" || inner.copiedTo[0] != "staging/u/b.mp3" {
-		t.Errorf("expected the copy call forwarded to the inner store, got from=%v to=%v", inner.copiedFrom, inner.copiedTo)
-	}
-}
-
-func TestScopedAudioStore_CopyOutsidePrefixErrors(t *testing.T) {
-	inner := &scopedFakeCopyingStore{scopedFakeStore: newScopedFakeStore()}
-	store := NewScopedAudioStore(inner, "staging/")
-
-	copier, ok := store.(ports.AudioCopier)
-	if !ok {
-		t.Fatal("expected the scoped store to satisfy ports.AudioCopier")
-	}
-	if err := copier.Copy(context.Background(), "staging/u/a.mp3", "prod-user/b.mp3"); err == nil {
-		t.Fatal("expected an error copying out to a prod key through the scoped store")
-	}
-	if len(inner.copiedFrom) != 0 {
-		t.Error("expected the inner Copy never called for a destination outside the prefix")
 	}
 }

@@ -54,7 +54,3 @@ type ObjectAge struct {
 type AudioAgeLister interface {
 	ListWithAge(ctx context.Context, prefix string) ([]ObjectAge, error)
 }
-
-type AudioCopier interface {
-	Copy(ctx context.Context, srcRef, dstRef string) error
-}

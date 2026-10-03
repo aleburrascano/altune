@@ -19,7 +19,6 @@ var (
 	_ ports.AudioURLSigner = (*ObjectStorageAudioStore)(nil)
 	_ ports.AudioLister    = (*ObjectStorageAudioStore)(nil)
 	_ ports.AudioAgeLister = (*ObjectStorageAudioStore)(nil)
-	_ ports.AudioCopier    = (*ObjectStorageAudioStore)(nil)
 )
 
 const storageOpTimeout = 30 * time.Second
@@ -116,19 +115,6 @@ func (s *ObjectStorageAudioStore) ListWithAge(ctx context.Context, prefix string
 		objects = append(objects, ports.ObjectAge{AudioRef: obj.Key, LastModified: obj.LastModified})
 	}
 	return objects, nil
-}
-
-func (s *ObjectStorageAudioStore) Copy(ctx context.Context, srcRef, dstRef string) error {
-	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)
-	defer cancel()
-
-	_, err := s.client.CopyObject(ctx,
-		minio.CopyDestOptions{Bucket: s.bucket, Object: dstRef},
-		minio.CopySrcOptions{Bucket: s.bucket, Object: srcRef})
-	if err != nil {
-		return fmt.Errorf("copy %q to %q: %w", srcRef, dstRef, err)
-	}
-	return nil
 }
 
 func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath string, audioRef string) error {

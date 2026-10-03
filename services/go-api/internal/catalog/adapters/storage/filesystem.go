@@ -16,7 +16,6 @@ import (
 var (
 	_ ports.AudioStore     = (*FilesystemAudioStore)(nil)
 	_ ports.AudioAgeLister = (*FilesystemAudioStore)(nil)
-	_ ports.AudioCopier    = (*FilesystemAudioStore)(nil)
 )
 
 type FilesystemAudioStore struct {
@@ -218,27 +217,6 @@ func walkErrOrNilIfMissing(err error) error {
 	if os.IsNotExist(err) {
 		return nil
 	}
-	return err
-}
-
-func (s *FilesystemAudioStore) Copy(ctx context.Context, srcRef, dstRef string) error {
-	srcPath, err := s.safePath(srcRef)
-	if err != nil {
-		return err
-	}
-	dstPath, err := s.safePath(dstRef)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
-	defer cancel()
-
-	_, err = boundedFSCall(ctx, "copy", func() (struct{}, error) {
-		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-			return struct{}{}, fmt.Errorf("create directory: %w", err)
-		}
-		return struct{}{}, copyFile(srcPath, dstPath)
-	}, nil)
 	return err
 }
 
