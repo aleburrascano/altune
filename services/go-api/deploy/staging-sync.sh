@@ -278,16 +278,6 @@ done <<<"$USER_MAP"
 PROD_IDS="'{$(printf '%s\n' "$USER_MAP" | cut -d'|' -f1 | paste -sd,)}'::uuid[]"
 log "syncing $(printf '%s\n' "$USER_MAP" | wc -l | tr -d ' ') matched account(s) from prod"
 
-prod_api=$(docker ps --filter "name=^altune-go-api-" --format '{{.Names}}' | head -1)
-if [ -z "$prod_api" ]; then
-    log "FAILED: no running altune-go-api-* container; cannot promote staging audio"
-    exit 1
-fi
-if ! STAGING_DATABASE_URL="$STAGING_URL" docker exec -e STAGING_DATABASE_URL "$prod_api" /app promote-staging --execute; then
-    log "FAILED: promote-staging failed in $prod_api; aborting sync so its unpromoted songs are not wiped"
-    exit 1
-fi
-
 trap cleanup_import EXIT
 cleanup_import
 staging_sql -c "CREATE SCHEMA $IMPORT_SCHEMA" \

@@ -12,7 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const sweepMinAge = time.Hour
+const (
+	sweepMinAge      = time.Hour
+	stagingRefPrefix = "staging/"
+)
 
 func RunSweepStagingAudio(cfg *config.Config, execute bool) {
 	exitOnError(runSweepStagingAudio(cfg, execute))
@@ -98,7 +101,7 @@ func oldEnoughToSweep(age time.Duration) bool {
 
 func referencedStagingRefs(ctx context.Context, pool *pgxpool.Pool) (map[string]bool, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT audio_ref FROM tracks WHERE audio_ref LIKE 'staging/%'`)
+		`SELECT audio_ref FROM tracks WHERE audio_ref LIKE $1`, stagingRefPrefix+"%")
 	if err != nil {
 		return nil, fmt.Errorf("query referenced staging refs: %w", err)
 	}

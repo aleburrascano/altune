@@ -42,10 +42,6 @@ case "$1" in
     fi
     ;;
   exec)
-    if [ -f /tmp/docker-exec-should-fail ] && printf '%s' "$*" | grep -q "promote-staging"; then
-        echo "stubbed promote-staging failure" >&2
-        exit 1
-    fi
     exit 0
     ;;
   *)
@@ -205,16 +201,6 @@ test_env_gates() {
     write_env
     sql staging -c "DELETE FROM auth.users WHERE id = '$S1'"
     check "no matched account is refused" 1 "$(sync_refused)"
-}
-
-test_promote_failure_aborts_sync() {
-    reset_databases
-    write_env
-    docker exec "$RUN_ID" touch /tmp/docker-exec-should-fail
-    check "a promote-staging failure aborts the sync" 1 "$(sync_refused)"
-    check "the failure names promote-staging" 1 "$(grep -c 'promote-staging failed' "$WORK/out")"
-    check "an aborted sync leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
-    docker exec "$RUN_ID" rm -f /tmp/docker-exec-should-fail
 }
 
 test_table_without_a_rule_aborts_sync() {
@@ -395,15 +381,12 @@ test_staging_ahead_with_a_migration_file_skips_sync() {
     write_env
     touch "$WORK/api/migrations/033_x.sql"
     sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_x')"
-    docker exec "$RUN_ID" touch /tmp/docker-exec-should-fail
     run_sync
     check "staging ahead of prod skips the sync with exit 0" 0 "$?"
     check "the skip names the pending version" 1 "$(grep -c 'SKIPPED: staging is ahead by 033_x$' "$WORK/out")"
-    check "a skipped sync never runs promote-staging" 0 "$(grep -c 'promote-staging' "$WORK/out")"
     check "a skipped sync leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
     check "a skipped sync leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
     check "a skipped sync never creates the import schema" 0 "$(staging_value "SELECT count(*) FROM pg_namespace WHERE nspname = 'prod_import'")"
-    docker exec "$RUN_ID" rm -f /tmp/docker-exec-should-fail
     rm "$WORK/api/migrations/033_x.sql"
 }
 
@@ -544,7 +527,6 @@ install_docker_stub
 test_sync_copies_matched_account
 test_failed_swap_rolls_back
 test_env_gates
-test_promote_failure_aborts_sync
 test_table_without_a_rule_aborts_sync
 test_staging_only_table_without_a_rule_aborts_sync
 test_manifest_line_for_a_table_on_neither_tier_aborts_sync

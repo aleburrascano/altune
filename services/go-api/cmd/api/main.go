@@ -47,12 +47,10 @@ func main() {
 		commands.RunReacquireCorruptM4a(cfg, execute, limit)
 	case "journey-check":
 		commands.RunJourneyCheck(cfg)
-	case "promote-staging":
-		commands.RunPromoteStaging(cfg, parseExecute(cmd, args))
 	case "sweep-staging-audio":
 		commands.RunSweepStagingAudio(cfg, parseExecute(cmd, args))
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a|journey-check|promote-staging|sweep-staging-audio]\n", cmd)
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a|journey-check|sweep-staging-audio]\n", cmd)
 		os.Exit(1)
 	}
 }

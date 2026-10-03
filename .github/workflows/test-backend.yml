@@ -98,12 +98,6 @@ jobs:
         run: bash deploy/caddy-routing_test.sh
       - name: staging sync test (real postgres image)
         run: bash deploy/staging-sync_test.sh
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: services/go-api/go.mod
-          cache-dependency-path: services/go-api/go.sum
-      - name: promote-staging test (real postgres image)
-        run: bash deploy/promote-staging_test.sh
       - name: deploy workflow self-test
         working-directory: .
         run: bash .github/workflows/deploy-backend_test.sh
