@@ -78,12 +78,14 @@ reset_databases() {
         sql postgres -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db"
         sql "$db" -c "CREATE SCHEMA auth" -c "CREATE TABLE auth.users (id uuid PRIMARY KEY, email text)" \
             -c "CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+        local applied_versions=()
         for file in $(cd "$WORK/api" && printf '%s\n' migrations/*.sql | sort -V); do
             sql "$db" -f "/api/$file" >/dev/null || { printf 'FAIL: %s did not apply\n' "$file"; exit 1; }
+            applied_versions+=("$(basename "$file" .sql)")
         done
+        printf "INSERT INTO schema_migrations (version) VALUES ('%s');\n" "${applied_versions[@]}" | sql "$db"
     done
     sql prod <<SQL
-ALTER TABLE tracks ADD COLUMN prod_only text DEFAULT 'prod';
 INSERT INTO auth.users VALUES ('$P1', 'Op@Example.com'), ('$P2', 'other@example.com');
 INSERT INTO tracks (id, user_id, title, artist, dedup_key, audio_ref) VALUES
     ('$T1', '$P1', 'Mine', 'A', 'k1', 'a/mine.mp3'),
@@ -101,7 +103,6 @@ INSERT INTO entity_identity (provider, external_id, kind, mbid) VALUES ('deezer'
 INSERT INTO orphaned_audio (audio_ref, user_id, track_id) VALUES ('a/gone.mp3', '$P1', '$T1');
 SQL
     sql staging <<SQL
-ALTER TABLE tracks ADD COLUMN staging_only text;
 INSERT INTO auth.users VALUES ('$S1', 'op@example.com'), ('$S2', 'smoke@example.com');
 INSERT INTO tracks (id, user_id, title, artist, dedup_key) VALUES
     ('$T_STALE', '$S1', 'Stale', 'S', 'ks'),
@@ -126,10 +127,13 @@ sync_refused() {
     if run_sync; then echo 0; else echo 1; fi
 }
 
+manifest_tables() {
+    awk '$1 != "" && $1 !~ /^#/ { print $1 }' "$HERE/staging-sync.tables"
+}
+
 prod_fingerprint() {
     local table out=""
-    for table in tracks playlists playlist_tracks featured_artists track_featured_artists \
-        acquisition_cooldowns discovery_search_history playback_queue_state entity_identity orphaned_audio; do
+    for table in $(manifest_tables); do
         out="$out $table=$(sql prod -c "SELECT md5(coalesce(string_agg(t::text, '' ORDER BY t::text), '')) FROM $table t")"
     done
     printf '%s' "$out"
@@ -168,7 +172,6 @@ test_sync_copies_matched_account() {
     check "playback queue lands under the staging UUID" 1 "$(staging_value "SELECT count(*) FROM playback_queue_state WHERE user_id = '$S1'")"
     check "entity cache is replaced by prod's" "mb-1" "$(staging_value "SELECT string_agg(mbid, ',') FROM entity_identity")"
     check "orphaned audio is never copied" 0 "$(staging_value "SELECT count(*) FROM orphaned_audio")"
-    check "a staging-only column stays null" "" "$(staging_value "SELECT staging_only FROM tracks WHERE id = '$T1'")"
     check "the import schema is dropped" 0 "$(staging_value "SELECT count(*) FROM pg_namespace WHERE nspname = 'prod_import'")"
     check "prod is unchanged" "$before" "$(prod_fingerprint)"
 
@@ -179,6 +182,7 @@ test_sync_copies_matched_account() {
 test_failed_swap_rolls_back() {
     reset_databases
     write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN required_later text"
     sql staging -c "ALTER TABLE tracks ADD COLUMN required_later text NOT NULL DEFAULT 'x'" \
         -c "ALTER TABLE tracks ALTER COLUMN required_later DROP DEFAULT"
     check "a failing swap exits non-zero" 1 "$(sync_refused)"
@@ -338,6 +342,203 @@ test_unknown_rule_aborts_sync() {
     restore_manifest
 }
 
+test_prod_only_column_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN bar text"
+    check "a prod-only column aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the drifted column" 1 "$(grep -c 'FAILED: tracks.bar differs: prod text, staging missing' "$WORK/out")"
+    check "a prod-only column leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "a prod-only column leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_staging_only_column_aborts_sync() {
+    reset_databases
+    write_env
+    sql staging -c "ALTER TABLE tracks ADD COLUMN staging_only text"
+    check "a staging-only column aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the staging-only column" 1 "$(grep -c 'FAILED: tracks.staging_only differs: prod missing, staging text' "$WORK/out")"
+    check "a staging-only column leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_array_element_type_drift_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN tags text[]"
+    sql staging -c "ALTER TABLE tracks ADD COLUMN tags integer[]"
+    check "an array element type drift aborts the sync" 1 "$(sync_refused)"
+    check "the abort names both array types" 1 "$(grep -c 'FAILED: tracks.tags differs: prod text\[\], staging integer\[\]' "$WORK/out")"
+    check "an array type drift leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_generated_column_drift_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN title_upper text GENERATED ALWAYS AS (upper(title)) STORED"
+    sql staging -c "ALTER TABLE tracks ADD COLUMN title_upper text"
+    check "a column generated on one tier only aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the generated column" 1 "$(grep -c 'FAILED: tracks.title_upper differs: prod text generated, staging text' "$WORK/out")"
+}
+
+test_generated_column_on_both_tiers_syncs() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN title_upper text GENERATED ALWAYS AS (upper(title)) STORED"
+    sql staging -c "ALTER TABLE tracks ADD COLUMN title_upper text GENERATED ALWAYS AS (upper(title)) STORED"
+    run_sync
+    check "a column generated on both tiers syncs" 0 "$?"
+    check "a generated column is recomputed on staging" "MINE" "$(staging_value "SELECT title_upper FROM tracks WHERE id = '$T1'")"
+}
+
+test_staging_ahead_with_a_migration_file_skips_sync() {
+    reset_databases
+    write_env
+    touch "$WORK/api/migrations/033_x.sql"
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_x')"
+    docker exec "$RUN_ID" touch /tmp/docker-exec-should-fail
+    run_sync
+    check "staging ahead of prod skips the sync with exit 0" 0 "$?"
+    check "the skip names the pending version" 1 "$(grep -c 'SKIPPED: staging is ahead by 033_x$' "$WORK/out")"
+    check "a skipped sync never runs promote-staging" 0 "$(grep -c 'promote-staging' "$WORK/out")"
+    check "a skipped sync leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    check "a skipped sync leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    check "a skipped sync never creates the import schema" 0 "$(staging_value "SELECT count(*) FROM pg_namespace WHERE nspname = 'prod_import'")"
+    docker exec "$RUN_ID" rm -f /tmp/docker-exec-should-fail
+    rm "$WORK/api/migrations/033_x.sql"
+}
+
+test_staging_ahead_without_a_migration_file_aborts_sync() {
+    reset_databases
+    write_env
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_gone')"
+    check "a staging version with no file aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the fileless version" 1 "$(grep -c 'FAILED: staging has migration 033_gone with no file' "$WORK/out")"
+    check "a fileless staging version leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_staging_version_shaped_like_a_path_aborts_sync() {
+    reset_databases
+    write_env
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('../migrations/001_baseline')"
+    check "a staging version shaped like a path aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the path-shaped version" 1 "$(grep -c 'FAILED: staging has migration ../migrations/001_baseline with no file' "$WORK/out")"
+}
+
+test_prod_ahead_of_staging_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "INSERT INTO schema_migrations (version) VALUES ('033_prod_first')"
+    check "a prod version staging lacks aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the version staging lacks" 1 "$(grep -c 'FAILED: prod has migration 033_prod_first that staging lacks' "$WORK/out")"
+    check "prod ahead leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_prod_fingerprint_covers_every_manifest_table() {
+    local before
+    reset_databases
+    before=$(prod_fingerprint)
+    check "prod fingerprint names every manifest table" "$(manifest_tables | paste -sd' ')" \
+        "$(printf '%s' "$before" | tr ' ' '\n' | sed -n 's/=.*//p' | paste -sd' ')"
+}
+
+test_staging_ahead_by_a_fileless_and_a_filed_version_aborts_sync() {
+    reset_databases
+    write_env
+    touch "$WORK/api/migrations/033_x.sql"
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_x'), ('034_gone')"
+    check "a fileless version among filed extras aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the fileless version among filed extras" 1 "$(grep -c 'FAILED: staging has migration 034_gone with no file' "$WORK/out")"
+    check "a fileless version among filed extras is not reported as a skip" 0 "$(grep -c 'SKIPPED:' "$WORK/out")"
+    check "a fileless version among filed extras leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    rm "$WORK/api/migrations/033_x.sql"
+}
+
+test_staging_ahead_by_two_filed_versions_skips_naming_both() {
+    reset_databases
+    write_env
+    touch "$WORK/api/migrations/033_x.sql" "$WORK/api/migrations/034_y.sql"
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_x'), ('034_y')"
+    run_sync
+    check "staging ahead by two filed versions exits 0" 0 "$?"
+    check "the skip names both pending versions" 1 "$(grep -c 'SKIPPED: staging is ahead by 033_x 034_y$' "$WORK/out")"
+    check "staging ahead by two versions leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    rm "$WORK/api/migrations/033_x.sql" "$WORK/api/migrations/034_y.sql"
+}
+
+test_staging_ahead_mid_contract_skips_despite_column_drift() {
+    reset_databases
+    write_env
+    touch "$WORK/api/migrations/033_contract_x.sql"
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_contract_x')" \
+        -c "ALTER TABLE tracks ADD COLUMN mid_deploy text"
+    run_sync
+    check "staging ahead with drifted columns skips with exit 0" 0 "$?"
+    check "a mid-deploy column drift is reported as a skip" 1 "$(grep -c 'SKIPPED: staging is ahead by 033_contract_x$' "$WORK/out")"
+    check "a mid-deploy column drift is not reported as a failure" 0 "$(grep -c 'FAILED:' "$WORK/out")"
+    check "a mid-deploy skip leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    rm "$WORK/api/migrations/033_contract_x.sql"
+}
+
+test_prod_ahead_while_staging_ahead_aborts_sync() {
+    reset_databases
+    write_env
+    touch "$WORK/api/migrations/033_x.sql"
+    sql staging -c "INSERT INTO schema_migrations (version) VALUES ('033_x')"
+    sql prod -c "INSERT INTO schema_migrations (version) VALUES ('033_prod_first')"
+    check "prod ahead while staging is also ahead aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the prod version staging lacks, not a skip" 1 "$(grep -c 'FAILED: prod has migration 033_prod_first that staging lacks' "$WORK/out")"
+    check "diverged tiers leave staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+    rm "$WORK/api/migrations/033_x.sql"
+}
+
+test_column_drift_on_a_child_table_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE playlist_tracks ADD COLUMN note text"
+    check "a prod-only column on a child table aborts the sync" 1 "$(sync_refused)"
+    check "the abort names the child table's column" 1 "$(grep -c 'FAILED: playlist_tracks.note differs: prod text, staging missing' "$WORK/out")"
+    check "a child-table drift leaves staging without prod's track" 0 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T1'")"
+}
+
+test_type_modifier_drift_on_a_global_table_aborts_sync() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE entity_identity ADD COLUMN label varchar(10)"
+    sql staging -c "ALTER TABLE entity_identity ADD COLUMN label varchar(20)"
+    check "a varchar length drift aborts the sync" 1 "$(sync_refused)"
+    check "the abort names both varchar lengths" 1 "$(grep -c 'FAILED: entity_identity.label differs: prod character varying(10), staging character varying(20)' "$WORK/out")"
+    check "a varchar length drift leaves the stale entity cache" "mb-stale" "$(staging_value "SELECT string_agg(mbid, ',') FROM entity_identity")"
+}
+
+test_column_drift_on_a_skip_table_still_syncs() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE acquisition_outcomes ADD COLUMN prod_extra text"
+    run_sync
+    check "column drift on a skip table does not abort the sync" 0 "$?"
+    check "a skip-table drift still lets the matched track cross" "$S1" "$(staging_value "SELECT user_id FROM tracks WHERE id = '$T1'")"
+}
+
+test_a_dropped_column_on_one_tier_is_not_drift() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN gone text" -c "ALTER TABLE tracks DROP COLUMN gone"
+    run_sync
+    check "a column dropped on prod and never on staging does not abort the sync" 0 "$?"
+    check "a dropped-column tier still lets the matched track cross" "$S1" "$(staging_value "SELECT user_id FROM tracks WHERE id = '$T1'")"
+}
+
+test_same_columns_in_a_different_order_copy_by_name() {
+    reset_databases
+    write_env
+    sql prod -c "ALTER TABLE tracks ADD COLUMN first_col text" -c "ALTER TABLE tracks ADD COLUMN second_col text" \
+        -c "UPDATE tracks SET first_col = 'one', second_col = 'two' WHERE id = '$T1'"
+    sql staging -c "ALTER TABLE tracks ADD COLUMN second_col text" -c "ALTER TABLE tracks ADD COLUMN first_col text"
+    run_sync
+    check "the same columns in a different order sync" 0 "$?"
+    check "reordered columns land by name" "one,two" "$(staging_value "SELECT first_col || ',' || second_col FROM tracks WHERE id = '$T1'")"
+}
+
 start_postgres
 install_docker_stub
 test_sync_copies_matched_account
@@ -355,6 +556,25 @@ test_manifest_rule_for_a_table_on_one_tier_only_syncs
 test_missing_manifest_aborts_sync
 test_table_with_two_rules_aborts_sync
 test_unknown_rule_aborts_sync
+test_prod_only_column_aborts_sync
+test_staging_only_column_aborts_sync
+test_array_element_type_drift_aborts_sync
+test_generated_column_drift_aborts_sync
+test_generated_column_on_both_tiers_syncs
+test_staging_ahead_with_a_migration_file_skips_sync
+test_staging_ahead_without_a_migration_file_aborts_sync
+test_staging_version_shaped_like_a_path_aborts_sync
+test_prod_ahead_of_staging_aborts_sync
+test_prod_fingerprint_covers_every_manifest_table
+test_staging_ahead_by_a_fileless_and_a_filed_version_aborts_sync
+test_staging_ahead_by_two_filed_versions_skips_naming_both
+test_staging_ahead_mid_contract_skips_despite_column_drift
+test_prod_ahead_while_staging_ahead_aborts_sync
+test_column_drift_on_a_child_table_aborts_sync
+test_type_modifier_drift_on_a_global_table_aborts_sync
+test_column_drift_on_a_skip_table_still_syncs
+test_a_dropped_column_on_one_tier_is_not_drift
+test_same_columns_in_a_different_order_copy_by_name
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed; last script output:\n' "$FAILURES"

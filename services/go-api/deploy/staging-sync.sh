@@ -13,8 +13,9 @@ MANIFEST_NAME=staging-sync.tables
 TABLE_NAME_RE='^[a-z_0-9]+$'
 
 declare -a MANIFEST_TABLES=()
-declare -A TABLE_RULE TABLE_PARENT TABLE_FK_COLUMN
+declare -A TABLE_RULE TABLE_PARENT TABLE_FK_COLUMN TABLE_COLUMNS
 
+VERSION_RE='^[A-Za-z0-9_-]+$'
 UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 
 env_value() {
@@ -41,19 +42,91 @@ cleanup_import() {
     staging_sql -c "DROP SCHEMA IF EXISTS $IMPORT_SCHEMA CASCADE" >/dev/null 2>&1 || true
 }
 
-columns_of() {
-    printf '%s\n' "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '$1' AND is_generated = 'NEVER' ORDER BY ordinal_position;"
+migration_versions_sql() {
+    printf '%s\n' "SELECT version FROM schema_migrations;"
 }
 
-shared_columns() {
-    local table=$1 prod_cols col out=""
-    prod_cols=$(columns_of "$table" | prod_read)
-    for col in $(columns_of "$table" | staging_sql); do
-        if printf '%s\n' "$prod_cols" | grep -qx "$col"; then
-            out="${out:+$out,}\"$col\""
+is_migration_file() {
+    [[ $1 =~ $VERSION_RE ]] && [ -f "migrations/$1.sql" ]
+}
+
+versions_only_in_first() {
+    LC_ALL=C comm -23 <(printf '%s\n' "$1") <(printf '%s\n' "$2") | { grep -v '^$' || true; } | sort -V
+}
+
+require_staging_not_behind_prod() {
+    local missing_on_staging version
+    missing_on_staging=$(versions_only_in_first "$1" "$2")
+    [ -n "$missing_on_staging" ] || return 0
+    while IFS= read -r version; do
+        log "FAILED: prod has migration $version that staging lacks"
+    done <<<"$missing_on_staging"
+    exit 1
+}
+
+skip_while_staging_is_ahead() {
+    local ahead version has_orphan=""
+    ahead=$(versions_only_in_first "$2" "$1")
+    [ -n "$ahead" ] || return 0
+    while IFS= read -r version; do
+        if ! is_migration_file "$version"; then
+            log "FAILED: staging has migration $version with no file (reverted or renamed)"
+            has_orphan=1
         fi
+    done <<<"$ahead"
+    [ -z "$has_orphan" ] || exit 1
+    log "SKIPPED: staging is ahead by $(printf '%s\n' "$ahead" | paste -sd' ')"
+    exit 0
+}
+
+require_equal_migration_versions() {
+    local prod_versions staging_versions
+    prod_versions=$(migration_versions_sql | prod_read | LC_ALL=C sort) ||
+        { log "FAILED: cannot read prod schema_migrations"; exit 1; }
+    staging_versions=$(migration_versions_sql | staging_sql | LC_ALL=C sort) ||
+        { log "FAILED: cannot read staging schema_migrations"; exit 1; }
+    require_staging_not_behind_prod "$prod_versions" "$staging_versions"
+    skip_while_staging_is_ahead "$prod_versions" "$staging_versions"
+}
+
+column_shapes_sql() {
+    printf '%s\n' "SELECT c.relname || '|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod) || CASE WHEN a.attgenerated <> '' THEN ' generated' ELSE '' END FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped AND c.relname = ANY(string_to_array(:'tables', ' ')) ORDER BY a.attnum;"
+}
+
+column_drift() {
+    awk -F'|' '
+        NF == 0 { next }
+        FILENAME == ARGV[1] { prod[$1 "." $2] = $3; seen[$1 "." $2]; next }
+        { staging[$1 "." $2] = $3; seen[$1 "." $2] }
+        END {
+            for (column in seen) {
+                prod_shape = (column in prod) ? prod[column] : "missing"
+                staging_shape = (column in staging) ? staging[column] : "missing"
+                if (prod_shape != staging_shape) print column " differs: prod " prod_shape ", staging " staging_shape
+            }
+        }' <(printf '%s\n' "$1") <(printf '%s\n' "$2") | sort
+}
+
+copied_columns() {
+    awk -F'|' -v table="$1" '$1 == table && $3 !~ / generated$/ { printf "%s\"%s\"", sep, $2; sep = "," }' <<<"$2"
+}
+
+require_identical_columns() {
+    local compared_tables prod_shapes staging_shapes drift table line
+    compared_tables=$(synced_tables; tables_with_rule reset)
+    compared_tables=$(printf '%s\n' "$compared_tables" | paste -sd' ')
+    prod_shapes=$(column_shapes_sql | prod_read -v tables="$compared_tables") ||
+        { log "FAILED: cannot read prod column types"; exit 1; }
+    staging_shapes=$(column_shapes_sql | staging_sql -v tables="$compared_tables") ||
+        { log "FAILED: cannot read staging column types"; exit 1; }
+    drift=$(column_drift "$prod_shapes" "$staging_shapes")
+    if [ -n "$drift" ]; then
+        while IFS= read -r line; do log "FAILED: $line"; done <<<"$drift"
+        exit 1
+    fi
+    for table in $(synced_tables); do
+        TABLE_COLUMNS[$table]=$(copied_columns "$table" "$staging_shapes")
     done
-    printf '%s' "$out"
 }
 
 manifest_fail() {
@@ -183,6 +256,8 @@ fi
 require_psql
 load_manifest
 require_every_table_has_a_rule
+require_equal_migration_versions
+require_identical_columns
 
 staging_accounts=$(staging_sql -c "SELECT id, lower(email) FROM auth.users WHERE email IS NOT NULL")
 prod_accounts=$(printf '%s\n' "SELECT id, lower(email) FROM auth.users WHERE lower(email) = ANY(string_to_array(:'emails', E'\\n'));" |
@@ -219,13 +294,7 @@ staging_sql -c "CREATE SCHEMA $IMPORT_SCHEMA" \
     -c "CREATE TABLE $IMPORT_SCHEMA.user_map (prod_id uuid PRIMARY KEY, staging_id uuid NOT NULL)"
 printf '%s\n' "$USER_MAP" | staging_sql -c "\\copy $IMPORT_SCHEMA.user_map FROM pstdin WITH (DELIMITER '|')"
 
-declare -A TABLE_COLUMNS
 for table in $(synced_tables); do
-    TABLE_COLUMNS[$table]=$(shared_columns "$table")
-    if [ -z "${TABLE_COLUMNS[$table]}" ]; then
-        log "FAILED: public.$table is missing on one tier"
-        exit 1
-    fi
     import_table "$table" "${TABLE_COLUMNS[$table]}"
 done
 
