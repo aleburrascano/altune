@@ -2,14 +2,21 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
+import * as discoveryApi from '@shared/api-client/discovery';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { ApiError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpDiscoverPort } from '@features/discover/adapters/http/httpDiscoverPort';
 import { createMemoryDiscoverPort } from '@features/discover/__tests__/memoryDiscoverPort';
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 import { useAutocompleteSuggestions } from '@features/discover/hooks/useAutocompleteSuggestions';
-import { DiscoverPortProvider } from '@features/discover/ports/DiscoverPortProvider';
+import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
+import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
+import {
+  DiscoverPortProvider,
+  useDiscoverPort,
+} from '@features/discover/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
@@ -181,5 +188,192 @@ describe('useAutocompleteSuggestions on the memory fake', () => {
 
     await waitFor(() => expect(result.current.data?.suggestions).toHaveLength(1));
     expect(result.current.data?.suggestions[0]?.text).toBe('radiohead');
+  });
+});
+
+const probeClients: QueryClient[] = [];
+
+afterEach(() => {
+  probeClients.splice(0).forEach((client) => client.clear());
+});
+
+function wrapperWith(port: DiscoverPort) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  probeClients.push(queryClient);
+  return function wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      DiscoverPortProvider({ port, children }),
+    );
+  };
+}
+
+describe('useDiscoverPort', () => {
+  it('hands back the HTTP port when no provider is mounted', () => {
+    const { result } = renderHook(() => useDiscoverPort());
+
+    expect(result.current).toBe(httpDiscoverPort);
+  });
+
+  it('hands back the port the provider was given', () => {
+    const port = createMemoryDiscoverPort();
+    function wrapper({ children }: { children: React.ReactNode }) {
+      return DiscoverPortProvider({ port, children });
+    }
+
+    const { result } = renderHook(() => useDiscoverPort(), { wrapper });
+
+    expect(result.current).toBe(port);
+  });
+
+  it('hands back the innermost port when providers are nested', () => {
+    const outer = createMemoryDiscoverPort();
+    const inner = createMemoryDiscoverPort();
+    function wrapper({ children }: { children: React.ReactNode }) {
+      return DiscoverPortProvider({
+        port: outer,
+        children: DiscoverPortProvider({ port: inner, children }),
+      });
+    }
+
+    const { result } = renderHook(() => useDiscoverPort(), { wrapper });
+
+    expect(result.current).toBe(inner);
+  });
+});
+
+describe('the discover hooks run on the port the provider was given', () => {
+  it('useSearchHistory returns the seeded history without a network request', async () => {
+    const port = createMemoryDiscoverPort({ history: ['first', 'second'] });
+
+    const { result } = renderHook(() => useSearchHistory(), { wrapper: wrapperWith(port) });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.items.map((item) => item.query)).toEqual(['first', 'second']);
+    expect(__http.requests).toHaveLength(0);
+  });
+
+  it('useDiscoverSearch returns the seeded results without a network request', async () => {
+    const port = createMemoryDiscoverPort({ results: resultsTitled(SEEDED_COUNT) });
+
+    const { result } = renderHook(() => useDiscoverSearch('radio'), {
+      wrapper: wrapperWith(port),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.results.map((found) => found.title)).toEqual([
+      'title 0',
+      'title 1',
+    ]);
+    expect(__http.requests).toHaveLength(0);
+  });
+
+  it('useSearchHistory surfaces the exact error the port rejected with', async () => {
+    const failure = new ApiError(400, 'bad history request');
+    const port: DiscoverPort = {
+      ...createMemoryDiscoverPort(),
+      listSearchHistory: () => Promise.reject(failure),
+    };
+
+    const { result } = renderHook(() => useSearchHistory(), { wrapper: wrapperWith(port) });
+
+    await waitFor(() => expect(result.current.error).toBe(failure));
+  });
+
+  it('useAutocompleteSuggestions surfaces the exact error the port rejected with', async () => {
+    const failure = new ApiError(400, 'bad suggest request');
+    const port: DiscoverPort = {
+      ...createMemoryDiscoverPort(),
+      suggestDiscovery: () => Promise.reject(failure),
+    };
+
+    const { result } = renderHook(() => useAutocompleteSuggestions('radio'), {
+      wrapper: wrapperWith(port),
+    });
+
+    await waitFor(() => expect(result.current.error).toBe(failure));
+  });
+
+  it('useDiscoverSearch surfaces the exact error the port rejected with', async () => {
+    const failure = new ApiError(400, 'bad search request');
+    const port: DiscoverPort = {
+      ...createMemoryDiscoverPort(),
+      searchDiscovery: () => Promise.reject(failure),
+    };
+
+    const { result } = renderHook(() => useDiscoverSearch('radio'), {
+      wrapper: wrapperWith(port),
+    });
+
+    await waitFor(() => expect(result.current.error).toBe(failure), { timeout: 5000 });
+  });
+});
+
+describe('httpDiscoverPort', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('rejects searchDiscovery with an AbortError when the signal aborts while the request is on the wire', async () => {
+    __http.hang(`GET ${SEARCH_PATH}`);
+    const controller = new AbortController();
+
+    const calling = httpDiscoverPort.searchDiscovery({ q: 'q' }, controller.signal);
+    await waitFor(() => expect(__http.countFor(`GET ${SEARCH_PATH}`)).toBe(1));
+    controller.abort();
+
+    await expect(calling).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('rejects suggestDiscovery with an AbortError when the signal aborts while the request is on the wire', async () => {
+    __http.hang(`GET ${SUGGEST_PATH}`);
+    const controller = new AbortController();
+
+    const calling = httpDiscoverPort.suggestDiscovery({ q: 'q' }, controller.signal);
+    await waitFor(() => expect(__http.countFor(`GET ${SUGGEST_PATH}`)).toBe(1));
+    controller.abort();
+
+    await expect(calling).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it.each<[string, () => Promise<unknown>, string]>([
+    ['searchDiscovery', () => httpDiscoverPort.searchDiscovery({ q: 'q' }), SEARCH_PATH],
+    ['suggestDiscovery', () => httpDiscoverPort.suggestDiscovery({ q: 'q' }), SUGGEST_PATH],
+    ['listSearchHistory', () => httpDiscoverPort.listSearchHistory(), HISTORY_PATH],
+  ])('passes a 404 from the server through %s as an ApiError', async (_m, call, path) => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    __http.reply(`GET ${path}`, { status: 404, json: { detail: 'not found' } });
+
+    const calling = call();
+
+    await expect(calling).rejects.toBeInstanceOf(ApiError);
+    await expect(calling).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('reaches spies installed on the api-client after the port was imported', async () => {
+    const search = { results: [] } as unknown as discoveryApi.DiscoverySearchResponse;
+    const suggest = { suggestions: [] };
+    const history = { items: [], total: 0 };
+    jest.spyOn(discoveryApi, 'searchDiscovery').mockResolvedValue(search);
+    jest.spyOn(discoveryApi, 'suggestDiscovery').mockResolvedValue(suggest);
+    jest.spyOn(discoveryApi, 'listSearchHistory').mockResolvedValue(history);
+
+    await expect(httpDiscoverPort.searchDiscovery({ q: 'q' })).resolves.toBe(search);
+    await expect(httpDiscoverPort.suggestDiscovery({ q: 'q' })).resolves.toBe(suggest);
+    await expect(httpDiscoverPort.listSearchHistory()).resolves.toBe(history);
+  });
+});
+
+describe('createMemoryDiscoverPort seeding', () => {
+  it('serves empty results, suggestions and history when created with no seed', async () => {
+    const port = createMemoryDiscoverPort();
+
+    const search = await port.searchDiscovery({ q: 'q' });
+    const suggest = await port.suggestDiscovery({ q: 'q' });
+    const history = await port.listSearchHistory();
+
+    expect(search.results).toEqual([]);
+    expect(search.total).toBe(0);
+    expect(suggest.suggestions).toEqual([]);
+    expect(history).toEqual({ items: [], total: 0 });
   });
 });
