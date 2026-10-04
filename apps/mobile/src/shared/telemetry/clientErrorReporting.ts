@@ -72,10 +72,10 @@ function forgetExpiredErrors(now: number): void {
 
 function evictOneToMakeRoom(): void {
   if (seenErrors.size < MAX_TRACKED_ERRORS) return;
-  const entries = [...seenErrors];
-  const [key, seen] =
-    entries.find(([, candidate]) => candidate.suppressed === 0) ?? entries[0] ?? [];
-  if (key !== undefined && seen !== undefined) flushSuppressedRepeats(key, seen);
+  const quietFirst = [...seenErrors].sort(
+    ([, a], [, b]) => Number(a.suppressed !== 0) - Number(b.suppressed !== 0),
+  );
+  for (const [key, seen] of quietFirst.slice(0, 1)) flushSuppressedRepeats(key, seen);
 }
 
 function flushWhenWindowEnds(key: string, seen: SeenError, now: number): void {

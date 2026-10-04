@@ -190,7 +190,7 @@ async function receive<T>(
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const correlationId = newCorrelationId() ?? undefined;
-  const route = path.split('?', 1)[0] ?? path;
+  const route = path.replace(/\?.*/s, '');
   const sentWith = stampCredentials();
   try {
     const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);

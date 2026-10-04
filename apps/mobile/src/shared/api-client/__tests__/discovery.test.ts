@@ -986,6 +986,21 @@ describe('searchDiscovery tolerates additive wire enum values', () => {
     expect(res.results.map((r) => r.title)).toEqual(['a', 'c']);
   });
 
+  it('leaves top_result off the response when its kind is unknown', async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: body({
+        results: [discoveryResult({ title: 'a' })],
+        top_result: { ...discoveryResult({ title: 'b' }), kind: 'playlist' },
+      }),
+    });
+
+    const res = await searchDiscovery({ q: 'q' });
+
+    expect(res).not.toHaveProperty('top_result');
+    expect(res.results.map((r) => r.title)).toEqual(['a']);
+  });
+
   it('coerces an unknown provider status to error and an unknown confidence to low', async () => {
     __http.reply('GET /v1/discovery/search', {
       status: 200,

@@ -6,6 +6,7 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useSession } from '../useSession';
 import { supabase } from '../supabaseClient';
 import { isTestAuthEnabled, testAuthBootSettled } from '../testAuthBoot';
+import type * as TestAuthBootModule from '../testAuthBoot';
 
 jest.mock('../supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
@@ -114,5 +115,43 @@ describe('useSession while the test login is in flight', () => {
     await flush();
 
     expect(result.current).toEqual({ status: 'signed-out' });
+  });
+});
+
+describe('the real testAuthBoot module', () => {
+  const real = jest.requireActual<typeof TestAuthBootModule>('../testAuthBoot');
+  const globals = globalThis as unknown as { __DEV__: boolean };
+  const devMode = globals.__DEV__;
+  const authEnv = process.env.EXPO_PUBLIC_TEST_AUTH;
+
+  afterEach(() => {
+    globals.__DEV__ = devMode;
+    if (authEnv === undefined) delete process.env.EXPO_PUBLIC_TEST_AUTH;
+    else process.env.EXPO_PUBLIC_TEST_AUTH = authEnv;
+  });
+
+  it('holds testAuthBootSettled pending until the boot is marked settled', async () => {
+    globals.__DEV__ = true;
+    process.env.EXPO_PUBLIC_TEST_AUTH = '1';
+    let resolved = false;
+
+    const pending = real.testAuthBootSettled().then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    real.markTestAuthBootSettled();
+    await pending;
+
+    expect(resolved).toBe(true);
+  });
+
+  it('resolves testAuthBootSettled immediately when test auth is off', async () => {
+    delete process.env.EXPO_PUBLIC_TEST_AUTH;
+
+    expect(real.isTestAuthEnabled()).toBe(false);
+    await expect(real.testAuthBootSettled()).resolves.toBeUndefined();
   });
 });

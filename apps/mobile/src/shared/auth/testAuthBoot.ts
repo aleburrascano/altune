@@ -1,4 +1,4 @@
-let settle: () => void = () => {};
+let settle: () => void;
 const settled = new Promise<void>((resolve) => {
   settle = resolve;
 });

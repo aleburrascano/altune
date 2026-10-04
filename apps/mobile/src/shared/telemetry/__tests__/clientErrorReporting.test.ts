@@ -207,6 +207,43 @@ describe('reportClientError dedupe', () => {
     expect(enqueueCriticalMock).not.toHaveBeenCalled();
   });
 
+  it('flushes the suppressed count of an expired error when a different error arrives', () => {
+    const stale = new Error('stale');
+    reportClientError(stale, 'boundary');
+    reportClientError(stale, 'boundary');
+    reportClientError(stale, 'boundary');
+    enqueueCriticalMock.mockClear();
+
+    now += WINDOW_MS;
+    reportClientError(new Error('fresh'), 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+    const [flushed, fresh] = enqueueCriticalMock.mock.calls.map(
+      (call) => call[0].payload as Record<string, unknown>,
+    );
+    expect(flushed).toMatchObject({ message: 'stale', suppressed_repeats: 2 });
+    expect(fresh?.['message']).toBe('fresh');
+    expect(fresh).not.toHaveProperty('suppressed_repeats');
+  });
+
+  it('when the table is full of repeating errors, evicts the oldest and flushes its count', () => {
+    for (let i = 0; i < 50; i += 1) {
+      const error = new Error(`hot ${i}`);
+      reportClientError(error, 'boundary');
+      reportClientError(error, 'boundary');
+    }
+    enqueueCriticalMock.mockClear();
+
+    reportClientError(new Error('newcomer'), 'boundary');
+
+    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+    expect(enqueueCriticalMock.mock.calls[0]?.[0].payload).toMatchObject({
+      message: 'hot 0',
+      suppressed_repeats: 1,
+    });
+    expect(lastPayload()['message']).toBe('newcomer');
+  });
+
   it('treats messages that differ only past the size cap as the same error', () => {
     reportClientError(new Error(`${'x'.repeat(600)}a`), 'boundary');
     reportClientError(new Error(`${'x'.repeat(600)}b`), 'boundary');
