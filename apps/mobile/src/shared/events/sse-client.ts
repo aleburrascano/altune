@@ -49,7 +49,7 @@ export class ServerEventHandlerError extends Error {
   }
 }
 
-export class SSEConnectionError extends Error {
+class SSEConnectionError extends Error {
   readonly correlationId: string | null;
 
   constructor(correlationId: string | null) {

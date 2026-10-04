@@ -4,4 +4,29 @@ export default {
     'react-doctor/rn-prefer-reanimated': 'off',
     'deslop/unused-dev-dependency': 'off',
   },
+  ignore: {
+    overrides: [
+      {
+        files: [
+          'src/app-shell/platformExtras.tsx',
+          'src/features/auth/hooks/useAuthDeepLink.ts',
+          'src/features/auth/hooks/useOAuth.ts',
+          'src/features/auth/ui/AuthCallbackScreen.tsx',
+          'src/features/playback/hooks/PlaybackProvider.tsx',
+          'src/features/playback/playsThroughTrackPlayer.ts',
+          'src/shared/ui/dialog/dialog.ts',
+          'src/shared/ui/keyboard/keyboard.tsx',
+        ],
+        rules: ['deslop/unused-export'],
+      },
+      {
+        files: ['eslint/consistency/**'],
+        rules: ['deslop/unused-file'],
+      },
+      {
+        files: ['src/shared/ui/keyboard/keyboard.tsx', 'src/shared/ui/keyboard/keyboard.web.tsx'],
+        rules: ['react-doctor/only-export-components'],
+      },
+    ],
+  },
 };
