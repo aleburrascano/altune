@@ -138,3 +138,76 @@ describe('MC-2 owner of the library delete and re-acquire calls', () => {
     },
   );
 });
+
+async function lintMc8At(filename: string, source: string) {
+  const mc8 = rules.find((rule) => rule.id === 'MC-8')!;
+  const bridge = [
+    `const { lintSource } = await import(${JSON.stringify(ratchetUrl)});`,
+    `const messages = await lintSource(${JSON.stringify(mc8)}, ${JSON.stringify(source)}, ${JSON.stringify(filename)});`,
+    'process.stdout.write(JSON.stringify(messages));',
+  ].join('\n');
+  const output = execFileSync('node', ['--input-type=module', '-e', bridge], {
+    cwd: mobileRoot,
+    encoding: 'utf8',
+  });
+  return JSON.parse(output) as { message: string; ruleId?: string | null }[];
+}
+
+describe('MC-8 features reach the API only through their own adapters', () => {
+  const barrelImport =
+    "import { getTracks } from '@shared/api-client';\nexport const g = getTracks;\n";
+
+  test('checklist doc has an MC-8 row', () => {
+    const doc = fs.readFileSync(
+      path.join(__dirname, '..', '..', '..', '..', 'docs', 'conventions', 'mobile-consistency.md'),
+      'utf8',
+    );
+    expect(doc).toMatch(/^\| MC-8 \|/m);
+  });
+
+  test('the real script prints MC-8 at its baseline of 32 and exits 0', () => {
+    const { status, stdout } = runRatchetCli();
+
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/^MC-8: 32 \/ baseline 32$/m);
+  });
+
+  test('flags a value import from the barrel in a feature hook', async () => {
+    const messages = await lintMc8At('src/features/library/hooks/useThing.ts', barrelImport);
+
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0].message).toContain('MC-8');
+  });
+
+  test.each([
+    "import type { TrackResponse } from '@shared/api-client/types';\nexport type T = TrackResponse;\n",
+    "import { asTrackId } from '@shared/api-client/ids';\nexport const t = asTrackId;\n",
+  ])('allows a type or pure-module import in a feature hook', async (source) => {
+    expect(await lintMc8At('src/features/library/hooks/useThing.ts', source)).toHaveLength(0);
+  });
+
+  test('allows a feature adapter to import the barrel', async () => {
+    const messages = await lintMc8At(
+      'src/features/library/adapters/http/httpLibraryPort.ts',
+      barrelImport,
+    );
+
+    expect(messages).toHaveLength(0);
+  });
+
+  test('the real script exits 1 and names MC-8 and the file when a hook adds a barrel import', () => {
+    const relativePath = path.join('src', 'features', 'library', 'hooks', '__mc8_fixture__.ts');
+    const fixturePath = path.join(mobileRoot, relativePath);
+    fs.writeFileSync(fixturePath, barrelImport);
+
+    try {
+      const { status, stdout } = runRatchetCli();
+
+      expect(status).toBe(1);
+      expect(stdout).toContain('MC-8');
+      expect(stdout).toContain(relativePath);
+    } finally {
+      fs.rmSync(fixturePath, { force: true });
+    }
+  });
+});
