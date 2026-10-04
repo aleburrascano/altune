@@ -11,7 +11,7 @@ import {
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
 
-import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { useDiscoverClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 
 jest.mock('@shared/api-client/discovery', () => ({
@@ -48,7 +48,7 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
-    const { result } = renderHook(() => useClearSearchHistory(), { wrapper });
+    const { result } = renderHook(() => useDiscoverClearSearchHistory(), { wrapper });
     return { queryClient, invalidate, result, clear: result.current.clear };
   }
 
@@ -178,7 +178,7 @@ describe('discover clear-history racing an unrelated history invalidation', () =
 
   async function renderHistoryWithClear(queryClient: QueryClient) {
     const screen = renderHook(
-      () => ({ history: useSearchHistory(), clear: useClearSearchHistory() }),
+      () => ({ history: useSearchHistory(), clear: useDiscoverClearSearchHistory() }),
       { wrapper: makeWrapper(queryClient) },
     );
     await waitFor(() => expect(screen.result.current.history.data).toEqual(PRE_CLEAR_HISTORY));
@@ -265,7 +265,7 @@ describe('discover clear-history retries transient failures', () => {
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
-    const { result } = renderHook(() => useClearSearchHistory(), { wrapper });
+    const { result } = renderHook(() => useDiscoverClearSearchHistory(), { wrapper });
     return { queryClient, result };
   }
 

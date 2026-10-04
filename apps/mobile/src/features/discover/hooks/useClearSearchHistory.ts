@@ -8,7 +8,7 @@ type ClearSearchHistory = {
   error: Error | null;
 };
 
-export function useClearSearchHistory(): ClearSearchHistory {
+export function useDiscoverClearSearchHistory(): ClearSearchHistory {
   const clearHistoryMutation = useSharedClearSearchHistory({
     action: 'discover.clear_search_history',
     retryOptions: { retry: (failureCount, error) => isRetryable(error) && failureCount < 5 },

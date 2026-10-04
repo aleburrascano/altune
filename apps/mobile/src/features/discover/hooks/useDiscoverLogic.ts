@@ -10,7 +10,7 @@ import { SEARCH_DEBOUNCE_MS, useAutocompleteSuggestions } from './useAutocomplet
 import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
 import { useSearchHistory } from './useSearchHistory';
 import { useResultsFilter } from './useResultsFilter';
-import { useClearSearchHistory } from './useClearSearchHistory';
+import { useDiscoverClearSearchHistory } from './useClearSearchHistory';
 import { useResultTap } from './useResultTap';
 import { useSuggestionVisibility } from './useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
@@ -84,7 +84,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const impression = useImpressionLogger(searchData);
   const suggestionVisibility = useSuggestionVisibility(search, suggestionItems.length);
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
-  const clearHistory = useClearSearchHistory();
+  const clearHistory = useDiscoverClearSearchHistory();
   const onResultTap = useResultTap(searchData);
   const hookState = {
     query: search.committedQuery,

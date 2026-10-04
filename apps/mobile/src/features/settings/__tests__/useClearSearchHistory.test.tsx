@@ -13,7 +13,7 @@ import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
-import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { useSettingsClearSearchHistory } from '../hooks/useClearSearchHistory';
 
 jest.mock('@shared/api-client/discovery', () => ({
   ...jest.requireActual('@shared/api-client/discovery'),
@@ -45,7 +45,7 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
       .catch(() => undefined);
     jest.mocked(clearSearchHistory).mockResolvedValue(undefined);
 
-    const hook = renderHook(() => useClearSearchHistory(), {
+    const hook = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -75,7 +75,7 @@ describe('useClearSearchHistory when the clear fails', () => {
     jest.mocked(clearSearchHistory).mockReset();
     jest.mocked(clearSearchHistory).mockRejectedValue(new Error('boom'));
 
-    const hook = renderHook(() => useClearSearchHistory(), {
+    const hook = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -129,7 +129,7 @@ describe('settings mutations retry transient failures', () => {
       .mockRejectedValueOnce(badGateway())
       .mockResolvedValueOnce(undefined);
 
-    const hook = renderMutation(useClearSearchHistory);
+    const hook = renderMutation(useSettingsClearSearchHistory);
     await elapsePastTheFirstRetry();
 
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
@@ -140,7 +140,7 @@ describe('settings mutations retry transient failures', () => {
   it('does not retry a permanent 4xx on clear-history', async () => {
     jest.mocked(clearSearchHistory).mockRejectedValue(new ApiError(400, 'bad request'));
 
-    const hook = renderMutation(useClearSearchHistory);
+    const hook = renderMutation(useSettingsClearSearchHistory);
 
     await waitFor(() => expect(hook.result.current.isError).toBe(true));
     expect(clearSearchHistory).toHaveBeenCalledTimes(1);
@@ -152,7 +152,7 @@ describe('the jittered retry backoff', () => {
   const retryingMutations = [
     {
       name: 'clear-history',
-      useMutationHook: useClearSearchHistory,
+      useMutationHook: useSettingsClearSearchHistory,
       api: () => clearSearchHistory as jest.Mock,
     },
   ];
@@ -287,7 +287,7 @@ describe('settings mutations racing a sign-out', () => {
     const pending = deferred<void>();
     jest.mocked(clearSearchHistory).mockReturnValue(pending.promise);
 
-    const clear = renderHook(() => useClearSearchHistory(), {
+    const clear = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -326,7 +326,7 @@ describe('settings mutations racing a sign-out', () => {
       throw new ApiError(502, 'bad gateway');
     });
 
-    const clear = renderHook(() => useClearSearchHistory(), {
+    const clear = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -357,7 +357,7 @@ describe('settings mutations racing a sign-out', () => {
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'a' }] });
 
     const hooks = renderHook(
-      () => ({ backfill: useBackfillFeatured(), clear: useClearSearchHistory() }),
+      () => ({ backfill: useBackfillFeatured(), clear: useSettingsClearSearchHistory() }),
       { wrapper: makeWrapper(queryClient) },
     );
     act(() => {

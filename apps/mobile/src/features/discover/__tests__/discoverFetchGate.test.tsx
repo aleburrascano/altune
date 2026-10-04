@@ -14,7 +14,7 @@ import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/ki
 import { discoveryKeys } from '@shared/lib/query-keys';
 
 import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';
-import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { useDiscoverClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useSearchHistory } from '../hooks/useSearchHistory';
@@ -147,7 +147,7 @@ describe('discover fetches — remote kill switch', () => {
   it('keeps the cached history when a clear is tapped while the switch is off', async () => {
     switchDiscoveryFetches(false);
     queryClient.setQueryData(discoveryKeys.history, HISTORY);
-    const { result } = renderHook(() => useClearSearchHistory(), { wrapper });
+    const { result } = renderHook(() => useDiscoverClearSearchHistory(), { wrapper });
 
     act(() => result.current.clear());
     await settle();
