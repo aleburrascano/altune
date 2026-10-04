@@ -13,9 +13,11 @@ const OWNERS = {
   'src/features/settings/hooks/useSubmitReport.ts': { feedback: ['submitReport'] },
   'src/features/detail/hooks/useSaveTrack.ts': { tracks: ['createTrack'] },
   'src/shared/acquisition/useRetryAcquisition.ts': { tracks: ['retryAcquisition'] },
-  'src/features/settings/hooks/useBackfillFeatured.ts': { tracks: ['backfillFeaturedArtists'] },
   'src/features/library/adapters/http/httpLibraryPort.ts': {
     tracks: ['deleteTrack', 'reacquireTrack'],
+  },
+  'src/features/settings/adapters/http/httpSettingsPort.ts': {
+    tracks: ['backfillFeaturedArtists'],
   },
   'src/features/playback/native/service.ts': { audio: ['recoverAudio'] },
   'src/features/playback/native/useQueueResume.ts': { playback: ['saveQueueState'] },

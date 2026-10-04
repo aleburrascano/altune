@@ -139,6 +139,57 @@ describe('MC-2 owner of the library delete and re-acquire calls', () => {
   );
 });
 
+describe('MC-2 owner of the settings featured-artist backfill', () => {
+  const importing =
+    "import { backfillFeaturedArtists } from '@shared/api-client/tracks';\nexport const f = backfillFeaturedArtists;\n";
+
+  test('flags useBackfillFeatured.ts importing backfillFeaturedArtists from the api-client', async () => {
+    const messages = await lintMc2At(
+      'src/features/settings/hooks/useBackfillFeatured.ts',
+      importing,
+    );
+
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0].message).toContain('MC-2');
+  });
+
+  test('allows httpSettingsPort.ts to import backfillFeaturedArtists', async () => {
+    const messages = await lintMc2At(
+      'src/features/settings/adapters/http/httpSettingsPort.ts',
+      importing,
+    );
+
+    expect(messages).toHaveLength(0);
+  });
+});
+
+describe('MC-2 keeps backfillFeaturedArtists out of every file but the settings adapter', () => {
+  const importing =
+    "import { backfillFeaturedArtists } from '@shared/api-client/tracks';\nexport const f = backfillFeaturedArtists;\n";
+
+  test.each([
+    'src/features/settings/components/LibraryCard.tsx',
+    'src/features/settings/ports/SettingsPortProvider.tsx',
+    'src/features/library/adapters/http/httpLibraryPort.ts',
+    'src/features/settings/adapters/http/httpSettingsPortHelper.ts',
+  ])('flags %s importing it from the api-client', async (filename) => {
+    const messages = await lintMc2At(filename, importing);
+
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0].message).toContain('MC-2');
+  });
+
+  test('flags the hook importing it under an alias', async () => {
+    const messages = await lintMc2At(
+      'src/features/settings/hooks/useBackfillFeatured.ts',
+      "import { backfillFeaturedArtists as runBackfill } from '@shared/api-client/tracks';\nexport const f = runBackfill;\n",
+    );
+
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0].message).toContain('MC-2');
+  });
+});
+
 async function lintMc8At(filename: string, source: string) {
   const mc8 = rules.find((rule) => rule.id === 'MC-8')!;
   const bridge = [
@@ -165,11 +216,11 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     expect(doc).toMatch(/^\| MC-8 \|/m);
   });
 
-  test('the real script prints MC-8 at its baseline of 29 and exits 0', () => {
+  test('the real script prints MC-8 at its baseline of 28 and exits 0', () => {
     const { status, stdout } = runRatchetCli();
 
     expect(status).toBe(0);
-    expect(stdout).toMatch(/^MC-8: 29 \/ baseline 29$/m);
+    expect(stdout).toMatch(/^MC-8: 28 \/ baseline 28$/m);
   });
 
   test('flags a value import from the barrel in a feature hook', async () => {
