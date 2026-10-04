@@ -8,9 +8,11 @@ import {
 import { useEffect } from 'react';
 
 import type { LibrarySort } from '@shared/api-client/library';
-import { getAllTracks, getTracks } from '@shared/api-client/tracks';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
+
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { failureLogFields } from '../failureLogFields';
 import { classifyLibraryError, type LibraryFailure } from '../state';
@@ -47,6 +49,7 @@ function loadedPagesOnFailure(tracks: TrackResponse[], onFallback: FallbackHandl
 }
 
 interface PollTarget {
+  port: LibraryPort;
   queryClient: QueryClient;
   query: string;
   sort: LibrarySort;
@@ -54,10 +57,10 @@ interface PollTarget {
 }
 
 async function fetchUnlessSuperseded(target: PollTarget, offset: number) {
-  const { queryClient, query, sort, signal } = target;
+  const { port, queryClient, query, sort, signal } = target;
   const key = libraryKeys.tracks(query, sort);
   const before = queryClient.getQueryData<TracksData>(key);
-  const fresh = await getTracks({ limit: TRACKS_PAGE_SIZE, offset, q: query, sort }, signal);
+  const fresh = await port.getTracks({ limit: TRACKS_PAGE_SIZE, offset, q: query, sort }, signal);
   const superseded = signal.aborted || queryClient.getQueryData<TracksData>(key) !== before;
   return superseded ? undefined : fresh;
 }
@@ -90,20 +93,32 @@ async function refreshPending(target: PollTarget) {
   }
 }
 
-function startPoll(queryClient: QueryClient, query: string, sort: LibrarySort) {
-  const controller = new AbortController();
-  let polls = 0;
-  let inFlight = false;
-  const settle = () => {
-    inFlight = false;
+type PollScope = Omit<PollTarget, 'signal'>;
+
+interface PollBudget {
+  polls: number;
+  inFlight: boolean;
+}
+
+function releaseSlot(budget: PollBudget) {
+  budget.inFlight = false;
+}
+
+function pollTick(scope: PollScope, signal: AbortSignal, stop: () => void) {
+  const budget: PollBudget = { polls: 0, inFlight: false };
+  return () => {
+    budget.polls += 1;
+    if (budget.polls >= MAX_PENDING_POLLS) stop();
+    if (budget.inFlight) return;
+    budget.inFlight = true;
+    void refreshPending({ ...scope, signal }).finally(() => releaseSlot(budget));
   };
-  const timer = setInterval(() => {
-    polls += 1;
-    if (polls >= MAX_PENDING_POLLS) clearInterval(timer);
-    if (inFlight) return;
-    inFlight = true;
-    void refreshPending({ queryClient, query, sort, signal: controller.signal }).finally(settle);
-  }, PENDING_POLL_MS);
+}
+
+function startPoll(scope: PollScope) {
+  const controller = new AbortController();
+  const tick = pollTick(scope, controller.signal, () => clearInterval(timer));
+  const timer = setInterval(tick, PENDING_POLL_MS);
   return () => {
     clearInterval(timer);
     controller.abort();
@@ -111,14 +126,16 @@ function startPoll(queryClient: QueryClient, query: string, sort: LibrarySort) {
 }
 
 function usePendingPoll(active: boolean, query: string, sort: LibrarySort) {
+  const port = useLibraryPort();
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!active) return;
-    return startPoll(queryClient, query, sort);
-  }, [active, query, sort, queryClient]);
+    return startPoll({ port, queryClient, query, sort });
+  }, [active, query, sort, queryClient, port]);
 }
 
 export function useLibraryTracks(query: string, sort: LibrarySort, enabled: boolean) {
+  const port = useLibraryPort();
   const queryClient = useQueryClient();
   const {
     data: tracksData,
@@ -134,7 +151,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     queryKey: libraryKeys.tracks(query, sort),
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
-      getTracks({ limit: TRACKS_PAGE_SIZE, offset: pageParam, q: query, sort }, signal),
+      port.getTracks({ limit: TRACKS_PAGE_SIZE, offset: pageParam, q: query, sort }, signal),
     getNextPageParam: (lastPage) =>
       lastPage.has_more && lastPage.items.length > 0
         ? lastPage.offset + lastPage.items.length
@@ -174,7 +191,8 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
       queryClient
         .fetchQuery({
           queryKey: libraryKeys.tracksAll(query, sort),
-          queryFn: async ({ signal }) => (await getAllTracks({ q: query, sort, signal })).items,
+          queryFn: async ({ signal }) =>
+            (await port.getAllTracks({ q: query, sort, signal })).items,
           staleTime: 0,
           gcTime: 0,
         })

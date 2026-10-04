@@ -13,6 +13,9 @@ import {
 } from '@shared/events/trackCachePatch';
 
 import { TRACKS_PAGE_SIZE, useLibraryTracks } from '../hooks/useLibraryTracks';
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 
 const mockGetTracks = jest.fn();
 const mockGetAllTracks = jest.fn();
@@ -419,5 +422,27 @@ describe('useLibraryTracks loadAll cancellation', () => {
     expect(mockGetAllTracks).toHaveBeenCalledWith(
       expect.objectContaining({ q: 'q', signal: expect.any(AbortSignal) }),
     );
+  });
+});
+
+describe('useLibraryTracks on an injected LibraryPort', () => {
+  it('lists the tracks the injected port holds', async () => {
+    const tracks = [seededTrack('m0'), seededTrack('m1'), seededTrack('m2')];
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>
+          <LibraryPortProvider port={createMemoryLibraryPort({ tracks })}>
+            {children}
+          </LibraryPortProvider>
+        </QueryClientProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
+
+    await waitFor(() => expect(result.current.tracks.map((t) => t.id)).toEqual(['m0', 'm1', 'm2']));
+    expect(mockGetTracks).not.toHaveBeenCalled();
+    client.clear();
   });
 });

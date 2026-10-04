@@ -16,6 +16,9 @@ const OWNERS = {
   'src/shared/acquisition/useRetryAcquisition.ts': { tracks: ['retryAcquisition'] },
   'src/features/settings/hooks/useBackfillFeatured.ts': { tracks: ['backfillFeaturedArtists'] },
   'src/features/library/hooks/useReacquireTrack.ts': { tracks: ['reacquireTrack'] },
+  'src/features/library/adapters/http/httpLibraryPort.ts': {
+    tracks: ['deleteTrack', 'reacquireTrack'],
+  },
   'src/features/playback/native/service.ts': { audio: ['recoverAudio'] },
   'src/features/playback/native/useQueueResume.ts': { playback: ['saveQueueState'] },
 };
@@ -26,7 +29,7 @@ const EXEMPT = {
 
 const mutatingByModule = Object.values(OWNERS).reduce((all, owned) => {
   for (const [module, names] of Object.entries(owned)) {
-    all[module] = [...(all[module] ?? []), ...names];
+    all[module] = [...new Set([...(all[module] ?? []), ...names])];
   }
   return all;
 }, {});
@@ -39,6 +42,7 @@ function restrictedPatterns(allowed) {
       {
         group: [`**/api-client/${module}`],
         importNames: banned,
+        allowTypeImports: true,
         message: `Call this api-client mutation only from its owning hook (MC-2).`,
       },
     ];
