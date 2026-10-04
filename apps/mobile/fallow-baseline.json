@@ -11,6 +11,10 @@
     "src/shared/telemetry/userTelemetry.ts"
   ],
   "unused_exports": [
+    "src/features/detail/navigation.ts:openDetail",
+    "src/features/auth/errorReason.ts:SIGNUP_DISABLED_COPY",
+    "src/features/discover/ports/DiscoverPortProvider.tsx:DiscoverPortProvider",
+    "src/features/library/ports/LibraryPortProvider.tsx:LibraryPortProvider",
     "src/features/auth/attemptLockout.ts:LOCKOUT_AFTER_FAILURES",
     "src/features/auth/attemptLockout.ts:LOCKOUT_BASE_MS",
     "src/features/auth/attemptLockout.ts:FAILURE_RUN_MEMORY_MS",

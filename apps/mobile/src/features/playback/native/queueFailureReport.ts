@@ -32,7 +32,7 @@ export function isIndexOutOfBounds(err: unknown): boolean {
   return nativeErrorCode(err) === INDEX_OUT_OF_BOUNDS_CODE;
 }
 
-export function nativeErrorCode(err: unknown): string | null {
+function nativeErrorCode(err: unknown): string | null {
   if (typeof err !== 'object' || err === null || !('code' in err)) return null;
   return typeof err.code === 'string' ? err.code : null;
 }

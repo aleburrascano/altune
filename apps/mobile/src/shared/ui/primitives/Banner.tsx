@@ -9,7 +9,7 @@ import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { Text } from './Text';
 
-export type BannerTone = 'danger' | 'info';
+type BannerTone = 'danger' | 'info';
 
 type BannerBase = {
   children: ReactNode;

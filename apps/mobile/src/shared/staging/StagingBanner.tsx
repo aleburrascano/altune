@@ -5,7 +5,7 @@ import { spacing, useTheme } from '@shared/ui/theme';
 
 const STAGING_SUPABASE_PROJECT_REF = 'ijyjoyxhwmbmriwzazbx';
 
-export const STAGING_BANNER_COPY =
+const STAGING_BANNER_COPY =
   'Staging. Everything here is wiped every night. Use altune.duckdns.org.';
 
 function isStagingBuild(): boolean {

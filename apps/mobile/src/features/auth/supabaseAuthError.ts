@@ -7,7 +7,7 @@ export type SupabaseAuthErrorLike = {
   message?: string | undefined;
 };
 
-export function isTransportAuthError(error: SupabaseAuthErrorLike): boolean {
+function isTransportAuthError(error: SupabaseAuthErrorLike): boolean {
   return (
     error.name === 'AuthRetryableFetchError' ||
     error.status === 0 ||
@@ -15,7 +15,7 @@ export function isTransportAuthError(error: SupabaseAuthErrorLike): boolean {
   );
 }
 
-export function isRateLimitedAuthError(error: SupabaseAuthErrorLike): boolean {
+function isRateLimitedAuthError(error: SupabaseAuthErrorLike): boolean {
   return (
     error.status === 429 ||
     (typeof error.code === 'string' && /^over_.*_rate_limit$/.test(error.code))

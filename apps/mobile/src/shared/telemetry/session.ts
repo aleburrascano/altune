@@ -51,7 +51,7 @@ export function getSessionId(now: Clock = Date.now, tick: Clock = () => performa
   return _state.sessionId;
 }
 
-export function resetSession(now: Clock = Date.now): void {
+function resetSession(now: Clock = Date.now): void {
   const at = now();
   _state = { sessionId: makeSessionId(at), lastActivity: at };
   _tickAnchor = null;
