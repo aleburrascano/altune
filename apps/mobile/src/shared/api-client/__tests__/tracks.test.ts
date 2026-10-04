@@ -419,6 +419,31 @@ describe('backfillFeaturedArtists', () => {
   });
 });
 
+describe('backfillFeaturedArtists timeout', () => {
+  it('is not aborted at 89_999 ms and rejects with a timeout NetworkError at 90_000 ms', async () => {
+    jest.useFakeTimers();
+    try {
+      __http.hang('POST /v1/tracks/featured-backfill');
+
+      const outcome = backfillFeaturedArtists().then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+      await jest.advanceTimersByTimeAsync(89_999);
+      expect(__http.last().signal.aborted).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(1);
+      const error = await outcome;
+
+      expect(error).toBeInstanceOf(NetworkError);
+      expect((error as NetworkError).failure).toBe('timeout');
+      expect(__http.last().signal.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe('getAllTracks', () => {
   function page(items: { id: string }[], offset: number, total: number, hasMore: boolean) {
     return {

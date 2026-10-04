@@ -22,6 +22,14 @@ const DEFAULT_BASE = 'http://127.0.0.1:8000';
 
 export const REQUEST_TIMEOUT_MS = 15_000;
 
+export const LONG_REQUEST_TIMEOUT_MS = 90_000;
+
+declare global {
+  interface RequestInit {
+    timeoutMs?: number;
+  }
+}
+
 const API_URL_VAR = 'EXPO_PUBLIC_API_URL';
 
 const API_BASE_SHAPE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*[^\s/?#])?$/;
@@ -86,6 +94,7 @@ async function send(
   route: string,
   init: RequestInit,
   deadline: Deadline,
+  timeoutMs: number,
   correlationId: string | undefined,
 ): Promise<Response> {
   try {
@@ -95,7 +104,7 @@ async function send(
     if (deadline.expired()) {
       throw new NetworkError(
         'timeout',
-        `API ${route} timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        `API ${route} timed out after ${timeoutMs}ms`,
         correlationId,
       );
     }
@@ -192,12 +201,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const correlationId = newCorrelationId() ?? undefined;
   const route = path.replace(/\?.*/s, '');
   const sentWith = stampCredentials();
+  const timeoutMs = init?.timeoutMs ?? REQUEST_TIMEOUT_MS;
   try {
-    const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
+    const deadline = startDeadline(init?.signal ?? undefined, timeoutMs);
     try {
       const headers = await requestHeaders(route, correlationId, init);
       return await receive<T>(
-        await send(`${apiBase}${path}`, route, { ...init, headers }, deadline, correlationId),
+        await send(
+          `${apiBase}${path}`,
+          route,
+          { ...init, headers },
+          deadline,
+          timeoutMs,
+          correlationId,
+        ),
         route,
         correlationId,
         sentWith,

@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 import { ContractError } from '@shared/errors';
-import { apiFetch, apiSend, signalInit } from './index';
+import { apiFetch, apiSend, LONG_REQUEST_TIMEOUT_MS, signalInit } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { withQuery } from './queryString';
@@ -223,7 +223,10 @@ export async function backfillFeaturedArtists(offset?: number): Promise<Backfill
   const qs = new URLSearchParams();
   if (offset != null) qs.set('offset', String(offset));
   return parseBackfillFeaturedResult(
-    await apiFetch<unknown>(withQuery('/v1/tracks/featured-backfill', qs), { method: 'POST' }),
+    await apiFetch<unknown>(withQuery('/v1/tracks/featured-backfill', qs), {
+      method: 'POST',
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    }),
   );
 }
 

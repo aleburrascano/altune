@@ -12,7 +12,12 @@ import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeature
 import { SettingsPortProvider } from '@features/settings/ports/SettingsPortProvider';
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
 import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';
-import { ApiError, NetworkError, REQUEST_TIMEOUT_MS } from '@shared/api-client';
+import {
+  ApiError,
+  LONG_REQUEST_TIMEOUT_MS,
+  NetworkError,
+  REQUEST_TIMEOUT_MS,
+} from '@shared/api-client';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
 
@@ -126,7 +131,7 @@ describe('httpSettingsPort on the wire', () => {
     expect(__http.requests.map((r: { query: string }) => r.query)).toEqual(['', 'offset=2']);
   });
 
-  it('gives up on a request the server holds open past the client timeout', async () => {
+  it('gives up on the backfill the server holds open only at the long timeout, not at 15s', async () => {
     jest.useFakeTimers();
     try {
       __http.hang(`POST ${BACKFILL_PATH}`);
@@ -135,7 +140,10 @@ describe('httpSettingsPort on the wire', () => {
         () => 'resolved',
         (error: unknown) => error,
       );
-      await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1);
+      await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 1);
+      expect(__http.last().signal.aborted).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(LONG_REQUEST_TIMEOUT_MS - REQUEST_TIMEOUT_MS - 2);
       expect(__http.last().signal.aborted).toBe(false);
 
       await jest.advanceTimersByTimeAsync(1);
