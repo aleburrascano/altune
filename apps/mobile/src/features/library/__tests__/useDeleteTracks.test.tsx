@@ -6,9 +6,15 @@ import { ApiError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import type * as ForgetTrackModule from '@shared/events/forgetTrack';
+import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import {
   BULK_DELETE_CONCURRENCY,
@@ -513,8 +519,105 @@ describe('useDeleteTracks — a failed run names the affected tracks', () => {
   it('deleteOne sends one delete request for the track', async () => {
     mockDeleteTrack.mockResolvedValue(undefined);
 
-    await deleteOne(asTrackId('t9'));
+    await deleteOne(httpLibraryPort, asTrackId('t9'));
 
     expect(mockDeleteTrack).toHaveBeenCalledWith('t9', undefined);
+  });
+});
+
+describe('useDeleteTracks — deletes through the library port it is given (#1132)', () => {
+  function portWrapper(queryClient: ReturnType<typeof setup>['queryClient'], port: LibraryPort) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        </QueryClientProvider>
+      );
+    };
+  }
+
+  async function idsLeftIn(port: LibraryPort): Promise<string[]> {
+    const { items } = await port.getAllTracks({});
+    return items.map((t) => t.id);
+  }
+
+  it('removes the selected tracks from the provided port and never calls the HTTP client', async () => {
+    const { queryClient } = setup();
+    const port = createMemoryLibraryPort({ tracks: [track('a'), track('b'), track('c')] });
+    queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a'), track('b'), track('c')]));
+
+    const { result } = renderHook(() => useDeleteTracks(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate([asTrackId('a'), asTrackId('c')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
+    expect(await idsLeftIn(port)).toEqual(['b']);
+    expect(pagedIds(queryClient)).toEqual(['b']);
+    expect(mockDeleteTrack).not.toHaveBeenCalled();
+  });
+
+  it('counts a track the port no longer has (404) as deleted, not as a failure', async () => {
+    const { queryClient } = setup();
+    const port = createMemoryLibraryPort({ tracks: [track('a'), track('b')] });
+    queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a'), track('b'), track('ghost')]));
+
+    const { result } = renderHook(() => useDeleteTracks(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate([asTrackId('ghost'), asTrackId('a')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
+    expect(await idsLeftIn(port)).toEqual(['b']);
+    expect(pagedIds(queryClient)).toEqual(['b']);
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports a delete the port refuses as a failure with its own error and keeps that track', async () => {
+    const { queryClient } = setup();
+    const memory = createMemoryLibraryPort({ tracks: [track('a'), track('b')] });
+    const refusal = new ApiError(500, 'boom');
+    const port: LibraryPort = {
+      ...memory,
+      deleteTrack: (id) => (id === 'a' ? Promise.reject(refusal) : memory.deleteTrack(id)),
+    };
+    queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a'), track('b')]));
+
+    const { result } = renderHook(() => useDeleteTracks(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      deleted: 1,
+      requested: 2,
+      failures: [{ trackId: 'a', error: refusal }],
+    });
+    expect(await idsLeftIn(port)).toEqual(['a']);
+    expect(pagedIds(queryClient)).toEqual(['a']);
+    expect(mockDeleteTrack).not.toHaveBeenCalled();
+  });
+
+  it('deleteOne deletes the track through the port passed to it', async () => {
+    const port = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
+
+    await deleteOne(port, asTrackId('t1'));
+
+    expect(await idsLeftIn(port)).toEqual(['t2']);
+    expect(mockDeleteTrack).not.toHaveBeenCalled();
+  });
+
+  it('deleteOne rejects with the error the port gives, without falling back to HTTP', async () => {
+    const refusal = new ApiError(500, 'boom');
+    const port: LibraryPort = {
+      ...createMemoryLibraryPort(),
+      deleteTrack: () => Promise.reject(refusal),
+    };
+
+    await expect(deleteOne(port, asTrackId('t1'))).rejects.toBe(refusal);
+    expect(mockDeleteTrack).not.toHaveBeenCalled();
   });
 });

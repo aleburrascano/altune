@@ -97,3 +97,44 @@ test('running the real script exits 1 and names MC-1 and the file when a raw fet
     fs.rmSync(fixturePath, { force: true });
   }
 });
+
+async function lintMc2At(filename: string, source: string) {
+  const mc2 = rules.find((rule) => rule.id === 'MC-2')!;
+  const bridge = [
+    `const { lintSource } = await import(${JSON.stringify(ratchetUrl)});`,
+    `const messages = await lintSource(${JSON.stringify(mc2)}, ${JSON.stringify(source)}, ${JSON.stringify(filename)});`,
+    'process.stdout.write(JSON.stringify(messages));',
+  ].join('\n');
+  const output = execFileSync('node', ['--input-type=module', '-e', bridge], {
+    cwd: mobileRoot,
+    encoding: 'utf8',
+  });
+  return JSON.parse(output) as { message: string; ruleId?: string | null }[];
+}
+
+describe('MC-2 owner of the library delete and re-acquire calls', () => {
+  const importing = (name: string) =>
+    `import { ${name} } from '@shared/api-client/tracks';\nexport const f = ${name};\n`;
+
+  test.each([
+    ['useDeleteTracks.ts', 'deleteTrack'],
+    ['useReacquireTrack.ts', 'reacquireTrack'],
+  ])('flags %s importing %s from the api-client', async (hook, name) => {
+    const messages = await lintMc2At(`src/features/library/hooks/${hook}`, importing(name));
+
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0].message).toContain('MC-2');
+  });
+
+  test.each(['deleteTrack', 'reacquireTrack'])(
+    'allows httpLibraryPort.ts to import %s',
+    async (name) => {
+      const messages = await lintMc2At(
+        'src/features/library/adapters/http/httpLibraryPort.ts',
+        importing(name),
+      );
+
+      expect(messages).toHaveLength(0);
+    },
+  );
+});

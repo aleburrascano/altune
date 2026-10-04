@@ -18,6 +18,9 @@ import {
 } from '@shared/acquisition/trackStatusStore';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+
 import { deleteOne } from './useDeleteTracks';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { alertLibraryFailure } from '../libraryFailureAlert';
@@ -67,9 +70,9 @@ function undoFailedRemoval(queryClient: QueryClient) {
   };
 }
 
-function deleteTrackOptions(queryClient: QueryClient) {
+function deleteTrackOptions(queryClient: QueryClient, port: LibraryPort) {
   return guardedMutationOptions({
-    mutationFn: deleteOne,
+    mutationFn: (trackId: TrackId) => deleteOne(port, trackId),
     onMutate: removeOptimistically(queryClient),
     onSuccess: confirmRemoval(queryClient),
     onError: undoFailedRemoval(queryClient),
@@ -78,8 +81,9 @@ function deleteTrackOptions(queryClient: QueryClient) {
 
 export function useDeleteTrack() {
   const queryClient = useQueryClient();
+  const port = useLibraryPort();
   return useAppMutation({
-    ...deleteTrackOptions(queryClient),
+    ...deleteTrackOptions(queryClient, port),
     action: 'library.delete_track',
     trackIdOf: (trackId: TrackId) => trackId,
   });

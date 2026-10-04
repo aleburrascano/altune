@@ -8,6 +8,11 @@ import type { PlaylistDetailResponse } from '@shared/api-client/types';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
+import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import {
@@ -182,5 +187,70 @@ describe('useReacquireTrack — a re-acquire that never reaches the API (#3027)'
     expect(
       queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!.acquisition_status,
     ).toBe('ready');
+  });
+});
+
+describe('useReacquireTrack — re-acquires through the library port it is given (#1132)', () => {
+  function portWrapper(queryClient: ReturnType<typeof setup>['queryClient'], port: LibraryPort) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        </QueryClientProvider>
+      );
+    };
+  }
+
+  it('asks the provided port to re-acquire, marks the track pending and never calls the HTTP client', async () => {
+    const { queryClient } = setup();
+    const memory = createMemoryLibraryPort({ tracks: [track('t1')] });
+    const asked: string[] = [];
+    const port: LibraryPort = {
+      ...memory,
+      reacquireTrack: (id) => {
+        asked.push(id);
+        return memory.reacquireTrack(id);
+      },
+    };
+    queryClient.setQueryData(
+      PLAYLIST_KEY,
+      playlist([track('t1', { acquisition_status: 'failed' })]),
+    );
+
+    const { result } = renderHook(() => useReacquireTrack(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(asked).toEqual(['t1']);
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!.acquisition_status,
+    ).toBe('pending');
+    expect(mockReacquireTrack).not.toHaveBeenCalled();
+  });
+
+  it('alerts and leaves the track as it was when the port refuses the re-acquire', async () => {
+    const { queryClient } = setup();
+    const port: LibraryPort = {
+      ...createMemoryLibraryPort({ tracks: [track('t1')] }),
+      reacquireTrack: () => Promise.reject(new ApiError(409, 'conflict')),
+    };
+    queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1')]));
+
+    const { result } = renderHook(() => useReacquireTrack(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Re-acquire failed',
+      `Could not start a re-acquisition. Your current audio is unchanged. ${RETRY_TAIL}`,
+    );
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!.acquisition_status,
+    ).toBe('ready');
+    expect(mockReacquireTrack).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,11 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { libraryKeys } from '@shared/lib/query-keys';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
+import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import {
@@ -272,5 +277,78 @@ describe('track mutations that settle after sign-out leave the next user untouch
     expect(userBLibrary(queryClient)).toEqual(libraryOf([track('b1')]));
     expect(useTrackStatusStore.getState().statuses).toEqual({ b1: READY });
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDeleteTrack — deletes through the library port it is given (#1132)', () => {
+  function portWrapper(queryClient: ReturnType<typeof setup>['queryClient'], port: LibraryPort) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+        </QueryClientProvider>
+      );
+    };
+  }
+
+  async function idsLeftIn(port: LibraryPort): Promise<string[]> {
+    const { items } = await port.getAllTracks({});
+    return items.map((t) => t.id);
+  }
+
+  it('removes the track from the provided port and never calls the HTTP client', async () => {
+    const { queryClient } = setup();
+    const port = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
+    queryClient.setQueryData(TRACKS_KEY, libraryOf([track('t1'), track('t2')]));
+
+    const { result } = renderHook(() => useDeleteTrack(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate(asTrackId('t2')));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(await idsLeftIn(port)).toEqual(['t1']);
+    expect(pagedIds(queryClient)).toEqual(['t1']);
+    expect(mockDeleteTrack).not.toHaveBeenCalled();
+  });
+
+  it('keeps a track the port no longer has (404) removed and shows no failure', async () => {
+    const { queryClient } = setup();
+    const port = createMemoryLibraryPort({ tracks: [track('t1')] });
+    queryClient.setQueryData(TRACKS_KEY, libraryOf([track('t1'), track('t2')]));
+
+    const { result } = renderHook(() => useDeleteTrack(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate(asTrackId('t2')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(pagedIds(queryClient)).toEqual(['t1']);
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('puts the track back and alerts when the port refuses the delete', async () => {
+    const { queryClient } = setup();
+    const memory = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
+    const port: LibraryPort = {
+      ...memory,
+      deleteTrack: () => Promise.reject(new ApiError(500, 'internal')),
+    };
+    queryClient.setQueryData(TRACKS_KEY, libraryOf([track('t1'), track('t2')]));
+
+    const { result } = renderHook(() => useDeleteTrack(), {
+      wrapper: portWrapper(queryClient, port),
+    });
+    act(() => result.current.mutate(asTrackId('t2')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(pagedIds(queryClient)).toEqual(['t1', 't2']);
+    expect(await idsLeftIn(port)).toEqual(['t1', 't2']);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Delete failed',
+      `Could not remove the track. ${RETRY_TAIL}`,
+    );
+    expect(mockDeleteTrack).not.toHaveBeenCalled();
   });
 });

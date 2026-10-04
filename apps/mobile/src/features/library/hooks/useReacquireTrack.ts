@@ -4,9 +4,11 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { toPending } from '@shared/api-client/trackAcquisition';
-import { reacquireTrack } from '@shared/api-client/tracks';
 import { patchTrackInCaches } from '@shared/events/trackCachePatch';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
@@ -33,9 +35,9 @@ function reportFailedReacquire(queryClient: QueryClient) {
   };
 }
 
-function reacquireOptions(queryClient: QueryClient) {
+function reacquireOptions(queryClient: QueryClient, port: LibraryPort) {
   return guardedMutationOptions({
-    mutationFn: (trackId: TrackId) => reacquireTrack(trackId),
+    mutationFn: (trackId: TrackId) => port.reacquireTrack(trackId),
     onSuccess: markPending(queryClient),
     onError: reportFailedReacquire(queryClient),
   });
@@ -43,11 +45,12 @@ function reacquireOptions(queryClient: QueryClient) {
 
 export function useReacquireTrack(): TrackMutation<void, unknown> {
   const queryClient = useQueryClient();
+  const port = useLibraryPort();
   const mutation = useAppMutation({
     action: 'library.reacquire',
     trackIdOf: (trackId: TrackId) => trackId,
     mutationKey: trackMutationKeys.reacquire,
-    ...reacquireOptions(queryClient),
+    ...reacquireOptions(queryClient, port),
   });
   return useOneRunPerTrack(mutation, trackMutationKeys.reacquire);
 }

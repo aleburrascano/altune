@@ -12,10 +12,8 @@ const OWNERS = {
   'src/shared/favorites/useFavorites.ts': { favorites: ['addFavorite', 'removeFavorite'] },
   'src/features/settings/hooks/useSubmitReport.ts': { feedback: ['submitReport'] },
   'src/features/detail/hooks/useSaveTrack.ts': { tracks: ['createTrack'] },
-  'src/features/library/hooks/useDeleteTracks.ts': { tracks: ['deleteTrack'] },
   'src/shared/acquisition/useRetryAcquisition.ts': { tracks: ['retryAcquisition'] },
   'src/features/settings/hooks/useBackfillFeatured.ts': { tracks: ['backfillFeaturedArtists'] },
-  'src/features/library/hooks/useReacquireTrack.ts': { tracks: ['reacquireTrack'] },
   'src/features/library/adapters/http/httpLibraryPort.ts': {
     tracks: ['deleteTrack', 'reacquireTrack'],
   },

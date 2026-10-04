@@ -5,7 +5,6 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 import { showFailureAlert } from '@shared/ui';
 
 import type { TrackId } from '@shared/api-client/ids';
-import { deleteTrack } from '@shared/api-client/tracks';
 import { forgetTrack } from '@shared/events/forgetTrack';
 import { invalidateLibraryDerived, TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
@@ -15,6 +14,9 @@ import {
   guardedMutationOptions,
   isSameSession,
 } from '@shared/session/signOutCleanup';
+
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { failureLogFields } from '../failureLogFields';
@@ -53,8 +55,8 @@ type BatchContext = {
   failed: DeleteAttempt[];
 };
 
-export function deleteOne(trackId: TrackId): Promise<void> {
-  return deleteTrack(trackId);
+export function deleteOne(port: LibraryPort, trackId: TrackId): Promise<void> {
+  return port.deleteTrack(trackId);
 }
 
 async function deleteTrackForBulk(trackId: TrackId, ctx: BatchContext): Promise<DeleteAttempt> {
@@ -253,10 +255,11 @@ function recoverFailedBulkRun(queryClient: QueryClient) {
 export function useDeleteTracks() {
   const queryClient = useQueryClient();
   const startRun = useUnmountStop();
+  const port = useLibraryPort();
   return useAppMutation({
     ...guardedMutationOptions({
       mutationFn: (trackIds: TrackId[]) =>
-        runBulkDelete(queryClient, startRun(), trackIds, deleteOne),
+        runBulkDelete(queryClient, startRun(), trackIds, (id) => deleteOne(port, id)),
       onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, summary),
       onError: recoverFailedBulkRun(queryClient),
     }),
