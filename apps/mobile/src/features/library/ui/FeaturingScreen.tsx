@@ -16,8 +16,8 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 
-import { featuringDetailRoute } from '../featuringDetailRoute';
-import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { featuringDetailRoute } from '../domain/featuringDetailRoute';
+import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useExploreArtist } from '../hooks/useExploreArtist';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';

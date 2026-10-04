@@ -1,6 +1,6 @@
 import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
 
-import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
 
 function routerWithHistory(hasHistory: boolean) {
   return {

@@ -6,8 +6,8 @@ import { useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { failureLogFields } from '../failureLogFields';
-import type { FeaturingDetailRoute } from '../featuringDetailRoute';
+import { failureLogFields } from '../domain/failureLogFields';
+import type { FeaturingDetailRoute } from '../domain/featuringDetailRoute';
 import { alertLibraryFailure } from '../libraryFailureAlert';
 import { classifyLibraryError } from '../domain/state';
 

@@ -6,7 +6,7 @@ import { libraryKeys } from '@shared/lib/query-keys';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { failureLogFields } from '../failureLogFields';
+import { failureLogFields } from '../domain/failureLogFields';
 
 const DIGITS = /^[0-9]+$/;
 

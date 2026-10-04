@@ -6,7 +6,7 @@ import { NO_PLAYLIST_ID, parsePlaylistId, type PlaylistId } from '@shared/api-cl
 import { Screen, Skeleton, spacing } from '@shared/ui';
 import type { PlaylistDetailResponse } from '@shared/api-client/types';
 
-import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
 import { useLoggedPlaylistDetailFailure } from '../hooks/useLoggedPlaylistDetailFailure';
 import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
 import { BackHeader } from './BackHeader';

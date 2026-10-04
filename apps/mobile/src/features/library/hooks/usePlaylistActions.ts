@@ -10,7 +10,7 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
+import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../domain/groupPaging';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];

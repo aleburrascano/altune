@@ -19,7 +19,7 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
-import { failureLogFields } from '../failureLogFields';
+import { failureLogFields } from '../domain/failureLogFields';
 import { alertLibraryFailure } from '../libraryFailureAlert';
 import { classifyLibraryError, failureTail, type LibraryFailure } from '../domain/state';
 

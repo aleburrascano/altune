@@ -3,7 +3,7 @@ import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
-import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
 
 const DELETE_PROMPT = {
   title: 'Delete Playlist',

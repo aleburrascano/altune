@@ -11,7 +11,7 @@ import type { LibrarySort } from '@shared/api-client/library';
 import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 import type { LibraryChip } from '../activeView';
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
+import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../domain/groupPaging';
 
 interface GroupPage<T> {
   items: T[];

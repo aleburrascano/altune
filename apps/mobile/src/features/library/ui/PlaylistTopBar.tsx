@@ -8,7 +8,7 @@ import { spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 
-import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
 import { useLibraryOffline } from '../hooks/useLibraryOffline';
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';

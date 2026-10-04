@@ -1,6 +1,6 @@
 import { ApiError, correlationIdOf } from '@shared/errors';
 
-import { classifyLibraryError, type LibraryFailure } from './domain/state';
+import { classifyLibraryError, type LibraryFailure } from './state';
 
 type FailureLogFields = {
   status?: number;

@@ -17,8 +17,8 @@ jest.mock('@shared/api-client/library', () => ({
   getLibraryArtists: (query: LibraryQuery) => mockGetLibraryArtists(query),
 }));
 
-jest.mock('../groupPaging', () => {
-  const actual = jest.requireActual('../groupPaging');
+jest.mock('../domain/groupPaging', () => {
+  const actual = jest.requireActual('../domain/groupPaging');
   return {
     __esModule: true,
     get GROUP_PAGE_SIZE() {

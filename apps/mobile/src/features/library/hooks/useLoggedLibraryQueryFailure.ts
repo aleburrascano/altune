@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import type { LibrarySort } from '@shared/api-client/library';
 
-import { failureLogFields } from '../failureLogFields';
+import { failureLogFields } from '../domain/failureLogFields';
 import type { LibraryChip } from '../activeView';
 import type { SortKey } from '../domain/sort';
 

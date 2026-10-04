@@ -1,6 +1,6 @@
 import type { TrackId } from '@shared/api-client/ids';
 
-import { failureLogFields } from '../failureLogFields';
+import { failureLogFields } from '../domain/failureLogFields';
 
 export function logTrackMutationFailure(
   action: string,

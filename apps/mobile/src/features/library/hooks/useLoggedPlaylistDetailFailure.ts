@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import type { PlaylistId } from '@shared/api-client/ids';
 
-import { failureLogFields } from '../failureLogFields';
+import { failureLogFields } from '../domain/failureLogFields';
 
 export function useLoggedPlaylistDetailFailure(playlistId: PlaylistId, error: Error | null): void {
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
+import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../domain/groupPaging';
 
 describe('nextGroupPageOffset', () => {
   it('advances past a full default-sized page', () => {

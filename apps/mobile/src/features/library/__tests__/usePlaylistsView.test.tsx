@@ -6,7 +6,7 @@ import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistPage } from '@shared/api-client/playlists';
 import type { ListPlaylistsResponse, PlaylistResponse } from '@shared/api-client/types';
 
-import { GROUP_PAGE_SIZE } from '../groupPaging';
+import { GROUP_PAGE_SIZE } from '../domain/groupPaging';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { usePlaylistsView } from '../hooks/usePlaylistsView';
 import { SortControl } from '../ui/SortControl';
@@ -38,8 +38,8 @@ jest.mock('@shared/api-client/playlists', () => ({
   getPlaylists: (page?: PlaylistPage) => mockGetPlaylists(page),
 }));
 
-jest.mock('../groupPaging', () => {
-  const actual = jest.requireActual('../groupPaging');
+jest.mock('../domain/groupPaging', () => {
+  const actual = jest.requireActual('../domain/groupPaging');
   return {
     __esModule: true,
     get GROUP_PAGE_SIZE() {

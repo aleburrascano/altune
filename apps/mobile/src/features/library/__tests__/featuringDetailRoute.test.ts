@@ -1,4 +1,4 @@
-import { featuringDetailRoute } from '../featuringDetailRoute';
+import { featuringDetailRoute } from '../domain/featuringDetailRoute';
 
 describe('featuringDetailRoute', () => {
   it('routes to the discover detail screen under the discover tab', () => {
