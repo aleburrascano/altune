@@ -2360,6 +2360,7 @@ describe('pinned audio is served only at the version the server currently serves
 describe('resolvePinnedUri serves only ready local copies', () => {
   beforeEach(() => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
+    runSignOutCleanups();
   });
 
   describe('resolvePinnedUri — every branch and boundary of the status check', () => {
