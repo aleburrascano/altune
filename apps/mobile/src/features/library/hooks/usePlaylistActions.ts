@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
-import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 
 import { useCreatePlaylist } from '@shared/playlists';
+
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
@@ -30,6 +31,7 @@ export type PlaylistActionsState = {
 };
 
 export function usePlaylistActions(): PlaylistActionsState {
+  const port = useLibraryPort();
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
 
@@ -47,7 +49,7 @@ export function usePlaylistActions(): PlaylistActionsState {
     queryKey: playlistKeys.paged,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
-      getPlaylists({ limit: GROUP_PAGE_SIZE, offset: pageParam }, signal),
+      port.getPlaylists({ limit: GROUP_PAGE_SIZE, offset: pageParam }, signal),
     getNextPageParam: (lastPage, _pages, lastOffset) =>
       nextGroupPageOffset(lastPage.items.length, lastOffset),
     staleTime: Infinity,

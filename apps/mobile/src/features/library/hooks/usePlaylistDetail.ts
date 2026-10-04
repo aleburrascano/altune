@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { PlaylistId } from '@shared/api-client/ids';
-import { getPlaylist } from '@shared/api-client/playlists';
 import { playlistKeys } from '@shared/lib/query-keys';
 
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+
 export function usePlaylistDetail(playlistId: PlaylistId) {
+  const port = useLibraryPort();
   return useQuery({
     queryKey: playlistKeys.detail(playlistId),
-    queryFn: () => getPlaylist(playlistId),
+    queryFn: () => port.getPlaylist(playlistId),
     enabled: playlistId.length > 0,
     staleTime: Infinity,
   });

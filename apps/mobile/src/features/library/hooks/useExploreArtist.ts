@@ -1,7 +1,10 @@
 import { useState } from 'react';
-import { searchDiscovery, type DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { detailHref } from '@shared/lib/detail-handoff';
 import { useNavigator, type Navigator } from '@shared/navigation';
+
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { failureLogFields } from '../failureLogFields';
 import type { FeaturingDetailRoute } from '../featuringDetailRoute';
@@ -29,21 +32,31 @@ function reportExploreFailure(artist: string, error: unknown): void {
   );
 }
 
-async function searchTopMatch(artist: string): Promise<DiscoveryResult | undefined> {
-  const res = await searchDiscovery({
-    q: artist,
-    kinds: ['artist', 'track'],
-    limit: 1,
-    saveHistory: false,
-  });
+const topMatchQuery = (artist: string) => ({
+  q: artist,
+  kinds: ['artist', 'track'] as ('artist' | 'track')[],
+  limit: 1,
+  saveHistory: false,
+});
+
+async function searchTopMatch(
+  port: LibraryPort,
+  artist: string,
+): Promise<DiscoveryResult | undefined> {
+  const res = await port.searchDiscovery(topMatchQuery(artist));
   return res.results[0];
 }
 
-type OpenTopMatch = { artist: string; detailPath: DetailPath; navigator: Navigator };
+type OpenTopMatch = {
+  port: LibraryPort;
+  artist: string;
+  detailPath: DetailPath;
+  navigator: Navigator;
+};
 
-async function openTopMatch({ artist, detailPath, navigator }: OpenTopMatch): Promise<void> {
+async function openTopMatch({ port, artist, detailPath, navigator }: OpenTopMatch): Promise<void> {
   try {
-    const topMatch = await searchTopMatch(artist);
+    const topMatch = await searchTopMatch(port, artist);
     if (topMatch !== undefined) navigator.push(detailHref(detailPath, topMatch));
   } catch (error) {
     reportExploreFailure(artist, error);
@@ -61,10 +74,11 @@ async function whileBusy(setBusy: SetBusy, work: () => Promise<void>): Promise<v
 
 export function useExploreArtist(): ExploreArtist {
   const navigator = useNavigator();
+  const port = useLibraryPort();
   const [exploring, setExploring] = useState(false);
   const explore = async (artist: string, detailPath: DetailPath): Promise<void> => {
     if (exploring) return;
-    await whileBusy(setExploring, () => openTopMatch({ artist, detailPath, navigator }));
+    await whileBusy(setExploring, () => openTopMatch({ port, artist, detailPath, navigator }));
   };
   return { explore, exploring };
 }
