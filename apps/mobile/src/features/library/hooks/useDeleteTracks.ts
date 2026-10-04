@@ -43,11 +43,13 @@ type Outcome = { sent: number; failures: DeleteTrackFailure[] };
 type RunHandle = { stopped: () => boolean; inStartingSession: () => boolean; finish: () => void };
 type Deadline = { expired: () => boolean; clear: () => void };
 type Cursor = { taken: number };
+type RemoveTrack = (trackId: TrackId) => Promise<void>;
 type BatchContext = {
   cursor: Cursor;
   trackIds: TrackId[];
   run: BatchRun;
   onDeleted: OnDeleted;
+  remove: RemoveTrack;
   failed: DeleteAttempt[];
 };
 
@@ -55,13 +57,13 @@ export function deleteOne(trackId: TrackId): Promise<void> {
   return deleteTrack(trackId);
 }
 
-async function deleteTrackForBulk(trackId: TrackId, onDeleted: OnDeleted): Promise<DeleteAttempt> {
+async function deleteTrackForBulk(trackId: TrackId, ctx: BatchContext): Promise<DeleteAttempt> {
   try {
-    await deleteOne(trackId);
+    await ctx.remove(trackId);
   } catch (error) {
     if (classifyLibraryError(error) !== 'not-found') return { trackId, error };
   }
-  onDeleted(trackId);
+  ctx.onDeleted(trackId);
   return undefined;
 }
 
@@ -73,7 +75,7 @@ function takeNextIndex(cursor: Cursor, trackIds: TrackId[], run: BatchRun): numb
 async function drainWorker(ctx: BatchContext): Promise<void> {
   let index = takeNextIndex(ctx.cursor, ctx.trackIds, ctx.run);
   while (index !== undefined) {
-    const failure = await deleteTrackForBulk(ctx.trackIds[index]!, ctx.onDeleted);
+    const failure = await deleteTrackForBulk(ctx.trackIds[index]!, ctx);
     if (failure) ctx.failed[index] = failure;
     index = takeNextIndex(ctx.cursor, ctx.trackIds, ctx.run);
   }
@@ -83,8 +85,13 @@ function collectFailures(failed: DeleteAttempt[]): DeleteTrackFailure[] {
   return failed.filter((failure): failure is DeleteTrackFailure => failure != null);
 }
 
-function newContext(trackIds: TrackId[], run: BatchRun, onDeleted: OnDeleted): BatchContext {
-  return { cursor: { taken: 0 }, trackIds, run, onDeleted, failed: [] };
+function newContext(
+  trackIds: TrackId[],
+  run: BatchRun,
+  onDeleted: OnDeleted,
+  remove: RemoveTrack,
+): BatchContext {
+  return { cursor: { taken: 0 }, trackIds, run, onDeleted, remove, failed: [] };
 }
 
 async function deleteInBatches(ctx: BatchContext): Promise<Outcome> {
@@ -160,10 +167,16 @@ async function runBulkDelete(
   queryClient: QueryClient,
   handle: RunHandle,
   trackIds: TrackId[],
+  remove: RemoveTrack,
 ): Promise<DeleteTracksResult> {
   const { run, done } = openTimedRun(handle);
   const cleanup: CleanupState = { failed: false };
-  const ctx = newContext(trackIds, run, removeTrackEverywhere(queryClient, handle, cleanup));
+  const ctx = newContext(
+    trackIds,
+    run,
+    removeTrackEverywhere(queryClient, handle, cleanup),
+    remove,
+  );
   const outcome = await deleteInBatches(ctx).finally(done);
   if (cleanup.failed && handle.inStartingSession()) resyncTrackCaches(queryClient);
   return summarizeRun(trackIds, outcome, handle.stopped());
@@ -242,7 +255,8 @@ export function useDeleteTracks() {
   const startRun = useUnmountStop();
   return useAppMutation({
     ...guardedMutationOptions({
-      mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds),
+      mutationFn: (trackIds: TrackId[]) =>
+        runBulkDelete(queryClient, startRun(), trackIds, deleteOne),
       onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, summary),
       onError: recoverFailedBulkRun(queryClient),
     }),
