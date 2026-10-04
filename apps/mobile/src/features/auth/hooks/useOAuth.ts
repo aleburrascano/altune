@@ -15,7 +15,7 @@ import {
   type OAuthProvider,
 } from '../oauthResult';
 import { parseAuthLink } from '../parseAuthLink';
-import { reportSignInFailure } from '../reportSignInFailure';
+import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
 
 import { useOAuthFlow } from './useOAuthFlow';
 

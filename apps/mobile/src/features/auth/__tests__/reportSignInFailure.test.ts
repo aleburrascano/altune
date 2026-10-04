@@ -4,7 +4,7 @@ import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { reportSignInFailure } from '../reportSignInFailure';
+import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));

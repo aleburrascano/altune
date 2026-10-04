@@ -9,7 +9,7 @@ import {
   injectTestSession,
   isTestAuthEnabled,
   type TestLoginResponse,
-} from '../testAuth';
+} from '../adapters/http/testAuth';
 import { supabase } from '@shared/auth/supabaseClient';
 import { markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 import { useSession } from '@shared/auth/useSession';

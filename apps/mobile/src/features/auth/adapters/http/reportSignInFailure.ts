@@ -2,7 +2,7 @@ import { apiBase } from '@shared/api-client';
 import { appVersion } from '@shared/device/device';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
-import type { SignInFailureReason } from './errorReason';
+import type { SignInFailureReason } from '../../errorReason';
 
 const REPORT_TIMEOUT_MS = 5_000;
 

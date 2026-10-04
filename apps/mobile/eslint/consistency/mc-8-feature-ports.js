@@ -13,7 +13,7 @@ module.exports = {
   id: 'MC-8',
   description:
     'Features reach the API only through their own adapters, never a value import from shared/api-client',
-  baseline: 28,
+  baseline: 26,
   config: [
     {
       ignores: [

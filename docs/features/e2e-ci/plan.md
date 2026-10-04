@@ -14,7 +14,7 @@ smoke or by hand.
 ### 1. Target: Expo web driven by Playwright Test
 
 - Playwright Test drives the static Expo web build (`expo export -p web --dev`). The
-  `TestAuthBridge` path (`src/features/auth/testAuth.ts`) works headlessly on a plain
+  `TestAuthBridge` path (`src/features/auth/adapters/http/testAuth.ts`) works headlessly on a plain
   Linux runner. No emulator, no macOS minutes.
 - A native runner (Maestro/Detox) covers device-only behaviour (background audio, share
   sheet), which is not where cross-stack regressions live. Deferred; revisit if a

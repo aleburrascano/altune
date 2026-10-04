@@ -2,7 +2,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
 import type { SignInFailureReason } from '../errorReason';
-import { reportSignInFailure } from '../reportSignInFailure';
+import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
 import {
   isInvalidCredentialsError,
   classifyAuthError,

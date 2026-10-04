@@ -10,8 +10,8 @@ module.exports = {
         'src/shared/killSwitch/killSwitchPoll.ts',
         'src/shared/events/sse-client.ts',
         'src/shared/files/fileStore.ts',
-        'src/features/auth/testAuth.ts',
-        'src/features/auth/reportSignInFailure.ts',
+        'src/features/auth/adapters/http/testAuth.ts',
+        'src/features/auth/adapters/http/reportSignInFailure.ts',
         '**/__tests__/**',
       ],
       rules: {

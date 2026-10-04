@@ -10,7 +10,7 @@ import {
   type OAuthProvider,
 } from '../oauthResult';
 import { authRedirectUrl } from '../authRedirect';
-import { reportSignInFailure } from '../reportSignInFailure';
+import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
 
 import { useOAuthFlow } from './useOAuthFlow';
 

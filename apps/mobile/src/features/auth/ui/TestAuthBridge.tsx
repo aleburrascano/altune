@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { bootstrapTestAuth, isTestAuthEnabled } from '../testAuth';
+import { bootstrapTestAuth, isTestAuthEnabled } from '../adapters/http/testAuth';
 
 export function TestAuthBridge(): null {
   const started = useRef(false);

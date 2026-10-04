@@ -216,11 +216,11 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     expect(doc).toMatch(/^\| MC-8 \|/m);
   });
 
-  test('the real script prints MC-8 at its baseline of 28 and exits 0', () => {
+  test('the real script prints MC-8 at its baseline of 26 and exits 0', () => {
     const { status, stdout } = runRatchetCli();
 
     expect(status).toBe(0);
-    expect(stdout).toMatch(/^MC-8: 28 \/ baseline 28$/m);
+    expect(stdout).toMatch(/^MC-8: 26 \/ baseline 26$/m);
   });
 
   test('flags a value import from the barrel in a feature hook', async () => {
