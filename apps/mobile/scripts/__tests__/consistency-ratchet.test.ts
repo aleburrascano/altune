@@ -196,8 +196,10 @@ describe('MC-8 features reach the API only through their own adapters', () => {
   });
 
   test('the real script exits 1 and names MC-8 and the file when a hook adds a barrel import', () => {
-    const relativePath = path.join('src', 'features', 'library', 'hooks', '__mc8_fixture__.ts');
+    const fixtureDir = path.join(mobileRoot, 'src', 'features', '__mc8_fixture__');
+    const relativePath = path.join('src', 'features', '__mc8_fixture__', 'hooks', 'x.ts');
     const fixturePath = path.join(mobileRoot, relativePath);
+    fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
     fs.writeFileSync(fixturePath, barrelImport);
 
     try {
@@ -207,7 +209,7 @@ describe('MC-8 features reach the API only through their own adapters', () => {
       expect(stdout).toContain('MC-8');
       expect(stdout).toContain(relativePath);
     } finally {
-      fs.rmSync(fixturePath, { force: true });
+      fs.rmSync(fixtureDir, { recursive: true, force: true });
     }
   });
 });
