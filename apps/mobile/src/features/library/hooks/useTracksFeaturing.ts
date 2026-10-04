@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { listTracksFeaturing } from '@shared/api-client/tracks';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
+
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { failureLogFields } from '../failureLogFields';
 
@@ -30,12 +31,13 @@ function useLoggedFeaturingQueryFailure(error: Error | null, key: string): void 
 }
 
 export function useTracksFeaturing(input: FeaturedArtist) {
+  const port = useLibraryPort();
   const nonFiniteId = input.deezer_id != null && !Number.isFinite(input.deezer_id);
   const fa: FeaturedArtist = nonFiniteId ? { ...input, deezer_id: null } : input;
   const key = fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : `name:${fa.name}`);
   const { data, error, isLoading, isError, isRefetching, refetch } = useQuery({
     queryKey: libraryKeys.featuring(key),
-    queryFn: () => listTracksFeaturing(fa),
+    queryFn: () => port.listTracksFeaturing(fa),
     enabled: fa.name.length > 0 || fa.mbid != null || fa.deezer_id != null,
     staleTime: 60_000,
   });

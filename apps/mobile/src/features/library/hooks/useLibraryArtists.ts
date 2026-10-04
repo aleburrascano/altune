@@ -1,16 +1,19 @@
-import { getLibraryArtists, type LibrarySort } from '@shared/api-client/library';
+import type { LibrarySort } from '@shared/api-client/library';
 import { libraryKeys } from '@shared/lib/query-keys';
+
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { usePagedGroupQuery } from './usePagedGroupQuery';
 
 export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boolean) {
+  const port = useLibraryPort();
   const { items, ...paged } = usePagedGroupQuery({
     queryKey: libraryKeys.artists(query, sort),
     chip: 'artists',
     query,
     sort,
     enabled,
-    fetchPage: getLibraryArtists,
+    fetchPage: (params, signal) => port.getLibraryArtists(params, signal),
   });
   return { artists: items, ...paged };
 }
