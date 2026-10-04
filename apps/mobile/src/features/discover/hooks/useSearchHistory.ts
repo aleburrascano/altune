@@ -1,15 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
-import {
-  listSearchHistory,
-  type DiscoverySearchHistoryResponse,
-} from '@shared/api-client/discovery';
+import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discovery';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from './discoverFetchGate';
+import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 export function useSearchHistory() {
+  const port = useDiscoverPort();
   const isHistoryEnabled = useDiscoverFetchEnabled();
 
   const {
@@ -18,7 +17,7 @@ export function useSearchHistory() {
     refetch,
   } = useQuery<DiscoverySearchHistoryResponse>({
     queryKey: discoveryKeys.history,
-    queryFn: () => listSearchHistory({ limit: 10 }),
+    queryFn: () => port.listSearchHistory({ limit: 10 }),
     enabled: isHistoryEnabled,
   });
 

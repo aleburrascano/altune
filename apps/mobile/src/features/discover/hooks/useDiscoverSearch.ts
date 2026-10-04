@@ -1,11 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  searchDiscovery,
-  type DiscoveryProviderInfo,
-  type DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
+import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
@@ -13,6 +9,8 @@ import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGa
 import { useRefreshFromFirstPage } from './useRefreshFromFirstPage';
 import { useRestartOnExpiredSlate } from './useRestartOnExpiredSlate';
 import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
+import type { DiscoverPort } from '@features/discover/ports/discoverPort';
+import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
@@ -38,6 +36,7 @@ function cancelStaleSearches(queryClient: ReturnType<typeof useQueryClient>, tri
 }
 
 function searchQueryFn(
+  port: DiscoverPort,
   queryClient: ReturnType<typeof useQueryClient>,
   trimmed: string,
   claimHistorySave: () => boolean,
@@ -45,7 +44,7 @@ function searchQueryFn(
   return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
     cancelStaleSearches(queryClient, trimmed);
     const saveHistory = pageParam.offset === 0 && claimHistorySave();
-    return searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
+    return port.searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
   };
 }
 
@@ -61,6 +60,7 @@ function nextSearchPageParam(
 const SEARCH_RETRY_COUNT = 1;
 
 type SearchQueryArgs = {
+  port: DiscoverPort;
   queryKey: readonly unknown[];
   queryClient: ReturnType<typeof useQueryClient>;
   trimmed: string;
@@ -72,7 +72,7 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
   return useInfiniteQuery({
     queryKey: args.queryKey,
     initialPageParam: firstPageParam,
-    queryFn: searchQueryFn(args.queryClient, args.trimmed, args.claimHistorySave),
+    queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed, args.claimHistorySave),
     getNextPageParam: nextSearchPageParam,
     enabled: args.trimmed.length > 0 && args.isSearchEnabled,
     retry: SEARCH_RETRY_COUNT,
@@ -91,6 +91,7 @@ function useHistorySaveOnce(queryKey: readonly unknown[], saveHistory: boolean) 
 
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
+  const port = useDiscoverPort();
   const queryClient = useQueryClient();
   const isSearchEnabled = useDiscoverFetchEnabled();
 
@@ -109,7 +110,14 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useSearchInfiniteQuery({ queryKey, queryClient, trimmed, claimHistorySave, isSearchEnabled });
+  } = useSearchInfiniteQuery({
+    port,
+    queryKey,
+    queryClient,
+    trimmed,
+    claimHistorySave,
+    isSearchEnabled,
+  });
 
   useReportQueryFailure(error, 'search');
 

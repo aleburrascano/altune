@@ -1,0 +1,20 @@
+import { createContext, useContext } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+
+import { httpDiscoverPort } from '@features/discover/adapters/http/httpDiscoverPort';
+import type { DiscoverPort } from '@features/discover/ports/discoverPort';
+
+const DiscoverPortContext = createContext<DiscoverPort>(httpDiscoverPort);
+
+interface DiscoverPortProviderProps {
+  port: DiscoverPort;
+  children: ReactNode;
+}
+
+export function DiscoverPortProvider({ port, children }: DiscoverPortProviderProps): ReactElement {
+  return <DiscoverPortContext.Provider value={port}>{children}</DiscoverPortContext.Provider>;
+}
+
+export function useDiscoverPort(): DiscoverPort {
+  return useContext(DiscoverPortContext);
+}
