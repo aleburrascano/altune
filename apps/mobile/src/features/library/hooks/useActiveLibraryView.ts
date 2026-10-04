@@ -12,7 +12,7 @@ import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
 import { useTracksView } from './useTracksView';
 import type { ActiveView, LibraryChip } from '../activeView';
-import type { SortKey } from '../sort';
+import type { SortKey } from '../domain/sort';
 
 type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;

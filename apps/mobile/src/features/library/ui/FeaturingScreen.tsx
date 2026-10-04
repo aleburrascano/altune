@@ -27,7 +27,7 @@ import {
   parseStringParam,
   useTracksFeaturing,
 } from '../hooks/useTracksFeaturing';
-import { classifyLibraryError, failureTail } from '../state';
+import { classifyLibraryError, failureTail } from '../domain/state';
 import { TracksList } from './TracksList';
 
 export function FeaturingScreen(): ReactElement {

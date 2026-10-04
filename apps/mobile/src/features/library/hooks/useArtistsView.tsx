@@ -2,8 +2,8 @@ import type { ArtistGroup } from '@shared/api-client/library';
 
 import { useLibraryArtists } from './useLibraryArtists';
 import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../refresh';
-import { ARTIST_SORT_OPTIONS, type SortKey } from '../sort';
+import type { ListPaging, ListRefresh } from '../domain/refresh';
+import { ARTIST_SORT_OPTIONS, type SortKey } from '../domain/sort';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 
 type ArtistsViewDeps = {

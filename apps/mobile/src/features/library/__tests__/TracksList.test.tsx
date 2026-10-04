@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { ListRefresh } from '../refresh';
+import type { ListRefresh } from '../domain/refresh';
 import { TracksList } from '../ui/TracksList';
 
 function idleRefresh(): ListRefresh {

@@ -20,7 +20,7 @@ import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
 import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../state';
+import { classifyLibraryError } from '../domain/state';
 
 type PriorAcquisition = { prior: AcquisitionTransition | undefined };
 type RetryContext = PriorAcquisition & { epoch: number };

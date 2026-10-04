@@ -7,7 +7,7 @@ import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
 
 import { avatarColumns, cellSize, coverColumns } from '../gridColumns';
-import type { ListRefresh } from '../refresh';
+import type { ListRefresh } from '../domain/refresh';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 import { PlaylistCover } from '../ui/PlaylistCover';

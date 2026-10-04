@@ -18,7 +18,7 @@ import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { useLibraryTrackSelection } from '../hooks/useLibraryTrackSelection';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { librarySection } from '../state';
+import { librarySection } from '../domain/state';
 import { LibraryChips } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
@@ -30,7 +30,7 @@ import {
 import { SortControl } from './SortControl';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import type { LibraryChip } from '../activeView';
-import { type SortKey } from '../sort';
+import { type SortKey } from '../domain/sort';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {

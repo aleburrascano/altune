@@ -14,7 +14,7 @@ import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
 import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../state';
+import { classifyLibraryError } from '../domain/state';
 
 const reacquireEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/reacquire`;
 

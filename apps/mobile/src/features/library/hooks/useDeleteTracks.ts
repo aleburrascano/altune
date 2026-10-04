@@ -21,7 +21,7 @@ import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { failureLogFields } from '../failureLogFields';
 import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError, failureTail, type LibraryFailure } from '../state';
+import { classifyLibraryError, failureTail, type LibraryFailure } from '../domain/state';
 
 const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
 

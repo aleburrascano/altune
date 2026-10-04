@@ -24,7 +24,7 @@ import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { deleteOne } from './useDeleteTracks';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../state';
+import { classifyLibraryError } from '../domain/state';
 
 type RemovedTrack = { placements: TrackCachePlacement[]; status: TrackStatus | undefined };
 

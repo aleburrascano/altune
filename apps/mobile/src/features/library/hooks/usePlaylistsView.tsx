@@ -2,8 +2,8 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 
 import type { PlaylistActionsState } from './usePlaylistActions';
 import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../refresh';
-import { PLAYLIST_SORT_OPTIONS, type SortKey } from '../sort';
+import type { ListPaging, ListRefresh } from '../domain/refresh';
+import { PLAYLIST_SORT_OPTIONS, type SortKey } from '../domain/sort';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 
 type PlaylistsViewDeps = {

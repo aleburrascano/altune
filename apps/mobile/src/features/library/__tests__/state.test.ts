@@ -1,7 +1,7 @@
 import { ApiError, ContractError, NetworkError } from '@shared/errors';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 
-import { classifyLibraryError, failureTail, librarySection } from '../state';
+import { classifyLibraryError, failureTail, librarySection } from '../domain/state';
 
 function inputs(
   over: Partial<{

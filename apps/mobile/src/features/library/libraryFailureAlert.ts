@@ -1,6 +1,6 @@
 import { showFailureAlert } from '@shared/ui';
 
-import { failureTail, type LibraryFailure } from './state';
+import { failureTail, type LibraryFailure } from './domain/state';
 
 export function alertLibraryFailure(
   surface: string,

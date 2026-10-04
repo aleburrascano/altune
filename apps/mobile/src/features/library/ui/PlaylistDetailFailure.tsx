@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { describeError } from '@shared/lib/describeError';
 import { Button, Text, spacing } from '@shared/ui';
 
-import { classifyLibraryError } from '../state';
+import { classifyLibraryError } from '../domain/state';
 
 interface PlaylistDetailFailureProps {
   error: unknown;

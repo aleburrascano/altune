@@ -13,7 +13,7 @@ import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { LibraryRow } from './LibraryRow';
 import { listContent } from './listContentStyles';
 import { WideTrackHeader } from './WideTrackHeader';
-import type { ListPaging, ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../domain/refresh';
 
 type TracksListHeaderProps = {
   isWide: boolean;

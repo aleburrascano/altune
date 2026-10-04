@@ -15,7 +15,7 @@ import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { failureLogFields } from '../failureLogFields';
-import { classifyLibraryError, type LibraryFailure } from '../state';
+import { classifyLibraryError, type LibraryFailure } from '../domain/state';
 import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 

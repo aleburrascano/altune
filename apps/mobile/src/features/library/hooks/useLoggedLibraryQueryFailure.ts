@@ -4,7 +4,7 @@ import type { LibrarySort } from '@shared/api-client/library';
 
 import { failureLogFields } from '../failureLogFields';
 import type { LibraryChip } from '../activeView';
-import type { SortKey } from '../sort';
+import type { SortKey } from '../domain/sort';
 
 type LibraryQueryChip = LibraryChip;
 

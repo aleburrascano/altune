@@ -14,7 +14,7 @@ import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { listContent } from './listContentStyles';
 import { GRID_GAP } from '../gridColumns';
-import type { ListPaging, ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../domain/refresh';
 
 type LibraryGridProps<TItem> = {
   testID: string;

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
 
-import type { ListRefresh } from '../refresh';
+import type { ListRefresh } from '../domain/refresh';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';

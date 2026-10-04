@@ -12,8 +12,8 @@ import { useLibraryTracks } from './useLibraryTracks';
 import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
 import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../refresh';
-import { TRACK_SORT_OPTIONS, type SortKey } from '../sort';
+import type { ListPaging, ListRefresh } from '../domain/refresh';
+import { TRACK_SORT_OPTIONS, type SortKey } from '../domain/sort';
 import { TracksList } from '../ui/TracksList';
 
 type TracksViewDeps = {

@@ -9,7 +9,7 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import { failureLogFields } from '../failureLogFields';
 import type { FeaturingDetailRoute } from '../featuringDetailRoute';
 import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../state';
+import { classifyLibraryError } from '../domain/state';
 
 type DetailPath = FeaturingDetailRoute;
 

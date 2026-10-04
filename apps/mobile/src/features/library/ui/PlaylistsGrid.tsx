@@ -8,7 +8,7 @@ import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 import { LibraryGrid } from './LibraryGrid';
 import { PlaylistCover } from './PlaylistCover';
 import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../domain/refresh';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 
