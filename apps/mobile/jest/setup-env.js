@@ -3,6 +3,10 @@ process.env.EXPO_PUBLIC_SUPABASE_URL =
 process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'fixture-anon-key';
 
+const hermesAbortPolyfill = require('abort-controller/dist/abort-controller');
+global.AbortController = hermesAbortPolyfill.AbortController;
+global.AbortSignal = hermesAbortPolyfill.AbortSignal;
+
 function mockNativeViewAs(moduleName, mockExportedNames) {
   jest.mock(moduleName, () => {
     const { View } = require('react-native');

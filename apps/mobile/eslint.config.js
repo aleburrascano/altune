@@ -62,6 +62,29 @@ const rulesWrittenForTheWebAndWrongForReactNative = {
   },
 };
 
+const HERMES_ABORT_MESSAGE =
+  'Hermes uses the abort-controller polyfill, which lacks this. Check signal.aborted and throw an AbortError instead (see shared/api-client/tracks.ts).';
+
+const abortApisTheHermesPolyfillLacks = [
+  { selector: "MemberExpression[property.name='throwIfAborted']", message: HERMES_ABORT_MESSAGE },
+  {
+    selector: "MemberExpression[object.name='AbortSignal'][property.name='any']",
+    message: HERMES_ABORT_MESSAGE,
+  },
+  {
+    selector: "MemberExpression[object.name='AbortSignal'][property.name='timeout']",
+    message: HERMES_ABORT_MESSAGE,
+  },
+];
+
+const noAbortApisTheHermesPolyfillLacks = {
+  name: 'noAbortApisTheHermesPolyfillLacks',
+  files: ['src/**/*.{ts,tsx}'],
+  rules: {
+    'no-restricted-syntax': ['error', ...abortApisTheHermesPolyfillLacks],
+  },
+};
+
 const noInlinePlatformBranchesInFeatureUi = {
   name: 'noInlinePlatformBranchesInFeatureUi',
   files: ['src/features/*/ui/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
@@ -69,6 +92,7 @@ const noInlinePlatformBranchesInFeatureUi = {
   rules: {
     'no-restricted-syntax': [
       'error',
+      ...abortApisTheHermesPolyfillLacks,
       {
         selector: "MemberExpression[object.name='Platform'][property.name='OS']",
         message:
@@ -224,6 +248,7 @@ const styleRulesConfig = [
     },
   },
   rulesWrittenForTheWebAndWrongForReactNative,
+  noAbortApisTheHermesPolyfillLacks,
   noInlinePlatformBranchesInFeatureUi,
   featureLogicStaysPlatformFree,
   reactCompilerRulesRestoredToErrors,
