@@ -15,7 +15,7 @@ import {
 } from '@shared/errors';
 import { parseErrorBody } from './wireDecoders';
 
-export { ApiError, NetworkError, ContractError, isRetryable } from '@shared/errors';
+export { ApiError, NetworkError, ContractError } from '@shared/errors';
 export type { NetworkFailure } from '@shared/errors';
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000';

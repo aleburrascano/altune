@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { isRetryable } from '@shared/api-client';
+import { isRetryable } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import type { DiscoverySource } from '@shared/api-client/discovery';
 

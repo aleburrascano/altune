@@ -3,6 +3,14 @@
 A feature that talks to the API is split into layers so its logic runs without the network,
 React or the platform. Library (`apps/mobile/src/features/library`) is the worked example.
 
+## Which features are ported
+
+- Ported (port, HTTP adapter and memory fake): library, discover and settings.
+- Adapters with no port: auth. Its `adapters/http/` files hold the raw fetches and also import
+  Supabase, `@shared/device/device` and the kill switch, an exception to the table's "may import"
+  column.
+- Not yet ported: detail and playback.
+
 ## Layout
 
 | Folder           | Holds                                                                                                                          | May import                                                                                                                                                                |
@@ -34,3 +42,11 @@ React or the platform. Library (`apps/mobile/src/features/library`) is the worke
   outside `adapters/`.
 - `__tests__/libraryPortInvariants.test.ts` pins library's port boundary.
 - `__tests__/libraryLayersInvariants.test.ts` checks every file in `domain/` stays pure.
+- `features/__tests__/featurePortInvariants.test.ts` checks library, discover and auth make no
+  api-client value import outside `adapters/`, and settings makes none besides its feedback files
+  (`hooks/useSubmitReport.ts`, `ui/ReportIssueModal.tsx`).
+
+## The purity rule
+
+The domain check reads direct imports only. A file whose imports pull in the platform one step
+down, or that registers a listener when it is loaded, stays out of `domain/`.
