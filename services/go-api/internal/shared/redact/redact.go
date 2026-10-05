@@ -10,7 +10,10 @@ var secretParamRe = regexp.MustCompile(
 
 var bearerRe = regexp.MustCompile(`(?i)\bbearer\s+[^\s"'\\]+`)
 
+var userinfoPasswordRe = regexp.MustCompile(`(?i)(\b[a-z][a-z0-9+.\-]*://[^\s/:@?#"'\\]*:)[^\s/@?#"'\\]*@`)
+
 func Secrets(s string) string {
+	s = userinfoPasswordRe.ReplaceAllString(s, "${1}"+Mask+"@")
 	s = secretParamRe.ReplaceAllString(s, "${1}"+Mask)
 	s = bearerRe.ReplaceAllString(s, "Bearer "+Mask)
 	return maskedKeyedFields(maskedKeyedParams(s))

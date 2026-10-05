@@ -61,3 +61,17 @@ func TestSecrets_masksSoundCloudClientID(t *testing.T) {
 		}
 	}
 }
+
+func TestSecrets_masksUserinfoPasswordKeepsUserAndHost(t *testing.T) {
+	in := `Get "https://altune:s3cr3tVALUEfedcba9876543210@musicbrainz.org/ws/2/release-group": refused` +
+		` mail me@example.com https://host/path/@x https://user@host/p https://h/a?x=1@2`
+	got := Secrets(in)
+	if strings.Contains(got, "s3cr3tVALUEfedcba9876543210") {
+		t.Fatalf("password leaked: %q", got)
+	}
+	for _, kept := range []string{"https://altune:REDACTED@musicbrainz.org/ws/2/release-group", "me@example.com", "https://host/path/@x", "https://user@host/p", "https://h/a?x=1@2"} {
+		if !strings.Contains(got, kept) {
+			t.Errorf("missing %q in %q", kept, got)
+		}
+	}
+}
