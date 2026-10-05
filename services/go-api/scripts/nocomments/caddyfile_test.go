@@ -20,6 +20,9 @@ func requireDocker(t *testing.T) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker unavailable")
 	}
+	if err := exec.Command("docker", "info").Run(); err != nil {
+		t.Skip("docker daemon unreachable")
+	}
 }
 
 func repoFile(t *testing.T, rel string) []byte {
