@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { getSearchState } from '../searchState';
-import { MAX_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
+import { MAX_QUERY_LENGTH, clampQueryWords, isSearchableQuery } from '../searchLimits';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;
@@ -77,7 +77,7 @@ export function useDebouncedSearch({
   };
 
   const onChangeText = (rawText: string): void => {
-    const text = rawText.slice(0, MAX_QUERY_LENGTH);
+    const text = clampQueryWords(rawText.slice(0, MAX_QUERY_LENGTH));
     setInputValue(text);
     clearDebounce();
     const trimmed = text.trim();
@@ -93,7 +93,7 @@ export function useDebouncedSearch({
 
   const setQuery = (query: string): void => {
     clearDebounce();
-    const trimmed = query.slice(0, MAX_QUERY_LENGTH).trim();
+    const trimmed = clampQueryWords(query.slice(0, MAX_QUERY_LENGTH)).trim();
     setInputValue(trimmed);
     if (!isSearchableQuery(trimmed)) {
       dropCommittedQuery();

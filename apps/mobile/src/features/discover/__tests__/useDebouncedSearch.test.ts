@@ -401,3 +401,47 @@ describe('useDebouncedSearch applies one trim and length rule to every commit pa
     expect(result.current.committedQuery).toHaveLength(MAX_QUERY_LENGTH);
   });
 });
+
+const SERVER_WORD_CAP = 32;
+
+const numberedWords = (count: number): string[] =>
+  Array.from({ length: count }, (_, index) => `w${index}`);
+
+describe('useDebouncedSearch never commits more words than the server accepts', () => {
+  it('onChangeText and onSubmit commit only the first SERVER_WORD_CAP words of a longer input', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+    const allowed = numberedWords(SERVER_WORD_CAP).join(' ');
+
+    act(() => {
+      result.current.onChangeText(numberedWords(40).join(' '));
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current.committedQuery).toBe(allowed);
+
+    act(() => {
+      result.current.onSubmit();
+    });
+    expect(result.current.committedQuery).toBe(allowed);
+  });
+
+  it('setQuery commits only the first SERVER_WORD_CAP words of a longer query', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery(numberedWords(40).join(' '));
+    });
+
+    expect(result.current.committedQuery).toBe(numberedWords(SERVER_WORD_CAP).join(' '));
+  });
+
+  it('commits a query of exactly SERVER_WORD_CAP words unchanged', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+    const exact = numberedWords(SERVER_WORD_CAP).join(' ');
+
+    act(() => {
+      result.current.setQuery(exact);
+    });
+
+    expect(result.current.committedQuery).toBe(exact);
+  });
+});
