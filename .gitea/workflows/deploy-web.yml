@@ -1,12 +1,6 @@
 name: deploy-web
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - '.gitea/workflows/deploy-web.yml'
-      - '.gitea/workflows/web-*.sh'
   workflow_dispatch:
 
 concurrency:
