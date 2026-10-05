@@ -3,7 +3,9 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
+	"log/slog"
 	"sort"
 )
 
@@ -11,7 +13,7 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	groups, partial := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
-	groups = s.verifyGroupsAgainstMB(ctx, identity, groups)
+	groups, anchorFailed := s.verifyGroupsAgainstMB(ctx, identity, groups)
 	merged := MergeReleases(groups)
 	s.discographyTelemetry.emit(ctx, artistRef, merged)
 	kept := FilterCohesive(FilterKept(merged))
@@ -23,7 +25,7 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 		out = append(out, r)
 	}
 	sortByReleaseDateDesc(out, albumReleaseSortKey)
-	return out, partial
+	return out, partial || anchorFailed
 }
 
 func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity ResolvedArtistIdentity) (tracks []domain.SearchResult, partial bool) {
@@ -50,17 +52,24 @@ func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity 
 	return groups, partial
 }
 
-func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, identity ResolvedArtistIdentity, groups []ReleaseGroup) []ReleaseGroup {
+func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, identity ResolvedArtistIdentity, groups []ReleaseGroup) (out []ReleaseGroup, anchorFailed bool) {
 	if s.mbAnchor == nil || identity.MBID == "" {
-		return groups
+		return groups, false
 	}
 	titles, err := guardedFetch(ctx, s.breaker, domain.ProviderMusicBrainz, func() ([]string, error) {
 		return s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
 	})
-	if err != nil || len(titles) == 0 {
-		return groups
+	if err != nil {
+		if ctx.Err() != nil {
+			return groups, false
+		}
+		slog.WarnContext(ctx, "artist_albums.mb_anchor_failed", "mbid", identity.MBID, "error", redact.Secrets(err.Error()))
+		return groups, true
 	}
-	return FilterGroupsByMBAnchor(normalizeTitleSet(titles), groups)
+	if len(titles) == 0 {
+		return groups, false
+	}
+	return FilterGroupsByMBAnchor(normalizeTitleSet(titles), groups), false
 }
 
 func normalizeReleaseYear(r *domain.SearchResult) {
