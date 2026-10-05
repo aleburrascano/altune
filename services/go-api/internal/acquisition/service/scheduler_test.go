@@ -2384,7 +2384,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	if released.delay != retryBackoff(1) {
 		t.Errorf("released delay = %v, want %v", released.delay, retryBackoff(1))
 	}
-	stored := repo.tracks[track.ID.String()+":"+userId.String()]
+	stored := storedTrack(t, repo, track)
 	if stored.AcquisitionStatus != domain.AcquisitionPending {
 		t.Errorf("status = %v, want %v", stored.AcquisitionStatus, domain.AcquisitionPending)
 	}

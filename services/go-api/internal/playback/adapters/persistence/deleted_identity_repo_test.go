@@ -58,8 +58,10 @@ type blockingRowsQuerier struct{}
 
 func (blockingRowsQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
 	<-ctx.Done()
-	return nil, ctx.Err()
+	return &blockedRows{}, ctx.Err()
 }
+
+type blockedRows struct{ pgx.Rows }
 
 func TestListOwnersWithoutIdentity_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	repo := &PgxDeletedIdentityRepository{pool: blockingRowsQuerier{}}

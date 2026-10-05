@@ -73,6 +73,9 @@ func (r *stubIdentityRows) Next() bool { r.pos++; return r.pos <= len(r.data) }
 func (r *stubIdentityRows) Close()     {}
 func (r *stubIdentityRows) Err() error { return nil }
 func (r *stubIdentityRows) Scan(dest ...any) error {
+	if dest == nil {
+		return fmt.Errorf("scan called without destinations")
+	}
 	for i, d := range r.data[r.pos-1] {
 		switch p := dest[i].(type) {
 		case *string:

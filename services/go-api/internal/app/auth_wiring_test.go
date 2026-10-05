@@ -74,7 +74,10 @@ func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	pub, _ := jwk.FromRaw(key.PublicKey)
+	pub, err := jwk.FromRaw(key.PublicKey)
+	if err != nil {
+		t.Fatalf("jwk from public key: %v", err)
+	}
 	_ = pub.Set(jwk.KeyIDKey, "k1")
 	_ = pub.Set(jwk.AlgorithmKey, jwa.RS256)
 	set := jwk.NewSet()
@@ -98,7 +101,10 @@ func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
 	_ = tok.Set("aud", "authenticated")
 	_ = tok.Set("iat", time.Now().Add(-time.Minute))
 	_ = tok.Set("exp", time.Now().Add(30*time.Minute))
-	priv, _ := jwk.FromRaw(key)
+	priv, err := jwk.FromRaw(key)
+	if err != nil {
+		t.Fatalf("jwk from private key: %v", err)
+	}
 	_ = priv.Set(jwk.KeyIDKey, "k1")
 	signed, err := jwt.Sign(tok, jwt.WithKey(jwa.RS256, priv))
 	if err != nil {

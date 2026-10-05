@@ -116,6 +116,9 @@ func withJobAttempt(ctx context.Context, attempt int) context.Context {
 }
 
 func jobAttemptFrom(ctx context.Context) int {
+	if ctx == nil {
+		return 0
+	}
 	attempt, _ := ctx.Value(jobAttemptContextKey{}).(int)
 	return attempt
 }

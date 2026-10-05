@@ -144,7 +144,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T)
 		t.Fatalf("expected nil for already-ready track with existing audio, got %v", execErr)
 	}
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	updated := storedTrack(t, repo, track)
 	if updated.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("track status = %v, want %v (should remain ready)", updated.AcquisitionStatus, domain.AcquisitionReady)
 	}
@@ -169,7 +169,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioMissing(t *testing.T
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	updated := storedTrack(t, repo, track)
 	if updated.AcquisitionStatus == domain.AcquisitionReady {
 		t.Error("track should not remain in 'ready' status when audio file is missing")
 	}
@@ -192,7 +192,7 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	updated := storedTrack(t, repo, track)
 	if updated.AcquisitionStatus == domain.AcquisitionPending {
 	}
 	if updated.FailureReason != nil && *updated.FailureReason == "previous failure reason" {
@@ -704,7 +704,7 @@ func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 		t.Fatal("expected the replace to fail with no candidates")
 	}
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	updated := storedTrack(t, repo, track)
 	if updated.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("status = %v, want the track left ready", updated.AcquisitionStatus)
 	}
@@ -744,7 +744,7 @@ func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	updated := storedTrack(t, repo, track)
 	if updated.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("status = %v, want the track left ready", updated.AcquisitionStatus)
 	}
@@ -1009,7 +1009,7 @@ func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (*
 
 	execErr := svc.Execute(ctx, userId, track.ID)
 
-	return repo.tracks[track.ID.String()+":"+userId.String()], pub, execErr
+	return storedTrack(t, repo, track), pub, execErr
 }
 
 func TestExecute_TransientFailureBelowTheAttemptCap_ReturnsRetryableAndLeavesTheTrackPending(t *testing.T) {

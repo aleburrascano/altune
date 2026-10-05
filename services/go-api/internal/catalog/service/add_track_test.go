@@ -733,7 +733,10 @@ func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t 
 		t.Fatalf("Execute: %v", err)
 	}
 
-	stored, _ := repo.GetByID(ctx, out.Track.ID, out.Track.UserId)
+	stored, err := repo.GetByID(ctx, out.Track.ID, out.Track.UserId)
+	if err != nil || stored == nil {
+		t.Fatalf("GetByID: track = %v, err = %v", stored, err)
+	}
 	if stored.AcquisitionStatus == domain.AcquisitionPending && !repo.Claimable(stored.ID) {
 		t.Fatal("stored track is pending and unclaimable: nothing will ever acquire or fail it")
 	}

@@ -43,6 +43,9 @@ func (n *WebhookNotifier) Notify(ctx context.Context, a Alert) error {
 	if err != nil {
 		return fmt.Errorf("post alert: %w", withoutURL(err))
 	}
+	if resp == nil {
+		return errors.New("post alert: no response")
+	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {

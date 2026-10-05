@@ -36,10 +36,12 @@ func commentRanges(tokens []scanToken) []commentRange {
 func mergeInlineRuns(src []byte, ranges []commentRange) []commentRange {
 	var merged []commentRange
 	for _, r := range ranges {
-		last := len(merged) - 1
-		if last >= 0 && isInlineGap(src[merged[last].end:r.start]) {
-			merged[last].end = r.end
-			continue
+		if len(merged) > 0 {
+			last := &merged[len(merged)-1]
+			if isInlineGap(src[last.end:r.start]) {
+				last.end = r.end
+				continue
+			}
 		}
 		merged = append(merged, r)
 	}
