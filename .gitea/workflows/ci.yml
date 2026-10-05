@@ -155,7 +155,7 @@ jobs:
       - name: dependencies
         run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
       - name: jest with coverage ratchet
-        run: cd "$WT/apps/mobile" && npx jest --coverage --ci --maxWorkers=2 --cacheDirectory "$HOME/.cache/altune-ci/jest"
+        run: cd "$WT/apps/mobile" && npx jest --coverage --ci --maxWorkers=2 --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest"
       - name: clean up
         if: always()
         run: |

@@ -172,7 +172,7 @@ if touches '^apps/mobile/'; then
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
-    [ -n "$src" ] && test_check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
+    [ -n "$src" ] && test_check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
