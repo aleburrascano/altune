@@ -170,7 +170,6 @@ type itunesItem struct {
 	TrackExplicitness string `json:"trackExplicitness"`
 }
 
-// getJSON replaces the 3 inline limiter-and-User-Agent copies in search, content and artwork.
 func (a *ITunesAdapter) getJSON(ctx context.Context, u string, dst any) error {
 	if err := a.limiter.wait(ctx); err != nil {
 		return err
