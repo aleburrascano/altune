@@ -151,6 +151,20 @@ describe('startKillSwitchPolling', () => {
     expect(appStateListeners).toHaveLength(0);
   });
 
+  it('does not refresh on a return to the foreground after the stop function ran', async () => {
+    __http.replyAll({ json: {} });
+
+    const stop = startKillSwitchPolling();
+    await settle();
+    stop();
+    const before = __http.countFor(SWITCH_GET);
+
+    emitAppState('active');
+    await settle();
+
+    expect(__http.countFor(SWITCH_GET)).toBe(before);
+  });
+
   it('lets the switches flip a loop off through the poll', async () => {
     __http.reply(SWITCH_GET, { json: { offline_downloads_enabled: false } });
 

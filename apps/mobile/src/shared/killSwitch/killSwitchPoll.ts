@@ -1,4 +1,4 @@
-import { AppState } from 'react-native';
+import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { startDeadline } from '@shared/deadline/deadline';
 
@@ -39,13 +39,13 @@ export function startKillSwitchPolling(): () => void {
     interval = undefined;
   };
   startInterval();
-  const subscription = AppState.addEventListener('change', (state) => {
+  const unsubscribeAppState = subscribeAppState((state) => {
     if (state !== 'active') return stopInterval();
     void refreshKillSwitches();
     startInterval();
   });
   return () => {
-    subscription.remove();
+    unsubscribeAppState();
     stopInterval();
   };
 }

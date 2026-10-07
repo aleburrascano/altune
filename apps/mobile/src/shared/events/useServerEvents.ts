@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { apiBase } from '../api-client/config';
@@ -24,7 +24,7 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 function isForegrounded(): boolean {
-  return AppState.currentState === 'active';
+  return isAppActive();
 }
 
 export type ServerEventsClient = Pick<SSEClient, 'connect' | 'disconnect' | 'dispose'>;
@@ -59,7 +59,7 @@ export function useServerEvents(createClient: ServerEventsClientFactory = create
     };
     connectIfEnabled();
 
-    const subscription = AppState.addEventListener('change', (nextState) => {
+    const unsubscribeAppState = subscribeAppState((nextState) => {
       if (nextState === 'active') {
         connectIfEnabled();
       } else {
@@ -82,7 +82,7 @@ export function useServerEvents(createClient: ServerEventsClientFactory = create
     return () => {
       unregisterSignOutCleanup();
       unsubscribeKillSwitch();
-      subscription.remove();
+      unsubscribeAppState();
       client.dispose();
     };
   }, [queryClient, createClient]);
