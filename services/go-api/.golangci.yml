@@ -168,6 +168,7 @@ linters:
             - "**/internal/acquisition/service/eval/**"
           allow:
             - altune/go-api/internal/acquisition/adapters/discoverybridge
+            - altune/go-api/internal/acquisition/adapters/tempfs
           deny:
             - pkg: altune/go-api/internal/catalog/adapters
               desc: service is driven by ports, it never imports adapters
@@ -178,7 +179,16 @@ linters:
             - pkg: altune/go-api/internal/feedback/adapters
               desc: service is driven by ports, it never imports adapters
             - pkg: altune/go-api/internal/acquisition/adapters
-              desc: the eval harness may compose only the discoverybridge adapter
+              desc: the eval harness may compose only the discoverybridge and tempfs adapters
+
+        acquisition-service-filesystem:
+          files:
+            - "**/internal/acquisition/service/**"
+            - "!**/internal/acquisition/service/eval/**"
+            - "!$test"
+          deny:
+            - pkg: "os$"
+              desc: acquisition service reaches the filesystem only through ports.TempWorkspace
 
         layer-ports-inward:
           files:

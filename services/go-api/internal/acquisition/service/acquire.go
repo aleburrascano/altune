@@ -28,6 +28,7 @@ type AcquireTrackAudioService struct {
 	downloadLimiter *DownloadLimiter
 	verifySkips     ports.VerifySkipRecorder
 	confidenceFloor float64
+	workspace       ports.TempWorkspace
 }
 
 func NewAcquireTrackAudioService(
@@ -42,6 +43,7 @@ func NewAcquireTrackAudioService(
 		audioStore: audioStore,
 		recordings: ports.NoopRecordingResolver(),
 		events:     events.NoopPublisher(),
+		workspace:  defaultTempWorkspace,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -51,6 +53,10 @@ func NewAcquireTrackAudioService(
 
 func WithDownloadLimiter(l *DownloadLimiter) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
+}
+
+func WithAcquireTempWorkspace(w ports.TempWorkspace) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.workspace = w }
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
@@ -143,7 +149,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	}
 
 	ac := s.startAcquisition(ctx, userId, trackId, track)
-	defer CleanupTemp(ctx, ac)
+	defer CleanupTemp(ctx, s.workspace, ac)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		if schedulerCancelledJobContext(jobCtx) {
@@ -168,7 +174,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	}
 
 	ac := s.startAcquisition(ctx, userId, trackId, track)
-	defer CleanupTemp(ctx, ac)
+	defer CleanupTemp(ctx, s.workspace, ac)
 	configureReplaceExclusion(ctx, ac, track, trackId)
 	s.loadPriorRejections(ctx, ac)
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {

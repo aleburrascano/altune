@@ -2,6 +2,7 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/adapters/discoverybridge"
+	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"context"
@@ -35,9 +36,10 @@ func Run(ctx context.Context, kase Case) Outcome {
 	}
 	resolveIdentity(ctx, kase, p, ac)
 
-	steps := service.CoreSteps(service.NewSourceRegistry(p.sources()...), nil, p, p, p, nil)
+	ws := tempfs.New()
+	steps := service.CoreSteps(service.NewSourceRegistry(p.sources()...), nil, p, p, p, ws, nil)
 	runErr := service.RunPipeline(ctx, steps, ac)
-	service.CleanupTemp(ctx, ac)
+	service.CleanupTemp(ctx, ws, ac)
 	return outcomeOf(kase, ac, runErr, p.clock)
 }
 

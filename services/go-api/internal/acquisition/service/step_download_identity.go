@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 )
 
@@ -98,11 +97,11 @@ func (s *DownloadStep) identifyPreview(
 	candidate ports.AudioCandidate,
 	previewer ports.PreviewFetcher,
 ) (ports.RecordingMatch, error) {
-	previewDir, err := os.MkdirTemp("", tempDirPrefix+"preview-*")
+	previewDir, err := s.workspace.Create("preview-*")
 	if err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("create preview dir: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(previewDir) }()
+	defer func() { _ = s.workspace.Remove(previewDir) }()
 
 	previewPath, err := s.fetchPreview(ctx, previewer, candidate, previewDir)
 	if err != nil {

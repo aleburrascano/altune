@@ -1,18 +1,18 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"log/slog"
-	"os"
 	"path/filepath"
 )
 
-func CleanupTemp(ctx context.Context, ac *AcquisitionContext) {
+func CleanupTemp(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionContext) {
 	if ac.TempPath == "" {
 		return
 	}
 	root := ac.tempRoot()
-	if err := os.RemoveAll(root); err != nil {
+	if err := ws.Remove(root); err != nil {
 		slog.WarnContext(ctx, "temp_cleanup_failed", "path", root, "error", err)
 	}
 }

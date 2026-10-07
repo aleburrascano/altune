@@ -1735,3 +1735,108 @@ func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 		})
 	}
 }
+
+func TestDownloadStep_WorkspaceRejectedCandidateLeavesNoLiveDir(t *testing.T) {
+	ws := newCallRecordingWorkspace()
+	step := NewDownloadStep(&fileWritingSearcher{err: errors.New("boom")}, WithStepTempWorkspace(ws))
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+		t.Fatal("expected download error")
+	}
+
+	if len(ws.createdDirs()) != 1 {
+		t.Fatalf("created = %v, want one dir", ws.createdDirs())
+	}
+	if live := ws.liveDirs(); len(live) != 0 {
+		t.Errorf("live dirs after rejection = %v, want none", live)
+	}
+}
+
+func TestDownloadStep_WorkspaceWindowRemovesLoserAndKeepsWinnerUntilCleanup(t *testing.T) {
+	ws := newCallRecordingWorkspace()
+	rank1Gate := make(chan struct{})
+	fetcher := newGatedFetcher(map[string]chan struct{}{"rank1": rank1Gate})
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "rank1"}, {URL: "rank2"}}}
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := NewDownloadStep(fetcher, WithVerifyWidth(2), WithStepTempWorkspace(ws)).Execute(context.Background(), ac, afterSelect{})
+		done <- err
+	}()
+	for range 2 {
+		<-fetcher.started
+	}
+	for fetcher.inFlight.Load() != 1 {
+		time.Sleep(time.Millisecond)
+	}
+	close(rank1Gate)
+	if err := <-done; err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	winner, loser := fetcher.dirOf("rank1"), fetcher.dirOf("rank2")
+	if ac.TempDir != winner {
+		t.Fatalf("TempDir = %q, want winner dir %q", ac.TempDir, winner)
+	}
+	if ws.removedCount(loser) != 1 {
+		t.Errorf("loser dir removed %d times during the step, want 1", ws.removedCount(loser))
+	}
+	if ws.removedCount(winner) != 0 {
+		t.Errorf("winner dir removed during the step")
+	}
+	if _, err := os.Stat(winner); err != nil {
+		t.Errorf("winner dir should survive until cleanup: %v", err)
+	}
+
+	CleanupTemp(context.Background(), ws, ac)
+
+	if ws.removedCount(winner) != 1 {
+		t.Errorf("winner dir removed %d times by CleanupTemp, want 1", ws.removedCount(winner))
+	}
+	if _, err := os.Stat(winner); !os.IsNotExist(err) {
+		t.Errorf("winner dir should be gone after CleanupTemp, stat err = %v", err)
+	}
+}
+
+func TestDownloadStep_WorkspacePreviewDirCreatedAndRemovedAfterIdentify(t *testing.T) {
+	ws := newCallRecordingWorkspace()
+	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
+	identifier := &durationRecordingIdentifier{match: previewMatch("mb-live", "Nessun dorma (live)")}
+	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier), WithStepTempWorkspace(ws))
+
+	if _, err := step.Execute(context.Background(), previewContext(), afterSelect{}); err == nil {
+		t.Fatal("expected the live preview to reject the only candidate")
+	}
+
+	if len(fetcher.previewDirs) != 1 {
+		t.Fatalf("preview dirs = %v, want one", fetcher.previewDirs)
+	}
+	preview := fetcher.previewDirs[0]
+	if !strings.HasPrefix(filepath.Base(preview), tempDirPrefix+"preview-") {
+		t.Errorf("preview dir %q, want a %spreview-* dir", preview, tempDirPrefix)
+	}
+	if ws.removedCount(preview) != 1 {
+		t.Errorf("preview dir removed %d times, want 1", ws.removedCount(preview))
+	}
+	if _, err := os.Stat(preview); !os.IsNotExist(err) {
+		t.Errorf("preview dir should be gone, stat err = %v", err)
+	}
+}
+
+func TestDownloadStep_WorkspaceRollbackWithOnlyTempPathRemovesThatFile(t *testing.T) {
+	ws := newCallRecordingWorkspace()
+	file := filepath.Join(t.TempDir(), "track.mp3")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	step := NewDownloadStep(&fileWritingSearcher{}, WithStepTempWorkspace(ws))
+	if err := step.Rollback(context.Background(), &AcquisitionContext{TempPath: file}); err != nil {
+		t.Fatalf("Rollback error: %v", err)
+	}
+
+	if got := ws.removedPaths(); len(got) != 1 || got[0] != file {
+		t.Errorf("removed = %v, want exactly [%s]", got, file)
+	}
+}
