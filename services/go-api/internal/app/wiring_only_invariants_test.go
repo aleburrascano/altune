@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// Rule names reported by wiringViolations.
 const (
 	ruleRuntimeMethod  = "runtime-method"
 	ruleRecover        = "recover-call"
@@ -20,8 +19,6 @@ const (
 	ruleSyncStateField = "sync-state-field"
 )
 
-// wiringOnlyAllowlist names the files that still hold runtime code. Each
-// reason says what has to move out; later tickets shrink this list.
 var wiringOnlyAllowlist = map[string]string{
 	"sse_handler.go":        "SSE ServeHTTP handler with a mutex and an event select loop",
 	"live_transport.go":     "RoundTrip transport with mutex-guarded state",
@@ -33,8 +30,6 @@ var wiringOnlyAllowlist = map[string]string{
 	"catalog_wiring.go":     "lookupTracker holding an atomic counter",
 }
 
-// wiringViolations reports, per file name, the runtime-code rules the file breaks.
-// Files without violations are absent from the result.
 func wiringViolations(fset *token.FileSet, files map[string]*ast.File) map[string][]string {
 	_ = fset
 	out := map[string][]string{}
@@ -81,7 +76,6 @@ func wiringViolations(fset *token.FileSet, files map[string]*ast.File) map[strin
 	return out
 }
 
-// importNames returns the local names bound to "sync" and "sync/atomic".
 func importNames(f *ast.File) (syncNames, atomicNames map[string]bool) {
 	syncNames, atomicNames = map[string]bool{}, map[string]bool{}
 	for _, imp := range f.Imports {
@@ -107,8 +101,6 @@ func importNames(f *ast.File) (syncNames, atomicNames map[string]bool) {
 	return syncNames, atomicNames
 }
 
-// containsSelect reports whether a select statement sits in body, not
-// counting ones inside function literals (those run in their own context).
 func containsSelect(body *ast.BlockStmt) bool {
 	found := false
 	ast.Inspect(body, func(n ast.Node) bool {
