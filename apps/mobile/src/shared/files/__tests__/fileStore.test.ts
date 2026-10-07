@@ -2,7 +2,7 @@ import { File } from 'expo-file-system';
 
 import { deviceFileStore, type FileStore, createFileStoreSlot } from '../fileStore';
 import { createMemoryFileStore } from './memoryFileStore';
-import { createWebFileStore, WebDownloadUnsupportedError } from '../webFileStore';
+import { createWebFileStore, WebDownloadUnsupportedError } from '../web/webFileStore';
 
 function fakeLocalStorage(): Storage {
   const data = new Map<string, string>();
@@ -227,30 +227,25 @@ describe('createFileStoreSlot', () => {
   });
 });
 
-type FileStoreModules = { selected: unknown; device: unknown; web: unknown };
-
-function storesOn(os: string): FileStoreModules {
-  let modules: FileStoreModules | undefined;
-  jest.isolateModules(() => {
-    require('react-native').Platform.OS = os;
-    const { defaultFileStore, deviceFileStore } = require('../fileStore');
-    const { webFileStore } = require('../webFileStore');
-    modules = { selected: defaultFileStore, device: deviceFileStore, web: webFileStore };
-  });
-  return modules as FileStoreModules;
-}
-
 describe('the default file store', () => {
-  it.each(['ios', 'android'])('is the device filesystem on %s', (os) => {
-    const { selected, device } = storesOn(os);
+  it('is the device filesystem natively', () => {
+    const { defaultFileStore } = require('../defaultFileStore');
 
-    expect(selected).toBe(device);
+    expect(defaultFileStore).toBe(deviceFileStore);
   });
 
   it('is the localStorage-backed store on web', () => {
-    const { selected, web } = storesOn('web');
+    const { defaultFileStore } = require('../defaultFileStore.web');
+    const { webFileStore } = require('../web/webFileStore');
 
-    expect(selected).toBe(web);
+    expect(defaultFileStore).toBe(webFileStore);
+  });
+
+  it('does not pick the web store natively', () => {
+    const { defaultFileStore } = require('../defaultFileStore');
+    const { webFileStore } = require('../web/webFileStore');
+
+    expect(defaultFileStore).not.toBe(webFileStore);
   });
 });
 

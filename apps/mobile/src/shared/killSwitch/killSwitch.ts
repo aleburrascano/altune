@@ -1,7 +1,7 @@
 import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
+import { defaultFileStore } from '@shared/files/defaultFileStore';
 import {
   createFileStoreSlot,
-  defaultFileStore,
   type FileStore,
   type StoredDirectory,
 } from '@shared/files/fileStore';
