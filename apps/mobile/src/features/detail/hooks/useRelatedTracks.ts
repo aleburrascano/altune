@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getRelatedTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 import { contentFailure, DETAIL_CONTENT_STALE_MS, type ContentFailure } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
+import type { DetailPort } from '../ports/detailPort';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
@@ -19,17 +20,22 @@ type UseRelatedTracksReturn = {
   failure: ContentFailure | null;
 };
 
-function fetchRelated(scSource: DiscoverySource | null, signal: AbortSignal | undefined) {
+function fetchRelated(
+  port: DetailPort,
+  scSource: DiscoverySource | null,
+  signal: AbortSignal | undefined,
+) {
   return fetchTallyingOutcome('related_tracks', () =>
-    getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
+    port.getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
   );
 }
 
 function useRelatedTracksQuery(scSource: DiscoverySource | null, isFetchEnabled: boolean) {
+  const port = useDetailPort();
   const retry = useContentFetchRetry();
   return useQuery({
     queryKey: ['related-tracks', scSource?.external_id ?? ''],
-    queryFn: ({ signal }) => fetchRelated(scSource, signal),
+    queryFn: ({ signal }) => fetchRelated(port, scSource, signal),
     enabled: isFetchEnabled && scSource !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,

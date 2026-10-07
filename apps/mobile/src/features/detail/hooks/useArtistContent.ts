@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getArtistContent } from '@shared/api-client/enrichment';
 import { isAbort } from '@shared/errors';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
@@ -13,6 +12,8 @@ import {
   type ContentFailure,
 } from '../content-status';
 import { recordContentFetchOutcome } from '../detailHealth';
+import type { DetailPort } from '../ports/detailPort';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
@@ -81,9 +82,14 @@ function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext)
   recordContentFetchOutcome('artist_content', isFullyServed(content));
 }
 
-async function fetchContent(ctx: ContentFetchContext, signal: AbortSignal) {
+async function fetchContent(port: DetailPort, ctx: ContentFetchContext, signal: AbortSignal) {
   const { provider, externalId, artistName } = ctx;
-  const content = await getArtistContent(provider, externalId, contentParams(artistName), signal);
+  const content = await port.getArtistContent(
+    provider,
+    externalId,
+    contentParams(artistName),
+    signal,
+  );
   recordContent(content, ctx);
   return content;
 }
@@ -99,9 +105,9 @@ function contentContext(
   };
 }
 
-async function fetchReporting(ctx: ContentFetchContext, signal: AbortSignal) {
+async function fetchReporting(port: DetailPort, ctx: ContentFetchContext, signal: AbortSignal) {
   try {
-    return await fetchContent(ctx, signal);
+    return await fetchContent(port, ctx, signal);
   } catch (error) {
     reportContentFailure(error, ctx);
     throw error;
@@ -109,11 +115,12 @@ async function fetchReporting(ctx: ContentFetchContext, signal: AbortSignal) {
 }
 
 function loadArtistContent(
+  port: DetailPort,
   source: { provider: string; external_id: string },
   artistName: string | undefined,
   signal: AbortSignal,
 ) {
-  return fetchReporting(contentContext(source, artistName), signal);
+  return fetchReporting(port, contentContext(source, artistName), signal);
 }
 
 export function useArtistContent({
@@ -122,6 +129,7 @@ export function useArtistContent({
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
   const source = sources[0] ?? null;
+  const port = useDetailPort();
   const retry = useContentFetchRetry();
   const isFetchEnabled = useDetailFetchEnabled();
 
@@ -132,7 +140,7 @@ export function useArtistContent({
       source?.external_id ?? '',
       artistName ?? '',
     ],
-    queryFn: ({ signal }) => loadArtistContent(source!, artistName, signal),
+    queryFn: ({ signal }) => loadArtistContent(port, source!, artistName, signal),
     enabled: enabled && isFetchEnabled && source !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
