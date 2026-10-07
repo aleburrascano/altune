@@ -1,5 +1,5 @@
-export { AddToPlaylistSheet } from './AddToPlaylistSheet';
-export { CreatePlaylistModal } from './CreatePlaylistModal';
+export { AddToPlaylistSheet } from './ui/AddToPlaylistSheet';
+export { CreatePlaylistModal } from './ui/CreatePlaylistModal';
 export {
   useAddTracksToPlaylist,
   useCreatePlaylist,

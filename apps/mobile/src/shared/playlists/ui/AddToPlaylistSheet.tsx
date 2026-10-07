@@ -17,9 +17,9 @@ import { playlistKeys } from '@shared/lib/query-keys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
 import { CreatePlaylistModal } from './CreatePlaylistModal';
-import { usePlaylistsPort } from './ports/PlaylistsPortProvider';
-import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations';
-import { useSingleFlightAction } from './useSingleFlightAction';
+import { usePlaylistsPort } from '../ports/PlaylistsPortProvider';
+import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from '../mutations';
+import { useSingleFlightAction } from '../useSingleFlightAction';
 
 const SHEET_PLAYLIST_CAP = 2000;
 
