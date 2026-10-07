@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { apiBase } from '../api-client';
+import { apiBase } from '../api-client/config';
 import { withinAuthDeadline } from '../auth/authDeadline';
 import { supabase } from '../auth/supabaseClient';
 import { isLoopEnabled, onKillSwitchChange } from '../killSwitch/killSwitch';

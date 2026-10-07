@@ -5,7 +5,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { fetchAudioUrls, isAudioPrefetchEnabled } from '@shared/api-client/audio';
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
+import { REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 import { deviceFileStore, fileHandle } from '@shared/files/fileStore';
 import {
   MAX_PREFETCH_FILE_BYTES,
