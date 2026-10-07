@@ -447,7 +447,7 @@ func walkTarget(path string, d fs.DirEntry, err error, targets *[]target) error 
 	if d.IsDir() {
 		return skipUnwanted(d)
 	}
-	if !d.Type().IsRegular() {
+	if !isRegularFile(d) {
 		return nil
 	}
 	k, ok, err := matchKind(path)
@@ -458,6 +458,14 @@ func walkTarget(path string, d fs.DirEntry, err error, targets *[]target) error 
 		*targets = append(*targets, target{display: path, read: path, kind: k})
 	}
 	return nil
+}
+
+func isRegularFile(d fs.DirEntry) bool {
+	if !d.Type().IsRegular() {
+		return false
+	}
+	info, err := d.Info()
+	return err == nil && info.Mode().IsRegular()
 }
 
 func skipUnwanted(d fs.DirEntry) error {
