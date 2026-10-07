@@ -74,7 +74,6 @@ func splitDegraded(err error) (bool, error) {
 	return false, err
 }
 
-// degradedCall replaces the four inline Execute/splitDegraded/stamp closures.
 func degradedCall[E, D any](exec func() (E, error), toDTO func(E) D, stamp func(*D, bool)) func() (any, error) {
 	return func() (any, error) {
 		e, err := exec()
@@ -88,7 +87,6 @@ func degradedCall[E, D any](exec func() (E, error), toDTO func(E) D, stamp func(
 	}
 }
 
-// requireTitle writes the 400 for an empty title and reports whether to continue.
 func requireTitle(w http.ResponseWriter, title string) bool {
 	if title == "" {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
