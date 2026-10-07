@@ -1,6 +1,6 @@
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
-import { apiBase } from '@shared/api-client';
+import { apiBase } from '@shared/api-client/config';
 import { supabase } from '@shared/auth/supabaseClient';
 import { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 
