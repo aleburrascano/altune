@@ -8,4 +8,8 @@ describe('the mobile jest config', () => {
   it('restores every mock after each test', () => {
     expect(config.restoreMocks).toBe(true);
   });
+
+  it('exits when the run ends, even with open handles left behind', () => {
+    expect(config.forceExit).toBe(true);
+  });
 });
