@@ -1,4 +1,4 @@
-import { MIN_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
+import { MAX_SEARCH_OFFSET, MIN_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
 import { clampQueryWords } from '../searchLimits';
 
 describe('isSearchableQuery', () => {
@@ -45,5 +45,11 @@ describe('clampQueryWords', () => {
     const spaced = joinWithMixedWhitespace(numberedWords(SERVER_WORD_CAP + 1));
     const expected = joinWithMixedWhitespace(numberedWords(SERVER_WORD_CAP));
     expect(clampQueryWords(spaced)).toBe(expected);
+  });
+});
+
+describe('MAX_SEARCH_OFFSET', () => {
+  it('matches the server MaxSearchOffset', () => {
+    expect(MAX_SEARCH_OFFSET).toBe(200);
   });
 });

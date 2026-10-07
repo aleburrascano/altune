@@ -8,6 +8,9 @@ const MAX_QUERY_WORDS = 32;
 
 export const MAX_SEARCH_PAGES = 25;
 
+// Mirrors the server's MaxSearchOffset (services/go-api discovery domain); a larger offset is a 400.
+export const MAX_SEARCH_OFFSET = 200;
+
 export function isSearchableQuery(text: string): boolean {
   return text.trim().length >= MIN_QUERY_LENGTH;
 }

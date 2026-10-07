@@ -8,7 +8,7 @@ import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
 import { useRefreshFromFirstPage } from './useRefreshFromFirstPage';
 import { useRestartOnExpiredSlate } from './useRestartOnExpiredSlate';
-import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
+import { MAX_SEARCH_OFFSET, MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
@@ -54,7 +54,9 @@ function nextSearchPageParam(
 ): SearchPageParam | undefined {
   if (pages.length >= MAX_SEARCH_PAGES) return undefined;
   if (!lastPage.has_more) return undefined;
-  return { offset: lastPage.offset + lastPage.results.length, searchId: pages[0]?.search_id };
+  const offset = lastPage.offset + lastPage.results.length;
+  if (offset > MAX_SEARCH_OFFSET) return undefined;
+  return { offset, searchId: pages[0]?.search_id };
 }
 
 const SEARCH_RETRY_COUNT = 1;
