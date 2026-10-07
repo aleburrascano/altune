@@ -18,6 +18,11 @@ const OWNERS = {
   'src/features/library/adapters/http/httpLibraryPort.ts': {
     tracks: ['deleteTrack', 'reacquireTrack'],
   },
+  'src/features/detail/adapters/http/httpDetailPort.ts': { tracks: ['createTrack'] },
+  'src/features/playback/adapters/http/httpPlaybackPort.ts': {
+    audio: ['recoverAudio'],
+    playback: ['saveQueueState'],
+  },
   'src/features/settings/adapters/http/httpSettingsPort.ts': {
     tracks: ['backfillFeaturedArtists'],
   },
