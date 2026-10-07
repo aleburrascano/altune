@@ -5,6 +5,8 @@ import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discover
 
 import { useOpenDetail, type DetailRoute } from '../navigation';
 import { resolveEntityQuery } from '../resolve-entity-query';
+import type { DetailPort } from '../ports/detailPort';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled } from './detailFetchGate';
 
 type LateralNavState = 'idle' | 'searching';
@@ -17,6 +19,7 @@ export type LateralNavHandle = {
 
 type View = { state: LateralNavState; error: string | null };
 type Outcome = { picked: DiscoveryResult } | { message: string };
+type Fetch = () => Promise<DiscoveryResult[]>;
 type Task = () => Promise<Outcome>;
 type OnPicked = (picked: DiscoveryResult) => void;
 type Gate = {
@@ -42,9 +45,18 @@ function warnFetchFailed(query: string, kind: DiscoveryKind, error: unknown): vo
   });
 }
 
-async function lookup(qc: QueryClient, query: string, kind: DiscoveryKind): Promise<Outcome> {
+function fetchResolved(
+  qc: QueryClient,
+  port: DetailPort,
+  query: string,
+  kind: DiscoveryKind,
+): Promise<DiscoveryResult[]> {
+  return qc.fetchQuery({ ...resolveEntityQuery(kind, query, 1, port), retry: false });
+}
+
+async function lookup(fetch: Fetch, query: string, kind: DiscoveryKind): Promise<Outcome> {
   try {
-    const results = await qc.fetchQuery({ ...resolveEntityQuery(kind, query, 1), retry: false });
+    const results = await fetch();
     const picked = results[0];
     return picked === undefined ? { message: notFoundMessage(kind, query) } : { picked };
   } catch (error) {
@@ -81,8 +93,9 @@ function useSearchSession(): [View, (task: Task, onPicked: OnPicked) => Promise<
 export function useLateralNav(detailRoute: DetailRoute): LateralNavHandle {
   const openDetail = useOpenDetail(detailRoute);
   const queryClient = useQueryClient();
+  const port = useDetailPort();
   const [{ state, error }, run] = useSearchSession();
   const navigateTo = (query: string, kind: DiscoveryKind) =>
-    run(() => lookup(queryClient, query, kind), openDetail);
+    run(() => lookup(() => fetchResolved(queryClient, port, query, kind), query, kind), openDetail);
   return { navigateTo, state, error };
 }

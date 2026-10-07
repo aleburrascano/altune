@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getLibraryAlbums, type AlbumGroup } from '@shared/api-client/library';
+import type { AlbumGroup } from '@shared/api-client/library';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { libraryKeys } from '@shared/lib/query-keys';
 
 import { DETAIL_LIST_CAP } from '../content-status';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { normalizeForCompare } from '../text-compare';
 
 function albumExtrasFor(group: AlbumGroup) {
@@ -26,10 +27,11 @@ function albumFromLibraryGroup(group: AlbumGroup): DiscoveryResult {
 }
 
 function useLibraryAlbumsQuery(artistName: string, enabled: boolean) {
+  const port = useDetailPort();
   return useQuery({
     queryKey: libraryKeys.albums(artistName, 'recent', DETAIL_LIST_CAP),
     queryFn: ({ signal }) =>
-      getLibraryAlbums({ q: artistName, sort: 'recent', limit: DETAIL_LIST_CAP }, signal),
+      port.getLibraryAlbums({ q: artistName, sort: 'recent', limit: DETAIL_LIST_CAP }, signal),
     enabled: enabled && artistName.length > 0,
     staleTime: 60_000,
   });

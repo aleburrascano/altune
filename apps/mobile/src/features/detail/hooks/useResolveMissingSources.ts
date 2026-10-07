@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { normalizeForCompare } from '../text-compare';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled } from './detailFetchGate';
 
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
@@ -21,46 +22,43 @@ function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): 
   }, [error, result.kind, result.title, result.subtitle]);
 }
 
-export function useResolveMissingSources(result: DiscoveryResult): {
-  resolved: DiscoveryResult;
-  isResolving: boolean;
-} {
-  const needsSources = result.sources.length === 0;
+function useResolveSearch(entity: DiscoveryResult, enabled: boolean) {
+  const port = useDetailPort();
   const fetchEnabled = useDetailFetchEnabled();
-  const searchTerm = result.subtitle ? `${result.title} ${result.subtitle}` : result.title;
-
-  const { data, isLoading, error } = useQuery({
-    ...resolveEntityQuery(result.kind, searchTerm, 5),
-    enabled: needsSources && fetchEnabled,
+  const searchTerm = entity.subtitle ? `${entity.title} ${entity.subtitle}` : entity.title;
+  return useQuery({
+    ...resolveEntityQuery(entity.kind, searchTerm, 5, port),
+    enabled: enabled && fetchEnabled,
   });
+}
 
-  useLoggedResolveFailure(result, error);
+function sameArtist(entity: DiscoveryResult, other: DiscoveryResult): boolean {
+  if (!entity.subtitle) return true;
+  return (
+    other.subtitle != null &&
+    normalizeForCompare(other.subtitle) === normalizeForCompare(entity.subtitle)
+  );
+}
 
-  if (!needsSources) {
-    return { resolved: result, isResolving: false };
-  }
+function findMatch(entity: DiscoveryResult, candidates: DiscoveryResult[]): DiscoveryResult | null {
+  const titleNorm = normalizeForCompare(entity.title);
+  const matches = (r: DiscoveryResult) =>
+    r.kind === entity.kind && normalizeForCompare(r.title) === titleNorm && sameArtist(entity, r);
+  return candidates.find(matches) ?? null;
+}
 
-  if (!data?.length) {
-    return { resolved: result, isResolving: isLoading };
-  }
+function withSourcesFrom(entity: DiscoveryResult, match: DiscoveryResult | null): DiscoveryResult {
+  if (!match || match.sources.length === 0) return entity;
+  return { ...entity, sources: match.sources, extras: { ...match.extras, ...entity.extras } };
+}
 
-  const titleNorm = normalizeForCompare(result.title);
-  const artistNorm = result.subtitle ? normalizeForCompare(result.subtitle) : null;
-  const match =
-    data.find(
-      (r) =>
-        r.kind === result.kind &&
-        normalizeForCompare(r.title) === titleNorm &&
-        (artistNorm === null ||
-          (r.subtitle != null && normalizeForCompare(r.subtitle) === artistNorm)),
-    ) ?? null;
+type Resolution = { resolved: DiscoveryResult; isResolving: boolean };
 
-  if (!match || match.sources.length === 0) {
-    return { resolved: result, isResolving: false };
-  }
-
-  return {
-    resolved: { ...result, sources: match.sources, extras: { ...match.extras, ...result.extras } },
-    isResolving: false,
-  };
+export function useResolveMissingSources(entity: DiscoveryResult): Resolution {
+  const needsSources = entity.sources.length === 0;
+  const { data: found, isLoading, error } = useResolveSearch(entity, needsSources);
+  useLoggedResolveFailure(entity, error);
+  if (!needsSources) return { resolved: entity, isResolving: false };
+  if (!found?.length) return { resolved: entity, isResolving: isLoading };
+  return { resolved: withSourcesFrom(entity, findMatch(entity, found)), isResolving: false };
 }

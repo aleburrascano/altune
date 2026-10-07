@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import type { DetailPort } from '../ports/detailPort';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { normalizeForCompare } from '../text-compare';
 
 export const LOOKUP_LIMIT = 200;
@@ -12,10 +13,10 @@ export const LOOKUP_MAX_PAGES = 5;
 type Lookup = { items: TrackResponse[]; complete: boolean };
 export type LibraryMatches = TrackResponse[] & { complete?: boolean };
 
-async function fetchLookup(q: string, signal?: AbortSignal): Promise<Lookup> {
+async function fetchLookup(port: DetailPort, q: string, signal?: AbortSignal): Promise<Lookup> {
   const items: TrackResponse[] = [];
   for (let page = 0; page < LOOKUP_MAX_PAGES; page++) {
-    const res = await getTracks({ limit: LOOKUP_LIMIT, offset: items.length, q }, signal);
+    const res = await port.getTracks({ limit: LOOKUP_LIMIT, offset: items.length, q }, signal);
     items.push(...res.items);
     if (!res.has_more || res.items.length === 0) return { items, complete: true };
   }
@@ -23,10 +24,11 @@ async function fetchLookup(q: string, signal?: AbortSignal): Promise<Lookup> {
 }
 
 function useLibraryLookup(search: string): Lookup {
+  const port = useDetailPort();
   const trimmed = search.trim();
   const { data: lookup, isError } = useQuery({
     queryKey: libraryKeys.lookup(trimmed),
-    queryFn: ({ signal }) => fetchLookup(trimmed, signal),
+    queryFn: ({ signal }) => fetchLookup(port, trimmed, signal),
     enabled: trimmed.length > 0,
     staleTime: 60_000,
   });
