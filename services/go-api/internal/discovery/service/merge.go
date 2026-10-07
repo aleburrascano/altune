@@ -28,39 +28,44 @@ func Merge(perProvider [][]domain.SearchResult) []Entity {
 	for _, group := range perProvider {
 		for rank, c := range group {
 			cProviders := providersOf(c)
-
-			merged := false
-			for i := range entities {
-				tier, ok := sameEntity(entities[i].Result, c)
-				if !ok {
-					continue
-				}
-				if c.Kind == domain.ResultKindArtist &&
-					tier == domain.EntityResolutionNone &&
-					ambiguous[textnorm.NormalizeForMatch(c.Title)] {
-					continue
-				}
-				entities[i].Result = mergeInto(entities[i].Result, c, tier)
+			i, tier, ok := findMergeTarget(entities, c, ambiguous)
+			if !ok {
+				ranks := make(map[domain.ProviderName]int, len(cProviders))
 				for p := range cProviders {
-					if prev, exists := entities[i].BestRank[p]; !exists || rank < prev {
-						entities[i].BestRank[p] = rank
-					}
+					ranks[p] = rank
 				}
-				merged = true
-				break
-			}
-			if merged {
+				entities = append(entities, Entity{Result: c, BestRank: ranks})
 				continue
 			}
-
-			ranks := make(map[domain.ProviderName]int, len(cProviders))
-			for p := range cProviders {
-				ranks[p] = rank
-			}
-			entities = append(entities, Entity{Result: c, BestRank: ranks})
+			entities[i].Result = mergeInto(entities[i].Result, c, tier)
+			recordBestRank(&entities[i], cProviders, rank)
 		}
 	}
 	return entities
+}
+
+func findMergeTarget(entities []Entity, c domain.SearchResult, ambiguous map[string]bool) (int, domain.EntityResolutionTier, bool) {
+	for i := range entities {
+		tier, ok := sameEntity(entities[i].Result, c)
+		if !ok {
+			continue
+		}
+		if c.Kind == domain.ResultKindArtist &&
+			tier == domain.EntityResolutionNone &&
+			ambiguous[textnorm.NormalizeForMatch(c.Title)] {
+			continue
+		}
+		return i, tier, true
+	}
+	return 0, domain.EntityResolutionNone, false
+}
+
+func recordBestRank(e *Entity, providers map[domain.ProviderName]bool, rank int) {
+	for p := range providers {
+		if prev, exists := e.BestRank[p]; !exists || rank < prev {
+			e.BestRank[p] = rank
+		}
+	}
 }
 
 func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
@@ -104,44 +109,20 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 	return domain.EntityResolutionNone, false
 }
 
-func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutionTier) domain.SearchResult {
+func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) domain.SearchResult {
 	provenISRC, provenMBID, hasProven := provenIdentity(canonical, other)
 	if completenessOf(other) > completenessOf(canonical) {
 		canonical, other = other, canonical
 	}
-	titleTierMerge := tier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
+	titleTierMerge := matchTier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
 	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
 
 	sources := unionSources(canonical.Sources, other.Sources)
 
-	extras := make(map[string]any, len(canonical.Extras)+len(other.Extras))
-	for k, v := range other.Extras {
-		extras[k] = v
-	}
-	for k, v := range canonical.Extras {
-		if v != nil || extras[k] == nil {
-			extras[k] = v
-		}
-	}
-	prev := canonical.ResolutionTier
-	if !prev.Stamped {
-		prev = other.ResolutionTier
-	}
-	if prev.Tier > tier {
-		tier = prev.Tier
-	}
+	extras := mergeExtras(canonical, other)
+	tier := effectiveTier(canonical, other, matchTier)
 
 	imageURL, imageSource := mergedArtwork(canonical, other, tier)
-
-	conf := domain.ConfidenceLow
-	switch tier {
-	case domain.EntityResolutionISRC, domain.EntityResolutionUPC, domain.EntityResolutionMBID, domain.EntityResolutionBridge:
-		conf = domain.ConfidenceHigh
-	default:
-		if len(sources) > 1 {
-			conf = domain.ConfidenceMedium
-		}
-	}
 
 	merged := domain.SearchResult{
 		Kind:          canonical.Kind,
@@ -149,7 +130,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		Subtitle:      canonical.Subtitle,
 		ImageURL:      imageURL,
 		ArtworkSource: imageSource,
-		Confidence:    conf,
+		Confidence:    confidenceFor(tier, len(sources)),
 		Sources:       sources,
 		Popularity:    math.Max(canonical.Popularity, other.Popularity),
 		Extras:        extras,
@@ -176,6 +157,38 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	merged.Duration = firstNonZero(canonical.Duration, other.Duration)
 	merged.DeezerAlbumID = firstNonEmpty(canonical.DeezerAlbumID, other.DeezerAlbumID)
 	return merged
+}
+
+func mergeExtras(canonical, other domain.SearchResult) map[string]any {
+	extras := make(map[string]any, len(canonical.Extras)+len(other.Extras))
+	for k, v := range other.Extras {
+		extras[k] = v
+	}
+	for k, v := range canonical.Extras {
+		if v != nil || extras[k] == nil {
+			extras[k] = v
+		}
+	}
+	return extras
+}
+
+func effectiveTier(canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) domain.EntityResolutionTier {
+	prev := canonical.ResolutionTier
+	if !prev.Stamped {
+		prev = other.ResolutionTier
+	}
+	return max(prev.Tier, matchTier)
+}
+
+func confidenceFor(tier domain.EntityResolutionTier, sourceCount int) domain.Confidence {
+	switch tier {
+	case domain.EntityResolutionISRC, domain.EntityResolutionUPC, domain.EntityResolutionMBID, domain.EntityResolutionBridge:
+		return domain.ConfidenceHigh
+	}
+	if sourceCount > 1 {
+		return domain.ConfidenceMedium
+	}
+	return domain.ConfidenceLow
 }
 
 func firstNonEmpty[T ~string](a, b T) T {
