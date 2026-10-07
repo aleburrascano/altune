@@ -24,11 +24,8 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	entity := itunesEntity(kind)
 
 	u := fmt.Sprintf(itunesAPIBaseURL+"/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
-	if err := a.limiter.wait(ctx); err != nil {
-		return artworkFailure(domain.ProviderKeyITunes, err)
-	}
 	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return artworkFailure(domain.ProviderKeyITunes, err)
 	}
 	for _, item := range body.Results {
