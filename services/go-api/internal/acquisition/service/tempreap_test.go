@@ -1,93 +1,60 @@
 package service
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
-func TestSweepStaleTempDirsReapsAbandonedKeepsLive(t *testing.T) {
-	tempRoot := useTempRoot(t)
-	abandoned := agedDir(t, tempRoot, tempDirPrefix+"abandoned", maxLiveTempAge+time.Hour)
-	live := agedDir(t, tempRoot, tempDirPrefix+"live", maxLiveTempAge-time.Minute)
+type recordingWorkspace struct {
+	cutoffs []time.Time
+}
 
-	SweepStaleTempDirs()
+func (r *recordingWorkspace) Create(string) (string, error) { return "", nil }
+func (r *recordingWorkspace) Remove(string) error           { return nil }
+func (r *recordingWorkspace) SweepAbandoned(abandonedBefore time.Time) int {
+	r.cutoffs = append(r.cutoffs, abandonedBefore)
+	return 0
+}
 
-	if _, err := os.Stat(abandoned); !os.IsNotExist(err) {
-		t.Errorf("abandoned temp dir: Stat err = %v, want not-exist", err)
+func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
+	fake := &recordingWorkspace{}
+
+	before := time.Now()
+	SweepStaleTempDirs(fake)
+	after := time.Now()
+
+	if len(fake.cutoffs) != 1 {
+		t.Fatalf("SweepAbandoned calls = %d, want 1", len(fake.cutoffs))
 	}
-	if _, err := os.Stat(live); err != nil {
-		t.Errorf("temp dir a live job could own was removed: %v", err)
+	cutoff := fake.cutoffs[0]
+	if cutoff.Before(before.Add(-maxLiveTempAge)) || cutoff.After(after.Add(-maxLiveTempAge)) {
+		t.Errorf("cutoff = %v, want within [%v, %v]", cutoff, before.Add(-maxLiveTempAge), after.Add(-maxLiveTempAge))
 	}
 }
 
-func TestSweepStaleTempDirsLeavesForeignEntriesAlone(t *testing.T) {
-	tempRoot := useTempRoot(t)
-	foreignDir := agedDir(t, tempRoot, "unrelated-service-cache", maxLiveTempAge+time.Hour)
-	ourNamedFile := agedFile(t, tempRoot, tempDirPrefix+"notadir", maxLiveTempAge+time.Hour)
+func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.T) {
+	fake := &recordingWorkspace{}
 
-	SweepStaleTempDirs()
+	SweepStaleTempDirs(fake)
 
-	for _, path := range []string{foreignDir, ourNamedFile} {
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("entry outside the sweep's claim was removed: %s: %v", path, err)
-		}
+	if len(fake.cutoffs) != 1 {
+		t.Fatalf("SweepAbandoned calls = %d, want 1", len(fake.cutoffs))
+	}
+	if age := time.Since(fake.cutoffs[0]); age < acquireTimeout {
+		t.Errorf("cutoff is %v in the past, want at least acquireTimeout %v", age, acquireTimeout)
 	}
 }
 
-func useTempRoot(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	t.Setenv("TMPDIR", root)
-	if os.TempDir() != root {
-		t.Fatalf("os.TempDir() = %q, want the test root %q", os.TempDir(), root)
-	}
-	return root
-}
+func TestSweepStaleTempDirsRepeatedCallsNeverMoveCutoffBack(t *testing.T) {
+	fake := &recordingWorkspace{}
 
-func agedDir(t *testing.T, root, name string, age time.Duration) string {
-	t.Helper()
-	path := filepath.Join(root, name)
-	if err := os.Mkdir(path, 0o755); err != nil {
-		t.Fatalf("create %s: %v", name, err)
-	}
-	if err := os.WriteFile(filepath.Join(path, "track.m4a"), []byte("audio"), 0o600); err != nil {
-		t.Fatalf("write downloaded file in %s: %v", name, err)
-	}
-	backdate(t, path, age)
-	return path
-}
+	SweepStaleTempDirs(fake)
+	SweepStaleTempDirs(fake)
 
-func agedFile(t *testing.T, root, name string, age time.Duration) string {
-	t.Helper()
-	path := filepath.Join(root, name)
-	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
-		t.Fatalf("create %s: %v", name, err)
+	if len(fake.cutoffs) != 2 {
+		t.Fatalf("SweepAbandoned calls = %d, want 2", len(fake.cutoffs))
 	}
-	backdate(t, path, age)
-	return path
-}
-
-func backdate(t *testing.T, path string, age time.Duration) {
-	t.Helper()
-	when := time.Now().Add(-age)
-	if err := os.Chtimes(path, when, when); err != nil {
-		t.Fatalf("backdate %s: %v", path, err)
-	}
-}
-
-func TestSweepStaleTempDirsReapsAgedCookieCopyDirKeepsFresh(t *testing.T) {
-	tempRoot := useTempRoot(t)
-	aged := agedDir(t, tempRoot, tempDirPrefix+"cookies-aged", maxLiveTempAge+time.Hour)
-	fresh := agedDir(t, tempRoot, tempDirPrefix+"cookies-fresh", time.Minute)
-
-	SweepStaleTempDirs()
-
-	if _, err := os.Stat(aged); !os.IsNotExist(err) {
-		t.Errorf("aged cookie copy dir: Stat err = %v, want not-exist", err)
-	}
-	if _, err := os.Stat(fresh); err != nil {
-		t.Errorf("fresh cookie copy dir was removed: %v", err)
+	if fake.cutoffs[1].Before(fake.cutoffs[0]) {
+		t.Errorf("second cutoff %v earlier than first %v", fake.cutoffs[1], fake.cutoffs[0])
 	}
 }

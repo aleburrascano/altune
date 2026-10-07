@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/fixture"
 	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/streamrip"
+	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
@@ -85,7 +86,7 @@ func (a *App) wireCatalog(
 	tap *eventtap.Tap,
 	disc discoveryWiring,
 ) (catalogWiring, error) {
-	acqService.SweepStaleTempDirs()
+	acqService.SweepStaleTempDirs(tempfs.New())
 
 	audio, err := a.wireAudioSources(tap, disc)
 	if err != nil {

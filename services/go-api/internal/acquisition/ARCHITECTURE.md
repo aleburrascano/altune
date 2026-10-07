@@ -200,7 +200,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
   logredact.go           logSafeError / logSafeText — cookie paths and host filesystem layout out of log lines
   cleanup.go             CleanupTemp — removes TempDir (the MkdirTemp root)
-  tempreap.go            SweepStaleTempDirs — startup reap of altune-acquire-* dirs no live job can still own
+  tempreap.go            SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned; the reap itself lives in adapters/tempfs
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
   joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
