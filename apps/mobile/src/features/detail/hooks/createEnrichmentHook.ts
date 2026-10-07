@@ -5,6 +5,8 @@ import type { DiscoveryKind } from '@shared/api-client/discovery';
 import { isAbort } from '@shared/errors';
 
 import { recordEnrichmentOutcome, type EnrichmentProvider } from '../detailHealth';
+import type { DetailPort } from '../ports/detailPort';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled } from './detailFetchGate';
 
 const ENRICHMENT_STALE_TIME = 1000 * 60 * 60 * 24;
@@ -52,6 +54,7 @@ type EnrichmentHookConfig<T> = {
   keyPrefix: string;
   provider: EnrichmentProvider;
   fetch: (
+    port: DetailPort,
     params: Required<Pick<EnrichmentParams, 'kind' | 'title'>> &
       Pick<EnrichmentParams, 'subtitle' | 'mbid'> & { signal: AbortSignal },
   ) => Promise<T>;
@@ -70,13 +73,14 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
   }: EnrichmentParams): EnrichmentReturn<T> {
     const hasMbid = config.mbidAware && mbid !== undefined && mbid !== '';
     const cacheKey = hasMbid ? mbid : `${title}|${subtitle ?? ''}`;
+    const port = useDetailPort();
     const isFetchEnabled = useDetailFetchEnabled();
     const hasLookupKey = title.trim() !== '' || hasMbid;
     const canFetch = enabled && isFetchEnabled && hasLookupKey;
     const { data: enrichment, isError } = useQuery<T>({
       queryKey: [config.keyPrefix, kind, cacheKey] as QueryKey,
       queryFn: ({ signal }) =>
-        fetchReportingOutcome(() => config.fetch({ kind, title, subtitle, mbid, signal }), {
+        fetchReportingOutcome(() => config.fetch(port, { kind, title, subtitle, mbid, signal }), {
           provider: config.provider,
           kind,
           title,

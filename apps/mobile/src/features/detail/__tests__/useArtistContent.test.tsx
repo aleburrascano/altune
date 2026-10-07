@@ -3,17 +3,15 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import type { DiscoverySource } from '@shared/api-client/discovery';
+import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { useArtistContent } from '../hooks/useArtistContent';
 import { _resetDetailHealthForTest } from '../detailHealth';
+import { DetailPortProvider } from '../ports/DetailPortProvider';
+import type { DetailPort } from '../ports/detailPort';
+import { createMemoryDetailPort } from './memoryDetailPort';
 import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
-
-const mockGetArtistContent = jest.fn();
-jest.mock('@shared/api-client/enrichment', () => ({
-  ...jest.requireActual('@shared/api-client/enrichment'),
-  getArtistContent: (...args: unknown[]) => mockGetArtistContent(...args),
-}));
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
@@ -25,6 +23,17 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 const ARTIST_CONTENT_PATH = 'GET /v1/discovery/artists/spotify/artist-1/content';
 
+function createPortWrapper(port: DetailPort) {
+  const Base = createWrapper(createTestQueryClient());
+  return function PortWrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <Base>
+        <DetailPortProvider port={port}>{children}</DetailPortProvider>
+      </Base>
+    );
+  };
+}
+
 const emptyContentFetch = {
   items: [],
   provider: 'spotify',
@@ -33,9 +42,6 @@ const emptyContentFetch = {
 };
 
 beforeEach(() => {
-  mockGetArtistContent.mockImplementation(
-    jest.requireActual('@shared/api-client/enrichment').getArtistContent,
-  );
   (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
 });
 
@@ -93,7 +99,11 @@ describe('logging degraded content', () => {
 
   describe('useArtistContent logs degraded per-provider content statuses', () => {
     it('logs which side/provider/artist failed when top_tracks status is not ok', async () => {
-      mockGetArtistContent.mockResolvedValue(contentResponse({ topStatus: 'timeout' }));
+      const port = createMemoryDetailPort({
+        artistContent: {
+          Radiohead: contentResponse({ topStatus: 'timeout' }) as ArtistContentResponse,
+        },
+      });
 
       const { result } = renderHook(
         () =>
@@ -101,7 +111,7 @@ describe('logging degraded content', () => {
             sources: [{ provider: 'spotify', external_id: 'artist-1', url: 'https://x' }],
             artistName: 'Radiohead',
           }),
-        { wrapper: createWrapper(createTestQueryClient()) },
+        { wrapper: createPortWrapper(port) },
       );
 
       await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
@@ -118,14 +128,17 @@ describe('logging degraded content', () => {
     });
 
     it('logs when the whole content request throws', async () => {
-      mockGetArtistContent.mockRejectedValue(new Error('network down'));
+      const port: DetailPort = {
+        ...createMemoryDetailPort(),
+        getArtistContent: () => Promise.reject(new Error('network down')),
+      };
 
       const { result } = renderHook(
         () =>
           useArtistContent({
             sources: [{ provider: 'deezer', external_id: 'artist-2', url: 'https://x' }],
           }),
-        { wrapper: createWrapper(createTestQueryClient()) },
+        { wrapper: createPortWrapper(port) },
       );
 
       await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
@@ -141,14 +154,16 @@ describe('logging degraded content', () => {
     });
 
     it('does not log when both statuses are ok', async () => {
-      mockGetArtistContent.mockResolvedValue(contentResponse({}));
+      const port = createMemoryDetailPort({
+        artistContent: { '': contentResponse({}) as ArtistContentResponse },
+      });
 
       const { result } = renderHook(
         () =>
           useArtistContent({
             sources: [{ provider: 'spotify', external_id: 'artist-3', url: 'https://x' }],
           }),
-        { wrapper: createWrapper(createTestQueryClient()) },
+        { wrapper: createPortWrapper(port) },
       );
 
       await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 5000 });
@@ -230,5 +245,49 @@ describe('useArtistContent reopened against the 30-minute content cache window',
     });
 
     expect(__http.countFor(CACHED_ARTIST_PATH)).toBe(expectedRequests);
+  });
+});
+
+describe('useArtistContent through the detail port', () => {
+  const track = (title: string) =>
+    ({ title }) as unknown as ArtistContentResponse['top_tracks']['items'][number];
+  const served = (title: string): ArtistContentResponse => ({
+    top_tracks: { items: [track(title)], provider_name: 'memory', status: 'ok' },
+    albums: { items: [], provider_name: 'memory', status: 'ok' },
+  });
+  const sources = [{ provider: 'spotify', external_id: 'artist-1', url: 'https://x' }];
+  const port = createMemoryDetailPort({
+    artistContent: { Radiohead: served('Creep'), Bjork: served('Joga') },
+  });
+
+  it('returns content seeded for the artist', async () => {
+    const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Radiohead' }), {
+      wrapper: createPortWrapper(port),
+    });
+
+    await waitFor(() => expect(result.current.topTracks).toHaveLength(1));
+    expect(result.current.topTracks[0]).toMatchObject({ title: 'Creep' });
+  });
+
+  it('returns no content for an unseeded artist', async () => {
+    const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Unknown' }), {
+      wrapper: createPortWrapper(port),
+    });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.topTracks).toEqual([]);
+    expect(result.current.albums).toEqual([]);
+  });
+
+  it('returns the new artist content, not the previous one, after a rerender', async () => {
+    const { result, rerender } = renderHook(
+      ({ artistName }: { artistName: string }) => useArtistContent({ sources, artistName }),
+      { wrapper: createPortWrapper(port), initialProps: { artistName: 'Radiohead' } },
+    );
+    await waitFor(() => expect(result.current.topTracks[0]).toMatchObject({ title: 'Creep' }));
+
+    rerender({ artistName: 'Bjork' });
+
+    await waitFor(() => expect(result.current.topTracks[0]).toMatchObject({ title: 'Joga' }));
   });
 });

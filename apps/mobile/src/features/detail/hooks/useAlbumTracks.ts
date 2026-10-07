@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 import { detailKeys } from '@shared/lib/query-keys';
 
@@ -11,6 +10,7 @@ import {
   type ContentFailure,
 } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
@@ -40,6 +40,7 @@ export function useAlbumTracks({
   enabled = true,
 }: UseAlbumTracksParams): UseAlbumTracksReturn {
   const mbExternalId = allSources?.find((s) => s.provider === 'musicbrainz')?.external_id;
+  const port = useDetailPort();
   const retry = useContentFetchRetry();
   const isFetchEnabled = useDetailFetchEnabled();
 
@@ -47,7 +48,7 @@ export function useAlbumTracks({
     queryKey: detailKeys.albumTracks(provider, externalId, mbExternalId),
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
-        getAlbumTracks({
+        port.getAlbumTracks({
           provider,
           externalId,
           limit: DETAIL_LIST_CAP,
