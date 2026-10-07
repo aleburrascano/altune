@@ -83,13 +83,8 @@ function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext)
 }
 
 async function fetchContent(port: DetailPort, ctx: ContentFetchContext, signal: AbortSignal) {
-  const { provider, externalId, artistName } = ctx;
-  const content = await port.getArtistContent(
-    provider,
-    externalId,
-    contentParams(artistName),
-    signal,
-  );
+  const params = contentParams(ctx.artistName);
+  const content = await port.getArtistContent(ctx.provider, ctx.externalId, params, signal);
   recordContent(content, ctx);
   return content;
 }
