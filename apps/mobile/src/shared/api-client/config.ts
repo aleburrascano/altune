@@ -17,19 +17,27 @@ function sendsPlaintextOffDevice(value: string): boolean {
   return !ON_DEVICE_AUTHORITY.test(value.slice(INSECURE_SCHEME.length));
 }
 
+function missingApiBase(isDev: boolean): string {
+  if (isDev) return DEFAULT_BASE;
+  throw new Error(`Missing required environment variable ${API_URL_VAR}`);
+}
+
+function assertWellFormed(value: string): void {
+  if (API_BASE_SHAPE.test(value)) return;
+  throw new Error(`Invalid ${API_URL_VAR} "${value}": expected http(s)://host[:port][/path]`);
+}
+
+function assertSecure(value: string, isDev: boolean): void {
+  if (isDev || !sendsPlaintextOffDevice(value)) return;
+  throw new Error(
+    `Insecure ${API_URL_VAR} "${value}": a release build requires https:// for a remote host`,
+  );
+}
+
 function resolveApiBase(value: string | undefined, isDev: boolean): string {
-  if (value == null || value === '') {
-    if (isDev) return DEFAULT_BASE;
-    throw new Error(`Missing required environment variable ${API_URL_VAR}`);
-  }
-  if (!API_BASE_SHAPE.test(value)) {
-    throw new Error(`Invalid ${API_URL_VAR} "${value}": expected http(s)://host[:port][/path]`);
-  }
-  if (!isDev && sendsPlaintextOffDevice(value)) {
-    throw new Error(
-      `Insecure ${API_URL_VAR} "${value}": a release build requires https:// for a remote host`,
-    );
-  }
+  if (value == null || value === '') return missingApiBase(isDev);
+  assertWellFormed(value);
+  assertSecure(value, isDev);
   return value;
 }
 

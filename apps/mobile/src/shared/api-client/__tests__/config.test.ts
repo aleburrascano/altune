@@ -15,8 +15,8 @@ const IMPORT_STATEMENT = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*'([^']+)'/g;
 
 function importsConfigFromBarrel(source: string): boolean {
   for (const match of source.matchAll(IMPORT_STATEMENT)) {
-    const names = match[1].split(',').map((n) => n.trim().split(/\s+as\s+/)[0]);
-    if (BARREL_SPECIFIER.test(match[2]) && names.some((n) => CONFIG_NAMES.includes(n))) {
+    const names = (match[1] ?? '').split(',').map((n) => n.trim().split(/\s+as\s+/)[0] ?? '');
+    if (BARREL_SPECIFIER.test(match[2] ?? '') && names.some((n) => CONFIG_NAMES.includes(n))) {
       return true;
     }
   }
