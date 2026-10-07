@@ -570,3 +570,56 @@ func TestEnrichFeatured_PanickingLookupIsContained(t *testing.T) {
 		t.Errorf("featured should be unset after a panicking lookup, got %v", results[0].Extras["featured_artists"])
 	}
 }
+
+func albumCandidate(title, artist, deezerID string) domain.SearchResult {
+	r := albumSearchResult(artist, deezerID)
+	r.Title = title
+	return r
+}
+
+func singleTrackDeezer() *fakeAlbumContentProvider {
+	return &fakeAlbumContentProvider{
+		getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{{
+				Kind: domain.ResultKindTrack, Title: "Like Lil Mexico",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "cht"}},
+			}}, nil
+		},
+	}
+}
+
+func TestGetAlbumTracks_fallbackRefusesSameArtistDifferentTitle(t *testing.T) {
+	for _, artist := range []string{"Che", ""} {
+		t.Run("artist="+artist, func(t *testing.T) {
+			searcher := &fakeAlbumSearcher{results: []domain.SearchResult{albumCandidate("Another Album", "Che", "222")}}
+			svc := albumTracksWithFailingPrimary(statusErr(503), singleTrackDeezer(), searcher)
+			req := albumTracksFallbackRequest()
+			req.Artist = artist
+
+			resp, err := svc.ExecuteRequest(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp.Status != domain.ProviderStatusError || len(resp.Items) != 0 {
+				t.Errorf("resp = %v/%d items, want the primary's error status and no items", resp.Status, len(resp.Items))
+			}
+		})
+	}
+}
+
+func TestGetAlbumTracks_fallbackAcceptsTitleEquivalentUnderNormaliser(t *testing.T) {
+	for _, title := range []string{"EMPTY CLIP", "Empty Clip (Deluxe Edition)"} {
+		t.Run(title, func(t *testing.T) {
+			searcher := &fakeAlbumSearcher{results: []domain.SearchResult{albumCandidate(title, "Che", "111")}}
+			svc := albumTracksWithFailingPrimary(statusErr(503), singleTrackDeezer(), searcher)
+
+			resp, err := svc.ExecuteRequest(context.Background(), albumTracksFallbackRequest())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp.Status != domain.ProviderStatusOK || len(resp.Items) != 1 {
+				t.Errorf("resp = %v/%d items, want OK and the fallback tracklist", resp.Status, len(resp.Items))
+			}
+		})
+	}
+}
