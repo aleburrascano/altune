@@ -74,6 +74,27 @@ func splitDegraded(err error) (bool, error) {
 	return false, err
 }
 
+func degradedCall[E, D any](exec func() (E, error), toDTO func(E) D, stamp func(*D, bool)) func() (any, error) {
+	return func() (any, error) {
+		e, err := exec()
+		degraded, err := splitDegraded(err)
+		if err != nil {
+			return nil, err
+		}
+		dto := toDTO(e)
+		stamp(&dto, degraded)
+		return dto, nil
+	}
+}
+
+func requireTitle(w http.ResponseWriter, title string) bool {
+	if title == "" {
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
+		return false
+	}
+	return true
+}
+
 func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
 	kind, ok := parseKindParam(w, r)
 	if !ok {
@@ -94,16 +115,12 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 
 	withEnricher(w, r, h.enrichSvc != nil,
 		nil,
-		func() (any, error) {
-			e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
-			degraded, err := splitDegraded(err)
-			if err != nil {
-				return nil, err
-			}
-			dto := enrichmentToDTO(e)
-			dto.Degraded = degraded
-			return dto, nil
-		},
+		degradedCall(
+			func() (domain.MBEnrichment, error) {
+				return h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
+			},
+			enrichmentToDTO,
+			func(d *EnrichmentResponseDTO, v bool) { d.Degraded = v }),
 		"enrichment failed", "kind", kind.String(), "title", title)
 }
 
@@ -164,23 +181,18 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	if title == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
+	if !requireTitle(w, title) {
 		return
 	}
 
 	withEnricher(w, r, h.enrichers.LastFm != nil,
 		func() any { return lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()) },
-		func() (any, error) {
-			e, err := h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
-			degraded, err := splitDegraded(err)
-			if err != nil {
-				return nil, err
-			}
-			dto := lastfmEnrichmentToDTO(e)
-			dto.Degraded = degraded
-			return dto, nil
-		},
+		degradedCall(
+			func() (domain.LastFmEnrichment, error) {
+				return h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
+			},
+			lastfmEnrichmentToDTO,
+			func(d *LastFmEnrichmentResponseDTO, v bool) { d.Degraded = v }),
 		"lastfm enrichment failed", "kind", kind.String(), "title", title)
 }
 
@@ -220,23 +232,18 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	if title == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
+	if !requireTitle(w, title) {
 		return
 	}
 
 	withEnricher(w, r, h.enrichers.Deezer != nil,
 		func() any { return deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()) },
-		func() (any, error) {
-			e, err := h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
-			degraded, err := splitDegraded(err)
-			if err != nil {
-				return nil, err
-			}
-			dto := deezerEnrichmentToDTO(e)
-			dto.Degraded = degraded
-			return dto, nil
-		},
+		degradedCall(
+			func() (domain.DeezerEnrichment, error) {
+				return h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
+			},
+			deezerEnrichmentToDTO,
+			func(d *DeezerEnrichmentResponseDTO, v bool) { d.Degraded = v }),
 		"deezer enrichment failed", "kind", kind.String(), "title", title)
 }
 
@@ -272,23 +279,16 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if title == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
+	if !requireTitle(w, title) {
 		return
 	}
 
 	withEnricher(w, r, h.enrichers.Lyrics != nil,
 		func() any { return lyricsToDTO(domain.EmptyDeezerLyrics()) },
-		func() (any, error) {
-			l, err := h.enrichers.Lyrics.Execute(r.Context(), title, subtitle)
-			degraded, err := splitDegraded(err)
-			if err != nil {
-				return nil, err
-			}
-			dto := lyricsToDTO(l)
-			dto.Degraded = degraded
-			return dto, nil
-		},
+		degradedCall(
+			func() (domain.DeezerLyrics, error) { return h.enrichers.Lyrics.Execute(r.Context(), title, subtitle) },
+			lyricsToDTO,
+			func(d *LyricsResponseDTO, v bool) { d.Degraded = v }),
 		"lyrics fetch failed", "title", title)
 }
 
