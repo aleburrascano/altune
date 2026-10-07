@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useLoggedSearchFailure } from './useLoggedSearchFailure';
 
@@ -14,9 +15,10 @@ export function useArtistDiscovery({
   enabled: boolean;
 }) {
   const isFetchEnabled = useDetailFetchEnabled();
+  const port = useDetailPort();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    ...resolveEntityQuery('artist', artistName, 1),
+    ...resolveEntityQuery('artist', artistName, 1, port),
     enabled: enabled && isFetchEnabled,
   });
   const searchResult = data?.[0] ?? null;

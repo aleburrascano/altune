@@ -10,7 +10,7 @@ import { createTestQueryClient, createWrapper } from './support/queryHarness';
 const mockQueryFn = jest.fn<Promise<DiscoveryResult[]>, []>();
 
 jest.mock('../resolve-entity-query', () => ({
-  resolveEntityQuery: (kind: string, q: string, limit: number) => ({
+  resolveEntityQuery: (kind: string, q: string, limit: number, _port: unknown) => ({
     queryKey: ['resolve-entity', kind, q, limit],
     queryFn: () => mockQueryFn(),
   }),

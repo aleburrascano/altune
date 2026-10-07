@@ -1,54 +1,74 @@
-import type { QueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import { supabase } from '@shared/auth/supabaseClient';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { _resetDetailHealthForTest } from '../detailHealth';
+import type { DetailPort } from '../ports/detailPort';
 import { resolveEntityQuery } from '../resolve-entity-query';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
+import { createMemoryDetailPort } from './memoryDetailPort';
+import { createTestQueryClient, createWrapper } from './support/queryHarness';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+function artist(title: string): DiscoveryResult {
+  return {
+    kind: 'artist',
+    title,
+    subtitle: null,
+    image_url: null,
+    confidence: 'high',
+    sources: [],
+    extras: {},
+  };
+}
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+function render(port: DetailPort, q: string) {
+  const client = createTestQueryClient();
+  const hook = renderHook(() => useQuery(resolveEntityQuery('artist', q, 1, port)), {
+    wrapper: createWrapper(client),
+  });
+  return { client, ...hook };
+}
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-describe('aborting on unmount', () => {
-  let client: QueryClient;
-
-  let wrapper: ReturnType<typeof createWrapper>;
-
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
-    _resetDetailHealthForTest();
-    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
-    client = createTestQueryClient();
-    wrapper = createWrapper(client);
+describe('resolveEntityQuery', () => {
+  it('returns the fake discovery results for a seeded name', async () => {
+    const port = createMemoryDetailPort({ discovery: [artist('Radiohead')] });
+    const { result } = render(port, 'radiohead');
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([artist('Radiohead')]);
   });
 
-  afterEach(() => client.clear());
+  it('returns [] for an unseeded name', async () => {
+    const { result } = render(createMemoryDetailPort(), 'nobody');
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual([]);
+  });
 
-  describe.each([
-    [
-      'resolveEntityQuery',
-      'GET /v1/discovery/search',
-      (): void => void useQuery(resolveEntityQuery('artist', 'radiohead', 1)),
-    ],
-  ] as const)('%s, left before its request resolves', (_name, spec, useHook) => {
-    it('aborts the in-flight request when the screen unmounts', async () => {
-      __http.hang(spec);
-      const { unmount } = renderHook(useHook, { wrapper });
-      await waitFor(() => expect(__http.last()).toBeDefined());
-      const { signal } = __http.last() as { signal: AbortSignal };
-      expect(signal.aborted).toBe(false);
+  it('keeps the port out of the query key', () => {
+    const a = resolveEntityQuery('artist', 'radiohead', 1, createMemoryDetailPort());
+    const b = resolveEntityQuery(
+      'artist',
+      'radiohead',
+      1,
+      createMemoryDetailPort({ discovery: [artist('x')] }),
+    );
+    expect(a.queryKey).toEqual(['resolve-entity', 'artist', 'radiohead', 1]);
+    expect(b.queryKey).toEqual(a.queryKey);
+  });
 
-      unmount();
+  it('aborts the in-flight search when the screen unmounts', async () => {
+    let seen: AbortSignal | undefined;
+    const port: DetailPort = {
+      ...createMemoryDetailPort(),
+      searchDiscovery: (_params, signal) => {
+        seen = signal;
+        return new Promise(() => {});
+      },
+    };
+    const { unmount } = render(port, 'radiohead');
+    await waitFor(() => expect(seen).toBeDefined());
+    expect(seen?.aborted).toBe(false);
 
-      await waitFor(() => expect(signal.aborted).toBe(true));
-    });
+    unmount();
+
+    await waitFor(() => expect(seen?.aborted).toBe(true));
   });
 });

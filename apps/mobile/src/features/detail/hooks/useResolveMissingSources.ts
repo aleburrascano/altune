@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { normalizeForCompare } from '../text-compare';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled } from './detailFetchGate';
 
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
@@ -27,10 +28,11 @@ export function useResolveMissingSources(result: DiscoveryResult): {
 } {
   const needsSources = result.sources.length === 0;
   const fetchEnabled = useDetailFetchEnabled();
+  const port = useDetailPort();
   const searchTerm = result.subtitle ? `${result.title} ${result.subtitle}` : result.title;
 
   const { data, isLoading, error } = useQuery({
-    ...resolveEntityQuery(result.kind, searchTerm, 5),
+    ...resolveEntityQuery(result.kind, searchTerm, 5, port),
     enabled: needsSources && fetchEnabled,
   });
 

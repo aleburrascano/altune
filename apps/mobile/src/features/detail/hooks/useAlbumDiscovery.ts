@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { contentFailure, DETAIL_CONTENT_STALE_MS, DETAIL_LIST_CAP } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
 import { resolveEntityQuery } from '../resolve-entity-query';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 import { useLoggedSearchFailure } from './useLoggedSearchFailure';
@@ -21,6 +21,7 @@ export function useAlbumDiscovery({
 }) {
   const searchQuery = `${albumTitle} ${artist ?? ''}`.trim();
   const isFetchEnabled = useDetailFetchEnabled();
+  const port = useDetailPort();
   const canFetch = enabled && isFetchEnabled;
 
   const {
@@ -30,7 +31,7 @@ export function useAlbumDiscovery({
     error: searchError,
     refetch: refetchSearch,
   } = useQuery({
-    ...resolveEntityQuery('album', searchQuery, 1),
+    ...resolveEntityQuery('album', searchQuery, 1, port),
     enabled: canFetch,
   });
   const searchResult = data?.[0] ?? null;
@@ -52,7 +53,7 @@ export function useAlbumDiscovery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
-        getAlbumTracks({
+        port.getAlbumTracks({
           provider: source!.provider,
           externalId: source!.external_id,
           limit: DETAIL_LIST_CAP,
