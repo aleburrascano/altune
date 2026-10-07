@@ -1,4 +1,4 @@
-import { AppState } from 'react-native';
+import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
 
@@ -33,13 +33,13 @@ function touch(now: Clock, tick: Clock): void {
   const at = tick();
   const rebased = { ..._state, lastActivity: wall - trustedElapsed(wall, at) };
   _state = advanceSession(rebased, wall);
-  _tickAnchor = AppState.currentState === 'active' ? at : null;
+  _tickAnchor = isAppActive() ? at : null;
 }
 
 function ensureForegroundRotation(now: Clock, tick: Clock): void {
   if (_listening) return;
   _listening = true;
-  AppState.addEventListener('change', (status) => {
+  subscribeAppState((status) => {
     _tickAnchor = null;
     if (status === 'active') touch(now, tick);
   });

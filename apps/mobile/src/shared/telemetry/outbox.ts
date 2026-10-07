@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { AppState } from 'react-native';
+import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { ApiError, NetworkError } from '@shared/api-client';
 import { clampedExponent, equalJitterMs } from '@shared/backoff';
@@ -111,7 +111,7 @@ function commit(next: OutboxEntry[]): void {
 function ensureFlushOnForeground(): void {
   if (_listening) return;
   _listening = true;
-  AppState.addEventListener('change', (status) => {
+  subscribeAppState((status) => {
     if (status === 'active') void requestFlush();
   });
 }
