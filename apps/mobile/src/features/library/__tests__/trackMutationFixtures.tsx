@@ -11,6 +11,13 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import type { TrackStatus } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
+import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
+import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+
+import { createMemoryLibraryPort } from './memoryLibraryPort';
 
 export function track(id: string, overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
@@ -63,12 +70,28 @@ export function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
 }
 export const PLAYLIST_KEY = playlistKeys.detail(asPlaylistId('pl1'));
 
-export function setup() {
+export interface PortOverrides {
+  library?: Partial<LibraryPort>;
+  acquisition?: Partial<AcquisitionPort>;
+}
+
+export function setup({ library, acquisition }: PortOverrides = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const libraryPort: LibraryPort = { ...createMemoryLibraryPort(), ...library };
+  const acquisitionPort: AcquisitionPort = {
+    ...createMemoryAcquisitionPort().port,
+    ...acquisition,
+  };
   function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <LibraryPortProvider port={libraryPort}>
+          <AcquisitionPortProvider port={acquisitionPort}>{children}</AcquisitionPortProvider>
+        </LibraryPortProvider>
+      </QueryClientProvider>
+    );
   }
   return { queryClient, wrapper: Wrapper };
 }

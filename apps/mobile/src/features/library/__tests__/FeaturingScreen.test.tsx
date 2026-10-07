@@ -6,21 +6,20 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { asTrackId } from '@shared/api-client/ids';
 import { ApiError, NetworkError } from '@shared/errors';
 
+import { createMemoryLibraryPort } from './memoryLibraryPort';
+import { LibraryPortProvider } from '../ports/LibraryPortProvider';
+import type { LibraryPort } from '../ports/libraryPort';
 import { FeaturingScreen } from '../ui/FeaturingScreen';
 import * as detailHandoff from '@shared/lib/detail-handoff';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
 
-jest.mock('@shared/api-client/discovery', () => ({
-  searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
-}));
-jest.mock('@shared/api-client/tracks', () => ({
-  listTracksFeaturing: (fa: unknown) => mockListTracksFeaturing(fa),
-  deleteTrack: jest.fn(),
-  retryAcquisition: jest.fn(),
-  reacquireTrack: jest.fn(),
-}));
+const port: LibraryPort = {
+  ...createMemoryLibraryPort(),
+  searchDiscovery: (params) => mockSearchDiscovery(params),
+  listTracksFeaturing: (featured) => mockListTracksFeaturing(featured),
+};
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ name: 'Guest Star' }),
@@ -42,7 +41,11 @@ let warnSpy: jest.SpyInstance;
 let alertSpy: jest.SpyInstance;
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+    </QueryClientProvider>
+  );
 }
 
 function loggedText(): string {

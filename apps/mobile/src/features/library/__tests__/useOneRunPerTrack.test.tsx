@@ -1,5 +1,3 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
@@ -8,13 +6,14 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { TracksList } from '../ui/TracksList';
+import { setup } from './trackMutationFixtures';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
-jest.mock('@shared/api-client/tracks', () => ({
-  retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
-  reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
-}));
+const ports = {
+  library: { reacquireTrack: mockReacquireTrack },
+  acquisition: { retryAcquisition: mockRetryAcquisition },
+};
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 function failedTrack(id: string): TrackResponse {
@@ -36,16 +35,6 @@ function failedTrack(id: string): TrackResponse {
     isrc: null,
     audio_ref: null,
   } as TrackResponse;
-}
-
-function setup() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  }
-  return { wrapper: Wrapper };
 }
 
 function FailedTracksList({ tracks }: { tracks: TrackResponse[] }) {
@@ -89,7 +78,7 @@ beforeEach(() => {
 
 describe('retry acquisition — a row in flight does not speak for the others', () => {
   it('sends no second retry for a track whose first retry is still in flight', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     render(<FailedTracksList tracks={[failedTrack('a'), failedTrack('b')]} />, { wrapper });
 
     tapRetry('a');
@@ -102,7 +91,7 @@ describe('retry acquisition — a row in flight does not speak for the others', 
   });
 
   it('keeps both tapped rows showing their own retry in progress', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     render(<FailedTracksList tracks={[failedTrack('a'), failedTrack('b')]} />, { wrapper });
 
     tapRetry('a');
@@ -115,7 +104,7 @@ describe('retry acquisition — a row in flight does not speak for the others', 
   });
 
   it('offers retry again on the row whose request landed, and only on that row', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     let firstRetryLands!: () => void;
     mockRetryAcquisition.mockImplementationOnce(
       () => new Promise((resolve) => (firstRetryLands = () => resolve())),
@@ -134,7 +123,7 @@ describe('retry acquisition — a row in flight does not speak for the others', 
 
 describe('track mutations — one run per track id, whatever the taps do', () => {
   it('starts one retry per id when several taps land before any row re-renders', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
 
     act(() => {
@@ -148,7 +137,7 @@ describe('track mutations — one run per track id, whatever the taps do', () =>
   });
 
   it('reports every re-acquiring track as in flight, not just the last one started', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const { result } = renderHook(() => useReacquireTrack(), { wrapper });
 
     act(() => {
