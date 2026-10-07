@@ -7,8 +7,6 @@ import (
 
 const tempDirPrefix = ports.TempDirPrefix
 
-// defaultTempWorkspace is nil in production: composition roots inject a workspace.
-// Tests set it so constructors work without wiring.
 var defaultTempWorkspace ports.TempWorkspace
 
 const maxLiveTempAge = acquireTimeout + 15*time.Minute
