@@ -194,6 +194,10 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
   fi
 fi
 
+if touches '^\.gitea/workflows/precheck-trusted'; then
+  test_check "precheck-trusted tests" . bash .gitea/workflows/precheck-trusted.test.sh
+fi
+
 if touches '^\.gitea/workflows/pr-shape'; then
   test_check "pr-shape tests" . bash .gitea/workflows/pr-shape.test.sh
 fi
