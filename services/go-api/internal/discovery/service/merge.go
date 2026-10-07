@@ -110,40 +110,49 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 }
 
 func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) domain.SearchResult {
-	provenISRC, provenMBID, hasProven := provenIdentity(canonical, other)
-	if completenessOf(other) > completenessOf(canonical) {
-		canonical, other = other, canonical
+	canonical, other = orderByCompleteness(canonical, other)
+	tier := effectiveTier(canonical, other, matchTier)
+	sources := unionSources(canonical.Sources, other.Sources)
+	imageURL, imageSource := mergedArtwork(canonical, other, tier)
+	merged := domain.SearchResult{
+		Kind:           canonical.Kind,
+		Title:          canonical.Title,
+		Subtitle:       canonical.Subtitle,
+		ImageURL:       imageURL,
+		ArtworkSource:  imageSource,
+		Confidence:     confidenceFor(tier, len(sources)),
+		Sources:        sources,
+		Popularity:     math.Max(canonical.Popularity, other.Popularity),
+		Extras:         mergeExtras(canonical, other),
+		ResolutionTier: domain.StampResolutionTier(tier),
 	}
+	carryIdentity(&merged, canonical, other, matchTier)
+	carryFields(&merged, canonical, other)
+	return merged
+}
+
+func orderByCompleteness(canonical, other domain.SearchResult) (domain.SearchResult, domain.SearchResult) {
+	if completenessOf(other) > completenessOf(canonical) {
+		return other, canonical
+	}
+	return canonical, other
+}
+
+func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) {
+	provenISRC, provenMBID, hasProven := provenIdentity(canonical, other)
 	titleTierMerge := matchTier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
 	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
-
-	sources := unionSources(canonical.Sources, other.Sources)
-
-	extras := mergeExtras(canonical, other)
-	tier := effectiveTier(canonical, other, matchTier)
-
-	imageURL, imageSource := mergedArtwork(canonical, other, tier)
-
-	merged := domain.SearchResult{
-		Kind:          canonical.Kind,
-		Title:         canonical.Title,
-		Subtitle:      canonical.Subtitle,
-		ImageURL:      imageURL,
-		ArtworkSource: imageSource,
-		Confidence:    confidenceFor(tier, len(sources)),
-		Sources:       sources,
-		Popularity:    math.Max(canonical.Popularity, other.Popularity),
-		Extras:        extras,
-	}
-	merged.RecordType = firstNonEmpty(canonical.RecordType, other.RecordType)
-	merged.ResolutionTier = domain.StampResolutionTier(tier)
 	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
-	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
 	merged.MBID = identityCarriedField(canonical.MBID, other.MBID, identityAgrees)
 	if !identityAgrees && hasProven {
 		merged.ISRC = provenISRC
 		merged.MBID = provenMBID
 	}
+}
+
+func carryFields(merged *domain.SearchResult, canonical, other domain.SearchResult) {
+	merged.RecordType = firstNonEmpty(canonical.RecordType, other.RecordType)
+	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
 	merged.Xref = canonical.Xref
 	if len(merged.Xref) == 0 {
 		merged.Xref = other.Xref
@@ -156,7 +165,6 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 	merged.Album = firstNonEmpty(canonical.Album, other.Album)
 	merged.Duration = firstNonZero(canonical.Duration, other.Duration)
 	merged.DeezerAlbumID = firstNonEmpty(canonical.DeezerAlbumID, other.DeezerAlbumID)
-	return merged
 }
 
 func mergeExtras(canonical, other domain.SearchResult) map[string]any {
