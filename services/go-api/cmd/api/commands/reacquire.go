@@ -2,7 +2,9 @@ package commands
 
 import (
 	"altune/go-api/internal/acquisition/adapters/id3"
+	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	acqPorts "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -83,7 +85,8 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 	}
 
 	sources := acqService.NewSourceRegistry(ytdlp.NewSource(searcher))
-	steps := acqService.CoreSteps(sources, id3.NewTagger(), audioStore, prober, nil, nil,
+	ws := tempfs.New()
+	steps := acqService.CoreSteps(sources, id3.NewTagger(), audioStore, prober, nil, ws, nil,
 		acqService.WithStoreKeyPrefix(cfg.AudioKeyPrefix))
 
 	fixed, skipped := 0, 0
@@ -98,7 +101,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 			album = *t.album
 		}
 		track := acqService.TrackRef{ID: t.id, UserID: t.userId, Title: t.title, Artist: t.artist, Album: album}
-		newRef, err := reacquireTrack(ctx, steps, audioStore, track, t.oldRef, t.duration)
+		newRef, err := reacquireTrack(ctx, steps, ws, audioStore, track, t.oldRef, t.duration)
 		if err != nil {
 			fmt.Printf("  [%d/%d] SKIP: %s — %s  (%v)\n", i+1, len(tracks), t.title, t.artist, err)
 			skipped++
@@ -141,6 +144,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 func reacquireTrack(
 	ctx context.Context,
 	steps acqService.Pipeline,
+	ws acqPorts.TempWorkspace,
 	audioStore ports.AudioStore,
 	track acqService.TrackRef,
 	oldRef string,
@@ -154,7 +158,7 @@ func reacquireTrack(
 	ac := &acqService.AcquisitionContext{Track: track}
 
 	runErr := acqService.RunPipeline(perCtx, steps, ac)
-	acqService.CleanupTemp(perCtx, ac)
+	acqService.CleanupTemp(perCtx, ws, ac)
 	if runErr != nil {
 		return "", runErr
 	}

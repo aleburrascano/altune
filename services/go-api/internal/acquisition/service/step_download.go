@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 )
 
@@ -26,6 +25,7 @@ type previewSource interface {
 
 type DownloadStep struct {
 	fetcher    candidateFetcher
+	workspace  ports.TempWorkspace
 	prober     ports.AudioProber
 	identifier ports.AudioIdentifier
 	limiter    *DownloadLimiter
@@ -37,7 +37,7 @@ type DownloadStep struct {
 }
 
 func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, width: 1, candidateTimeout: defaultCandidateTimeout}
+	s := &DownloadStep{fetcher: fetcher, workspace: defaultTempWorkspace, width: 1, candidateTimeout: defaultCandidateTimeout}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -54,6 +54,10 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 
 func WithStepDownloadLimiter(l *DownloadLimiter) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.limiter = l }
+}
+
+func WithStepTempWorkspace(w ports.TempWorkspace) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.workspace = w }
 }
 
 func WithStepVerifySkips(r ports.VerifySkipRecorder) func(*DownloadStep) {
@@ -92,7 +96,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		return s.executeWindowed(ctx, ac)
 	}
 	failures := downloadFailures{unavailable: ac.SearchUnavailable}
-	var holds holdBook
+	holds := holdBook{ws: s.workspace}
 	defer holds.discard()
 	attempts := 0
 
@@ -113,7 +117,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			continue
 		}
 
-		tmpDir, err := os.MkdirTemp("", tempDirPrefix+"*")
+		tmpDir, err := s.workspace.Create("*")
 		if err != nil {
 			return afterDownload{}, fmt.Errorf("create temp dir: %w", err)
 		}
@@ -138,7 +142,7 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 		return failures.noneAccepted(ctx)
 	}
 	if held.confidence < s.confidenceFloor() {
-		_ = os.RemoveAll(held.tmpDir)
+		_ = holds.ws.Remove(held.tmpDir)
 		return fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
 			held.confidence, s.confidenceFloor(), ErrNoConfidentMatch)
 	}
@@ -149,6 +153,7 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 }
 
 type holdBook struct {
+	ws   ports.TempWorkspace
 	best *attempt
 }
 
@@ -157,7 +162,7 @@ func (h *holdBook) offer(candidate attempt) {
 		return
 	}
 	if h.best != nil && !candidate.beats(*h.best) {
-		_ = os.RemoveAll(candidate.tmpDir)
+		_ = h.ws.Remove(candidate.tmpDir)
 		return
 	}
 	h.discard()
@@ -172,7 +177,7 @@ func (h *holdBook) take() *attempt {
 
 func (h *holdBook) discard() {
 	if h.best != nil {
-		_ = os.RemoveAll(h.best.tmpDir)
+		_ = h.ws.Remove(h.best.tmpDir)
 		h.best = nil
 	}
 }
@@ -313,7 +318,7 @@ func (s *DownloadStep) runAttempt(
 ) (result attempt) {
 	defer func() {
 		if result.status == attemptRejected {
-			_ = os.RemoveAll(tmpDir)
+			_ = s.workspace.Remove(tmpDir)
 		}
 	}()
 	result = s.attemptAudio(ctx, ac, candidate, tmpDir)
@@ -536,9 +541,9 @@ func decodeRejection(
 
 func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {
 	if ac.TempDir != "" {
-		_ = os.RemoveAll(ac.TempDir)
+		_ = s.workspace.Remove(ac.TempDir)
 	} else if ac.TempPath != "" {
-		_ = os.RemoveAll(ac.TempPath)
+		_ = s.workspace.Remove(ac.TempPath)
 	}
 	return nil
 }

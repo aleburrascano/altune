@@ -167,7 +167,8 @@ func (a *App) buildAcquisitionScheduler(
 	}
 	acquireOpts = append(acquireOpts,
 		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)),
-		acqService.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor))
+		acqService.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor),
+		acqService.WithAcquireTempWorkspace(tempfs.New()))
 	acquireSvc := acqService.NewAcquireTrackAudioService(
 		trackRepo,
 		acqService.NewSourceRegistry(audioSources...),

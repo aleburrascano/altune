@@ -64,7 +64,7 @@ func TestBuildSteps_RunsAllSixInOrder(t *testing.T) {
 	if err := RunPipeline(ctx, svc.buildSteps(track.UserId, track.ID), ac); err != nil {
 		t.Fatalf("pipeline: %v", err)
 	}
-	CleanupTemp(ctx, ac)
+	CleanupTemp(ctx, svc.workspace, ac)
 	assertStepOrder(t, rep.stages, []string{"search", "select", "download", "tag", "store", "update_track"})
 }
 
@@ -73,11 +73,11 @@ func TestCoreSteps_StopsAfterStore(t *testing.T) {
 	rep := &recordingReporter{}
 	ctx := withJobReporter(context.Background(), rep)
 
-	core := CoreSteps(svc.sources, svc.audioTagger, svc.audioStore, svc.audioProber, svc.identifier, nil)
+	core := CoreSteps(svc.sources, svc.audioTagger, svc.audioStore, svc.audioProber, svc.identifier, svc.workspace, nil)
 	if err := RunPipeline(ctx, core, ac); err != nil {
 		t.Fatalf("pipeline: %v", err)
 	}
-	CleanupTemp(ctx, ac)
+	CleanupTemp(ctx, svc.workspace, ac)
 	assertStepOrder(t, rep.stages, []string{"search", "select", "download", "tag", "store"})
 	if ac.AudioRef == "" {
 		t.Error("store stage did not record an audio ref")

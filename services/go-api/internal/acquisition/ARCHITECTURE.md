@@ -199,8 +199,8 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   sourcekey.go           sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
   logredact.go           logSafeError / logSafeText — cookie paths and host filesystem layout out of log lines
-  cleanup.go             CleanupTemp — removes TempDir (the MkdirTemp root)
-  tempreap.go            SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned; the reap itself lives in adapters/tempfs
+  cleanup.go             CleanupTemp(ctx, ws, ac) — removes TempDir (the workspace-created root) through ports.TempWorkspace
+  tempreap.go            SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned; the reap itself lives in adapters/tempfs; also holds `defaultTempWorkspace`, nil in production and set by the service tests
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
   joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
@@ -474,7 +474,8 @@ A change should preserve all of these; if it can't, that's the discussion.
 - One search engine failing never fails the search.
 - Feature extraction reads the raw title; "with" is never a feature separator.
 - No raw error chain reaches the Track row or the wire — `failureReason` first.
-- `CleanupTemp` removes `TempDir` (the `MkdirTemp` root), falling back to the parent of `TempPath` when only `TempPath` is set; never `TempPath` itself.
+- The service never touches the filesystem itself: every temp dir is created (`Create`) and removed (`Remove`) through `ports.TempWorkspace`, injected by `WithAcquireTempWorkspace` / `WithStepTempWorkspace` / `CoreSteps` (adapter: `adapters/tempfs`). The `acquisition-service-filesystem` depguard rule denies `os` in `service/` (`eval/` and tests excepted).
+- `CleanupTemp` removes `TempDir` (the workspace-created root), falling back to the parent of `TempPath` when only `TempPath` is set; never `TempPath` itself.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.
 - Acquisition never imports catalog's adapters, observe, or the composition root.

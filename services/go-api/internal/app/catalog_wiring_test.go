@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/acquisition/adapters/fixture"
 	"altune/go-api/internal/acquisition/adapters/id3"
+	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqPorts "altune/go-api/internal/acquisition/ports"
@@ -229,7 +230,7 @@ func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acqService.
 		t.Fatalf("new track: %v", err)
 	}
 	repo := &fixtureTrackRepo{track: track}
-	opts = append(opts, acqService.WithAudioTagger(id3.NewTagger()))
+	opts = append(opts, acqService.WithAudioTagger(id3.NewTagger()), acqService.WithAcquireTempWorkspace(tempfs.New()))
 	svc := acqService.NewAcquireTrackAudioService(repo, acqService.NewSourceRegistry(sources...), storage.NewFilesystemAudioStore(musicDir), opts...)
 	if err := svc.Execute(context.Background(), userID, track.ID); err != nil {
 		t.Fatalf("execute: %v", err)

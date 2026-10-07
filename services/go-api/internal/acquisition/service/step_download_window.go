@@ -5,14 +5,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"runtime/debug"
 	"sync"
 )
 
 func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionContext) (afterDownload, error) {
 	failures := downloadFailures{unavailable: ac.SearchUnavailable}
-	var holds holdBook
+	holds := holdBook{ws: s.workspace}
 	defer holds.discard()
 	pending := ac.Ranked
 	used, windowIndex := 0, 0
@@ -30,7 +29,7 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 		recordWindow(ac, window, windowIndex)
 		windowIndex++
 		results := s.runWindow(ctx, ac, window)
-		if mergeWindow(ctx, ac, results, &holds, &failures) {
+		if mergeWindow(ctx, s.workspace, ac, results, &holds, &failures) {
 			return afterDownload{}, nil
 		}
 	}
@@ -128,7 +127,7 @@ func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *Acquisition
 }
 
 func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {
-	tmpDir, err := os.MkdirTemp("", tempDirPrefix+"*")
+	tmpDir, err := s.workspace.Create("*")
 	if err != nil {
 		return attempt{candidate: candidate, rejection: &downloadRejection{
 			stage: RejectionDownload, reason: "download failed", err: fmt.Errorf("create temp dir: %w", err),
@@ -137,11 +136,11 @@ func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionCont
 	return s.runAttempt(ctx, ac, candidate, tmpDir)
 }
 
-func mergeWindow(ctx context.Context, ac *AcquisitionContext, results []attempt, holds *holdBook, failures *downloadFailures) bool {
+func mergeWindow(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionContext, results []attempt, holds *holdBook, failures *downloadFailures) bool {
 	won := false
 	for _, result := range results {
 		if won && result.status != attemptRejected {
-			_ = os.RemoveAll(result.tmpDir)
+			_ = ws.Remove(result.tmpDir)
 			continue
 		}
 		result.applyTo(ctx, ac)
