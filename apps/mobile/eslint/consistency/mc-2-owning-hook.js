@@ -1,6 +1,6 @@
 const OWNERS = {
   'src/shared/search-history/useClearSearchHistory.ts': { discovery: ['clearSearchHistory'] },
-  'src/shared/playlists/mutations.ts': {
+  'src/shared/playlists/adapters/http/httpPlaylistsPort.ts': {
     playlists: [
       'createPlaylist',
       'renamePlaylist',

@@ -11,13 +11,13 @@ import {
 import { useQuery } from '@tanstack/react-query';
 
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
-import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
 import { CreatePlaylistModal } from './CreatePlaylistModal';
+import { usePlaylistsPort } from './ports/PlaylistsPortProvider';
 import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations';
 import { useSingleFlightAction } from './useSingleFlightAction';
 
@@ -56,9 +56,10 @@ export function AddToPlaylistSheet({
     onClose,
   });
 
+  const port = usePlaylistsPort();
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
-    queryFn: ({ signal }) => getPlaylists({ limit: SHEET_PLAYLIST_CAP }, signal),
+    queryFn: ({ signal }) => port.getPlaylists({ limit: SHEET_PLAYLIST_CAP }, signal),
     enabled: visible,
     staleTime: Infinity,
   });
