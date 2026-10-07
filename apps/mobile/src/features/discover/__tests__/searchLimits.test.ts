@@ -1,5 +1,9 @@
-import { MAX_SEARCH_OFFSET, MIN_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
-import { clampQueryWords } from '../searchLimits';
+import {
+  MAX_SEARCH_OFFSET,
+  MIN_QUERY_LENGTH,
+  clampQueryWords,
+  isSearchableQuery,
+} from '../searchLimits';
 
 describe('isSearchableQuery', () => {
   it('rejects text whose trimmed length is below the minimum', () => {
