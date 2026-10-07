@@ -1,14 +1,13 @@
 package tempfs
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/redact"
 )
 
 var _ ports.TempWorkspace = (*Workspace)(nil)
@@ -34,20 +33,22 @@ func (*Workspace) SweepAbandoned(abandonedBefore time.Time) int {
 	}
 	removed := 0
 	for _, entry := range entries {
-		if !isAbandoned(entry, abandonedBefore) {
-			continue
+		if isAbandoned(entry, abandonedBefore) && removeStale(filepath.Join(root, entry.Name())) {
+			removed++
 		}
-		path := filepath.Join(root, entry.Name())
-		if err := os.RemoveAll(path); err != nil {
-			slog.Warn("acquisition.stale_temp_removal_failed", "path", path, "error", redact.LogError(err))
-			continue
-		}
-		removed++
 	}
 	if removed > 0 {
 		slog.Info("acquisition.stale_temp_dirs_swept", "dir", root, "removed", removed)
 	}
 	return removed
+}
+
+func removeStale(path string) bool {
+	if err := os.RemoveAll(path); err != nil {
+		slog.Warn("acquisition.stale_temp_removal_failed", "path", path, "error", redact.LogError(err))
+		return false
+	}
+	return true
 }
 
 func isAbandoned(entry os.DirEntry, abandonedBefore time.Time) bool {
