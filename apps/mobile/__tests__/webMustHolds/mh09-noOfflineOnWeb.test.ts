@@ -171,7 +171,7 @@ describe('mh09: the reconcile bridge does nothing on web', () => {
     });
     jest.doMock('@shared/offline/pinnedStore', () => mockPinnedStoreDouble);
     OfflineReconcileBridge =
-      require('@shared/offline/OfflineReconcileBridge').OfflineReconcileBridge;
+      require('@shared/offline/ui/OfflineReconcileBridge').OfflineReconcileBridge;
   });
 
   beforeEach(() => {

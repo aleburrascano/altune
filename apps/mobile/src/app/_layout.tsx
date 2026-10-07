@@ -14,7 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { appMutationCache, appQueryCache } from '../shared/query/useAppMutation';
 import { transientRetryOptions } from '../shared/query/retryDelay';
-import { StagingBanner } from '../shared/staging/StagingBanner';
+import { StagingBanner } from '../shared/staging/ui/StagingBanner';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
@@ -24,7 +24,7 @@ import { installGlobalErrorReporting } from '../shared/telemetry/clientErrorRepo
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
-import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
+import { OfflineReconcileBridge } from '../shared/offline/ui/OfflineReconcileBridge';
 import { useWideWebLayout } from '../shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '../shared/ui/theme';
