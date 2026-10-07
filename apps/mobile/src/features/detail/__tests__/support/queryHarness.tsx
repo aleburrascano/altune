@@ -1,6 +1,12 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
+import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
+
+import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
+import type { DetailPort } from '@features/detail/ports/detailPort';
+
 export function createTestQueryClient({ mutations = false }: { mutations?: boolean } = {}) {
   return new QueryClient({
     defaultOptions: mutations
@@ -12,6 +18,24 @@ export function createTestQueryClient({ mutations = false }: { mutations?: boole
 export function createWrapper(client: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  };
+}
+
+export function createPortWrapper(
+  client: QueryClient,
+  ports: { detail: DetailPort; acquisition?: AcquisitionPort },
+) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    const detail = <DetailPortProvider port={ports.detail}>{children}</DetailPortProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        {ports.acquisition === undefined ? (
+          detail
+        ) : (
+          <AcquisitionPortProvider port={ports.acquisition}>{detail}</AcquisitionPortProvider>
+        )}
+      </QueryClientProvider>
+    );
   };
 }
 

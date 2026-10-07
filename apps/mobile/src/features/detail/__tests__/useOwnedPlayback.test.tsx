@@ -6,28 +6,23 @@ import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/track
 
 import { useOwnedPlayback, type OwnedPlaybackContext } from '../hooks/useOwnedPlayback';
 import { useSaveTrack, type SaveTrack } from '../hooks/useSaveTrack';
-import { supabase } from '@shared/auth/supabaseClient';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
-
-const { __http } = require('../../../../jest/doubles/fetch.js');
+import { createMemoryDetailPort } from './memoryDetailPort';
+import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
-jest.mock('@shared/api-client/tracks', () => ({
-  ...jest.requireActual('@shared/api-client/tracks'),
-  retryAcquisition: (trackId: unknown) => mockRetryAcquisition(trackId),
-}));
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+const mockCreateTrack = jest.fn<Promise<never>, []>();
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('@shared/playback/useQueuePlayback', () => ({
   useQueuePlayback: () => ({ playFromList: jest.fn(), shuffleFromList: jest.fn() }),
 }));
 
-let wrapper: ReturnType<typeof createWrapper>;
+let wrapper: ReturnType<typeof createPortWrapper>;
 
 beforeEach(() => {
-  wrapper = createWrapper(createTestQueryClient({ mutations: true }));
+  wrapper = createPortWrapper(createTestQueryClient({ mutations: true }), {
+    detail: { ...createMemoryDetailPort(), createTrack: () => mockCreateTrack() },
+    acquisition: { retryAcquisition: (trackId) => mockRetryAcquisition(trackId) },
+  });
 });
 
 const context: OwnedPlaybackContext = {
@@ -54,8 +49,9 @@ function trackResult(extras: Record<string, unknown> = {}): DiscoveryResult {
 }
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
   mockRetryAcquisition.mockReset();
+  mockCreateTrack.mockReset();
+  mockCreateTrack.mockRejectedValue(new Error('500 server error'));
   useTrackStatusStore.getState().reset();
 });
 
@@ -120,7 +116,6 @@ describe('useOwnedPlayback — onQuickSave re-entrancy', () => {
   }
 
   it('sends one create when a never-owned track is tapped twice in one act', async () => {
-    __http.reply('POST /v1/tracks', { status: 500 });
     const { result } = renderWithRealSave();
 
     await act(async () => {
@@ -128,8 +123,8 @@ describe('useOwnedPlayback — onQuickSave re-entrancy', () => {
       result.current.onQuickSave(trackResult());
     });
 
-    await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBeGreaterThan(0));
-    expect(__http.countFor('POST /v1/tracks')).toBe(1);
+    await waitFor(() => expect(mockCreateTrack.mock.calls.length).toBeGreaterThan(0));
+    expect(mockCreateTrack.mock.calls.length).toBe(1);
   });
 
   it('sends one retry and no create when a failed track is tapped twice in one act', async () => {
@@ -142,11 +137,10 @@ describe('useOwnedPlayback — onQuickSave re-entrancy', () => {
     });
 
     expect(mockRetryAcquisition).toHaveBeenCalledTimes(1);
-    expect(__http.countFor('POST /v1/tracks')).toBe(0);
+    expect(mockCreateTrack.mock.calls.length).toBe(0);
   });
 
   it('sends one create when the enrich fills a null subtitle and the track is tapped twice', async () => {
-    __http.reply('POST /v1/tracks', { status: 500 });
     const artistPage: OwnedPlaybackContext = {
       ...context,
       enrich: (track) => ({ ...track, subtitle: track.subtitle ?? 'Grip' }),
@@ -161,8 +155,8 @@ describe('useOwnedPlayback — onQuickSave re-entrancy', () => {
       result.current.onQuickSave(track);
     });
 
-    await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBeGreaterThan(0));
-    expect(__http.countFor('POST /v1/tracks')).toBe(1);
+    await waitFor(() => expect(mockCreateTrack.mock.calls.length).toBeGreaterThan(0));
+    expect(mockCreateTrack.mock.calls.length).toBe(1);
   });
 
   it('retries again after a failed retry settles', async () => {

@@ -1,5 +1,6 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
+import { ApiError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
@@ -10,13 +11,19 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { useSaveTrack } from '../hooks/useSaveTrack';
-import { createTestQueryClient, createWrapper } from './support/queryHarness';
+import type { DetailPort } from '../ports/detailPort';
+import { createMemoryDetailPort } from './memoryDetailPort';
+import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 
-jest.mock('@shared/api-client/tracks', () => ({
-  createTrack: (body: unknown) => mockCreateTrack(body),
-}));
+function createWrapper(queryClient: ReturnType<typeof createTestQueryClient>) {
+  const detail = {
+    ...createMemoryDetailPort(),
+    createTrack: (body: unknown) => mockCreateTrack(body),
+  };
+  return createPortWrapper(queryClient, { detail: detail as DetailPort });
+}
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
@@ -319,5 +326,66 @@ describe('two same-title saves on different albums in flight together', () => {
       (id) => statuses[id as keyof typeof statuses]?.acquisitionStatus === 'pending',
     );
     expect(survivors).toHaveLength(1);
+  });
+});
+
+describe('saving through the memory fake', () => {
+  const request = { title: 'Idioteque', artist: 'Radiohead' } as never;
+
+  function setup(port: DetailPort) {
+    const wrapper = createPortWrapper(createTestQueryClient({ mutations: true }), { detail: port });
+    return renderHook(() => useSaveTrack(), { wrapper });
+  }
+
+  function trackCount(port: DetailPort): Promise<number> {
+    return port.getTracks({ limit: 50, offset: 0 }).then((page) => page.items.length);
+  }
+
+  beforeEach(() => {
+    useTrackStatusStore.getState().reset();
+  });
+
+  it('puts the new track into the fake, which held none before', async () => {
+    const port = createMemoryDetailPort();
+    expect(await trackCount(port)).toBe(0);
+    const { result } = setup(port);
+
+    await act(async () => {
+      await result.current.mutateAsync(request);
+    });
+
+    expect(await trackCount(port)).toBe(1);
+  });
+
+  it('reuses the idempotency key on a second save of the same result', async () => {
+    const port = createMemoryDetailPort();
+    const { result } = setup(port);
+
+    await act(async () => {
+      await result.current.mutateAsync(request);
+      await result.current.mutateAsync(request);
+    });
+
+    expect(await trackCount(port)).toBe(1);
+  });
+
+  it.each([
+    [503, true],
+    [404, false],
+  ])('reports a %i rejection as retryable=%s', async (status, retryable) => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const port: DetailPort = {
+      ...createMemoryDetailPort(),
+      createTrack: () => Promise.reject(new ApiError(status, `${status} failed`)),
+    };
+    const { result } = setup(port);
+
+    await act(async () => {
+      await result.current.mutateAsync(request).catch(() => undefined);
+    });
+
+    await waitFor(() => expect(result.current.failure).not.toBeNull());
+    expect(result.current.failure?.isRetryable).toBe(retryable);
+    warnSpy.mockRestore();
   });
 });

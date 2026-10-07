@@ -11,25 +11,25 @@ import { enqueueCritical } from '@shared/telemetry/outbox';
 import { toCreateTrackRequest } from '../save-cache';
 import { ownedTrack } from '../hooks/useOwnedTrack';
 import { useTrackSave } from '../hooks/useTrackSave';
-import { createTestQueryClient, createWrapper } from './support/queryHarness';
+import { createMemoryDetailPort } from './memoryDetailPort';
+import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
-jest.mock('@shared/api-client/tracks', () => ({
-  createTrack: (body: unknown) => mockCreateTrack(body),
-  retryAcquisition: (trackId: unknown) => mockRetryAcquisition(trackId),
-}));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('../save-cache', () => ({
   ...jest.requireActual('../save-cache'),
   toCreateTrackRequest: jest.fn(jest.requireActual('../save-cache').toCreateTrackRequest),
 }));
 
-let wrapper: ReturnType<typeof createWrapper>;
+let wrapper: ReturnType<typeof createPortWrapper>;
 
 beforeEach(() => {
-  wrapper = createWrapper(createTestQueryClient({ mutations: true }));
+  wrapper = createPortWrapper(createTestQueryClient({ mutations: true }), {
+    detail: { ...createMemoryDetailPort(), createTrack: (body) => mockCreateTrack(body) },
+    acquisition: { retryAcquisition: (trackId) => mockRetryAcquisition(trackId) },
+  });
 });
 
 function track(subtitle: string | null = 'Radiohead'): DiscoveryResult {
