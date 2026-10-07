@@ -7,7 +7,7 @@ work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 cat > "$work/forge" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
-  "pr view") jq -n --arg b "$PR_BODY" '{body:$b,additions:10,deletions:0,files:[{path:"README.md"}]}' ;;
+  "pr view") jq -n --arg b "$PR_BODY" --arg a "${PR_AUTHOR:-aleburrascano}" '{author:{login:$a},body:$b,additions:10,deletions:0,files:[{path:"README.md"}]}' ;;
   "issue view") [ -n "${ISSUE_FAIL:-}" ] && exit 1; jq -n --arg b "$ISSUE_BODY" --arg l "$ISSUE_LABELS" '{body:$b,labels:($l|split(",")|map(select(.!="")|{name:.}))}' ;;
 esac
 STUB
@@ -56,6 +56,10 @@ ISSUE_FAIL=""
 
 PR_BODY=$'short\nCloses #7' ISSUE_LABELS="" ISSUE_BODY=$noDone
 t 0 "existing short-body warning still passes" "::warning::.*little or no description"
+
+export PR_AUTHOR=lane-bot; ISSUE_BODY=$withDone ISSUE_LABELS="risk" PR_BODY=$longBody
+t 0 "a harness PR missing DONE-WHEN and Coverage warns and passes" "::warning::.*DONE-WHEN"
+PR_AUTHOR=""
 
 [ "$fail" = 0 ] && echo "pr-shape tests ok"
 exit $fail
