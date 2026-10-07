@@ -4,12 +4,8 @@ import {
   writeDocumentAtomically,
   type SchemaSpec,
 } from '@shared/files/durableDocument';
-import {
-  createFileStoreSlot,
-  defaultFileStore,
-  type FileStore,
-  type StoredDirectory,
-} from '@shared/files/fileStore';
+import { defaultFileStore } from '@shared/files/defaultFileStore';
+import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
 
 import type { OutboxEntry } from './outbox';
 import type { DiscoveryEventType } from './recordEvent';

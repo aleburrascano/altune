@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-import { defaultFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
+import { defaultFileStore } from '@shared/files/defaultFileStore';
+import type { FileStore, StoredFile } from '@shared/files/fileStore';
 
 import type { ColorScheme } from './theme';
 

@@ -1,7 +1,4 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import { Platform } from 'react-native';
-
-import { webFileStore } from './webFileStore';
 
 export type StoredFile = {
   readonly uri: string;
@@ -76,8 +73,6 @@ export const deviceFileStore: FileStore = {
     }).then((file) => file.uri),
   availableBytes: () => Paths.availableDiskSpace,
 };
-
-export const defaultFileStore: FileStore = Platform.OS === 'web' ? webFileStore : deviceFileStore;
 
 export type FileStoreSlot = {
   get(): FileStore;
