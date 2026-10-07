@@ -9,7 +9,9 @@ const OWNERS = {
       'removeTracksFromPlaylist',
     ],
   },
-  'src/shared/favorites/useFavorites.ts': { favorites: ['addFavorite', 'removeFavorite'] },
+  'src/shared/favorites/adapters/http/httpFavoritesPort.ts': {
+    favorites: ['addFavorite', 'removeFavorite'],
+  },
   'src/features/settings/hooks/useSubmitReport.ts': { feedback: ['submitReport'] },
   'src/features/detail/hooks/useSaveTrack.ts': { tracks: ['createTrack'] },
   'src/shared/acquisition/useRetryAcquisition.ts': { tracks: ['retryAcquisition'] },
