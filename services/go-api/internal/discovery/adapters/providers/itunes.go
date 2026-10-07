@@ -49,11 +49,8 @@ func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domai
 	entity := itunesEntity(kind)
 	u := fmt.Sprintf(itunesAPIBaseURL+"/search?term=%s&entity=%s&country=US&limit=200", url.QueryEscape(query), entity)
 
-	if err := a.limiter.wait(ctx); err != nil {
-		return nil, err
-	}
 	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -171,4 +168,11 @@ type itunesItem struct {
 	PrimaryGenreName  string `json:"primaryGenreName"`
 	Copyright         string `json:"copyright"`
 	TrackExplicitness string `json:"trackExplicitness"`
+}
+
+func (a *ITunesAdapter) getJSON(ctx context.Context, u string, dst any) error {
+	if err := a.limiter.wait(ctx); err != nil {
+		return err
+	}
+	return getJSON(ctx, a.client, u, dst, withHeader("User-Agent", itunesUserAgent))
 }
