@@ -12,7 +12,7 @@ const OWNERS = {
   'src/shared/favorites/useFavorites.ts': { favorites: ['addFavorite', 'removeFavorite'] },
   'src/features/settings/hooks/useSubmitReport.ts': { feedback: ['submitReport'] },
   'src/features/detail/hooks/useSaveTrack.ts': { tracks: ['createTrack'] },
-  'src/shared/acquisition/useRetryAcquisition.ts': { tracks: ['retryAcquisition'] },
+  'src/shared/acquisition/adapters/http/httpAcquisitionPort.ts': { tracks: ['retryAcquisition'] },
   'src/features/library/adapters/http/httpLibraryPort.ts': {
     tracks: ['deleteTrack', 'reacquireTrack'],
   },

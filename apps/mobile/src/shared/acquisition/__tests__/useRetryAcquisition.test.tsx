@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
-import { ApiError } from '@shared/errors';
+import type { ApiError } from '@shared/errors';
 
 import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
