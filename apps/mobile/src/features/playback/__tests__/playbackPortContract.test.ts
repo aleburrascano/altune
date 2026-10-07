@@ -40,7 +40,10 @@ function queueState(trackIds: string[]): QueueStateResponse {
 function servePlaybackOverHttp({ prefetchEnabled = true }: PlaybackWorld): PlaybackPort {
   let saved: unknown;
   global.fetch = ((url: string, init?: RequestInit) => {
-    const path = String(url).replace(/^[a-z]+:\/\/[^/]+/, '').split('?')[0] ?? '';
+    const path =
+      String(url)
+        .replace(/^[a-z]+:\/\/[^/]+/, '')
+        .split('?')[0] ?? '';
     const method = String(init?.method ?? 'GET').toUpperCase();
     if (method === 'POST' && path === AUDIO_URLS_PATH) {
       __http.replyOnce(`POST ${path}`, {
