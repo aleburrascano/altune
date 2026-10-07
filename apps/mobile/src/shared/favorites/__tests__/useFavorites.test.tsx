@@ -4,31 +4,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useFavorites } from '../useFavorites';
-import {
-  addFavorite,
-  listFavorites,
-  removeFavorite,
-  type FavoritesResponse,
-  type FavoriteTarget,
-} from '@shared/api-client/favorites';
+import type { FavoritesResponse, FavoriteTarget } from '@shared/api-client/favorites';
 import { asFavoriteKey } from '@shared/api-client/ids';
+import { FavoritesPortProvider } from '@shared/favorites';
+import { createMemoryFavoritesPort } from '@shared/favorites/__tests__/memoryFavoritesPort';
+import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
 import { discoveryKeys } from '@shared/lib/query-keys';
 
-jest.mock('@shared/api-client/favorites', () => ({
-  addFavorite: jest.fn(),
-  listFavorites: jest.fn(),
-  removeFavorite: jest.fn(),
-}));
-
-const mockedAdd = addFavorite as jest.Mock;
-const mockedList = listFavorites as jest.Mock;
-const mockedRemove = removeFavorite as jest.Mock;
+let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;
+let mockedList: jest.MockedFunction<FavoritesPort['listFavorites']>;
+let mockedRemove: jest.MockedFunction<FavoritesPort['removeFavorite']>;
+let port: FavoritesPort;
 
 let alertSpy: jest.SpyInstance;
 beforeEach(() => {
-  mockedAdd.mockReset();
-  mockedList.mockReset();
-  mockedRemove.mockReset();
+  const memory = createMemoryFavoritesPort();
+  mockedAdd = jest.fn(memory.addFavorite);
+  mockedList = jest.fn(memory.listFavorites);
+  mockedRemove = jest.fn(memory.removeFavorite);
+  port = { addFavorite: mockedAdd, listFavorites: mockedList, removeFavorite: mockedRemove };
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -49,6 +43,8 @@ const saved: FavoritesResponse = {
   total: 1,
 };
 
+const addedFavorite = saved.items[0]!;
+
 function newClient(): QueryClient {
   return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -57,7 +53,11 @@ function newClient(): QueryClient {
 
 function wrapperFor(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <FavoritesPortProvider port={port}>{children}</FavoritesPortProvider>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -78,7 +78,7 @@ async function flush(times = 8): Promise<void> {
 describe('useFavorites(): optimistic toggle', () => {
   it('prepends the target to the favorites cache mid-flight when it was not saved', async () => {
     const pending = deferred<void>();
-    mockedAdd.mockReturnValue(pending.promise);
+    mockedAdd.mockReturnValue(pending.promise.then(() => addedFavorite));
     mockedList.mockResolvedValue({ items: [], total: 0 });
     const queryClient = newClient();
     queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
@@ -128,7 +128,7 @@ describe('useFavorites(): optimistic toggle', () => {
 
   it('writes the optimistic entry even against a cold cache (no guard on an empty snapshot)', async () => {
     const pending = deferred<void>();
-    mockedAdd.mockReturnValue(pending.promise);
+    mockedAdd.mockReturnValue(pending.promise.then(() => addedFavorite));
     mockedList.mockReturnValue(new Promise(() => {}));
     const queryClient = newClient();
 
@@ -193,7 +193,7 @@ describe('useFavorites(): optimistic toggle', () => {
 
   it('does not cancel an in-flight favorites fetch before writing optimistically', async () => {
     const pending = deferred<void>();
-    mockedAdd.mockReturnValue(pending.promise);
+    mockedAdd.mockReturnValue(pending.promise.then(() => addedFavorite));
     mockedList.mockReturnValue(new Promise(() => {}));
     const queryClient = newClient();
     queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
@@ -213,7 +213,7 @@ describe('useFavorites(): optimistic toggle', () => {
   it('toggles back on a second tap before re-render instead of duplicating the entry', async () => {
     const pendingAdd = deferred<void>();
     const pendingRemove = deferred<void>();
-    mockedAdd.mockReturnValue(pendingAdd.promise);
+    mockedAdd.mockReturnValue(pendingAdd.promise.then(() => addedFavorite));
     mockedRemove.mockReturnValue(pendingRemove.promise);
     mockedList.mockReturnValue(new Promise(() => {}));
     const queryClient = newClient();

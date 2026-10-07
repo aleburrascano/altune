@@ -1,12 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  addFavorite,
-  listFavorites,
-  removeFavorite,
-  type FavoritesResponse,
-  type FavoriteTarget,
-} from '@shared/api-client/favorites';
+import type { FavoritesResponse, FavoriteTarget } from '@shared/api-client/favorites';
+import { useFavoritesPort } from '@shared/favorites/ports/FavoritesPortProvider';
+import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
@@ -24,9 +20,10 @@ function entryKey(kind: string, key: string): string {
 
 export function useFavorites(): FavoritesApi {
   const queryClient = useQueryClient();
+  const port = useFavoritesPort();
   const { data } = useQuery({
     queryKey: discoveryKeys.favorites,
-    queryFn: listFavorites,
+    queryFn: () => port.listFavorites(),
     staleTime: Infinity,
   });
 
@@ -38,7 +35,7 @@ export function useFavorites(): FavoritesApi {
     action: 'favorites.toggle',
     queryKey: discoveryKeys.favorites,
     unguarded: true,
-    mutationFn: sendToggle,
+    mutationFn: (request: ToggleRequest) => sendToggle(port, request),
     applyOptimistic: (previous: FavoritesResponse | undefined, { target, wasFavorite }) =>
       patched(previous, target, wasFavorite),
     alertOnError: () => ({
@@ -58,9 +55,12 @@ export function useFavorites(): FavoritesApi {
   return { isFavorite, toggle };
 }
 
-async function sendToggle({ target, wasFavorite }: ToggleRequest): Promise<void> {
+async function sendToggle(
+  port: FavoritesPort,
+  { target, wasFavorite }: ToggleRequest,
+): Promise<void> {
   const { kind, title, subtitle, image_url } = target;
-  const send = wasFavorite ? removeFavorite : addFavorite;
+  const send = wasFavorite ? port.removeFavorite : port.addFavorite;
   await send({ kind, title, subtitle, image_url });
 }
 
