@@ -60,18 +60,20 @@ function rollBackInSameSession(port: PlaylistsPort, { playlist, epoch }: Created
   return isSameSession(epoch) ? rollBackCreatedPlaylist(port, playlist) : leftInPlace(playlist);
 }
 
+async function addCreatedTracks(
+  port: PlaylistsPort,
+  { playlist, trackIds }: CreatedInSession,
+): Promise<CreateWithTracksResult> {
+  const { added } = await port.addTracksToPlaylist(playlist.id, { track_ids: trackIds });
+  return { playlist, added, addFailed: false };
+}
+
 async function fillCreatedPlaylist(
   port: PlaylistsPort,
   created: CreatedInSession,
 ): Promise<CreateWithTracksResult> {
-  const { playlist, trackIds, epoch } = created;
-  if (!isSameSession(epoch)) return leftInPlace(playlist);
-  try {
-    const { added } = await port.addTracksToPlaylist(playlist.id, { track_ids: trackIds });
-    return { playlist, added, addFailed: false };
-  } catch {
-    return rollBackInSameSession(port, created);
-  }
+  if (!isSameSession(created.epoch)) return leftInPlace(created.playlist);
+  return addCreatedTracks(port, created).catch(() => rollBackInSameSession(port, created));
 }
 
 async function createWithTracks(
