@@ -1,10 +1,6 @@
 import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
 import { defaultFileStore } from '@shared/files/defaultFileStore';
-import {
-  createFileStoreSlot,
-  type FileStore,
-  type StoredDirectory,
-} from '@shared/files/fileStore';
+import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
 
 export type KillSwitchLoop =
   'serverEvents' | 'telemetryFlush' | 'offlineDownloads' | 'detailEnrichment' | 'discovery';
