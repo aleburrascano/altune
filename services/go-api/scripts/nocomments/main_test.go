@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -741,5 +742,27 @@ func TestCheckAndStripCountTwoCommentsOnOneLineTheSame(t *testing.T) {
 
 	if !strings.Contains(checkOut.String(), "comment violations: 1\n") || !strings.Contains(stripOut.String(), "stripped 1 comments in 1 files") {
 		t.Fatalf("check:\n%s\nstrip:\n%s", checkOut.String(), stripOut.String())
+	}
+}
+
+type maskedEntry struct{ fs.DirEntry }
+
+func (maskedEntry) IsDir() bool { return false }
+
+func (maskedEntry) Type() fs.FileMode { return 0 }
+
+func (maskedEntry) Info() (fs.FileInfo, error) { return deviceInfo{}, nil }
+
+type deviceInfo struct{ fs.FileInfo }
+
+func (deviceInfo) Mode() fs.FileMode { return fs.ModeDevice | fs.ModeCharDevice }
+
+func TestWalkSkipsAFileMaskedByADeviceMount(t *testing.T) {
+	var targets []target
+	if err := walkTarget("/repo/.bash_profile", maskedEntry{}, nil, &targets); err != nil {
+		t.Fatalf("walkTarget: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Fatalf("targets = %v, want none", targets)
 	}
 }
