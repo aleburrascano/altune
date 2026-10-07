@@ -3,6 +3,7 @@ package cache
 import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -590,5 +591,73 @@ func assertIndexed(t *testing.T, client *goredis.Client, norm, term string, want
 	}
 	if got, _ := client.SIsMember(ctx, vocabMetaPrefix+"QATRIM", norm).Result(); got != want {
 		t.Errorf("%s in metaphone set = %v, want %v", norm, got, want)
+	}
+}
+
+func vocabStoredPopularity(t *testing.T, client *goredis.Client, norm string, member string) (float64, int64) {
+	t.Helper()
+	ctx := context.Background()
+	score, err := client.ZScore(ctx, vocabTermsKey, member).Result()
+	if err != nil {
+		t.Fatalf("ZScore: %v", err)
+	}
+	raw, err := client.Get(ctx, vocabEntryPfx+norm).Bytes()
+	if err != nil {
+		t.Fatalf("Get entry: %v", err)
+	}
+	var data vocabEntryData
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("unmarshal entry: %v", err)
+	}
+	return score, data.Popularity
+}
+
+func TestVocabularyStore_Add_DoesNotLowerChartPopularity(t *testing.T) {
+	client := testRedisClient(t)
+	store := NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	vocabCleanKeys(t, "popguard")
+	member := encodeMember("popguard", "PopGuard", "artist")
+	client.ZRem(ctx, vocabTermsKey, member)
+	t.Cleanup(func() { client.ZRem(ctx, vocabTermsKey, member) })
+
+	chart := domain.VocabularyEntry{Term: "PopGuard", Kind: "artist", Popularity: 500}
+	if err := store.BulkAdd(ctx, []domain.VocabularyEntry{chart}); err != nil {
+		t.Fatalf("BulkAdd: %v", err)
+	}
+	searched := domain.VocabularyEntry{Term: "PopGuard", Kind: "artist", Popularity: 0}
+	if err := store.Add(ctx, searched); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	score, pop := vocabStoredPopularity(t, client, "popguard", member)
+	if score != 500 || pop != 500 {
+		t.Errorf("after Add: score=%v entry popularity=%d, want 500/500", score, pop)
+	}
+
+	chart.Popularity = 100
+	if err := store.BulkAdd(ctx, []domain.VocabularyEntry{chart}); err != nil {
+		t.Fatalf("BulkAdd lower: %v", err)
+	}
+	score, pop = vocabStoredPopularity(t, client, "popguard", member)
+	if score != 100 || pop != 100 {
+		t.Errorf("after lower BulkAdd: score=%v entry popularity=%d, want 100/100", score, pop)
+	}
+}
+
+func TestVocabularyStore_Add_NewMemberWithZeroPopularityIsAdded(t *testing.T) {
+	client := testRedisClient(t)
+	store := NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	vocabCleanKeys(t, "zeropop")
+	member := encodeMember("zeropop", "ZeroPop", "artist")
+	client.ZRem(ctx, vocabTermsKey, member)
+	t.Cleanup(func() { client.ZRem(ctx, vocabTermsKey, member) })
+
+	if err := store.Add(ctx, domain.VocabularyEntry{Term: "ZeroPop", Kind: "artist"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	score, pop := vocabStoredPopularity(t, client, "zeropop", member)
+	if score != 0 || pop != 0 {
+		t.Errorf("score=%v entry popularity=%d, want 0/0", score, pop)
 	}
 }

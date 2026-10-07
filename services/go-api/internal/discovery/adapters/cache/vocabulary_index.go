@@ -25,7 +25,7 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 	for _, e := range entries {
 		norm := s.buildNorm(e)
 		if domain.IsIndexableVocabularyTerm(e.Term, norm) {
-			addEntryToPipeline(pipe, ctx, norm, e, s.metaphone)
+			addEntryToPipeline(pipe, ctx, norm, e, s.metaphone, false)
 		}
 	}
 	if pipe.Len() == 0 {
@@ -44,7 +44,7 @@ func (s *RedisVocabularyStore) indexEntry(
 		return nil
 	}
 	pipe := s.client.Pipeline()
-	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone)
+	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone, true)
 	_, err := pipe.Exec(ctx)
 	return err
 }
@@ -55,19 +55,26 @@ func addEntryToPipeline(
 	norm string,
 	entry domain.VocabularyEntry,
 	metaphone MetaphoneFunc,
+	keepHigherPopularity bool,
 ) {
 	member := encodeMember(norm, entry.Term, string(entry.Kind))
-	pipe.ZAdd(ctx, vocabTermsKey, goredis.Z{
-		Score:  float64(entry.Popularity),
-		Member: member,
-	})
+	score := goredis.Z{Score: float64(entry.Popularity), Member: member}
+	if keepHigherPopularity {
+		pipe.ZAddGT(ctx, vocabTermsKey, score)
+	} else {
+		pipe.ZAdd(ctx, vocabTermsKey, score)
+	}
 	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
 	entryJSON, _ := json.Marshal(vocabEntryData{
 		Term:       entry.Term,
 		Kind:       string(entry.Kind),
 		Popularity: entry.Popularity,
 	})
-	pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
+	if keepHigherPopularity {
+		pipe.SetNX(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
+	} else {
+		pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
+	}
 	for _, tri := range trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
 	}
