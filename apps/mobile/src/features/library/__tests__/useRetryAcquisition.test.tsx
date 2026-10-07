@@ -28,11 +28,13 @@ import {
 const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
-jest.mock('@shared/api-client/tracks', () => ({
-  deleteTrack: (id: TrackId, signal?: AbortSignal) => mockDeleteTrack(id, signal),
-  retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
-  reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
-}));
+const ports = {
+  library: {
+    deleteTrack: mockDeleteTrack,
+    reacquireTrack: mockReacquireTrack,
+  },
+  acquisition: { retryAcquisition: mockRetryAcquisition },
+};
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueueCritical>;
@@ -63,7 +65,7 @@ afterEach(() => {
 
 describe('useRetryAcquisition — a failed retry does not strand the track in fake pending', () => {
   it('restores the prior failed status and failure reason in every cache', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const failed = track('t1', { acquisition_status: 'failed', failure_reason: 'no source' });
     queryClient.setQueryData(TRACKS_KEY, { pages: [page([failed])], pageParams: [0] });
     queryClient.setQueryData(PLAYLIST_KEY, playlist([failed]));
@@ -91,7 +93,7 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
   });
 
   it('clears the failure text while pending and restores all of it on rollback (#933)', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const failed = track('t1', {
       acquisition_status: 'failed',
       failure_reason: 'no source',
@@ -119,7 +121,7 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
   });
 
   it('does not overwrite a status a server event already moved past pending', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(
       PLAYLIST_KEY,
       playlist([track('t1', { acquisition_status: 'failed' })]),
@@ -143,7 +145,7 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
   });
 
   it('logs the failure with the track id and endpoint, and alerts with the shared tail', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const error = new ApiError(500, 'internal');
     mockRetryAcquisition.mockRejectedValue(error);
 
@@ -168,7 +170,7 @@ describe('track mutation hooks — respond to the failure class, not one generic
   const vanished = ['Track not found', 'This track is no longer in your library.'] as const;
 
   it('a retry answered 404 drops the vanished track instead of restoring it as failed', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('t1', { acquisition_status: 'failed' }), track('t2')])],
       pageParams: [0],
@@ -188,7 +190,7 @@ describe('track mutation hooks — respond to the failure class, not one generic
   });
 
   it('a retry refused for auth asks to sign in instead of a plain retry', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockRetryAcquisition.mockRejectedValue(new ApiError(401, 'unauthorized'));
 
     const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
@@ -204,7 +206,7 @@ describe('track mutation hooks — respond to the failure class, not one generic
 
 describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {
   it("useRetryAcquisition: a retry failing after sign-out rolls nothing back into user B's cache and does not alert", async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(
       TRACKS_KEY,
       libraryOf([track('a1', { acquisition_status: 'failed' })]),
@@ -231,7 +233,7 @@ describe('useRetryAcquisition — retry_tapped and retry_request telemetry', () 
   });
 
   it('records retry_tapped with the given entry point, then a sent and succeeded retry_request', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockRetryAcquisition.mockResolvedValue(undefined);
     const { result } = renderHook(() => useRetryAcquisition('album_row'), { wrapper });
 
@@ -248,7 +250,7 @@ describe('useRetryAcquisition — retry_tapped and retry_request telemetry', () 
   });
 
   it('has no entry point in the payload when none is given', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockRetryAcquisition.mockResolvedValue(undefined);
     const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
 
@@ -259,7 +261,7 @@ describe('useRetryAcquisition — retry_tapped and retry_request telemetry', () 
   });
 
   it('records a failed retry_request with the status once the request rejects', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const { ApiError } = jest.requireActual('@shared/errors');
     mockRetryAcquisition.mockRejectedValue(new ApiError(500, 'internal'));
     const { result } = renderHook(() => useRetryAcquisition('detail'), { wrapper });
@@ -280,7 +282,7 @@ describe('useRetryAcquisition — retry_tapped and retry_request telemetry', () 
   });
 
   it('records a skipped retry_request for a second tap while the first is still in flight', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockRetryAcquisition.mockReturnValue(new Promise(() => undefined));
     const { result } = renderHook(() => useRetryAcquisition('library_row'), { wrapper });
 
@@ -307,7 +309,7 @@ describe('useRetryAcquisition — retry_tapped and retry_request telemetry', () 
   });
 
   it('records a skipped retry_request for an unsafe id without ever sending the request', () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const { result } = renderHook(() => useRetryAcquisition('playlist'), { wrapper });
     const unsafeId = '../etc/passwd' as unknown as TrackId;
 

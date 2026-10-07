@@ -6,7 +6,6 @@ import { ApiError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import type * as ForgetTrackModule from '@shared/events/forgetTrack';
@@ -39,11 +38,13 @@ import {
 const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
-jest.mock('@shared/api-client/tracks', () => ({
-  deleteTrack: (id: TrackId, signal?: AbortSignal) => mockDeleteTrack(id, signal),
-  retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
-  reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
-}));
+const ports = {
+  library: {
+    deleteTrack: mockDeleteTrack,
+    reacquireTrack: mockReacquireTrack,
+  },
+  acquisition: { retryAcquisition: mockRetryAcquisition },
+};
 
 const actualForgetTrack = jest.requireActual<typeof ForgetTrackModule>(
   '@shared/events/forgetTrack',
@@ -76,7 +77,7 @@ afterEach(() => {
 
 describe('useDeleteTracks — derived caches', () => {
   it('invalidates the membership-derived caches once when any track was deleted (#938)', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockImplementation((id) =>
       id === 'a' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
@@ -90,7 +91,7 @@ describe('useDeleteTracks — derived caches', () => {
   });
 
   it('invalidates nothing when no track was deleted', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
 
@@ -104,7 +105,7 @@ describe('useDeleteTracks — derived caches', () => {
 
 describe('useDeleteTracks — each failed item keeps its cause', () => {
   it('reports every failure with its own error and removes only the successes', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('a'), track('b'), track('c')])],
       pageParams: [0],
@@ -156,7 +157,7 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
   const ids = (n: number): TrackId[] => Array.from({ length: n }, (_, i) => asTrackId(`t${i}`));
 
   it('sends a bounded batch of deletes in parallel instead of one at a time', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockDeleteTrack.mockReturnValue(new Promise(() => undefined));
 
     const { result } = renderHook(() => useDeleteTracks(), { wrapper });
@@ -170,7 +171,7 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
   it('stops sending once the aggregate deadline passes and reports the rest as not removed', async () => {
     jest.useFakeTimers();
     try {
-      const { wrapper } = setup();
+      const { wrapper } = setup(ports);
       mockDeleteTrack.mockImplementation(
         () =>
           new Promise((_, reject) =>
@@ -202,7 +203,7 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
   });
 
   it('sends nothing more and shows no alert once the owning screen unmounts', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('t0'), track('t1'), track('t9')])],
       pageParams: [0],
@@ -229,7 +230,7 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
   });
 
   it('cancels no delete already in flight at unmount, and waits for each to settle', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const pending: (() => void)[] = [];
     mockDeleteTrack.mockImplementation(() => new Promise<void>((resolve) => pending.push(resolve)));
     const settled = jest.fn();
@@ -256,7 +257,7 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
 
 describe('track mutation hooks — respond to the failure class, not one generic path', () => {
   it('a bulk delete counts tracks already gone (404) as deleted, not as failures', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('a'), track('b'), track('c')])],
       pageParams: [0],
@@ -282,7 +283,7 @@ describe('deleting a pinned track removes its download entry', () => {
     });
 
   it('drops the entries of bulk-deleted tracks only', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     seedPinned('a');
     usePinnedStore.setState((s) => ({
       entries: {
@@ -302,7 +303,7 @@ describe('deleting a pinned track removes its download entry', () => {
 
 describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {
   it('useDeleteTracks: a bulk delete stops sending once its user signs out and reports nothing to the next', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'].map(asTrackId);
     const requests = ids.map(() => deferred());
     mockDeleteTrack.mockImplementation((id) => requests[ids.indexOf(id)]!.promise);
@@ -327,7 +328,7 @@ describe('track mutations that settle after sign-out leave the next user untouch
 
 describe('useDeleteTracks — a cleanup throw is not silent (#2763)', () => {
   it('logs the cleanup failure and re-syncs instead of rejecting when onDeleted throws', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockResolvedValue(undefined);
     mockForgetTrack.mockImplementation((queryClient, trackId) => {
@@ -370,7 +371,7 @@ describe('useDeleteTracks — local cleanup failure never loses a deleted track 
     }));
 
   it('succeeds, cleans the other tracks, and re-syncs every track cache family', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('a'), track('b'), track('c')])],
       pageParams: [0],
@@ -399,7 +400,7 @@ describe('useDeleteTracks — local cleanup failure never loses a deleted track 
   });
 
   it('invalidates only the derived keys when no cleanup threw', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockResolvedValue(undefined);
 
@@ -411,7 +412,7 @@ describe('useDeleteTracks — local cleanup failure never loses a deleted track 
   });
 
   it('skips cleanup and re-sync for a run whose user signed out before the delete returned', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     const request = deferred();
     mockDeleteTrack.mockImplementation(() => request.promise);
@@ -435,7 +436,7 @@ describe('useDeleteTracks — local cleanup failure never loses a deleted track 
 
 describe('useDeleteTracks — re-sync gate after a live cleanup throw then sign-out', () => {
   it('does not re-sync track caches when a cleanup threw and the user then signed out', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     const held = deferred();
     mockDeleteTrack.mockImplementation((id) => (id === 'a1' ? Promise.resolve() : held.promise));
@@ -463,7 +464,7 @@ describe('useDeleteTracks — re-sync gate after a live cleanup throw then sign-
 
 describe('useDeleteTracks — partial failure alert uses the classified tail', () => {
   const runWithFailures = async (errors: Record<string, ApiError>) => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockDeleteTrack.mockImplementation((id) =>
       errors[id] ? Promise.reject(errors[id]) : Promise.resolve(),
     );
@@ -494,7 +495,7 @@ describe('useDeleteTracks — partial failure alert uses the classified tail', (
 
 describe('useDeleteTracks — a failed run names the affected tracks', () => {
   it('logs the first 20 ids of 25 and invalidates the tracks list', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockResolvedValue(undefined);
     alertSpy.mockImplementationOnce(() => {
@@ -519,9 +520,9 @@ describe('useDeleteTracks — a failed run names the affected tracks', () => {
   it('deleteOne sends one delete request for the track', async () => {
     mockDeleteTrack.mockResolvedValue(undefined);
 
-    await deleteOne(httpLibraryPort, asTrackId('t9'));
+    await deleteOne({ ...createMemoryLibraryPort(), ...ports.library }, asTrackId('t9'));
 
-    expect(mockDeleteTrack).toHaveBeenCalledWith('t9', undefined);
+    expect(mockDeleteTrack).toHaveBeenCalledWith('t9');
   });
 });
 
@@ -542,7 +543,7 @@ describe('useDeleteTracks — deletes through the library port it is given (#113
   }
 
   it('removes the selected tracks from the provided port and never calls the HTTP client', async () => {
-    const { queryClient } = setup();
+    const { queryClient } = setup(ports);
     const port = createMemoryLibraryPort({ tracks: [track('a'), track('b'), track('c')] });
     queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a'), track('b'), track('c')]));
 
@@ -559,7 +560,7 @@ describe('useDeleteTracks — deletes through the library port it is given (#113
   });
 
   it('counts a track the port no longer has (404) as deleted, not as a failure', async () => {
-    const { queryClient } = setup();
+    const { queryClient } = setup(ports);
     const port = createMemoryLibraryPort({ tracks: [track('a'), track('b')] });
     queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a'), track('b'), track('ghost')]));
 
@@ -576,7 +577,7 @@ describe('useDeleteTracks — deletes through the library port it is given (#113
   });
 
   it('reports a delete the port refuses as a failure with its own error and keeps that track', async () => {
-    const { queryClient } = setup();
+    const { queryClient } = setup(ports);
     const memory = createMemoryLibraryPort({ tracks: [track('a'), track('b')] });
     const refusal = new ApiError(500, 'boom');
     const port: LibraryPort = {

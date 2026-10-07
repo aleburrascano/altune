@@ -37,11 +37,13 @@ import {
 const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
-jest.mock('@shared/api-client/tracks', () => ({
-  deleteTrack: (id: TrackId, signal?: AbortSignal) => mockDeleteTrack(id, signal),
-  retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
-  reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
-}));
+const ports = {
+  library: {
+    deleteTrack: mockDeleteTrack,
+    reacquireTrack: mockReacquireTrack,
+  },
+  acquisition: { retryAcquisition: mockRetryAcquisition },
+};
 jest.mock('@shared/telemetry/userTelemetry', () => ({
   recordUserAction: jest.fn(),
   recordFailureShown: jest.fn(),
@@ -67,7 +69,7 @@ afterEach(() => {
 
 describe('useDeleteTrack — a failed delete puts the track back', () => {
   it('re-inserts the track at its original position in every cache it was removed from', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const target = track('t2');
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('t1'), target, track('t3')], 10)],
@@ -105,7 +107,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
   });
 
   it('logs the failure with the track id and endpoint', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     const error = new Error('Network request failed');
     mockDeleteTrack.mockRejectedValue(error);
 
@@ -125,7 +127,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
   });
 
   it('leaves the track removed when the delete succeeds', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('t1'), track('t2')])],
       pageParams: [0],
@@ -141,7 +143,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
   });
 
   it('records the delete as a library.delete_track user action with the track id', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     mockDeleteTrack.mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useDeleteTrack(), { wrapper });
@@ -156,7 +158,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
   });
 
   it('marks the membership-derived caches stale once the delete lands (#938)', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockResolvedValue(undefined);
 
@@ -168,7 +170,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
   });
 
   it('invalidates nothing when the delete fails and the track is restored', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
 
@@ -182,7 +184,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
 
 describe('track mutation hooks — respond to the failure class, not one generic path', () => {
   it('a delete answered 404 keeps the track removed and shows no failure', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('t1'), track('t2')])],
       pageParams: [0],
@@ -199,7 +201,7 @@ describe('track mutation hooks — respond to the failure class, not one generic
   });
 
   it('a delete refused for auth rolls back and asks to sign in, unlike a server error', async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, {
       pages: [page([track('t1'), track('t2')])],
       pageParams: [0],
@@ -229,7 +231,7 @@ describe('deleting a pinned track removes its download entry', () => {
     });
 
   it('drops the entry after a single delete succeeds', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     seedPinned('t1');
     mockDeleteTrack.mockResolvedValue(undefined);
     const { result } = renderHook(() => useDeleteTrack(), { wrapper });
@@ -239,7 +241,7 @@ describe('deleting a pinned track removes its download entry', () => {
   });
 
   it('drops the entry when the server says the track is already gone', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     seedPinned('t1');
     mockDeleteTrack.mockRejectedValue(new ApiError(404, 'not found'));
     const { result } = renderHook(() => useDeleteTrack(), { wrapper });
@@ -249,7 +251,7 @@ describe('deleting a pinned track removes its download entry', () => {
   });
 
   it('leaves the entry as it was when the delete fails', async () => {
-    const { wrapper } = setup();
+    const { wrapper } = setup(ports);
     seedPinned('t1');
     mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
     const { result } = renderHook(() => useDeleteTrack(), { wrapper });
@@ -261,7 +263,7 @@ describe('deleting a pinned track removes its download entry', () => {
 
 describe('track mutations that settle after sign-out leave the next user untouched (#2729)', () => {
   it("useDeleteTrack: a delete failing after sign-out restores nothing into user B's library, status store or alerts", async () => {
-    const { queryClient, wrapper } = setup();
+    const { queryClient, wrapper } = setup(ports);
     queryClient.setQueryData(TRACKS_KEY, libraryOf([track('a1'), track('a2')]));
     useTrackStatusStore.getState().patch(asTrackId('a1'), READY);
     const request = deferred();
@@ -297,7 +299,7 @@ describe('useDeleteTrack — deletes through the library port it is given (#1132
   }
 
   it('removes the track from the provided port and never calls the HTTP client', async () => {
-    const { queryClient } = setup();
+    const { queryClient } = setup(ports);
     const port = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
     queryClient.setQueryData(TRACKS_KEY, libraryOf([track('t1'), track('t2')]));
 
@@ -313,7 +315,7 @@ describe('useDeleteTrack — deletes through the library port it is given (#1132
   });
 
   it('keeps a track the port no longer has (404) removed and shows no failure', async () => {
-    const { queryClient } = setup();
+    const { queryClient } = setup(ports);
     const port = createMemoryLibraryPort({ tracks: [track('t1')] });
     queryClient.setQueryData(TRACKS_KEY, libraryOf([track('t1'), track('t2')]));
 
@@ -329,7 +331,7 @@ describe('useDeleteTrack — deletes through the library port it is given (#1132
   });
 
   it('puts the track back and alerts when the port refuses the delete', async () => {
-    const { queryClient } = setup();
+    const { queryClient } = setup(ports);
     const memory = createMemoryLibraryPort({ tracks: [track('t1'), track('t2')] });
     const port: LibraryPort = {
       ...memory,
