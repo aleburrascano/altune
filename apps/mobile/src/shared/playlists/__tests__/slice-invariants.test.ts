@@ -58,6 +58,10 @@ function namedValueImportsFrom(source: string, moduleSpecifier: string): string[
   return names;
 }
 
+function importsApiClientPlaylists(source: string): boolean {
+  return importSpecifiers(source, false).includes('@shared/api-client/playlists');
+}
+
 function exportedFunctionNames(source: string): string[] {
   const names: string[] = [];
   for (const match of source.matchAll(/export function (\w+)/g)) names.push(match[1]!);
@@ -81,8 +85,11 @@ describe('sanity: this suite is actually scanning the real slice', () => {
     expect(names).toEqual([
       'AddToPlaylistSheet.tsx',
       'CreatePlaylistModal.tsx',
+      'PlaylistsPortProvider.tsx',
+      'httpPlaylistsPort.ts',
       'index.ts',
       'mutations.ts',
+      'playlistsPort.ts',
       'useSingleFlightAction.ts',
     ]);
   });
@@ -213,6 +220,7 @@ describe('rule 4 — components never call playlist write functions directly; on
     expect(componentFiles.map((file) => path.basename(file)).sort()).toEqual([
       'AddToPlaylistSheet.tsx',
       'CreatePlaylistModal.tsx',
+      'PlaylistsPortProvider.tsx',
     ]);
   });
 
@@ -229,11 +237,23 @@ describe('rule 4 — components never call playlist write functions directly; on
     expect(offenders).toEqual([]);
   });
 
-  it('AddToPlaylistSheet is allowed to call the read function getPlaylists, and only that one', () => {
-    const sheetSource = fs.readFileSync(path.join(SLICE_DIR, 'AddToPlaylistSheet.tsx'), 'utf8');
-    expect(namedValueImportsFrom(sheetSource, '@shared/api-client/playlists')).toEqual([
-      'getPlaylists',
-    ]);
+  it('no slice file outside adapters/ value-imports from @shared/api-client/playlists', () => {
+    const offenders = listSourceFiles(SLICE_DIR)
+      .filter((file) => !file.includes(`${path.sep}adapters${path.sep}`))
+      .filter((file) => importsApiClientPlaylists(fs.readFileSync(file, 'utf8')))
+      .map((file) => path.basename(file));
+    expect(offenders).toEqual([]);
+  });
+
+  it('the api-client detector flags a value import and allows a type-only import from api-client/types', () => {
+    expect(
+      importsApiClientPlaylists("import { getPlaylists } from '@shared/api-client/playlists';"),
+    ).toBe(true);
+    expect(
+      importsApiClientPlaylists(
+        "import type { PlaylistResponse } from '@shared/api-client/types';",
+      ),
+    ).toBe(false);
   });
 
   it('the writer-import detector fires when a component imports createPlaylist directly', () => {
@@ -320,8 +340,11 @@ describe('rule 6 — the banned noun never appears in this slice', () => {
     expect(sliceFiles.map(({ file }) => path.basename(file)).sort()).toEqual([
       'AddToPlaylistSheet.tsx',
       'CreatePlaylistModal.tsx',
+      'PlaylistsPortProvider.tsx',
+      'httpPlaylistsPort.ts',
       'index.ts',
       'mutations.ts',
+      'playlistsPort.ts',
       'useSingleFlightAction.ts',
     ]);
   });
@@ -355,16 +378,20 @@ describe('rule 5b — the barrel is executable, not just textually correct', () 
     expect(exported).toEqual([
       'AddToPlaylistSheet',
       'CreatePlaylistModal',
+      'PlaylistsPortProvider',
+      'httpPlaylistsPort',
       'useAddTracksToPlaylist',
       'useCreatePlaylist',
       'useCreatePlaylistWithTracks',
       'useDeletePlaylist',
+      'usePlaylistsPort',
       'useRemoveTracksFromPlaylist',
       'useRenamePlaylist',
       'useSingleFlightAction',
     ]);
     for (const name of exported) {
-      expect(typeof barrel[name as keyof typeof barrel]).toBe('function');
+      const expectedType = name === 'httpPlaylistsPort' ? 'object' : 'function';
+      expect(typeof barrel[name as keyof typeof barrel]).toBe(expectedType);
     }
   });
 });

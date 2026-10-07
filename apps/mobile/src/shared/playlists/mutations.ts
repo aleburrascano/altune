@@ -1,12 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import {
-  addTracksToPlaylist,
-  createPlaylist,
-  deletePlaylist,
-  removeTracksFromPlaylist,
-  renamePlaylist,
-} from '@shared/api-client/playlists';
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { RETRY_TAIL } from '@shared/lib/describeError';
@@ -20,6 +13,9 @@ import {
   isSameSession,
 } from '@shared/session/signOutCleanup';
 import { showFailureAlert } from '@shared/ui';
+
+import { usePlaylistsPort } from './ports/PlaylistsPortProvider';
+import type { PlaylistsPort } from './ports/playlistsPort';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
@@ -45,10 +41,11 @@ function orphanedPlaylistMessage(requested: number): string {
 }
 
 async function rollBackCreatedPlaylist(
+  port: PlaylistsPort,
   playlist: PlaylistResponse,
 ): Promise<CreateWithTracksResult> {
   try {
-    await deletePlaylist(playlist.id);
+    await port.deletePlaylist(playlist.id);
     return { added: 0, addFailed: true };
   } catch {
     return { playlist, added: 0, addFailed: true };
@@ -59,28 +56,31 @@ function leftInPlace(playlist: PlaylistResponse): CreateWithTracksResult {
   return { playlist, added: 0, addFailed: true };
 }
 
-function rollBackInSameSession({ playlist, epoch }: CreatedInSession) {
-  return isSameSession(epoch) ? rollBackCreatedPlaylist(playlist) : leftInPlace(playlist);
+function rollBackInSameSession(port: PlaylistsPort, { playlist, epoch }: CreatedInSession) {
+  return isSameSession(epoch) ? rollBackCreatedPlaylist(port, playlist) : leftInPlace(playlist);
 }
 
-async function fillCreatedPlaylist(created: CreatedInSession): Promise<CreateWithTracksResult> {
+async function fillCreatedPlaylist(
+  port: PlaylistsPort,
+  created: CreatedInSession,
+): Promise<CreateWithTracksResult> {
   const { playlist, trackIds, epoch } = created;
   if (!isSameSession(epoch)) return leftInPlace(playlist);
   try {
-    const { added } = await addTracksToPlaylist(playlist.id, { track_ids: trackIds });
+    const { added } = await port.addTracksToPlaylist(playlist.id, { track_ids: trackIds });
     return { playlist, added, addFailed: false };
   } catch {
-    return rollBackInSameSession(created);
+    return rollBackInSameSession(port, created);
   }
 }
 
-async function createWithTracks({
-  name,
-  trackIds,
-}: CreateWithTracksVariables): Promise<CreateWithTracksResult> {
+async function createWithTracks(
+  port: PlaylistsPort,
+  { name, trackIds }: CreateWithTracksVariables,
+): Promise<CreateWithTracksResult> {
   const epoch = currentSessionEpoch();
-  const playlist = await createPlaylist({ name });
-  return fillCreatedPlaylist({ playlist, trackIds, epoch });
+  const playlist = await port.createPlaylist({ name });
+  return fillCreatedPlaylist(port, { playlist, trackIds, epoch });
 }
 
 function alertCreateFailed(): void {
@@ -134,11 +134,12 @@ function reinsertTracks<T extends { id: TrackId }>(
 }
 
 export function useCreatePlaylist() {
+  const port = usePlaylistsPort();
   const queryClient = useQueryClient();
   return useAppMutation({
     action: 'playlist.create',
     ...guardedMutationOptions({
-      mutationFn: (name: string) => createPlaylist({ name }),
+      mutationFn: (name: string) => port.createPlaylist({ name }),
       onError: alertCreateFailed,
     }),
     onSettled: refreshPlaylistsInSameSession(queryClient),
@@ -146,11 +147,12 @@ export function useCreatePlaylist() {
 }
 
 export function useCreatePlaylistWithTracks() {
+  const port = usePlaylistsPort();
   const queryClient = useQueryClient();
   return useAppMutation({
     action: 'playlist.create_with_tracks',
     ...guardedMutationOptions({
-      mutationFn: createWithTracks,
+      mutationFn: (variables: CreateWithTracksVariables) => createWithTracks(port, variables),
       onSuccess: alertCreatedWithTracks,
       onError: alertCreateFailed,
     }),
@@ -159,12 +161,13 @@ export function useCreatePlaylistWithTracks() {
 }
 
 export function useAddTracksToPlaylist() {
+  const port = usePlaylistsPort();
   const queryClient = useQueryClient();
   return useOptimisticMutation({
     action: 'playlist.add_tracks',
     queryKey: playlistKeys.list,
     mutationFn: ({ playlistId, trackIds }: AddTracksVariables) =>
-      addTracksToPlaylist(playlistId, { track_ids: trackIds }),
+      port.addTracksToPlaylist(playlistId, { track_ids: trackIds }),
     applyOptimistic: (previous: PlaylistList, { playlistId, trackIds }) => ({
       ...previous,
       items: previous.items.map((p) =>
@@ -203,10 +206,11 @@ export function useAddTracksToPlaylist() {
 }
 
 export function useRenamePlaylist(playlistId: PlaylistId) {
+  const port = usePlaylistsPort();
   return useOptimisticMutation({
     action: 'playlist.rename',
     queryKey: playlistKeys.detail(playlistId),
-    mutationFn: (name: string) => renamePlaylist(playlistId, name),
+    mutationFn: (name: string) => port.renamePlaylist(playlistId, name),
     applyOptimistic: (previous: PlaylistDetail, name) => ({ ...previous, name }),
     revertOptimistic: (current, name, previous) =>
       current.name === name ? { ...current, name: previous.name } : current,
@@ -234,11 +238,12 @@ function alertDeleteFailed(): void {
 }
 
 export function useDeletePlaylist(playlistId: PlaylistId) {
+  const port = usePlaylistsPort();
   const queryClient = useQueryClient();
   return useAppMutation({
     action: 'playlist.delete',
     ...guardedMutationOptions({
-      mutationFn: () => deletePlaylist(playlistId),
+      mutationFn: () => port.deletePlaylist(playlistId),
       onSuccess: forgetDeletedPlaylist(queryClient, playlistId),
       onError: alertDeleteFailed,
     }),
@@ -246,11 +251,12 @@ export function useDeletePlaylist(playlistId: PlaylistId) {
 }
 
 export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
+  const port = usePlaylistsPort();
   return useOptimisticMutation({
     action: 'playlist.remove_tracks',
     queryKey: playlistKeys.detail(playlistId),
     mutationFn: (trackIds: TrackId[]) =>
-      removeTracksFromPlaylist(playlistId, { track_ids: trackIds }),
+      port.removeTracksFromPlaylist(playlistId, { track_ids: trackIds }),
     applyOptimistic: (previous: PlaylistDetail, trackIds) => {
       const removing = new Set(trackIds);
       return { ...previous, tracks: previous.tracks.filter((t) => !removing.has(t.id)) };
