@@ -39,7 +39,7 @@ func (a *App) whenLeader(name jobName, start func(context.Context)) {
 func (a *App) whenLeaderUnlessDisabled(name jobName, start func(context.Context)) {
 	jc := a.job(name)
 	a.whenLeader(name, func(ctx context.Context) {
-		if !jc.admit() {
+		if !jc.Admit() {
 			return
 		}
 		start(ctx)
@@ -75,7 +75,7 @@ func jobRunBudget(interval time.Duration) time.Duration {
 }
 
 type jobRun struct {
-	control *jobControl
+	control *runloop.JobControl
 	name    jobName
 	budget  time.Duration
 }
@@ -113,14 +113,14 @@ func (a *App) loopEvery(ctx context.Context, interval time.Duration, run func())
 }
 
 func (a *App) tickEveryInstance(ctx context.Context, run jobRun, fn func(context.Context) error) {
-	if !run.control.admit() {
+	if !run.control.Admit() {
 		return
 	}
 	a.runJob(ctx, run, fn)
 }
 
 func (a *App) tick(ctx context.Context, run jobRun, fn func(context.Context) error) {
-	if !run.control.admit() {
+	if !run.control.Admit() {
 		return
 	}
 	leaderCtx, release, ok := a.leaderContext(ctx)
@@ -148,7 +148,7 @@ func (a *App) runJob(parent context.Context, run jobRun, fn func(context.Context
 			"job", run.name, "cause", context.Cause(parent))
 		return
 	}
-	run.control.record(err)
+	run.control.Record(err)
 }
 
 func (a *App) leaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {

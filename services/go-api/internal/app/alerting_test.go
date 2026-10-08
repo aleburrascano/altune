@@ -227,13 +227,13 @@ func TestJobFailingCondition(t *testing.T) {
 	}
 
 	for range jobFailureEscalation - 1 {
-		jc.record(errors.New("boom secret"))
+		jc.Record(errors.New("boom secret"))
 	}
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("fired below escalation: %+v", got)
 	}
 
-	jc.record(errors.New("boom secret"))
+	jc.Record(errors.New("boom secret"))
 	got := cond.Eval(ctx)
 	if got == nil {
 		t.Fatal("consecutive failures produced no alert")
@@ -250,7 +250,7 @@ func TestJobFailingCondition(t *testing.T) {
 	}
 	a.SetJobEnabled(name, true)
 
-	jc.record(nil)
+	jc.Record(nil)
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("recovered job still firing: %+v", got)
 	}
@@ -295,7 +295,7 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playbackPorts.ErrIdentityStoreUnavailable)
 
 	for range jobFailureEscalation {
-		jc.record(sweepErr)
+		jc.Record(sweepErr)
 	}
 
 	if got := cond.Eval(ctx); got == nil {
