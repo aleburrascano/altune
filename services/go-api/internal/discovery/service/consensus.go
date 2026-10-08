@@ -196,11 +196,9 @@ func (s *ConsensusService) fetchProvider(ctx, callerCtx context.Context, p Conse
 		slog.WarnContext(callerCtx, "consensus.provider_circuit_open", "provider", p.Name)
 		return providerFetch{}
 	}
-	settled := false
-	defer call.failPanicked(&settled)
-	albums, err := p.Fetcher(ctx, artistName)
-	settled = true
-	call.settle(callerCtx, budgetOutcome(ctx, breakerOutcome(err)))
+	albums, err := runAdmitted(callerCtx, call,
+		func(err error) error { return budgetOutcome(ctx, breakerOutcome(err)) },
+		func() ([]domain.SearchResult, error) { return p.Fetcher(ctx, artistName) })
 	if err == nil {
 		return providerFetch{albums: albums, responded: true}
 	}

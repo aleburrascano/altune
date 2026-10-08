@@ -63,11 +63,20 @@ func guardedFetch[T any](
 		var zero T
 		return zero, errCircuitOpen
 	}
+	return runAdmitted(callerCtx, c, breakerOutcome, call)
+}
+
+func runAdmitted[T any](
+	callerCtx context.Context,
+	c breakerCall,
+	outcome func(error) error,
+	call func() (T, error),
+) (T, error) {
 	settled := false
 	defer c.failPanicked(&settled)
 	res, err := call()
 	settled = true
-	c.settle(callerCtx, breakerOutcome(err))
+	c.settle(callerCtx, outcome(err))
 	return res, err
 }
 

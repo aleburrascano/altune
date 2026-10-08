@@ -59,10 +59,8 @@ func (s *Service) searchProvider(
 	searchQuery string,
 	kinds domain.ResultKindSet,
 ) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
-	settled := false
 	defer func() {
 		if r := recover(); r != nil {
-			call.failPanicked(&settled)
 			res = nil
 			status = domain.ProviderSearchResponse{Provider: p.Name(), Status: domain.ProviderStatusError}
 			slog.ErrorContext(ctx, "search.v2.provider_panic",
@@ -77,11 +75,14 @@ func (s *Service) searchProvider(
 	provCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	start := time.Now()
-	res, err := p.Search(provCtx, searchQuery, kinds)
-	latencyMs := time.Since(start).Milliseconds()
-	settled = true
-	call.settle(ctx, budgetOutcome(provCtx, err))
+	var latencyMs int64
+	res, err := runAdmitted(ctx, call,
+		func(err error) error { return budgetOutcome(provCtx, err) },
+		func() ([]domain.SearchResult, error) {
+			start := time.Now()
+			defer func() { latencyMs = time.Since(start).Milliseconds() }()
+			return p.Search(provCtx, searchQuery, kinds)
+		})
 
 	if err != nil {
 		st := domain.ProviderStatusError

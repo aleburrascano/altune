@@ -133,11 +133,8 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 			defer wg.Done()
 			defer RecoverGoroutine(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
 			failed[i] = true
-			settled := false
-			defer j.call.failPanicked(&settled)
-			res, err := fetch(ctx, j.p, j.provider, j.id)
-			settled = true
-			j.call.settle(callerCtx, breakerOutcome(err))
+			res, err := runAdmitted(callerCtx, j.call, breakerOutcome,
+				func() ([]domain.SearchResult, error) { return fetch(ctx, j.p, j.provider, j.id) })
 			if isPartialResult(err) {
 				truncated[i] = true
 				err = nil
