@@ -265,3 +265,32 @@ func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
 		t.Fatal("a bucket surviving a reclaim with only 11s of a 60s refill must still be throttled")
 	}
 }
+
+func TestQueueStateRateLimit_RefusalWireFormat(t *testing.T) {
+	clock := newFakeClock()
+	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 1}
+	h := NewQueueHandler(service.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		WithQueueStateRateLimit(limit), withClock(clock.now))
+	user := shared.NewUserId(uuid.New())
+
+	if rec := serve(h, requestAs(http.MethodPut, user, validSaveBody)); rec.Code != http.StatusNoContent {
+		t.Fatalf("the request using the last token of the burst must get through, got %d", rec.Code)
+	}
+
+	rec := serve(h, requestAs(http.MethodPut, user, validSaveBody))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got == "" {
+		t.Error("missing Retry-After header")
+	}
+	const want = `{"detail":"too many queue state requests, try again later","code":"playback.rate_limited"}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Errorf("body = %s, want %s", got, want)
+	}
+
+	clock.advance(limit.Every)
+	if rec := serve(h, requestAs(http.MethodPut, user, validSaveBody)); rec.Code != http.StatusNoContent {
+		t.Fatalf("after Every the same user must be allowed again, got %d", rec.Code)
+	}
+}
