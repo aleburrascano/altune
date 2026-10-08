@@ -9,9 +9,6 @@ G1 internal/auth/failure_throttle_test.go unexpected root entry
 G1 internal/auth/middleware.go unexpected root entry
 G1 internal/auth/middleware_test.go unexpected root entry
 G1 internal/auth/verifier.go unexpected root entry
-G1 internal/catalog missing ARCHITECTURE.md
-G1 internal/catalog/RETENTION.md unexpected root entry
-G1 internal/catalog/doc.go unexpected root entry
 G1 internal/eventstream missing ARCHITECTURE.md
 G1 internal/eventstream missing adapters/
 G1 internal/eventstream missing domain/
