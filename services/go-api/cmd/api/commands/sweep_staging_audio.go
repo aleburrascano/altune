@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -8,8 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -39,42 +38,10 @@ func runSweepStagingAudio(cfg *config.Config, execute bool) error {
 		return errors.New("the configured audio store cannot list object age")
 	}
 
-	objects, err := lister.ListWithAge(ctx, stagingRefPrefix)
-	if err != nil {
-		return fmt.Errorf("list staging objects: %w", err)
-	}
-
-	referenced, err := referencedStagingRefs(ctx, pool)
+	now := time.Now()
+	deleted, keptReferenced, keptFresh, failed, err := sweepStaging(ctx, store, lister, persistence.NewPgxTrackRepository(pool), execute, now)
 	if err != nil {
 		return err
-	}
-
-	now := time.Now()
-	fmt.Printf("\nFound %d object(s) under %q.\n\n", len(objects), stagingRefPrefix)
-
-	var deleted, keptReferenced, keptFresh, failed int
-	for _, obj := range objects {
-		age := now.Sub(obj.LastModified)
-		if referenced[obj.AudioRef] {
-			keptReferenced++
-			continue
-		}
-		if !oldEnoughToSweep(age) {
-			keptFresh++
-			continue
-		}
-
-		fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
-		if !execute {
-			deleted++
-			continue
-		}
-		if err := store.Delete(ctx, obj.AudioRef); err != nil {
-			fmt.Printf("    FAILED: %v\n", err)
-			failed++
-			continue
-		}
-		deleted++
 	}
 
 	printSummary("Sweep staging audio complete:")
@@ -99,21 +66,41 @@ func oldEnoughToSweep(age time.Duration) bool {
 	return age >= sweepMinAge
 }
 
-func referencedStagingRefs(ctx context.Context, pool *pgxpool.Pool) (map[string]bool, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT audio_ref FROM tracks WHERE audio_ref LIKE $1`, stagingRefPrefix+"%")
+func sweepStaging(ctx context.Context, store ports.AudioStore, lister ports.AudioAgeLister, refs ports.AudioRefPrefixLister, execute bool, now time.Time) (deleted, keptReferenced, keptFresh, failed int, err error) {
+	objects, err := lister.ListWithAge(ctx, stagingRefPrefix)
 	if err != nil {
-		return nil, fmt.Errorf("query referenced staging refs: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("list staging objects: %w", err)
 	}
-	defer rows.Close()
 
-	referenced := map[string]bool{}
-	for rows.Next() {
-		var ref string
-		if err := rows.Scan(&ref); err != nil {
-			return nil, fmt.Errorf("scan referenced staging ref: %w", err)
-		}
-		referenced[ref] = true
+	referenced, err := refs.AudioRefsUnderPrefix(ctx, stagingRefPrefix)
+	if err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("query referenced staging refs: %w", err)
 	}
-	return referenced, rows.Err()
+
+	fmt.Printf("\nFound %d object(s) under %q.\n\n", len(objects), stagingRefPrefix)
+
+	for _, obj := range objects {
+		age := now.Sub(obj.LastModified)
+		if referenced[obj.AudioRef] {
+			keptReferenced++
+			continue
+		}
+		if !oldEnoughToSweep(age) {
+			keptFresh++
+			continue
+		}
+
+		fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
+		if !execute {
+			deleted++
+			continue
+		}
+		if err := store.Delete(ctx, obj.AudioRef); err != nil {
+			fmt.Printf("    FAILED: %v\n", err)
+			failed++
+			continue
+		}
+		deleted++
+	}
+	return deleted, keptReferenced, keptFresh, failed, nil
 }
