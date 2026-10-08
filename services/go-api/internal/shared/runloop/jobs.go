@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// JobControl is the per-job kill switch plus failure counters.
 type JobControl struct {
 	disabled    atomic.Bool
 	failures    atomic.Int64
@@ -17,7 +16,6 @@ type JobControl struct {
 	lastFailure atomic.Int64
 }
 
-// Admit reports whether the job may run; a disabled job is counted as skipped.
 func (jc *JobControl) Admit() bool {
 	if jc.disabled.Load() {
 		jc.skipped.Add(1)
@@ -26,7 +24,6 @@ func (jc *JobControl) Admit() bool {
 	return true
 }
 
-// Record notes the outcome of one run.
 func (jc *JobControl) Record(err error) {
 	now := time.Now().UnixNano()
 	if err != nil {
@@ -39,7 +36,6 @@ func (jc *JobControl) Record(err error) {
 	jc.lastSuccess.Store(now)
 }
 
-// DisableIfEnabled disables the job and reports whether it was enabled before.
 func (jc *JobControl) DisableIfEnabled() bool {
 	return jc.disabled.CompareAndSwap(false, true)
 }
@@ -77,13 +73,11 @@ func nanosToTime(nanos int64) time.Time {
 	return time.Unix(0, nanos).UTC()
 }
 
-// JobRegistry holds the JobControl of every job by name. The zero value is ready to use.
 type JobRegistry struct {
 	mu   sync.Mutex
 	jobs map[string]*JobControl
 }
 
-// Control returns the control for name, creating it on first use.
 func (r *JobRegistry) Control(name string) *JobControl {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -98,7 +92,6 @@ func (r *JobRegistry) Control(name string) *JobControl {
 	return jc
 }
 
-// SetEnabled flips the switch of a registered job; false means the name is unknown.
 func (r *JobRegistry) SetEnabled(name string, enabled bool) (JobHealth, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -110,7 +103,6 @@ func (r *JobRegistry) SetEnabled(name string, enabled bool) (JobHealth, bool) {
 	return jc.snapshot(name), true
 }
 
-// Health snapshots every registered job, sorted by name.
 func (r *JobRegistry) Health() []JobHealth {
 	r.mu.Lock()
 	defer r.mu.Unlock()
