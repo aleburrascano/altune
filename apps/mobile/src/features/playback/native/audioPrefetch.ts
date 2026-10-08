@@ -5,7 +5,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { deviceFileStore, fileHandle } from '@shared/files/fileStore';
+import { deviceFileStore, fileHandle } from '@shared/files/native/deviceFileStore';
 import {
   MAX_PREFETCH_FILE_BYTES,
   buildCacheFileName,

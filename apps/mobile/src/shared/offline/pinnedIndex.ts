@@ -1,3 +1,4 @@
+import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { isSafeId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import {
   readVersionedEntries,
@@ -54,7 +55,7 @@ const INDEX_DIR = 'offline';
 const INDEX_FILE = 'pinned.json';
 const OWNER_FILE = 'pinned-owner';
 
-const fileStore = createFileStoreSlot();
+const fileStore = createFileStoreSlot(defaultFileStore);
 
 export function setPinnedIndexFileStore(store?: FileStore): void {
   fileStore.set(store);

@@ -1,3 +1,4 @@
+import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { NetworkError } from '@shared/errors';
 import { startDeadline } from '@shared/deadline/deadline';
 import { isSafeId, type TrackId } from '@shared/api-client/ids';
@@ -14,7 +15,7 @@ export const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 export const MAX_PINNED_BYTES = 8 * 1024 ** 3;
 export const MIN_FREE_BYTES = 512 * 1024 ** 2;
 
-const fileStore = createFileStoreSlot();
+const fileStore = createFileStoreSlot(defaultFileStore);
 
 export function setPinnedFileStore(store?: FileStore): void {
   fileStore.set(store);

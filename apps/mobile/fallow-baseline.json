@@ -120,7 +120,7 @@
     "src/shared/favorites/index.ts:useFavorites",
     "src/shared/files/durableDocument.ts:schemaVersionOf",
     "src/shared/files/durableDocument.ts:migrateDocument",
-    "src/shared/files/fileStore.ts:deviceFileStore",
+    "src/shared/files/native/deviceFileStore.ts:deviceFileStore",
     "src/shared/files/web/webFileStore.ts:WebDownloadUnsupportedError",
     "src/shared/files/web/webFileStore.ts:createWebFileStore",
     "src/shared/killSwitch/killSwitch.ts:KILL_SWITCH_KEYS",

@@ -1,6 +1,7 @@
 import { File } from 'expo-file-system';
 
-import { deviceFileStore, type FileStore, createFileStoreSlot } from '@shared/files/fileStore';
+import { type FileStore, createFileStoreSlot } from '@shared/files/fileStore';
+import { deviceFileStore } from '@shared/files/native/deviceFileStore';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { createWebFileStore, WebDownloadUnsupportedError } from '@shared/files/web/webFileStore';
 
@@ -178,8 +179,8 @@ describe('createWebFileStore download() is unsupported', () => {
 
 describe('createFileStoreSlot', () => {
   describe('a file store slot', () => {
-    it('starts bound to the device filesystem when created with no default', () => {
-      const slot = createFileStoreSlot();
+    it('starts bound to the default it was created with', () => {
+      const slot = createFileStoreSlot(deviceFileStore);
 
       expect(slot.get()).toBe(deviceFileStore);
     });
