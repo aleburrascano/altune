@@ -11,10 +11,8 @@ import (
 	"time"
 )
 
-// maxConcurrentYtdlp caps yt-dlp subprocesses so an API outage cannot fork one per search.
 const maxConcurrentYtdlp = 3
 
-// ErrYtdlpBusy is returned when every yt-dlp slot is taken; the search is shed, never queued.
 var ErrYtdlpBusy = errors.New("yt-dlp soundcloud search: all slots busy")
 
 type SoundCloudAdapter struct {
