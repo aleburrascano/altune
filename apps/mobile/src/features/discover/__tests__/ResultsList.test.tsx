@@ -2,7 +2,7 @@ import React from 'react';
 import { Platform, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { ResultsList, type ResultsCommonProps } from '../ui/ResultsList';
+import { ResultsList, type ResultsCommonProps } from '@features/discover/ui/ResultsList';
 
 const NATIVE_OS = Platform.OS;
 

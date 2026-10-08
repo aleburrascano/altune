@@ -1,4 +1,4 @@
-package app
+package providerhttp
 
 import (
 	"context"
@@ -332,7 +332,7 @@ var adapterURLHost = regexp.MustCompile(`"https?://([a-zA-Z0-9.-]+)`)
 
 func adapterHosts(t *testing.T) []string {
 	t.Helper()
-	root := filepath.Join("..", "discovery", "adapters")
+	root := filepath.Join("..", "..", "discovery", "adapters")
 	seen := map[string]struct{}{}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {

@@ -3,7 +3,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-import { useDiscoverFetchEnabled } from './discoverFetchGate';
+import { useDiscoverFetchEnabled } from '@features/discover/hooks/discoverFetchGate';
 
 type SearchPageParam = { offset: number; searchId: string | undefined };
 type SearchPages = InfiniteData<DiscoverySearchResponse, unknown>;

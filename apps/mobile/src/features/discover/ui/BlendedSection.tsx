@@ -5,12 +5,12 @@ import { ChevronRight } from 'lucide-react-native';
 import { Card, Text, pressedStyle, radius, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
-import { DiscoverRow } from './DiscoverRow';
-import { ResultsList, type ResultsCommonProps } from './ResultsList';
-import { SectionLabel } from './SectionLabel';
-import { TopResultCard } from './TopResultCard';
-import { kindLabel } from '../kindLabel';
-import { resultKey } from '../resultKey';
+import { DiscoverRow } from '@features/discover/ui/DiscoverRow';
+import { ResultsList, type ResultsCommonProps } from '@features/discover/ui/ResultsList';
+import { SectionLabel } from '@features/discover/ui/SectionLabel';
+import { TopResultCard } from '@features/discover/ui/TopResultCard';
+import { kindLabel } from '@features/discover/kindLabel';
+import { resultKey } from '@features/discover/resultKey';
 
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
 

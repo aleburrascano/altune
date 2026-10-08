@@ -1,7 +1,7 @@
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
-import type { TransientAuthReason } from './errorReason';
-import { classifyAuthError, type SupabaseAuthErrorLike } from './supabaseAuthError';
+import type { TransientAuthReason } from '@features/auth/errorReason';
+import { classifyAuthError, type SupabaseAuthErrorLike } from '@features/auth/supabaseAuthError';
 
 export type OAuthProvider = 'google';
 

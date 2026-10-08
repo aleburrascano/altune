@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/providerhttp"
 	"context"
 	"errors"
 	"io"
@@ -73,7 +74,7 @@ func TestDiscoveryClientRefusesALoopbackUpstream(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("a loopback upstream was fetched through the discovery client")
 	}
-	if !errors.Is(err, errNonPublicProviderAddr) {
+	if !errors.Is(err, providerhttp.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
 	}
 	if connections != 0 {
@@ -86,7 +87,7 @@ func allowLoopbackThenGuard(ctx context.Context, network, address string) (net.C
 		if strings.HasPrefix(address, "127.0.0.1:") {
 			return nil
 		}
-		return refuseNonPublicDial(network, address, c)
+		return providerhttp.RefuseNonPublicDial(network, address, c)
 	}}
 	return guarded.DialContext(ctx, network, address)
 }
@@ -103,26 +104,8 @@ func TestDiscoveryClientRefusesARedirectToTheMetadataAddress(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("the redirect to the metadata address was followed")
 	}
-	if !errors.Is(err, errNonPublicProviderAddr) {
+	if !errors.Is(err, providerhttp.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
-	}
-}
-
-func TestBaseTransportKeepsItsConnectionCapAndRefusesNonPublicAddresses(t *testing.T) {
-	tr, ok := baseTransport().(*http.Transport)
-	if !ok {
-		t.Fatal("baseTransport is not an *http.Transport")
-	}
-	if tr.MaxConnsPerHost != liveMaxConnsPerHost {
-		t.Errorf("MaxConnsPerHost = %d, want %d", tr.MaxConnsPerHost, liveMaxConnsPerHost)
-	}
-	for _, addr := range []string{"10.0.0.1:80", "169.254.169.254:80", "[::1]:80", "100.64.0.1:80"} {
-		if err := refuseNonPublicDial("tcp", addr, nil); !errors.Is(err, errNonPublicProviderAddr) {
-			t.Errorf("%s: err = %v, want refusal", addr, err)
-		}
-	}
-	if err := refuseNonPublicDial("tcp", "93.184.216.34:443", nil); err != nil {
-		t.Errorf("public address refused: %v", err)
 	}
 }
 

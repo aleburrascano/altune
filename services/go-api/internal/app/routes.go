@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/reqmetrics"
 	"net/http"
@@ -83,7 +84,7 @@ func (a *App) mountRoutes(
 			r.Mount("/playback", queueHandler.Routes())
 			r.Mount("/discovery", discoveryH.Routes())
 			mountFeedback(r, feedbackH)
-			r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns).withShutdown(a.lifecycleDone))
+			r.Handle("/events", eventstream.NewHandler(a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		})
 	})
 
@@ -94,13 +95,13 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(httputil.CorrelationID)
-	r.Use(latencyMiddleware(reqmetrics.Observe))
+	r.Use(reqmetrics.Middleware(reqmetrics.Observe))
 	r.Use(httputil.WriteDeadline(writeTimeout))
 	r.Use(v1RequestTimeout(a.requestBudget()))
 	r.Use(httputil.RequestLogger)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.MaxBodySize(1 << 20))
-	corsHeaders := []string{"Accept", "Authorization", "Content-Type"}
+	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key"}
 	if a.cfg.IsDevelopment() {
 		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
 	}

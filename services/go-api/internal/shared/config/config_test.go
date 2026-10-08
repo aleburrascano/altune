@@ -1786,3 +1786,24 @@ func TestValidate_NoAudioSources(t *testing.T) {
 		})
 	}
 }
+
+func TestAcquisitionFixtureEnabled_ProviderReplayImpliesFixture(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+		want bool
+	}{
+		{"replay in test", Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: "/tmp/replay"}, true},
+		{"replay without dir", Config{Env: "test", ProviderReplayOptIn: true}, false},
+		{"replay in production", Config{Env: "production", ProviderReplayOptIn: true, ProviderReplayDir: "/tmp/replay"}, false},
+		{"neither", Config{Env: "test"}, false},
+		{"fixture opt-in alone", Config{Env: "test", AcquisitionFixtureOptIn: true}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.AcquisitionFixtureEnabled(); got != tt.want {
+				t.Errorf("AcquisitionFixtureEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

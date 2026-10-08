@@ -62,7 +62,7 @@ export function LibraryErrorScreen(props: { error: unknown; onRetry: () => void 
   const { title, body } = describeError(props.error);
   return (
     <CenterMessage testID="library-error" title={title} body={body}>
-      <Button testID="library-retry" label="Retry" onPress={props.onRetry} />
+      <Button action="library.retry" testID="library-retry" label="Retry" onPress={props.onRetry} />
     </CenterMessage>
   );
 }
@@ -72,7 +72,7 @@ const EMPTY_BODY = 'Tracks you add will show up here.';
 export function LibraryEmptyScreen({ onDiscover }: { onDiscover: () => void }): ReactElement {
   return (
     <CenterMessage testID="library-empty" title="Your library is empty" body={EMPTY_BODY}>
-      <Button label="Discover Music" onPress={onDiscover} />
+      <Button action="library.empty.discover" label="Discover Music" onPress={onDiscover} />
     </CenterMessage>
   );
 }

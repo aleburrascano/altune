@@ -4,9 +4,9 @@ import type { ReactElement } from 'react';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
-import { useOAuth } from '../hooks/useOAuth';
-import { AuthErrorBanner } from './AuthErrorBanner';
-import { GoogleLogo } from './hero/GoogleLogo';
+import { useOAuth } from '@features/auth/hooks/useOAuth';
+import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
+import { GoogleLogo } from '@features/auth/ui/hero/GoogleLogo';
 
 const OAUTH_ERROR = "Couldn't sign in with that provider. Please try again.";
 

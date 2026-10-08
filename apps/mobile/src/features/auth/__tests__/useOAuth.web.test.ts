@@ -2,10 +2,10 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '../authDeadline';
-import { useOAuth } from '../hooks/useOAuth.web';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
+import { useOAuth } from '@features/auth/hooks/useOAuth.web';
 
-import { createSupabaseAuthMock } from './testUtils/authTestUtils';
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 const mockStateUpdates: unknown[] = [];
 

@@ -29,6 +29,7 @@ export function FeedbackCard({ onPress }: FeedbackCardProps): ReactElement {
         </View>
       </View>
       <Button
+        action="settings.feedback.report_issue"
         testID="settings-report-issue"
         label="Report an issue"
         onPress={onPress}

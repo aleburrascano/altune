@@ -1,11 +1,11 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { lockoutOnRepeatedFailure } from '../attemptLockout';
-import type { TransientAuthReason } from '../errorReason';
-import { authRedirectUrl } from '../authRedirect';
-import { classifyAuthError, type SupabaseAuthErrorLike } from '../supabaseAuthError';
+import { lockoutOnRepeatedFailure } from '@features/auth/attemptLockout';
+import type { TransientAuthReason } from '@features/auth/errorReason';
+import { authRedirectUrl } from '@features/auth/authRedirect';
+import { classifyAuthError, type SupabaseAuthErrorLike } from '@features/auth/supabaseAuthError';
 
-import { useAsyncAuthAction } from './useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 
 type ResetRequestResult =
   | { kind: 'idle' }

@@ -4,9 +4,9 @@ import { StyleSheet } from 'react-native';
 
 import { darkTheme, spacing } from '@shared/ui/theme';
 
-import { AuthGate } from '../ui/AuthGate';
-import { InvalidRecoveryLinkNotice } from '../ui/InvalidRecoveryLinkNotice';
-import { SessionExpiredNotice } from '../ui/SessionExpiredNotice';
+import { AuthGate } from '@features/auth/ui/AuthGate';
+import { InvalidRecoveryLinkNotice } from '@features/auth/ui/InvalidRecoveryLinkNotice';
+import { SessionExpiredNotice } from '@features/auth/ui/SessionExpiredNotice';
 
 jest.mock('expo-router', () => ({
   useSegments: () => [],

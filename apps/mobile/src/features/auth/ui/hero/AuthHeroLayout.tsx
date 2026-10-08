@@ -7,8 +7,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { ArtworkBackground } from './ArtworkBackground';
-import { EqGlyph } from './EqGlyph';
+import { ArtworkBackground } from '@features/auth/ui/hero/ArtworkBackground';
+import { EqGlyph } from '@features/auth/ui/hero/EqGlyph';
 
 type AuthHeroLayoutProps = {
   tagline?: string;

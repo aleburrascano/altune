@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 import { showAlert } from '@shared/ui/dialog/dialog';
 
-import { SetNewPasswordScreen } from '../SetNewPasswordScreen';
+import { SetNewPasswordScreen } from '@features/auth/ui/SetNewPasswordScreen';
 
 const mockReplace = jest.fn();
 const mockUpdatePassword = jest.fn();
@@ -10,8 +10,9 @@ let mockState: unknown = { kind: 'idle' };
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
-jest.mock('../../recoveryUnlock', () => ({ clearRecoveryUnlock: jest.fn() }));
-jest.mock('../../hooks/useUpdatePassword', () => ({
+jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
+jest.mock('@features/auth/recoveryUnlock', () => ({ clearRecoveryUnlock: jest.fn() }));
+jest.mock('@features/auth/hooks/useUpdatePassword', () => ({
   useUpdatePassword: () => ({ state: mockState, updatePassword: mockUpdatePassword }),
 }));
 

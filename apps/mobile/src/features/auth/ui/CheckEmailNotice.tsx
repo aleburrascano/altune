@@ -5,8 +5,8 @@ import { Banner } from '@shared/ui/primitives/Banner';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import { BackToSignInLink } from './BackToSignInLink';
-import { AuthHeroLayout } from './hero/AuthHeroLayout';
+import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
+import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
 
 export function CheckEmailNotice(): ReactElement {
   return (

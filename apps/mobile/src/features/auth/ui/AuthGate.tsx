@@ -5,12 +5,12 @@ import { useSession } from '@shared/auth/useSession';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 
-import { useRecoveryUnlocked } from '../recoveryUnlock';
-import { RESET_PASSWORD_ROUTE_SEGMENT } from '../resetPasswordRoute';
+import { useRecoveryUnlocked } from '@features/auth/recoveryUnlock';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/resetPasswordRoute';
 
-import { AuthFullScreenNotice } from './AuthFullScreenNotice';
-import { InvalidRecoveryLinkNotice } from './InvalidRecoveryLinkNotice';
-import { SessionExpiredNotice } from './SessionExpiredNotice';
+import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
+import { InvalidRecoveryLinkNotice } from '@features/auth/ui/InvalidRecoveryLinkNotice';
+import { SessionExpiredNotice } from '@features/auth/ui/SessionExpiredNotice';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useSession();

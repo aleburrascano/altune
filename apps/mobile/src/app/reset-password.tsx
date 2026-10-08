@@ -1,3 +1,3 @@
-import { SetNewPasswordScreen } from '../features/auth/ui/SetNewPasswordScreen';
+import { SetNewPasswordScreen } from '@features/auth/ui/SetNewPasswordScreen';
 
 export default SetNewPasswordScreen;

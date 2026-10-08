@@ -1,6 +1,6 @@
 import { webOrigin } from '@shared/device/device';
 
-import { LINK_PATH, SCHEME } from './authRedirect';
+import { LINK_PATH, SCHEME } from '@features/auth/authRedirect';
 
 const MAX_URL_LENGTH = 4096;
 const MAX_PARAM_PAIRS = 64;

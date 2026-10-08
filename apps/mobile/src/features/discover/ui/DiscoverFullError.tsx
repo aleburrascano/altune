@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Text, spacing } from '@shared/ui';
 
 import { describeError } from '@shared/lib/describeError';
-import { SEARCH_UNAVAILABLE_TITLE } from '../discoverView';
+import { SEARCH_UNAVAILABLE_TITLE } from '@features/discover/discoverView';
 
 export function DiscoverUnavailable(): ReactElement {
   return (
@@ -38,7 +38,12 @@ export function DiscoverFullError({ error, onRetry }: FullErrorProps): ReactElem
   return (
     <View testID="discover-full-error" style={styles.center}>
       <ErrorCopy {...copy} />
-      <Button testID="discover-retry" label="Retry" onPress={onRetry} />
+      <Button
+        action="discover.error.retry"
+        testID="discover-retry"
+        label="Retry"
+        onPress={onRetry}
+      />
     </View>
   );
 }

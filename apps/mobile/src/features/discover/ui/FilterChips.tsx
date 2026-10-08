@@ -3,8 +3,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { Chip, spacing } from '@shared/ui';
 
-import { kindLabel } from '../kindLabel';
-import type { ResultsFilter } from '../hooks/useResultsFilter';
+import { kindLabel } from '@features/discover/kindLabel';
+import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
 
 const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
   { filter: 'all', label: 'All', testID: 'discover-filter-all' },
@@ -29,6 +29,7 @@ export function FilterChips({
       {FILTER_CHIPS.map(({ filter, label, testID }) => (
         <Chip
           key={filter}
+          action={`discover.filter.${filter}`}
           testID={testID}
           label={label}
           selected={active === filter}

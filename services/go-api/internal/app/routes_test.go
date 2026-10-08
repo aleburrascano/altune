@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/auth"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/observe/eventtap"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	"altune/go-api/internal/shared"
@@ -64,7 +65,7 @@ func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
 
 const routeWriteDeadline = 150 * time.Millisecond
 
-func newDeadlineRouter(uid shared.UserId, sse *sseHandler, bulkErrs chan<- error) *chi.Mux {
+func newDeadlineRouter(uid shared.UserId, sse *eventstream.Handler, bulkErrs chan<- error) *chi.Mux {
 	a := &App{cfg: &config.Config{Env: "test"}}
 	r := a.newRouter(routeWriteDeadline)
 	r.Get("/v1/bulk", func(w http.ResponseWriter, _ *http.Request) {
@@ -86,7 +87,7 @@ func newDeadlineRouter(uid shared.UserId, sse *sseHandler, bulkErrs chan<- error
 
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
-	sse := newSSEHandler(events.NewInProcessBus(), 0)
+	sse := eventstream.NewHandler(events.NewInProcessBus(), 0)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(shared.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
@@ -108,8 +109,7 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	sse := newSSEHandler(bus, 0)
-	sse.heartbeat = routeWriteDeadline / 3
+	sse := eventstream.NewHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
 	conn, br := httputiltest.Get(t, srv, "/v1/events", nil)
@@ -132,9 +132,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	sse := newSSEHandler(bus, 0)
-	sse.writeTimeout = routeWriteDeadline
-	sse.heartbeat = time.Hour
+	sse := eventstream.NewHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
 	srv := httputiltest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -358,4 +356,54 @@ func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *t
 			}
 		})
 	}
+}
+
+func TestRouter_CORSPreflightAllowsIdempotencyKeyOnlyForAllowedOrigin(t *testing.T) {
+	const allowed = "http://127.0.0.1:8081"
+	a := &App{cfg: &config.Config{Env: "test", CORSOrigins: []string{allowed}}}
+	r := a.newRouter(apiWriteTimeout)
+	r.Post("/v1/tracks", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
+	preflight := func(origin, headers string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodOptions, "/v1/tracks", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", headers)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := preflight(allowed, "authorization,content-type,idempotency-key")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != allowed {
+		t.Errorf("Allow-Origin = %q, want %q", got, allowed)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), "idempotency-key") {
+		t.Errorf("Allow-Headers = %q, want it to contain Idempotency-Key", got)
+	}
+
+	rec = preflight("http://evil.example", "authorization,content-type,idempotency-key")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("look-alike origin got Allow-Origin %q, want none", got)
+	}
+
+	rec = preflight(allowed, "authorization,x-not-allowed")
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "" {
+		t.Errorf("disallowed header got Allow-Headers %q, want none", got)
+	}
+}
+
+func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading stream: %v", err)
+		}
+		if match(strings.TrimRight(line, "\n")) {
+			return line
+		}
+	}
+	t.Fatal("timed out waiting for expected line")
+	return ""
 }

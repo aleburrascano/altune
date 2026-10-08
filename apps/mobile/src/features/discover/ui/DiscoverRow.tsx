@@ -9,8 +9,8 @@ import { FavoriteButton } from '@shared/favorites';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { resultSecondaryLine } from '../resultSecondaryLine';
-import { usePreviewPlayback } from '../hooks/usePreviewPlayback';
+import { resultSecondaryLine } from '@features/discover/resultSecondaryLine';
+import { usePreviewPlayback } from '@features/discover/hooks/usePreviewPlayback';
 
 type DiscoverRowProps = {
   result: DiscoveryResult;
@@ -66,6 +66,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
             {preview.hasPreview ? (
               <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
                 <IconButton
+                  action="discover.preview.toggle"
                   testID={`discover-preview-${position}`}
                   icon={preview.isPlaying ? Pause : Play}
                   size={18}

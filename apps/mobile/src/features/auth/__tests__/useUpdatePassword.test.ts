@@ -1,8 +1,11 @@
 import { act } from '@testing-library/react-native';
 
-import { useUpdatePassword } from '../hooks/useUpdatePassword';
+import { useUpdatePassword } from '@features/auth/hooks/useUpdatePassword';
 
-import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
+import {
+  createSupabaseAuthMock,
+  runAsyncAuthHook,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 

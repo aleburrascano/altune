@@ -1,10 +1,10 @@
 import Head from 'expo-router/head';
 import type { ReactElement } from 'react';
 
-import { usePlaylistActions } from '../features/library/hooks/usePlaylistActions';
-import { usePlayback } from '../shared/playback/usePlayback';
-import { useKeyboardShortcuts } from '../shared/ui/keyboard/useKeyboardShortcuts';
-import { pageTitleFor } from '../shared/ui/navigation/pageTitle';
+import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
+import { usePlayback } from '@shared/playback/usePlayback';
+import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
+import { pageTitleFor } from '@shared/ui/navigation/pageTitle';
 
 const PLAYLIST_PATH_PREFIX = '/library/playlist/';
 

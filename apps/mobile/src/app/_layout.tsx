@@ -12,28 +12,28 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { appMutationCache, appQueryCache } from '../shared/query/useAppMutation';
-import { transientRetryOptions } from '../shared/query/retryDelay';
-import { StagingBanner } from '../shared/staging/ui/StagingBanner';
-import { AuthGate } from '../features/auth/ui/AuthGate';
-import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
-import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
-import { useServerEvents } from '../shared/events/useServerEvents';
-import { startKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
-import { installGlobalErrorReporting } from '../shared/telemetry/clientErrorReporting';
-import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
-import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
-import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
-import { OfflineReconcileBridge } from '../shared/offline/ui/OfflineReconcileBridge';
-import { useWideWebLayout } from '../shared/ui/layout/useWideWebLayout';
-import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
-import { ThemeProvider, themes } from '../shared/ui/theme';
-import { useThemePreference } from '../shared/ui/theme/themePreference';
-import { AppChrome } from '../app-shell/AppChrome';
-import { PlaybackShortcuts, SystemNavigationBar } from '../app-shell/platformExtras';
+import { appMutationCache, appQueryCache } from '@shared/query/useAppMutation';
+import { transientRetryOptions } from '@shared/query/retryDelay';
+import { StagingBanner } from '@shared/staging/ui/StagingBanner';
+import { AuthGate } from '@features/auth/ui/AuthGate';
+import { TestAuthBridge } from '@features/auth/ui/TestAuthBridge';
+import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
+import { useServerEvents } from '@shared/events/useServerEvents';
+import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
+import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
+import { PlaybackProvider } from '@features/playback/hooks/PlaybackProvider';
+import { playsThroughTrackPlayer } from '@features/playback/playsThroughTrackPlayer';
+import { SleepTimerBridge } from '@features/playback/ui/SleepTimerBridge';
+import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
+import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
+import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
+import { ThemeProvider, themes } from '@shared/ui/theme';
+import { useThemePreference } from '@shared/ui/theme/themePreference';
+import { AppChrome } from '@/app-shell/AppChrome';
+import { PlaybackShortcuts, SystemNavigationBar } from '@/app-shell/platformExtras';
 
 if (playsThroughTrackPlayer) {
-  require('../features/playback/native/registerPlaybackService').registerPlaybackService();
+  require('@features/playback/native/registerPlaybackService').registerPlaybackService();
 }
 
 void SplashScreen.preventAutoHideAsync();

@@ -556,7 +556,7 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	if workers < 1 {
 		workers = 1
 	}
-	pending, oldestAge := s.pendingDepth()
+	pending, oldestAge, depthKnown := s.pendingDepth()
 	return ports.AcquisitionStatus{
 		InFlight:         int(s.inflightCount.Load()),
 		Succeeded:        succeeded,
@@ -566,6 +566,7 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 		Paused:           s.paused.Load(),
 		QueueDepth:       pending,
 		OldestPendingAge: oldestAge,
+		QueueDepthKnown:  depthKnown,
 		QueueCapacity:    workers,
 		Verification:     s.verificationStatus(),
 		ActiveJobs:       jobs,
@@ -573,17 +574,17 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) pendingDepth() (int, time.Duration) {
+func (s *BackgroundAcquisitionScheduler) pendingDepth() (int, time.Duration, bool) {
 	reader, ok := s.queue.(ports.QueueDepthReader)
 	if !ok {
-		return 0, 0
+		return 0, 0, false
 	}
 	pending, oldestAge, err := reader.PendingDepth(s.baseCtx)
 	if err != nil {
 		slog.Error("acquisition.pending_depth_failed", "error", err)
-		return 0, 0
+		return 0, 0, false
 	}
-	return pending, oldestAge
+	return pending, oldestAge, true
 }
 
 func (s *BackgroundAcquisitionScheduler) closeAdmission() {

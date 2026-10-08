@@ -6,12 +6,7 @@
     "scripts/**/*.mjs",
     "eslint-rules/**/*.js"
   ],
-  "ignorePatterns": [
-    "**/*.test.{ts,tsx}",
-    "**/__tests__/**",
-    "**/__mocks__/**",
-    "jest/**"
-  ],
+  "ignorePatterns": ["**/*.test.{ts,tsx}", "**/__tests__/**", "**/__mocks__/**", "jest/**"],
   "ignoreDependencies": [
     "react-doctor",
     "shaka-player",
@@ -22,9 +17,7 @@
     "@stryker-mutator/jest-runner"
   ],
   "dynamicallyLoaded": ["eslint/consistency/*.js"],
-  "ignoreUnresolvedImports": [
-    "@react-navigation/bottom-tabs"
-  ],
+  "ignoreUnresolvedImports": ["@react-navigation/bottom-tabs"],
   "framework": [
     {
       "name": "lint-tooling-config",
@@ -76,31 +69,272 @@
       { "name": "shared-ui", "patterns": ["src/shared/ui/**"] }
     ],
     "rules": [
-      { "from": "app", "allow": ["feature-auth", "feature-detail", "feature-discover", "feature-library", "feature-playback", "feature-settings", "shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "feature-auth", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "feature-detail", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "feature-discover", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "feature-library", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "feature-playback", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "feature-settings", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-device", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-navigation", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "shared-acquisition", "allow": ["shared-api-client", "shared-errors", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
+      {
+        "from": "app",
+        "allow": [
+          "feature-auth",
+          "feature-detail",
+          "feature-discover",
+          "feature-library",
+          "feature-playback",
+          "feature-settings",
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "feature-auth",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "feature-detail",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "feature-discover",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "feature-library",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "feature-playback",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "feature-settings",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-deadline",
+          "shared-device",
+          "shared-errors",
+          "shared-events",
+          "shared-favorites",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-navigation",
+          "shared-offline",
+          "shared-playback",
+          "shared-playlists",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
+      {
+        "from": "shared-acquisition",
+        "allow": [
+          "shared-api-client",
+          "shared-errors",
+          "shared-query",
+          "shared-session",
+          "shared-telemetry",
+          "shared-ui"
+        ]
+      },
       { "from": "shared-api-client", "allow": ["shared-auth", "shared-deadline", "shared-errors"] },
-      { "from": "shared-auth", "allow": ["shared-deadline", "shared-errors", "shared-offline", "shared-session", "shared-telemetry"] },
+      {
+        "from": "shared-auth",
+        "allow": [
+          "shared-deadline",
+          "shared-errors",
+          "shared-offline",
+          "shared-session",
+          "shared-telemetry"
+        ]
+      },
       { "from": "shared-deadline", "allow": [] },
       { "from": "shared-errors", "allow": [] },
-      { "from": "shared-events", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-errors", "shared-killSwitch", "shared-lifecycle", "shared-lib", "shared-offline", "shared-session", "shared-telemetry"] },
-      { "from": "shared-favorites", "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-ui"] },
+      {
+        "from": "shared-events",
+        "allow": [
+          "shared-acquisition",
+          "shared-api-client",
+          "shared-auth",
+          "shared-errors",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-lib",
+          "shared-offline",
+          "shared-session",
+          "shared-telemetry"
+        ]
+      },
+      {
+        "from": "shared-favorites",
+        "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-ui"]
+      },
       { "from": "shared-files", "allow": [] },
-      { "from": "shared-killSwitch", "allow": ["shared-deadline", "shared-files"] },
+      {
+        "from": "shared-killSwitch",
+        "allow": ["shared-deadline", "shared-files", "shared-lifecycle"]
+      },
       { "from": "shared-lifecycle", "allow": [] },
       { "from": "shared-lib", "allow": ["shared-api-client", "shared-errors", "shared-session"] },
       { "from": "shared-navigation", "allow": [] },
-      { "from": "shared-offline", "allow": ["shared-api-client", "shared-deadline", "shared-errors", "shared-files", "shared-killSwitch", "shared-session", "shared-telemetry"] },
+      {
+        "from": "shared-offline",
+        "allow": [
+          "shared-api-client",
+          "shared-deadline",
+          "shared-errors",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-session",
+          "shared-telemetry"
+        ]
+      },
       { "from": "shared-playback", "allow": ["shared-api-client"] },
-      { "from": "shared-playlists", "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-session", "shared-ui"] },
-      { "from": "shared-query", "allow": ["shared-errors", "shared-session", "shared-telemetry", "shared-ui"] },
+      {
+        "from": "shared-playlists",
+        "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-session", "shared-ui"]
+      },
+      {
+        "from": "shared-query",
+        "allow": ["shared-errors", "shared-session", "shared-telemetry", "shared-ui"]
+      },
       { "from": "shared-session", "allow": [] },
-      { "from": "shared-telemetry", "allow": ["shared-api-client", "shared-device", "shared-errors", "shared-files", "shared-killSwitch", "shared-session"] },
+      {
+        "from": "shared-telemetry",
+        "allow": [
+          "shared-api-client",
+          "shared-device",
+          "shared-errors",
+          "shared-files",
+          "shared-killSwitch",
+          "shared-lifecycle",
+          "shared-session"
+        ]
+      },
       { "from": "shared-ui", "allow": ["shared-files", "shared-lib", "shared-telemetry"] }
     ]
   },

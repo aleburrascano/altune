@@ -6,10 +6,10 @@ import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import { DismissKeyboardArea } from '@shared/ui/keyboard/keyboard';
 import { registerSearchFocus } from '@shared/ui/keyboard/useKeyboardShortcuts';
-import { DiscoverBody } from './DiscoverBody';
-import { SuggestionsList } from './SuggestionsList';
-import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { MAX_QUERY_LENGTH } from '../searchLimits';
+import { DiscoverBody } from '@features/discover/ui/DiscoverBody';
+import { SuggestionsList } from '@features/discover/ui/SuggestionsList';
+import { useDiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
+import { MAX_QUERY_LENGTH } from '@features/discover/searchLimits';
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();

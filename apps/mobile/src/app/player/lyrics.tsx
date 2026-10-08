@@ -1,1 +1,1 @@
-export { LyricsSheet as default } from '../../features/playback/ui/LyricsSheet';
+export { LyricsSheet as default } from '@features/playback/ui/LyricsSheet';

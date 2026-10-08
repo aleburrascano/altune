@@ -6,7 +6,7 @@ import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/ap
 import { ApiError, NetworkError } from '@shared/errors';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import { useSearchHistory } from '../hooks/useSearchHistory';
+import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
 
 jest.mock('@shared/api-client/discovery', () => ({
   searchDiscovery: jest.fn(),

@@ -39,6 +39,7 @@ export function SheetHeader({
     <View style={styles.header}>
       <View style={styles.leading}>
         <IconButton
+          action="playback.sheet.close"
           icon={ChevronDown}
           size={28}
           onPress={onClose}

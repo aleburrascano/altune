@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
-import { SectionLabel } from './SectionLabel';
-import { kindLabel } from '../kindLabel';
+import { SectionLabel } from '@features/discover/ui/SectionLabel';
+import { kindLabel } from '@features/discover/kindLabel';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 function buildHighlightProps(setHovered: (v: boolean) => void, setFocused: (v: boolean) => void) {

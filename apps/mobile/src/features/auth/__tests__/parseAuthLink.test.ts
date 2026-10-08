@@ -3,12 +3,12 @@ import { join } from 'path';
 
 import { Platform } from 'react-native';
 
-import appJson from '../../../../app.json';
-import { completeAuthIntent } from '../completeAuthIntent';
-import type * as AuthRedirectModule from '../authRedirect';
-import { authRedirectUrl } from '../authRedirect';
-import type * as ParseAuthLinkModule from '../parseAuthLink';
-import { parseAuthLink } from '../parseAuthLink';
+import appJson from '@/../app.json';
+import { completeAuthIntent } from '@features/auth/completeAuthIntent';
+import type * as AuthRedirectModule from '@features/auth/authRedirect';
+import { authRedirectUrl } from '@features/auth/authRedirect';
+import type * as ParseAuthLinkModule from '@features/auth/parseAuthLink';
+import { parseAuthLink } from '@features/auth/parseAuthLink';
 
 type LoadedModules = typeof ParseAuthLinkModule & typeof AuthRedirectModule;
 
@@ -19,8 +19,8 @@ function loadWithExpoScheme(scheme: unknown): LoadedModules {
     default: { expoConfig: scheme === undefined ? {} : { scheme } },
   }));
   return {
-    ...(require('../authRedirect') as typeof AuthRedirectModule),
-    ...(require('../parseAuthLink') as typeof ParseAuthLinkModule),
+    ...(require('@features/auth/authRedirect') as typeof AuthRedirectModule),
+    ...(require('@features/auth/parseAuthLink') as typeof ParseAuthLinkModule),
   };
 }
 
@@ -384,8 +384,8 @@ describe('parseAuthLink reads its scheme and web origin through the device port'
       webOrigin: () => 'https://port.example',
     }));
     const loaded = {
-      ...(require('../authRedirect') as typeof AuthRedirectModule),
-      ...(require('../parseAuthLink') as typeof ParseAuthLinkModule),
+      ...(require('@features/auth/authRedirect') as typeof AuthRedirectModule),
+      ...(require('@features/auth/parseAuthLink') as typeof ParseAuthLinkModule),
     };
 
     expect(loaded.authRedirectUrl('callback')).toBe('https://port.example/auth/callback');

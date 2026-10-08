@@ -1,7 +1,7 @@
 import { isRetryable } from '@shared/errors';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/search-history/useClearSearchHistory';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
-import { useGatedDiscoverCall } from './discoverFetchGate';
+import { useGatedDiscoverCall } from '@features/discover/hooks/discoverFetchGate';
 
 type ClearSearchHistory = {
   clear: () => void;

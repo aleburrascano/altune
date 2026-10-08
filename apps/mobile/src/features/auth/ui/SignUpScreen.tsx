@@ -1,13 +1,13 @@
 import { useState, type ReactElement } from 'react';
 
-import { useEmailPasswordFields } from '../hooks/useEmailPasswordFields';
-import { useSignUp } from '../hooks/useSignUp';
-import { newPasswordFormState } from '../validation';
-import { AuthForm } from './AuthForm';
-import { CheckEmailNotice } from './CheckEmailNotice';
-import { EmailPasswordFields } from './EmailPasswordFields';
-import { FieldError } from './FieldError';
-import { NewPasswordField } from './NewPasswordField';
+import { useEmailPasswordFields } from '@features/auth/hooks/useEmailPasswordFields';
+import { useSignUp } from '@features/auth/hooks/useSignUp';
+import { newPasswordFormState } from '@features/auth/validation';
+import { AuthForm } from '@features/auth/ui/AuthForm';
+import { CheckEmailNotice } from '@features/auth/ui/CheckEmailNotice';
+import { EmailPasswordFields } from '@features/auth/ui/EmailPasswordFields';
+import { FieldError } from '@features/auth/ui/FieldError';
+import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
 
 const GENERIC_SIGN_UP_ERROR = "Couldn't create your account. Please try again.";
 

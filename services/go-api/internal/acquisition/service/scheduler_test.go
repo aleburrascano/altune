@@ -2453,6 +2453,33 @@ func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) 
 	}
 }
 
+type failingDepthQueue struct{ *memJobQueue }
+
+func (failingDepthQueue) PendingDepth(context.Context) (int, time.Duration, error) {
+	return 0, 0, errors.New("db down")
+}
+
+func TestSchedulerStatus_QueueDepthKnownFalseWhenDepthReadFails(t *testing.T) {
+	var wg sync.WaitGroup
+	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 2), WithJobQueue(failingDepthQueue{newMemJobQueue(nil)}))
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
+
+	if got := s.Status(); got.QueueDepthKnown {
+		t.Errorf("QueueDepthKnown = true after a failed depth read, want false")
+	}
+}
+
+func TestSchedulerStatus_QueueDepthKnownTrueWhenDepthReadSucceeds(t *testing.T) {
+	var wg sync.WaitGroup
+	queue := backlogQueue{memJobQueue: newMemJobQueue(nil)}
+	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 2), WithJobQueue(queue))
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
+
+	if got := s.Status(); !got.QueueDepthKnown {
+		t.Errorf("QueueDepthKnown = false after a successful depth read, want true")
+	}
+}
+
 type conflictingQueue struct {
 	*memJobQueue
 	enqueues  atomic.Int32

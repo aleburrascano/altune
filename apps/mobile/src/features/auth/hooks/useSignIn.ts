@@ -1,16 +1,16 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { lockoutOnRepeatedFailure } from '../attemptLockout';
-import type { SignInFailureReason } from '../errorReason';
-import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
+import { lockoutOnRepeatedFailure } from '@features/auth/attemptLockout';
+import type { SignInFailureReason } from '@features/auth/errorReason';
+import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
 import {
   isInvalidCredentialsError,
   classifyAuthError,
   isUnconfirmedEmailError,
   type SupabaseAuthErrorLike,
-} from '../supabaseAuthError';
+} from '@features/auth/supabaseAuthError';
 
-import { useAsyncAuthAction } from './useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 
 type SignInResult =
   | { kind: 'idle' }

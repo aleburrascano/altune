@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { useImpressionLogger } from '../hooks/useImpressionLogger';
-import { resultFixture } from './fixtures';
+import { useImpressionLogger } from '@features/discover/hooks/useImpressionLogger';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 import type { ViewToken } from 'react-native';
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';

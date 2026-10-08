@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 
-import { AuthFullScreenNotice } from './AuthFullScreenNotice';
+import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 
 export function InvalidRecoveryLinkNotice() {
   const router = useRouter();
@@ -18,6 +18,7 @@ export function InvalidRecoveryLinkNotice() {
         screen to choose a new password.
       </Text>
       <Button
+        action="auth.invalid_recovery_link.back_to_sign_in"
         testID="invalid-recovery-link-signin"
         label="Back to sign in"
         onPress={() => {

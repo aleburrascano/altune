@@ -34,19 +34,19 @@ func (s *scriptedCooldownStore) setErr(err error) {
 	s.err = err
 }
 
-func (s *scriptedCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, error) {
+func (s *scriptedCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.err != nil {
-		return time.Time{}, false, s.err
+		return time.Time{}, false, 0, s.err
 	}
 	s.reserves++
 	now, key := time.Now(), string(kind)+"/"+trackID.String()
 	if last, ok := s.lastAt[key]; ok && now.Sub(last) < cooldown {
-		return time.Time{}, false, nil
+		return time.Time{}, false, cooldown - now.Sub(last), nil
 	}
 	s.lastAt[key] = now
-	return now, true, nil
+	return now, true, 0, nil
 }
 
 func (s *scriptedCooldownStore) Release(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
@@ -122,14 +122,14 @@ func TestFallbackCooldownStore_MissingTableWindowElapses(t *testing.T) {
 	track := failedTrack(t)
 	ctx := context.Background()
 
-	if _, ok, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); err != nil || !ok {
+	if _, ok, _, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); err != nil || !ok {
 		t.Fatalf("first Reserve = %v, %v; want ok", ok, err)
 	}
-	if _, ok, _ := store.Reserve(ctx, track.ID, ports.CooldownReacquire, time.Minute); !ok {
+	if _, ok, _, _ := store.Reserve(ctx, track.ID, ports.CooldownReacquire, time.Minute); !ok {
 		t.Error("reacquire blocked by a retry admission; kinds must be independent")
 	}
 	now = now.Add(time.Minute)
-	if _, ok, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); err != nil || !ok {
+	if _, ok, _, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); err != nil || !ok {
 		t.Errorf("Reserve after window = %v, %v; want ok", ok, err)
 	}
 }
@@ -187,5 +187,26 @@ func TestFallbackCooldownStore_OtherStoreErrorsPropagate(t *testing.T) {
 				t.Error("schedule ran despite a store error")
 			}
 		})
+	}
+}
+
+func TestFallbackCooldownStore_RefusalReportsTimeLeft(t *testing.T) {
+	store := NewFallbackCooldownStore(newScriptedCooldownStore(missingTableErr()))
+	now := time.Now()
+	store.mem.now = func() time.Time { return now }
+	track := failedTrack(t)
+	ctx := context.Background()
+
+	if _, ok, _, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); err != nil || !ok {
+		t.Fatalf("first Reserve = %v, %v; want ok", ok, err)
+	}
+	now = now.Add(45 * time.Second)
+
+	_, ok, wait, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute)
+	if err != nil || ok {
+		t.Fatalf("second Reserve = %v, %v; want refused", ok, err)
+	}
+	if wait != 15*time.Second {
+		t.Errorf("wait = %v, want 15s", wait)
 	}
 }

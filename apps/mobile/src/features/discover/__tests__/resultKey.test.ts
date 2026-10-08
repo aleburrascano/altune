@@ -1,5 +1,5 @@
-import { resultKey } from '../resultKey';
-import { resultFixture } from './fixtures';
+import { resultKey } from '@features/discover/resultKey';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 describe('resultKey builds a stable key with source-aware fallbacks', () => {
   it('uses kind, first provider and external id when a source with an id is present', () => {
