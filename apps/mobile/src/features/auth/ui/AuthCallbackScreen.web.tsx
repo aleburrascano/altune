@@ -17,6 +17,7 @@ import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
 
 type FailureState = 'refused' | 'unreachable';
+type Failure = (state: FailureState) => void;
 type ScreenState = 'pending' | FailureState;
 
 function currentUrl(): string | null {
@@ -42,23 +43,28 @@ function navigateToLanding(intent: AuthLinkIntent, router: AuthRouter): 'ok' {
   return 'ok';
 }
 
-async function completeCallback(router: AuthRouter): Promise<'ok' | 'refused'> {
-  const url = currentUrl();
-  stripCredentialsFromUrl();
-  if (!url) {
-    console.warn('[auth] web callback has no url to read');
-    return 'refused';
-  }
+function reportRefusal(kind: AuthLinkIntent['kind'], outcome: AuthIntentResult): void {
+  if (outcome.kind !== 'failure') return;
+  console.warn('[auth] web callback exchange failed', {
+    intent: kind,
+    cause: outcome.cause,
+    error: outcome.error,
+  });
+}
+
+async function exchangeUrl(url: string, router: AuthRouter): Promise<'ok' | 'refused'> {
   const intent = parseAuthLink(url);
   const outcome = await completeAuthIntent(intent, router, supabase.auth);
   if (landed(outcome)) return navigateToLanding(intent, router);
-  if (outcome.kind === 'failure') {
-    console.warn('[auth] web callback exchange failed', {
-      intent: intent.kind,
-      cause: outcome.cause,
-      error: outcome.error,
-    });
-  }
+  reportRefusal(intent.kind, outcome);
+  return 'refused';
+}
+
+async function completeCallback(router: AuthRouter): Promise<'ok' | 'refused'> {
+  const url = currentUrl();
+  stripCredentialsFromUrl();
+  if (url) return exchangeUrl(url, router);
+  console.warn('[auth] web callback has no url to read');
   return 'refused';
 }
 
@@ -66,17 +72,16 @@ function failureStateFor(err: unknown): FailureState {
   return err instanceof NetworkError ? 'unreachable' : 'refused';
 }
 
-function onMountCompleteCallback(
-  router: AuthRouter,
-  onFailure: (state: FailureState) => void,
-): () => void {
+function reportThrown(err: unknown): void {
+  console.warn('[auth] web callback exchange threw', thrownErrorDetail(err));
+}
+
+function onMountCompleteCallback(router: AuthRouter, onFailure: Failure): () => void {
   let active = true;
+  const fail = (state: FailureState): void => (active ? onFailure(state) : undefined);
   completeCallback(router)
-    .then((outcome) => (active && outcome === 'refused' ? onFailure('refused') : undefined))
-    .catch((err: unknown) => {
-      console.warn('[auth] web callback exchange threw', thrownErrorDetail(err));
-      if (active) onFailure(failureStateFor(err));
-    });
+    .then((outcome) => (outcome === 'refused' ? fail('refused') : undefined))
+    .catch((err: unknown) => (reportThrown(err), fail(failureStateFor(err))));
   return () => {
     active = false;
   };
