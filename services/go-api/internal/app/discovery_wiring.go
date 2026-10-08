@@ -3,7 +3,6 @@ package app
 import (
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/discovery/adapters/providers"
-	"altune/go-api/internal/shared"
 	"context"
 	"log/slog"
 	"time"
@@ -31,22 +30,6 @@ type discoveryContentStaging struct {
 	artistSvc      *discoveryService.GetArtistContentService
 	relatedSvc     *discoveryService.GetRelatedTracksService
 	suggestSvc     *discoveryService.SuggestService
-}
-
-type sharedFeaturedResolver struct {
-	inner *discoveryService.FeaturedArtistResolver
-}
-
-func (r sharedFeaturedResolver) Resolve(ctx context.Context, artist, title string) ([]shared.FeaturedArtist, error) {
-	feats, err := r.inner.Resolve(ctx, artist, title)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]shared.FeaturedArtist, 0, len(feats))
-	for _, f := range feats {
-		out = append(out, shared.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID, Role: f.Role})
-	}
-	return out, nil
 }
 
 func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter, breaker *discoveryService.CircuitBreaker) *discoveryService.ConsensusService {
@@ -95,7 +78,7 @@ func buildFeaturedBridge(cf clientFactory, sharedMB *providers.MusicBrainzAdapte
 	if sharedMB != nil {
 		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
 	}
-	return discoverybridge.NewFeaturedResolver(sharedFeaturedResolver{inner: featuredResolver})
+	return discoverybridge.NewFeaturedResolver(featuredResolver)
 }
 
 func (a *App) buildAlbumAndRelatedServices(
