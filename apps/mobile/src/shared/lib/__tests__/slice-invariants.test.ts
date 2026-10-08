@@ -11,7 +11,15 @@ function sliceModuleNames(): string[] {
     .readdirSync(SLICE_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
     .map((entry) => entry.name.replace(/\.tsx?$/, ''))
+    .filter((moduleName) => !isReExportShim(readSliceFile(moduleName)))
     .sort();
+}
+
+const RE_EXPORT_LINE_PATTERN = /^export (type )?\{[^}]*\} from '[^']+';$/;
+
+function isReExportShim(source: string): boolean {
+  const lines = source.split('\n').filter((line) => line.trim() !== '');
+  return lines.length > 0 && lines.every((line) => RE_EXPORT_LINE_PATTERN.test(line));
 }
 
 function readSliceFile(moduleName: string): string {
