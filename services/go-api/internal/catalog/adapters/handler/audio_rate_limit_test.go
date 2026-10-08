@@ -2,6 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -61,12 +63,12 @@ func (s *countingAudioStore) PresignGet(_ context.Context, ref string, _ time.Du
 	return "https://storage.test/" + ref + "?sig=x", nil
 }
 
-var verifyBearerAsUser = auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+var verifyBearerAsUser = authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 	id, err := uuid.Parse(token)
 	if err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
-	return auth.VerifiedToken{UserID: shared.NewUserId(id), ExpiresAt: time.Now().Add(time.Hour)}, nil
+	return authdomain.VerifiedToken{UserID: shared.NewUserId(id), ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 const audioTestBytes = 64 * 1024

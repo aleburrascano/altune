@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/reqmetrics"
@@ -59,7 +59,7 @@ func v1ResponseHeaders(next http.Handler) http.Handler {
 }
 
 func (a *App) mountRoutes(
-	verifier auth.TokenVerifier,
+	verifier authports.TokenVerifier,
 	cat catalogWiring,
 	queueHandler *playbackHandler.QueueHandler,
 	discoveryH *discoveryHandler.DiscoveryHandler,

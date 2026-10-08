@@ -1,7 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -27,14 +28,14 @@ const operatorToken = "operator-token"
 
 func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		switch token {
 		case operatorToken:
-			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		case "jwks-down":
-			return auth.VerifiedToken{}, errors.New("fetch JWKS: connection refused")
+			return authdomain.VerifiedToken{}, errors.New("fetch JWKS: connection refused")
 		}
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
 	})
 	r := chi.NewRouter()
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
@@ -60,7 +61,7 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	if got.Auth.TokenRejections != before.TokenRejections+1 {
 		t.Errorf("auth.token_rejections_total %d, want %d", got.Auth.TokenRejections, before.TokenRejections+1)
 	}
-	reason := string(auth.ReasonSignatureInvalid)
+	reason := string(authdomain.ReasonSignatureInvalid)
 	if want := before.TokenRejectionsByReason[reason] + 1; got.Auth.TokenRejectionsByReason[reason] != want {
 		t.Errorf("auth.token_rejections_by_reason_total[%s] %d, want %d", reason, got.Auth.TokenRejectionsByReason[reason], want)
 	}

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
@@ -130,7 +130,7 @@ func (l *audioRateLimiter) sweep(now time.Time) {
 
 func (l *audioRateLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userId, ok := auth.UserIDFromContext(r.Context())
+		userId, ok := authservice.UserIDFromContext(r.Context())
 		if !ok {
 			next.ServeHTTP(w, r)
 			return

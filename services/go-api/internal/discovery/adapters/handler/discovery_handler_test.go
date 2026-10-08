@@ -2,6 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
@@ -28,8 +30,8 @@ var (
 	discTestUserId   = shared.NewUserId(discTestUserUUID)
 )
 
-var discVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-	return auth.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
+var discVerifyAsTestUser = authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+	return authdomain.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 type fakeSearchProvider struct {

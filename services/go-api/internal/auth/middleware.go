@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -14,7 +16,7 @@ import (
 	"time"
 )
 
-func Middleware(verifier TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
+func Middleware(verifier ports.TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
 	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics()}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -36,19 +38,19 @@ func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
 	}
 }
 
-func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {
+func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {
 	rej := rejecter{metrics: metrics}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				rej.rejectToken(w, r, ReasonMissing, "missing authorization header", nil)
+				rej.rejectToken(w, r, domain.ReasonMissing, "missing authorization header", nil)
 				return
 			}
 
 			token, ok := bearerToken(authHeader)
 			if !ok {
-				rej.rejectToken(w, r, ReasonMalformed, "malformed authorization header", nil)
+				rej.rejectToken(w, r, domain.ReasonMalformed, "malformed authorization header", nil)
 				return
 			}
 
@@ -64,7 +66,7 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports
 				return
 			}
 			if verified.ExpiresAt.IsZero() {
-				rej.rejectToken(w, r, ReasonClaimMissingEXP, "invalid token", nil)
+				rej.rejectToken(w, r, domain.ReasonClaimMissingEXP, "invalid token", nil)
 				return
 			}
 			attempt.succeeded()
@@ -74,9 +76,13 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports
 				"path", r.URL.Path,
 			)
 
-			next.ServeHTTP(w, r.WithContext(verified.contextFor(r.Context())))
+			next.ServeHTTP(w, r.WithContext(contextFor(r.Context(), verified)))
 		})
 	}
+}
+
+func contextFor(ctx context.Context, t domain.VerifiedToken) context.Context {
+	return service.ContextWithTokenExpiry(service.ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
 }
 
 const maxBearerTokenBytes = 8 << 10
@@ -99,7 +105,7 @@ type rejecter struct {
 }
 
 func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error) {
-	var invalidToken *InvalidTokenError
+	var invalidToken *domain.InvalidTokenError
 	if errors.As(err, &invalidToken) {
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
@@ -138,12 +144,12 @@ func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Req
 	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 }
 
-func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
+func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {
 	rej.metrics.TokenRejected(string(reason))
 	writeUnauthorized(w, r, reason, detail, err)
 }
 
-func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
+func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {
 	attrs := []any{
 		"reason", string(reason),
 		"detail", detail,
@@ -163,9 +169,9 @@ func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason TokenRejec
 }
 
 func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
-	id, ok := UserIDFromContext(r.Context())
+	id, ok := service.UserIDFromContext(r.Context())
 	if !ok {
-		writeUnauthorized(w, r, ReasonMissing, "authentication required", nil)
+		writeUnauthorized(w, r, domain.ReasonMissing, "authentication required", nil)
 		return shared.UserId{}, false
 	}
 	return id, true

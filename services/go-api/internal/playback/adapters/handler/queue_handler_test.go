@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service"
@@ -59,13 +59,13 @@ func newHandler(repo ports.QueueStateRepository) *QueueHandler {
 
 func savePut(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPut, "/queue-state", strings.NewReader(body))
-	ctx := auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
+	ctx := authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
 	return req.WithContext(ctx)
 }
 
 func deleteReq() *http.Request {
 	req := httptest.NewRequest(http.MethodDelete, "/queue-state", nil)
-	ctx := auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
+	ctx := authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
 	return req.WithContext(ctx)
 }
 
@@ -194,7 +194,7 @@ func resavedSource(t *testing.T, resumed json.RawMessage) string {
 func resumedSource(t *testing.T, h *QueueHandler) json.RawMessage {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
 
 	h.Routes().ServeHTTP(rec, req)
@@ -288,7 +288,7 @@ func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.
 	}}
 	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying, opts...))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
 
 	h.Routes().ServeHTTP(rec, req)
@@ -350,7 +350,7 @@ func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *tes
 
 func positionPut(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPut, "/queue-state/position", strings.NewReader(body))
-	return req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	return req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 }
 
 func TestHandleSavePosition_WritesPositionWithoutTheQueue(t *testing.T) {
@@ -417,7 +417,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Hour, Burst: 1}))
 	user := shared.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
-		return req.WithContext(auth.ContextWithUserID(req.Context(), user))
+		return req.WithContext(authservice.ContextWithUserID(req.Context(), user))
 	}
 
 	first := httptest.NewRecorder()
@@ -436,7 +436,7 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 		NaturalOrder: []string{"t1"},
 	}}, nilNowPlaying{}))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
 
 	h.Routes().ServeHTTP(rec, req)

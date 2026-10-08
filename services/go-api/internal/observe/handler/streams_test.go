@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
@@ -307,7 +307,7 @@ func TestStreams_OpenWritesOneObserveReadAuditLine(t *testing.T) {
 			var logs bytes.Buffer
 			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 			principal := shared.NewUserId(uuid.New())
-			ctx, cancel := context.WithCancel(auth.ContextWithUserID(withCorrelation("audit-corr-1"), principal))
+			ctx, cancel := context.WithCancel(authservice.ContextWithUserID(withCorrelation("audit-corr-1"), principal))
 			cancel()
 
 			streamRouter(fx.deps).ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
@@ -421,7 +421,7 @@ func TestStreams_EndAtTokenExpiry(t *testing.T) {
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
-			req = req.WithContext(auth.ContextWithTokenExpiry(req.Context(), time.Now().Add(50*time.Millisecond)))
+			req = req.WithContext(authservice.ContextWithTokenExpiry(req.Context(), time.Now().Add(50*time.Millisecond)))
 
 			returned := serveStream(t, fx.deps, req)
 

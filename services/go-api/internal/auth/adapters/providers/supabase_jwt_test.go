@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
@@ -106,9 +107,9 @@ func signingJWK(t *testing.T, raw any, kid string) jwk.Key {
 	return key
 }
 
-func assertInvalidTokenReason(t *testing.T, err error, want auth.TokenRejectReason) {
+func assertInvalidTokenReason(t *testing.T, err error, want authdomain.TokenRejectReason) {
 	t.Helper()
-	var tokenErr *auth.InvalidTokenError
+	var tokenErr *authdomain.InvalidTokenError
 	if !errors.As(err, &tokenErr) {
 		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
 	}
@@ -122,7 +123,7 @@ func assertVerifierUnavailable(t *testing.T, err error) {
 	if err == nil {
 		t.Fatal("expected a verifier-unavailable error, got nil")
 	}
-	var tokenErr *auth.InvalidTokenError
+	var tokenErr *authdomain.InvalidTokenError
 	if errors.As(err, &tokenErr) {
 		t.Fatalf("a failed key refresh was reported as a token rejection (%q): %v", tokenErr.Reason, err)
 	}
@@ -208,7 +209,7 @@ func TestSupabaseJWTVerifier_ExpiredToken(t *testing.T) {
 		t.Fatal("expected error for expired token, got nil")
 	}
 
-	assertInvalidTokenReason(t, err, auth.ReasonExpired)
+	assertInvalidTokenReason(t, err, authdomain.ReasonExpired)
 }
 
 func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
@@ -238,7 +239,7 @@ func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
 		t.Fatal("expected error for wrong-key signature, got nil")
 	}
 
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertInvalidTokenReason(t, err, authdomain.ReasonSignatureInvalid)
 }
 
 func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
@@ -267,7 +268,7 @@ func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
 		t.Fatal("expected error for unknown key id, got nil")
 	}
 
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertInvalidTokenReason(t, err, authdomain.ReasonSignatureInvalid)
 }
 
 func TestSupabaseJWTVerifier_JWKSUnavailable(t *testing.T) {
@@ -283,7 +284,7 @@ func TestSupabaseJWTVerifier_JWKSUnavailable(t *testing.T) {
 		t.Fatal("expected error when JWKS is unreachable, got nil")
 	}
 
-	var tokenErr *auth.InvalidTokenError
+	var tokenErr *authdomain.InvalidTokenError
 	if errors.As(err, &tokenErr) {
 		t.Fatalf("JWKS unavailability must not be an InvalidTokenError, got reason %q", tokenErr.Reason)
 	}
@@ -305,7 +306,7 @@ func TestSupabaseJWTVerifier_MissingExp(t *testing.T) {
 		t.Fatal("expected error for token missing exp claim, got nil")
 	}
 
-	assertInvalidTokenReason(t, err, auth.ReasonClaimMissingEXP)
+	assertInvalidTokenReason(t, err, authdomain.ReasonClaimMissingEXP)
 }
 
 func TestSupabaseJWTVerifier_SlowJWKSEndpointDoesNotHang(t *testing.T) {
@@ -729,7 +730,7 @@ func TestSupabaseJWTVerifier_UnknownKidFloodCannotForceUnboundedFetches(t *testi
 	for range sequential {
 		f.keyID = uuid.New().String()
 		_, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience)))
-		assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+		assertInvalidTokenReason(t, err, authdomain.ReasonSignatureInvalid)
 	}
 
 	tokens := make([]string, concurrent)
@@ -743,7 +744,7 @@ func TestSupabaseJWTVerifier_UnknownKidFloodCannotForceUnboundedFetches(t *testi
 		go func() {
 			defer wg.Done()
 			_, err := verifier.Verify(context.Background(), token)
-			assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+			assertInvalidTokenReason(t, err, authdomain.ReasonSignatureInvalid)
 		}()
 	}
 	wg.Wait()
@@ -820,11 +821,11 @@ func TestSupabaseJWTVerifier_UnknownKidInsideRecentRefreshWindowIsRejected(t *te
 	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
 	token := f.signToken(t, validClaims(f.issuer, f.audience))
 	_, err := verifier.Verify(context.Background(), token)
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertInvalidTokenReason(t, err, authdomain.ReasonSignatureInvalid)
 
 	jwks.down.Store(true)
 	_, err = verifier.Verify(context.Background(), token)
-	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	assertInvalidTokenReason(t, err, authdomain.ReasonSignatureInvalid)
 }
 
 func TestSupabaseJWTVerifier_RefreshPublishingNoKeysKeepsCachedKeys(t *testing.T) {
@@ -896,7 +897,7 @@ func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 		t.Fatal("expected error for missing sub claim, got nil")
 	}
 
-	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidSUB)
+	assertInvalidTokenReason(t, err, authdomain.ReasonClaimInvalidSUB)
 }
 
 func TestSupabaseJWTVerifier_LifetimeAtMaximumAccepted(t *testing.T) {
@@ -934,7 +935,7 @@ func TestSupabaseJWTVerifier_LifetimeOverMaximumRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for token lifetime over maximum, got nil")
 	}
-	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidIAT)
+	assertInvalidTokenReason(t, err, authdomain.ReasonClaimInvalidIAT)
 }
 
 func TestSupabaseJWTVerifier_MissingIatRejected(t *testing.T) {
@@ -952,7 +953,7 @@ func TestSupabaseJWTVerifier_MissingIatRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for token missing iat claim, got nil")
 	}
-	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidIAT)
+	assertInvalidTokenReason(t, err, authdomain.ReasonClaimInvalidIAT)
 }
 
 func TestSupabaseJWTVerifier_FutureIatCannotShrinkLifetime(t *testing.T) {
@@ -1006,9 +1007,9 @@ func TestVerifiedToken_RejectsTokenWithoutExpiry(t *testing.T) {
 
 	_, err = verifiedToken(token)
 
-	var invalid *auth.InvalidTokenError
-	if !errors.As(err, &invalid) || invalid.Reason != auth.ReasonClaimMissingEXP {
-		t.Fatalf("err = %v, want InvalidTokenError with reason %q", err, auth.ReasonClaimMissingEXP)
+	var invalid *authdomain.InvalidTokenError
+	if !errors.As(err, &invalid) || invalid.Reason != authdomain.ReasonClaimMissingEXP {
+		t.Fatalf("err = %v, want InvalidTokenError with reason %q", err, authdomain.ReasonClaimMissingEXP)
 	}
 }
 
@@ -1093,7 +1094,7 @@ func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T)
 	if !errors.Is(err, errJWKSStale) {
 		t.Fatalf("Verify past the staleness bound: got %v, want errJWKSStale", err)
 	}
-	var invalid *auth.InvalidTokenError
+	var invalid *authdomain.InvalidTokenError
 	if errors.As(err, &invalid) {
 		t.Fatalf("stale key set must not read as a token rejection: %v", err)
 	}
@@ -1174,7 +1175,7 @@ func TestSupabaseJWTVerifier_RevokerErrorIsUnavailableNotInvalid(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when revoker fails, got nil")
 	}
-	var tokenErr *auth.InvalidTokenError
+	var tokenErr *authdomain.InvalidTokenError
 	if errors.As(err, &tokenErr) {
 		t.Fatalf("revoker failure must be a plain error (503), got InvalidTokenError %v", tokenErr)
 	}

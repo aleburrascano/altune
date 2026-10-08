@@ -2,6 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
@@ -28,8 +30,8 @@ var (
 	testUserId   = shared.NewUserId(testUserUUID)
 )
 
-var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-	return auth.VerifiedToken{UserID: testUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
+var verifyAsTestUser = authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+	return authdomain.VerifiedToken{UserID: testUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 func serve(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {

@@ -3,8 +3,8 @@ package app
 import (
 	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
 	"altune/go-api/internal/acquisition/adapters/streamrip"
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/config"
@@ -178,7 +178,7 @@ func (a *App) connectDatastores(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, *testauth.TestAuth, error) {
+func (a *App) connectInfra(ctx context.Context) (authports.TokenVerifier, *testauth.TestAuth, error) {
 	if err := a.connectDatastores(ctx); err != nil {
 		return nil, nil, err
 	}

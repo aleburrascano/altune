@@ -2,6 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
@@ -122,11 +124,11 @@ func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 		Suggest: RequestLimit{Max: 2, Window: time.Hour},
 	})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	r.Use(auth.Middleware(authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == "other" {
-			return auth.VerifiedToken{UserID: otherTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return authdomain.VerifiedToken{UserID: otherTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return auth.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return authdomain.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})))
 	r.Mount("/discovery", h.Routes())
 
@@ -262,12 +264,12 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 				Favorites: RequestLimit{Max: 1, Window: time.Hour},
 			})
 			r := chi.NewRouter()
-			r.Use(auth.Middleware(auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+			r.Use(auth.Middleware(authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 				id := discTestUserId
 				if token == "other" {
 					id = otherTestUserId
 				}
-				return auth.VerifiedToken{UserID: id, ExpiresAt: time.Now().Add(time.Hour)}, nil
+				return authdomain.VerifiedToken{UserID: id, ExpiresAt: time.Now().Add(time.Hour)}, nil
 			})))
 			r.Mount("/discovery", h.Routes())
 

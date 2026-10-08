@@ -1,7 +1,9 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
+	authservice "altune/go-api/internal/auth/service"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/observe/service/eventtap"
@@ -80,7 +82,7 @@ func newDeadlineRouter(uid shared.UserId, sse *eventstream.Handler, bulkErrs cha
 		bulkErrs <- nil
 	})
 	r.Handle("/v1/events", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		sse.ServeHTTP(w, req.WithContext(auth.ContextWithUserID(req.Context(), uid)))
+		sse.ServeHTTP(w, req.WithContext(authservice.ContextWithUserID(req.Context(), uid)))
 	}))
 	return r
 }
@@ -169,8 +171,8 @@ func productionRouter(t *testing.T) *chi.Mux {
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+	verifier := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
 	})
 	r := a.mountRoutes(verifier, cat, playbackHandler.NewQueueHandler(nil),
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))

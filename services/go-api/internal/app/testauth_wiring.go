@@ -1,8 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func buildTestAuthVerifier(cfg testAuthConfig, supa auth.TokenVerifier) (*testauth.TestAuth, auth.TokenVerifier, error) {
+func buildTestAuthVerifier(cfg testAuthConfig, supa authports.TokenVerifier) (*testauth.TestAuth, authports.TokenVerifier, error) {
 	if !cfg.TestAuthEnabled() {
 		return nil, supa, nil
 	}

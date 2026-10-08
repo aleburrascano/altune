@@ -2,6 +2,9 @@ package eventstream
 
 import (
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
+	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -29,7 +32,7 @@ func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId,
 	h := NewHandler(bus, 0)
 	h.heartbeat = heartbeat
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
 		h.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
@@ -227,7 +230,7 @@ func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	h := NewHandler(bus, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := logging.WithCorrelationID(auth.ContextWithUserID(r.Context(), uid), corrID)
+		ctx := logging.WithCorrelationID(authservice.ContextWithUserID(r.Context(), uid), corrID)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	}))
 	defer srv.Close()
@@ -382,7 +385,7 @@ func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid shared.UserId) s
 func serveSSE(t *testing.T, h *Handler, uid shared.UserId) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
 		h.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
@@ -534,7 +537,7 @@ func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 	w := newBlockingFlushWriter()
 	defer w.close()
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
-	r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+	r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
 
 	done := make(chan struct{})
 	go func() {
@@ -555,7 +558,7 @@ func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 	h := NewHandler(bus, 0)
 	h.heartbeat = time.Hour
 
-	ctx, cancel := context.WithCancel(auth.ContextWithUserID(context.Background(), uid))
+	ctx, cancel := context.WithCancel(authservice.ContextWithUserID(context.Background(), uid))
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
 
@@ -583,7 +586,7 @@ func TestSSEHandler_PerUserConnectionCapRejectsOverflow(t *testing.T) {
 	h.heartbeat = time.Hour
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
 		h.ServeHTTP(w, r)
 	}))
 	defer srv.Close()
@@ -717,7 +720,7 @@ func newMultiUserSSEServer(t *testing.T, h *Handler) *httptest.Server {
 			http.Error(w, "bad test user", http.StatusBadRequest)
 			return
 		}
-		r = r.WithContext(auth.ContextWithUserID(r.Context(), shared.NewUserId(uid)))
+		r = r.WithContext(authservice.ContextWithUserID(r.Context(), shared.NewUserId(uid)))
 		h.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
@@ -765,7 +768,7 @@ func waitForSlotRelease(t *testing.T, url string) {
 func serveSSEWithTokenExpiry(t *testing.T, h *Handler, uid shared.UserId, expiresAt time.Time) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := auth.ContextWithTokenExpiry(auth.ContextWithUserID(r.Context(), uid), expiresAt)
+		ctx := authservice.ContextWithTokenExpiry(authservice.ContextWithUserID(r.Context(), uid), expiresAt)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	}))
 	t.Cleanup(srv.Close)
@@ -836,8 +839,8 @@ func TestSSEHandler_StreamEndingAtTokenExpiryFreesUserSlot(t *testing.T) {
 func TestSSEHandler_TokenWithoutExpiryOpensNoStream(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{UserID: uid}, nil
+	verifier := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+		return authdomain.VerifiedToken{UserID: uid}, nil
 	})
 	srv := httptest.NewServer(auth.Middleware(verifier)(NewHandler(bus, 0)))
 	t.Cleanup(srv.Close)
@@ -864,7 +867,7 @@ func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
 	h := NewHandler(events.NewInProcessBus(), 0).WithShutdown(done)
 	h.heartbeat = time.Hour
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).
-		WithContext(auth.ContextWithUserID(context.Background(), uid))
+		WithContext(authservice.ContextWithUserID(context.Background(), uid))
 
 	returned := make(chan struct{})
 	go func() {
@@ -981,7 +984,7 @@ func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
 	w := &nonFlushingWriter{header: http.Header{}}
 	uid := shared.NewUserId(uuid.New())
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
-	r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+	r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
 
 	h.ServeHTTP(w, r)
 

@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
 	"crypto/rand"
 	"crypto/rsa"
 	"testing"
@@ -58,8 +58,8 @@ func TestClassifyJWTError_RealJWXSignatureFailures(t *testing.T) {
 				t.Fatal("expected jwt.Parse to fail")
 			}
 
-			if got := classifyJWTError(parseErr); got != auth.ReasonSignatureInvalid {
-				t.Fatalf("classifyJWTError(%q) = %v, want %v", parseErr, got, auth.ReasonSignatureInvalid)
+			if got := classifyJWTError(parseErr); got != authdomain.ReasonSignatureInvalid {
+				t.Fatalf("classifyJWTError(%q) = %v, want %v", parseErr, got, authdomain.ReasonSignatureInvalid)
 			}
 		})
 	}

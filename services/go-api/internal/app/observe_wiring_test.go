@@ -2,8 +2,9 @@ package app
 
 import (
 	acqService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	observeNotifier "altune/go-api/internal/observe/adapters/notifier"
@@ -55,18 +56,18 @@ func newObserveSubjects() observeSubjects {
 	}
 }
 
-func (s observeSubjects) verifier() auth.TokenVerifier {
+func (s observeSubjects) verifier() authports.TokenVerifier {
 	byToken := map[string]shared.UserId{
 		observePrincipalToken: s.principal,
 		observeStrangerToken:  s.stranger,
 		observeReadOnlyToken:  s.readOnly,
 	}
-	return auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	return authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		subject, known := byToken[token]
 		if !known {
-			return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+			return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid}
 		}
-		return auth.VerifiedToken{UserID: subject, ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return authdomain.VerifiedToken{UserID: subject, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 }
 
@@ -226,7 +227,7 @@ func callObserveAs(t *testing.T, srv http.Handler, method, path, token string) (
 	return rec.Code, rec.Body.Bytes()
 }
 
-func mountObserveLiveMetrics(r chi.Router, verifier auth.TokenVerifier, principal shared.UserId, source observeHandler.LiveMetricsSource) {
+func mountObserveLiveMetrics(r chi.Router, verifier authports.TokenVerifier, principal shared.UserId, source observeHandler.LiveMetricsSource) {
 	mountObserve(r, verifier, principal.String(), observeHandler.New(observeHandler.Deps{LiveMetrics: source}))
 }
 

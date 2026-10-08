@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	authservice "altune/go-api/internal/auth/service"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
@@ -74,7 +74,7 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
 			before := providermetrics.ReadSnapshot()
 			req := httptest.NewRequest(http.MethodGet, route.target, nil)
-			req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+			req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
 			counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
 
