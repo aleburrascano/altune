@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
@@ -19,5 +19,5 @@ export function AcquisitionPortProvider({
 }
 
 export function useAcquisitionPort(): AcquisitionPort {
-  return useContext(AcquisitionPortContext);
+  return use(AcquisitionPortContext);
 }
