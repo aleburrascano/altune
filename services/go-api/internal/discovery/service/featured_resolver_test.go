@@ -18,10 +18,9 @@ func (f fakeMBFeat) SearchStructured(_ context.Context, _, _ string, _ map[domai
 }
 
 type fakeDeezerFeat struct {
-	id    string
-	feats []domain.FeaturedArtist
-	err   error
-	// lookupErr fails LookupTrackFeatured only.
+	id        string
+	feats     []domain.FeaturedArtist
+	err       error
 	lookupErr error
 }
 

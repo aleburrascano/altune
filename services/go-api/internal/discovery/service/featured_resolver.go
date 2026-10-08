@@ -28,10 +28,6 @@ func NewFeaturedArtistResolver(mb mbFeaturedSearcher, deezer deezerFeaturedLooku
 	return &FeaturedArtistResolver{mb: mb, deezer: deezer}
 }
 
-// Resolve merges the featured artists from MusicBrainz and Deezer. It returns
-// an error only when at least one source was tried and every tried source
-// failed (a cancelled ctx counts as a failure), so callers can tell an outage
-// from a track with no featured artists.
 func (r *FeaturedArtistResolver) Resolve(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error) {
 	var attempted int
 	var errs []error
