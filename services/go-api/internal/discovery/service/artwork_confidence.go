@@ -12,7 +12,7 @@ func artworkConfidenceRank(r domain.SearchResult) int {
 	if r.ImageURL == "" {
 		return artworkRankNone
 	}
-	switch stringExtra(r.Extras, domain.ExtraArtworkPath) {
+	switch domain.StringExtra(r.Extras, domain.ExtraArtworkPath) {
 	case "durable-identity", "identity":
 		return artworkRankIdentity
 	case "name":

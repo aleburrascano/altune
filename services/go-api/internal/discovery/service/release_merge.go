@@ -121,7 +121,7 @@ func mergeRecordType(a, b domain.RecordType) domain.RecordType {
 }
 
 func hasStrongID(r domain.SearchResult) bool {
-	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || stringExtra(r.Extras, domain.ExtraUPC) != ""
+	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || domain.StringExtra(r.Extras, domain.ExtraUPC) != ""
 }
 
 func unionSources(a, b []domain.SourceRef) []domain.SourceRef {
@@ -144,16 +144,6 @@ func sourceKey(provider domain.ProviderName, id string) string {
 
 func SourceKey(provider domain.ProviderName, id string) string {
 	return sourceKey(provider, id)
-}
-
-func stringExtra(extras map[string]any, key string) string {
-	if extras == nil {
-		return ""
-	}
-	if v, ok := extras[key].(string); ok {
-		return v
-	}
-	return ""
 }
 
 func maxInt(a, b int) int {

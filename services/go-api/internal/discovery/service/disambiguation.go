@@ -66,7 +66,7 @@ func applyDisambiguationExtras(results []domain.SearchResult) {
 		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
 			continue
 		}
-		if disambig, _ := r.Extras[domain.ExtraDisambiguation].(string); disambig != "" {
+		if disambig := domain.StringExtra(r.Extras, domain.ExtraDisambiguation); disambig != "" {
 			results[i].Subtitle = disambig
 		}
 	}

@@ -26,3 +26,9 @@ const (
 	ExtraRecordType         = "record_type"
 	ExtraResolutionTier     = "resolution_tier"
 )
+
+// StringExtra reads a string extra; a nil map, missing key or non-string value gives "".
+func StringExtra(extras map[string]any, key string) string {
+	v, _ := extras[key].(string)
+	return v
+}

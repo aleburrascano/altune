@@ -143,8 +143,8 @@ func pendingTrackNumbers(items []OwnableItem) map[string]int {
 	pending := map[string]int{}
 	for i, item := range items {
 		extras := item.extras()
-		trackId, ok := extras[domain.ExtraOwnedTrackID].(string)
-		if !ok || trackId == "" {
+		trackId := domain.StringExtra(extras, domain.ExtraOwnedTrackID)
+		if trackId == "" {
 			continue
 		}
 		if _, positioned := extras[domain.ExtraTrackPosition]; positioned {
