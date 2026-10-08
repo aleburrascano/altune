@@ -74,6 +74,7 @@ grep -q "expo export -p web --dev TEST_AUTH=1" "$STUB_LOG" || { echo "FAIL web e
 grep -q "expo export -p web --dev TEST_AUTH=1 TMPDIR=$E2E_STACK_DIR/metro-tmp$" "$STUB_LOG" || { echo "FAIL web export should keep its metro cache inside this run"; fail=1; }
 grep -q "^docker run .* rustfs/rustfs:" "$STUB_LOG" || { echo "FAIL up should start an S3 store for audio"; fail=1; }
 grep -q "^python3 make-bucket altune-e2e e2e$" "$STUB_LOG" || { echo "FAIL up should create the audio bucket"; fail=1; }
+grep -q "^docker run .* -e RUSTFS_TLS_PATH=/opt/tls -v .*/tls:/opt/tls:ro .*rustfs/rustfs:" "$STUB_LOG" || { echo "FAIL up should serve the S3 store over https"; fail=1; }
 [ -d "$E2E_STACK_DIR" ] || { echo "FAIL state should exist while the stack is up"; fail=1; }
 [ "$(grep -c '^docker run' "$STUB_LOG")" = "$(grep -c '^docker run .*--label altune-ci=1 ' "$STUB_LOG")" ] || { echo "FAIL every docker run should carry the altune-ci label"; fail=1; }
 
@@ -81,7 +82,8 @@ sleep 1
 for want in PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR=.*/apps/mobile/e2e/fixtures/providers \
   SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
   AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
-  OCI_S3_ENDPOINT=http://127.0.0.1:5555 OCI_S3_BUCKET=altune-e2e OCI_S3_ACCESS_KEY=e2e; do
+  OCI_S3_ENDPOINT=https://127.0.0.1:5555 OCI_S3_BUCKET=altune-e2e OCI_S3_ACCESS_KEY=e2e \
+  SSL_CERT_FILE=.*/ca-bundle.pem; do
   grep -q "^$want$" "$STUB_API_ENV" || { echo "FAIL api should start with $want"; fail=1; }
 done
 
