@@ -4,10 +4,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
-import { fetchAudioUrls } from '@shared/api-client/audio';
-import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/api-client/playback';
-import { getAllTracks, getTracks } from '@shared/api-client/tracks';
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
@@ -24,18 +21,30 @@ import {
 import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
 
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 
-jest.mock('@shared/api-client/playback', () => ({
-  getQueueState: jest.fn(),
-  saveQueueState: jest.fn(async () => undefined),
-}));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-jest.mock('@shared/api-client/tracks', () => ({ getTracks: jest.fn(), getAllTracks: jest.fn() }));
-jest.mock('@shared/api-client/audio', () => ({
-  audioStreamUrl: (id: string) => `https://api.example/audio/${id}`,
-  audioRequestHeaders: jest.fn(async () => ({})),
-  fetchAudioUrls: jest.fn(async () => []),
-}));
+
+const getQueueState = jest.fn();
+const saveQueueState = jest.fn(async (_body: SaveQueueStateRequest): Promise<void> => undefined);
+const getAllTracks = jest.fn();
+const getTracks = jest.fn();
+const fetchAudioUrls = jest.fn(async (): Promise<ResolvedAudioUrl[]> => []);
+
+let restorePort: () => void;
+beforeAll(() => {
+  restorePort = installPlaybackPort({
+    ...createMemoryPlaybackPort(),
+    getQueueState,
+    saveQueueState,
+    getAllTracks,
+    fetchAudioUrls,
+  });
+});
+afterAll(() => {
+  restorePort();
+});
 
 const { __player } = jest.requireMock('react-native-track-player');
 
@@ -1191,5 +1200,101 @@ describe('queue save and restore failures move playback_health counters', () => 
     expect(flushedPayloads()).toEqual([
       expect.objectContaining({ queue_state_rejected: 1, queue_restore_failed_fetch: 0 }),
     ]);
+  });
+});
+
+describe('resuming through a memory playback port', () => {
+  const NOW = '2026-01-01T00:00:00Z';
+
+  function libraryRow(id: string): TrackResponse {
+    return {
+      id,
+      title: `Title ${id}`,
+      artist: 'Artist',
+      album: null,
+      duration_seconds: 200,
+      added_at: NOW,
+      acquisition_status: 'ready',
+      artwork_url: null,
+      failure_reason: null,
+      year: null,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+      isrc: null,
+      audio_ref: null,
+    } as TrackResponse;
+  }
+
+  function queueState(ids: string[]): QueueStateResponse {
+    return {
+      track_ids: ids,
+      natural_order: ids,
+      current_index: 0,
+      position_ms: 1000,
+      shuffled: false,
+      repeat_mode: 'off',
+      source: null,
+    } as unknown as QueueStateResponse;
+  }
+
+  let restoreMemory: () => void;
+  let restoredIds: () => string[];
+
+  function useMemoryPort(seed: Parameters<typeof createMemoryPlaybackPort>[0]) {
+    const port = createMemoryPlaybackPort(seed);
+    restoreMemory = installPlaybackPort(port);
+    return port;
+  }
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+    });
+  }
+
+  beforeEach(() => {
+    useQueueStore.getState().clearQueue();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    restoredIds = () => orderedQueueTracks(useQueueStore.getState()).map((t) => trackKey(t));
+  });
+
+  afterEach(() => {
+    restoreMemory();
+    jest.restoreAllMocks();
+  });
+
+  it('restores nothing from an empty queue state', async () => {
+    useMemoryPort({ tracks: [libraryRow('a')], queueState: queueState([]) });
+    renderHook(() => useQueueResume());
+    await settle();
+    expect(useQueueStore.getState().tracks).toHaveLength(0);
+  });
+
+  it('restores the seeded tracks in order', async () => {
+    useMemoryPort({
+      tracks: ['a', 'b', 'c'].map(libraryRow),
+      queueState: queueState(['c', 'a', 'b']),
+    });
+    renderHook(() => useQueueResume());
+    await settle();
+    expect(restoredIds()).toEqual(['library:c', 'library:a', 'library:b']);
+  });
+
+  it('returns a queue state saved after a change from the next read', async () => {
+    const port = useMemoryPort({ tracks: [libraryRow('a')], queueState: queueState([]) });
+    const saved = queueState(['a']);
+    await port.saveQueueState(saved);
+    expect(await port.getQueueState()).toEqual(saved);
+  });
+
+  it('does not restore a saved track the library no longer has', async () => {
+    useMemoryPort({
+      tracks: ['a', 'c'].map(libraryRow),
+      queueState: queueState(['a', 'gone', 'c']),
+    });
+    renderHook(() => useQueueResume());
+    await settle();
+    expect(restoredIds()).not.toContain('library:gone');
   });
 });

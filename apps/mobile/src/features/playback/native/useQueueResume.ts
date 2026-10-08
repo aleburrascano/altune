@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef } from 'react';
 import TrackPlayer from 'react-native-track-player';
 
 import type { QueueStateResponse } from '@shared/api-client/playback';
-import { getQueueState, saveQueueState } from '@shared/api-client/playback';
-import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { canPlay } from '@shared/playback/canPlay';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
@@ -14,6 +12,7 @@ import { currentSessionEpoch, isSameSession } from '@shared/session/signOutClean
 import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { reportLoadFailure } from '@features/playback/playbackErrorStore';
 import {
   rebuildOnFirstWorkingRungReportingCurrent,
@@ -125,7 +124,7 @@ function sameFingerprint(a: SaveFingerprint | null, b: SaveFingerprint): boolean
 }
 
 async function sendSave(s: QueueStore, positionMs: number): Promise<void> {
-  await saveQueueState({
+  await playbackPort().saveQueueState({
     ...cappedSavedLists(s),
     position_ms: positionMs,
     shuffled: s.shuffled,
@@ -244,7 +243,7 @@ async function restoreSavedQueue(
   try {
     let owned = useQueueStore.getState().generation;
 
-    const parsed = parseQueueState(await getQueueState());
+    const parsed = parseQueueState(await playbackPort().getQueueState());
     if (!parsed.ok) {
       console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
       recordQueueStateRejected();
@@ -262,7 +261,7 @@ async function restoreSavedQueue(
     }
 
     stage = 'tracks';
-    const { items: home, truncated } = await getAllTracks({});
+    const { items: home, truncated } = await playbackPort().getAllTracks({});
     if (!home.length) return;
     if (userTookOver(owned)) return;
     if (truncated && savedTracksMissingFrom(saved, home)) {

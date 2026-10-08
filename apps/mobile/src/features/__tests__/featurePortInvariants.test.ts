@@ -54,7 +54,7 @@ function isCheckedFile(name: string): boolean {
   );
 }
 
-const PORTED_FEATURES = ['library', 'discover', 'auth', 'settings', 'detail'];
+const PORTED_FEATURES = ['library', 'discover', 'auth', 'settings', 'detail', 'playback'];
 const files = PORTED_FEATURES.flatMap(featureFiles).filter(({ name }) => isCheckedFile(name));
 
 test.each(PORTED_FEATURES)('%s has source files to check', (feature) => {

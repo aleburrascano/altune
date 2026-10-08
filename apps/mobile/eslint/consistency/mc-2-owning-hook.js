@@ -13,7 +13,6 @@ const OWNERS = {
     favorites: ['addFavorite', 'removeFavorite'],
   },
   'src/features/settings/hooks/useSubmitReport.ts': { feedback: ['submitReport'] },
-  'src/features/detail/hooks/useSaveTrack.ts': { tracks: ['createTrack'] },
   'src/shared/acquisition/adapters/http/httpAcquisitionPort.ts': { tracks: ['retryAcquisition'] },
   'src/features/library/adapters/http/httpLibraryPort.ts': {
     tracks: ['deleteTrack', 'reacquireTrack'],
@@ -26,8 +25,6 @@ const OWNERS = {
   'src/features/settings/adapters/http/httpSettingsPort.ts': {
     tracks: ['backfillFeaturedArtists'],
   },
-  'src/features/playback/native/service.ts': { audio: ['recoverAudio'] },
-  'src/features/playback/native/useQueueResume.ts': { playback: ['saveQueueState'] },
 };
 
 const EXEMPT = {
