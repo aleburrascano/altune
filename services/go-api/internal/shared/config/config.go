@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -58,6 +59,7 @@ type Config struct {
 	FFmpegLocation         string `env:"FFMPEG_LOCATION"`
 	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
+	YtDLPRemoteComponents  string `env:"YTDLP_REMOTE_COMPONENTS"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 
 	AcquisitionDownloadConcurrency int `env:"ACQUISITION_DOWNLOAD_CONCURRENCY" envDefault:"6"`
@@ -105,12 +107,18 @@ type Config struct {
 	DisabledJobs      []string `env:"DISABLED_JOBS" envSeparator:","`
 }
 
+// defaultYtDLPRemoteComponents applies only when the variable is unset; an empty value turns the fetch off.
+const defaultYtDLPRemoteComponents = "ejs:github"
+
 func Load() (*Config, error) {
 	_ = godotenv.Load(".env.development")
 
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	if _, set := os.LookupEnv("YTDLP_REMOTE_COMPONENTS"); !set {
+		cfg.YtDLPRemoteComponents = defaultYtDLPRemoteComponents
 	}
 	cfg.normalize()
 	if err := cfg.validate(); err != nil {

@@ -723,3 +723,78 @@ func TestEmbeddedStderr_CapsOnRuneBoundaryWithSuffix(t *testing.T) {
 		t.Errorf("short stderr changed: %q", short)
 	}
 }
+
+func recordedArgv(t *testing.T, s *YtDlpAudioSearcher, call func(ctx context.Context, s *YtDlpAudioSearcher, outDir string)) []string {
+	t.Helper()
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	var argvFile string
+	s.binary, argvFile = argvRecordingDownloaderAt(t, outDir)
+	// Search resolves yt-dlp from PATH rather than s.binary, so expose the recorder there too.
+	pathDir := t.TempDir()
+	if err := os.Symlink(s.binary, filepath.Join(pathDir, "yt-dlp")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", pathDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	call(context.Background(), s, outDir)
+	raw, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+}
+
+var ytDlpCallers = map[string]func(ctx context.Context, s *YtDlpAudioSearcher, outDir string){
+	"search": func(ctx context.Context, s *YtDlpAudioSearcher, _ string) {
+		_, _ = s.runYtDlpSearch(ctx, "ytsearch5:x")
+	},
+	"download": func(ctx context.Context, s *YtDlpAudioSearcher, outDir string) {
+		_, _ = s.Download(ctx, "https://youtube.com/watch?v=1", outDir)
+	},
+	"inspect": func(ctx context.Context, s *YtDlpAudioSearcher, _ string) {
+		_, _ = s.runYtDlpInspect(ctx, "https://soundcloud.com/a/b")
+	},
+	"canary": func(ctx context.Context, s *YtDlpAudioSearcher, _ string) {
+		_ = s.Canary(ctx, YouTubeCanary)
+	},
+}
+
+func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
+	cases := []struct {
+		name string
+		with func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher
+		want []string
+	}{
+		{"default fetches ejs:github", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s },
+			[]string{"--js-runtimes", "node", "--remote-components", "ejs:github"}},
+		{"configured spec", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("ejs:npm") },
+			[]string{"--js-runtimes", "node", "--remote-components", "ejs:npm"}},
+		{"empty spec drops the fetch", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("") },
+			[]string{"--js-runtimes", "node"}},
+	}
+	for caller, call := range ytDlpCallers {
+		for _, tc := range cases {
+			t.Run(caller+"/"+tc.name, func(t *testing.T) {
+				s := tc.with(NewYtDlpAudioSearcher("", "", "node"))
+				argv := recordedArgv(t, s, call)
+				if len(argv) < len(tc.want) || strings.Join(argv[:len(tc.want)], " ") != strings.Join(tc.want, " ") {
+					t.Fatalf("argv = %q, want it to start with %q", argv, tc.want)
+				}
+				if len(tc.want) == 2 && strings.Contains(strings.Join(argv, " "), "--remote-components") {
+					t.Fatalf("argv = %q, want no --remote-components", argv)
+				}
+			})
+		}
+	}
+}
+
+func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
+	for caller, call := range ytDlpCallers {
+		t.Run(caller, func(t *testing.T) {
+			argv := strings.Join(recordedArgv(t, NewYtDlpAudioSearcher("", "", ""), call), " ")
+			if strings.Contains(argv, "--js-runtimes") || strings.Contains(argv, "--remote-components") {
+				t.Fatalf("argv = %q, want no runtime or component flags", argv)
+			}
+		})
+	}
+}
