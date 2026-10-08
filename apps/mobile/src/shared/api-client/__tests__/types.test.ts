@@ -33,7 +33,6 @@ describe('api-client types shim', () => {
   });
 
   it('emits no runtime export', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    expect(Object.keys(require('@shared/api-client/types'))).toEqual([]);
+    expect(Object.keys(jest.requireActual('@shared/api-client/types'))).toEqual([]);
   });
 });
