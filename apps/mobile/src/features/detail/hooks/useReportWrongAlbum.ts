@@ -3,8 +3,8 @@ import { useRef, useState } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
-import { trackExtras } from '../extras-accessors';
-import { useDetailHandoff } from '../handoff-context';
+import { trackExtras } from '@/features/detail/extras-accessors';
+import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
 
 function wrongAlbumPayload(track: DiscoveryResult) {
   return {

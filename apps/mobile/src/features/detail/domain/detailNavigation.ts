@@ -1,7 +1,7 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { detailHref } from '@shared/lib/detail-handoff';
-import { useNavigator, type Href, type Navigator, type TabRoot } from '@shared/navigation';
+import type { Href, Navigator, TabRoot } from '@shared/navigation';
 
 export type DetailRoute = `/${TabRoot}/detail`;
 export type FeaturingRoute = `/${TabRoot}/featuring`;
@@ -22,11 +22,6 @@ export function openDetail(
   navigator.push(detailHref(detailRoute, result));
 }
 
-export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {
-  const navigator = useNavigator();
-  return (picked) => openDetail(navigator, detailRoute, picked);
-}
-
 export function featuringHref(detailRoute: DetailRoute, artist: FeaturedArtist): Href {
   return {
     pathname: featuringRouteFor(detailRoute),
@@ -36,9 +31,4 @@ export function featuringHref(detailRoute: DetailRoute, artist: FeaturedArtist):
       ...(artist.deezer_id != null ? { deezer_id: String(artist.deezer_id) } : {}),
     },
   };
-}
-
-export function useOpenFeaturing(detailRoute: DetailRoute): (artist: FeaturedArtist) => void {
-  const navigator = useNavigator();
-  return (artist) => navigator.push(featuringHref(detailRoute, artist));
 }

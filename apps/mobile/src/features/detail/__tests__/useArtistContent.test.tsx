@@ -6,12 +6,12 @@ import type { DiscoverySource } from '@shared/api-client/discovery';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { useArtistContent } from '../hooks/useArtistContent';
-import { _resetDetailHealthForTest } from '../detailHealth';
-import { DetailPortProvider } from '../ports/DetailPortProvider';
-import type { DetailPort } from '../ports/detailPort';
-import { createMemoryDetailPort } from './memoryDetailPort';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
+import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
+import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
+import { DetailPortProvider } from '@/features/detail/ports/DetailPortProvider';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from '@/features/detail/__tests__/support/queryHarness';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 

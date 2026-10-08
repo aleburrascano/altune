@@ -8,11 +8,11 @@ import {
   DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
   type ContentFailure,
-} from '../content-status';
-import { fetchTallyingOutcome } from '../detailHealth';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
-import { useContentFetchRetry } from './useContentFetchRetry';
+} from '@/features/detail/domain/content-status';
+import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled, useGatedRefetch } from '@/features/detail/hooks/detailFetchGate';
+import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
 
 type UseAlbumTracksParams = {
   provider: string;

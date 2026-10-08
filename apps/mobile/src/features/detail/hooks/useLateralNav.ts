@@ -3,11 +3,12 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
 
-import { useOpenDetail, type DetailRoute } from '../navigation';
-import { resolveEntityQuery } from '../resolve-entity-query';
-import type { DetailPort } from '../ports/detailPort';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled } from './detailFetchGate';
+import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
+import { useOpenDetail } from '@/features/detail/hooks/useOpenDetail';
+import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/detailFetchGate';
 
 type LateralNavState = 'idle' | 'searching';
 

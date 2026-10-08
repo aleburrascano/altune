@@ -7,7 +7,7 @@ import { spacing } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { type ContentFailure } from '@features/detail/content-status';
+import { type ContentFailure } from '@features/detail/domain/content-status';
 import { type LastBatch } from '@features/detail/hooks/useAlbumSaveAll';
 import { type AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 

@@ -8,7 +8,8 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
-import { useOpenDetail, type DetailRoute } from '@features/detail/navigation';
+import { type DetailRoute } from '@features/detail/domain/detailNavigation';
+import { useOpenDetail } from '@features/detail/hooks/useOpenDetail';
 import { RELATED_CARD_WIDTH } from '@features/detail/ui/layout';
 import { sharedStyles } from '@features/detail/ui/styles';
 

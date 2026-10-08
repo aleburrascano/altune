@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { spacing } from '@shared/ui/theme';
 
-import { type ContentFailure } from '@features/detail/content-status';
+import { type ContentFailure } from '@features/detail/domain/content-status';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 
 import { AsyncListSection } from '@features/detail/ui/AsyncListSection';

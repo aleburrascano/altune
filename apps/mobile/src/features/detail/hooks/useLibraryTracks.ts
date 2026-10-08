@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-import type { DetailPort } from '../ports/detailPort';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { normalizeForCompare } from '../text-compare';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
 
 export const LOOKUP_LIMIT = 200;
 export const LOOKUP_MAX_PAGES = 5;

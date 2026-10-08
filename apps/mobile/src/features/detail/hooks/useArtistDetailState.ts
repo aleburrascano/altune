@@ -3,16 +3,17 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
-import { type ContentFailure } from '../content-status';
-import { useOpenDetail, type DetailRoute } from '../navigation';
-import { type OwnedTrack } from './useOwnedTrack';
-import { type OwnedSplit } from '../owned-playback';
-import { useArtistContent } from './useArtistContent';
-import { useArtistDiscovery } from './useArtistDiscovery';
-import { useLibraryAlbumsForArtist } from './useLibraryAlbumsForArtist';
-import { useLibraryTracksForArtist } from './useLibraryTracks';
-import { useSaveTrack } from './useSaveTrack';
-import { useOwnedPlayback } from './useOwnedPlayback';
+import { type ContentFailure } from '@/features/detail/domain/content-status';
+import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
+import { useOpenDetail } from '@/features/detail/hooks/useOpenDetail';
+import { type OwnedTrack } from '@/features/detail/hooks/useOwnedTrack';
+import { type OwnedSplit } from '@/features/detail/owned-playback';
+import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
+import { useArtistDiscovery } from '@/features/detail/hooks/useArtistDiscovery';
+import { useLibraryAlbumsForArtist } from '@/features/detail/hooks/useLibraryAlbumsForArtist';
+import { useLibraryTracksForArtist } from '@/features/detail/hooks/useLibraryTracks';
+import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
+import { useOwnedPlayback } from '@/features/detail/hooks/useOwnedPlayback';
 
 export type ArtistDetailState = {
   hasSources: boolean;

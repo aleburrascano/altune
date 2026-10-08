@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { contentFailure, DETAIL_CONTENT_STALE_MS, DETAIL_LIST_CAP } from '../content-status';
-import { fetchTallyingOutcome } from '../detailHealth';
-import { resolveEntityQuery } from '../resolve-entity-query';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
-import { useContentFetchRetry } from './useContentFetchRetry';
-import { useLoggedSearchFailure } from './useLoggedSearchFailure';
+import { contentFailure, DETAIL_CONTENT_STALE_MS, DETAIL_LIST_CAP } from '@/features/detail/domain/content-status';
+import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
+import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled, useGatedRefetch } from '@/features/detail/hooks/detailFetchGate';
+import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
+import { useLoggedSearchFailure } from '@/features/detail/hooks/useLoggedSearchFailure';
 
 export function useAlbumDiscovery({
   albumTitle,

@@ -5,7 +5,7 @@ import {
   failFastOnSettledContentFailure,
   isContentError,
   isSettledContentFailure,
-} from '../content-status';
+} from '@/features/detail/domain/content-status';
 
 describe('isSettledContentFailure', () => {
   it.each([

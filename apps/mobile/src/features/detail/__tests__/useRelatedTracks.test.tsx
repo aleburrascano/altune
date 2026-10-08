@@ -5,9 +5,9 @@ import type { DiscoverySource } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { _resetDetailHealthForTest } from '../detailHealth';
-import { useRelatedTracks } from '../hooks/useRelatedTracks';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
+import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
+import { useRelatedTracks } from '@/features/detail/hooks/useRelatedTracks';
+import { createTestQueryClient, createWrapper, mockSupabaseSession } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

@@ -1,19 +1,10 @@
 M1 src/features/auth missing index.ts
-M1 src/features/detail missing domain/
 M1 src/features/detail missing index.ts
-M1 src/features/detail/content-status.ts loose root file
-M1 src/features/detail/detailHealth.ts loose root file
 M1 src/features/detail/extras-accessors.ts loose root file
-M1 src/features/detail/featured-artists.ts loose root file
-M1 src/features/detail/handoff-context.ts loose root file
-M1 src/features/detail/navigation.ts loose root file
 M1 src/features/detail/owned-playback.ts loose root file
 M1 src/features/detail/play-source.ts loose root file
-M1 src/features/detail/resolve-entity-query.ts loose root file
-M1 src/features/detail/save-all.ts loose root file
 M1 src/features/detail/save-cache.ts loose root file
 M1 src/features/detail/save-control-state.ts loose root file
-M1 src/features/detail/text-compare.ts loose root file
 M1 src/features/library missing index.ts
 M1 src/features/library/gridColumns.ts loose root file
 M1 src/features/library/libraryFailureAlert.ts loose root file
@@ -53,7 +44,6 @@ N1 src/shared/lib generic name
 N1 src/shared/playback/constants.ts generic name
 N1 src/shared/playback/types.ts generic name
 N2 src/features/discover go-api module is discovery
-N3 src/features/detail/text-compare.ts only export is normalizeForCompare
 N3 src/features/detail/ui/albumDetailFacts.ts only export is buildAlbumFacts
 N3 src/features/detail/ui/color.ts only export is withAlpha
 N3 src/features/detail/ui/styles.ts only export is sharedStyles

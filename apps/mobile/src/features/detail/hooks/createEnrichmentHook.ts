@@ -4,10 +4,10 @@ import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { isAbort } from '@shared/errors';
 
-import { recordEnrichmentOutcome, type EnrichmentProvider } from '../detailHealth';
-import type { DetailPort } from '../ports/detailPort';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled } from './detailFetchGate';
+import { recordEnrichmentOutcome, type EnrichmentProvider } from '@/features/detail/domain/detailHealth';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/detailFetchGate';
 
 const ENRICHMENT_STALE_TIME = 1000 * 60 * 60 * 24;
 

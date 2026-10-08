@@ -12,7 +12,7 @@ import {
   type TrackDetailActions,
 } from '@features/detail/hooks/useTrackDetailActions';
 import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
-import { type DetailRoute } from '@features/detail/navigation';
+import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import {
   DetailActions,

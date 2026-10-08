@@ -2,8 +2,8 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { createElement, type ReactElement, type ReactNode } from 'react';
 
-import { DetailHandoffProvider } from '../handoff-context';
-import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
+import { DetailHandoffProvider } from '@/features/detail/hooks/useDetailHandoff';
+import { useReportWrongAlbum } from '@/features/detail/hooks/useReportWrongAlbum';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 

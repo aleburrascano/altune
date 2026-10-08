@@ -4,9 +4,9 @@ import type { AlbumGroup } from '@shared/api-client/library';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-import { DETAIL_LIST_CAP } from '../content-status';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { normalizeForCompare } from '../text-compare';
+import { DETAIL_LIST_CAP } from '@/features/detail/domain/content-status';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
 
 function albumExtrasFor(group: AlbumGroup) {
   return { track_count: group.track_count, ...(group.year != null ? { year: group.year } : {}) };

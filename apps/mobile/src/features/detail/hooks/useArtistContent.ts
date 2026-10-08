@@ -10,12 +10,12 @@ import {
   DETAIL_LIST_CAP,
   hasDegradedStatus,
   type ContentFailure,
-} from '../content-status';
-import { recordContentFetchOutcome } from '../detailHealth';
-import type { DetailPort } from '../ports/detailPort';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
-import { useContentFetchRetry } from './useContentFetchRetry';
+} from '@/features/detail/domain/content-status';
+import { recordContentFetchOutcome } from '@/features/detail/domain/detailHealth';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled, useGatedRefetch } from '@/features/detail/hooks/detailFetchGate';
+import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
 
 type ContentFetchContext = {
   provider: string;

@@ -5,11 +5,11 @@ import type {
 } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import type { EnrichmentProvider } from '../detailHealth';
-import { trackExtras } from '../extras-accessors';
-import { useDeezerEnrichment } from './useDeezerEnrichment';
-import { useEnrichment } from './useEnrichment';
-import { useLastFmEnrichment } from './useLastFmEnrichment';
+import type { EnrichmentProvider } from '@/features/detail/domain/detailHealth';
+import { trackExtras } from '@/features/detail/extras-accessors';
+import { useDeezerEnrichment } from '@/features/detail/hooks/useDeezerEnrichment';
+import { useEnrichment } from '@/features/detail/hooks/useEnrichment';
+import { useLastFmEnrichment } from '@/features/detail/hooks/useLastFmEnrichment';
 
 export type EnrichmentErrors = Record<EnrichmentProvider, boolean>;
 
