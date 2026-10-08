@@ -8,21 +8,21 @@ import { Text } from '@shared/ui/primitives/Text';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 
-import { useArtistDetailState, type ArtistDetailState } from '../hooks/useArtistDetailState';
-import type { DetailRoute } from '../navigation';
+import { useArtistDetailState, type ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
+import type { DetailRoute } from '@features/detail/navigation';
 
-import { compactCount } from './formatters';
-import { buildArtistFacts } from './artistDetailFacts';
-import { AsyncListSection } from './AsyncListSection';
-import { AlbumCardsSkeleton } from './DetailSkeleton';
-import { ArtistExploreDiscography } from './ArtistExploreDiscography';
-import { ArtistTopTracks } from './ArtistTopTracks';
-import { DetailActions } from './DetailActions';
-import { DetailFacts } from './DetailFacts';
-import { DetailScaffold, type DetailChrome } from './DetailScaffold';
-import { DiscographySections } from './DiscographySections';
-import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
-import { Section } from './Section';
+import { compactCount } from '@features/detail/ui/formatters';
+import { buildArtistFacts } from '@features/detail/ui/artistDetailFacts';
+import { AsyncListSection } from '@features/detail/ui/AsyncListSection';
+import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
+import { ArtistExploreDiscography } from '@features/detail/ui/ArtistExploreDiscography';
+import { ArtistTopTracks } from '@features/detail/ui/ArtistTopTracks';
+import { DetailActions } from '@features/detail/ui/DetailActions';
+import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
+import { DiscographySections } from '@features/detail/ui/DiscographySections';
+import { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
+import { Section } from '@features/detail/ui/Section';
 
 type ArtistDetailBodyProps = {
   chrome: DetailChrome;

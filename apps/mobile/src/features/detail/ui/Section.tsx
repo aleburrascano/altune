@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme/tokens';
 
-import { sharedStyles } from './styles';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 export function Section({
   label,

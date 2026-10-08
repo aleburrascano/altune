@@ -3,13 +3,13 @@ import { StyleSheet, View } from 'react-native';
 
 import { spacing } from '@shared/ui/theme';
 
-import { type ContentFailure } from '../content-status';
-import type { ArtistDetailState } from '../hooks/useArtistDetailState';
+import { type ContentFailure } from '@features/detail/content-status';
+import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 
-import { AsyncListSection } from './AsyncListSection';
-import { AlbumCardsSkeleton } from './DetailSkeleton';
-import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
-import { DiscographySections } from './DiscographySections';
+import { AsyncListSection } from '@features/detail/ui/AsyncListSection';
+import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
+import { CollapsibleSectionHeader } from '@features/detail/ui/CollapsibleSectionHeader';
+import { DiscographySections } from '@features/detail/ui/DiscographySections';
 
 function exploreAccessibilityLabel(expanded: boolean): string {
   return expanded ? 'Collapse discography' : 'Explore full discography';

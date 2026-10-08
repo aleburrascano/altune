@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 
-import { SavePillShell } from './SavePillShell';
+import { SavePillShell } from '@features/detail/ui/SavePillShell';
 
 type SaveAllPillProps = { unownedCount: number; saving: boolean; onSave: () => void };
 

@@ -5,18 +5,18 @@ import { readDetailHandoff, type DetailHandoff } from '@shared/lib/detail-handof
 import { featuredArtistsFromExtras } from '@shared/lib/featured';
 import { tabRootFromSegments } from '@shared/navigation';
 
-import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
-import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
-import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
-import { useLateralNav } from '../hooks/useLateralNav';
-import { DetailHandoffProvider } from '../handoff-context';
-import { detailRouteFor } from '../navigation';
+import { useArtistDiscovery } from '@features/detail/hooks/useArtistDiscovery';
+import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
+import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
+import { useLateralNav } from '@features/detail/hooks/useLateralNav';
+import { DetailHandoffProvider } from '@features/detail/handoff-context';
+import { detailRouteFor } from '@features/detail/navigation';
 
-import { TrackDetailBody } from './TrackDetailBody';
-import { AlbumDetailBody } from './AlbumDetailBody';
-import { ArtistDetailBody } from './ArtistDetailBody';
-import type { DetailChrome } from './DetailScaffold';
-import { secondaryLine } from './secondaryLine';
+import { TrackDetailBody } from '@features/detail/ui/TrackDetailBody';
+import { AlbumDetailBody } from '@features/detail/ui/AlbumDetailBody';
+import { ArtistDetailBody } from '@features/detail/ui/ArtistDetailBody';
+import type { DetailChrome } from '@features/detail/ui/DetailScaffold';
+import { secondaryLine } from '@features/detail/ui/secondaryLine';
 
 export function DetailScreen(): ReactElement {
   const params = useLocalSearchParams<{ handoff?: string }>();

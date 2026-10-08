@@ -1,8 +1,8 @@
 import { formatDuration } from '@shared/lib/format';
 
-import type { TrackDetailActions } from '../hooks/useTrackDetailActions';
+import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
 
-import type { DetailFact } from './DetailFacts';
+import type { DetailFact } from '@features/detail/ui/DetailFacts';
 
 type FactsInput = Pick<TrackDetailActions, 'durationSeconds' | 'year' | 'source' | 'isPreview'>;
 

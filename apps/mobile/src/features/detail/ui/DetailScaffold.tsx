@@ -6,9 +6,9 @@ import { useWideWebLayout } from '@shared/ui/layout';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { useTheme, type Theme } from '@shared/ui/theme';
 
-import { DetailBodyLayout } from './DetailBodyLayout';
-import { DetailHeroBanner } from './DetailHeroBanner';
-import { DetailTopBar, type DetailTopBarProps } from './DetailTopBar';
+import { DetailBodyLayout } from '@features/detail/ui/DetailBodyLayout';
+import { DetailHeroBanner } from '@features/detail/ui/DetailHeroBanner';
+import { DetailTopBar, type DetailTopBarProps } from '@features/detail/ui/DetailTopBar';
 
 const BANNER_HEIGHT = 318;
 const BAR_HEIGHT = 52;

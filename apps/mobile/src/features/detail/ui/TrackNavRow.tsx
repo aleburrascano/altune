@@ -6,7 +6,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { sharedStyles } from './styles';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 export type TrackNavRowNav = {
   overline: string;
