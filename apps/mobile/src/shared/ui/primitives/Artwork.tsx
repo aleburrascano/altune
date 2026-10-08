@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { radius as radiusTokens } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
-const ARTWORK_PLACEHOLDER = require('../../../../assets/artwork-placeholder.png');
+const ARTWORK_PLACEHOLDER = require('@assets/artwork-placeholder.png');
 
 export type ArtworkProps = {
   uri: string | null;
