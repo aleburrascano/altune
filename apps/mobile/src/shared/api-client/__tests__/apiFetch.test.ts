@@ -1071,3 +1071,43 @@ describe('NetworkError messages never carry the query string', () => {
     expect((error as Error).message).not.toContain('secret');
   });
 });
+
+describe('platform-dependent request headers', () => {
+  beforeEach(() => {
+    withSession();
+    __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
+  });
+
+  it('sends neither ngrok-skip-browser-warning nor X-Correlation-ID on web', async () => {
+    Platform.OS = 'web';
+
+    await apiFetch('/v1/library/tracks');
+
+    const { headers } = __http.last();
+    expect(headers['ngrok-skip-browser-warning']).toBeUndefined();
+    expect(headers['X-Correlation-ID']).toBeUndefined();
+  });
+
+  it.each(['ios', 'android'] as const)('sends both headers on %s', async (os) => {
+    Platform.OS = os;
+
+    await apiFetch('/v1/library/tracks');
+
+    const { headers } = __http.last();
+    expect(headers['ngrok-skip-browser-warning']).toBe('1');
+    expect(headers['X-Correlation-ID']).toBeDefined();
+  });
+
+  it('drops the headers on the second request when Platform.OS flips from ios to web', async () => {
+    Platform.OS = 'ios';
+    await apiFetch('/v1/library/tracks');
+    expect(__http.last().headers['ngrok-skip-browser-warning']).toBe('1');
+
+    Platform.OS = 'web';
+    await apiFetch('/v1/library/tracks');
+
+    const { headers } = __http.last();
+    expect(headers['ngrok-skip-browser-warning']).toBeUndefined();
+    expect(headers['X-Correlation-ID']).toBeUndefined();
+  });
+});
