@@ -35,6 +35,7 @@ STUB
 cat >"$stubbin/python3" <<'STUB'
 #!/usr/bin/env bash
 if [ "$1" = -c ]; then echo "$((20000 + RANDOM % 1000))"; exit 0; fi
+if [ "$1" = - ]; then cat >/dev/null; echo "python3 make-bucket $3 $4" >>"$STUB_LOG"; exit 0; fi
 sleep 30
 STUB
 cat >"$stubbin/curl" <<'STUB'
@@ -71,13 +72,16 @@ grep -q "^API_URL=http://127.0.0.1:[0-9]*$" <<<"$OUT" || { echo "FAIL API_URL sh
 grep -q "^DATABASE_URL=postgres://altune:altune_dev@127.0.0.1:5555/altune" <<<"$OUT" || { echo "FAIL DATABASE_URL should use the mapped port"; fail=1; }
 grep -q "expo export -p web --dev TEST_AUTH=1" "$STUB_LOG" || { echo "FAIL web export should run with --dev and test auth"; fail=1; }
 grep -q "expo export -p web --dev TEST_AUTH=1 TMPDIR=$E2E_STACK_DIR/metro-tmp$" "$STUB_LOG" || { echo "FAIL web export should keep its metro cache inside this run"; fail=1; }
+grep -q "^docker run .* rustfs/rustfs:" "$STUB_LOG" || { echo "FAIL up should start an S3 store for audio"; fail=1; }
+grep -q "^python3 make-bucket altune-e2e e2e$" "$STUB_LOG" || { echo "FAIL up should create the audio bucket"; fail=1; }
 [ -d "$E2E_STACK_DIR" ] || { echo "FAIL state should exist while the stack is up"; fail=1; }
 [ "$(grep -c '^docker run' "$STUB_LOG")" = "$(grep -c '^docker run .*--label altune-ci=1 ' "$STUB_LOG")" ] || { echo "FAIL every docker run should carry the altune-ci label"; fail=1; }
 
 sleep 1
 for want in PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR=.*/apps/mobile/e2e/fixtures/providers \
   SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
-  AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false; do
+  AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
+  OCI_S3_ENDPOINT=http://127.0.0.1:5555 OCI_S3_BUCKET=altune-e2e OCI_S3_ACCESS_KEY=e2e; do
   grep -q "^$want$" "$STUB_API_ENV" || { echo "FAIL api should start with $want"; fail=1; }
 done
 
@@ -89,8 +93,8 @@ pids=$(cat "$E2E_STACK_DIR"/*.pid)
 run down
 check 0 "down exits 0"
 [ ! -e "$E2E_STACK_DIR" ] || { echo "FAIL down should remove the state dir"; fail=1; }
-[ "$(grep -c '^docker rm -f' "$STUB_LOG")" = 2 ] || { echo "FAIL down should remove both containers"; fail=1; }
-[ "$(grep -c '^docker rm -fv' "$STUB_LOG")" = 2 ] || { echo "FAIL down should remove both containers with their volumes"; fail=1; }
+[ "$(grep -c '^docker rm -f' "$STUB_LOG")" = 3 ] || { echo "FAIL down should remove all three containers"; fail=1; }
+[ "$(grep -c '^docker rm -fv' "$STUB_LOG")" = 3 ] || { echo "FAIL down should remove all three containers with their volumes"; fail=1; }
 for pid in $pids; do
   kill -0 "$pid" 2>/dev/null && { echo "FAIL down should stop process $pid"; fail=1; }
 done
