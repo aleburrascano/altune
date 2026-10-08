@@ -70,3 +70,49 @@ func TestRequireUserID(t *testing.T) {
 		}
 	})
 }
+
+func TestRequireUserID_AbsentBodyIsPinned(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	_, ok := RequireUserID(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if ok {
+		t.Fatal("expected ok=false, got true")
+	}
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"authentication required","reason":"missing"}`+"\n")
+}
+
+func TestRequireUserID_PresentWritesNothing(t *testing.T) {
+	uid := shared.NewUserId(uuid.New())
+	req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ContextWithUserID(context.Background(), uid))
+	rec := httptest.NewRecorder()
+
+	got, ok := RequireUserID(rec, req)
+
+	if !ok || got.UUID() != uid.UUID() {
+		t.Fatalf("got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
+	}
+	if rec.Body.Len() != 0 || len(rec.Header()) != 0 {
+		t.Errorf("wrote body %q headers %v, want nothing", rec.Body.String(), rec.Header())
+	}
+}
+
+func TestRequireUserID_ChangesBetweenTicks(t *testing.T) {
+	base := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	first := httptest.NewRecorder()
+	if _, ok := RequireUserID(first, base); ok {
+		t.Fatal("first tick: expected ok=false without a user")
+	}
+	requireExactResponse(t, first, http.StatusUnauthorized, "Bearer", `{"detail":"authentication required","reason":"missing"}`+"\n")
+
+	uid := shared.NewUserId(uuid.New())
+	second := httptest.NewRecorder()
+	got, ok := RequireUserID(second, base.WithContext(ContextWithUserID(base.Context(), uid)))
+	if !ok || got.UUID() != uid.UUID() {
+		t.Fatalf("second tick: got %v, %v; want %v, true", got.UUID(), ok, uid.UUID())
+	}
+	if second.Body.Len() != 0 {
+		t.Errorf("second tick wrote body %q, want none", second.Body.String())
+	}
+}

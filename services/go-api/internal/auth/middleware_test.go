@@ -689,3 +689,111 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+func requireExactResponse(t *testing.T, rec *httptest.ResponseRecorder, status int, wwwAuthenticate, body string) {
+	t.Helper()
+	if rec.Code != status {
+		t.Errorf("status: got %d, want %d", rec.Code, status)
+	}
+	if got := rec.Header().Get("WWW-Authenticate"); got != wwwAuthenticate {
+		t.Errorf("WWW-Authenticate: got %q, want %q", got, wwwAuthenticate)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Errorf("Content-Type: got %q, want %q", got, "application/json")
+	}
+	if got := rec.Body.String(); got != body {
+		t.Errorf("body: got %q, want %q", got, body)
+	}
+}
+
+func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
+	next, called := noopHandler()
+	handler := Middleware(stubVerifier(shared.UserId{}, nil))(next)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"missing authorization header","reason":"missing"}`+"\n")
+	if *called {
+		t.Error("next handler should not have been called")
+	}
+}
+
+func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
+	for _, header := range []string{"Basic abc", "Bearer", "Bearerabc"} {
+		t.Run(header, func(t *testing.T) {
+			verified := false
+			verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
+				verified = true
+				return VerifiedToken{}, nil
+			})
+			next, called := noopHandler()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("Authorization", header)
+			rec := httptest.NewRecorder()
+
+			Middleware(verifier)(next).ServeHTTP(rec, req)
+
+			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"malformed authorization header","reason":"malformed"}`+"\n")
+			if verified || *called {
+				t.Errorf("verifier ran=%v next ran=%v, want neither", verified, *called)
+			}
+		})
+	}
+}
+
+func TestMiddleware_LowerCaseSchemeReachesTheVerifier(t *testing.T) {
+	var got string
+	verifier := VerifierFunc(func(_ context.Context, token string) (VerifiedToken, error) {
+		got = token
+		return VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+	})
+	next, called := noopHandler()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "bearer abc")
+	rec := httptest.NewRecorder()
+
+	Middleware(verifier)(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || got != "abc" || !*called {
+		t.Fatalf("status %d, verifier token %q, next ran %v; want 200, %q, true", rec.Code, got, *called, "abc")
+	}
+}
+
+func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
+	next, called := noopHandler()
+	handler := Middleware(stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired}))(next)
+
+	rec := serveBearer(handler, "203.0.113.7:1", "expired-token")
+
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"invalid token","reason":"expired"}`+"\n")
+	if *called {
+		t.Error("next handler should not have been called")
+	}
+}
+
+func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
+	next, called := noopHandler()
+	handler := Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused")))(next)
+
+	rec := serveBearer(handler, "203.0.113.7:1", "some-token")
+
+	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable"}`+"\n")
+	if *called {
+		t.Error("next handler should not have been called")
+	}
+}
+
+func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
+	handler, _ := throttledMiddleware(stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired}))
+	for range testFailureLimits.Burst {
+		serveBearer(handler, "203.0.113.7:1", "t")
+	}
+
+	rec := serveBearer(handler, "203.0.113.7:1", "t")
+
+	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"detail":"too many failed authentication attempts"}`+"\n")
+	if got := rec.Header().Get("Retry-After"); got != "60" {
+		t.Errorf("Retry-After: got %q, want %q", got, "60")
+	}
+}
