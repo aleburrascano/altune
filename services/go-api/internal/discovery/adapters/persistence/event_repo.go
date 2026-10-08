@@ -20,7 +20,6 @@ var (
 	_ ports.BehavioralSignalStore    = (*PgxEventStore)(nil)
 	_ ports.BehavioralLabelStore     = (*PgxEventStore)(nil)
 	_ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
-	_ ports.DiscographyPruner        = (*PgxEventStore)(nil)
 	_ ports.DeletedIdentityEraser    = (*PgxEventStore)(nil)
 )
 
