@@ -173,6 +173,18 @@ func nonNilStrings(s []string) []string {
 	return s
 }
 
+func namedEnrichmentParams(w http.ResponseWriter, r *http.Request) (domain.ResultKind, string, string, bool) {
+	kind, ok := parseKindParam(w, r)
+	if !ok {
+		return 0, "", "", false
+	}
+	title, subtitle, ok := titleAndSubtitle(w, r)
+	if !ok || !requireTitle(w, title) {
+		return 0, "", "", false
+	}
+	return kind, title, subtitle, true
+}
+
 func serveNamedEnrichment[E, D any](
 	w http.ResponseWriter,
 	r *http.Request,
@@ -183,15 +195,8 @@ func serveNamedEnrichment[E, D any](
 	stamp func(*D, bool),
 	logMsg string,
 ) {
-	kind, ok := parseKindParam(w, r)
+	kind, title, subtitle, ok := namedEnrichmentParams(w, r)
 	if !ok {
-		return
-	}
-	title, subtitle, ok := titleAndSubtitle(w, r)
-	if !ok {
-		return
-	}
-	if !requireTitle(w, title) {
 		return
 	}
 

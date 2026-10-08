@@ -676,8 +676,6 @@ func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
 	}
 }
 
-// The enrich services wrap every provider error as ErrDegraded, so the
-// service-error path of the shared function is reached with a direct exec.
 func TestServeNamedEnrichment_OtherErrorUsesServiceErrorStatus(t *testing.T) {
 	failing := statusCodedError{status: http.StatusServiceUnavailable, code: "enrichment_unavailable"}
 	run := func(call func(w http.ResponseWriter, r *http.Request)) *httptest.ResponseRecorder {
