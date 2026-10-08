@@ -17,11 +17,21 @@ describe('describeError — network vs 5xx vs generic', () => {
     });
   });
 
-  it('maps a 4xx ApiError to the generic copy, not the server copy', () => {
-    expect(describeError(new ApiError(400, 'Bad request'))).toEqual({
-      title: 'Something went wrong',
-      body: `Something went wrong. ${RETRY_TAIL}`,
+  it('maps a 429 ApiError to a rate-limit copy that asks the user to wait', () => {
+    expect(describeError(new ApiError(429, 'Too many requests'))).toEqual({
+      title: 'Too many requests',
+      body: 'You are doing that too often. Wait a moment, then try again.',
     });
+  });
+
+  it('maps a permanent 4xx ApiError to a copy with no retry tail', () => {
+    const copy = describeError(new ApiError(400, 'Bad request'));
+
+    expect(copy).toEqual({
+      title: 'Something went wrong',
+      body: 'We could not complete that request.',
+    });
+    expect(copy.body).not.toMatch(/try again/i);
   });
 
   it('maps an Error without a status to the generic copy', () => {
