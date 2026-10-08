@@ -34,7 +34,10 @@ import {
   wasSwappedToLocal,
 } from '@features/playback/native/nativeTrackSwap';
 import { classifyNativePlaybackError } from '@features/playback/domain/classifyPlaybackError';
-import { clearPlaybackError, reportPlaybackError } from '@features/playback/hooks/usePlaybackErrorStore';
+import {
+  clearPlaybackError,
+  reportPlaybackError,
+} from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   recordAudioRecoveryFailure,
   recordPlaybackFailure,

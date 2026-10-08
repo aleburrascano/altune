@@ -14,7 +14,12 @@ import {
   reorderUpcomingApplied,
 } from '@features/playback/native/rebuildNativeTail';
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
-import { claimLoad, currentLoadToken, isStale, type LoadToken } from '@features/playback/domain/loadToken';
+import {
+  claimLoad,
+  currentLoadToken,
+  isStale,
+  type LoadToken,
+} from '@features/playback/domain/loadToken';
 import { beginNativeLoad, endNativeLoad } from '@features/playback/native/nativeSyncGuard';
 import {
   NATIVE_QUEUE_WINDOW,

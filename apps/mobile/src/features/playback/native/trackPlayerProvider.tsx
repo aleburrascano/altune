@@ -16,7 +16,10 @@ import {
   createNativePlaybackActions,
   ignoringNativeRejection,
 } from '@features/playback/native/createNativePlaybackActions';
-import { derivePlaybackState, type PlayerPhase } from '@features/playback/domain/derivePlaybackState';
+import {
+  derivePlaybackState,
+  type PlayerPhase,
+} from '@features/playback/domain/derivePlaybackState';
 import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
 import { usePlaybackErrorFor } from '@features/playback/hooks/usePlaybackErrorStore';
 import { usePlaybackPosition } from '@features/playback/native/usePlaybackPosition';
