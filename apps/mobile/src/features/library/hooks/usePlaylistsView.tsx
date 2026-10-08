@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 import type { PlaylistResponse } from '@shared/api-client/types';
 
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
@@ -32,6 +34,12 @@ function sortPlaylistsByKey(playlists: PlaylistResponse[], key: SortKey): Playli
 
 export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDeps): PlaylistsView {
   const playlists = sortPlaylistsByKey(pl.playlists, sort);
+
+  const { loadMorePlaylists: loadRemainingPlaylists, isFetchingMorePlaylists } = pl;
+  const loadedCount = pl.playlists.length;
+  useEffect(() => {
+    if (sort === 'az') loadRemainingPlaylists();
+  }, [sort, loadedCount, isFetchingMorePlaylists, loadRemainingPlaylists]);
 
   const refresh: ListRefresh = {
     refreshing: pl.isRefetchingPlaylists,
