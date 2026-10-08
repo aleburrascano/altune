@@ -20,7 +20,6 @@ const (
 )
 
 var wiringOnlyAllowlist = map[string]string{
-	"leader_ticker.go":  "leader ticker with recover and a for/select loop",
 	"health.go":         "health checker holding a mutex",
 	"catalog_wiring.go": "lookupTracker holding an atomic counter",
 }
@@ -203,8 +202,8 @@ func TestWiringOnly_ViolatingFilesEqualAllowlist(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("files with violations = %v, want exactly the allowlist %v", got, want)
 	}
-	if len(want) != 3 {
-		t.Errorf("allowlist has %d entries, want 3 at the start", len(want))
+	if len(want) != 2 {
+		t.Errorf("allowlist has %d entries, want 2 at the start", len(want))
 	}
 }
 
