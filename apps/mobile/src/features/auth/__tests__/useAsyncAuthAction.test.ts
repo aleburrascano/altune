@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 
 type Result =

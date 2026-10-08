@@ -1,14 +1,14 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { withAuthDeadline } from '@features/auth/authDeadline';
+import { withAuthDeadline } from '@features/auth/domain/authDeadline';
 import {
   type SupabaseErrorDetail,
   type ThrownErrorDetail,
   supabaseErrorDetail,
   thrownErrorDetail,
-} from '@features/auth/errorDetail';
-import type { TransientAuthReason } from '@features/auth/errorReason';
-import { classifyAuthError, isWeakPasswordError } from '@features/auth/supabaseAuthError';
+} from '@features/auth/domain/errorDetail';
+import type { TransientAuthReason } from '@features/auth/domain/errorReason';
+import { classifyAuthError, isWeakPasswordError } from '@features/auth/domain/supabaseAuthError';
 
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 

@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
 
 import { useSignUp } from '@features/auth/hooks/useSignUp';
 

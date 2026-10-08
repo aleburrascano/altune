@@ -1,8 +1,8 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
-import { completeAuthIntent } from '@features/auth/completeAuthIntent';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
+import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
 import { OAUTH_BROWSER_TIMEOUT_MS, useOAuth } from '@features/auth/hooks/useOAuth';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
@@ -32,7 +32,7 @@ jest.mock('expo-web-browser', () => ({
   dismissAuthSession: jest.fn(),
 }));
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;

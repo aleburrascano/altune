@@ -9,7 +9,7 @@ import {
   recordFailedAttempt,
   _resetLockoutsForTest,
   type LockoutAction,
-} from '@features/auth/attemptLockout';
+} from '@features/auth/domain/attemptLockout';
 
 const START = 1_000_000;
 

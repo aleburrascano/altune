@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { _resetLockoutsForTest } from '@features/auth/attemptLockout';
+import { _resetLockoutsForTest } from '@features/auth/domain/attemptLockout';
 
 type SupabaseAuthClient = typeof supabase.auth;
 

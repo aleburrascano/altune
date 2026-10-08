@@ -1,10 +1,10 @@
 import {
   completeAuthIntent,
   _resetConsumedCredentialForTest,
-} from '@features/auth/completeAuthIntent';
-import { type AuthLinkIntent, parseAuthLink } from '@features/auth/parseAuthLink';
-import { clearRecoveryUnlock, isRecoveryUnlocked } from '@features/auth/recoveryUnlock';
-import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
+} from '@features/auth/domain/completeAuthIntent';
+import { type AuthLinkIntent, parseAuthLink } from '@features/auth/domain/parseAuthLink';
+import { clearRecoveryUnlock, isRecoveryUnlocked } from '@features/auth/domain/recoveryUnlock';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
 
 describe('the outcome it reports', () => {
   const auth = {

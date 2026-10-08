@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
 import { NetworkError } from '@shared/errors';
-import { type AuthIntentResult, completeAuthIntent } from '@features/auth/completeAuthIntent';
+import { type AuthIntentResult, completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
 
 jest.mock('@shared/device/webOrigin', () => ({
@@ -24,7 +24,7 @@ jest.mock('expo-router', () => {
   };
 });
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const mockComplete = completeAuthIntent as jest.Mock;
 
@@ -174,7 +174,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
   const actual = jest.requireActual<{
     completeAuthIntent: typeof completeAuthIntent;
     _resetConsumedCredentialForTest: () => void;
-  }>('@features/auth/completeAuthIntent');
+  }>('@features/auth/domain/completeAuthIntent');
   const auth = (
     require('@shared/auth/supabaseClient') as { supabase: { auth: Record<string, unknown> } }
   ).supabase.auth;

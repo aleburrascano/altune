@@ -1,14 +1,14 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { supabaseErrorDetail } from '@features/auth/errorDetail';
-import type { TransientAuthReason } from '@features/auth/errorReason';
-import { authRedirectUrl } from '@features/auth/authRedirect';
+import { supabaseErrorDetail } from '@features/auth/domain/errorDetail';
+import type { TransientAuthReason } from '@features/auth/domain/errorReason';
+import { authRedirectUrl } from '@features/auth/domain/authRedirect';
 import {
   classifyAuthError,
   isAlreadyRegisteredError,
   isSignupDisabledError,
   isWeakPasswordError,
-} from '@features/auth/supabaseAuthError';
+} from '@features/auth/domain/supabaseAuthError';
 
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 

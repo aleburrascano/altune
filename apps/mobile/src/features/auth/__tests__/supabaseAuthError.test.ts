@@ -3,7 +3,7 @@ import {
   isInvalidCredentialsError,
   isSignupDisabledError,
   isUnconfirmedEmailError,
-} from '@features/auth/supabaseAuthError';
+} from '@features/auth/domain/supabaseAuthError';
 
 describe('classifyAuthError', () => {
   it('reports rate limiting ahead of transport when an error is both', () => {

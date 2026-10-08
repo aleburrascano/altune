@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { LOCKOUT_AFTER_FAILURES } from '@features/auth/attemptLockout';
+import { LOCKOUT_AFTER_FAILURES } from '@features/auth/domain/attemptLockout';
 import { useResetPassword } from '@features/auth/hooks/useResetPassword';
 
 import {

@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 
-import { completeAuthIntent } from '@features/auth/completeAuthIntent';
+import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
 import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink.web';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
@@ -10,7 +10,7 @@ jest.mock('expo-linking', () => ({
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
 const addEventListener = Linking.addEventListener as unknown as jest.Mock;
