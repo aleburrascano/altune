@@ -11,6 +11,8 @@ type EnrichmentMetrics interface {
 type QueueStateMetrics interface {
 	CorruptStoredState()
 	QueueStateOpTimedOut()
+	QueueStateOpFailedTransient()
+	QueueStateStaleWrite()
 }
 
 type RateLimitMetrics interface {
@@ -45,8 +47,10 @@ func (noopEnrichmentMetrics) EnrichmentBreakerClosed()   {}
 
 type noopQueueStateMetrics struct{}
 
-func (noopQueueStateMetrics) CorruptStoredState()   {}
-func (noopQueueStateMetrics) QueueStateOpTimedOut() {}
+func (noopQueueStateMetrics) CorruptStoredState()          {}
+func (noopQueueStateMetrics) QueueStateOpTimedOut()        {}
+func (noopQueueStateMetrics) QueueStateOpFailedTransient() {}
+func (noopQueueStateMetrics) QueueStateStaleWrite()        {}
 
 type noopRateLimitMetrics struct{}
 
