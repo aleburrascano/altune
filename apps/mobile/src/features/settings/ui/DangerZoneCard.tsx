@@ -17,6 +17,56 @@ const DANGER_ZONE_ICONS: Record<DangerZoneActionKey, LucideIcon> = {
 };
 
 type DangerZoneCardProps = Parameters<typeof buildDangerZoneActions>[0];
+type Action = ReturnType<typeof buildDangerZoneActions>[number];
+
+function DangerZoneRow(props: {
+  action: Action;
+  first: boolean;
+  onPress: () => void;
+}): ReactElement {
+  const { action, first, onPress } = props;
+  const { key, row } = action;
+  return (
+    <SettingsRow
+      testID={row.testID}
+      first={first}
+      icon={DANGER_ZONE_ICONS[key]}
+      tone="danger"
+      label={row.label}
+      detail={row.detail}
+      onPress={onPress}
+      disabled={row.disabled ?? false}
+      right={
+        row.status ? (
+          <Text variant="label" tone={row.status.tone}>
+            {row.status.label}
+          </Text>
+        ) : null
+      }
+    />
+  );
+}
+
+function DangerZoneConfirm(props: {
+  action: Action;
+  visible: boolean;
+  onClose: () => void;
+}): ReactElement {
+  const { action, visible, onClose } = props;
+  const { key, confirm } = action;
+  return (
+    <ConfirmModal
+      testID={confirm.testID}
+      visible={visible}
+      icon={DANGER_ZONE_ICONS[key]}
+      title={confirm.title}
+      body={confirm.body}
+      confirmLabel={confirm.confirmLabel}
+      onConfirm={confirm.onConfirm}
+      onClose={onClose}
+    />
+  );
+}
 
 export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
   const [confirming, setConfirming] = useState<DangerZoneActionKey | null>(null);
@@ -27,38 +77,21 @@ export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
   return (
     <>
       <SettingsCard label="Danger zone" danger>
-        {visibleRows.map(({ key, row }, index) => (
-          <SettingsRow
-            key={key}
-            testID={row.testID}
+        {visibleRows.map((action, index) => (
+          <DangerZoneRow
+            key={action.key}
+            action={action}
             first={index === 0}
-            icon={DANGER_ZONE_ICONS[key]}
-            tone="danger"
-            label={row.label}
-            detail={row.detail}
-            onPress={() => setConfirming(key)}
-            disabled={row.disabled ?? false}
-            right={
-              row.status ? (
-                <Text variant="label" tone={row.status.tone}>
-                  {row.status.label}
-                </Text>
-              ) : null
-            }
+            onPress={() => setConfirming(action.key)}
           />
         ))}
       </SettingsCard>
 
-      {actions.map(({ key, confirm }) => (
-        <ConfirmModal
-          key={key}
-          testID={confirm.testID}
-          visible={confirming === key}
-          icon={DANGER_ZONE_ICONS[key]}
-          title={confirm.title}
-          body={confirm.body}
-          confirmLabel={confirm.confirmLabel}
-          onConfirm={confirm.onConfirm}
+      {actions.map((action) => (
+        <DangerZoneConfirm
+          key={action.key}
+          action={action}
+          visible={confirming === action.key}
           onClose={close}
         />
       ))}

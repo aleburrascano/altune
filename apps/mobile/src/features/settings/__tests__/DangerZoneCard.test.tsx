@@ -507,10 +507,11 @@ describe('DangerZoneCard downloads row after a stale partial removal', () => {
 
 describe('DangerZoneCard icons', () => {
   const ICONS = [Trash2, Eraser, LogOut];
-  const iconsIn = (testID: string): LucideIcon[] =>
-    ICONS.filter(
+  function iconsIn(testID: string): LucideIcon[] {
+    return ICONS.filter(
       (icon) => within(screen.getByTestId(testID)).UNSAFE_queryAllByType(icon).length > 0,
     );
+  }
 
   it.each([
     ['downloads', 'settings-remove-downloads', 'settings-confirm-remove-downloads', Trash2],
