@@ -17,7 +17,11 @@ import {
 import { ContractError, NetworkError, isAbort } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '@shared/api-client/types';
+import type {
+  CreateTrackRequest,
+  FeaturedArtist,
+  TrackResponse,
+} from '@shared/api-client/trackResponse';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

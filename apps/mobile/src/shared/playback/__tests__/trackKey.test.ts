@@ -1,6 +1,6 @@
 import { asTrackId } from '@shared/api-client/ids';
 
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { trackKey } from '@shared/playback/trackKey';
 
 function track(source: PlaybackTrack['source']): PlaybackTrack {

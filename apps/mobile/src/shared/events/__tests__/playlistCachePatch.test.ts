@@ -7,8 +7,8 @@ import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/playlistResponse';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { playlistKeys } from '@shared/lib/query-keys';
 
 import {

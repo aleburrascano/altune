@@ -29,7 +29,7 @@ import {
   toReady,
   toTrackStatus,
 } from '@shared/api-client/trackAcquisition';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import { forgetTrack } from '@shared/events/forgetTrack';

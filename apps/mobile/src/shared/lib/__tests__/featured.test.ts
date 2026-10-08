@@ -2,7 +2,7 @@ import fc from 'fast-check';
 
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 
-import type { FeaturedArtist } from '@shared/api-client/types';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
 
 describe('featuredArtistsFromExtras — Array.isArray guard', () => {
   it.each<unknown>(['not-an-array', 42, true, {}, null, undefined])(

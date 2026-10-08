@@ -1,7 +1,7 @@
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
+import type { FeaturedArtist, TrackResponse } from '@shared/api-client/trackResponse';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {

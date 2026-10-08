@@ -18,7 +18,8 @@ import {
   withoutUpcoming,
 } from '@shared/playback/queueOrder';
 import type { QueueState } from '@shared/playback/queueOrder';
-import type { PlaybackTrack, QueueSource, RepeatMode } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { QueueSource, RepeatMode } from '@shared/playback/queueSource';
 
 export interface QueueView {
   ordered: PlaybackTrack[];

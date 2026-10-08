@@ -1,8 +1,8 @@
 import { asTrackId } from '@shared/api-client/ids';
 import type { QueueStateCurrentTrack } from '@shared/api-client/playback';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 export function toPlaybackTrack(t: TrackResponse): PlaybackTrack {
   return {

@@ -15,7 +15,7 @@ import {
 } from '@shared/acquisition/trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { toFailed, toPending, toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
-import type { AcquisitionStatus } from '@shared/api-client/types';
+import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 

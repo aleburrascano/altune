@@ -3,7 +3,7 @@ import type {
   PendingAcquisition,
   ReadyAcquisition,
   TrackAcquisition,
-} from '@shared/api-client/types';
+} from '@shared/api-client/trackResponse';
 
 export type AcquisitionTransition =
   Required<PendingAcquisition> | Required<ReadyAcquisition> | Required<FailedAcquisition>;

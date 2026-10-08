@@ -5,7 +5,7 @@ import { asTrackId } from '@shared/api-client/ids';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 function buildContextValue(): PlaybackContextValue {
   return {

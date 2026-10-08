@@ -1,5 +1,5 @@
 import { asTrackId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/types';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { supabase } from '@shared/auth/supabaseClient';
 import { ApiError } from '@shared/errors';
 

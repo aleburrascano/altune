@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { AddToPlaylistSheet } from '@shared/playlists/ui/AddToPlaylistSheet';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/types';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('@testing/doubles/fetch.js');
