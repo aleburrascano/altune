@@ -1,4 +1,4 @@
-import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/playback/time';
+import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/playback/domain/time';
 
 describe('progressSecondsToMs — native TrackPlayer seconds to milliseconds', () => {
   it('keeps sub-millisecond precision', () => {

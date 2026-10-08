@@ -7,7 +7,7 @@ import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
-} from '@features/discover/hooks/discoverFetchGate';
+} from '@features/discover/hooks/useDiscoverFetchGate';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 export function useSearchHistory() {

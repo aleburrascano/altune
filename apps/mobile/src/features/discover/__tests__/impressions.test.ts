@@ -1,4 +1,4 @@
-import { buildImpressionRows } from '@features/discover/domain/impressions';
+import { buildImpressionRows } from '@features/discover/domain/buildImpressionRows';
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 describe('buildImpressionRows projects results into impression rows', () => {

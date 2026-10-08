@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import type { SearchPages } from '@features/discover/hooks/searchPages';
+import type { SearchPages } from '@features/discover/domain/searchPages';
 
 type HeldSlate = { key: readonly unknown[]; pages: SearchPages | undefined };
 type RefetchResult = { isError: boolean };

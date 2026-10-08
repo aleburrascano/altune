@@ -10,19 +10,19 @@ import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions
 import {
   classifyNativePlaybackError,
   classifyPlaybackFailure,
-} from '@features/playback/classifyPlaybackError';
+} from '@features/playback/domain/classifyPlaybackError';
 import {
   clearPlaybackError,
   reportLoadFailure,
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
-} from '@features/playback/playbackErrorStore';
+} from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/playback/playbackHealth';
-import { canRetryPlaybackError } from '@features/playback/retryPolicy';
+} from '@features/playback/domain/playbackHealth';
+import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 

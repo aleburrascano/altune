@@ -27,7 +27,7 @@ import { forgetAllSwaps, wasSwappedToLocal } from '@features/playback/native/nat
 import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/playback/playbackHealth';
+} from '@features/playback/domain/playbackHealth';
 
 import {
   libraryTrack,

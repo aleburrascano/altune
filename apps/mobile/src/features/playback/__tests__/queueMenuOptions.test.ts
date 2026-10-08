@@ -1,4 +1,4 @@
-import { queueMenuOptions, type QueueMenuContext } from '@features/playback/queueMenuOptions';
+import { queueMenuOptions, type QueueMenuContext } from '@features/playback/domain/queueMenuOptions';
 
 function makeCtx(over: Partial<QueueMenuContext> = {}): QueueMenuContext {
   return {

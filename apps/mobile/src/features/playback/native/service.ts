@@ -24,7 +24,7 @@ import {
   claimRecoveryAttempt,
   resetRecoveryBudget,
 } from '@features/playback/native/recoveryBudget';
-import { claimSessionReset } from '@features/playback/loadToken';
+import { claimSessionReset } from '@features/playback/domain/loadToken';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 import { shouldApplyActiveIndex } from '@features/playback/native/nativeSyncGuard';
 import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
@@ -33,17 +33,17 @@ import {
   repairActiveToStreaming,
   wasSwappedToLocal,
 } from '@features/playback/native/nativeTrackSwap';
-import { classifyNativePlaybackError } from '@features/playback/classifyPlaybackError';
-import { clearPlaybackError, reportPlaybackError } from '@features/playback/playbackErrorStore';
+import { classifyNativePlaybackError } from '@features/playback/domain/classifyPlaybackError';
+import { clearPlaybackError, reportPlaybackError } from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   recordAudioRecoveryFailure,
   recordPlaybackFailure,
-} from '@features/playback/playbackHealth';
+} from '@features/playback/domain/playbackHealth';
 import {
   redactedPlaybackFailure,
   redactPlaybackErrorMessage,
-} from '@features/playback/redactPlaybackError';
-import { progressSecondsToMs } from '@features/playback/time';
+} from '@features/playback/domain/redactPlaybackError';
+import { progressSecondsToMs } from '@features/playback/domain/time';
 import {
   reportingQueueFailure,
   reportQueueFailure,

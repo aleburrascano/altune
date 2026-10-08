@@ -2,9 +2,9 @@ import { type TrackKey } from '@shared/playback/trackKey';
 import type { PlaybackErrorKind } from '@shared/playback/types';
 
 import { NativeQueueTimeoutError } from '@features/playback/native/nativeQueueLock';
-import { reportPlaybackError } from '@features/playback/playbackErrorStore';
-import { recordPlaybackFailure } from '@features/playback/playbackHealth';
-import { warnPlayback } from '@features/playback/redactPlaybackError';
+import { reportPlaybackError } from '@features/playback/hooks/usePlaybackErrorStore';
+import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
+import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
 
 export type NativeQueueFailureKind = 'transient' | 'permanent';
 

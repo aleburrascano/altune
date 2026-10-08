@@ -13,11 +13,11 @@ import {
   swapUpcomingToLocal,
   wasSwappedToLocal,
 } from '@features/playback/native/nativeTrackSwap';
-import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
+import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/playback/playbackHealth';
+} from '@features/playback/domain/playbackHealth';
 import { resetPlaybackForSignOut } from '@features/playback/native/service';
 import '@features/playback/native/loadNativeTrack';
 import {

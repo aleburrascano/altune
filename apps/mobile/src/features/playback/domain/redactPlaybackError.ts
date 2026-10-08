@@ -1,6 +1,6 @@
 import type { PlaybackErrorKind } from '@shared/playback/types';
 
-import { classifyPlaybackFailure } from '@features/playback/classifyPlaybackError';
+import { classifyPlaybackFailure } from '@features/playback/domain/classifyPlaybackError';
 
 const MAX_MESSAGE_LENGTH = 500;
 const REDACTED = '[redacted]';

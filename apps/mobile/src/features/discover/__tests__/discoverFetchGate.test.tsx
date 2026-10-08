@@ -14,7 +14,7 @@ import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/ki
 import { discoveryKeys } from '@shared/lib/query-keys';
 
 import { useAutocompleteSuggestions } from '@features/discover/hooks/useAutocompleteSuggestions';
-import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useClearSearchHistory';
+import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useDiscoverClearSearchHistory';
 import { useDiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
 import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';

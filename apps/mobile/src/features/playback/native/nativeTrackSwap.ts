@@ -5,16 +5,16 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import type { TrackId } from '@shared/api-client/ids';
-import { currentLoadToken, isStale } from '@features/playback/loadToken';
+import { currentLoadToken, isStale } from '@features/playback/domain/loadToken';
 import {
   NativeQueueTimeoutError,
   withNativeQueue,
   type Fence,
 } from '@features/playback/native/nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
-import { reportLoadFailure } from '@features/playback/playbackErrorStore';
-import { recordPresignOutcome } from '@features/playback/playbackHealth';
-import { warnPlayback } from '@features/playback/redactPlaybackError';
+import { reportLoadFailure } from '@features/playback/hooks/usePlaybackErrorStore';
+import { recordPresignOutcome } from '@features/playback/domain/playbackHealth';
+import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 

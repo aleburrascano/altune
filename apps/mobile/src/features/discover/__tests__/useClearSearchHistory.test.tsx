@@ -11,7 +11,7 @@ import {
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
 
-import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useClearSearchHistory';
+import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useDiscoverClearSearchHistory';
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
 
 jest.mock('@shared/api-client/discovery', () => ({

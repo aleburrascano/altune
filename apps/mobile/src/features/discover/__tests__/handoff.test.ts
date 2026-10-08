@@ -1,6 +1,6 @@
 import { clearDetailHandoffs, readDetailHandoff } from '@shared/lib/detail-handoff';
 
-import { stashHandoffForDetail } from '@features/discover/domain/handoff';
+import { stashHandoffForDetail } from '@features/discover/domain/stashHandoffForDetail';
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 beforeEach(() => {

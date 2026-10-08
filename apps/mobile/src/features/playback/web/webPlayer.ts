@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { TrackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import type { RedactedPlaybackFailure } from '@features/playback/redactPlaybackError';
+import type { RedactedPlaybackFailure } from '@features/playback/domain/redactPlaybackError';
 
 type AudioPhase = 'loading' | 'playing' | 'paused' | 'ended';
 

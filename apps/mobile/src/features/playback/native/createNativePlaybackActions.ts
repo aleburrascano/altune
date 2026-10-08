@@ -12,14 +12,14 @@ import {
   loadNativeTrack,
 } from '@features/playback/native/loadNativeTrack';
 import { reorderUpcomingNative } from '@features/playback/native/rebuildNativeTail';
-import { claimSessionReset } from '@features/playback/loadToken';
+import { claimSessionReset } from '@features/playback/domain/loadToken';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
-import { clearPlaybackError, reportLoadFailure } from '@features/playback/playbackErrorStore';
+import { clearPlaybackError, reportLoadFailure } from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   isIndexOutOfBounds,
   reportingQueueFailure,
 } from '@features/playback/native/queueFailureReport';
-import { redactedPlaybackFailure, warnPlayback } from '@features/playback/redactPlaybackError';
+import { redactedPlaybackFailure, warnPlayback } from '@features/playback/domain/redactPlaybackError';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;

@@ -10,9 +10,9 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 import { ignoringNativeRejection } from '@features/playback/native/createNativePlaybackActions';
 import { playbackService } from '@features/playback/native/service';
 import { repairActiveToStreaming } from '@features/playback/native/nativeTrackSwap';
-import { _resetPlaybackHealthForTest } from '@features/playback/playbackHealth';
+import { _resetPlaybackHealthForTest } from '@features/playback/domain/playbackHealth';
 import { reportingQueueFailure } from '@features/playback/native/queueFailureReport';
-import { redactPlaybackErrorMessage, warnPlayback } from '@features/playback/redactPlaybackError';
+import { redactPlaybackErrorMessage, warnPlayback } from '@features/playback/domain/redactPlaybackError';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 

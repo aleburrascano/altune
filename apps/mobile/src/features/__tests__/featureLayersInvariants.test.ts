@@ -7,7 +7,7 @@ const IMPORT_STATEMENT = /^\s*(import|export)\s+(type\s+)?([^;]*?\s+from\s+)?['"
 const FORBIDDEN_VALUE_SOURCE =
   /^(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
 
-const DISCOVER_DOMAIN_FILE_COUNT = 8;
+const DISCOVER_DOMAIN_FILE_COUNT = 9;
 
 function domainFiles(featuresRoot: string = FEATURES_ROOT): { feature: string; file: string }[] {
   return readdirSync(featuresRoot, { withFileTypes: true })
@@ -46,9 +46,37 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     },
   );
 
-  it('covers all 8 discover domain files', () => {
+  it('covers all 9 discover domain files', () => {
     expect(files.filter(({ feature }) => feature === 'discover')).toHaveLength(
       DISCOVER_DOMAIN_FILE_COUNT,
+    );
+  });
+
+  it('covers the 16 playback domain files', () => {
+    expect(
+      files
+        .filter(({ feature }) => feature === 'playback')
+        .map(({ file }) => file)
+        .sort(),
+    ).toEqual(
+      [
+        'canRetryPlaybackError.ts',
+        'clamp.ts',
+        'classifyPlaybackError.ts',
+        'derivePlaybackState.ts',
+        'loadToken.ts',
+        'lyrics-sync.ts',
+        'playbackHealth.ts',
+        'presignWindow.ts',
+        'queueItem.ts',
+        'queueMenuOptions.ts',
+        'queueRebuildStrategies.ts',
+        'queueStateWire.ts',
+        'redactPlaybackError.ts',
+        'resumeQueue.ts',
+        'signals.ts',
+        'time.ts',
+      ].sort(),
     );
   });
 
@@ -78,6 +106,10 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     expect(forbiddenValueImports("import { x } from '../hooks/useThing';")).toEqual([
       '../hooks/useThing',
     ]);
+  });
+
+  it('allows a zustand value import, which is why only react-using stores leave domain', () => {
+    expect(forbiddenValueImports("import { create } from 'zustand';")).toEqual([]);
   });
 
   it('tells a look-alike path from an outer-layer import', () => {

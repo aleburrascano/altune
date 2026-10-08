@@ -7,11 +7,11 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/playback/playbackHealth';
+} from '@features/playback/domain/playbackHealth';
 import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
-} from '@features/playback/queueRebuildStrategies';
+} from '@features/playback/domain/queueRebuildStrategies';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 

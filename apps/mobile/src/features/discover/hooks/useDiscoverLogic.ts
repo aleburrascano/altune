@@ -15,7 +15,7 @@ import {
 } from '@features/discover/hooks/useImpressionLogger';
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
 import { useResultsFilter } from '@features/discover/hooks/useResultsFilter';
-import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useClearSearchHistory';
+import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useDiscoverClearSearchHistory';
 import { useResultTap, type ResultTapHandler } from '@features/discover/hooks/useResultTap';
 import { useSuggestionVisibility } from '@features/discover/hooks/useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from '@features/discover/hooks/useDegradedSearchTelemetry';
