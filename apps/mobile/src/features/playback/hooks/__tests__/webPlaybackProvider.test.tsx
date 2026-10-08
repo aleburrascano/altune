@@ -18,7 +18,6 @@ import { recordPlaybackFailure } from '@features/playback/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
 
-
 jest.mock('@features/playback/playbackHealth', () => ({
   ...jest.requireActual('@features/playback/playbackHealth'),
   recordPlaybackFailure: jest.fn(),
