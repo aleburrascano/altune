@@ -12,19 +12,32 @@ function trackMetadata(track: PlaybackTrack): MediaMetadata {
   return new MediaMetadata({ title: track.title, artist: track.artist, artwork });
 }
 
-function browserPlaybackState(track: PlaybackTrack | null, status: PlaybackContextValue['status']): MediaSessionPlaybackState {
+function browserPlaybackState(
+  track: PlaybackTrack | null,
+  status: PlaybackContextValue['status'],
+): MediaSessionPlaybackState {
   if (!track) return 'none';
   return status === 'playing' ? 'playing' : 'paused';
 }
 
-function syncMetadataAndState(session: MediaSession, track: PlaybackTrack | null, status: PlaybackContextValue['status']): void {
+function syncMetadataAndState(
+  session: MediaSession,
+  track: PlaybackTrack | null,
+  status: PlaybackContextValue['status'],
+): void {
   session.metadata = track ? trackMetadata(track) : null;
   session.playbackState = browserPlaybackState(track, status);
 }
 
-function syncPositionState(session: MediaSession, positionMs: number, durationMs: number, rate: number): void {
-  if (!session.setPositionState) return;
-  if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+interface PositionSnapshot {
+  positionMs: number;
+  durationMs: number;
+  rate: number;
+}
+
+function syncPositionState(session: MediaSession, snapshot: PositionSnapshot): void {
+  const { positionMs, durationMs, rate } = snapshot;
+  if (!session.setPositionState || !Number.isFinite(durationMs) || durationMs <= 0) return;
   const position = Math.min(positionMs, durationMs) / 1000;
   try {
     session.setPositionState({ duration: durationMs / 1000, position, playbackRate: rate });
@@ -44,7 +57,9 @@ function seekTo(playback: PlaybackContextValue, details: MediaSessionActionDetai
 
 function seekBy(playback: PlaybackContextValue, deltaMs: number): void {
   const target = Math.max(0, playback.positionMs + deltaMs);
-  const clamped = Number.isFinite(playback.durationMs) ? Math.min(target, playback.durationMs) : target;
+  const clamped = Number.isFinite(playback.durationMs)
+    ? Math.min(target, playback.durationMs)
+    : target;
   playback.seekTo(clamped);
 }
 
@@ -71,20 +86,22 @@ function actionEntries(latest: { current: PlaybackContextValue }): ActionEntry[]
   return [...transportEntries(latest), ...seekEntries(latest)];
 }
 
-function trySetActionHandler(session: MediaSession, action: MediaSessionAction, onAction: MediaSessionActionHandler | null): void {
+type ActionHandler = MediaSessionActionHandler | null;
+
+function trySetHandler(session: MediaSession, action: MediaSessionAction, h: ActionHandler): void {
   try {
-    session.setActionHandler(action, onAction);
+    session.setActionHandler(action, h);
   } catch {
     return;
   }
 }
 
 function clearActionHandlers(session: MediaSession, entries: ActionEntry[]): void {
-  for (const [action] of entries) trySetActionHandler(session, action, null);
+  for (const [action] of entries) trySetHandler(session, action, null);
 }
 
 function registerActionHandlers(session: MediaSession, entries: ActionEntry[]): () => void {
-  for (const [action, onAction] of entries) trySetActionHandler(session, action, onAction);
+  for (const [action, onAction] of entries) trySetHandler(session, action, onAction);
   return () => clearActionHandlers(session, entries);
 }
 
@@ -106,7 +123,11 @@ function isStopped(playback: PlaybackContextValue): boolean {
   return playback.status === 'idle' && playback.track === null;
 }
 
-function syncActionHandlers(session: MediaSession | undefined, stopped: boolean, latest: { current: PlaybackContextValue }): (() => void) | undefined {
+function syncActionHandlers(
+  session: MediaSession | undefined,
+  stopped: boolean,
+  latest: { current: PlaybackContextValue },
+): (() => void) | undefined {
   if (!session) return undefined;
   if (stopped) return void clearActionHandlers(session, actionEntries(latest));
   return registerActionHandlers(session, actionEntries(latest));
@@ -121,7 +142,10 @@ function useMediaSessionActions(
   useEffect(() => syncActionHandlers(session, stopped, latest), [session, stopped, latest]);
 }
 
-function useMediaSessionMetadata(session: MediaSession | undefined, playback: PlaybackContextValue): void {
+function useMediaSessionMetadata(
+  session: MediaSession | undefined,
+  playback: PlaybackContextValue,
+): void {
   const { track, status } = playback;
   useEffect(() => {
     if (session) syncMetadataAndState(session, track, status);
@@ -134,12 +158,15 @@ function isDueForSync(lastSyncRef: { current: number }, now: number): boolean {
   return true;
 }
 
-function useMediaSessionPosition(session: MediaSession | undefined, playback: PlaybackContextValue): void {
+type MaybeSession = MediaSession | undefined;
+
+function useMediaSessionPosition(session: MaybeSession, playback: PlaybackContextValue): void {
   const rate = usePlaybackRateStore((s) => s.rate);
   const { positionMs, durationMs } = playback;
   const lastSyncRef = useRef(0);
   useEffect(() => {
-    if (session && isDueForSync(lastSyncRef, Date.now())) syncPositionState(session, positionMs, durationMs, rate);
+    if (session && isDueForSync(lastSyncRef, Date.now()))
+      syncPositionState(session, { positionMs, durationMs, rate });
   }, [session, positionMs, durationMs, rate]);
 }
 
