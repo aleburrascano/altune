@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { SERVER_EVENT_TYPES } from '../eventTypes';
+import { SERVER_EVENT_TYPES } from '@shared/events/eventTypes';
 
 function findGoApiRoot(): string | null {
   let dir = __dirname;

@@ -2,8 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
-import type { ServerEventHandlers } from './eventPayload';
-import { TRACK_CACHE_FAMILIES } from './trackCachePatch';
+import type { ServerEventHandlers } from '@shared/events/eventPayload';
+import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 
 const RESYNC_KEYS: readonly (readonly string[])[] = [
   TRACK_CACHE_FAMILIES.pagedLibrary.prefix,

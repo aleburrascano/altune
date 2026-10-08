@@ -2,8 +2,8 @@ import fc from 'fast-check';
 
 import { asTrackId } from '@shared/api-client/ids';
 
-import { orderedQueueTracks, useQueueStore } from '../queueStore';
-import type { PlaybackTrack } from '../types';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 const INITIAL_STATE = useQueueStore.getState();
 

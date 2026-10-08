@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useSingleFlightAction } from '../useSingleFlightAction';
+import { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
 
 type Props = {
   open: boolean;

@@ -6,9 +6,12 @@ import {
   schemaVersionOf,
   writeDocumentAtomically,
   type SchemaSpec,
-} from '../durableDocument';
-import type { StoredDirectory } from '../fileStore';
-import { createMemoryFileStore, type MemoryFileStore } from './memoryFileStore';
+} from '@shared/files/durableDocument';
+import type { StoredDirectory } from '@shared/files/fileStore';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@shared/files/__tests__/memoryFileStore';
 
 const DIR_URI = 'memory://document/docs';
 const FILE_URI = `${DIR_URI}/doc.json`;

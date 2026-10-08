@@ -6,8 +6,8 @@ import {
   MalformedSSEEventError,
   ServerEventHandlerError,
   SSEHttpError,
-} from '../sse-client';
-import type { ServerEvent } from '../sse-client';
+} from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sse-client';
 import {
   clearSessionExpired,
   getSessionExpired,

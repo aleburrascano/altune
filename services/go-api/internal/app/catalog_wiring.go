@@ -272,8 +272,7 @@ func (a *App) acquisitionSources() ([]acqPorts.AudioSource, acqPorts.Acquisition
 		slog.Warn("acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
 		return []acqPorts.AudioSource{fixture.NewSource()}, acqPorts.AcquisitionVerification{}
 	}
-	searcher := ytdlp.NewYtDlpAudioSearcher(
-		a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
+	searcher := a.newYtDlpSearcher()
 	tools := acqPorts.AcquisitionVerification{YtDlp: searcher.Available()}
 	sources, streamripOK := a.audioSourcesFor(searcher)
 	tools.Streamrip = streamripOK
@@ -284,7 +283,12 @@ func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
 	if a.cfg.AcquisitionFixtureEnabled() {
 		return nil
 	}
-	return ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
+	return a.newYtDlpSearcher()
+}
+
+func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
+	return ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime).
+		WithRemoteComponents(a.cfg.YtDLPRemoteComponents)
 }
 
 func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {

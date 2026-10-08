@@ -1,4 +1,4 @@
-import type { PlaybackTrack } from './types';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 declare const trackKeyBrand: unique symbol;
 export type TrackKey = string & { readonly [trackKeyBrand]: true };

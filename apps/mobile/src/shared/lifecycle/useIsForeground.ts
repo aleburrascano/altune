@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { isAppActive } from './appState';
-import { useAppStateChange } from './useAppStateChange';
+import { isAppActive } from '@shared/lifecycle/appState';
+import { useAppStateChange } from '@shared/lifecycle/useAppStateChange';
 
 export function useIsForeground(): boolean {
   const [isForeground, setIsForeground] = useState(isAppActive);

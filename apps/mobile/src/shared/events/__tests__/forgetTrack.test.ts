@@ -6,7 +6,7 @@ import type { ListTracksResponse } from '@shared/api-client/types';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-import { forgetTrack } from '../forgetTrack';
+import { forgetTrack } from '@shared/events/forgetTrack';
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 

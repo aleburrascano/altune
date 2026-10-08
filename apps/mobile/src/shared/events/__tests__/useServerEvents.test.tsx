@@ -6,15 +6,15 @@ import {
   useServerEvents,
   type ServerEventsClient,
   type ServerEventsClientFactory,
-} from '../useServerEvents';
-import { SSEClient, type ServerEvent } from '../sse-client';
-import { applyServerEvent } from '../applyServerEvent';
+} from '@shared/events/useServerEvents';
+import { SSEClient, type ServerEvent } from '@shared/events/sse-client';
+import { applyServerEvent } from '@shared/events/applyServerEvent';
 import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
-jest.mock('../applyServerEvent', () => ({ applyServerEvent: jest.fn() }));
+jest.mock('@shared/events/applyServerEvent', () => ({ applyServerEvent: jest.fn() }));
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn(() => Promise.resolve()),

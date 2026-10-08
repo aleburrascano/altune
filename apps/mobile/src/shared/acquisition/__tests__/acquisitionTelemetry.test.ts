@@ -9,7 +9,7 @@ import {
   recordRetryTapped,
   recordStatusChanged,
   retryFailureOutcome,
-} from '../acquisitionTelemetry';
+} from '@shared/acquisition/acquisitionTelemetry';
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 

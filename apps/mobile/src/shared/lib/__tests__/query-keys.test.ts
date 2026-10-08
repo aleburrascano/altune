@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { asPlaylistId } from '@shared/api-client/ids';
 
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 import {
   detailKeys,
@@ -11,7 +11,7 @@ import {
   libraryKeys,
   playlistKeys,
   isSearchKeyFor,
-} from '../query-keys';
+} from '@shared/lib/query-keys';
 
 function makeClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });

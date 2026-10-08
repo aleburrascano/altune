@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useFavorites } from '../useFavorites';
+import { useFavorites } from '@shared/favorites/useFavorites';
 import type { FavoritesResponse, FavoriteTarget } from '@shared/api-client/favorites';
 import { asFavoriteKey } from '@shared/api-client/ids';
 import { FavoritesPortProvider } from '@shared/favorites';

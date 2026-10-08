@@ -1,4 +1,4 @@
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
@@ -15,7 +15,7 @@ import {
   patchPlaylistName,
   removeTrackFromPlaylistCache,
   reorderPlaylistCache,
-} from '../playlistCachePatch';
+} from '@shared/events/playlistCachePatch';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {

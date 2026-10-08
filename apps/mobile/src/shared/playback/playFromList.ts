@@ -1,8 +1,8 @@
 import type { TrackResponse } from '@shared/api-client/types';
 
-import { canPlay } from './canPlay';
-import { toPlaybackTrack } from './toPlaybackTrack';
-import type { PlaybackTrack, QueueSource } from './types';
+import { canPlay } from '@shared/playback/canPlay';
+import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
+import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
 
 export function buildPlayableQueue(
   tracks: readonly TrackResponse[],

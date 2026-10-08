@@ -2,14 +2,14 @@ import { useEffect } from 'react';
 import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { apiBase } from '../api-client/config';
-import { withinAuthDeadline } from '../auth/authDeadline';
-import { supabase } from '../auth/supabaseClient';
-import { isLoopEnabled, onKillSwitchChange } from '../killSwitch/killSwitch';
-import { onSignOut } from '../session/signOutCleanup';
-import { applyServerEvent } from './applyServerEvent';
-import { SSEClient } from './sse-client';
-import type { ServerEvent } from './sse-client';
+import { apiBase } from '@shared/api-client/config';
+import { withinAuthDeadline } from '@shared/auth/authDeadline';
+import { supabase } from '@shared/auth/supabaseClient';
+import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
+import { onSignOut } from '@shared/session/signOutCleanup';
+import { applyServerEvent } from '@shared/events/applyServerEvent';
+import { SSEClient } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sse-client';
 
 async function getAccessToken(): Promise<string | null> {
   try {

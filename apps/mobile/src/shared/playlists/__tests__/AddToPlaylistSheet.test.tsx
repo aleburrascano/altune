@@ -3,13 +3,13 @@ import { Alert, StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
-import { AddToPlaylistSheet } from '../ui/AddToPlaylistSheet';
+import { AddToPlaylistSheet } from '@shared/playlists/ui/AddToPlaylistSheet';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

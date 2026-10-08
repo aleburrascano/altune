@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { appVersion, declaredAppScheme, deviceInfo, webOrigin } from '../device';
+import { appVersion, declaredAppScheme, deviceInfo, webOrigin } from '@shared/device/device';
 
 let mockExpoConfig: Record<string, unknown> | null = null;
 jest.mock('expo-constants', () => ({

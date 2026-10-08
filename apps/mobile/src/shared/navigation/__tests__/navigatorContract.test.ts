@@ -1,8 +1,8 @@
 import { createElement } from 'react';
 import { act, renderRouter } from 'expo-router/testing-library';
 
-import { useNavigator, type Navigator } from '../index';
-import { createMemoryNavigator } from './memoryNavigator';
+import { useNavigator, type Navigator } from '@shared/navigation/index';
+import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
 
 jest.mock('decode-uri-component', () => ({
   __esModule: true,

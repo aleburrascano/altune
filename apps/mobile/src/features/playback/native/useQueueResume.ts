@@ -38,6 +38,7 @@ import { progressSecondsToRoundedMs } from '@features/playback/time';
 import { useAppStateChange } from '@shared/lifecycle';
 
 const SAVE_INTERVAL_MS = 15_000;
+const MAX_SAVED_QUEUE_IDS = 10_000;
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -77,28 +78,92 @@ function savedCurrentIndex(s: QueueStore): number {
   return libraryIds(orderedQueueTracks({ tracks: s.tracks, playOrder: before })).length;
 }
 
-async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
-  if (isSkippable(useQueueStore.getState())) return;
+interface SavedLists {
+  track_ids: string[];
+  natural_order: string[];
+  current_index: number;
+}
 
+function windowStart(currentIndex: number, length: number): number {
+  const centered = currentIndex - Math.floor(MAX_SAVED_QUEUE_IDS / 2);
+  return Math.max(Math.min(centered, length - MAX_SAVED_QUEUE_IDS), 0);
+}
+
+function naturalWithin(natural: readonly string[], window: readonly string[]): string[] {
+  const left = new Map<string, number>();
+  for (const id of window) left.set(id, (left.get(id) ?? 0) + 1);
+  return natural.filter((id) => {
+    const count = left.get(id) ?? 0;
+    left.set(id, count - 1);
+    return count > 0;
+  });
+}
+
+function windowOf(ordered: readonly string[], currentIndex: number) {
+  const start = windowStart(currentIndex, ordered.length);
+  return { ids: ordered.slice(start, start + MAX_SAVED_QUEUE_IDS), start };
+}
+
+function cappedSavedLists(s: QueueStore): SavedLists {
+  const currentIndex = savedCurrentIndex(s);
+  const { ids, start } = windowOf(libraryIds(orderedQueueTracks(s)), currentIndex);
+  return {
+    track_ids: ids,
+    natural_order: naturalWithin(libraryIds(s.tracks), ids),
+    current_index: currentIndex - start,
+  };
+}
+
+type SaveFingerprint = readonly unknown[];
+
+function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
+  return [s.tracks, s.playOrder, s.source, s.currentIndex, s.shuffled, s.repeatMode, positionMs];
+}
+
+function sameFingerprint(a: SaveFingerprint | null, b: SaveFingerprint): boolean {
+  return a !== null && a.every((value, i) => Object.is(value, b[i]));
+}
+
+async function sendSave(s: QueueStore, positionMs: number): Promise<void> {
+  await saveQueueState({
+    ...cappedSavedLists(s),
+    position_ms: positionMs,
+    shuffled: s.shuffled,
+    repeat_mode: s.repeatMode,
+    source: toWireSource(s.source),
+  });
+}
+
+async function readSaveSnapshot(
+  isSkippable: (state: QueueStore) => boolean,
+): Promise<ConsistentSnapshot | null> {
+  if (isSkippable(useQueueStore.getState())) return null;
   const epoch = currentSessionEpoch();
   const snapshot = await readConsistentSnapshot();
-  if (!snapshot || isSkippable(snapshot.state) || !isSameSession(epoch)) return;
-  const { state: s, positionMs } = snapshot;
+  if (!snapshot || isSkippable(snapshot.state) || !isSameSession(epoch)) return null;
+  return snapshot;
+}
 
+async function sendSaveReportingFailure(snapshot: ConsistentSnapshot): Promise<boolean> {
   try {
-    await saveQueueState({
-      track_ids: libraryIds(orderedQueueTracks(s)),
-      current_index: savedCurrentIndex(s),
-      position_ms: positionMs,
-      shuffled: s.shuffled,
-      repeat_mode: s.repeatMode,
-      source: toWireSource(s.source),
-      natural_order: libraryIds(s.tracks),
-    });
+    await sendSave(snapshot.state, snapshot.positionMs);
+    return true;
   } catch (err) {
     warnPlayback('failed to save queue state', {}, err);
     recordQueueSaveFailure();
+    return false;
   }
+}
+
+async function saveOnce(
+  isSkippable: (state: QueueStore) => boolean,
+  lastSaved: { current: SaveFingerprint | null },
+): Promise<void> {
+  const snapshot = await readSaveSnapshot(isSkippable);
+  if (!snapshot) return;
+  const fingerprint = fingerprintOf(snapshot.state, snapshot.positionMs);
+  if (sameFingerprint(lastSaved.current, fingerprint)) return;
+  if (await sendSaveReportingFailure(snapshot)) lastSaved.current = fingerprint;
 }
 
 function userTookOver(owned: number): boolean {
@@ -262,12 +327,13 @@ export function useQueueResume() {
   const restoredRef = useRef(false);
   const placeholderGenerationRef = useRef<number | null>(null);
   const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
+  const lastSavedRef = useRef<SaveFingerprint | null>(null);
   const save = useCallback((): Promise<void> => {
     const isSkippable = (state: QueueStore): boolean =>
       state.tracks.length === 0 ||
       placeholderGenerationRef.current === state.generation ||
       state.currentTrack()?.source.kind !== 'library';
-    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable));
+    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable, lastSavedRef));
     return singleFlightRef.current();
   }, []);
 

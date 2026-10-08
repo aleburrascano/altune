@@ -1,2 +1,2 @@
-export { useAppStateChange } from './useAppStateChange';
-export { useIsForeground } from './useIsForeground';
+export { useAppStateChange } from '@shared/lifecycle/useAppStateChange';
+export { useIsForeground } from '@shared/lifecycle/useIsForeground';

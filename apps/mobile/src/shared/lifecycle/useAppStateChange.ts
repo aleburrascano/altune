@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { type AppLifecycleState, subscribeAppState } from './appState';
+import { type AppLifecycleState, subscribeAppState } from '@shared/lifecycle/appState';
 
 export function useAppStateChange(listener: (state: AppLifecycleState) => void): void {
   const handlerRef = useRef(listener);

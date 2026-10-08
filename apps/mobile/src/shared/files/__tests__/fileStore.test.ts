@@ -1,8 +1,8 @@
 import { File } from 'expo-file-system';
 
-import { deviceFileStore, type FileStore, createFileStoreSlot } from '../fileStore';
-import { createMemoryFileStore } from './memoryFileStore';
-import { createWebFileStore, WebDownloadUnsupportedError } from '../web/webFileStore';
+import { deviceFileStore, type FileStore, createFileStoreSlot } from '@shared/files/fileStore';
+import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import { createWebFileStore, WebDownloadUnsupportedError } from '@shared/files/web/webFileStore';
 
 function fakeLocalStorage(): Storage {
   const data = new Map<string, string>();
@@ -229,21 +229,21 @@ describe('createFileStoreSlot', () => {
 
 describe('the default file store', () => {
   it('is the device filesystem natively', () => {
-    const { defaultFileStore } = require('../defaultFileStore');
+    const { defaultFileStore } = require('@shared/files/defaultFileStore');
 
     expect(defaultFileStore).toBe(deviceFileStore);
   });
 
   it('is the localStorage-backed store on web', () => {
-    const { defaultFileStore } = require('../defaultFileStore.web');
-    const { webFileStore } = require('../web/webFileStore');
+    const { defaultFileStore } = require('@shared/files/defaultFileStore.web');
+    const { webFileStore } = require('@shared/files/web/webFileStore');
 
     expect(defaultFileStore).toBe(webFileStore);
   });
 
   it('does not pick the web store natively', () => {
-    const { defaultFileStore } = require('../defaultFileStore');
-    const { webFileStore } = require('../web/webFileStore');
+    const { defaultFileStore } = require('@shared/files/defaultFileStore');
+    const { webFileStore } = require('@shared/files/web/webFileStore');
 
     expect(defaultFileStore).not.toBe(webFileStore);
   });

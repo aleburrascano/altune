@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { countLabel, formatDuration } from '../format';
+import { countLabel, formatDuration } from '@shared/lib/format';
 
 describe('formatDuration — boundaries the minutes/seconds arithmetic turns on', () => {
   it.each<[number, string]>([

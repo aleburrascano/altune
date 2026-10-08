@@ -38,30 +38,39 @@ var searchEngines = []string{"ytsearch5:", "scsearch5:"}
 const maxConcurrentSearches = 4
 
 type YtDlpAudioSearcher struct {
-	ffmpegLocation  string
-	cookieFile      string
-	jsRuntime       string
-	binary          string
-	runSearch       searchRunner
-	inspect         inspectRunner
-	inspections     *inspectionCache
-	searchTimeout   time.Duration
-	downloadTimeout time.Duration
-	previewTimeout  time.Duration
-	canaryTimeout   time.Duration
+	ffmpegLocation   string
+	cookieFile       string
+	jsRuntime        string
+	remoteComponents string
+	binary           string
+	runSearch        searchRunner
+	inspect          inspectRunner
+	inspections      *inspectionCache
+	searchTimeout    time.Duration
+	downloadTimeout  time.Duration
+	previewTimeout   time.Duration
+	canaryTimeout    time.Duration
+}
+
+const defaultRemoteComponents = "ejs:github"
+
+func (s *YtDlpAudioSearcher) WithRemoteComponents(spec string) *YtDlpAudioSearcher {
+	s.remoteComponents = spec
+	return s
 }
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
 	s := &YtDlpAudioSearcher{
-		ffmpegLocation:  ffmpegLocation,
-		cookieFile:      cookieFile,
-		jsRuntime:       jsRuntime,
-		binary:          "yt-dlp",
-		searchTimeout:   searchTimeout,
-		downloadTimeout: downloadTimeout,
-		previewTimeout:  previewTimeout,
-		canaryTimeout:   canaryTimeout,
-		inspections:     newInspectionCache(),
+		ffmpegLocation:   ffmpegLocation,
+		cookieFile:       cookieFile,
+		jsRuntime:        jsRuntime,
+		remoteComponents: defaultRemoteComponents,
+		binary:           "yt-dlp",
+		searchTimeout:    searchTimeout,
+		downloadTimeout:  downloadTimeout,
+		previewTimeout:   previewTimeout,
+		canaryTimeout:    canaryTimeout,
+		inspections:      newInspectionCache(),
 	}
 	s.runSearch = s.runYtDlpSearch
 	s.inspect = s.runYtDlpInspect
@@ -184,7 +193,11 @@ func (s *YtDlpAudioSearcher) SearchQueries(ctx context.Context, queries []string
 
 func (s *YtDlpAudioSearcher) authFlags(args []string, cookieFile string) []string {
 	if s.jsRuntime != "" {
-		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
+		prefix := []string{"--js-runtimes", s.jsRuntime}
+		if s.remoteComponents != "" {
+			prefix = append(prefix, "--remote-components", s.remoteComponents)
+		}
+		args = append(prefix, args...)
 	}
 	if cookieFile != "" {
 		args = append([]string{"--cookies", cookieFile}, args...)

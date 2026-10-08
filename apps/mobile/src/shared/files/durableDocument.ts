@@ -1,4 +1,4 @@
-import type { StoredDirectory, StoredFile } from './fileStore';
+import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 
 type OpenDir = () => StoredDirectory;
 

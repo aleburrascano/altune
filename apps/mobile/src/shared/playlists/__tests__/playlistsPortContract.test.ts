@@ -3,11 +3,11 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 import { supabase } from '@shared/auth/supabaseClient';
 import { ApiError } from '@shared/errors';
 
-import { httpPlaylistsPort } from '../adapters/http/httpPlaylistsPort';
-import type { PlaylistsPort } from '../ports/playlistsPort';
-import { createMemoryPlaylistsPort } from './memoryPlaylistsPort';
+import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
+import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
+import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

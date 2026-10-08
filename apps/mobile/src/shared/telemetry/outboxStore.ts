@@ -7,8 +7,8 @@ import {
 import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { createFileStoreSlot, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
 
-import type { OutboxEntry } from './outbox';
-import type { DiscoveryEventType } from './recordEvent';
+import type { OutboxEntry } from '@shared/telemetry/outbox';
+import type { DiscoveryEventType } from '@shared/telemetry/recordEvent';
 
 const OUTBOX_DIR = 'telemetry';
 const OUTBOX_FILE = 'critical-outbox.json';

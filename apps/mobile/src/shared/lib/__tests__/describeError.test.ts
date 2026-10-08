@@ -1,6 +1,6 @@
 import { ApiError, ContractError } from '@shared/errors';
 
-import { RETRY_TAIL, describeError } from '../describeError';
+import { RETRY_TAIL, describeError } from '@shared/lib/describeError';
 
 describe('describeError — network vs 5xx vs generic', () => {
   it('maps a transport failure to the offline copy', () => {

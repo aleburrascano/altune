@@ -1,4 +1,4 @@
-import { getPreviewUrl } from '../previewUrl';
+import { getPreviewUrl } from '@shared/playback/previewUrl';
 
 describe('getPreviewUrl', () => {
   it.each([
