@@ -29,6 +29,10 @@ func runSweepStagingAudio(cfg *config.Config, execute bool) error {
 	}
 	defer pool.Close()
 
+	return sweepAudioStore(ctx, cfg, persistence.NewPgxTrackRepository(pool), execute)
+}
+
+func sweepAudioStore(ctx context.Context, cfg *config.Config, refs ports.AudioRefPrefixLister, execute bool) error {
 	store, err := NewAudioStoreFromConfig(cfg)
 	if err != nil {
 		return err
@@ -38,12 +42,14 @@ func runSweepStagingAudio(cfg *config.Config, execute bool) error {
 		return errors.New("the configured audio store cannot list object age")
 	}
 
-	now := time.Now()
-	deleted, keptReferenced, keptFresh, failed, err := sweepStaging(ctx, store, lister, persistence.NewPgxTrackRepository(pool), execute, now)
+	deleted, keptReferenced, keptFresh, failed, err := sweepStaging(ctx, store, lister, refs, execute, time.Now())
 	if err != nil {
 		return err
 	}
+	return reportSweep(deleted, keptReferenced, keptFresh, failed, execute)
+}
 
+func reportSweep(deleted, keptReferenced, keptFresh, failed int, execute bool) error {
 	printSummary("Sweep staging audio complete:")
 	fmt.Printf("  Deleted:         %d\n", deleted)
 	fmt.Printf("  Kept (in use):   %d\n", keptReferenced)
@@ -79,6 +85,11 @@ func sweepStaging(ctx context.Context, store ports.AudioStore, lister ports.Audi
 
 	fmt.Printf("\nFound %d object(s) under %q.\n\n", len(objects), stagingRefPrefix)
 
+	deleted, keptReferenced, keptFresh, failed = sweepObjects(ctx, store, objects, referenced, execute, now)
+	return deleted, keptReferenced, keptFresh, failed, nil
+}
+
+func sweepObjects(ctx context.Context, store ports.AudioStore, objects []ports.ObjectAge, referenced map[string]bool, execute bool, now time.Time) (deleted, keptReferenced, keptFresh, failed int) {
 	for _, obj := range objects {
 		age := now.Sub(obj.LastModified)
 		if referenced[obj.AudioRef] {
@@ -90,17 +101,23 @@ func sweepStaging(ctx context.Context, store ports.AudioStore, lister ports.Audi
 			continue
 		}
 
-		fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
-		if !execute {
-			deleted++
-			continue
-		}
-		if err := store.Delete(ctx, obj.AudioRef); err != nil {
-			fmt.Printf("    FAILED: %v\n", err)
+		if !sweepObject(ctx, store, obj, age, execute) {
 			failed++
 			continue
 		}
 		deleted++
 	}
-	return deleted, keptReferenced, keptFresh, failed, nil
+	return deleted, keptReferenced, keptFresh, failed
+}
+
+func sweepObject(ctx context.Context, store ports.AudioStore, obj ports.ObjectAge, age time.Duration, execute bool) bool {
+	fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
+	if !execute {
+		return true
+	}
+	if err := store.Delete(ctx, obj.AudioRef); err != nil {
+		fmt.Printf("    FAILED: %v\n", err)
+		return false
+	}
+	return true
 }
