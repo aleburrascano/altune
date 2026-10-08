@@ -8,9 +8,9 @@ import (
 const ringCaptureFloor = slog.LevelDebug
 
 type ringHandler struct {
-	inner slog.Handler
-	ring  *RingBuffer
-	attrs []slog.Attr
+	inner  slog.Handler
+	ring   *RingBuffer
+	attrs  []slog.Attr
 	prefix string
 }
 
