@@ -14,6 +14,22 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
+func withDate(d string) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.ReleaseDate = d }
+}
+
+func withTracks(n int) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.TrackCount = n }
+}
+
+func withCover(u string) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.ImageURL = u }
+}
+
+func withType(t domain.RecordType) func(*domain.SearchResult) {
+	return func(r *domain.SearchResult) { r.RecordType = t }
+}
+
 func trackFrom(provider domain.ProviderName, id, title, artist string) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:     domain.ResultKindTrack,

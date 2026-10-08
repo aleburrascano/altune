@@ -1,4 +1,4 @@
-package service
+package release
 
 import (
 	"altune/go-api/internal/discovery/domain"
@@ -64,7 +64,7 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	a.UPC = firstNonEmpty(a.UPC, b.UPC)
 	a.MBID = firstNonEmpty(a.MBID, b.MBID)
 	a.ImageURL, a.ArtworkSource = bestArtwork(a, b)
-	a.Sources = unionSources(a.Sources, b.Sources)
+	a.Sources = UnionSources(a.Sources, b.Sources)
 	a.RecordType = mergeReleaseRecordType(a.RecordType, b.RecordType)
 	if !a.ResolutionTier.Stamped {
 		a.ResolutionTier = b.ResolutionTier
@@ -74,10 +74,10 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 }
 
 func bestArtwork(a, b domain.SearchResult) (url string, source domain.ProviderKey) {
-	if artworkConfidenceRank(b) > artworkConfidenceRank(a) {
+	if b.ArtworkConfidenceRank() > a.ArtworkConfidenceRank() {
 		return b.ImageURL, b.ArtworkSource
 	}
-	return firstNonEmptyArtwork(a, b)
+	return domain.FirstNonEmptyArtwork(a, b)
 }
 
 func bestReleaseDate(a, b string) string {
@@ -124,11 +124,11 @@ func hasStrongID(r domain.SearchResult) bool {
 	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || domain.StringExtra(r.Extras, domain.ExtraUPC) != ""
 }
 
-func unionSources(a, b []domain.SourceRef) []domain.SourceRef {
+func UnionSources(a, b []domain.SourceRef) []domain.SourceRef {
 	seen := make(map[string]bool, len(a)+len(b))
 	out := make([]domain.SourceRef, 0, len(a)+len(b))
 	for _, s := range append(append([]domain.SourceRef{}, a...), b...) {
-		key := sourceKey(s.Provider, s.ExternalID)
+		key := SourceKey(s.Provider, s.ExternalID)
 		if seen[key] {
 			continue
 		}
@@ -138,12 +138,22 @@ func unionSources(a, b []domain.SourceRef) []domain.SourceRef {
 	return out
 }
 
-func sourceKey(provider domain.ProviderName, id string) string {
+func SourceKey(provider domain.ProviderName, id string) string {
 	return provider.String() + ":" + id
 }
 
-func SourceKey(provider domain.ProviderName, id string) string {
-	return sourceKey(provider, id)
+func firstNonEmpty[T ~string](a, b T) T {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func firstNonZero[T int | int64](a, b T) T {
+	if a != 0 {
+		return a
+	}
+	return b
 }
 
 func maxInt(a, b int) int {

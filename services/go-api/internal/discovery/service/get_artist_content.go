@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -195,7 +196,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	v2Partial := false
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		artistRef := sourceKey(providerName, externalID)
+		artistRef := release.SourceKey(providerName, externalID)
 		var albums []domain.SearchResult
 		albums, v2Partial = s.v2Albums(ctx, identity, artistRef)
 		if len(albums) > 0 {

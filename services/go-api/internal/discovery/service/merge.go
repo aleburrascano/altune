@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
 )
@@ -112,7 +113,7 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) domain.SearchResult {
 	canonical, other = orderByCompleteness(canonical, other)
 	tier := effectiveTier(canonical, other, matchTier)
-	sources := unionSources(canonical.Sources, other.Sources)
+	sources := release.UnionSources(canonical.Sources, other.Sources)
 	imageURL, imageSource := mergedArtwork(canonical, other, tier)
 	merged := domain.SearchResult{
 		Kind:           canonical.Kind,
@@ -265,7 +266,7 @@ func identityClaims(r domain.SearchResult) map[string]bool {
 	claims := make(map[string]bool, len(r.Sources)+1)
 	for _, s := range r.Sources {
 		if s.ExternalID != "" {
-			claims[sourceKey(s.Provider, s.ExternalID)] = true
+			claims[release.SourceKey(s.Provider, s.ExternalID)] = true
 		}
 	}
 	for name, id := range r.Xref {
@@ -273,7 +274,7 @@ func identityClaims(r domain.SearchResult) map[string]bool {
 			continue
 		}
 		if p, ok := name.ProviderName(); ok {
-			claims[sourceKey(p, id)] = true
+			claims[release.SourceKey(p, id)] = true
 		}
 	}
 	return claims

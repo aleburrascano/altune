@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -58,7 +59,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if ambiguous[norm] {
 			key = norm + "\x00" + r.MBID
 			if r.MBID == "" && len(r.Sources) > 0 {
-				key = norm + "\x00" + sourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
+				key = norm + "\x00" + release.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
 			}
 		}
 		pop := r.Popularity

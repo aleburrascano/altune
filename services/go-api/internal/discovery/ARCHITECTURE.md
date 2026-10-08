@@ -361,7 +361,7 @@ artist duplicates, keyed by MBID when the name is ambiguous).
 ## 5. The detail / discography pipeline
 
 A separate pipeline (`service/get_artist_content.go`,
-`get_artist_content_v2.go`, `detail_identity.go`, `release_*.go`,
+`get_artist_content_v2.go`, `detail_identity.go`, `service/release/*.go`,
 `get_album_tracks.go`). It answers "give me *this* artist's full discography /
 top-tracks" or "give me *this* album's tracklist," starting from one
 `(provider, external_id)` seed.
@@ -413,12 +413,12 @@ whole mis-bridged provider group before best-of merge can absorb its fields —
 then merge → keep → cohesion. Albums get **both** the anchor and cohesion;
 top-tracks get cohesion only.
 
-1. **`MergeReleases`** (`release_merge.go`) — field-level **best-of** across every
+1. **`MergeReleases`** (`service/release/merge.go`) — field-level **best-of** across every
    provider that returned a release. A cover, year, or track-count from *any* source
    fills the gap; no variant is ever wholesale-discarded. (This replaced an earlier
    "replace-by-completeness" merge that scored only image/isrc/duration/album and
    silently dropped year/track-count — the root cause of blank-year discographies.)
-2. **`FilterKept`** (`release_keep.go`) — keep a merged cluster **iff `IDVerified`**:
+2. **`FilterKept`** (`service/release/keep.go`) — keep a merged cluster **iff `IDVerified`**:
    at least one provider returned it when queried by the artist's *verified id*.
    This is the one sound signal for ambiguous names. A strong identifier and
    ≥2-provider corroboration were both tried and are **unsound** — a namesake's
@@ -427,18 +427,18 @@ top-tracks get cohesion only.
    id-verified cluster, but a cluster with no id-verified source is dropped. MB
    becomes a *vote* (best-of enrichment), not a *veto*.
 3. **Identity verification** — the guard against a *corrupt identity* (§6):
-   - Albums: `FilterGroupsByMBAnchor` (`release_verify.go`) checks each id-fanout
+   - Albums: `FilterGroupsByMBAnchor` (`service/release/verify.go`) checks each id-fanout
      provider group's titles against the MBID's own MusicBrainz release-group set
      and drops a group whose overlap is below threshold (min 4 shared titles or
      ratio 0.25, only when MB knows ≥5 release-groups and the group returned ≥4
      titles — **fail-open** otherwise: no anchor / no MBID / MB error keeps
      everything). A mis-bridged same-name artist shares far less of the real
      artist's catalogue than the real one does.
-   - Top-tracks: `FilterCohesive` (`release_cohesion.go`) unions releases into
+   - Top-tracks: `FilterCohesive` (`service/release/cohesion.go`) unions releases into
      connected components by cross-provider co-occurrence and drops single-source
      islands that corroborate with nothing (the album-level MB anchor doesn't apply
      to tracks).
-4. **`NormalizeRecordType`** (`release_bucket.go`) — fold
+4. **`NormalizeRecordType`** (`service/release/bucket.go`) — fold
    per-provider `record_type` signals plus a one-track⇒single rule into reliable
    album/single/EP buckets, then normalize a numeric year and sort newest-first
    (via `albumReleaseSortKey`, shared with the fallback so both agree on order).
@@ -911,7 +911,7 @@ The blast radius, per change:
 hard logic lives and where it is safest to change: `Merge` (`merge.go`), the
 `rankPipeline` composition (`pipeline.go` / `rank.go` / `rank_relevance.go`), and
 the detail cores `MergeReleases` / `FilterKept` / `NormalizeRecordType` /
-`FilterGroupsByMBAnchor` / `FilterCohesive` (`release_*.go`). Each is exhaustively
+`FilterGroupsByMBAnchor` / `FilterCohesive` (`service/release/*.go`). Each is exhaustively
 unit-testable with plain data and deletable in isolation. Every regression this
 module has seen came from the opposite shape — a conditional accreted across the
 orchestrator or a provider adapter, invisible to the pure-core tests. So: put new

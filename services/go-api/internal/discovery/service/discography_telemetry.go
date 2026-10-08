@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared"
 	"context"
 	"log/slog"
@@ -18,7 +19,7 @@ func newDiscographyTelemetry(eventStore ports.EventStore) *DiscographyTelemetry 
 	return &DiscographyTelemetry{eventStore: eventStore, bg: &backgroundRunner{}}
 }
 
-func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []MergedRelease) {
+func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []release.MergedRelease) {
 	if t == nil || t.eventStore == nil {
 		return
 	}
@@ -43,7 +44,7 @@ func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string,
 	})
 }
 
-func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string, merged []MergedRelease) (payload map[string]any, ok bool) {
+func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string, merged []release.MergedRelease) (payload map[string]any, ok bool) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			slog.WarnContext(ctx, "discography.telemetry.build_panicked", "error", rec)
@@ -53,7 +54,7 @@ func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string
 	return buildDiscographyPayload(artistRef, merged), true
 }
 
-func buildDiscographyPayload(artistRef string, merged []MergedRelease) map[string]any {
+func buildDiscographyPayload(artistRef string, merged []release.MergedRelease) map[string]any {
 	providerCounts := make(map[string]int)
 	singleProvider := 0
 	singleProviderNoID := 0
@@ -77,6 +78,6 @@ func buildDiscographyPayload(artistRef string, merged []MergedRelease) map[strin
 	}
 }
 
-func idBacked(m MergedRelease) bool {
+func idBacked(m release.MergedRelease) bool {
 	return m.HasStrongID || m.IDVerified
 }

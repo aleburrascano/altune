@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/release"
 	"context"
 	"sync"
 	"testing"
@@ -29,15 +30,15 @@ func (s *recordingEventStore) only(t *testing.T) domain.InteractionEvent {
 	return s.events[0]
 }
 
-func mergedRelease(providers ...domain.ProviderName) MergedRelease {
+func mergedRelease(providers ...domain.ProviderName) release.MergedRelease {
 	set := make(map[domain.ProviderName]bool, len(providers))
 	for _, p := range providers {
 		set[p] = true
 	}
-	return MergedRelease{Providers: set}
+	return release.MergedRelease{Providers: set}
 }
 
-func idBackedRelease(provider domain.ProviderName) MergedRelease {
+func idBackedRelease(provider domain.ProviderName) release.MergedRelease {
 	m := mergedRelease(provider)
 	m.HasStrongID = true
 	return m
@@ -47,7 +48,7 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 	store := &recordingEventStore{}
 	tel := newDiscographyTelemetry(store)
 
-	merged := []MergedRelease{
+	merged := []release.MergedRelease{
 		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz),
 		mergedRelease(domain.ProviderSpotify),
 	}
@@ -96,7 +97,7 @@ func TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect(t *testing.T) {
 	store := &recordingEventStore{}
 	tel := newDiscographyTelemetry(store)
 
-	merged := []MergedRelease{
+	merged := []release.MergedRelease{
 		idBackedRelease(domain.ProviderSpotify),
 		mergedRelease(domain.ProviderDeezer),
 		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz),
