@@ -296,3 +296,13 @@ func TestSourceRegistry_FindAllEmptyWithoutErrorIsNoMatch(t *testing.T) {
 		t.Fatalf("failure code = %s, want %s", code, domain.FailureNoMatchFound)
 	}
 }
+
+func mergeSlots(
+	ctx context.Context,
+	sources []ports.AudioSource,
+	slots [][]ports.AudioCandidate,
+	errs []error,
+) ([]ports.AudioCandidate, error) {
+	merged, _, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
+	return merged, err
+}
