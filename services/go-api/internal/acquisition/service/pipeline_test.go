@@ -3,11 +3,16 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
+	catalogports "altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type mockStep struct {
@@ -736,5 +741,95 @@ func TestProvenance(t *testing.T) {
 				t.Errorf("Provenance() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func handoverPipeline(t *testing.T, acquiring domain.TrackId, userId shared.UserId, queue *recordingOrphanQueue, updateTrack *mockStep) (Pipeline, *cancelSensitiveStore, *AcquisitionContext) {
+	t.Helper()
+	store := &cancelSensitiveStore{stored: map[string]bool{}}
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
+		TempPath: "/tmp/one-more-time.mp3",
+	}
+	ref := BuildAudioRef(ac.Track, ac.TempPath)
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{ref: {acquiring}}}
+	storeStep := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring), WithStoreOrphanQueue(queue, userId))
+	storeStep.sleep = func(_ time.Duration) {}
+
+	pipeline := pipelineOf()
+	pipeline.store = storeStep
+	pipeline.updateTrack = mockStage[afterStore, afterUpdate]{updateTrack}
+	return pipeline, store, ac
+}
+
+func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testing.T) {
+	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+	queue := &recordingOrphanQueue{}
+	updateTrack := newMockStep("update_track", nil)
+	updateTrack.executeErr = errors.New("update failed")
+	pipeline, store, ac := handoverPipeline(t, acquiring, userId, queue, updateTrack)
+
+	if err := RunPipeline(context.Background(), pipeline, ac); err == nil {
+		t.Fatal("expected the pipeline to fail, got nil")
+	}
+
+	if store.stored[ac.AudioRef] {
+		t.Errorf("audio %q left behind after a plain failure", ac.AudioRef)
+	}
+	if len(queue.recorded) != 0 {
+		t.Errorf("recorded = %+v, want nothing queued", queue.recorded)
+	}
+}
+
+func TestRunPipeline_LeaseLossKeepsTheStoredAudioAndQueuesItForTheSweep(t *testing.T) {
+	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+	queue := &recordingOrphanQueue{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	updateTrack := newMockStep("update_track", nil)
+	updateTrack.cancelJob = cancel
+	updateTrack.executeErr = errors.New("lease lost")
+	pipeline, store, ac := handoverPipeline(t, acquiring, userId, queue, updateTrack)
+
+	if err := RunPipeline(withSchedulerOwnedJobContext(ctx), pipeline, ac); err == nil {
+		t.Fatal("expected the pipeline to fail, got nil")
+	}
+
+	if !store.stored[ac.AudioRef] {
+		t.Errorf("rollback deleted %q, which the new lease owner may be serving", ac.AudioRef)
+	}
+	want := catalogports.OrphanedAudio{AudioRef: ac.AudioRef, UserId: userId, TrackId: acquiring}
+	if len(queue.recorded) != 1 || queue.recorded[0] != want {
+		t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
+	}
+}
+
+type storeThenExpire struct{ *StoreStep }
+
+func (s *storeThenExpire) Execute(ctx context.Context, ac *AcquisitionContext, prev afterTag) (afterStore, error) {
+	out, err := s.StoreStep.Execute(ctx, ac, prev)
+	<-ctx.Done()
+	return out, err
+}
+
+func TestRunPipeline_ElapsedAcquireDeadlineStillDeletesTheStoredAudio(t *testing.T) {
+	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+	queue := &recordingOrphanQueue{}
+	jobCtx, cancel := context.WithCancel(withSchedulerOwnedJobContext(context.Background()))
+	defer cancel()
+	ctx, cancelDeadline := context.WithDeadline(jobCtx, time.Now().Add(50*time.Millisecond))
+	defer cancelDeadline()
+	pipeline, store, ac := handoverPipeline(t, acquiring, userId, queue, newMockStep("update_track", nil))
+	pipeline.store = &storeThenExpire{StoreStep: pipeline.store.(*StoreStep)}
+
+	if err := RunPipeline(ctx, pipeline, ac); err == nil {
+		t.Fatal("expected the pipeline to fail, got nil")
+	}
+
+	if store.stored[ac.AudioRef] {
+		t.Errorf("audio %q leaked after the acquire deadline fired", ac.AudioRef)
+	}
+	if len(queue.recorded) != 0 {
+		t.Errorf("recorded = %+v, want nothing queued", queue.recorded)
 	}
 }

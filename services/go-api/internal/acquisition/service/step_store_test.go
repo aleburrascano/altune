@@ -2,11 +2,15 @@ package service
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	catalogports "altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type flakyDeleteStore struct {
@@ -445,4 +449,52 @@ func TestStoreStep_Name(t *testing.T) {
 	if got := step.Name(); got != "store" {
 		t.Errorf("Name() = %q, want %q", got, "store")
 	}
+}
+
+func TestStoreRollback_HandedOver(t *testing.T) {
+	ctx := withRollbackHandedOver(context.Background())
+	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+
+	newStep := func(store *flakyDeleteStore, queue *recordingOrphanQueue) *StoreStep {
+		refs := trackRefIndex{err: errors.New("database unavailable")}
+		step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring), WithStoreOrphanQueue(queue, userId))
+		step.sleep = func(_ time.Duration) {}
+		return step
+	}
+
+	t.Run("empty ref", func(t *testing.T) {
+		store, queue := &flakyDeleteStore{stored: map[string]bool{}}, &recordingOrphanQueue{}
+		if err := newStep(store, queue).Rollback(ctx, &AcquisitionContext{}); err != nil {
+			t.Fatalf("Rollback: %v", err)
+		}
+		if store.deleteCalls != 0 || len(queue.recorded) != 0 {
+			t.Errorf("deletes = %d, recorded = %+v, want neither", store.deleteCalls, queue.recorded)
+		}
+	})
+
+	t.Run("preserved ref", func(t *testing.T) {
+		store, queue := &flakyDeleteStore{stored: map[string]bool{"u/a/b/c.mp3": true}}, &recordingOrphanQueue{}
+		ac := &AcquisitionContext{AudioRef: "u/a/b/c.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/c.mp3"}}
+		if err := newStep(store, queue).Rollback(ctx, ac); err != nil {
+			t.Fatalf("Rollback: %v", err)
+		}
+		if !store.stored["u/a/b/c.mp3"] || store.deleteCalls != 0 || len(queue.recorded) != 0 {
+			t.Errorf("stored = %v, deletes = %d, recorded = %+v, want kept and unqueued", store.stored, store.deleteCalls, queue.recorded)
+		}
+	})
+
+	t.Run("fresh ref", func(t *testing.T) {
+		store, queue := &flakyDeleteStore{stored: map[string]bool{"u/a/b/new.mp3": true}}, &recordingOrphanQueue{}
+		ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/old.mp3"}}
+		if err := newStep(store, queue).Rollback(ctx, ac); err != nil {
+			t.Fatalf("Rollback: %v", err)
+		}
+		want := catalogports.OrphanedAudio{AudioRef: "u/a/b/new.mp3", UserId: userId, TrackId: acquiring}
+		if !store.stored["u/a/b/new.mp3"] || store.deleteCalls != 0 {
+			t.Errorf("stored = %v, deletes = %d, want kept without a delete", store.stored, store.deleteCalls)
+		}
+		if len(queue.recorded) != 1 || queue.recorded[0] != want {
+			t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
+		}
+	})
 }
