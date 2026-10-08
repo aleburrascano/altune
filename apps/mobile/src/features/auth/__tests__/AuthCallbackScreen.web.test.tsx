@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
+import { NetworkError } from '@shared/errors';
 import { type AuthIntentResult, completeAuthIntent } from '@features/auth/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
 
@@ -372,5 +373,50 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
     expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AuthCallbackScreen: web failures are reported with their cause', () => {
+  const url = 'https://app.altune.example/auth/callback?code=code-secret-9';
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => warnSpy.mockRestore());
+
+  it('warns with the cause of a refused exchange, without the url or code', async () => {
+    setWebUrl(url);
+    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'gotrue_rejected' });
+
+    render(<AuthCallbackScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ cause: 'gotrue_rejected' }),
+    );
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('code-secret-9');
+  });
+
+  it('warns and shows connection copy when the exchange times out', async () => {
+    setWebUrl(url);
+    mockComplete.mockRejectedValue(new NetworkError('timeout', 'auth deadline'));
+
+    render(<AuthCallbackScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('auth-callback-error')).toHaveTextContent(/connection/);
+    expect(screen.getByTestId('auth-callback-error')).not.toHaveTextContent(/expired/);
+  });
+
+  it('warns when there is no url to read', async () => {
+    Reflect.deleteProperty(globalThis, 'window');
+
+    render(<AuthCallbackScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });
