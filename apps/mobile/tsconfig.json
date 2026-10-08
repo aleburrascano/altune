@@ -38,6 +38,9 @@
       "@shared/*": [
         "./src/shared/*"
       ],
+      "@assets/*": [
+        "./assets/*"
+      ],
       "@testing/*": [
         "./jest/*"
       ]
