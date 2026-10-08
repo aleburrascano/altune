@@ -2820,9 +2820,9 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
       expect(usePinnedStore.getState().entries).toEqual({
         d2: { trackId: 'd2', status: 'ready', uri: audioUri('d2') },
       });
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('1 of 3 download(s) could not be removed'),
-      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('file delete failed'), {
+        trackIds: ['d2'],
+      });
     });
 
     it('counts a track named twice in the selection once', async () => {
@@ -2896,6 +2896,10 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
       expect(result.failed).toBeGreaterThan(0);
       expect(result.failed).toBeLessThan(400);
       expect(Object.keys(usePinnedStore.getState().entries)).toHaveLength(result.failed);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('deadline'), {
+        untried: result.failed,
+      });
     });
   });
 });
