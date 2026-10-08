@@ -10,6 +10,13 @@ import { authRedirectUrl } from '@features/auth/authRedirect';
 import type * as ParseAuthLinkModule from '@features/auth/parseAuthLink';
 import { parseAuthLink } from '@features/auth/parseAuthLink';
 
+jest.mock('@shared/device/webOrigin', () => ({
+  webOrigin: (): string | null =>
+    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
+      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
+      : null,
+}));
+
 type LoadedModules = typeof ParseAuthLinkModule & typeof AuthRedirectModule;
 
 function loadWithExpoScheme(scheme: unknown): LoadedModules {

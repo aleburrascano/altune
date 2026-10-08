@@ -4,6 +4,13 @@ import { Platform } from 'react-native';
 import { type AuthIntentResult, completeAuthIntent } from '@features/auth/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
 
+jest.mock('@shared/device/webOrigin', () => ({
+  webOrigin: (): string | null =>
+    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
+      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
+      : null,
+}));
+
 const mockRouter = { replace: jest.fn() };
 
 jest.mock('expo-router', () => {

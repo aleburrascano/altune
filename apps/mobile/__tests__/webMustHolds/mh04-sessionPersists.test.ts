@@ -17,8 +17,7 @@ function installFakeLocalStorage(backing: Map<string, string> = new Map()): Map<
 }
 
 afterEach(() => {
-  const RN = require('react-native') as { Platform: { OS: string } };
-  RN.Platform.OS = 'ios';
+  jest.dontMock('@shared/auth/authStorage');
   installFakeLocalStorage();
   jest.resetModules();
 });
@@ -37,17 +36,17 @@ describe('mh04: the web session survives a reload and sign-out clears it', () =>
     let clearPersistedAuthSession: () => Promise<void>;
 
     jest.isolateModules(() => {
-      const RN = require('react-native') as { Platform: { OS: string } };
-      RN.Platform.OS = 'web';
+      jest.doMock('@shared/auth/authStorage', () =>
+        jest.requireActual('@shared/auth/authStorage.web'),
+      );
       installFakeLocalStorage(sameBrowserProfile);
+      const web = require('@shared/auth/authStorage.web') as {
+        createLocalStorageWebStorage: () => typeof storage;
+      };
       const mod = require('@shared/auth/supabaseClient') as {
-        createLocalStorageWebStorage: () => {
-          getItem: (key: string) => Promise<string | null>;
-          setItem: (key: string, value: string) => Promise<void>;
-        };
         clearPersistedAuthSession: () => Promise<void>;
       };
-      storage = mod.createLocalStorageWebStorage();
+      storage = web.createLocalStorageWebStorage();
       clearPersistedAuthSession = mod.clearPersistedAuthSession;
     });
 
@@ -56,13 +55,14 @@ describe('mh04: the web session survives a reload and sign-out clears it', () =>
 
     let reloadedStorage: { getItem: (key: string) => Promise<string | null> };
     jest.isolateModules(() => {
-      const RN = require('react-native') as { Platform: { OS: string } };
-      RN.Platform.OS = 'web';
+      jest.doMock('@shared/auth/authStorage', () =>
+        jest.requireActual('@shared/auth/authStorage.web'),
+      );
       installFakeLocalStorage(sameBrowserProfile);
-      const mod = require('@shared/auth/supabaseClient') as {
-        createLocalStorageWebStorage: () => { getItem: (key: string) => Promise<string | null> };
+      const web = require('@shared/auth/authStorage.web') as {
+        createLocalStorageWebStorage: () => typeof reloadedStorage;
       };
-      reloadedStorage = mod.createLocalStorageWebStorage();
+      reloadedStorage = web.createLocalStorageWebStorage();
     });
 
     await expect(reloadedStorage!.getItem(SESSION_KEY)).resolves.toBe(SESSION_VALUE);

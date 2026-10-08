@@ -84,28 +84,11 @@ describe('declaredAppScheme', () => {
 });
 
 describe('webOrigin', () => {
-  it('returns null on native', () => {
-    setOS('ios');
-    expect(webOrigin()).toBeNull();
-  });
-
-  it('returns the window origin on web', () => {
-    setOS('web');
+  it('returns null on native even when a window origin exists', () => {
     Object.defineProperty(globalThis, 'window', {
       value: { location: { origin: 'https://altune.example' } },
       configurable: true,
     });
-    expect(webOrigin()).toBe('https://altune.example');
-  });
-
-  it('returns null on web when there is no window', () => {
-    setOS('web');
-    expect(webOrigin()).toBeNull();
-  });
-
-  it('returns null on web when window has no location', () => {
-    setOS('web');
-    Object.defineProperty(globalThis, 'window', { value: {}, configurable: true });
     expect(webOrigin()).toBeNull();
   });
 });
