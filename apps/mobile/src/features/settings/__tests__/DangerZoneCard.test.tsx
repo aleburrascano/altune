@@ -11,7 +11,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
-import { downloadUsage } from '@features/settings/downloadStatsModel';
+import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
 import type { ClearHistoryState } from '@features/settings/dangerZoneActions';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
 

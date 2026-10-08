@@ -3,7 +3,7 @@ import {
   backfillActionLabel,
   backfillActionTone,
   backfillDetail,
-} from '@features/settings/backfillStatus';
+} from '@features/settings/domain/backfillStatus';
 
 describe('backfill status copy', () => {
   const base = { error: null, data: undefined };

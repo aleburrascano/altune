@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { useDownloadStats } from '@features/settings/hooks/useDownloadStats';
-import { downloadStats } from '@features/settings/downloadStatsModel';
+import { downloadStats } from '@features/settings/domain/downloadStatsModel';
 import {
   buildDangerZoneActions,
   type ClearHistoryState,

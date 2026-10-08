@@ -1,5 +1,5 @@
 import type { TextTone } from '@shared/ui/primitives/Text';
-import { failureCopyForAction } from '@features/settings/failureCopyForAction';
+import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
 
 type BackfillStatus = 'idle' | 'pending' | 'error' | 'success';
 
