@@ -2,6 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { within } from '@testing-library/react-native';
+import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import { ApiError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -12,7 +13,7 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
 import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
-import type { ClearHistoryState } from '@features/settings/dangerZoneActions';
+import type { ClearHistoryState } from '@features/settings/domain/dangerZoneActions';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
@@ -501,5 +502,33 @@ describe('DangerZoneCard downloads row after a stale partial removal', () => {
     });
 
     expect(screen.queryByText('Failed')).toBeNull();
+  });
+});
+
+describe('DangerZoneCard icons', () => {
+  const ICONS = [Trash2, Eraser, LogOut];
+  function iconsIn(testID: string): LucideIcon[] {
+    return ICONS.filter(
+      (icon) => within(screen.getByTestId(testID)).UNSAFE_queryAllByType(icon).length > 0,
+    );
+  }
+
+  it.each([
+    ['downloads', 'settings-remove-downloads', 'settings-confirm-remove-downloads', Trash2],
+    ['history', 'settings-clear-search-history', 'settings-confirm-clear-history', Eraser],
+    ['sign-out', 'settings-sign-out', 'settings-confirm-sign-out', LogOut],
+  ] as const)('%s row and its confirm modal render their own icon', (_key, row, confirm, icon) => {
+    render(<DangerZoneCard {...makeProps()} />);
+    expect(iconsIn(row)).toEqual([icon]);
+    fireEvent.press(screen.getByTestId(row));
+    expect(iconsIn(confirm)).toEqual([icon]);
+  });
+
+  it('keeps Eraser on the history row when the downloads row is hidden', () => {
+    render(<DangerZoneCard {...makeProps({ downloadCount: 0, downloadBytes: 0 })} />);
+    expect(screen.queryByTestId('settings-remove-downloads')).toBeNull();
+    expect(iconsIn('settings-clear-search-history')).toEqual([Eraser]);
+    fireEvent.press(screen.getByTestId('settings-clear-search-history'));
+    expect(iconsIn('settings-confirm-clear-history')).toEqual([Eraser]);
   });
 });

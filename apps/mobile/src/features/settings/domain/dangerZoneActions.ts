@@ -1,5 +1,3 @@
-import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
-
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import type { TextTone } from '@shared/ui/primitives/Text';
 import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/domain/downloadStatsModel';
@@ -18,7 +16,6 @@ export type ClearHistoryState = {
 
 type DangerZoneAction = {
   key: DangerZoneActionKey;
-  icon: LucideIcon;
   row: {
     testID: string;
     label: string;
@@ -79,7 +76,6 @@ function removeDownloadsConfirm(downloads: RemoveDownloads): DangerZoneAction['c
 function removeDownloadsAction(downloads: RemoveDownloads): DangerZoneAction {
   return {
     key: 'downloads',
-    icon: Trash2,
     row: removeDownloadsRow(downloads),
     confirm: removeDownloadsConfirm(downloads),
   };
@@ -114,7 +110,6 @@ function clearHistoryConfirm(clearHistory: ClearHistoryState): DangerZoneAction[
 function clearSearchHistoryAction(clearHistory: ClearHistoryState): DangerZoneAction {
   return {
     key: 'history',
-    icon: Eraser,
     row: clearHistoryRow(clearHistory),
     confirm: clearHistoryConfirm(clearHistory),
   };
@@ -153,7 +148,6 @@ function signOutAction(opts: {
 }): DangerZoneAction {
   return {
     key: 'sign-out',
-    icon: LogOut,
     row: signOutRow(opts.signOutState),
     confirm: signOutConfirm(opts.signOut),
   };

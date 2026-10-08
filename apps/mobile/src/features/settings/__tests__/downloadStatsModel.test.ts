@@ -2,7 +2,7 @@ import { downloadStats, downloadUsage } from '@features/settings/domain/download
 import {
   buildDangerZoneActions,
   type ClearHistoryState,
-} from '@features/settings/dangerZoneActions';
+} from '@features/settings/domain/dangerZoneActions';
 
 type PinnedEntry = Parameters<typeof downloadStats>[0][string];
 

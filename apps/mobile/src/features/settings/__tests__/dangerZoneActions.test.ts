@@ -13,7 +13,7 @@ import {
   buildDangerZoneActions,
   type ClearHistoryState,
   type DangerZoneActionKey,
-} from '@features/settings/dangerZoneActions';
+} from '@features/settings/domain/dangerZoneActions';
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
@@ -96,6 +96,12 @@ describe('buildDangerZoneActions', () => {
     const actions = buildDangerZoneActions(makeOpts());
     expect(actions.map((a) => a.key)).toEqual(['downloads', 'history', 'sign-out']);
     expect(new Set(actions.map((a) => a.confirm.testID)).size).toBe(3);
+  });
+
+  it('carries no icon on any action, so the domain stays free of UI', () => {
+    for (const action of buildDangerZoneActions(makeOpts())) {
+      expect(action).not.toHaveProperty('icon');
+    }
   });
 
   it('hides only the downloads row when nothing is downloaded', () => {
