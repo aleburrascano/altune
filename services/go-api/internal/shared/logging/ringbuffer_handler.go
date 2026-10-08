@@ -11,7 +11,6 @@ type ringHandler struct {
 	inner slog.Handler
 	ring  *RingBuffer
 	attrs []slog.Attr
-	// prefix is the dotted group path set by WithGroup; attrs already carry it.
 	prefix string
 }
 
