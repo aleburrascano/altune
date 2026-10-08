@@ -40,6 +40,7 @@ export function SectionError({
         </Text>
       ) : (
         <Button
+          action="detail.section.retry"
           testID={`${testIDPrefix}-retry`}
           label="Retry"
           onPress={onRetry}
