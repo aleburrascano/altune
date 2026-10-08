@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 const secretCookiePath = "/secret/cookies.txt"
@@ -650,5 +651,77 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 				t.Fatalf("Unplayable = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+const leakyStderrScript = "#!/bin/sh\n" +
+	"echo \"ERROR: unable to open /home/op/secrets/cookies.txt https://cdn.example/a?Expires=1&token=SIGNEDTOKEN123456&Signature=SIGNEDSIG987654\" >&2\n" +
+	"head -c 100000 /dev/zero | tr '\\0' 'x' >&2\n" +
+	"exit 1\n"
+
+func withLeakyYtDlp(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "yt-dlp")
+	if err := os.WriteFile(path, []byte(leakyStderrScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return path
+}
+
+func assertStderrEmbeddedSafely(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error from the failing binary")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "(stderr: ") {
+		t.Fatalf("error lost its stderr section (binary not run?): %q", msg)
+	}
+	for _, leak := range []string{"cookies.txt", "SIGNEDTOKEN123456", "SIGNEDSIG987654"} {
+		if strings.Contains(msg, leak) {
+			t.Errorf("error leaks %q: %.300s", leak, msg)
+		}
+	}
+	if limit := maxEmbeddedStderrBytes + 512; len(msg) > limit {
+		t.Errorf("error is %d bytes, want <= %d", len(msg), limit)
+	}
+}
+
+func TestYtDlpAudioSearcher_SearchRedactsAndCapsStderr(t *testing.T) {
+	withLeakyYtDlp(t)
+	s := NewYtDlpAudioSearcher("", "", "")
+	_, err := s.Search(context.Background(), "q")
+	assertStderrEmbeddedSafely(t, err)
+}
+
+func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = withLeakyYtDlp(t)
+	_, err := s.Download(context.Background(), "https://example.com/v", t.TempDir())
+	assertStderrEmbeddedSafely(t, err)
+}
+
+// MarkUnplayable swallows the inspect error, so the error text is only
+// observable through the runner it wraps.
+func TestYtDlpAudioSearcher_InspectRedactsAndCapsStderr(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = withLeakyYtDlp(t)
+	_, err := s.runYtDlpInspect(context.Background(), "https://soundcloud.com/a/b")
+	assertStderrEmbeddedSafely(t, err)
+}
+
+func TestEmbeddedStderr_CapsOnRuneBoundaryWithSuffix(t *testing.T) {
+	got := embeddedStderr(strings.Repeat("é", maxEmbeddedStderrBytes))
+	if !strings.HasSuffix(got, stderrTruncatedSuffix) {
+		t.Fatalf("missing truncation suffix: %.40q", got[len(got)-40:])
+	}
+	body := strings.TrimSuffix(got, stderrTruncatedSuffix)
+	if !utf8.ValidString(body) || len(body) > maxEmbeddedStderrBytes {
+		t.Errorf("body invalid or over cap: valid=%v len=%d", utf8.ValidString(body), len(body))
+	}
+	if short := embeddedStderr("boom"); short != "boom" {
+		t.Errorf("short stderr changed: %q", short)
 	}
 }
