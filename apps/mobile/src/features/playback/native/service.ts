@@ -11,8 +11,8 @@ import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
-import { recoverAudio } from '@shared/api-client/audio';
 import { parseTrackId } from '@shared/api-client/ids';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import {
   discardPrefetchedAudio,
@@ -126,7 +126,7 @@ async function recoverFailedTrack(failed: PlaybackTrack | null): Promise<void> {
     await repairActiveToStreaming(failed);
     return;
   }
-  await recoverAudio(failed.source.trackId).catch(warnAudioRecoveryFailed);
+  await playbackPort().recoverAudio(failed.source.trackId).catch(warnAudioRecoveryFailed);
 }
 
 async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {

@@ -3,12 +3,14 @@ import { posix } from 'path';
 import TrackPlayer from 'react-native-track-player';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
+import { REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 import { asTrackId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
+import { installPlaybackPort, playbackPort } from '@features/playback/ports/activePlaybackPort';
 import * as audioCache from '@features/playback/native/audioCache';
 import {
   MAX_PREFETCH_FILE_BYTES,
@@ -1050,5 +1052,36 @@ describe('prefetch health tally', () => {
 
       expect(tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
     });
+  });
+});
+
+describe('playback port wiring', () => {
+  it('keeps the stall timeout equal to the api-client request timeout', () => {
+    expect(PREFETCH_STALL_TIMEOUT_MS).toBe(REQUEST_TIMEOUT_MS);
+  });
+
+  it('reads the port on each call, not at module load', async () => {
+    forgetAllSwaps();
+    useQueueStore.getState().clearQueue();
+    const apiFetch = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
+    apiFetch.mockReset();
+    const isAudioPrefetchEnabled = jest.fn(() => false);
+    const restore = installPlaybackPort({ ...playbackPort(), isAudioPrefetchEnabled });
+    try {
+      const ids = ['p0', 'p1'];
+      useQueueStore.getState().loadQueue(
+        ids.map((id) => libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } })),
+        0,
+        null,
+      );
+
+      await prefetchNext(0);
+
+      expect(isAudioPrefetchEnabled).toHaveBeenCalled();
+      expect(apiFetch).not.toHaveBeenCalled();
+    } finally {
+      restore();
+      useQueueStore.getState().clearQueue();
+    }
   });
 });

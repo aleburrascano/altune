@@ -50,7 +50,7 @@ describe('api-client config', () => {
       ),
     );
     expect(offenders).toEqual([]);
-    expect(users.length).toBeGreaterThanOrEqual(4);
+    expect(users.length).toBeGreaterThanOrEqual(3);
   });
 
   it('flags barrel imports of config constants', () => {

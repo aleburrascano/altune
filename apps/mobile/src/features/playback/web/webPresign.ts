@@ -1,4 +1,4 @@
-import { fetchAudioUrls } from '@shared/api-client/audio';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
@@ -63,7 +63,7 @@ export async function resolveSource(source: PlaybackSource): Promise<SourceOutco
       : { failure: NO_AUDIO_URL };
   }
   try {
-    const urls = await fetchAudioUrls([source.trackId]);
+    const urls = await playbackPort().fetchAudioUrls([source.trackId]);
     const match = urls.find((resolved) => resolved.trackId === source.trackId);
     return match ? { url: match.url } : { failure: NO_AUDIO_URL };
   } catch (err) {
