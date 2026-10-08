@@ -69,8 +69,9 @@ export function CreatePlaylistModal({
             />
           </View>
           <View style={styles.actions}>
-            <Button label="Cancel" variant="ghost" onPress={handleClose} />
+            <Button action="playlists.create.cancel" label="Cancel" variant="ghost" onPress={handleClose} />
             <Button
+              action="playlists.create.confirm"
               testID="create-playlist-confirm"
               label="Create"
               onPress={handleCreate}
