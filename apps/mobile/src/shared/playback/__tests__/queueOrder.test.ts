@@ -30,50 +30,67 @@ describe('identityOrder', () => {
 });
 
 describe('isPositionIn', () => {
+  const LENGTH = 3;
+  const LAST = LENGTH - 1;
+  const FRACTIONAL = 1.5;
+
   it('accepts an in-range integer', () => {
-    expect(isPositionIn(3, 2)).toBe(true);
+    expect(isPositionIn(LENGTH, LAST)).toBe(true);
   });
 
-  it.each([3, -1, 1.5])('rejects %s', (index) => {
-    expect(isPositionIn(3, index)).toBe(false);
+  it.each([LENGTH, -1, FRACTIONAL])('rejects %s', (index) => {
+    expect(isPositionIn(LENGTH, index)).toBe(false);
   });
 });
 
 describe('reorderTail', () => {
+  const QUEUE_SIZE = 5;
+  const QUEUED_NEXT = 3;
+  const QUEUED_LAST = 1;
+  const FIRST_REST = 2;
+  const SECOND_REST = 4;
+
   it('puts up-next first, the rest, then appended, keeping the head', () => {
-    const result = reorderTail([0, 1, 2, 3, 4], 0, { upNext: [3], appended: [1] }, ascending);
-    expect(result).toEqual([0, 3, 2, 4, 1]);
+    const queued = { upNext: [QUEUED_NEXT], appended: [QUEUED_LAST] };
+    const result = reorderTail(identityOrder(QUEUE_SIZE), 0, queued, ascending);
+    expect(result).toEqual([0, QUEUED_NEXT, FIRST_REST, SECOND_REST, QUEUED_LAST]);
   });
 });
 
 describe('resolveSyncTarget', () => {
-  const tracks = [track('a'), track('b'), track('c'), track('b'), track('b'), track('d')];
+  const FIRST_HIT = 1;
+  const CURSOR = 3;
+  const SECOND_HIT = 4;
+  const names = ['a', 'b', 'c', 'd', 'e', 'f'];
+  names[FIRST_HIT] = 'dup';
+  names[SECOND_HIT] = 'dup';
+  const tracks = names.map((name) => track(name));
   const order = identityOrder(tracks.length);
-  const keyB = trackKey(tracks[1]!);
+  const dupKey = trackKey(track('dup'));
 
   it('returns index when the key matches the track there', () => {
-    expect(resolveSyncTarget(tracks, order, 1, keyB)).toBe(1);
+    expect(resolveSyncTarget(tracks, order, FIRST_HIT, dupKey)).toBe(FIRST_HIT);
   });
 
   it('returns null for a look-alike key matching no track', () => {
-    expect(resolveSyncTarget(tracks, order, 1, `${keyB}x`)).toBeNull();
+    expect(resolveSyncTarget(tracks, order, FIRST_HIT, `${dupKey}x`)).toBeNull();
   });
 
   it('returns the nearest position when the key sits elsewhere', () => {
-    expect(resolveSyncTarget(tracks, order, 3, keyB)).toBe(3);
-    const moved = [track('a'), track('b'), track('c'), track('x'), track('b'), track('d')];
-    expect(resolveSyncTarget(moved, order, 3, keyB)).toBe(4);
+    expect(resolveSyncTarget(tracks, order, CURSOR, dupKey)).toBe(SECOND_HIT);
   });
 
   it('returns null with no key and an out-of-range index', () => {
-    expect(resolveSyncTarget(tracks, order, 9, undefined)).toBeNull();
+    expect(resolveSyncTarget(tracks, order, tracks.length, undefined)).toBeNull();
     expect(resolveSyncTarget(tracks, order, -1, undefined)).toBeNull();
   });
 });
 
 describe('withoutTrack', () => {
   it('drops the removed index and shifts higher ones down', () => {
-    expect(withoutTrack([0, 2, 3], 2)).toEqual([0, 2]);
+    const removed = 2;
+    const above = removed + 1;
+    expect(withoutTrack([0, removed, above], removed)).toEqual([0, removed]);
   });
 });
 
@@ -93,8 +110,9 @@ describe('withAppended', () => {
     };
     const first = withAppended(base, [track('b')]);
     const grown: QueueState = { ...base, ...first, tracks: [...first.tracks!, track('c')] };
+    const start = grown.tracks.length;
     const second = withAppended(grown, [track('d'), track('e')]);
-    expect(second.appended).toEqual([1, 3, 4]);
-    expect(second.playOrder).toEqual([0, 1, 3, 4]);
+    expect(second.appended).toEqual([...first.appended!, start, start + 1]);
+    expect(second.playOrder).toEqual([0, ...first.appended!, start, start + 1]);
   });
 });

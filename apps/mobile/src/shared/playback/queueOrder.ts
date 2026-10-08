@@ -1,6 +1,8 @@
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack, QueueSource, RepeatMode } from '@shared/playback/types';
 
+type TrackList = readonly PlaybackTrack[];
+
 export interface QueueState {
   tracks: readonly PlaybackTrack[];
   playOrder: readonly number[];
@@ -23,19 +25,23 @@ export interface UserQueued {
   appended: readonly number[];
 }
 
+function partitionTail(tail: readonly number[], queued: UserQueued) {
+  const nextIds = new Set(queued.upNext);
+  const lastIds = new Set(queued.appended);
+  const rest = tail.filter((i) => !nextIds.has(i) && !lastIds.has(i));
+  const next = tail.filter((i) => nextIds.has(i));
+  const last = tail.filter((i) => lastIds.has(i));
+  return { next, rest, last };
+}
+
 export function reorderTail(
   order: readonly number[],
   keepThrough: number,
   queued: UserQueued,
   arrange: (rest: number[]) => void,
 ): number[] {
-  const tail = order.slice(keepThrough + 1);
-  const nextIds = new Set(queued.upNext);
-  const lastIds = new Set(queued.appended);
-  const rest = tail.filter((i) => !nextIds.has(i) && !lastIds.has(i));
+  const { next, rest, last } = partitionTail(order.slice(keepThrough + 1), queued);
   arrange(rest);
-  const next = tail.filter((i) => nextIds.has(i));
-  const last = tail.filter((i) => lastIds.has(i));
   return [...order.slice(0, keepThrough + 1), ...next, ...rest, ...last];
 }
 
@@ -52,10 +58,7 @@ export function ascending(items: number[]): void {
   items.sort((a, b) => a - b);
 }
 
-export function withAppended(
-  state: QueueState,
-  tracks: readonly PlaybackTrack[],
-): Partial<QueueState> {
+export function withAppended(state: QueueState, tracks: TrackList): Partial<QueueState> {
   const added = tracks.map((_, i) => state.tracks.length + i);
   return {
     tracks: [...state.tracks, ...tracks],
@@ -72,10 +75,7 @@ export function survivingPositions(
   indices: readonly number[],
   renumbered: ReadonlyMap<number, number>,
 ): number[] {
-  return indices.flatMap((i) => {
-    const at = renumbered.get(i);
-    return at == null ? [] : [at];
-  });
+  return indices.map((i) => renumbered.get(i)).filter((at) => at != null);
 }
 
 export function withoutUpcoming(state: QueueState, kept: readonly number[]): Partial<QueueState> {
@@ -108,23 +108,34 @@ export function nearestKeyPosition(
   key: string,
   preferred: number,
 ): number | null {
-  const hits = ordered.flatMap((t, i) => (t && trackKey(t) === key ? [i] : []));
+  const hits = ordered.map((t, i) => (t && trackKey(t) === key ? i : -1)).filter((i) => i >= 0);
   if (hits.length === 0) return null;
   return hits.reduce((a, b) => (Math.abs(b - preferred) < Math.abs(a - preferred) ? b : a));
 }
 
+function keyedTarget(
+  ordered: readonly (PlaybackTrack | null)[],
+  key: string,
+  index: number,
+): number | null {
+  const at = ordered[index];
+  if (at && trackKey(at) === key) return index;
+  return nearestKeyPosition(ordered, key, index);
+}
+
 export function resolveSyncTarget(
-  tracks: readonly PlaybackTrack[],
+  tracks: TrackList,
   playOrder: readonly number[],
   index: number,
   key: string | undefined,
 ): number | null {
   const inRange = index >= 0 && index < playOrder.length;
   if (key == null) return inRange ? index : null;
-  const ordered = playOrder.map((i) => tracks[i] ?? null);
-  const at = inRange ? ordered[index] : null;
-  if (at && trackKey(at) === key) return index;
-  return nearestKeyPosition(ordered, key, index);
+  return keyedTarget(
+    playOrder.map((i) => tracks[i] ?? null),
+    key,
+    index,
+  );
 }
 
 export const REPEAT_CYCLE: Record<RepeatMode, RepeatMode> = {
