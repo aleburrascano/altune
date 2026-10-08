@@ -22,7 +22,10 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 	}
 	defer pool.Close()
 
-	repo := persistence.NewPgxTrackRepository(pool)
+	return healthCheck(ctx, cfg, persistence.NewPgxTrackRepository(pool), fix)
+}
+
+func healthCheck(ctx context.Context, cfg *config.Config, repo *persistence.PgxTrackRepository, fix bool) error {
 	tracks, err := repo.ListReadyAudioTracks(ctx)
 	if err != nil {
 		return err
@@ -36,7 +39,11 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 	}
 
 	orphanedDB, fixed := checkReadyTracks(ctx, tracks, audioStore, repo, fix)
+	reportHealthCheck(totalChecked, orphanedDB, fixed, fix)
+	return nil
+}
 
+func reportHealthCheck(totalChecked, orphanedDB, fixed int, fix bool) {
 	printSummary("Health check complete:")
 	fmt.Printf("  Tracks checked:    %d\n", totalChecked)
 	fmt.Printf("  Orphaned DB rows:  %d\n", orphanedDB)
@@ -51,7 +58,6 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 		"total_checked", totalChecked,
 		"orphaned_db", orphanedDB,
 		"fixed", fixed)
-	return nil
 }
 
 const missingAudioReason = "Audio file missing from storage (health-check)"
