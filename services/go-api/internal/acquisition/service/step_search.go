@@ -38,6 +38,9 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 		kept = skipped
 	}
 	if len(kept) == 0 {
+		if outage != nil {
+			return afterSearch{}, withCancellation(ctx, fmt.Errorf("no candidates found: %w", outage))
+		}
 		return afterSearch{}, withCancellation(ctx, fmt.Errorf("no candidates found"))
 	}
 
