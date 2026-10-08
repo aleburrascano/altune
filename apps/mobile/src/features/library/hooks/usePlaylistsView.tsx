@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 import type { PlaylistResponse } from '@shared/api-client/types';
 
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
@@ -32,6 +34,14 @@ function sortPlaylistsByKey(playlists: PlaylistResponse[], key: SortKey): Playli
 
 export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDeps): PlaylistsView {
   const playlists = sortPlaylistsByKey(pl.playlists, sort);
+
+  // The server orders by created_at only, so A to Z is right only over every page.
+  // loadMorePlaylists is a no-op when there is no next page, one is in flight, or the last fetch failed.
+  const { loadMorePlaylists, isFetchingMorePlaylists } = pl;
+  const loadedCount = pl.playlists.length;
+  useEffect(() => {
+    if (sort === 'az') loadMorePlaylists();
+  }, [sort, loadedCount, isFetchingMorePlaylists, loadMorePlaylists]);
 
   const refresh: ListRefresh = {
     refreshing: pl.isRefetchingPlaylists,

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 
 import { asPlaylistId } from '@shared/api-client/ids';
@@ -147,6 +147,35 @@ describe('a library whose playlists all fit in one page', () => {
 
     scrollToEnd();
     scrollToEnd();
+
+    expect(mockGetPlaylists).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sorting playlists A to Z', () => {
+  function viewWith(sort: 'az' | 'recent') {
+    return renderHook(
+      () => {
+        const pl = usePlaylistActions();
+        return usePlaylistsView({ pl, sort, onPlaylistPress: noop }).playlists;
+      },
+      { wrapper },
+    );
+  }
+
+  it('loads every remaining page and orders all of them A to Z', async () => {
+    const { result } = viewWith('az');
+
+    await waitFor(() => expect(result.current).toHaveLength(PLAYLIST_COUNT));
+
+    const names = result.current.map((p) => p.name);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('fetches no extra pages for the recent sort', async () => {
+    const { result } = viewWith('recent');
+
+    await waitFor(() => expect(result.current).toHaveLength(GROUP_PAGE_SIZE));
 
     expect(mockGetPlaylists).toHaveBeenCalledTimes(1);
   });
