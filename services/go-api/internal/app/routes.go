@@ -94,7 +94,7 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(httputil.CorrelationID)
-	r.Use(latencyMiddleware(reqmetrics.Observe))
+	r.Use(reqmetrics.Middleware(reqmetrics.Observe))
 	r.Use(httputil.WriteDeadline(writeTimeout))
 	r.Use(v1RequestTimeout(a.requestBudget()))
 	r.Use(httputil.RequestLogger)

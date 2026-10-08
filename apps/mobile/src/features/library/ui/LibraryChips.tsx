@@ -29,6 +29,7 @@ export function LibraryChips({
       {CHIPS.map((chip) => (
         <Chip
           key={chip.key}
+          action={`library.chip.${chip.key}`}
           label={chip.label}
           selected={value === chip.key}
           onPress={() => onChange(chip.key)}

@@ -1,4 +1,4 @@
-package app
+package reqmetrics
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func latencyMiddleware(record func(route string, d time.Duration, status int)) func(http.Handler) http.Handler {
+func Middleware(record func(route string, d time.Duration, status int)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()

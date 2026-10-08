@@ -22,26 +22,60 @@ export type TransportControlsProps = {
   center: ReactNode;
 };
 
-function ShuffleControl({ shuffled, smallIconSize, dimColor, activeColor, onToggleShuffle }: TransportControlsProps) {
-  const color = shuffled ? activeColor : dimColor;
-  const label = shuffled ? 'Disable shuffle' : 'Enable shuffle';
-  return <IconButton icon={Shuffle} size={smallIconSize} color={color} onPress={onToggleShuffle} accessibilityLabel={label} />;
+function shuffleLook(p: TransportControlsProps) {
+  return {
+    size: p.smallIconSize,
+    color: p.shuffled ? p.activeColor : p.dimColor,
+    onPress: p.onToggleShuffle,
+    accessibilityLabel: p.shuffled ? 'Disable shuffle' : 'Enable shuffle',
+  };
 }
 
-function PreviousControl({ hasPrevious, canRestart, largeIconSize, dimColor, primaryColor, onPrevious }: TransportControlsProps) {
-  const color = hasPrevious || canRestart ? primaryColor : dimColor;
-  return <IconButton icon={SkipBack} size={largeIconSize} color={color} onPress={onPrevious} accessibilityLabel="Previous track" />;
+function ShuffleControl(props: TransportControlsProps) {
+  return <IconButton action="playback.transport.shuffle" icon={Shuffle} {...shuffleLook(props)} />;
 }
 
-function NextControl({ hasNext, largeIconSize, dimColor, primaryColor, onNext }: TransportControlsProps) {
-  const color = hasNext ? primaryColor : dimColor;
-  return <IconButton icon={SkipForward} size={largeIconSize} color={color} disabled={!hasNext} onPress={onNext} accessibilityLabel="Next track" />;
+function previousLook(p: TransportControlsProps) {
+  return {
+    size: p.largeIconSize,
+    color: p.hasPrevious || p.canRestart ? p.primaryColor : p.dimColor,
+    onPress: p.onPrevious,
+    accessibilityLabel: 'Previous track',
+  };
 }
 
-function RepeatControl({ repeatMode, smallIconSize, dimColor, activeColor, onCycleRepeat }: TransportControlsProps) {
-  const icon = repeatMode === 'one' ? Repeat1 : Repeat;
-  const color = repeatMode === 'off' ? dimColor : activeColor;
-  return <IconButton icon={icon} size={smallIconSize} color={color} onPress={onCycleRepeat} accessibilityLabel={`Repeat: ${repeatMode}`} />;
+function PreviousControl(props: TransportControlsProps) {
+  return (
+    <IconButton action="playback.transport.previous" icon={SkipBack} {...previousLook(props)} />
+  );
+}
+
+function nextLook(p: TransportControlsProps) {
+  return {
+    size: p.largeIconSize,
+    color: p.hasNext ? p.primaryColor : p.dimColor,
+    disabled: !p.hasNext,
+    onPress: p.onNext,
+    accessibilityLabel: 'Next track',
+  };
+}
+
+function NextControl(props: TransportControlsProps) {
+  return <IconButton action="playback.transport.next" icon={SkipForward} {...nextLook(props)} />;
+}
+
+function repeatLook(p: TransportControlsProps) {
+  return {
+    icon: p.repeatMode === 'one' ? Repeat1 : Repeat,
+    size: p.smallIconSize,
+    color: p.repeatMode === 'off' ? p.dimColor : p.activeColor,
+    onPress: p.onCycleRepeat,
+    accessibilityLabel: `Repeat: ${p.repeatMode}`,
+  };
+}
+
+function RepeatControl(props: TransportControlsProps) {
+  return <IconButton action="playback.transport.repeat" {...repeatLook(props)} />;
 }
 
 function PlayRow(props: TransportControlsProps) {

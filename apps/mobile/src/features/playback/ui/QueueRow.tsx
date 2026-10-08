@@ -62,6 +62,7 @@ export function QueueRow({ item, onSkip, onRemove, onOpenMenu }: QueueRowProps):
           {formatSeconds(item.durationSeconds)}
         </Text>
         <IconButton
+          action="playback.queue.row_menu"
           icon={EllipsisVertical}
           size={18}
           onPress={() => onOpenMenu(item)}
