@@ -16,7 +16,11 @@ import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
 import { useDetailEnrichments } from '@/features/detail/hooks/useDetailEnrichments';
 import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
 import { useEnrichment } from '@/features/detail/hooks/useEnrichment';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from '@/features/detail/__tests__/support/queryHarness';
+import {
+  createTestQueryClient,
+  createWrapper,
+  mockSupabaseSession,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

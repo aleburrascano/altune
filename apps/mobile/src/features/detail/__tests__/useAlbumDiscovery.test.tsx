@@ -3,7 +3,11 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { useAlbumDiscovery } from '@/features/detail/hooks/useAlbumDiscovery';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from '@/features/detail/__tests__/support/queryHarness';
+import {
+  createTestQueryClient,
+  createWrapper,
+  mockSupabaseSession,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

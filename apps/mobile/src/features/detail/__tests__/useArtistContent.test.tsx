@@ -11,7 +11,11 @@ import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth
 import { DetailPortProvider } from '@/features/detail/ports/DetailPortProvider';
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from '@/features/detail/__tests__/support/queryHarness';
+import {
+  createTestQueryClient,
+  createWrapper,
+  mockSupabaseSession,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 

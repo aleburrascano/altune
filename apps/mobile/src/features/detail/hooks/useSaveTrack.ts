@@ -32,7 +32,11 @@ import { enqueueCritical } from '@shared/telemetry/outbox';
 import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { optimisticTrack, optimisticTrackId, saveIdempotencyKey } from '@/features/detail/save-cache';
+import {
+  optimisticTrack,
+  optimisticTrackId,
+  saveIdempotencyKey,
+} from '@/features/detail/save-cache';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 

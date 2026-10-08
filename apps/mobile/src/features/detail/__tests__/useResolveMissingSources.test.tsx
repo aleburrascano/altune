@@ -5,7 +5,10 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
 import { useResolveMissingSources } from '@/features/detail/hooks/useResolveMissingSources';
-import { createTestQueryClient, createWrapper } from '@/features/detail/__tests__/support/queryHarness';
+import {
+  createTestQueryClient,
+  createWrapper,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const mockQueryFn = jest.fn<Promise<DiscoveryResult[]>, []>();
 

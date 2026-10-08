@@ -12,7 +12,11 @@ import { useAlbumDiscovery } from '@/features/detail/hooks/useAlbumDiscovery';
 import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
 import { useLibraryTracksForAlbum } from '@/features/detail/hooks/useLibraryTracks';
 import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
-import { enrichAlbumTrack, useAlbumSaveAll, type LastBatch } from '@/features/detail/hooks/useAlbumSaveAll';
+import {
+  enrichAlbumTrack,
+  useAlbumSaveAll,
+  type LastBatch,
+} from '@/features/detail/hooks/useAlbumSaveAll';
 import { useOwnedPlayback } from '@/features/detail/hooks/useOwnedPlayback';
 import { trackExtras } from '@/features/detail/extras-accessors';
 import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';

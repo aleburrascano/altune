@@ -2,7 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { contentFailure, DETAIL_CONTENT_STALE_MS, DETAIL_LIST_CAP } from '@/features/detail/domain/content-status';
+import {
+  contentFailure,
+  DETAIL_CONTENT_STALE_MS,
+  DETAIL_LIST_CAP,
+} from '@/features/detail/domain/content-status';
 import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';

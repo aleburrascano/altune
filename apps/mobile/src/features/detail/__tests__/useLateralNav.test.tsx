@@ -2,7 +2,10 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { useLateralNav } from '@/features/detail/hooks/useLateralNav';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
-import { createTestQueryClient, createWrapper } from '@/features/detail/__tests__/support/queryHarness';
+import {
+  createTestQueryClient,
+  createWrapper,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const mockResolveEntityQuery = jest.fn();
 jest.mock('@/features/detail/domain/resolveEntityQuery', () => ({

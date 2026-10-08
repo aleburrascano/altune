@@ -6,7 +6,10 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
 import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
-import { createTestQueryClient, createWrapper } from '@/features/detail/__tests__/support/queryHarness';
+import {
+  createTestQueryClient,
+  createWrapper,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 function artist(title: string): DiscoveryResult {
   return {
