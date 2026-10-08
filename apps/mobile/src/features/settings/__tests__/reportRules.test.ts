@@ -1,4 +1,8 @@
-import { MAX_MESSAGE_LENGTH, MIN_MESSAGE_LENGTH, isReportReady } from '../reportRules';
+import {
+  MAX_MESSAGE_LENGTH,
+  MIN_MESSAGE_LENGTH,
+  isReportReady,
+} from '@features/settings/reportRules';
 
 describe('isReportReady(): needs a kind and a trimmed message of at least MIN_MESSAGE_LENGTH', () => {
   it.each([

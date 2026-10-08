@@ -10,8 +10,8 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { detailKeys, libraryKeys } from '@shared/lib/query-keys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
-import { makeWrapper } from '../../../../jest/makeWrapper';
-import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
+import { makeWrapper } from '@testing/makeWrapper';
+import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
 
 jest.mock('@shared/api-client/tracks', () => ({
   ...jest.requireActual('@shared/api-client/tracks'),

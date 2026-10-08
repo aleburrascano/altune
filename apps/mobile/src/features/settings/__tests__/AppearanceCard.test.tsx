@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
 import { useThemePreference } from '@shared/ui/theme/themePreference';
-import { AppearanceCard } from '../ui/AppearanceCard';
+import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
 
 describe('AppearanceCard', () => {
   afterEach(() => {

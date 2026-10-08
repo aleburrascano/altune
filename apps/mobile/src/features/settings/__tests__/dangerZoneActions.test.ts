@@ -5,15 +5,15 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
-import { downloadUsage } from '../downloadStatsModel';
-import type { RemoveDownloads } from '../hooks/useRemoveDownloads';
+import { downloadUsage } from '@features/settings/downloadStatsModel';
+import type { RemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
 import {
   buildDangerZoneActions,
   type ClearHistoryState,
   type DangerZoneActionKey,
-} from '../dangerZoneActions';
+} from '@features/settings/dangerZoneActions';
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 

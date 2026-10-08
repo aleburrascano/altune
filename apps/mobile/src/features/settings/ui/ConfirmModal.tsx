@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
-import { SettingsModal } from './SettingsModal';
+import { SettingsModal } from '@features/settings/ui/SettingsModal';
 
 type ConfirmModalProps = {
   visible: boolean;

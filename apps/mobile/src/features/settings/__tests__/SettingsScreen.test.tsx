@@ -9,9 +9,9 @@ import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { SettingsScreen } from '../ui/SettingsScreen';
+import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -28,9 +28,11 @@ jest.mock('@shared/api-client/discovery', () => ({
 jest.mock('@shared/auth/useSignOut', () => ({
   useSignOut: () => ({ state: { status: 'idle' }, signOut: jest.fn() }),
 }));
-jest.mock('../hooks/useAccountEmail', () => ({ useAccountEmail: () => 'me@example.com' }));
-jest.mock('../hooks/useDownloadStats', () => ({
-  ...jest.requireActual('../hooks/useDownloadStats'),
+jest.mock('@features/settings/hooks/useAccountEmail', () => ({
+  useAccountEmail: () => 'me@example.com',
+}));
+jest.mock('@features/settings/hooks/useDownloadStats', () => ({
+  ...jest.requireActual('@features/settings/hooks/useDownloadStats'),
   useDownloadStats: () => ({
     downloadCount: 0,
     downloadBytes: 0,

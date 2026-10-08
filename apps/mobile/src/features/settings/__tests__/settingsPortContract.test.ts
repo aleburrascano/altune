@@ -5,7 +5,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { BackfillFeaturedResult } from '@shared/api-client/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { makeWrapper } from '../../../../jest/makeWrapper';
+import { makeWrapper } from '@testing/makeWrapper';
 import { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
 import { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
@@ -19,7 +19,7 @@ import {
   REQUEST_TIMEOUT_MS,
 } from '@shared/api-client';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

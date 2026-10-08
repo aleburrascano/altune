@@ -1,10 +1,13 @@
 import { useState, type ReactElement } from 'react';
 
 import { Text } from '@shared/ui';
-import { ConfirmModal } from './ConfirmModal';
-import { buildDangerZoneActions, type DangerZoneActionKey } from '../dangerZoneActions';
-import { SettingsCard } from './SettingsCard';
-import { SettingsRow } from './SettingsRow';
+import { ConfirmModal } from '@features/settings/ui/ConfirmModal';
+import {
+  buildDangerZoneActions,
+  type DangerZoneActionKey,
+} from '@features/settings/dangerZoneActions';
+import { SettingsCard } from '@features/settings/ui/SettingsCard';
+import { SettingsRow } from '@features/settings/ui/SettingsRow';
 
 type DangerZoneCardProps = Parameters<typeof buildDangerZoneActions>[0];
 

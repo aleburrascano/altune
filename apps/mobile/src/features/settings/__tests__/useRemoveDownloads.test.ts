@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { downloadStats } from '../downloadStatsModel';
-import { useRemoveDownloads } from '../hooks/useRemoveDownloads';
+import { downloadStats } from '@features/settings/downloadStatsModel';
+import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
 import * as FileSystem from 'expo-file-system';
 import { asTrackId } from '@shared/api-client/ids';
 

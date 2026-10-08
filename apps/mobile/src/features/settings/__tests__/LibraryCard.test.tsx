@@ -4,7 +4,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react-native
 import type { ReactNode } from 'react';
 
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
-import { LibraryCard } from '../ui/LibraryCard';
+import { LibraryCard } from '@features/settings/ui/LibraryCard';
 
 jest.mock('@shared/api-client/tracks', () => ({
   ...jest.requireActual('@shared/api-client/tracks'),

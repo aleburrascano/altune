@@ -3,9 +3,9 @@ import type { ReactElement } from 'react';
 
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 import type { ColorScheme } from '@shared/ui';
-import { SettingsCard } from './SettingsCard';
-import { SettingsRow } from './SettingsRow';
-import { ThemeSegment } from './ThemeSegment';
+import { SettingsCard } from '@features/settings/ui/SettingsCard';
+import { SettingsRow } from '@features/settings/ui/SettingsRow';
+import { ThemeSegment } from '@features/settings/ui/ThemeSegment';
 
 export function AppearanceCard(): ReactElement {
   const scheme = useThemePreference((s) => s.scheme);
