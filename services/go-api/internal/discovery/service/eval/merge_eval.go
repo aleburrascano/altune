@@ -1,11 +1,11 @@
 package eval
 
 import (
-	"altune/go-api/internal/discovery/service/release"
 	"context"
 	"sync"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/textnorm"
 )
 

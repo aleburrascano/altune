@@ -29,19 +29,23 @@ func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string,
 	}
 	occurredAt := time.Now().UTC()
 	t.bg.launch(parentCtx, "discography.telemetry.emit", func(ctx context.Context) {
-		emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
-		defer cancel()
-
-		event := domain.InteractionEvent{
-			OccurredAt: occurredAt,
-			UserId:     shared.SystemUserId(),
-			Type:       domain.EventTypeDiscographyObserved,
-			Payload:    payload,
-		}
-		if err := t.eventStore.Append(emitCtx, event); err != nil {
-			slog.WarnContext(emitCtx, "discography.telemetry.emit_failed", "error", err)
-		}
+		t.append(ctx, occurredAt, payload)
 	})
+}
+
+func (t *DiscographyTelemetry) append(ctx context.Context, occurredAt time.Time, payload map[string]any) {
+	emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
+	defer cancel()
+
+	event := domain.InteractionEvent{
+		OccurredAt: occurredAt,
+		UserId:     shared.SystemUserId(),
+		Type:       domain.EventTypeDiscographyObserved,
+		Payload:    payload,
+	}
+	if err := t.eventStore.Append(emitCtx, event); err != nil {
+		slog.WarnContext(emitCtx, "discography.telemetry.emit_failed", "error", err)
+	}
 }
 
 func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string, merged []release.MergedRelease) (payload map[string]any, ok bool) {
@@ -55,9 +59,18 @@ func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string
 }
 
 func buildDiscographyPayload(artistRef string, merged []release.MergedRelease) map[string]any {
-	providerCounts := make(map[string]int)
-	singleProvider := 0
-	singleProviderNoID := 0
+	providerCounts, singleProvider, singleProviderNoID := countProviders(merged)
+	return map[string]any{
+		domain.PayloadKeyArtistRef:          artistRef,
+		domain.PayloadKeyReleases:           len(merged),
+		domain.PayloadKeySingleProvider:     singleProvider,
+		domain.PayloadKeySingleProviderNoId: singleProviderNoID,
+		domain.PayloadKeyProviderCounts:     providerCounts,
+	}
+}
+
+func countProviders(merged []release.MergedRelease) (providerCounts map[string]int, singleProvider, singleProviderNoID int) {
+	providerCounts = make(map[string]int)
 	for _, m := range merged {
 		if len(m.Providers) == 1 {
 			singleProvider++
@@ -69,13 +82,7 @@ func buildDiscographyPayload(artistRef string, merged []release.MergedRelease) m
 			providerCounts[p.String()]++
 		}
 	}
-	return map[string]any{
-		domain.PayloadKeyArtistRef:          artistRef,
-		domain.PayloadKeyReleases:           len(merged),
-		domain.PayloadKeySingleProvider:     singleProvider,
-		domain.PayloadKeySingleProviderNoId: singleProviderNoID,
-		domain.PayloadKeyProviderCounts:     providerCounts,
-	}
+	return providerCounts, singleProvider, singleProviderNoID
 }
 
 func idBacked(m release.MergedRelease) bool {
