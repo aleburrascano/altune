@@ -65,6 +65,7 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **discovery_metrics** — nightly rollup table: one row per `(as_of day, metric)` for `zero_result_rate`, `ctr`, `tail_noise_top5_avg`, `searches`. Aggregates only, no `user_id`. Feeds the `ALERT_ZERO_RESULT_THRESHOLD` coverage alert. Defined in `services/go-api/internal/discovery/adapters/persistence/metrics_rollup_repo.go`.
 
 - **Observe** — the operator-facing health, metrics, alert and live-tap surface of the backend: dependency health, live metrics, alert conditions with their notifiers, and the event and log taps that stream to admins. Bounded context in `services/go-api/internal/observe/`.
+- **Auth** — verifies bearer tokens, gates HTTP requests on them and carries the request user id and token-expiry context to other modules. Bounded context in `services/go-api/internal/auth/`.
 
 - **Artist** — a creator of tracks, surfaced as a `SearchResult` with `kind = ResultKind.ARTIST`, name in `title`, optional disambiguator (year/MBID) in `extras`.
 - **Album** — a grouping of tracks released together, surfaced as a `SearchResult` with `kind = ResultKind.ALBUM`, title + artist subtitle + year in `extras`.

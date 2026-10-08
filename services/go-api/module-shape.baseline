@@ -1,4 +1,3 @@
-G1 internal/auth missing ARCHITECTURE.md
 G1 internal/observe/handler unexpected root entry
 G1 internal/playback missing ARCHITECTURE.md
 G1 internal/playback/doc.go unexpected root entry
@@ -130,7 +129,6 @@ N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/providers/helpers_test.go banned name helpers
 N1 internal/discovery/service/helpers_test.go banned name helpers
 N1 internal/shared/events/types.go banned name types
-N2 internal/auth is not a term in docs/ubiquitous-language.md
 N2 internal/discovery differs from mobile feature discover
 N2 internal/discovery is not a term in docs/ubiquitous-language.md
 N2 internal/playback is not a term in docs/ubiquitous-language.md

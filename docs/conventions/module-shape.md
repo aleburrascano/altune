@@ -20,7 +20,7 @@ A module is every folder under `internal/` except `app/` (the composition root, 
 
 ## Reaching auth
 
-Every handler needs the request user ID, the token-expiry context and `ErrTokenExpired`. Auth has `ports/` (metrics, revoker) and no `service/`, and these functions sit at the auth root. G3 accepts an `authbridge` only if it imports `internal/auth/ports` or `internal/auth/service`.
+Every handler needs the request user ID, the token-expiry context and `ErrTokenExpired`. The request user ID middleware `RequireUserID` lives in `auth/adapters/middleware`; the context functions and `ErrTokenExpired` live in `auth/service` and `auth/domain`. G3 accepts an `authbridge` only if it imports `internal/auth/ports` or `internal/auth/service`.
 
 | Option | Files touched | 401 body | `net/http` in `auth/service` |
 |---|---|---|---|
@@ -28,15 +28,15 @@ Every handler needs the request user ID, the token-expiry context and `ErrTokenE
 | (b) request-identity interface in `auth/ports`, implemented at the root | new `ports` file, `middleware.go`, every bridge, a wiring change in `app/` | identical | no |
 | (c) move request identity to `shared/` | `context.go`, `shared/`, the 29 caller files; `RequireUserID` cannot follow without `net/http` and the 401 body in the kernel, so it splits | identical only if the writer stays in auth, which keeps the G3 line | no, but the kernel grows |
 
-**Chosen: (a).** An `authbridge` imports `altune/go-api/internal/auth/service`. It is the smallest move, adds no interface with one implementer, keeps the 401 body byte for byte, and keeps `net/http` out of `auth/service`. The bridge wraps `auth.RequireUserID` from the root for the 401 path until `middleware.go` leaves the root (already G1 drift, baseline lines 1 to 11).
+**Chosen: (a).** An `authbridge` imports `altune/go-api/internal/auth/service`. It is the smallest move, adds no interface with one implementer, keeps the 401 body byte for byte, and keeps `net/http` out of `auth/service`. The bridge wraps `RequireUserID` from `auth/adapters/middleware` for the 401 path.
 
 Checked on a throwaway branch against the live repo: `internal/observe/adapters/authbridge/` importing `auth/service` produces no G3 line. The same package importing only `internal/auth` produces `G3 internal/observe/adapters/authbridge imports nothing from auth ports or service`.
 
 Follow-up tickets, in order:
 
-1. Move `internal/auth/context.go` and its test to `internal/auth/service/`; point `middleware.go` at it.
+1. (done) Move `internal/auth/context.go` and its test to `internal/auth/service/`; point `middleware.go` at it.
 2. `observe/adapters/authbridge/`, then move `observe/handler` imports to it. Clears the `G3 ... imports auth outside adapters/authbridge` lines for `observe/handler/gate.go`, `sse.go` and `streams.go` (baseline lines 96, 100 and 101 as re-recorded by tickets 2 and 3).
-3. `eventstream` bridge. Clears `internal/eventstream/handler.go` (line 94, same re-recording).
+3. (done) `eventstream` bridge. Clears `internal/eventstream/handler.go` (line 94, same re-recording).
 4. One bridge each for catalog, discovery, playback and acquisition. Clears the other 17 auth lines.
 
 Each ticket removes its baseline lines in the same commit; the check fails if it does not.
