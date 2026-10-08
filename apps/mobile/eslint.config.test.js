@@ -72,3 +72,65 @@ describe('mobile diff-scoped style rules', () => {
     assert.ok(diffScopedRuleIds(path, code).includes('max-lines-per-function'));
   });
 });
+
+describe('browser globals', () => {
+  const untyped = new ESLint({
+    cwd: __dirname,
+    overrideConfig: {
+      languageOptions: { parserOptions: { projectService: false } },
+      rules: Object.fromEntries(
+        [
+          'no-floating-promises',
+          'no-misused-promises',
+          'await-thenable',
+          'no-misused-spread',
+          'use-unknown-in-catch-callback-variable',
+          'no-unnecessary-type-assertion',
+        ].map((name) => [`@typescript-eslint/${name}`, 'off']),
+      ),
+    },
+  });
+
+  async function globalErrors(filePath, code) {
+    const [result] = await untyped.lintText(code, { filePath });
+    return result.messages.filter((m) => m.ruleId === 'no-restricted-globals');
+  }
+
+  const alertCode = "window.alert('x');\n";
+
+  it('flags window in a shared file', async () => {
+    assert.strictEqual((await globalErrors('src/shared/x.ts', alertCode)).length, 1);
+  });
+
+  it('flags typeof document in a feature hook', async () => {
+    const errors = await globalErrors('src/features/library/hooks/y.ts', 'export const t = typeof document;\n');
+    assert.strictEqual(errors.length, 1);
+  });
+
+  for (const file of ['src/shared/x.web.ts', 'src/shared/x.web.tsx', 'src/features/playback/web/y.ts']) {
+    it(`allows window in ${file}`, async () => {
+      assert.strictEqual((await globalErrors(file, alertCode)).length, 0);
+    });
+  }
+
+  it('allows window in a test file', async () => {
+    assert.strictEqual((await globalErrors('src/shared/__tests__/x.test.ts', alertCode)).length, 0);
+  });
+
+  for (const file of ['src/shared/webby.ts', 'src/shared/website/x.ts', 'src/shared/x.webview.ts']) {
+    it(`refuses window in look-alike ${file}`, async () => {
+      assert.strictEqual((await globalErrors(file, alertCode)).length, 1);
+    });
+  }
+
+  it('allows a parameter named navigator', async () => {
+    const code = 'export function f(navigator: { back(): void }) { navigator.back(); }\n';
+    assert.strictEqual((await globalErrors('src/shared/x.ts', code)).length, 0);
+  });
+
+  it('finds no offender anywhere under src', async () => {
+    const results = await eslint.lintFiles(['src/**/*.{ts,tsx}']);
+    const offenders = results.flatMap((r) => r.messages.filter((m) => m.ruleId === 'no-restricted-globals'));
+    assert.strictEqual(offenders.length, 0);
+  });
+});
