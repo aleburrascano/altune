@@ -372,7 +372,7 @@ describe('rule 6 — the banned noun never appears in this slice', () => {
 
 describe('rule 5b — the barrel is executable, not just textually correct', () => {
   it('re-exports every documented symbol as a live binding, so a consumer importing the slice root gets working values', () => {
-    const barrel = require('../index');
+    const barrel = require('@shared/playlists/index');
     const exported = Object.keys(barrel).sort();
 
     expect(exported).toEqual([

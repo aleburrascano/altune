@@ -4,8 +4,8 @@ import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
-import { offlineDownloadsSupported } from './offlineSupport';
-import { runDownloadQueue } from './pinnedDownloadWorker';
+import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
+import { runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
 import {
   deleteAllPinned,
   deletePinned,
@@ -13,7 +13,7 @@ import {
   deleteAbandonedDownloads,
   pinStorageFull,
   pinnedFilesByTrackId,
-} from './pinnedFiles';
+} from '@shared/offline/pinnedFiles';
 import {
   type PinnedEntry,
   changedEntryIds,
@@ -26,11 +26,11 @@ import {
   scheduleSaveIndex,
   tagChangedEntries,
   writeOwner,
-} from './pinnedIndex';
+} from '@shared/offline/pinnedIndex';
 
-export { formatBytes, pinnedBytes as pinnedByteTotal } from './pinnedFiles';
+export { formatBytes, pinnedBytes as pinnedByteTotal } from '@shared/offline/pinnedFiles';
 
-export type { PinnedEntry, PinnedStatus } from './pinnedIndex';
+export type { PinnedEntry, PinnedStatus } from '@shared/offline/pinnedIndex';
 
 function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<string, PinnedEntry> {
   const kept: Record<string, PinnedEntry> = {};

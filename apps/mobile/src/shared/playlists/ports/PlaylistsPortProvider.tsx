@@ -1,8 +1,8 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpPlaylistsPort } from '../adapters/http/httpPlaylistsPort';
-import type { PlaylistsPort } from './playlistsPort';
+import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
+import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 
 const PlaylistsPortContext = createContext<PlaylistsPort>(httpPlaylistsPort);
 

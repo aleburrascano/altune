@@ -8,7 +8,7 @@ import {
   saveIndex,
   setPinnedIndexFileStore,
   type PinnedEntry,
-} from '../pinnedIndex';
+} from '@shared/offline/pinnedIndex';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
@@ -16,7 +16,7 @@ import {
 import type { StoredDirectory } from '@shared/files/fileStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
-import { expectType, type IsExactlyAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
 
 const INDEX_URI = 'memory://document/offline/pinned.json';
 const TEMP_URI = `${INDEX_URI}.tmp`;

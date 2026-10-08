@@ -6,7 +6,7 @@ import { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcqui
 import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

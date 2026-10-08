@@ -1,6 +1,6 @@
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
-import { DownloadsSheet } from '../DownloadsSheet';
+import { DownloadsSheet } from '@shared/acquisition/ui/DownloadsSheet';
 import { useDownloadStore, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { asTrackId } from '@shared/api-client/ids';
 

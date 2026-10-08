@@ -1,7 +1,7 @@
 import type { TrackResponse } from '@shared/api-client/types';
 import { asTrackId } from '@shared/api-client/ids';
 
-import { buildPlayableQueue } from '../playFromList';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {

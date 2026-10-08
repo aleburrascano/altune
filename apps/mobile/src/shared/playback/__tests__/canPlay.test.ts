@@ -1,6 +1,6 @@
 import type { AcquisitionStatus } from '@shared/api-client/types';
 
-import { canPlay } from '../canPlay';
+import { canPlay } from '@shared/playback/canPlay';
 
 describe('canPlay', () => {
   it.each([

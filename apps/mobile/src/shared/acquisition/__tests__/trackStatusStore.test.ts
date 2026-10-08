@@ -1,4 +1,4 @@
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import { renderHook } from '@testing-library/react-native';
 
 import {
@@ -12,7 +12,7 @@ import {
   useTrackStatus,
   useTrackStatusStore,
   type TrackStatus,
-} from '../trackStatusStore';
+} from '@shared/acquisition/trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { toFailed, toPending, toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
 import type { AcquisitionStatus } from '@shared/api-client/types';

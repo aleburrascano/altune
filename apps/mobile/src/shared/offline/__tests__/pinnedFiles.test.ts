@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 import {
   deleteAllPinned,
@@ -17,7 +17,7 @@ import {
   pinnedFilesByTrackId,
   setPinnedFileStore,
   withPinnedBytesCached,
-} from '../pinnedFiles';
+} from '@shared/offline/pinnedFiles';
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 import {
   createMemoryFileStore,

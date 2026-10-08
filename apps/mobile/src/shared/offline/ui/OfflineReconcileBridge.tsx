@@ -1,7 +1,7 @@
 import { useEffect, type ReactElement } from 'react';
 
-import { offlineDownloadsSupported } from '../offlineSupport';
-import { usePinnedStore } from '../pinnedStore';
+import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 export function OfflineReconcileBridge(): ReactElement | null {
   const reconcile = usePinnedStore((s) => s.reconcile);

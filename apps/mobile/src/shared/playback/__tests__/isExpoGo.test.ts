@@ -6,7 +6,7 @@ function loadIsExpoGo(executionEnvironment: string): boolean {
       default: { executionEnvironment },
       ExecutionEnvironment: { Bare: 'bare', Standalone: 'standalone', StoreClient: 'storeClient' },
     }));
-    ({ isExpoGo } = require('../isExpoGo') as { isExpoGo: boolean });
+    ({ isExpoGo } = require('@shared/playback/isExpoGo') as { isExpoGo: boolean });
   });
   return isExpoGo as boolean;
 }

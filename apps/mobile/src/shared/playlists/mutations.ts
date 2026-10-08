@@ -14,8 +14,8 @@ import {
 } from '@shared/session/signOutCleanup';
 import { showFailureAlert } from '@shared/ui';
 
-import { usePlaylistsPort } from './ports/PlaylistsPortProvider';
-import type { PlaylistsPort } from './ports/playlistsPort';
+import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };

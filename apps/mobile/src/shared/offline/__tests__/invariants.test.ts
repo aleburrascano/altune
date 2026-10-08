@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { asTrackId } from '@shared/api-client/ids';
 
-import { downloadPinned, pinnedDir } from '../pinnedFiles';
+import { downloadPinned, pinnedDir } from '@shared/offline/pinnedFiles';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');
 const FILE_STORE_DIR = path.resolve(__dirname, '..', '..', 'files');

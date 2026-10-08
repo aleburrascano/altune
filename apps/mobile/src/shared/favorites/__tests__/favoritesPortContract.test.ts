@@ -6,7 +6,7 @@ import { httpFavoritesPort } from '@shared/favorites/adapters/http/httpFavorites
 import { createMemoryFavoritesPort } from '@shared/favorites/__tests__/memoryFavoritesPort';
 import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

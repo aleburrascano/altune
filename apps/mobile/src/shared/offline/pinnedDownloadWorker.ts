@@ -11,7 +11,7 @@ import {
   pinStorageFull,
   unsignedUrl,
   withPinnedBytesCached,
-} from './pinnedFiles';
+} from '@shared/offline/pinnedFiles';
 import {
   type PinnedEntry,
   downloadingEntry,
@@ -20,7 +20,7 @@ import {
   readyEntry,
   scheduleSaveIndex,
   tagChangedEntries,
-} from './pinnedIndex';
+} from '@shared/offline/pinnedIndex';
 
 type QueueState = {
   entries: Record<string, PinnedEntry>;

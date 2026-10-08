@@ -1,8 +1,8 @@
 import { act, render } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
-import { OfflineReconcileBridge } from '../ui/OfflineReconcileBridge';
-import { usePinnedStore, type PinnedEntry } from '../pinnedStore';
+import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
+import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));

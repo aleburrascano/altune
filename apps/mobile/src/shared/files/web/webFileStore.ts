@@ -1,4 +1,4 @@
-import type { FileStore, StoredDirectory, StoredFile } from '../fileStore';
+import type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileStore';
 
 const KEY_PREFIX = 'altune:file:';
 const ROOT = 'localstorage://document';
