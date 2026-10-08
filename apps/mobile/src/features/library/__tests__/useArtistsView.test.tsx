@@ -3,19 +3,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, View } from 'react-native';
 
-import type { ArtistGroup, LibraryQuery } from '@shared/api-client/library';
+import type { ArtistGroup } from '@shared/api-client/library';
+
+import {
+  createMemoryLibraryPort,
+  type MemoryLibrarySeed,
+} from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 
 import type { ActiveView } from '../activeView';
 import { useArtistsView } from '../hooks/useArtistsView';
 import { SortControl } from '../ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
-const mockGetLibraryArtists = jest.fn();
 let mockGroupPageSize = 50;
-
-jest.mock('@shared/api-client/library', () => ({
-  getLibraryArtists: (query: LibraryQuery) => mockGetLibraryArtists(query),
-}));
 
 jest.mock('../domain/groupPaging', () => {
   const actual = jest.requireActual('../domain/groupPaging');
@@ -31,6 +32,11 @@ jest.mock('../domain/groupPaging', () => {
 
 const noop = () => undefined;
 
+function spiedPort(seed: MemoryLibrarySeed) {
+  const memory = createMemoryLibraryPort(seed);
+  return { ...memory, getLibraryArtists: jest.fn(memory.getLibraryArtists) };
+}
+
 function WarmUpArtistsScreen() {
   const view = useArtistsView({ query: '', sort: 'az', isActive: true, onArtistPress: noop });
   return view.content;
@@ -38,23 +44,20 @@ function WarmUpArtistsScreen() {
 
 warmUpFirstRender(async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockGetLibraryArtists.mockResolvedValue({ items: [], total: 0 });
+  const port = spiedPort({});
   render(
     <QueryClientProvider client={client}>
-      <WarmUpArtistsScreen />
+      <LibraryPortProvider port={port}>
+        <WarmUpArtistsScreen />
+      </LibraryPortProvider>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(mockGetLibraryArtists).toHaveBeenCalled());
+  await waitFor(() => expect(port.getLibraryArtists).toHaveBeenCalled());
 });
 
 describe('a library grid holding more rows than one page', () => {
   const SERVER_DEFAULT_LIMIT = 50;
   const LIBRARY_SIZE = 60;
-
-  function servePage<TGroup>(rows: readonly TGroup[], { limit, offset = 0 }: LibraryQuery) {
-    const items = rows.slice(offset, offset + (limit ?? SERVER_DEFAULT_LIMIT));
-    return Promise.resolve({ items, total: items.length });
-  }
 
   const artists: ArtistGroup[] = Array.from({ length: LIBRARY_SIZE }, (_, i) => ({
     key: `ar${i}`,
@@ -81,8 +84,13 @@ describe('a library grid holding more rows than one page', () => {
   }
 
   let client: QueryClient;
+  let port: ReturnType<typeof spiedPort>;
   function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </QueryClientProvider>
+    );
   }
 
   function scrollToEnd(gridTestID: string): void {
@@ -91,8 +99,7 @@ describe('a library grid holding more rows than one page', () => {
 
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockGetLibraryArtists.mockReset();
-    mockGetLibraryArtists.mockImplementation((query: LibraryQuery) => servePage(artists, query));
+    port = spiedPort({ artists });
   });
 
   afterEach(() => client.clear());
@@ -131,7 +138,10 @@ describe('a library list whose next page fails to load', () => {
     most_recent_added_at: '2026-01-01T00:00:00Z',
   });
 
-  const rows = <T,>(make: (i: number) => T): T[] => Array.from({ length: PAGE }, (_, i) => make(i));
+  const rows = <T,>(count: number, make: (i: number) => T): T[] =>
+    Array.from({ length: count }, (_, i) => make(i));
+
+  const libraryRows = rows(PAGE * 2 + 1, artist);
 
   function Screen({ view }: { view: ActiveView }): ReactElement {
     return view.error ? <View testID="library-error" /> : <>{view.content}</>;
@@ -143,13 +153,18 @@ describe('a library list whose next page fails to load', () => {
   }
 
   let client: QueryClient;
+  let port: ReturnType<typeof spiedPort>;
   function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </QueryClientProvider>
+    );
   }
 
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockGetLibraryArtists.mockReset();
+    port = spiedPort({ artists: libraryRows });
     mockGroupPageSize = PAGE;
   });
 
@@ -167,9 +182,9 @@ describe('a library list whose next page fails to load', () => {
       'Artist 0',
       ArtistsScreen,
       () => {
-        mockGetLibraryArtists.mockResolvedValueOnce({ items: rows(artist), total: 200 });
-        mockGetLibraryArtists.mockImplementationOnce(failure);
-        mockGetLibraryArtists.mockResolvedValueOnce({ items: [artist(900)], total: 200 });
+        const { getLibraryArtists: servePage } = createMemoryLibraryPort({ artists: libraryRows });
+        port.getLibraryArtists.mockImplementationOnce(servePage);
+        port.getLibraryArtists.mockImplementationOnce(failure);
       },
     ],
   ])('keeps the loaded %s and offers a retry', async (_noun, listId, firstRow, Component, seed) => {
