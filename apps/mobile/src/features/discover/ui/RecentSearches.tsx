@@ -84,6 +84,7 @@ function ClearFailed(): ReactElement {
 function HistoryChip({ item, index, onTap }: ChipProps): ReactElement {
   return (
     <Chip
+      action="discover.history.recent"
       testID={`discover-history-row-${index}`}
       label={historyLabel(item.query)}
       onPress={() => onTap(item)}
@@ -107,7 +108,12 @@ function HistoryFailed({ onRetry }: { onRetry?: (() => void) | undefined }): Rea
       <Text variant="body" tone="secondary" style={styles.emptyText}>
         Couldn't load recent searches.
       </Text>
-      <Button testID="discover-history-retry" label="Retry" onPress={() => onRetry?.()} />
+      <Button
+        action="discover.history.retry"
+        testID="discover-history-retry"
+        label="Retry"
+        onPress={() => onRetry?.()}
+      />
     </View>
   );
 }

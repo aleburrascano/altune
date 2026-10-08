@@ -66,6 +66,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
             {preview.hasPreview ? (
               <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
                 <IconButton
+                  action="discover.preview.toggle"
                   testID={`discover-preview-${position}`}
                   icon={preview.isPlaying ? Pause : Play}
                   size={18}
