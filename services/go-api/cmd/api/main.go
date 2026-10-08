@@ -29,28 +29,14 @@ func main() {
 	switch cmd {
 	case "serve":
 		runServer(cfg, logRing)
-	case "migrate-dedup":
-		commands.RunDedupMigration(cfg, parseExecute(cmd, args))
 	case "health-check":
 		commands.RunHealthCheck(cfg, parseFix(cmd, args))
-	case "fix-audio-refs":
-		commands.RunFixAudioRefs(cfg, parseExecute(cmd, args))
-	case "backfill-duration":
-		commands.RunBackfillDuration(cfg, parseExecute(cmd, args))
-	case "reconcile-truncated":
-		commands.RunReconcileTruncated(cfg, parseExecute(cmd, args))
-	case "backfill-m4a":
-		execute, limit := parseExecuteLimit(cmd, args)
-		commands.RunBackfillM4a(cfg, execute, limit)
-	case "reacquire-corrupt-m4a":
-		execute, limit := parseExecuteLimit(cmd, args)
-		commands.RunReacquireCorruptM4a(cfg, execute, limit)
 	case "journey-check":
 		commands.RunJourneyCheck(cfg)
 	case "sweep-staging-audio":
 		commands.RunSweepStagingAudio(cfg, parseExecute(cmd, args))
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a|journey-check|sweep-staging-audio]\n", cmd)
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|health-check|journey-check|sweep-staging-audio]\n", cmd)
 		os.Exit(1)
 	}
 }
@@ -75,12 +61,4 @@ func parseFix(name string, args []string) bool {
 	fix := fs.Bool("fix", false, "apply fixes instead of a dry-run")
 	_ = fs.Parse(args)
 	return *fix
-}
-
-func parseExecuteLimit(name string, args []string) (bool, int) {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
-	execute := fs.Bool("execute", false, "apply changes instead of a dry-run")
-	limit := fs.Int("limit", 0, "cap rows touched (<= 0 means all)")
-	_ = fs.Parse(args)
-	return *execute, *limit
 }
