@@ -1,20 +1,20 @@
 import { create } from 'zustand';
 
-import { trackKey } from '@shared/playback/trackKey';
+import {
+  ascending,
+  fisherYates,
+  identityOrder,
+  isPositionIn,
+  reorderTail,
+  REPEAT_CYCLE,
+  resolveSyncTarget,
+  trackAt,
+  withAppended,
+  withoutTrack,
+  withoutUpcoming,
+} from '@shared/playback/queueOrder';
+import type { QueueState } from '@shared/playback/queueOrder';
 import type { PlaybackTrack, QueueSource, RepeatMode } from '@shared/playback/types';
-
-interface QueueState {
-  tracks: readonly PlaybackTrack[];
-  playOrder: readonly number[];
-  upNext: readonly number[];
-  appended: readonly number[];
-  currentIndex: number;
-  repeatMode: RepeatMode;
-  shuffled: boolean;
-  source: QueueSource | null;
-  resumePositionMs: number;
-  generation: number;
-}
 
 export interface QueueView {
   ordered: PlaybackTrack[];
@@ -71,122 +71,6 @@ const INITIAL: QueueState = {
   source: null,
   resumePositionMs: 0,
   generation: 0,
-};
-
-function identityOrder(length: number): number[] {
-  return Array.from({ length }, (_, i) => i);
-}
-
-interface UserQueued {
-  upNext: readonly number[];
-  appended: readonly number[];
-}
-
-function reorderTail(
-  order: readonly number[],
-  keepThrough: number,
-  queued: UserQueued,
-  arrange: (rest: number[]) => void,
-): number[] {
-  const tail = order.slice(keepThrough + 1);
-  const nextIds = new Set(queued.upNext);
-  const lastIds = new Set(queued.appended);
-  const rest = tail.filter((i) => !nextIds.has(i) && !lastIds.has(i));
-  arrange(rest);
-  const next = tail.filter((i) => nextIds.has(i));
-  const last = tail.filter((i) => lastIds.has(i));
-  return [...order.slice(0, keepThrough + 1), ...next, ...rest, ...last];
-}
-
-function fisherYates(items: number[]): void {
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = items[i]!;
-    items[i] = items[j]!;
-    items[j] = tmp;
-  }
-}
-
-function ascending(items: number[]): void {
-  items.sort((a, b) => a - b);
-}
-
-function withAppended(state: QueueState, tracks: readonly PlaybackTrack[]): Partial<QueueState> {
-  const added = tracks.map((_, i) => state.tracks.length + i);
-  return {
-    tracks: [...state.tracks, ...tracks],
-    playOrder: [...state.playOrder, ...added],
-    appended: [...state.appended, ...added],
-  };
-}
-
-function withoutTrack(indices: readonly number[], removed: number): number[] {
-  return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
-}
-
-function survivingPositions(
-  indices: readonly number[],
-  renumbered: ReadonlyMap<number, number>,
-): number[] {
-  return indices.flatMap((i) => {
-    const at = renumbered.get(i);
-    return at == null ? [] : [at];
-  });
-}
-
-function withoutUpcoming(state: QueueState, kept: readonly number[]): Partial<QueueState> {
-  const renumbered = new Map(kept.map((trackIdx, position) => [trackIdx, position]));
-  return {
-    tracks: kept.map((i) => state.tracks[i]!),
-    playOrder: identityOrder(kept.length),
-    upNext: survivingPositions(state.upNext, renumbered),
-    appended: survivingPositions(state.appended, renumbered),
-    shuffled: state.shuffled && kept.length > 1,
-  };
-}
-
-function isPositionIn(length: number, index: number): boolean {
-  return Number.isInteger(index) && index >= 0 && index < length;
-}
-
-function trackAt(
-  tracks: readonly PlaybackTrack[],
-  playOrder: readonly number[],
-  index: number,
-): PlaybackTrack | null {
-  const trackIndex = playOrder[index];
-  if (trackIndex == null) return null;
-  return tracks[trackIndex] ?? null;
-}
-
-function nearestKeyPosition(
-  ordered: readonly (PlaybackTrack | null)[],
-  key: string,
-  preferred: number,
-): number | null {
-  const hits = ordered.flatMap((t, i) => (t && trackKey(t) === key ? [i] : []));
-  if (hits.length === 0) return null;
-  return hits.reduce((a, b) => (Math.abs(b - preferred) < Math.abs(a - preferred) ? b : a));
-}
-
-function resolveSyncTarget(
-  tracks: readonly PlaybackTrack[],
-  playOrder: readonly number[],
-  index: number,
-  key: string | undefined,
-): number | null {
-  const inRange = index >= 0 && index < playOrder.length;
-  if (key == null) return inRange ? index : null;
-  const ordered = playOrder.map((i) => tracks[i] ?? null);
-  const at = inRange ? ordered[index] : null;
-  if (at && trackKey(at) === key) return index;
-  return nearestKeyPosition(ordered, key, index);
-}
-
-const REPEAT_CYCLE: Record<RepeatMode, RepeatMode> = {
-  off: 'all',
-  all: 'one',
-  one: 'off',
 };
 
 export const useQueueStore = create<QueueStore>((set, get) => ({
