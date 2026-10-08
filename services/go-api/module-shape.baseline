@@ -2,8 +2,6 @@ G1 internal/auth missing ARCHITECTURE.md
 G1 internal/observe/handler unexpected root entry
 G1 internal/playback missing ARCHITECTURE.md
 G1 internal/playback/doc.go unexpected root entry
-G2 internal/acquisition/service/eval/harness.go:4 service imports altune/go-api/internal/acquisition/adapters/discoverybridge
-G2 internal/acquisition/service/eval/harness.go:5 service imports altune/go-api/internal/acquisition/adapters/tempfs
 G2 internal/discovery/domain/records.go:7 domain imports github.com/google/uuid
 G2 internal/discovery/service/artwork_fill.go:15 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/eval/coverage_signal_b.go:10 service imports golang.org/x/sync/errgroup
@@ -27,7 +25,7 @@ G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catal
 G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/buildsteps.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/eval/case.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/eval/case.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/failure_reason.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/mem_job_queue.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:4 imports catalog outside adapters/catalogbridge

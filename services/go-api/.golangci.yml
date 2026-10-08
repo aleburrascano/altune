@@ -131,7 +131,6 @@ linters:
         layer-service-inward:
           files:
             - "**/internal/*/service/**"
-            - "!**/internal/acquisition/service/eval/**"
           deny:
             - pkg: altune/go-api/internal/catalog/adapters
               desc: service is driven by ports, it never imports adapters
@@ -145,7 +144,7 @@ linters:
         layer-service-inward-acquisition-eval:
           list-mode: lax
           files:
-            - "**/internal/acquisition/service/eval/**"
+            - "**/internal/acquisition/adapters/eval/**"
           allow:
             - altune/go-api/internal/acquisition/adapters/discoverybridge
             - altune/go-api/internal/acquisition/adapters/tempfs
@@ -162,7 +161,6 @@ linters:
         acquisition-service-filesystem:
           files:
             - "**/internal/acquisition/service/**"
-            - "!**/internal/acquisition/service/eval/**"
             - "!$test"
           deny:
             - pkg: "os$"

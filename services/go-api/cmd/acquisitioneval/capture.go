@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition/service/eval"
+	"altune/go-api/internal/acquisition/adapters/eval"
 	"encoding/json"
 	"flag"
 	"fmt"
