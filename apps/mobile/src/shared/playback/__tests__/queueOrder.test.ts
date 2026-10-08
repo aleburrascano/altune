@@ -2,6 +2,10 @@ import { asTrackId } from '@shared/api-client/ids';
 
 import {
   ascending,
+  currentAfterMove,
+  currentAfterRemoval,
+  freshQueue,
+  movedOrder,
   identityOrder,
   isPositionIn,
   reorderTail,
@@ -114,5 +118,87 @@ describe('withAppended', () => {
     const second = withAppended(grown, [track('d'), track('e')]);
     expect(second.appended).toEqual([...first.appended!, start, start + 1]);
     expect(second.playOrder).toEqual([0, ...first.appended!, start, start + 1]);
+  });
+});
+
+const TWO = 2;
+const THREE = 3;
+const FOUR = 4;
+const FIVE = 5;
+const SIX = 6;
+
+describe('currentAfterMove', () => {
+  it('follows the current track when it is moved', () => {
+    expect(currentAfterMove(TWO, TWO, 0)).toBe(0);
+  });
+
+  it('shifts down when a track before current moves to or past it', () => {
+    expect(currentAfterMove(TWO, 0, THREE)).toBe(1);
+  });
+
+  it('shifts up when a track after current moves to or before it', () => {
+    expect(currentAfterMove(TWO, FOUR, 1)).toBe(THREE);
+  });
+
+  it('stays put when the move is entirely after current', () => {
+    expect(currentAfterMove(TWO, THREE, FOUR)).toBe(TWO);
+  });
+});
+
+describe('movedOrder', () => {
+  it('moves the first entry to the end', () => {
+    expect(movedOrder([0, 1, TWO], 0, TWO)).toEqual([1, TWO, 0]);
+  });
+
+  it('returns a single-entry order unchanged', () => {
+    expect(movedOrder([0], 0, 0)).toEqual([0]);
+  });
+
+  it('does not mutate its input', () => {
+    const order = [0, 1, TWO];
+    movedOrder(order, 0, TWO);
+    expect(order).toEqual([0, 1, TWO]);
+  });
+});
+
+describe('currentAfterRemoval', () => {
+  it('is -1 when the only track is removed', () => {
+    expect(currentAfterRemoval(0, 0, 0)).toBe(-1);
+  });
+
+  it('clamps when the last track, which is current, is removed', () => {
+    expect(currentAfterRemoval(THREE, THREE, THREE)).toBe(TWO);
+  });
+
+  it('shifts down when a track before current is removed', () => {
+    expect(currentAfterRemoval(THREE, 1, FOUR)).toBe(TWO);
+  });
+
+  it('stays put when a track after current is removed', () => {
+    expect(currentAfterRemoval(1, TWO, FOUR)).toBe(1);
+  });
+});
+
+describe('freshQueue', () => {
+  const base = {
+    tracks: [],
+    playOrder: [],
+    currentIndex: -1,
+    shuffled: false,
+    source: null,
+  };
+
+  it('bumps the generation and clears user-queued state', () => {
+    const fresh = freshQueue({ ...base, generation: FOUR });
+    expect(fresh.generation).toBe(FIVE);
+    expect(fresh.upNext).toEqual([]);
+    expect(fresh.appended).toEqual([]);
+    expect(fresh.resumePositionMs).toBe(0);
+  });
+
+  it('increments from the generation passed in each time', () => {
+    expect(freshQueue({ ...base, generation: FOUR }).generation).toBe(FIVE);
+    expect(freshQueue({ ...base, generation: FOUR }).generation).toBe(FIVE);
+    expect(freshQueue({ ...base, generation: FIVE }).generation).toBe(SIX);
   });
 });

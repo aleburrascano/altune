@@ -2,9 +2,13 @@ import { create } from 'zustand';
 
 import {
   ascending,
+  currentAfterMove,
+  currentAfterRemoval,
   fisherYates,
+  freshQueue,
   identityOrder,
   isPositionIn,
+  movedOrder,
   reorderTail,
   REPEAT_CYCLE,
   resolveSyncTarget,
@@ -77,52 +81,49 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   ...INITIAL,
 
   loadQueue: (tracks, startIndex, source) => {
-    const order = identityOrder(tracks.length);
-    set({
-      tracks,
-      playOrder: order,
-      upNext: [],
-      appended: [],
-      currentIndex: order.length === 0 ? -1 : startIndex,
-      shuffled: false,
-      source,
-      resumePositionMs: 0,
-      generation: get().generation + 1,
-    });
+    const playOrder = identityOrder(tracks.length);
+    set(
+      freshQueue({
+        tracks,
+        playOrder,
+        currentIndex: playOrder.length === 0 ? -1 : startIndex,
+        shuffled: false,
+        source,
+        generation: get().generation,
+      }),
+    );
     return queueView(get());
   },
 
   loadShuffled: (tracks, source) => {
-    const order = identityOrder(tracks.length);
-    fisherYates(order);
-    set({
-      tracks,
-      playOrder: order,
-      upNext: [],
-      appended: [],
-      currentIndex: tracks.length === 0 ? -1 : 0,
-      shuffled: true,
-      source,
-      resumePositionMs: 0,
-      generation: get().generation + 1,
-    });
+    const playOrder = identityOrder(tracks.length);
+    fisherYates(playOrder);
+    set(
+      freshQueue({
+        tracks,
+        playOrder,
+        currentIndex: tracks.length === 0 ? -1 : 0,
+        shuffled: true,
+        source,
+        generation: get().generation,
+      }),
+    );
     return queueView(get());
   },
 
   restoreQueue: ({ tracks, playOrder, currentIndex, source, shuffled }) => {
     const clampedIdx =
       playOrder.length === 0 ? -1 : Math.max(0, Math.min(currentIndex, playOrder.length - 1));
-    set({
-      tracks,
-      playOrder,
-      upNext: [],
-      appended: [],
-      currentIndex: clampedIdx,
-      shuffled,
-      source,
-      resumePositionMs: 0,
-      generation: get().generation + 1,
-    });
+    set(
+      freshQueue({
+        tracks,
+        playOrder,
+        currentIndex: clampedIdx,
+        shuffled,
+        source,
+        generation: get().generation,
+      }),
+    );
   },
 
   enqueue: (track) => set((s) => withAppended(s, [track])),
@@ -225,18 +226,10 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     if (fromIndex === toIndex) return upcomingTracks(get());
     if (!isPositionIn(playOrder.length, fromIndex)) return upcomingTracks(get());
     if (!isPositionIn(playOrder.length, toIndex)) return upcomingTracks(get());
-    const newOrder = [...playOrder];
-    const [moved] = newOrder.splice(fromIndex, 1);
-    newOrder.splice(toIndex, 0, moved!);
-    let newCurrent = currentIndex;
-    if (fromIndex === currentIndex) {
-      newCurrent = toIndex;
-    } else if (fromIndex < currentIndex && toIndex >= currentIndex) {
-      newCurrent = currentIndex - 1;
-    } else if (fromIndex > currentIndex && toIndex <= currentIndex) {
-      newCurrent = currentIndex + 1;
-    }
-    set({ playOrder: newOrder, currentIndex: newCurrent });
+    set({
+      playOrder: movedOrder(playOrder, fromIndex, toIndex),
+      currentIndex: currentAfterMove(currentIndex, fromIndex, toIndex),
+    });
     return upcomingTracks(get());
   },
 
@@ -249,13 +242,8 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       set({ ...INITIAL, generation: get().generation + 1 });
       return;
     }
-    const newOrder = playOrder.filter((_, i) => i !== index).map((i) => (i > trackIdx ? i - 1 : i));
-    const newCurrent =
-      index < currentIndex
-        ? currentIndex - 1
-        : index === currentIndex
-          ? Math.min(currentIndex, newOrder.length - 1)
-          : currentIndex;
+    const newOrder = withoutTrack(playOrder, trackIdx);
+    const newCurrent = currentAfterRemoval(currentIndex, index, newOrder.length);
     set({
       tracks: newTracks,
       playOrder: newOrder,
