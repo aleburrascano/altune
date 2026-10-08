@@ -1,4 +1,4 @@
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
 export type DevicePlatform = 'ios' | 'android' | 'web' | 'windows' | 'macos';
@@ -23,6 +23,14 @@ export function deviceInfo(): DeviceInfo {
 
 export function declaredAppScheme(): string | string[] | undefined {
   return Constants.expoConfig?.scheme;
+}
+
+export function isWebPlatform(): boolean {
+  return Platform.OS === 'web';
+}
+
+export function isExpoGoRuntime(): boolean {
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
 export function webOrigin(): string | null {
