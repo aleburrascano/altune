@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -86,6 +87,9 @@ type Config struct {
 	AudioPrefetchEnabled bool `env:"AUDIO_PREFETCH_ENABLED" envDefault:"true"`
 
 	NowPlayingEnrichmentEnabled bool `env:"PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED" envDefault:"true"`
+
+	PlaybackQueueRateEvery time.Duration `env:"PLAYBACK_QUEUE_RATE_EVERY" envDefault:"2s"`
+	PlaybackQueueRateBurst int           `env:"PLAYBACK_QUEUE_RATE_BURST" envDefault:"20"`
 
 	OverseerPrincipalID string `env:"OVERSEER_PRINCIPAL_ID"`
 

@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/auth"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackMetrics "altune/go-api/internal/playback/adapters/metrics"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
@@ -14,6 +15,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -71,7 +73,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("NewQueueState: %v", err)
 	}
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, true), metrics)
+	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playbackHandler.DefaultQueueStateRateLimit)
 
 	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
@@ -148,7 +150,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(
 		newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
-		metrics)
+		metrics, playbackHandler.DefaultQueueStateRateLimit)
 
 	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
@@ -195,5 +197,45 @@ func TestWirePlayback_SweepReapsErasedQueueStates(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "reap erased queue states") {
 		t.Fatalf("Execute error = %v, want it to carry the reap failure, proving the reaper is wired", err)
+	}
+}
+
+func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
+	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
+	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
+	t.Setenv("PLAYBACK_QUEUE_RATE_EVERY", "1h")
+	t.Setenv("PLAYBACK_QUEUE_RATE_BURST", "2")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	user := shared.NewUserId(uuid.New())
+	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
+	queue := newQueueHandler(newQueueService(&storedQueue{}, nil, metrics, false), metrics, queueRateLimit(cfg))
+	routes := queue.Routes()
+
+	var codes []int
+	for range 3 {
+		req := httptest.NewRequest(http.MethodPut, "/queue-state",
+			strings.NewReader(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`))
+		req = req.WithContext(auth.ContextWithUserID(req.Context(), user))
+		rec := httptest.NewRecorder()
+		routes.ServeHTTP(rec, req)
+		codes = append(codes, rec.Code)
+	}
+	if codes[0] == http.StatusTooManyRequests || codes[1] == http.StatusTooManyRequests || codes[2] != http.StatusTooManyRequests {
+		t.Errorf("statuses = %v, want the third PUT throttled at burst 2", codes)
+	}
+}
+
+func TestQueueRateLimit_DefaultsMatchCompileTimeLimit(t *testing.T) {
+	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
+	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if got := queueRateLimit(cfg); got != playbackHandler.DefaultQueueStateRateLimit {
+		t.Errorf("limit = %+v, want %+v", got, playbackHandler.DefaultQueueStateRateLimit)
 	}
 }

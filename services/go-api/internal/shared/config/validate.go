@@ -163,6 +163,12 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionDrainBudgetSeconds < 1 {
 		return fmt.Errorf("ACQUISITION_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.AcquisitionDrainBudgetSeconds)
 	}
+	if c.PlaybackQueueRateEvery <= 0 {
+		return fmt.Errorf("PLAYBACK_QUEUE_RATE_EVERY must be > 0, got %s", c.PlaybackQueueRateEvery)
+	}
+	if c.PlaybackQueueRateBurst < 1 {
+		return fmt.Errorf("PLAYBACK_QUEUE_RATE_BURST must be >= 1, got %d", c.PlaybackQueueRateBurst)
+	}
 	if err := c.validateAudioSources(); err != nil {
 		return err
 	}
