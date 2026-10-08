@@ -16,11 +16,11 @@ const REDACTIONS: readonly [RegExp, string][] = [
 ];
 
 export function redactPlaybackErrorMessage(message: string): string {
-  let redacted = message.slice(0, MAX_MESSAGE_LENGTH);
+  let redacted = message;
   for (const [pattern, replacement] of REDACTIONS) {
     redacted = redacted.replace(pattern, replacement);
   }
-  return redacted;
+  return redacted.slice(0, MAX_MESSAGE_LENGTH);
 }
 
 export interface RedactedPlaybackFailure {

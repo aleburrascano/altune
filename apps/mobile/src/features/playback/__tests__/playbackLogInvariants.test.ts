@@ -13,7 +13,7 @@ import { playbackService } from '../native/service';
 import { repairActiveToStreaming } from '../native/nativeTrackSwap';
 import { _resetPlaybackHealthForTest } from '../playbackHealth';
 import { reportingQueueFailure } from '../native/queueFailureReport';
-import { warnPlayback } from '../redactPlaybackError';
+import { redactPlaybackErrorMessage, warnPlayback } from '../redactPlaybackError';
 
 import { libraryTrack } from './fixtures';
 
@@ -127,5 +127,16 @@ describe('unmapped native playback error log', () => {
     });
     await new Promise((resolve) => setImmediate(resolve));
     expectLoggedClean();
+  });
+});
+
+describe('redactPlaybackErrorMessage truncation boundary', () => {
+  it('leaves no JWT fragment when the 500-char cut falls before its second dot', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl';
+    const message = `${'x '.repeat(236)}${jwt}`;
+    expect(message.indexOf('.', message.indexOf('.') + 1)).toBeGreaterThan(500);
+    const result = redactPlaybackErrorMessage(message);
+    expect(result).not.toContain('eyJ');
+    expect(result.length).toBeLessThanOrEqual(500);
   });
 });
