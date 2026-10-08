@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/theaudiodb"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -395,7 +396,7 @@ func failingArtworkProviders(srv *httptest.Server) map[string]ports.ArtworkResol
 		"genius":     NewGeniusArtworkResolver(newTestClient(srv.URL), "token"),
 		"ytmusic":    NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL}),
 		"soundcloud": newTestSoundCloudAPI(srv, nil),
-		"theaudiodb": NewTheAudioDBAdapter(newTestClient(srv.URL)),
+		"theaudiodb": theaudiodb.New(newTestClient(srv.URL)),
 	}
 }
 
@@ -413,7 +414,7 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 
 	for name, broken := range failingArtworkProviders(failing) {
 		t.Run(name, func(t *testing.T) {
-			chain := NewChainedArtworkResolver(broken, NewTheAudioDBAdapter(newTestClient(healthy.URL)))
+			chain := NewChainedArtworkResolver(broken, theaudiodb.New(newTestClient(healthy.URL)))
 			url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)

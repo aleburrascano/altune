@@ -1,4 +1,4 @@
-package providers
+package theaudiodb
 
 import (
 	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
@@ -9,23 +9,23 @@ import (
 	"net/url"
 )
 
-type TheAudioDBAdapter struct {
+type Adapter struct {
 	client *http.Client
 }
 
-func NewTheAudioDBAdapter(client *http.Client) *TheAudioDBAdapter {
-	return &TheAudioDBAdapter{client: client}
+func New(client *http.Client) *Adapter {
+	return &Adapter{client: client}
 }
 
-func (a *TheAudioDBAdapter) Name() domain.ProviderName { return domain.ProviderTheAudioDB }
+func (a *Adapter) Name() domain.ProviderName { return domain.ProviderTheAudioDB }
 
-func (a *TheAudioDBAdapter) SupportedKinds() map[domain.ResultKind]bool {
+func (a *Adapter) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	}
 }
 
-func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+func (a *Adapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	if !kinds[domain.ResultKindArtist] {
 		return nil, nil
 	}
@@ -33,46 +33,55 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/search.php?s=%s", url.QueryEscape(query))
 
 	var body struct {
-		Artists []struct {
-			IDArtist       string `json:"idArtist"`
-			StrArtist      string `json:"strArtist"`
-			StrArtistThumb string `json:"strArtistThumb"`
-		} `json:"artists"`
+		Artists []artistHit `json:"artists"`
 	}
 	if err := providerhttp.GetJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
+	return artistResults(body.Artists), nil
+}
+
+type artistHit struct {
+	IDArtist       string `json:"idArtist"`
+	StrArtist      string `json:"strArtist"`
+	StrArtistThumb string `json:"strArtistThumb"`
+}
+
+func artistResults(artists []artistHit) []domain.SearchResult {
 	var results []domain.SearchResult
-	for _, art := range body.Artists {
+	for _, art := range artists {
 		results = append(results, domain.NewProviderResult(domain.ResultKindArtist, art.StrArtist, "", art.StrArtistThumb,
 			domain.SourceRef{Provider: domain.ProviderTheAudioDB, ExternalID: art.IDArtist},
 			nil))
 	}
-
-	return results, nil
+	return results
 }
 
-func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
+func (a *Adapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if kind == domain.ResultKindArtist {
-		if mbid != "" {
-			if art := a.artistThumbByMBID(ctx, mbid); art != "" {
-				return art, nil
-			}
+		return a.resolveArtist(ctx, title, mbid)
+	}
+	return a.resolveAlbum(ctx, title, subtitle)
+}
+
+func (a *Adapter) resolveArtist(ctx context.Context, title, mbid string) (string, error) {
+	if mbid != "" {
+		if art := a.artistThumbByMBID(ctx, mbid); art != "" {
+			return art, nil
 		}
-		results, err := a.Search(ctx, title, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
-		if err != nil {
-			return providerhttp.ArtworkFailure(a.ArtworkSource(), err)
-		}
-		if len(results) == 0 {
-			return "", nil
-		}
-		if results[0].ImageURL != "" {
-			return results[0].ImageURL, nil
-		}
+	}
+	results, err := a.Search(ctx, title, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+	if err != nil {
+		return providerhttp.ArtworkFailure(a.ArtworkSource(), err)
+	}
+	if len(results) == 0 {
 		return "", nil
 	}
+	return results[0].ImageURL, nil
+}
 
+func (a *Adapter) resolveAlbum(ctx context.Context, title, subtitle string) (string, error) {
 	if subtitle == "" {
 		return "", nil
 	}
@@ -93,7 +102,7 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 	return "", nil
 }
 
-func (a *TheAudioDBAdapter) artistThumbByMBID(ctx context.Context, mbid string) string {
+func (a *Adapter) artistThumbByMBID(ctx context.Context, mbid string) string {
 	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/artist-mb.php?i=%s", url.QueryEscape(mbid))
 	var body struct {
 		Artists []struct {
@@ -109,4 +118,4 @@ func (a *TheAudioDBAdapter) artistThumbByMBID(ctx context.Context, mbid string) 
 	return ""
 }
 
-func (*TheAudioDBAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyTheAudioDB }
+func (*Adapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyTheAudioDB }

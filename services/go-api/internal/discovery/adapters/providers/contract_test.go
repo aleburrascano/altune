@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/theaudiodb"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"net/http"
@@ -334,7 +335,7 @@ func TestArtworkSourceTags(t *testing.T) {
 		{(&GeniusArtworkResolver{}).ArtworkSource(), "genius"},
 		{(&SoundCloudAPIAdapter{}).ArtworkSource(), "soundcloud"},
 		{(&DiscogsAdapter{}).ArtworkSource(), "discogs"},
-		{(&TheAudioDBAdapter{}).ArtworkSource(), "theaudiodb"},
+		{(&theaudiodb.Adapter{}).ArtworkSource(), "theaudiodb"},
 		{(&AmazonMusicAdapter{}).ArtworkSource(), "amazonmusic"},
 		{(&CoverArtArchiveResolver{}).ArtworkSource(), "coverartarchive"},
 		{(&YouTubeMusicArtworkResolver{}).ArtworkSource(), "ytmusic"},

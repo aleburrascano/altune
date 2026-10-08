@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providertest"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
@@ -22,11 +23,7 @@ func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-func newTestClient(serverURL string) *http.Client {
-	return &http.Client{
-		Transport: &redirectTransport{targetURL: serverURL},
-	}
-}
+func newTestClient(serverURL string) *http.Client { return providertest.NewClient(serverURL) }
 
 func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

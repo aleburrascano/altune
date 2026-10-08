@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/adapters/providers/theaudiodb"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
@@ -161,7 +162,7 @@ func keyedArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPort
 
 func openArtworkResolvers(cf clientFactory, cfg *config.Config) []discoveryPorts.ArtworkResolver {
 	resolvers := []discoveryPorts.ArtworkResolver{
-		providers.NewTheAudioDBAdapter(cf.discovery()),
+		theaudiodb.New(cf.discovery()),
 		providers.NewDeezerAdapter(cf.discovery()),
 		providers.NewITunesAdapter(cf.discovery()),
 	}
