@@ -45,6 +45,22 @@ type TrackAudioRefLookup interface {
 	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
 }
 
+type ReadyAudioTrack struct {
+	Id       domain.TrackId
+	UserId   shared.UserId
+	Title    string
+	Artist   string
+	AudioRef string
+}
+
+type ReadyAudioLister interface {
+	ListReadyAudioTracks(ctx context.Context) ([]ReadyAudioTrack, error)
+}
+
+type AudioRefPrefixLister interface {
+	AudioRefsUnderPrefix(ctx context.Context, prefix string) (map[string]bool, error)
+}
+
 type TrackAudioDeleter interface {
 	TrackDeleter
 	TrackAudioRefLookup

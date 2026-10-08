@@ -934,3 +934,167 @@ func TestPgxTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
 		t.Fatal("pending row has no acquisition_available_at, so no worker can ever claim it")
 	}
 }
+
+func seedTrackWithAudio(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, status, audioRef string) domain.TrackId {
+	t.Helper()
+	id := seedTrackForDB(ctx, t, pool, userId)
+	var ref any
+	if audioRef != "" {
+		ref = audioRef
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_status = $1, audio_ref = $2 WHERE id = $3`,
+		status, ref, id.UUID(),
+	); err != nil {
+		t.Fatalf("seedTrackWithAudio: %v", err)
+	}
+	return id
+}
+
+func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id domain.TrackId, audioRef string) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `UPDATE tracks SET audio_ref = $1 WHERE id = $2`, audioRef, id.UUID()); err != nil {
+		t.Fatalf("setAudioRef: %v", err)
+	}
+}
+
+func TestPgxTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	var readyBefore int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM tracks WHERE acquisition_status = 'ready' AND audio_ref IS NOT NULL`,
+	).Scan(&readyBefore); err != nil {
+		t.Fatalf("count ready tracks: %v", err)
+	}
+	empty, err := repo.ListReadyAudioTracks(ctx)
+	if err != nil {
+		t.Fatalf("ListReadyAudioTracks() error = %v", err)
+	}
+	if empty == nil {
+		t.Fatal("ListReadyAudioTracks() = nil, want a non-nil slice")
+	}
+	if readyBefore == 0 && len(empty) != 0 {
+		t.Fatalf("len = %d with no matching rows, want 0", len(empty))
+	}
+
+	readyId := seedTrackWithAudio(ctx, t, pool, userId, "ready", uuid.NewString()+"/a.mp3")
+	pendingId := seedTrackWithAudio(ctx, t, pool, userId, "pending", uuid.NewString()+"/b.mp3")
+	noRefId := seedTrackWithAudio(ctx, t, pool, userId, "ready", "")
+
+	got, err := repo.ListReadyAudioTracks(ctx)
+	if err != nil {
+		t.Fatalf("ListReadyAudioTracks() error = %v", err)
+	}
+	var found *ports.ReadyAudioTrack
+	for i, track := range got {
+		switch track.Id {
+		case pendingId:
+			t.Errorf("pending track %s was listed", pendingId)
+		case noRefId:
+			t.Errorf("ready track with NULL audio_ref %s was listed", noRefId)
+		case readyId:
+			found = &got[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("ready track %s missing from %d results", readyId, len(got))
+	}
+	if found.UserId != userId || found.Title == "" || found.Artist == "" || found.AudioRef == "" {
+		t.Errorf("listed track = %+v, want owner %v and title, artist, audio_ref filled", *found, userId)
+	}
+}
+
+func TestPgxTrackRepo_ListReadyAudioTracks_CapsAndPagesAtTheCeiling(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	prevMax, prevPage := maxReadyAudioTracks, readyAudioTracksPageSize
+	maxReadyAudioTracks, readyAudioTracksPageSize = 2, 1
+	t.Cleanup(func() { maxReadyAudioTracks, readyAudioTracksPageSize = prevMax, prevPage })
+
+	for range 3 {
+		seedTrackWithAudio(ctx, t, pool, userId, "ready", uuid.NewString()+"/a.mp3")
+	}
+
+	got, err := repo.ListReadyAudioTracks(ctx)
+	if err != nil {
+		t.Fatalf("ListReadyAudioTracks() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (ceiling) from page size 1", len(got))
+	}
+	if got[0].Id == got[1].Id {
+		t.Errorf("both pages returned track %s: paging did not advance", got[0].Id)
+	}
+}
+
+func TestPgxTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	u := uuid.NewString()
+
+	staged := "staging/" + u + "/a.mp3"
+	lookalikes := []string{"stagingX/" + u + "/a.mp3", "prod/staging/" + u + "/a.mp3", u + "/a.mp3"}
+	seedTrackWithAudio(ctx, t, pool, userId, "ready", staged)
+	for _, ref := range lookalikes {
+		seedTrackWithAudio(ctx, t, pool, userId, "ready", ref)
+	}
+
+	got, err := repo.AudioRefsUnderPrefix(ctx, "staging/")
+	if err != nil {
+		t.Fatalf("AudioRefsUnderPrefix() error = %v", err)
+	}
+	if !got[staged] {
+		t.Errorf("%q missing from result", staged)
+	}
+	for _, ref := range lookalikes {
+		if got[ref] {
+			t.Errorf("look-alike %q matched prefix staging/", ref)
+		}
+	}
+
+	wild, err := repo.AudioRefsUnderPrefix(ctx, "st_ging/")
+	if err != nil {
+		t.Fatalf("AudioRefsUnderPrefix(st_ging/) error = %v", err)
+	}
+	if wild[staged] {
+		t.Errorf("%q matched st_ging/: _ must not act as a wildcard", staged)
+	}
+}
+
+func TestPgxTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	u := uuid.NewString()
+
+	staged := "staging/" + u + "/x.mp3"
+	id := seedTrackWithAudio(ctx, t, pool, userId, "ready", staged)
+
+	before, err := repo.AudioRefsUnderPrefix(ctx, "staging/")
+	if err != nil {
+		t.Fatalf("AudioRefsUnderPrefix() error = %v", err)
+	}
+	if !before[staged] {
+		t.Fatalf("%q missing before the update", staged)
+	}
+
+	setAudioRef(ctx, t, pool, id, u+"/x.mp3")
+
+	after, err := repo.AudioRefsUnderPrefix(ctx, "staging/")
+	if err != nil {
+		t.Fatalf("AudioRefsUnderPrefix() error = %v", err)
+	}
+	if after[staged] {
+		t.Errorf("%q still listed after audio_ref moved out of staging/", staged)
+	}
+}
