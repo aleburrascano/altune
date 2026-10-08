@@ -389,3 +389,55 @@ describe('saving through the memory fake', () => {
     warnSpy.mockRestore();
   });
 });
+
+describe('useSaveTrack — terminal status delivered before the save response', () => {
+  const serverId = asTrackId('server-race');
+
+  function pendingResponse(): TrackResponse {
+    return {
+      id: serverId,
+      title: 'Idioteque',
+      artist: 'Radiohead',
+      album: null,
+      duration_seconds: 300,
+      added_at: '2024-01-01T00:00:00Z',
+      acquisition_status: 'pending',
+      artwork_url: null,
+      failure_reason: null,
+      year: null,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+      isrc: null,
+      audio_ref: null,
+    } as TrackResponse;
+  }
+
+  beforeEach(() => {
+    mockCreateTrack.mockReset();
+    useTrackStatusStore.getState().reset();
+  });
+
+  it.each([
+    ['ready', null],
+    ['failed', 'no match'],
+  ] as const)('keeps %s when the event beat a pending response', async (status, message) => {
+    const queryClient = createTestQueryClient({ mutations: true });
+    mockCreateTrack.mockImplementation(() => {
+      useTrackStatusStore
+        .getState()
+        .patch(serverId, { acquisitionStatus: status, failureMessage: message } as never);
+      return Promise.resolve(pendingResponse());
+    });
+
+    const { result } = renderHook(() => useSaveTrack(), { wrapper: createWrapper(queryClient) });
+    await act(async () => {
+      await result.current.mutateAsync({ title: 'Idioteque', artist: 'Radiohead' } as never);
+    });
+
+    expect(useTrackStatusStore.getState().statuses[serverId]).toEqual({
+      acquisitionStatus: status,
+      failureMessage: message,
+    });
+  });
+});

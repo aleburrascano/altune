@@ -2,10 +2,17 @@ import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanst
 
 import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
-import { acquisitionOf, toTrackStatus } from '@shared/api-client/trackAcquisition';
+import {
+  acquisitionOf,
+  toFailed,
+  toReady,
+  toTrackStatus,
+  type TrackStatus,
+} from '@shared/api-client/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
 import {
+  adoptResponseStatus,
   linkTrackIdentity,
   patchTrackStatus,
   removeTrackStatus,
@@ -103,10 +110,16 @@ function recordLibraryAdd(body: CreateTrackRequest, handoff: Handoff): void {
   });
 }
 
+function withStatus(saved: TrackResponse, status: TrackStatus): TrackResponse {
+  if (status.acquisitionStatus === 'pending') return saved;
+  if (status.acquisitionStatus === 'ready') return { ...saved, ...toReady() };
+  return { ...saved, ...toFailed(null, status.failureMessage) };
+}
+
 function adoptSaved(queryClient: QueryClient, saved: TrackResponse, context: SaveContext): void {
-  replaceTrackInCaches(queryClient, context.optimisticId, saved);
+  const status = adoptResponseStatus(saved.id, toTrackStatus(acquisitionOf(saved)));
+  replaceTrackInCaches(queryClient, context.optimisticId, withStatus(saved, status));
   removeTrackStatus(context.optimisticId);
-  patchTrackStatus(saved.id, toTrackStatus(acquisitionOf(saved)));
   linkTrackIdentity(context.identity, saved.id);
   invalidateLibraryDerived(queryClient);
 }

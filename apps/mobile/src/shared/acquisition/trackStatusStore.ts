@@ -120,6 +120,15 @@ export function patchTrackStatus(
     recordStatusChanged(trackId, prior, status.acquisitionStatus, source);
 }
 
+export function adoptResponseStatus(trackId: TrackId, status: TrackStatus): TrackStatus {
+  const held = useTrackStatusStore.getState().statuses[trackId];
+  if (status.acquisitionStatus === 'pending' && held !== undefined) {
+    if (held.acquisitionStatus !== 'pending') return held;
+  }
+  patchTrackStatus(trackId, status, 'response');
+  return status;
+}
+
 export function isTrackStatusReady(trackId: TrackId): boolean {
   return isReady(useTrackStatusStore.getState().statuses[trackId]);
 }
