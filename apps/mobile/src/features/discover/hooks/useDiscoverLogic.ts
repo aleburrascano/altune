@@ -32,6 +32,39 @@ import type {
 import type { DiscoverView, SearchCorrection } from '@features/discover/discoverView';
 import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
 
+export type ResultsSlice = {
+  view: DiscoverView;
+  searchData: DiscoverySearchResponse | undefined;
+  resultsIncomplete: boolean;
+  searchError: unknown;
+  onRetry: () => void;
+  filter: ResultsFilter;
+  setFilter: Dispatch<SetStateAction<ResultsFilter>>;
+  onResultTap: ResultTapHandler;
+  impression: ImpressionHandlers;
+  correction: SearchCorrection | null;
+  onSearchOriginal: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+  refreshFailed: boolean;
+};
+
+export type PaginationSlice = {
+  onEndReached: () => void;
+  isFetchingNextPage: boolean;
+  nextPageFailed: boolean;
+  onRetryNextPage: () => void;
+};
+
+export type HistorySlice = {
+  items: SearchHistoryItem[];
+  failed: boolean;
+  clearFailed: boolean;
+  onTap: (item: SearchHistoryItem) => void;
+  onRetry: () => void;
+  onClear: () => void;
+};
+
 export type DiscoverLogic = {
   inputValue: string;
   pending: boolean;
@@ -43,30 +76,9 @@ export type DiscoverLogic = {
   showSuggestions: boolean;
   suggestionItems: DiscoverySuggestion[];
   onSuggestionSelect: (text: string) => void;
-  view: DiscoverView;
-  resultsIncomplete: boolean;
-  searchData: DiscoverySearchResponse | undefined;
-  historyItems: SearchHistoryItem[];
-  filter: ResultsFilter;
-  setFilter: Dispatch<SetStateAction<ResultsFilter>>;
-  onHistoryTap: (item: SearchHistoryItem) => void;
-  onResultTap: ResultTapHandler;
-  impression: ImpressionHandlers;
-  onRetry: () => void;
-  searchError: unknown;
-  onEndReached: () => void;
-  isFetchingNextPage: boolean;
-  onRefresh: () => void;
-  isRefreshing: boolean;
-  correction: SearchCorrection | null;
-  onSearchOriginal: () => void;
-  onClearHistory: () => void;
-  nextPageFailed: boolean;
-  onRetryNextPage: () => void;
-  clearHistoryFailed: boolean;
-  historyFailed: boolean;
-  onRetryHistory: () => void;
-  refreshFailed: boolean;
+  results: ResultsSlice;
+  pagination: PaginationSlice;
+  history: HistorySlice;
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
@@ -130,41 +142,47 @@ export function useDiscoverLogic(): DiscoverLogic {
     showSuggestions: suggestionVisibility.showSuggestions,
     suggestionItems,
     onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
-    view: viewForState(hookState),
-    resultsIncomplete,
-    searchData,
-    historyItems: history.data?.items ?? [],
-    filter,
-    setFilter,
-    onHistoryTap: (item: SearchHistoryItem) => {
-      search.setQuery(item.query);
+    results: {
+      view: viewForState(hookState),
+      searchData,
+      resultsIncomplete,
+      searchError,
+      onRetry,
+      filter,
+      setFilter,
+      onResultTap,
+      impression,
+      correction,
+      onSearchOriginal: () => {
+        if (correction != null) search.setQuery(correction.original);
+      },
+      onRefresh: onRetry,
+      isRefreshing,
+      refreshFailed,
     },
-    onResultTap,
-    impression,
-    onRetry,
-    searchError,
-    onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError && !isRefreshing) {
-        void fetchNextPage({ cancelRefetch: false });
-      }
+    pagination: {
+      onEndReached: () => {
+        if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError && !isRefreshing) {
+          void fetchNextPage({ cancelRefetch: false });
+        }
+      },
+      isFetchingNextPage,
+      nextPageFailed: isFetchNextPageError,
+      onRetryNextPage: () => {
+        if (!isFetchingNextPage && !isRefreshing) void fetchNextPage({ cancelRefetch: false });
+      },
     },
-    isFetchingNextPage,
-    onRefresh: onRetry,
-    isRefreshing,
-    correction,
-    onSearchOriginal: () => {
-      if (correction != null) search.setQuery(correction.original);
+    history: {
+      items: history.data?.items ?? [],
+      failed: history.error !== null && history.data === undefined,
+      clearFailed: clearHistory.error !== null,
+      onTap: (item: SearchHistoryItem) => {
+        search.setQuery(item.query);
+      },
+      onRetry: () => {
+        void history.refetch();
+      },
+      onClear: clearHistory.clear,
     },
-    onClearHistory: clearHistory.clear,
-    nextPageFailed: isFetchNextPageError,
-    onRetryNextPage: () => {
-      if (!isFetchingNextPage && !isRefreshing) void fetchNextPage({ cancelRefetch: false });
-    },
-    clearHistoryFailed: clearHistory.error !== null,
-    historyFailed: history.error !== null && history.data === undefined,
-    onRetryHistory: () => {
-      void history.refetch();
-    },
-    refreshFailed,
   };
 }

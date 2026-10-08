@@ -36,26 +36,32 @@ function renderBody(view: DiscoverView, resultsIncomplete: boolean) {
   const results = view === 'results' ? [resultFixture()] : [];
   render(
     <DiscoverBody
-      view={view}
-      searchData={{ results, sections: [] }}
-      resultsIncomplete={resultsIncomplete}
-      historyItems={[]}
-      filter="all"
-      onFilterChange={jest.fn()}
-      onHistoryTap={jest.fn()}
-      onClearHistory={jest.fn()}
-      onResultTap={jest.fn()}
-      impression={{
-        viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-        onViewableItemsChanged: jest.fn(),
+      results={{
+        view: view,
+        searchData: { results, sections: [] },
+        resultsIncomplete: resultsIncomplete,
+        filter: 'all',
+        setFilter: jest.fn(),
+        onResultTap: jest.fn(),
+        impression: {
+          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+          onViewableItemsChanged: jest.fn(),
+        },
+        onRetry: jest.fn(),
+        onRefresh: jest.fn(),
+        isRefreshing: false,
+        correction: null,
+        onSearchOriginal: jest.fn(),
       }}
-      onRetry={jest.fn()}
-      onEndReached={jest.fn()}
-      isFetchingNextPage={false}
-      onRefresh={jest.fn()}
-      isRefreshing={false}
-      correction={null}
-      onSearchOriginal={jest.fn()}
+      pagination={{
+        onEndReached: jest.fn(),
+        isFetchingNextPage: false,
+      }}
+      history={{
+        items: [],
+        onTap: jest.fn(),
+        onClear: jest.fn(),
+      }}
     />,
   );
 }
@@ -88,26 +94,32 @@ describe('clear history failure', () => {
   function renderEmpty(clearHistoryFailed: boolean) {
     render(
       <DiscoverBody
-        view="empty-no-query"
-        searchData={undefined}
-        historyItems={[{ query: 'old', query_norm: 'old' } as never]}
-        filter="all"
-        onFilterChange={jest.fn()}
-        onHistoryTap={jest.fn()}
-        onResultTap={jest.fn()}
-        impression={{
-          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-          onViewableItemsChanged: jest.fn(),
+        results={{
+          view: 'empty-no-query',
+          searchData: undefined,
+          filter: 'all',
+          setFilter: jest.fn(),
+          onResultTap: jest.fn(),
+          impression: {
+            viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+            onViewableItemsChanged: jest.fn(),
+          },
+          onRetry: jest.fn(),
+          onRefresh: jest.fn(),
+          isRefreshing: false,
+          correction: null,
+          onSearchOriginal: jest.fn(),
         }}
-        onRetry={jest.fn()}
-        onEndReached={jest.fn()}
-        isFetchingNextPage={false}
-        onRefresh={jest.fn()}
-        isRefreshing={false}
-        correction={null}
-        onSearchOriginal={jest.fn()}
-        onClearHistory={jest.fn()}
-        clearHistoryFailed={clearHistoryFailed}
+        pagination={{
+          onEndReached: jest.fn(),
+          isFetchingNextPage: false,
+        }}
+        history={{
+          items: [{ query: 'old', query_norm: 'old' } as never],
+          onTap: jest.fn(),
+          onClear: jest.fn(),
+          clearFailed: clearHistoryFailed,
+        }}
       />,
     );
   }
@@ -127,27 +139,33 @@ describe('history load failure', () => {
   function renderHistory(historyFailed: boolean, onRetryHistory = jest.fn()) {
     render(
       <DiscoverBody
-        view="empty-no-query"
-        searchData={undefined}
-        historyItems={[]}
-        filter="all"
-        onFilterChange={jest.fn()}
-        onHistoryTap={jest.fn()}
-        onResultTap={jest.fn()}
-        impression={{
-          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-          onViewableItemsChanged: jest.fn(),
+        results={{
+          view: 'empty-no-query',
+          searchData: undefined,
+          filter: 'all',
+          setFilter: jest.fn(),
+          onResultTap: jest.fn(),
+          impression: {
+            viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+            onViewableItemsChanged: jest.fn(),
+          },
+          onRetry: jest.fn(),
+          onRefresh: jest.fn(),
+          isRefreshing: false,
+          correction: null,
+          onSearchOriginal: jest.fn(),
         }}
-        onRetry={jest.fn()}
-        onEndReached={jest.fn()}
-        isFetchingNextPage={false}
-        onRefresh={jest.fn()}
-        isRefreshing={false}
-        correction={null}
-        onSearchOriginal={jest.fn()}
-        onClearHistory={jest.fn()}
-        historyFailed={historyFailed}
-        onRetryHistory={onRetryHistory}
+        pagination={{
+          onEndReached: jest.fn(),
+          isFetchingNextPage: false,
+        }}
+        history={{
+          items: [],
+          onTap: jest.fn(),
+          onClear: jest.fn(),
+          failed: historyFailed,
+          onRetry: onRetryHistory,
+        }}
       />,
     );
   }
@@ -206,25 +224,31 @@ function noTrackFirstSections(): ResultSection[] {
 function renderSearchBody(sections: ResultSection[], topResult: ReturnType<typeof resultFixture>) {
   render(
     <DiscoverBody
-      view="results"
-      searchData={{ results: [topResult], sections, top_result: topResult }}
-      historyItems={[]}
-      filter="all"
-      onFilterChange={jest.fn()}
-      onHistoryTap={jest.fn()}
-      onClearHistory={jest.fn()}
-      onResultTap={jest.fn()}
-      impression={{
-        viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-        onViewableItemsChanged: jest.fn(),
+      results={{
+        view: 'results',
+        searchData: { results: [topResult], sections, top_result: topResult },
+        filter: 'all',
+        setFilter: jest.fn(),
+        onResultTap: jest.fn(),
+        impression: {
+          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+          onViewableItemsChanged: jest.fn(),
+        },
+        onRetry: jest.fn(),
+        onRefresh: jest.fn(),
+        isRefreshing: false,
+        correction: null,
+        onSearchOriginal: jest.fn(),
       }}
-      onRetry={jest.fn()}
-      onEndReached={jest.fn()}
-      isFetchingNextPage={false}
-      onRefresh={jest.fn()}
-      isRefreshing={false}
-      correction={null}
-      onSearchOriginal={jest.fn()}
+      pagination={{
+        onEndReached: jest.fn(),
+        isFetchingNextPage: false,
+      }}
+      history={{
+        items: [],
+        onTap: jest.fn(),
+        onClear: jest.fn(),
+      }}
     />,
   );
 }
@@ -435,29 +459,35 @@ describe('wide layout grid column exactness and card taps', () => {
     const topResult = resultFixture({ kind: 'track', title: 'Top' });
     render(
       <DiscoverBody
-        view="results"
-        searchData={{
-          results: [topResult],
-          sections: sectionsWithArtistAndEmptySection(),
-          top_result: topResult,
+        results={{
+          view: 'results',
+          searchData: {
+            results: [topResult],
+            sections: sectionsWithArtistAndEmptySection(),
+            top_result: topResult,
+          },
+          filter: 'all',
+          setFilter: jest.fn(),
+          onResultTap: onResultTap,
+          impression: {
+            viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+            onViewableItemsChanged: jest.fn(),
+          },
+          onRetry: jest.fn(),
+          onRefresh: jest.fn(),
+          isRefreshing: false,
+          correction: null,
+          onSearchOriginal: jest.fn(),
         }}
-        historyItems={[]}
-        filter="all"
-        onFilterChange={jest.fn()}
-        onHistoryTap={jest.fn()}
-        onClearHistory={jest.fn()}
-        onResultTap={onResultTap}
-        impression={{
-          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-          onViewableItemsChanged: jest.fn(),
+        pagination={{
+          onEndReached: jest.fn(),
+          isFetchingNextPage: false,
         }}
-        onRetry={jest.fn()}
-        onEndReached={jest.fn()}
-        isFetchingNextPage={false}
-        onRefresh={jest.fn()}
-        isRefreshing={false}
-        correction={null}
-        onSearchOriginal={jest.fn()}
+        history={{
+          items: [],
+          onTap: jest.fn(),
+          onClear: jest.fn(),
+        }}
       />,
     );
 
@@ -502,30 +532,36 @@ function probeBody(
   sections: ResultSection[],
   topResult: ProbeResult | undefined,
   onResultTap: (result: ProbeResult, position: number) => void = jest.fn(),
-  filter: React.ComponentProps<typeof DiscoverBody>['filter'] = 'all',
+  filter: React.ComponentProps<typeof DiscoverBody>['results']['filter'] = 'all',
 ) {
   const results = topResult ? [topResult] : sections.flatMap((section) => section.items);
   return (
     <DiscoverBody
-      view="results"
-      searchData={{ results, sections, top_result: topResult }}
-      historyItems={[]}
-      filter={filter}
-      onFilterChange={jest.fn()}
-      onHistoryTap={jest.fn()}
-      onClearHistory={jest.fn()}
-      onResultTap={onResultTap}
-      impression={{
-        viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-        onViewableItemsChanged: jest.fn(),
+      results={{
+        view: 'results',
+        searchData: { results, sections, top_result: topResult },
+        filter: filter,
+        setFilter: jest.fn(),
+        onResultTap: onResultTap,
+        impression: {
+          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+          onViewableItemsChanged: jest.fn(),
+        },
+        onRetry: jest.fn(),
+        onRefresh: jest.fn(),
+        isRefreshing: false,
+        correction: null,
+        onSearchOriginal: jest.fn(),
       }}
-      onRetry={jest.fn()}
-      onEndReached={jest.fn()}
-      isFetchingNextPage={false}
-      onRefresh={jest.fn()}
-      isRefreshing={false}
-      correction={null}
-      onSearchOriginal={jest.fn()}
+      pagination={{
+        onEndReached: jest.fn(),
+        isFetchingNextPage: false,
+      }}
+      history={{
+        items: [],
+        onTap: jest.fn(),
+        onClear: jest.fn(),
+      }}
     />
   );
 }
@@ -883,25 +919,31 @@ describe('recent search label', () => {
     const query = `${'a'.repeat(39)}😀😀`;
     render(
       <DiscoverBody
-        view="empty-no-query"
-        searchData={undefined}
-        historyItems={[{ query, query_norm: query } as never]}
-        filter="all"
-        onFilterChange={jest.fn()}
-        onHistoryTap={jest.fn()}
-        onResultTap={jest.fn()}
-        impression={{
-          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
-          onViewableItemsChanged: jest.fn(),
+        results={{
+          view: 'empty-no-query',
+          searchData: undefined,
+          filter: 'all',
+          setFilter: jest.fn(),
+          onResultTap: jest.fn(),
+          impression: {
+            viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+            onViewableItemsChanged: jest.fn(),
+          },
+          onRetry: jest.fn(),
+          onRefresh: jest.fn(),
+          isRefreshing: false,
+          correction: null,
+          onSearchOriginal: jest.fn(),
         }}
-        onRetry={jest.fn()}
-        onEndReached={jest.fn()}
-        isFetchingNextPage={false}
-        onRefresh={jest.fn()}
-        isRefreshing={false}
-        correction={null}
-        onSearchOriginal={jest.fn()}
-        onClearHistory={jest.fn()}
+        pagination={{
+          onEndReached: jest.fn(),
+          isFetchingNextPage: false,
+        }}
+        history={{
+          items: [{ query, query_norm: query } as never],
+          onTap: jest.fn(),
+          onClear: jest.fn(),
+        }}
       />,
     );
     expect(screen.getByText(`${'a'.repeat(39)}😀…`)).toBeTruthy();

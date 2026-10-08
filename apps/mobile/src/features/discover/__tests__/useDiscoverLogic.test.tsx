@@ -144,7 +144,7 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     await waitFor(() => expect(mockHistory).toHaveBeenCalled());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
-    expect(result.current.historyItems).toEqual([]);
+    expect(result.current.history.items).toEqual([]);
   });
 
   it('exposes empty lists when the queries succeed with nothing to show', async () => {
@@ -157,7 +157,7 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     await waitFor(() => expect(mockHistory).toHaveBeenCalled());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
-    expect(result.current.historyItems).toEqual([]);
+    expect(result.current.history.items).toEqual([]);
   });
 });
 
@@ -168,7 +168,7 @@ describe('useDiscoverLogic reports a failed history load', () => {
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
-    await waitFor(() => expect(result.current.historyFailed).toBe(true));
+    await waitFor(() => expect(result.current.history.failed).toBe(true));
   });
 
   it('refetches history and recovers when retry succeeds', async () => {
@@ -177,12 +177,12 @@ describe('useDiscoverLogic reports a failed history load', () => {
     mockHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(result.current.historyFailed).toBe(true));
+    await waitFor(() => expect(result.current.history.failed).toBe(true));
 
-    act(() => result.current.onRetryHistory());
+    act(() => result.current.history.onRetry());
 
-    await waitFor(() => expect(result.current.historyFailed).toBe(false));
-    expect(result.current.historyItems).toEqual([{ query: 'radiohead' }]);
+    await waitFor(() => expect(result.current.history.failed).toBe(false));
+    expect(result.current.history.items).toEqual([{ query: 'radiohead' }]);
   });
 
   it('does not flag a failure when history loads', async () => {
@@ -192,7 +192,7 @@ describe('useDiscoverLogic reports a failed history load', () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    expect(result.current.historyFailed).toBe(false);
+    expect(result.current.history.failed).toBe(false);
   });
 });
 
@@ -203,12 +203,12 @@ describe('useDiscoverLogic keeps the history list when clearing it fails', () =>
     mockClearHistory.mockRejectedValue(new ApiError(500, 'clear down'));
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(result.current.historyItems).toEqual([{ query: 'radiohead' }]));
+    await waitFor(() => expect(result.current.history.items).toEqual([{ query: 'radiohead' }]));
 
-    act(() => result.current.onClearHistory());
+    act(() => result.current.history.onClear());
 
     await waitFor(() => expect(mockClearHistory).toHaveBeenCalled());
-    await waitFor(() => expect(result.current.historyItems).toEqual([{ query: 'radiohead' }]));
+    await waitFor(() => expect(result.current.history.items).toEqual([{ query: 'radiohead' }]));
   });
 });
 
@@ -233,7 +233,9 @@ describe('useDiscoverLogic recovers from failures', () => {
 
   function Probe() {
     const logic = useDiscoverLogic();
-    return <DiscoverBody {...logic} onFilterChange={logic.setFilter} />;
+    return (
+      <DiscoverBody results={logic.results} pagination={logic.pagination} history={logic.history} />
+    );
   }
 
   function clearFailureEvents() {
@@ -281,13 +283,15 @@ describe('useDiscoverLogic recovers from failures', () => {
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
       .mockResolvedValueOnce(page(SEARCH_PAGE_SIZE));
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(result.current.searchData).toBeDefined());
-    await act(async () => result.current.onEndReached());
-    await waitFor(() => expect(result.current.nextPageFailed).toBe(true), { timeout: 4000 });
+    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await act(async () => result.current.pagination.onEndReached());
+    await waitFor(() => expect(result.current.pagination.nextPageFailed).toBe(true), {
+      timeout: 4000,
+    });
 
-    await act(async () => result.current.onRetryNextPage());
+    await act(async () => result.current.pagination.onRetryNextPage());
 
-    await waitFor(() => expect(result.current.nextPageFailed).toBe(false));
+    await waitFor(() => expect(result.current.pagination.nextPageFailed).toBe(false));
     expect(mockSearch).toHaveBeenCalledTimes(4);
   });
 });
@@ -327,12 +331,12 @@ describe('useDiscoverLogic history invalidation', () => {
 
   it('refetches history once per search, not once per landed page', async () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(result.current.searchData).toBeDefined());
+    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     const historyCalls = mockHistory.mock.calls.length;
 
     await act(async () => {
-      result.current.onEndReached();
+      result.current.pagination.onEndReached();
     });
     await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -372,7 +376,7 @@ describe('useDiscoverLogic history tap', () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
     act(() => {
-      result.current.onHistoryTap({ query: 'ab ' } as never);
+      result.current.history.onTap({ query: 'ab ' } as never);
     });
 
     expect(result.current.pending).toBe(false);
@@ -417,10 +421,10 @@ describe('useDiscoverLogic refresh failure', () => {
       .mockReset()
       .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(page(offset)));
     const hook = renderHook(() => useDiscoverLogic(), { wrapper });
-    await waitFor(() => expect(hook.result.current.searchData).toBeDefined());
-    await act(async () => hook.result.current.onEndReached());
+    await waitFor(() => expect(hook.result.current.results.searchData).toBeDefined());
+    await act(async () => hook.result.current.pagination.onEndReached());
     await waitFor(() =>
-      expect(hook.result.current.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE * 2),
+      expect(hook.result.current.results.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE * 2),
     );
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     return hook;
@@ -444,11 +448,11 @@ describe('useDiscoverLogic refresh failure', () => {
     const { result } = await loadTwoPages();
     mockSearch.mockRejectedValue(new NetworkError('transport', 'offline'));
 
-    await act(async () => result.current.onRefresh());
+    await act(async () => result.current.results.onRefresh());
 
-    await waitFor(() => expect(result.current.refreshFailed).toBe(true));
-    expect(result.current.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE * 2);
-    expect(result.current.view).toBe('results');
+    await waitFor(() => expect(result.current.results.refreshFailed).toBe(true));
+    expect(result.current.results.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE * 2);
+    expect(result.current.results.view).toBe('results');
   });
 
   it('replaces the list with a fresh first page and clears the flag on a good refresh', async () => {
@@ -456,17 +460,17 @@ describe('useDiscoverLogic refresh failure', () => {
     mockSearch
       .mockRejectedValueOnce(new NetworkError('transport', 'offline'))
       .mockRejectedValueOnce(new NetworkError('transport', 'offline'));
-    await act(async () => result.current.onRefresh());
-    await waitFor(() => expect(result.current.refreshFailed).toBe(true), { timeout: 4000 });
+    await act(async () => result.current.results.onRefresh());
+    await waitFor(() => expect(result.current.results.refreshFailed).toBe(true), { timeout: 4000 });
     mockSearch.mockImplementation(({ offset }: { offset: number }) =>
       Promise.resolve(page(offset, 'fresh')),
     );
 
-    await act(async () => result.current.onRefresh());
+    await act(async () => result.current.results.onRefresh());
 
-    await waitFor(() => expect(result.current.refreshFailed).toBe(false));
-    expect(result.current.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE);
-    expect(result.current.searchData?.results[0]?.title).toBe('fresh');
+    await waitFor(() => expect(result.current.results.refreshFailed).toBe(false));
+    expect(result.current.results.searchData?.results).toHaveLength(SEARCH_PAGE_SIZE);
+    expect(result.current.results.searchData?.results[0]?.title).toBe('fresh');
   });
 
   it('does not cancel a refresh when the list end is reached during it', async () => {
@@ -478,16 +482,16 @@ describe('useDiscoverLogic refresh failure', () => {
           release = () => resolve(page(offset, 'fresh'));
         }),
     );
-    act(() => result.current.onRefresh());
-    await waitFor(() => expect(result.current.isRefreshing).toBe(true));
+    act(() => result.current.results.onRefresh());
+    await waitFor(() => expect(result.current.results.isRefreshing).toBe(true));
 
-    act(() => result.current.onEndReached());
-    act(() => result.current.onRefresh());
+    act(() => result.current.pagination.onEndReached());
+    act(() => result.current.results.onRefresh());
     await act(async () => release());
 
-    await waitFor(() => expect(result.current.isRefreshing).toBe(false));
+    await waitFor(() => expect(result.current.results.isRefreshing).toBe(false));
     expect(mockSearch).toHaveBeenCalledTimes(1);
-    expect(result.current.searchData?.results[0]?.title).toBe('fresh');
+    expect(result.current.results.searchData?.results[0]?.title).toBe('fresh');
   });
 });
 
