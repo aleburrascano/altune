@@ -514,7 +514,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"GITEA_ISSUE_URL", "GITEA_ISSUE_REPO", "GITEA_ISSUE_TOKEN", "EXPLORATION_RATE",
-		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
+		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
@@ -1805,5 +1805,45 @@ func TestAcquisitionFixtureEnabled_ProviderReplayImpliesFixture(t *testing.T) {
 				t.Errorf("AcquisitionFixtureEnabled() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoad_YtDLPJSRuntime(t *testing.T) {
+	for _, ok := range []string{"", "node", "deno"} {
+		env := validConfigEnv(nil)
+		env["YTDLP_JS_RUNTIME"] = ok
+		setEnv(t, env)
+		if _, err := Load(); err != nil {
+			t.Errorf("YTDLP_JS_RUNTIME=%q: unexpected error %v", ok, err)
+		}
+	}
+	env := validConfigEnv(nil)
+	env["YTDLP_JS_RUNTIME"] = "node --evil"
+	setEnv(t, env)
+	_, err := Load()
+	if err == nil || !searchString(err.Error(), "YTDLP_JS_RUNTIME") {
+		t.Fatalf("want error naming YTDLP_JS_RUNTIME, got %v", err)
+	}
+}
+
+func TestLoad_YtDLPRemoteComponents(t *testing.T) {
+	env := validConfigEnv(nil)
+	setEnv(t, env)
+	cfg, err := Load()
+	if err != nil || cfg.YtDLPRemoteComponents != "ejs:github" {
+		t.Fatalf("unset: got %q, %v; want ejs:github", cfg.YtDLPRemoteComponents, err)
+	}
+
+	env["YTDLP_REMOTE_COMPONENTS"] = ""
+	setEnv(t, env)
+	cfg, err = Load()
+	if err != nil || cfg.YtDLPRemoteComponents != "" {
+		t.Fatalf("empty: got %q, %v; want empty (fetch off)", cfg.YtDLPRemoteComponents, err)
+	}
+
+	env["YTDLP_REMOTE_COMPONENTS"] = "ejs:github --exec"
+	setEnv(t, env)
+	if _, err = Load(); err == nil || !searchString(err.Error(), "YTDLP_REMOTE_COMPONENTS") {
+		t.Fatalf("want error naming YTDLP_REMOTE_COMPONENTS, got %v", err)
 	}
 }

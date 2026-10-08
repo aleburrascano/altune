@@ -169,6 +169,9 @@ func (c *Config) validateTuning() error {
 	if err := c.validateCookieFile(); err != nil {
 		return err
 	}
+	if err := c.validateYtDLPRuntime(); err != nil {
+		return err
+	}
 	if !isUnitFraction(c.ExplorationRate) {
 		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
 	}
@@ -197,6 +200,20 @@ func (c *Config) validateCookieFile() error {
 		return fmt.Errorf("YTDLP_COOKIE_FILE is not readable: %w", err)
 	}
 	return f.Close()
+}
+
+var allowedJSRuntimes = map[string]bool{"node": true, "deno": true}
+
+var remoteComponentsPattern = regexp.MustCompile(`^[A-Za-z0-9_.:@/-]+(,[A-Za-z0-9_.:@/-]+)*$`)
+
+func (c *Config) validateYtDLPRuntime() error {
+	if c.YtDLPJSRuntime != "" && !allowedJSRuntimes[c.YtDLPJSRuntime] {
+		return fmt.Errorf("YTDLP_JS_RUNTIME must be one of node, deno (or empty), got %q", c.YtDLPJSRuntime)
+	}
+	if c.YtDLPRemoteComponents != "" && !remoteComponentsPattern.MatchString(c.YtDLPRemoteComponents) {
+		return fmt.Errorf("YTDLP_REMOTE_COMPONENTS must be a comma-separated list of component names (or empty), got %q", c.YtDLPRemoteComponents)
+	}
+	return nil
 }
 
 var knownLogLevels = map[string]bool{"DEBUG": true, "INFO": true, "WARN": true, "WARNING": true, "ERROR": true}
