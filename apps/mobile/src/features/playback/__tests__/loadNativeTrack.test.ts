@@ -1,6 +1,5 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { ApiError } from '@shared/errors';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
@@ -26,7 +25,14 @@ import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
 import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '@features/playback/presignWindow';
 import { playbackService, resetPlaybackForSignOut } from '@features/playback/native/service';
 
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+import type { PlaybackPort } from '@features/playback/ports/playbackPort';
+
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import {
+  createMemoryPlaybackPort,
+  type MemoryPlaybackSeed,
+} from '@features/playback/__tests__/memoryPlaybackPort';
 
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');
@@ -41,15 +47,44 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   },
 }));
 
-jest.mock('@shared/api-client/audio', () => {
-  const actual = jest.requireActual('@shared/api-client/audio');
-  return { ...actual, fetchAudioUrls: jest.fn() };
-});
+let restorePort: (() => void) | null = null;
 
-const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
-const realFetchAudioUrls = jest.requireActual<{ fetchAudioUrls: typeof fetchAudioUrls }>(
-  '@shared/api-client/audio',
-).fetchAudioUrls;
+function cdnUrls(ids: readonly string[]): NonNullable<MemoryPlaybackSeed['audioUrls']> {
+  return Object.fromEntries(
+    ids.map((id) => [id, { url: `https://cdn.example/${id}.mp3`, version: 'v1' }]),
+  );
+}
+
+function installMemoryPort(
+  seed: MemoryPlaybackSeed = {},
+  override: Partial<PlaybackPort> = {},
+): PlaybackPort {
+  restorePort?.();
+  const fake = { ...createMemoryPlaybackPort(seed), ...override };
+  restorePort = installPlaybackPort(fake);
+  return fake;
+}
+
+function holdFirstUrlFetch(): () => void {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let held = false;
+  installMemoryPort(
+    {},
+    {
+      fetchAudioUrls: async () => {
+        if (!held) {
+          held = true;
+          await gate;
+        }
+        return [];
+      },
+    },
+  );
+  return release;
+}
 
 const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
 const STUBBED_PLAYER_METHODS = [
@@ -74,10 +109,14 @@ function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): vo
 
 beforeEach(() => {
   for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
-  fetchUrls.mockImplementation(realFetchAudioUrls);
   markPresignedFrom(0, 0);
   useQueueStore.getState().clearQueue();
   forgetAllSwaps();
+});
+
+afterEach(() => {
+  restorePort?.();
+  restorePort = null;
 });
 
 describe('loadNativeQueue rollback of a failed add', () => {
@@ -592,17 +631,12 @@ describe('presign failure trace', () => {
     return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
   }
 
-  function resolved(trackId: string): ResolvedAudioUrl {
-    return { trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' };
-  }
-
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
-    fetchUrls.mockReset();
-    fetchUrls.mockImplementation(async (ids) => ids.map(resolved));
+    installMemoryPort({ audioUrls: cdnUrls(['t0', 't1']) });
     player.getQueue.mockResolvedValue([]);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -620,7 +654,10 @@ describe('presign failure trace', () => {
     }
 
     it('redacts a signed URL a presign rejection carries, keeping its classification', async () => {
-      fetchUrls.mockRejectedValue(new ApiError(403, `GET ${SIGNED_URL} denied`));
+      installMemoryPort(
+        {},
+        { fetchAudioUrls: () => Promise.reject(new ApiError(403, `GET ${SIGNED_URL} denied`)) },
+      );
       const tracks = [track('t0'), track('t1')];
       useQueueStore.getState().loadQueue(tracks, 0, null);
 
@@ -637,7 +674,7 @@ describe('presign failure trace', () => {
   describe('loadNativeQueue — presign failure trace', () => {
     it('logs the track ids it could not presign and still loads the queue', async () => {
       const boom = new Error('presign 503');
-      fetchUrls.mockRejectedValue(boom);
+      installMemoryPort({}, { fetchAudioUrls: () => Promise.reject(boom) });
       const tracks = [track('t0'), track('t1')];
       useQueueStore.getState().loadQueue(tracks, 0, null);
 
@@ -654,7 +691,7 @@ describe('presign failure trace', () => {
 
 describe('insertNativeTrackNext', () => {
   beforeEach(() => {
-    fetchUrls.mockImplementation(async () => []);
+    installMemoryPort();
   });
 
   const player = TrackPlayer as unknown as Record<string, jest.Mock>;
@@ -692,12 +729,11 @@ describe('insertNativeTrackNext', () => {
 
 describe('reorderUpcomingNative against native auto-advance and reorder bursts', () => {
   beforeEach(() => {
-    fetchUrls.mockImplementation(async () => []);
+    installMemoryPort();
   });
 
   type NativeItem = { id: string };
   const player = TrackPlayer as unknown as Record<string, jest.Mock>;
-  const mockedFetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
   let nativeQueue: NativeItem[];
   let nativeIndex: number;
@@ -724,14 +760,7 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
     useQueueStore.getState().syncCurrentIndex(nativeIndex, active.id);
   }
 
-  function deferredUrls(): () => void {
-    let release!: () => void;
-    const gate = new Promise<ResolvedAudioUrl[]>((resolve) => {
-      release = () => resolve([]);
-    });
-    mockedFetchUrls.mockImplementationOnce(() => gate);
-    return release;
-  }
+  const deferredUrls = holdFirstUrlFetch;
 
   async function flush(): Promise<void> {
     for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -755,8 +784,6 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
     ] as const) {
       restorePlayerDefault(name);
     }
-    mockedFetchUrls.mockReset();
-    mockedFetchUrls.mockImplementation(async () => []);
     useQueueStore.getState().clearQueue();
   });
 
@@ -876,12 +903,11 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
 
 describe('reorderUpcomingNative against the live store queue', () => {
   beforeEach(() => {
-    fetchUrls.mockImplementation(async () => []);
+    installMemoryPort();
   });
 
   type NativeItem = { id: string };
   const player = TrackPlayer as unknown as Record<string, jest.Mock>;
-  const mockedFetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
   let nativeQueue: NativeItem[];
   let nativeIndex: number;
@@ -905,14 +931,7 @@ describe('reorderUpcomingNative against the live store queue', () => {
     player.getActiveTrackIndex!.mockImplementation(async () => nativeIndex);
   }
 
-  function deferredUrls(): () => void {
-    let release!: () => void;
-    const gate = new Promise<ResolvedAudioUrl[]>((resolve) => {
-      release = () => resolve([]);
-    });
-    mockedFetchUrls.mockImplementationOnce(() => gate);
-    return release;
-  }
+  const deferredUrls = holdFirstUrlFetch;
 
   async function flush(): Promise<void> {
     for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -943,8 +962,6 @@ describe('reorderUpcomingNative against the live store queue', () => {
     ] as const) {
       restorePlayerDefault(name);
     }
-    mockedFetchUrls.mockReset();
-    mockedFetchUrls.mockImplementation(async () => []);
     useQueueStore.getState().clearQueue();
   });
 
@@ -1046,10 +1063,10 @@ describe('reorderUpcomingNative against the live store queue', () => {
       claimLoad();
       release();
       await stale;
-      mockedFetchUrls.mockClear();
+      installMemoryPort({ audioUrls: cdnUrls(tracks.map((_, i) => `p${i}`)) });
       await refreshUpcomingPresign(20);
 
-      expect(mockedFetchUrls).toHaveBeenCalled();
+      expect(nativeQueue[21]).toMatchObject({ url: 'https://cdn.example/p21.mp3' });
     });
 
     it('skips the next refresh once a rebuild applied', async () => {
@@ -1057,11 +1074,14 @@ describe('reorderUpcomingNative against the live store queue', () => {
       useQueueStore.getState().loadQueue(tracks, 20, null);
       modelNativePlayer(tracks.slice(0, 21), 20);
 
+      installMemoryPort({ audioUrls: cdnUrls(tracks.map((_, i) => `p${i}`)) });
       await refreshUpcomingPresign(20);
-      mockedFetchUrls.mockClear();
+      const rebuiltTail = [...nativeQueue];
+      player.removeUpcomingTracks!.mockClear();
       await refreshUpcomingPresign(20);
 
-      expect(mockedFetchUrls).not.toHaveBeenCalled();
+      expect(player.removeUpcomingTracks).not.toHaveBeenCalled();
+      expect(nativeQueue).toEqual(rebuiltTail);
     });
   });
 });
@@ -1073,51 +1093,45 @@ describe('loadNativeQueue presign window', () => {
 
   it('presigns only from startIndex while still adding the tracks before it', async () => {
     const tracks = ['a', 'b', 'c'].map(track);
-    fetchUrls.mockReset();
-    fetchUrls.mockImplementation(async (ids) =>
-      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
-    );
+    installMemoryPort({ audioUrls: cdnUrls(['a', 'b', 'c']) });
 
     await loadNativeQueue(tracks, 1, { autoplay: false });
 
-    expect(fetchUrls).toHaveBeenCalledTimes(1);
-    expect(fetchUrls).toHaveBeenCalledWith(['b', 'c']);
-    const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as { id: string }[];
+    const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as {
+      id: string;
+      url: string;
+    }[];
     expect(added.map((t) => t.id)).toEqual(tracks.map(trackKey));
+    expect(added.map((t) => t.url)).toEqual([
+      expect.not.stringContaining('cdn.example'),
+      'https://cdn.example/b.mp3',
+      'https://cdn.example/c.mp3',
+    ]);
   });
 
   it('presigns the last track when startIndex is past the end', async () => {
     const tracks = ['a', 'b', 'c'].map(track);
-    fetchUrls.mockReset();
-    fetchUrls.mockImplementation(async (ids) =>
-      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
-    );
+    installMemoryPort({ audioUrls: cdnUrls(['a', 'b', 'c']) });
 
     await loadNativeQueue(tracks, 7, { autoplay: false });
 
-    expect(fetchUrls).toHaveBeenCalledWith(['c']);
     const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as { url: string }[];
     expect(added.at(-1)?.url).toBe('https://cdn.example/c.mp3');
   });
 
   it('presigns from track 0 when startIndex is negative', async () => {
     const tracks = ['a', 'b', 'c'].map(track);
-    fetchUrls.mockReset();
-    fetchUrls.mockImplementation(async (ids) =>
-      ids.map((trackId) => ({ trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' })),
-    );
+    installMemoryPort({ audioUrls: cdnUrls(['a', 'b', 'c']) });
 
     await loadNativeQueue(tracks, -1, { autoplay: false });
 
-    expect(fetchUrls).toHaveBeenCalledWith(expect.arrayContaining(['a']));
     const added = (TrackPlayer.add as jest.Mock).mock.calls.at(-1)?.[0] as { url: string }[];
     expect(added[0]?.url).toBe('https://cdn.example/a.mp3');
   });
 
   it('keeps auth headers on a library track before startIndex when only previews follow', async () => {
     const tracks = [track('a'), previewTrack()];
-    fetchUrls.mockReset();
-    fetchUrls.mockResolvedValue([]);
+    installMemoryPort({}, { audioRequestHeaders: async () => ({ Authorization: 'Bearer tok' }) });
 
     await loadNativeQueue(tracks, 1, { autoplay: false });
 
@@ -1157,7 +1171,7 @@ describe('a tail rebuild that outlived the lock deadline', () => {
   }
 
   beforeEach(() => {
-    fetchUrls.mockImplementation(async () => []);
+    installMemoryPort();
     jest.useFakeTimers();
   });
 

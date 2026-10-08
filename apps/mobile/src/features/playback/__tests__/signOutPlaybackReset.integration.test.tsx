@@ -5,7 +5,6 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { useSession } from '@shared/auth/useSession';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -17,12 +16,10 @@ import { TrackPlayerPlaybackProvider } from '@features/playback/native/trackPlay
 import { registerPlaybackService } from '@features/playback/native/registerPlaybackService';
 import { playbackService } from '@features/playback/native/service';
 
-import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 
-jest.mock('@shared/api-client/audio', () => ({
-  ...jest.requireActual('@shared/api-client/audio'),
-  fetchAudioUrls: jest.fn(),
-}));
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 
 const { __player } = jest.requireMock('react-native-track-player');
 
@@ -244,7 +241,6 @@ describe("A's prefetched audio leaves the device with A (#1722)", () => {
       downloadFileAsync: (url: string, dest: { uri: string }) => Promise<{ uri: string }>;
     };
   };
-  const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
   function cachedNames(): string[] {
     return Object.keys(__fs.allFiles())
@@ -261,8 +257,18 @@ describe("A's prefetched audio leaves the device with A (#1722)", () => {
     return { promise, resolve };
   }
 
+  let restorePort: () => void;
+
   beforeEach(() => {
-    fetchUrls.mockReset();
+    restorePort = installPlaybackPort(
+      createMemoryPlaybackPort({
+        audioUrls: { [NEXT_ID]: { url: `https://cdn.example/${NEXT_ID}.mp3`, version: 'v1' } },
+      }),
+    );
+  });
+
+  afterEach(() => {
+    restorePort();
   });
 
   it('wipes the audio-prefetch directory when A signs out', async () => {
@@ -303,9 +309,6 @@ describe("A's prefetched audio leaves the device with A (#1722)", () => {
           null,
         );
     });
-    fetchUrls.mockResolvedValueOnce([
-      { trackId: NEXT_ID, url: `https://cdn.example/${NEXT_ID}.mp3`, version: 'v1' },
-    ] satisfies ResolvedAudioUrl[]);
     const started = deferred();
     const finishes = deferred();
     jest.spyOn(File, 'downloadFileAsync').mockImplementation(async (_url, dest) => {

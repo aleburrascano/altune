@@ -1,6 +1,6 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
@@ -25,7 +25,14 @@ import {
   withNativeQueue,
 } from '@features/playback/native/nativeQueueLock';
 
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+import type { PlaybackPort } from '@features/playback/ports/playbackPort';
+
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import {
+  createMemoryPlaybackPort,
+  type MemoryPlaybackSeed,
+} from '@features/playback/__tests__/memoryPlaybackPort';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn().mockResolvedValue(undefined),
@@ -40,14 +47,28 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   },
 }));
 
-jest.mock('@shared/api-client/audio', () => ({
-  ...jest.requireActual('@shared/api-client/audio'),
-  fetchAudioUrls: jest.fn(),
-}));
+let restorePort: (() => void) | null = null;
 
-const realFetchAudioUrls: typeof fetchAudioUrls = jest.requireActual(
-  '@shared/api-client/audio',
-).fetchAudioUrls;
+function cdnUrls(ids: readonly string[]): NonNullable<MemoryPlaybackSeed['audioUrls']> {
+  return Object.fromEntries(
+    ids.map((id) => [id, { url: `https://cdn.example/${id}.mp3`, version: 'v1' }]),
+  );
+}
+
+function installMemoryPort(
+  seed: MemoryPlaybackSeed = {},
+  override: Partial<PlaybackPort> = {},
+): PlaybackPort {
+  restorePort?.();
+  const fake = { ...createMemoryPlaybackPort(seed), ...override };
+  restorePort = installPlaybackPort(fake);
+  return fake;
+}
+
+afterEach(() => {
+  restorePort?.();
+  restorePort = null;
+});
 
 const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
 const STUBBED_PLAYER_METHODS = [
@@ -68,9 +89,6 @@ function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): vo
 
 beforeEach(() => {
   for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
-  (fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>).mockImplementation(
-    realFetchAudioUrls,
-  );
 });
 
 describe('a native load failure surfaces a PlaybackError', () => {
@@ -295,14 +313,9 @@ describe('swapping an upcoming slot to a cached file', () => {
 
 describe('presign failure trace', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
-  const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
   function track(trackId: string): PlaybackTrack {
     return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
-  function resolved(trackId: string): ResolvedAudioUrl {
-    return { trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' };
   }
 
   let warn: jest.SpyInstance;
@@ -310,8 +323,7 @@ describe('presign failure trace', () => {
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
-    fetchUrls.mockReset();
-    fetchUrls.mockImplementation(async (ids) => ids.map(resolved));
+    installMemoryPort({ audioUrls: cdnUrls(['t1']) });
     player.getQueue.mockResolvedValue([]);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -323,7 +335,13 @@ describe('presign failure trace', () => {
   describe('repairActiveToStreaming — presign failure trace', () => {
     it('logs the track it could not presign and still repairs to an authenticated stream', async () => {
       const boom = new Error('presign 503');
-      fetchUrls.mockRejectedValue(boom);
+      installMemoryPort(
+        {},
+        {
+          fetchAudioUrls: () => Promise.reject(boom),
+          audioRequestHeaders: async () => ({ Authorization: 'Bearer tok' }),
+        },
+      );
 
       await repairActiveToStreaming(track('t1'));
 
@@ -341,25 +359,16 @@ describe('presign failure trace', () => {
 describe('sign-out racing a streaming repair', () => {
   const { __player } = jest.requireMock('react-native-track-player');
 
-  const mockFetchAudioUrls = jest.fn();
-
-  beforeEach(() => {
-    (fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>).mockImplementation(
-      (...args: unknown[]) => mockFetchAudioUrls(...args),
-    );
-  });
-
   const A_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-of-a') } });
 
   function heldPresign() {
-    let release: (v: { url: string }[]) => void = () => undefined;
-    mockFetchAudioUrls.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
-    return (url: string) => release([{ url }]);
+    let release: (v: ResolvedAudioUrl[]) => void = () => undefined;
+    const gate = new Promise<ResolvedAudioUrl[]>((resolve) => (release = resolve));
+    installMemoryPort({}, { fetchAudioUrls: () => gate });
+    return (url: string) => release([{ trackId: 'trk-of-a', url, version: 'v1' }]);
   }
 
   describe('streaming repair in flight at sign-out (#2704)', () => {
-    beforeEach(() => mockFetchAudioUrls.mockReset());
-
     it('does not load or play the previous user track after the reset', async () => {
       const resolvePresign = heldPresign();
       const repair = repairActiveToStreaming(A_TRACK);
@@ -383,7 +392,6 @@ describe('sign-out racing a streaming repair', () => {
 });
 
 describe('swap-path presign health tally', () => {
-  const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
@@ -397,7 +405,7 @@ describe('swap-path presign health tally', () => {
   });
 
   it('counts a swap-path presign failure', async () => {
-    fetchUrls.mockRejectedValue(new Error('presign 503'));
+    installMemoryPort({}, { fetchAudioUrls: () => Promise.reject(new Error('presign 503')) });
     await repairActiveToStreaming(
       libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } }),
     );
