@@ -145,6 +145,23 @@ const featureLogicStaysPlatformFree = {
   },
 };
 
+const BROWSER_GLOBALS = ['window', 'document', 'localStorage', 'navigator'];
+
+const browserGlobalsOnlyInWebCode = {
+  name: 'browserGlobalsOnlyInWebCode',
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: [...TEST_FILES, 'src/**/web/**', 'src/**/*.web.{ts,tsx}'],
+  rules: {
+    'no-restricted-globals': [
+      'error',
+      ...BROWSER_GLOBALS.map((name) => ({
+        name,
+        message: 'Browser globals live only in .web.ts(x) files or web/ folders.',
+      })),
+    ],
+  },
+};
+
 const reactCompilerRulesRestoredToErrors = {
   rules: {
     'react-hooks/refs': 'error',
@@ -251,6 +268,7 @@ const styleRulesConfig = [
   noAbortApisTheHermesPolyfillLacks,
   noInlinePlatformBranchesInFeatureUi,
   featureLogicStaysPlatformFree,
+  browserGlobalsOnlyInWebCode,
   reactCompilerRulesRestoredToErrors,
   relaxationsForJestModuleMockingAndInlineMockComponents,
   relaxationForNativeModulesExpoGoDoesNotBundle,
