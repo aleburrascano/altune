@@ -11,7 +11,6 @@ import (
 
 const liveMaxConnsPerHost = 8
 
-// ErrNonPublicAddr is returned when a dial targets a non-public address.
 var ErrNonPublicAddr = errors.New("provider request refused: address is not public")
 
 var nonPublicProviderPrefixes = []netip.Prefix{
@@ -39,7 +38,6 @@ func isNonPublicAddr(addr netip.Addr) bool {
 	return false
 }
 
-// RefuseNonPublicDial is a net.Dialer Control hook that refuses non-public addresses.
 func RefuseNonPublicDial(_, address string, _ syscall.RawConn) error {
 	addrPort, err := netip.ParseAddrPort(address)
 	if err != nil || isNonPublicAddr(addrPort.Addr()) {

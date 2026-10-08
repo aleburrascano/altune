@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/providerhttp"
 	"context"
 	"errors"
 	"io"
@@ -13,7 +14,6 @@ import (
 	"testing"
 
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	"altune/go-api/internal/shared/providerhttp"
 )
 
 const stubbedChartTerm = "stubbed chart term"

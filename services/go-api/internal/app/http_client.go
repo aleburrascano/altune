@@ -1,12 +1,12 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/providerhttp"
 	"net/http"
 	"sync"
 	"time"
 
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	"altune/go-api/internal/shared/providerhttp"
 )
 
 const (
