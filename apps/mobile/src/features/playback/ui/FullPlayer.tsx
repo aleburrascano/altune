@@ -18,7 +18,7 @@ import {
   SheetScreen,
 } from '@features/playback/ui/SheetHeader';
 import { TransportControls } from '@features/playback/ui/TransportControls';
-import { usePlaybackTransport } from '@features/playback/ui/usePlaybackTransport';
+import { usePlaybackTransport } from '@features/playback/hooks/usePlaybackTransport';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { Button } from '@shared/ui/primitives/Button';

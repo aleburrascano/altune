@@ -12,7 +12,7 @@ export default {
           'src/features/auth/hooks/useAuthDeepLink.ts',
           'src/features/auth/hooks/useOAuth.ts',
           'src/features/auth/ui/AuthCallbackScreen.tsx',
-          'src/features/playback/hooks/PlaybackProvider.tsx',
+          'src/features/playback/adapters/PlaybackProvider.tsx',
           'src/features/playback/domain/playsThroughTrackPlayer.ts',
           'src/shared/files/defaultFileStore.ts',
           'src/shared/ui/dialog/dialog.ts',

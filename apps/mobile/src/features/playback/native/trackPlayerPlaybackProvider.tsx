@@ -22,9 +22,9 @@ import {
 } from '@features/playback/domain/derivePlaybackState';
 import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
 import { usePlaybackErrorFor } from '@features/playback/hooks/usePlaybackErrorStore';
-import { usePlaybackPosition } from '@features/playback/native/usePlaybackPosition';
-import { usePlaybackSignals } from '@features/playback/native/usePlaybackSignals';
-import { useQueueResume } from '@features/playback/native/useQueueResume';
+import { usePlaybackPosition } from '@features/playback/hooks/usePlaybackPosition';
+import { usePlaybackSignals } from '@features/playback/hooks/usePlaybackSignals';
+import { useQueueResume } from '@features/playback/hooks/useQueueResume';
 
 const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   off: RepeatMode.Off,

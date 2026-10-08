@@ -5,7 +5,7 @@ import type { PlaybackContextValue, PlaybackState } from '@shared/playback/types
 import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { derivePlaybackState } from '@features/playback/domain/derivePlaybackState';
-import { useMediaSession } from '@features/playback/web/useMediaSession';
+import { useMediaSession } from '@features/playback/hooks/useMediaSession';
 import {
   advanceOnEnded,
   endForSignOut,
@@ -21,7 +21,7 @@ import {
   type WebAudioPlayer,
   type WebPlayback,
 } from '@features/playback/web/webPlayer';
-import { createWebControls } from '@features/playback/web/webControls';
+import { createWebControls } from '@features/playback/web/createWebControls';
 
 const PHASE_EVENTS = ['play', 'pause', 'waiting', 'seeked'];
 

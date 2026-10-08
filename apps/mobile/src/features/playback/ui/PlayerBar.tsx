@@ -24,7 +24,7 @@ import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/u
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 import { Scrubber } from '@features/playback/ui/Scrubber';
 import { TransportControls } from '@features/playback/ui/TransportControls';
-import { usePlaybackTransport } from '@features/playback/ui/usePlaybackTransport';
+import { usePlaybackTransport } from '@features/playback/hooks/usePlaybackTransport';
 
 type Transport = ReturnType<typeof usePlaybackTransport>;
 type Theme = ReturnType<typeof useTheme>;

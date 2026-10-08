@@ -12,7 +12,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 
 import { prefetchNext } from '@features/playback/native/audioPrefetch';
-import { TrackPlayerPlaybackProvider } from '@features/playback/native/trackPlayerProvider';
+import { TrackPlayerPlaybackProvider } from '@features/playback/native/trackPlayerPlaybackProvider';
 import { registerPlaybackService } from '@features/playback/native/registerPlaybackService';
 import { playbackService } from '@features/playback/native/service';
 

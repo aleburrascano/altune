@@ -62,14 +62,6 @@ M4 src/features/library/hooks/logTrackMutationFailure.ts non-use* file in hooks/
 M4 src/features/library/hooks/pagedListControls.ts non-use* file in hooks/
 M4 src/features/library/ui/useAddableTracks.ts use* file outside hooks/
 M4 src/features/library/ui/useLibraryGridLayout.ts use* file outside hooks/
-M4 src/features/playback/hooks/PlaybackProvider.tsx non-use* file in hooks/
-M4 src/features/playback/hooks/PlaybackProvider.web.tsx non-use* file in hooks/
-M4 src/features/playback/native/usePlaybackPosition.ts use* file outside hooks/
-M4 src/features/playback/native/usePlaybackSignals.ts use* file outside hooks/
-M4 src/features/playback/native/useQueueResume.ts use* file outside hooks/
-M4 src/features/playback/ui/usePlaybackTransport.ts use* file outside hooks/
-M4 src/features/playback/ui/useScrubberGesture.ts use* file outside hooks/
-M4 src/features/playback/web/useMediaSession.ts use* file outside hooks/
 M7 jest/factories.ts sessionFactory has no importer under src/
 M7 jest/factories.ts trackResponseFactory has no importer under src/
 N1 src/shared/api-client/types.ts generic name
@@ -87,8 +79,6 @@ N3 src/features/library/libraryFailureAlert.ts only export is alertLibraryFailur
 N3 src/features/library/trackMenu.ts only export is buildTrackMenuItems
 N3 src/features/library/ui/libraryRowSurface.ts only export is rowSurfaceStyle
 N3 src/features/library/ui/listContentStyles.ts only export is listContent
-N3 src/features/playback/native/trackPlayerProvider.tsx only export is TrackPlayerPlaybackProvider
-N3 src/features/playback/web/webControls.ts only export is createWebControls
 N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
 N3 src/shared/api-client/queryString.ts only export is withQuery
 N3 src/shared/events/acquisitionEvents.ts only export is ACQUISITION_HANDLERS
