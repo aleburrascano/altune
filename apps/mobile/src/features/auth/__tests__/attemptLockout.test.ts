@@ -199,3 +199,23 @@ describe('attemptLockout: which outcomes count as a failure', () => {
     expect(isLockedOut('sign-in', 'a@b.co')).toBe(false);
   });
 });
+
+describe('attemptLockout: a clock moved back', () => {
+  it('does not keep a lockout live when now is earlier than the last failure', () => {
+    failTimes('a@b.co', LOCKOUT_AFTER_FAILURES);
+
+    expect(isLockedOut('sign-in', 'a@b.co', START - 3_600_000)).toBe(false);
+  });
+
+  it('keeps the lockout live while the monotonic clock says the cooldown has not passed', () => {
+    for (let i = 0; i < LOCKOUT_AFTER_FAILURES; i += 1) {
+      recordFailedAttempt('sign-in', 'a@b.co', START, 0);
+    }
+
+    expect(isLockedOut('sign-in', 'a@b.co', START + LOCKOUT_BASE_MS, LOCKOUT_BASE_MS - 1)).toBe(
+      false,
+    );
+    expect(isLockedOut('sign-in', 'a@b.co', START, 1)).toBe(true);
+    expect(isLockedOut('sign-in', 'a@b.co', START + 1, LOCKOUT_BASE_MS)).toBe(false);
+  });
+});
