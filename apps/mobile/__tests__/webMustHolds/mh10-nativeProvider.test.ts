@@ -11,7 +11,7 @@ jest.mock('@supabase/supabase-js', () => ({
   },
 }));
 
-jest.mock('@features/playback/native/trackPlayerProvider', () => ({
+jest.mock('@features/playback/native/trackPlayerPlaybackProvider', () => ({
   TrackPlayerPlaybackProvider: function TrackPlayerPlaybackProvider() {
     return null;
   },
@@ -26,7 +26,7 @@ function onPlatform<T>(os: string, load: () => T): T {
   return loaded as T;
 }
 
-function selectedProviderName(os: string, module = '@features/playback/hooks/PlaybackProvider'): string {
+function selectedProviderName(os: string, module = '@features/playback/adapters/PlaybackProvider'): string {
   return onPlatform(os, () => {
     const { PlaybackProvider } = require(module);
     const element: ReactElement<unknown, { name: string }> = PlaybackProvider({ children: null });
@@ -44,7 +44,7 @@ describe('mh10: the playback provider and session store each platform selects', 
   });
 
   it('selects the web audio provider on web', () => {
-    expect(selectedProviderName('web', '@features/playback/hooks/PlaybackProvider.web')).toBe('WebPlaybackProvider');
+    expect(selectedProviderName('web', '@features/playback/adapters/PlaybackProvider.web')).toBe('WebPlaybackProvider');
   });
 
   it.each(['ios', 'android'])('persists the native session in secure-store on %s', async (os) => {
@@ -62,7 +62,7 @@ describe('mh10: the playback provider and session store each platform selects', 
   it.each(['ios', 'android'])('keeps the no-op provider in Expo Go on %s', (os) => {
     const selected = onPlatform(os, () => {
       jest.doMock('@shared/playback/isExpoGo', () => ({ isExpoGo: true }));
-      const { PlaybackProvider } = require('@features/playback/hooks/PlaybackProvider');
+      const { PlaybackProvider } = require('@features/playback/adapters/PlaybackProvider');
       const element: ReactElement<unknown, { name: string }> = PlaybackProvider({ children: null });
       return element.type.name;
     });

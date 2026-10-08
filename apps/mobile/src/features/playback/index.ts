@@ -1,4 +1,4 @@
-export { PlaybackProvider } from '@features/playback/hooks/PlaybackProvider';
+export { PlaybackProvider } from '@features/playback/adapters/PlaybackProvider';
 export { SleepTimerBridge } from '@features/playback/ui/SleepTimerBridge';
 export { MiniPlayer } from '@features/playback/ui/MiniPlayer';
 export { PlayerBar } from '@features/playback/ui/PlayerBar';

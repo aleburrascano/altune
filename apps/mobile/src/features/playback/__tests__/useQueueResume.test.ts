@@ -12,7 +12,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { useQueueResume } from '@features/playback/native/useQueueResume';
+import { useQueueResume } from '@features/playback/hooks/useQueueResume';
 import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
 import {
   _resetPlaybackHealthForTest,

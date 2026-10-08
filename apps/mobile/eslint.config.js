@@ -28,7 +28,15 @@ const TEST_FILES = ['**/__tests__/**'];
 
 const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
   'src/features/playback/adapters/startPlaybackService.ts',
-  'src/features/playback/hooks/PlaybackProvider.tsx',
+  'src/features/playback/adapters/PlaybackProvider.tsx',
+];
+
+const PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER = [
+  'src/features/playback/hooks/usePlaybackPosition.ts',
+  'src/features/playback/hooks/usePlaybackSignals.ts',
+  'src/features/playback/hooks/useQueueResume.ts',
+  'src/features/playback/hooks/useScrubberGesture.ts',
+  'src/features/playback/hooks/useMediaSession.ts',
 ];
 
 const featureIsolationZones = [
@@ -116,6 +124,7 @@ const logicStaysPlatformFree = {
   files: ['src/features/**/*.{ts,tsx}', 'src/shared/**/*.{ts,tsx}'],
   ignores: [
     ...TEST_FILES,
+    ...PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER,
     'src/features/*/ui/**',
     'src/features/**/native/**',
     'src/features/**/web/**',
@@ -162,7 +171,12 @@ const BROWSER_GLOBALS = ['window', 'document', 'localStorage', 'navigator'];
 const browserGlobalsOnlyInWebCode = {
   name: 'browserGlobalsOnlyInWebCode',
   files: ['src/**/*.{ts,tsx}'],
-  ignores: [...TEST_FILES, 'src/**/web/**', 'src/**/*.web.{ts,tsx}'],
+  ignores: [
+    ...TEST_FILES,
+    ...PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER,
+    'src/**/web/**',
+    'src/**/*.web.{ts,tsx}',
+  ],
   rules: {
     'no-restricted-globals': [
       'error',
