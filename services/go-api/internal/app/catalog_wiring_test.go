@@ -506,7 +506,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 	})
 	r := a.mountRoutes(verifier, cat,
 		playbackHandler.NewQueueHandler(nil),
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
+		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	before := catalogMetrics.ReadSnapshot().DBCallTimeouts

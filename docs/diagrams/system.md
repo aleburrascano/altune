@@ -17,7 +17,7 @@ flowchart TD
         sources["Audio sources<br/>YouTube / YT Music / SoundCloud via yt-dlp<br/>Qobuz / Tidal / Deezer via streamrip"]
         acoustid["AcoustID<br/>fingerprint → recording"]
         github["GitHub<br/>Actions CI/CD · Releases · kill switches"]
-        gitea["Gitea · altune-git<br/>feedback issues · CI"]
+        gitea["Gitea · altune-git<br/>CI"]
         altstore["AltStore<br/>iOS sideload channel"]
         ociusage["OCI Usage API<br/>infra spend"]
     end
@@ -29,7 +29,6 @@ flowchart TD
     altune -->|download audio| sources
     altune -->|verify identity| acoustid
     altune -->|read kill switches| github
-    altune -->|file feedback issues| gitea
     github -->|deploy over SSH| altune
     altune -->|alerts logged, read on demand| operator
     altstore -->|installs app| listener
@@ -57,7 +56,7 @@ flowchart TD
 
     subgraph vm [OCI VM · one Docker Compose project per env, prod + staging]
         caddy["<b>Caddy</b><br/>TLS · routes · blue/green switch<br/>serves the web build"]
-        api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · feedback · observe API<br/>+ in-process jobs, leader-elected"]
+        api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · observe API<br/>+ in-process jobs, leader-elected"]
         tools[["yt-dlp · streamrip · ffmpeg · fpcalc<br/>subprocesses in the go-api image"]]
         overseer["<b>Overseer</b><br/>Go + React SPA<br/>owner control room"]
         redis[("<b>Redis</b><br/>cache only · 256 MB LRU<br/>results · identity · artwork · rate limits")]
@@ -69,7 +68,7 @@ flowchart TD
     auth["Supabase Auth"]
     providers["Metadata providers + AcoustID"]
     sources["Audio sources"]
-    extras["Gitea feedback issues · OCI Usage API"]
+    extras["OCI Usage API"]
     ks["kill-switches.json<br/>raw.githubusercontent.com"]
 
     listener --> mobile
@@ -117,7 +116,6 @@ flowchart TD
         acquisition["<b>acquisition</b><br/>find · download<br/>fingerprint · tag"]
         discovery["<b>discovery</b><br/>multi-provider search<br/>enrich · rank · cache"]
         playback["<b>playback</b><br/>queue · now playing"]
-        feedback["<b>feedback</b><br/>user feedback → issue"]
         observe["<b>observe</b><br/>alerts · eval meter<br/>event tap for Overseer"]
     end
 
@@ -127,10 +125,9 @@ flowchart TD
     jwks["Supabase Auth · JWKS"]
     providers["Metadata providers"]
     tools[["yt-dlp · streamrip · ffmpeg · fpcalc<br/>+ AcoustID"]]
-    gitea["Gitea issues"]
 
     caddy --> app
-    app --> auth & catalog & acquisition & discovery & playback & feedback & observe
+    app --> auth & catalog & acquisition & discovery & playback & observe
     acquisition --> catalog
     acquisition --> discovery
     playback --> catalog
@@ -146,12 +143,11 @@ flowchart TD
     discovery -->|cache| redis
     discovery -->|HTTPS/JSON| providers
     playback -->|SQL| pg
-    feedback -->|HTTPS| gitea
 
     classDef component fill:#85bbf0,color:#000,stroke:#5d82a8
     classDef store fill:#438dd5,color:#fff,stroke:#2e6295
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
-    class app,auth,catalog,acquisition,discovery,playback,feedback,observe component
+    class app,auth,catalog,acquisition,discovery,playback,observe component
     class pg,redis,bucket store
-    class caddy,jwks,providers,tools,gitea external
+    class caddy,jwks,providers,tools external
 ```

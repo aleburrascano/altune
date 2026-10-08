@@ -3,7 +3,6 @@ import * as path from 'node:path';
 
 const featuresRoot = path.join(__dirname, '..');
 const PURE_MODULES = new Set(['ids', 'trackAcquisition', 'types', 'wireDecoders']);
-const SETTINGS_FEEDBACK_FILES = new Set(['hooks/useSubmitReport.ts', 'ui/ReportIssueModal.tsx']);
 
 function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -48,14 +47,8 @@ function apiClientValueImports(text: string): string[] {
   return offenders;
 }
 
-function isCheckedFile(name: string): boolean {
-  return !(
-    name.startsWith('settings/') && SETTINGS_FEEDBACK_FILES.has(name.slice('settings/'.length))
-  );
-}
-
 const PORTED_FEATURES = ['library', 'discover', 'auth', 'settings', 'detail', 'playback'];
-const files = PORTED_FEATURES.flatMap(featureFiles).filter(({ name }) => isCheckedFile(name));
+const files = PORTED_FEATURES.flatMap(featureFiles);
 
 test.each(PORTED_FEATURES)('%s has source files to check', (feature) => {
   expect(files.filter(({ name }) => name.startsWith(`${feature}/`)).length).toBeGreaterThan(0);
@@ -72,13 +65,6 @@ test('the import scan flags a value import and spares type and pure-module impor
     0,
   );
   expect(apiClientValueImports("import { ApiError } from '@shared/errors';")).toHaveLength(0);
-});
-
-test('only the settings feedback files are exempt', () => {
-  expect(isCheckedFile('settings/hooks/useSubmitReport.ts')).toBe(false);
-  expect(isCheckedFile('settings/ui/ReportIssueModal.tsx')).toBe(false);
-  expect(isCheckedFile('settings/hooks/useBackfillFeatured.ts')).toBe(true);
-  expect(isCheckedFile('discover/hooks/useSubmitReport.ts')).toBe(true);
 });
 
 test.each(files)(

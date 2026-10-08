@@ -82,7 +82,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
+		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
 	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	var logs bytes.Buffer
@@ -159,7 +159,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
+		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
 
 	before := playbackMetrics.ReadSnapshot()
 	start := time.Now()

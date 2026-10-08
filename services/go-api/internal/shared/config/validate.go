@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -30,9 +29,6 @@ func (c *Config) validate() error {
 		return err
 	}
 	if err := c.validateOverseerPrincipal(); err != nil {
-		return err
-	}
-	if err := c.validateFeedback(); err != nil {
 		return err
 	}
 	if err := c.validateAudioKeyPrefix(); err != nil {
@@ -244,47 +240,6 @@ func (c *Config) validateSilentDefaults() error {
 		return errors.New("PROVIDER_REPLAY_DIR must be set when PROVIDER_REPLAY_ENABLED=true")
 	}
 	return nil
-}
-
-func (c *Config) validateFeedback() error {
-	c.GiteaIssueToken = strings.TrimSpace(c.GiteaIssueToken)
-	if err := validateSecureURL("GITEA_ISSUE_URL", c.GiteaIssueURL); err != nil {
-		return err
-	}
-	switch {
-	case c.GiteaIssueRepo == "" && c.GiteaIssueToken == "":
-		return nil
-	case c.GiteaIssueRepo == "":
-		return errors.New("GITEA_ISSUE_TOKEN set but GITEA_ISSUE_REPO missing")
-	case c.GiteaIssueToken == "":
-		return errors.New("GITEA_ISSUE_REPO set but GITEA_ISSUE_TOKEN missing")
-	}
-	return errors.Join(validateOwnerRepo("GITEA_ISSUE_REPO", c.GiteaIssueRepo), validateToken("GITEA_ISSUE_TOKEN", c.GiteaIssueToken))
-}
-
-var ownerRepoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-
-func validateOwnerRepo(field, value string) error {
-	owner, repo, _ := strings.Cut(value, "/")
-	if !ownerRepoPattern.MatchString(value) || isDotSegment(owner) || isDotSegment(repo) {
-		return fmt.Errorf("%s must be in owner/repo format, got %q", field, value)
-	}
-	return nil
-}
-
-func isDotSegment(s string) bool {
-	return s == "." || s == ".."
-}
-
-func validateToken(field, value string) error {
-	if strings.IndexFunc(value, isSpaceOrControl) >= 0 {
-		return fmt.Errorf("%s must not contain whitespace or control characters", field)
-	}
-	return nil
-}
-
-func isSpaceOrControl(r rune) bool {
-	return unicode.IsSpace(r) || unicode.IsControl(r)
 }
 
 func isUnitFraction(v float64) bool {

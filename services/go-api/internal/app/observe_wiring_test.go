@@ -6,7 +6,6 @@ import (
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
 	observeAlert "altune/go-api/internal/observe/alert"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
@@ -252,10 +251,6 @@ type observedCounterWire struct {
 	Catalog struct {
 		PresignFailures int64 `json:"presign_failures_total"`
 	} `json:"catalog"`
-	Feedback struct {
-		TrackerCreateFailures int64            `json:"tracker_create_failures_total"`
-		ByCause               map[string]int64 `json:"tracker_create_failures_by_cause_total"`
-	} `json:"feedback"`
 	Playback struct {
 		EnrichmentFailures       int64 `json:"now_playing_enrichment_failures_total"`
 		CorruptStoredState       int64 `json:"corrupt_stored_state_total"`
@@ -273,14 +268,13 @@ func readObservedCounterWire(t *testing.T) observedCounterWire {
 	return out
 }
 
-func TestObserveLiveMetrics_CarriesAuthCatalogFeedbackAndPlaybackFailureCounters(t *testing.T) {
+func TestObserveLiveMetrics_CarriesAuthCatalogAndPlaybackFailureCounters(t *testing.T) {
 	before := readObservedCounterWire(t)
 
 	authmetrics.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
 	authmetrics.NewExpvarAuthMetrics().VerifierUnavailable()
 	authmetrics.NewExpvarAuthMetrics().JWKSFetchFailed()
 	catalogmetrics.NewExpvarAudioStoreMetrics().PresignFailed()
-	feedbackmetrics.NewExpvarFeedbackMetrics().TrackerCreateFailed("tracker_unavailable")
 	pb := playbackmetrics.NewExpvarPlaybackMetrics()
 	pb.EnrichmentFailed()
 	pb.CorruptStoredState()
@@ -297,8 +291,6 @@ func TestObserveLiveMetrics_CarriesAuthCatalogFeedbackAndPlaybackFailureCounters
 		{"auth.verifier_unavailable_total", got.Auth.VerifierUnavailable, before.Auth.VerifierUnavailable + 1},
 		{"auth.jwks_fetch_failures_total", got.Auth.JWKSFetchFailures, before.Auth.JWKSFetchFailures + 1},
 		{"catalog.presign_failures_total", got.Catalog.PresignFailures, before.Catalog.PresignFailures + 1},
-		{"feedback.tracker_create_failures_total", got.Feedback.TrackerCreateFailures, before.Feedback.TrackerCreateFailures + 1},
-		{"feedback.tracker_create_failures_by_cause_total[tracker_unavailable]", got.Feedback.ByCause["tracker_unavailable"], before.Feedback.ByCause["tracker_unavailable"] + 1},
 		{"playback.now_playing_enrichment_failures_total", got.Playback.EnrichmentFailures, before.Playback.EnrichmentFailures + 1},
 		{"playback.corrupt_stored_state_total", got.Playback.CorruptStoredState, before.Playback.CorruptStoredState + 1},
 		{"playback.queue_state_op_timeouts_total", got.Playback.QueueStateOpTimeouts, before.Playback.QueueStateOpTimeouts + 1},
@@ -327,7 +319,7 @@ func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"db_pool", "redis_pool", "leader", "event_bus", "latency", "auth", "catalog", "feedback", "playback", "providers"} {
+	for _, key := range []string{"db_pool", "redis_pool", "leader", "event_bus", "latency", "auth", "catalog", "playback", "providers"} {
 		if _, ok := out[key]; !ok {
 			t.Errorf("live metrics missing key %q", key)
 		}

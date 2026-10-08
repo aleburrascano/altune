@@ -145,17 +145,12 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
   'cat.playlistHandler': ['internal', 'catalog', 'adapters', 'handler', 'playlist_handler.go'],
   queueHandler: ['internal', 'playback', 'adapters', 'handler', 'queue_handler.go'],
   discoveryH: ['internal', 'discovery', 'adapters', 'handler', 'discovery_handler.go'],
-  feedbackH: ['internal', 'feedback', 'adapters', 'handler', 'feedback_handler.go'],
 };
 
 const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
   streamHandler: ['internal', 'catalog', 'adapters', 'handler', 'stream_handler.go'],
   audioURLHandler: ['internal', 'catalog', 'adapters', 'handler', 'audio_url_handler.go'],
   featuredArtist: ['internal', 'catalog', 'adapters', 'handler', 'featured_artist_handler.go'],
-};
-
-const MOUNT_HELPER_FILES: Record<string, string[]> = {
-  mountFeedback: ['internal', 'app', 'feedback_wiring.go'],
 };
 
 function joinPath(prefix: string, sub: string): string {
@@ -216,21 +211,6 @@ function extractRouteEntries(body: string, prefix: string, source: string): Rout
   for (const m of masked.matchAll(/r\.Group\(\s*[\w.]+\.(\w+)\s*\)/g)) {
     const groupBody = extractGoMethodBody(source, m[1]!);
     entries.push(...extractRouteEntries(groupBody, prefix, source));
-  }
-
-  for (const m of masked.matchAll(/\b(\w+)\(\s*r\s*,\s*([\w.]+)\s*\)/g)) {
-    const helperFile = MOUNT_HELPER_FILES[m[1]!];
-    const handlerFile = MOUNT_HANDLER_FILES[m[2]!];
-    if (!helperFile || !handlerFile) continue;
-    const helperSource = fs.readFileSync(goPath(...helperFile), 'utf8');
-    const helperBody = extractGoMethodBody(helperSource, m[1]!);
-    const liveMount = /r\.Mount\(\s*"([^"]*)"\s*,\s*\w+\.Routes\(\)\)/.exec(helperBody);
-    if (!liveMount) continue;
-    const handlerSource = fs.readFileSync(goPath(...handlerFile), 'utf8');
-    const routesBody = extractGoMethodBody(handlerSource, 'Routes');
-    entries.push(
-      ...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!), handlerSource),
-    );
   }
 
   return entries;

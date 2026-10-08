@@ -15,7 +15,7 @@ const ROOT_FILE_CEILING: Record<string, number> = {
   discover: 0,
   library: 7,
   playback: 21,
-  settings: 7,
+  settings: 4,
 };
 
 function featureNames(): string[] {
