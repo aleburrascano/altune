@@ -1,4 +1,5 @@
 import { ESLint } from 'eslint';
+import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
 const CWD = path.join(__dirname, '..', '..');
@@ -54,4 +55,105 @@ describe('feature logic stays platform-free', () => {
 
     expect(config.rules?.[RULE]).toBeUndefined();
   });
+});
+
+describe('shared logic stays platform-free', () => {
+  // lintText needs a file the typed parser's project knows, so these paths exist on disk.
+  const SHARED_FILE = 'src/shared/events/eventTypes.ts';
+
+  it.each([
+    ["import { AppState } from 'react-native';", '@shared/lifecycle'],
+    ["import * as Crypto from 'expo-crypto';", '@shared/id/uuid'],
+    ["import * as S from 'expo-secure-store';", '@shared/auth/authStorage'],
+  ])('rejects %s once, naming its home', async (source, home) => {
+    const errors = await ruleErrorsFor(`${source}\n`, SHARED_FILE);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain(home);
+  });
+
+  it('accepts importing the port', async () => {
+    const errors = await ruleErrorsFor(
+      "import { randomUuid } from '@shared/id/uuid';\n",
+      SHARED_FILE,
+    );
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it.each([
+    'src/shared/device/deviceHelpers.ts',
+    'src/shared/uikit/x.ts',
+    'src/shared/id/uuidTools.ts',
+    'src/shared/auth/authStorageHelpers.ts',
+    'src/shared/auth/session/authStorage.ts',
+    'src/shared/telemetry/x.ts',
+  ])('applies the rule to the look-alike %s', async (filePath) => {
+    const config = await eslint.calculateConfigForFile(path.join(CWD, filePath));
+
+    expect(config.rules?.[RULE]).toBeDefined();
+  });
+
+  it('refuses a deep react-native import in telemetry', async () => {
+    const errors = await ruleErrorsFor(
+      "import { x } from 'react-native/Libraries/vendor/core/ErrorUtils';\n",
+      'src/shared/telemetry/outbox.ts',
+    );
+
+    expect(errors).toHaveLength(1);
+  });
+
+  it.each([
+    'src/shared/ui/primitives/X.tsx',
+    'src/shared/acquisition/ui/X.tsx',
+    'src/shared/files/native/x.ts',
+    'src/shared/auth/x.web.ts',
+    'src/shared/auth/x.native.ts',
+    'src/shared/device/device.ts',
+    'src/shared/lifecycle/appState.ts',
+    'src/shared/navigation/expoRouterNavigator.ts',
+    'src/shared/id/uuid.ts',
+    'src/shared/auth/authStorage.ts',
+    'src/shared/events/__tests__/x.test.ts',
+  ])('does not apply the rule to %s', async (filePath) => {
+    const config = await eslint.calculateConfigForFile(path.join(CWD, filePath));
+
+    expect(config.rules?.[RULE]).toBeUndefined();
+  });
+
+  it('applies the rule to supabaseClient.ts', async () => {
+    const config = await eslint.calculateConfigForFile(
+      path.join(CWD, 'src/shared/auth/supabaseClient.ts'),
+    );
+
+    expect(config.rules?.[RULE]).toBeDefined();
+  });
+
+  it('finds no platform import anywhere in the real src/shared tree', () => {
+    // ESLint.lintFiles dynamic-imports its glob walker, which Jest's VM refuses, so it runs in plain node.
+    const script = `
+      const { ESLint } = require('eslint');
+      new ESLint({ cwd: process.cwd(), overrideConfigFile: true, baseConfig: require('./eslint.config.js') })
+        .lintFiles(['src/shared/**/*.{ts,tsx}'])
+        .then((results) => process.stdout.write(JSON.stringify(results.map((r) => ({
+          filePath: r.filePath,
+          messages: r.messages.map((m) => ({ ruleId: m.ruleId, message: m.message })),
+        })))));
+    `;
+    const output = execFileSync(process.execPath, ['-e', script], {
+      cwd: CWD,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const results: { filePath: string; messages: { ruleId: string | null; message: string }[] }[] =
+      JSON.parse(output);
+    const violations = results.flatMap((r) =>
+      r.messages.filter((m) => m.ruleId === RULE).map((m) => `${r.filePath}: ${m.message}`),
+    );
+
+    expect(violations).toEqual([]);
+    expect(
+      results.some((r) => r.filePath.includes(`${path.sep}shared${path.sep}auth${path.sep}`)),
+    ).toBe(true);
+  }, 120000);
 });

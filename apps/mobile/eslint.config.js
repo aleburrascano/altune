@@ -108,11 +108,11 @@ const noInlinePlatformBranchesInFeatureUi = {
 };
 
 const CAPABILITY_HOMES =
-  'Feature logic must not import a platform API: Alert goes to @shared/ui/dialog, Keyboard to @shared/ui/keyboard, AppState to @shared/lifecycle, Platform and expo-constants to @shared/device, expo-router to @shared/navigation; or move the code into a ui/, native/ or web/ folder, or a .web.ts(x) split file.';
+  'Logic must not import a platform API: Alert goes to @shared/ui/dialog, Keyboard to @shared/ui/keyboard, AppState to @shared/lifecycle, Platform and expo-constants to @shared/device, expo-router to @shared/navigation, expo-crypto to @shared/id/uuid, expo-secure-store to @shared/auth/authStorage; or move the code into a ui/, native/ or web/ folder, or a .web.ts(x) split file.';
 
-const featureLogicStaysPlatformFree = {
-  name: 'featureLogicStaysPlatformFree',
-  files: ['src/features/**/*.{ts,tsx}'],
+const logicStaysPlatformFree = {
+  name: 'logicStaysPlatformFree',
+  files: ['src/features/**/*.{ts,tsx}', 'src/shared/**/*.{ts,tsx}'],
   ignores: [
     ...TEST_FILES,
     'src/features/*/ui/**',
@@ -120,6 +120,17 @@ const featureLogicStaysPlatformFree = {
     'src/features/**/web/**',
     'src/features/**/*.web.{ts,tsx}',
     'src/features/**/*.native.{ts,tsx}',
+    'src/shared/ui/**',
+    'src/shared/*/ui/**',
+    'src/shared/**/native/**',
+    'src/shared/**/web/**',
+    'src/shared/**/*.web.{ts,tsx}',
+    'src/shared/**/*.native.{ts,tsx}',
+    'src/shared/device/device.ts',
+    'src/shared/lifecycle/appState.ts',
+    'src/shared/navigation/expoRouterNavigator.ts',
+    'src/shared/id/uuid.ts',
+    'src/shared/auth/authStorage.ts',
   ],
   rules: {
     'no-restricted-imports': [
@@ -267,7 +278,7 @@ const styleRulesConfig = [
   rulesWrittenForTheWebAndWrongForReactNative,
   noAbortApisTheHermesPolyfillLacks,
   noInlinePlatformBranchesInFeatureUi,
-  featureLogicStaysPlatformFree,
+  logicStaysPlatformFree,
   browserGlobalsOnlyInWebCode,
   reactCompilerRulesRestoredToErrors,
   relaxationsForJestModuleMockingAndInlineMockComponents,
