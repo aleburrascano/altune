@@ -165,14 +165,9 @@ func TestFavoritesService_AddRejectsEmptyTitle(t *testing.T) {
 	}
 }
 
-type typedHTTPError interface {
-	HTTPStatus() int
-	ErrorCode() string
-}
-
 func assertTypedError(t *testing.T, err error, wantStatus int, wantCode string) {
 	t.Helper()
-	var typed typedHTTPError
+	var typed *domain.CodedError
 	if !errors.As(err, &typed) {
 		t.Fatalf("err = %v, want a typed %d %s", err, wantStatus, wantCode)
 	}

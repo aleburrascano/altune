@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/adapters/authbridge"
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"sync"
@@ -30,12 +31,6 @@ var DefaultDiscoveryRateLimits = DiscoveryRateLimits{
 	Favorites: RequestLimit{Max: 60, Window: time.Minute},
 	History:   RequestLimit{Max: 60, Window: time.Minute},
 }
-
-type rateLimitedError struct{}
-
-func (rateLimitedError) Error() string     { return "too many requests, try again later" }
-func (rateLimitedError) HTTPStatus() int   { return http.StatusTooManyRequests }
-func (rateLimitedError) ErrorCode() string { return "discovery.rate_limited" }
 
 type userRateLimiter struct {
 	mu        sync.Mutex
@@ -101,7 +96,7 @@ func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 		}
 		if wait, admitted := l.admit(userID.String()); !admitted {
 			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
-			httputil.HandleServiceError(w, r, rateLimitedError{})
+			httputil.HandleServiceError(w, r, domain.ErrRateLimited)
 			return
 		}
 		next.ServeHTTP(w, r)
