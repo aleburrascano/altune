@@ -41,6 +41,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@features/(.*)$': '<rootDir>/src/features/$1',
     '^@shared/(.*)$': '<rootDir>/src/shared/$1',
+    '^@testing/(.*)$': '<rootDir>/jest/$1',
     '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
   },
 };

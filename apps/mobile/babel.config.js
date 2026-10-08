@@ -10,6 +10,7 @@ module.exports = function (api) {
             '@': './src',
             '@features': './src/features',
             '@shared': './src/shared',
+            '@testing': './jest',
           },
         },
       ],

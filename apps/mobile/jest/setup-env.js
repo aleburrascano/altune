@@ -1,3 +1,9 @@
+const { faker } = require('@faker-js/faker');
+
+const { FAKER_SEED } = require('./fakerSeed');
+
+faker.seed(FAKER_SEED);
+
 process.env.EXPO_PUBLIC_SUPABASE_URL =
   process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://fixture.supabase.co';
 process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY =
