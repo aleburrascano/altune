@@ -98,5 +98,4 @@ describe('Chip', () => {
     });
     expect(onPress).toHaveBeenCalledTimes(1);
   });
-
 });
