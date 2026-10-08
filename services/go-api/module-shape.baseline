@@ -1,0 +1,111 @@
+G1 internal/acquisition missing domain/
+G1 internal/auth missing ARCHITECTURE.md
+G1 internal/auth missing domain/
+G1 internal/auth missing service/
+G1 internal/auth/context.go unexpected root entry
+G1 internal/auth/context_test.go unexpected root entry
+G1 internal/auth/failure_throttle.go unexpected root entry
+G1 internal/auth/failure_throttle_test.go unexpected root entry
+G1 internal/auth/middleware.go unexpected root entry
+G1 internal/auth/middleware_test.go unexpected root entry
+G1 internal/auth/verifier.go unexpected root entry
+G1 internal/catalog missing ARCHITECTURE.md
+G1 internal/catalog/RETENTION.md unexpected root entry
+G1 internal/catalog/doc.go unexpected root entry
+G1 internal/eventstream missing ARCHITECTURE.md
+G1 internal/eventstream missing adapters/
+G1 internal/eventstream missing domain/
+G1 internal/eventstream missing ports/
+G1 internal/eventstream missing service/
+G1 internal/eventstream/handler.go unexpected root entry
+G1 internal/eventstream/handler_test.go unexpected root entry
+G1 internal/observe missing ARCHITECTURE.md
+G1 internal/observe missing adapters/
+G1 internal/observe missing domain/
+G1 internal/observe missing ports/
+G1 internal/observe missing service/
+G1 internal/observe/alert unexpected root entry
+G1 internal/observe/evalmeter unexpected root entry
+G1 internal/observe/eventtap unexpected root entry
+G1 internal/observe/handler unexpected root entry
+G1 internal/playback missing ARCHITECTURE.md
+G1 internal/playback/doc.go unexpected root entry
+G2 internal/acquisition/service/eval/harness.go:4 service imports altune/go-api/internal/acquisition/adapters/discoverybridge
+G2 internal/acquisition/service/eval/harness.go:5 service imports altune/go-api/internal/acquisition/adapters/tempfs
+G2 internal/acquisition/service/step_store.go:13 service imports github.com/google/uuid
+G2 internal/acquisition/service/title_qualifiers.go:9 service imports golang.org/x/text/unicode/norm
+G2 internal/catalog/domain/dedup.go:7 domain imports golang.org/x/text/unicode/norm
+G2 internal/catalog/domain/playlist.go:8 domain imports github.com/google/uuid
+G2 internal/catalog/domain/source_url.go:8 domain imports golang.org/x/text/unicode/norm
+G2 internal/catalog/domain/track.go:12 domain imports github.com/google/uuid
+G2 internal/catalog/service/track_dto.go:7 service imports github.com/google/uuid
+G2 internal/discovery/domain/records.go:7 domain imports github.com/google/uuid
+G2 internal/discovery/service/artwork_fill.go:15 service imports golang.org/x/sync/errgroup
+G2 internal/discovery/service/eval/coverage_signal_b.go:10 service imports golang.org/x/sync/errgroup
+G2 internal/discovery/service/eval/parallel.go:6 service imports golang.org/x/sync/errgroup
+G2 internal/discovery/service/get_album_tracks.go:11 service imports golang.org/x/sync/errgroup
+G2 internal/discovery/service/record_event.go:14 service imports github.com/google/uuid
+G2 internal/discovery/service/record_history.go:12 service imports github.com/google/uuid
+G2 internal/discovery/service/result_cache.go:8 service imports github.com/google/uuid
+G2 internal/discovery/service/search.go:15 service imports github.com/google/uuid
+G2 internal/discovery/service/search.go:16 service imports golang.org/x/sync/singleflight
+G3 internal/acquisition/adapters/handler/command.go:5 imports auth outside adapters/authbridge
+G3 internal/acquisition/adapters/handler/command.go:6 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/handler/reacquire_handler.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/handler/retry_handler.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/persistence/cooldown_fallback.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/persistence/cooldown_store.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/persistence/job_queue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/ports/cooldown.go:4 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/ports/queue.go:4 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/buildsteps.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/eval/case.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/failure_reason.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/mem_job_queue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/orphan_queue.go:4 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/orphan_queue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/pipeline.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/reacquire.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/retry_admission.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/scheduler.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/scheduler_enqueue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/step_store.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/step_store.go:6 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/step_update_track.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/catalog/adapters/discoverybridge imports nothing from discovery ports or service
+G3 internal/catalog/adapters/handler/audio_rate_limit.go:4 imports auth outside adapters/authbridge
+G3 internal/catalog/adapters/handler/audio_url_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/catalog/adapters/handler/featured_artist_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/catalog/adapters/handler/library_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/catalog/adapters/handler/playlist_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/catalog/adapters/handler/stream_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/catalog/adapters/handler/track_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/catalogbridge imports nothing from catalog ports or service
+G3 internal/discovery/adapters/handler/auth_failure_endpoint.go:4 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/handler/content_endpoints.go:4 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/handler/discovery_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/handler/favorites_endpoints.go:4 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/handler/ownership_stamp.go:6 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/handler/search_endpoints.go:4 imports auth outside adapters/authbridge
+G3 internal/discovery/adapters/handler/search_rate_limit.go:4 imports auth outside adapters/authbridge
+G3 internal/eventstream/handler.go:4 imports auth outside adapters/authbridge
+G3 internal/observe/handler/acquisition.go:4 imports acquisition outside adapters/acquisitionbridge
+G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
+G3 internal/observe/handler/handler.go:11 imports acquisition outside adapters/acquisitionbridge
+G3 internal/observe/handler/handler.go:4 imports discovery outside adapters/discoverybridge
+G3 internal/observe/handler/quality.go:4 imports discovery outside adapters/discoverybridge
+G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
+G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
+G3 internal/playback/adapters/handler/queue_handler.go:4 imports auth outside adapters/authbridge
+G3 internal/playback/adapters/handler/queue_rate_limit.go:4 imports auth outside adapters/authbridge
+N1 cmd/api/commands/common.go banned name common
+N1 deploy/lib.sh banned name lib
+N1 internal/catalog/adapters/handler/helpers_test.go banned name helpers
+N1 internal/discovery/adapters/cache/helpers_test.go banned name helpers
+N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers
+N1 internal/discovery/adapters/providers/helpers_test.go banned name helpers
+N1 internal/discovery/service/helpers_test.go banned name helpers
+N1 internal/shared/events/types.go banned name types
