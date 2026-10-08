@@ -1,4 +1,4 @@
-import { isServerFaultStatus, type ContractError } from '@shared/errors';
+import { ApiError, isServerFaultStatus, type ContractError } from '@shared/errors';
 
 import { isNetworkError } from './isNetworkError';
 
@@ -38,9 +38,23 @@ const UNCLASSIFIED_COPY: ErrorCopy = {
   body: `Something went wrong. ${RETRY_TAIL}`,
 };
 
+const RATE_LIMITED_COPY: ErrorCopy = {
+  title: 'Too many requests',
+  body: 'You are doing that too often. Wait a moment, then try again.',
+};
+const REJECTED_COPY: ErrorCopy = {
+  title: 'Something went wrong',
+  body: 'We could not complete that request.',
+};
+
+const HTTP_TOO_MANY_REQUESTS = 429;
+
 export function describeError(err: unknown): ErrorCopy {
   if (isContractError(err)) return UPDATE_REQUIRED_COPY;
   if (isNetworkError(err)) return OFFLINE_COPY;
   if (isServerError(err)) return SERVER_FAULT_COPY;
+  if (err instanceof ApiError) {
+    return err.status === HTTP_TOO_MANY_REQUESTS ? RATE_LIMITED_COPY : REJECTED_COPY;
+  }
   return UNCLASSIFIED_COPY;
 }
