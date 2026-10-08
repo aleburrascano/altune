@@ -113,6 +113,10 @@ export function nearestKeyPosition(
   return hits.reduce((a, b) => (Math.abs(b - preferred) < Math.abs(a - preferred) ? b : a));
 }
 
+function orderedTracks(tracks: TrackList, playOrder: readonly number[]) {
+  return playOrder.map((i) => tracks[i] ?? null);
+}
+
 function keyedTarget(
   ordered: readonly (PlaybackTrack | null)[],
   key: string,
@@ -131,11 +135,7 @@ export function resolveSyncTarget(
 ): number | null {
   const inRange = index >= 0 && index < playOrder.length;
   if (key == null) return inRange ? index : null;
-  return keyedTarget(
-    playOrder.map((i) => tracks[i] ?? null),
-    key,
-    index,
-  );
+  return keyedTarget(orderedTracks(tracks, playOrder), key, index);
 }
 
 export const REPEAT_CYCLE: Record<RepeatMode, RepeatMode> = {
