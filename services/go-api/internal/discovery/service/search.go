@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
+	"runtime/debug"
 	"slices"
 
 	"github.com/google/uuid"
@@ -335,7 +336,14 @@ func (s *Service) resolveRanked(
 	}
 
 	detached := context.WithoutCancel(ctx)
-	call := s.resolveGroup.DoChan(s.cache.key(queryNorm, query.Kinds), func() (any, error) {
+	call := s.resolveGroup.DoChan(s.cache.key(queryNorm, query.Kinds), func() (val any, _ error) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.ErrorContext(detached, "search.v2.resolve_panic",
+					"panic", r, "stack", string(debug.Stack()))
+				val = rankedResolution{partial: true}
+			}
+		}()
 		return s.resolveCold(detached, query, searchQuery, queryNorm), nil
 	})
 	select {
