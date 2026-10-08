@@ -8,7 +8,9 @@ export const MAX_TRACKED_ACCOUNTS = 64;
 
 export type LockoutAction = 'sign-in' | 'reset-request';
 
-type FailureRun = { count: number; lastFailureAt: number };
+const monotonicNow = (): number => performance.now();
+
+type FailureRun = { count: number; lastFailureAt: number; lastFailureTick: number };
 
 const runsByAccount = new Map<string, FailureRun>();
 
@@ -22,15 +24,25 @@ function cooldownMs(failures: number): number {
   return Math.min(doubledPerExtraFailure, FAILURE_RUN_MEMORY_MS);
 }
 
-function runFor(action: LockoutAction, email: string, now: number): FailureRun | undefined {
-  const run = runsByAccount.get(accountKey(action, email));
-  if (!run) return undefined;
-  return now < run.lastFailureAt + FAILURE_RUN_MEMORY_MS ? run : undefined;
+function msSinceFailure(run: FailureRun, now: number, tick: number): number {
+  if (now < run.lastFailureAt) return Infinity;
+  return Math.max(now - run.lastFailureAt, tick - run.lastFailureTick);
 }
 
-function forgetStaleRuns(now: number): void {
+function runFor(
+  action: LockoutAction,
+  email: string,
+  now: number,
+  tick: number,
+): FailureRun | undefined {
+  const run = runsByAccount.get(accountKey(action, email));
+  if (!run) return undefined;
+  return msSinceFailure(run, now, tick) < FAILURE_RUN_MEMORY_MS ? run : undefined;
+}
+
+function forgetStaleRuns(now: number, tick: number): void {
   for (const [key, run] of runsByAccount) {
-    if (now >= run.lastFailureAt + FAILURE_RUN_MEMORY_MS) runsByAccount.delete(key);
+    if (msSinceFailure(run, now, tick) >= FAILURE_RUN_MEMORY_MS) runsByAccount.delete(key);
   }
 }
 
@@ -49,14 +61,15 @@ export function isLockedOut(
   action: LockoutAction,
   email: string,
   now: number = Date.now(),
+  tick: number = monotonicNow(),
 ): boolean {
-  const run = runFor(action, email, now);
+  const run = runFor(action, email, now, tick);
   if (!run) return false;
-  return now < run.lastFailureAt + cooldownMs(run.count);
+  return msSinceFailure(run, now, tick) < cooldownMs(run.count);
 }
 
-function prepareToStore(key: string, now: number): void {
-  forgetStaleRuns(now);
+function prepareToStore(key: string, now: number, tick: number): void {
+  forgetStaleRuns(now, tick);
   if (!runsByAccount.has(key) && runsByAccount.size >= MAX_TRACKED_ACCOUNTS) {
     forgetLeastRecentRun();
   }
@@ -66,11 +79,12 @@ export function recordFailedAttempt(
   action: LockoutAction,
   email: string,
   now: number = Date.now(),
+  tick: number = monotonicNow(),
 ): void {
   const key = accountKey(action, email);
-  const count = (runFor(action, email, now)?.count ?? 0) + 1;
-  prepareToStore(key, now);
-  runsByAccount.set(key, { count, lastFailureAt: now });
+  const count = (runFor(action, email, now, tick)?.count ?? 0) + 1;
+  prepareToStore(key, now, tick);
+  runsByAccount.set(key, { count, lastFailureAt: now, lastFailureTick: tick });
 }
 
 export function clearFailedAttempts(action: LockoutAction, email: string): void {
