@@ -95,7 +95,10 @@ test('running the real script exits 1 when one violation is fixed and another ad
   const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
   const swapped = path.join(os.tmpdir(), `consistency-swap-${process.pid}.baseline`);
   fs.writeFileSync(swapped, `${[...baselineLines, fixedLine].join('\n')}\n`);
-  fs.writeFileSync(fixturePath, "export function f() {\n  return fetch('https://example.com');\n}\n");
+  fs.writeFileSync(
+    fixturePath,
+    "export function f() {\n  return fetch('https://example.com');\n}\n",
+  );
 
   try {
     const { status, stdout } = runRatchetCli({ CONSISTENCY_BASELINE_FILE: swapped });
@@ -144,6 +147,38 @@ test('running the real script exits 1 and names MC-1 and the file when a raw fet
   } finally {
     fs.rmSync(fixturePath, { force: true });
   }
+});
+
+describe.each([
+  [
+    'MC-9',
+    path.join('src', 'features', 'auth', 'ui', '__mc9_fixture__.ts'),
+    "import { x } from '../adapters/http/x';\nexport const y = x;\n",
+  ],
+  [
+    'MC-9',
+    path.join('src', 'features', 'library', 'hooks', '__mc9_fixture__.ts'),
+    "import { x } from '../adapters/http/x';\nexport const y = x;\n",
+  ],
+  [
+    'MC-10',
+    path.join('src', 'features', 'library', 'hooks', '__mc10_fixture__.ts'),
+    "export const k = { queryKey: ['x'] };\n",
+  ],
+])('running the real script for %s', (ruleId, relativePath, source) => {
+  test(`exits 1 and names ${relativePath} when it is added`, () => {
+    const fixturePath = path.join(mobileRoot, relativePath);
+    fs.writeFileSync(fixturePath, source);
+
+    try {
+      const { status, stdout } = runRatchetCli();
+
+      expect(status).toBe(1);
+      expect(stdout).toContain(`new violation: ${ruleId} ${relativePath}`);
+    } finally {
+      fs.rmSync(fixturePath, { force: true });
+    }
+  });
 });
 
 async function lintMc2At(filename: string, source: string) {

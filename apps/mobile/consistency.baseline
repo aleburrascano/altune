@@ -7,6 +7,12 @@ MC-1 src/features/auth/hooks/useSignIn.ts '@shared/auth/supabaseClient' import i
 MC-1 src/features/auth/hooks/useSignUp.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
 MC-1 src/features/auth/hooks/useUpdatePassword.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
 MC-1 src/features/auth/ui/AuthCallbackScreen.web.tsx '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
+MC-10 src/features/detail/hooks/createEnrichmentHook.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/hooks/useAlbumDiscovery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/hooks/useArtistContent.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/hooks/useRelatedTracks.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/resolve-entity-query.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/resolve-entity-query.ts queryOptions() builds its own key; define it in the query-key factory (MC-10, module-shape M5).
 MC-4b src/features/auth/ui/OAuthButtons.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/AlbumRail.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/AlbumTrackRow.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
@@ -59,3 +65,12 @@ MC-4b src/shared/acquisition/ui/DownloadsSheet.tsx 'Pressable' import from 'reac
 MC-4b src/shared/playlists/ui/AddToPlaylistSheet.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/shared/playlists/ui/CreatePlaylistModal.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/shared/ui/keyboard/keyboard.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
+MC-9 src/features/auth/hooks/useOAuth.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/auth/hooks/useOAuth.web.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/auth/hooks/useSignIn.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/auth/ui/TestAuthBridge.tsx Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/detail/ports/DetailPortProvider.tsx Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/discover/ports/DiscoverPortProvider.tsx Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/library/ports/LibraryPortProvider.tsx Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/playback/ports/activePlaybackPort.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
+MC-9 src/features/settings/ports/SettingsPortProvider.tsx Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
