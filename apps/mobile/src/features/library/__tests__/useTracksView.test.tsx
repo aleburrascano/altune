@@ -6,7 +6,7 @@ import { View } from 'react-native';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 
-import type { ActiveView } from '../domain/activeView';
+import type { ActiveView } from '@features/library/domain/activeView';
 import { useSelection } from '../hooks/useSelection';
 import { useTracksView } from '../hooks/useTracksView';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';

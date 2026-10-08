@@ -11,15 +11,15 @@ import {
 } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 
-import type { ActiveView } from '../domain/activeView';
+import type { ActiveView } from '@features/library/domain/activeView';
 import { useArtistsView } from '../hooks/useArtistsView';
 import { SortControl } from '../ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 let mockGroupPageSize = 50;
 
-jest.mock('../domain/groupPaging', () => {
-  const actual = jest.requireActual('../domain/groupPaging');
+jest.mock('@features/library/domain/groupPaging', () => {
+  const actual = jest.requireActual('@features/library/domain/groupPaging');
   return {
     __esModule: true,
     get GROUP_PAGE_SIZE() {
