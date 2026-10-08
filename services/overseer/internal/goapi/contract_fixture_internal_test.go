@@ -47,8 +47,6 @@ func uncoveredKeys(fixture json.RawMessage, typ reflect.Type) []string {
 	return walkUncovered("", fixture, typ, false)
 }
 
-// uncoveredKeysStrict also reports omitempty fields the fixture lacks, so a
-// rename on the go-api side of an optional field still fails a test.
 func uncoveredKeysStrict(fixture json.RawMessage, typ reflect.Type) []string {
 	return walkUncovered("", fixture, typ, true)
 }
@@ -213,8 +211,6 @@ func TestContract_HealthFixtureDecodesIntoOperatorHealth(t *testing.T) {
 	}
 }
 
-// decodeFixtureStrict decodes the fixture and fails on every key of out's type
-// the fixture lacks, omitempty ones included, except the exempt paths.
 func decodeFixtureStrict(t *testing.T, name string, out any, exempt ...string) {
 	t.Helper()
 	data := loadContractFixture(t, name)
@@ -247,7 +243,6 @@ func TestContract_MetricsLiveFixtureDecodes(t *testing.T) {
 
 func TestContract_EvalFixtureDecodes(t *testing.T) {
 	var got EvalStatus
-	// error is only present when the last run failed; this fixture is a healthy run.
 	decodeFixtureStrict(t, "observe_eval.json", &got, "error")
 	if !got.Scored() {
 		t.Error("Scored() = false, want true")
