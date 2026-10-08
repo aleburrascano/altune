@@ -14,7 +14,6 @@ import (
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
 	observeHandler "altune/go-api/internal/observe/handler"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 
@@ -64,7 +63,6 @@ func liveMetricsSnapshot() observeHandler.LiveMetrics {
 	return observeHandler.LiveMetrics{
 		"auth":      authmetrics.ReadSnapshot(),
 		"catalog":   catalogmetrics.ReadSnapshot(),
-		"feedback":  feedbackmetrics.ReadSnapshot(),
 		"playback":  playbackmetrics.ReadSnapshot(),
 		"providers": providermetrics.ReadSnapshot(),
 		"latency":   reqmetrics.ReadSnapshot(),

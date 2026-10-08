@@ -173,7 +173,7 @@ func productionRouter(t *testing.T) *chi.Mux {
 		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	r := a.mountRoutes(verifier, cat, playbackHandler.NewQueueHandler(nil),
-		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
+		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	a.wireObserve(ctx, r, verifier, eventtap.New(events.NewInProcessBus()))

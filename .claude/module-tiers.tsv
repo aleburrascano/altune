@@ -13,7 +13,6 @@ apps/mobile/src/features/library/	2	managing the library	library
 apps/mobile/src/features/detail/	2	track and album detail	detail
 apps/mobile/src/features/settings/	3	rarely used	settings
 services/go-api/internal/observe/	3	operator only	observe
-services/go-api/internal/feedback/	3	operator only	feedback
 services/overseer/	3	operator only	overseer
 scripts/	2	repo tooling and CI	tooling
 services/go-api/scripts/	2	repo tooling and CI	tooling

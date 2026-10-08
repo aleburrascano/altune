@@ -11,8 +11,6 @@ import (
 
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 
-	feedbackHandler "altune/go-api/internal/feedback/adapters/handler"
-
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 
 	"github.com/go-chi/chi/v5"
@@ -65,7 +63,6 @@ func (a *App) mountRoutes(
 	cat catalogWiring,
 	queueHandler *playbackHandler.QueueHandler,
 	discoveryH *discoveryHandler.DiscoveryHandler,
-	feedbackH *feedbackHandler.FeedbackHandler,
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
@@ -93,7 +90,6 @@ func (a *App) mountRoutes(
 			r.Mount("/playlists", cat.playlistHandler.Routes())
 			r.Mount("/playback", queueHandler.Routes())
 			r.Mount("/discovery", discoveryH.Routes())
-			mountFeedback(r, feedbackH)
 			r.Handle("/events", eventstream.NewHandler(a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		})
 	})

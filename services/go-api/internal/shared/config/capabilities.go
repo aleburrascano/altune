@@ -87,7 +87,3 @@ func (c *Config) HasYouTubeMusic() bool {
 func (c *Config) HasNowPlayingEnrichment() bool {
 	return c.NowPlayingEnrichmentEnabled
 }
-
-func (c *Config) HasIssueTracker() bool {
-	return c.GiteaIssueRepo != "" && c.GiteaIssueToken != ""
-}

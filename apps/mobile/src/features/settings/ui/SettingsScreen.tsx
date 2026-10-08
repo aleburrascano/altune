@@ -1,5 +1,5 @@
 import { ChevronRight, User } from 'lucide-react-native';
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { appVersion } from '@shared/device/device';
@@ -12,10 +12,8 @@ import { useDownloadStats } from '@features/settings/hooks/useDownloadStats';
 import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
 import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
-import { FeedbackCard } from '@features/settings/ui/FeedbackCard';
 import { LibraryCard } from '@features/settings/ui/LibraryCard';
 import { OfflineDownloadsCard } from '@features/settings/ui/OfflineDownloadsCard';
-import { ReportIssueModal } from '@features/settings/ui/ReportIssueModal';
 import { SettingsCard } from '@features/settings/ui/SettingsCard';
 import { SettingsRow } from '@features/settings/ui/SettingsRow';
 
@@ -26,8 +24,6 @@ export function SettingsScreen(): ReactElement {
   const clearHistory = useSettingsClearSearchHistory();
   const stats = useDownloadStats();
   const downloads = useRemoveDownloads(stats);
-
-  const [reporting, setReporting] = useState(false);
 
   return (
     <Screen>
@@ -48,8 +44,6 @@ export function SettingsScreen(): ReactElement {
           />
         </SettingsCard>
 
-        <FeedbackCard onPress={() => setReporting(true)} />
-
         <AppearanceCard />
 
         {offlineDownloadsSupported && <OfflineDownloadsCard stats={stats} />}
@@ -69,8 +63,6 @@ export function SettingsScreen(): ReactElement {
           </Text>
         </View>
       </ScrollView>
-
-      <ReportIssueModal visible={reporting} onClose={() => setReporting(false)} screen="settings" />
     </Screen>
   );
 }

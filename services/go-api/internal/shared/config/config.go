@@ -78,12 +78,6 @@ type Config struct {
 	AppleMusicEnabled  bool `env:"APPLEMUSIC_ENABLED" envDefault:"true"`
 	AmazonMusicEnabled bool `env:"AMAZONMUSIC_ENABLED" envDefault:"true"`
 
-	GiteaIssueURL   string `env:"GITEA_ISSUE_URL" envDefault:"https://altune-git.duckdns.org"`
-	GiteaIssueRepo  string `env:"GITEA_ISSUE_REPO"`
-	GiteaIssueToken string `env:"GITEA_ISSUE_TOKEN"`
-
-	FeedbackEnabled bool `env:"FEEDBACK_ENABLED" envDefault:"true"`
-
 	AudioPrefetchEnabled bool `env:"AUDIO_PREFETCH_ENABLED" envDefault:"true"`
 
 	NowPlayingEnrichmentEnabled bool `env:"PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED" envDefault:"true"`
@@ -169,8 +163,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_fanarttv", c.HasFanartTV()),
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
-		slog.Bool("has_issue_tracker", c.HasIssueTracker()),
-		slog.Bool("feedback_enabled", c.FeedbackEnabled),
 		slog.Bool("has_spotify", c.HasSpotify()),
 		slog.Bool("has_soundcloud", c.HasSoundCloud()),
 		slog.Bool("has_applemusic", c.HasAppleMusic()),

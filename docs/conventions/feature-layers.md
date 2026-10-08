@@ -43,8 +43,7 @@ React or the platform. Library (`apps/mobile/src/features/library`) is the worke
 - `__tests__/libraryPortInvariants.test.ts` pins library's port boundary.
 - `__tests__/libraryLayersInvariants.test.ts` pins library's domain files and this doc.
 - `features/__tests__/featurePortInvariants.test.ts` checks library, discover and auth make no
-  api-client value import outside `adapters/`, and settings makes none besides its feedback files
-  (`hooks/useSubmitReport.ts`, `ui/ReportIssueModal.tsx`).
+  api-client value import outside `adapters/`, and neither does settings, detail or playback.
 - `features/__tests__/featureLayersInvariants.test.ts` runs the domain purity check over every
   `features/*/domain/` folder. Every feature uses the domain/ports/adapters/hooks/ui layout, and
   the same test ratchets the loose `.ts`/`.tsx` files at each feature root: a count over its

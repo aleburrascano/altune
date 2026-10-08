@@ -150,7 +150,7 @@ func (a *App) setup(ctx context.Context) error {
 	playback := a.wirePlayback(cat.trackRepo)
 	disc.handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
 
-	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler, a.wireFeedback())
+	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler)
 	if testAuth != nil {
 		mountTestLogin(r, testAuth)
 	}

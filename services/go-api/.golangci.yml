@@ -12,13 +12,11 @@ linters:
           files:
             - "**/internal/catalog/domain/**"
             - "**/internal/discovery/domain/**"
-            - "**/internal/feedback/domain/**"
             - "**/internal/playback/domain/**"
           allow:
             - $gostd
             - altune/go-api/internal/catalog/domain
             - altune/go-api/internal/discovery/domain
-            - altune/go-api/internal/feedback/domain
             - altune/go-api/internal/playback/domain
             - altune/go-api/internal/shared$
             - altune/go-api/internal/shared/sharedtest
@@ -55,21 +53,6 @@ linters:
             - pkg: altune/go-api/internal/observe
               desc: discovery never imports observe
 
-        feedback-boundary:
-          files:
-            - "**/internal/feedback/**"
-          deny:
-            - pkg: altune/go-api/internal/catalog
-              desc: feedback never imports catalog
-            - pkg: altune/go-api/internal/discovery
-              desc: feedback never imports discovery
-            - pkg: altune/go-api/internal/playback
-              desc: feedback never imports playback
-            - pkg: altune/go-api/internal/acquisition
-              desc: feedback never imports acquisition
-            - pkg: altune/go-api/internal/observe
-              desc: feedback never imports observe
-
         auth-boundary:
           files:
             - "**/internal/auth/**"
@@ -84,8 +67,6 @@ linters:
               desc: auth never imports acquisition
             - pkg: altune/go-api/internal/observe
               desc: auth never imports observe
-            - pkg: altune/go-api/internal/feedback
-              desc: auth never imports feedback
 
         acquisition-boundary:
           files:
@@ -157,8 +138,6 @@ linters:
               desc: service is driven by ports, it never imports adapters
             - pkg: altune/go-api/internal/playback/adapters
               desc: service is driven by ports, it never imports adapters
-            - pkg: altune/go-api/internal/feedback/adapters
-              desc: service is driven by ports, it never imports adapters
             - pkg: altune/go-api/internal/acquisition/adapters
               desc: service is driven by ports, it never imports adapters
 
@@ -175,8 +154,6 @@ linters:
             - pkg: altune/go-api/internal/discovery/adapters
               desc: service is driven by ports, it never imports adapters
             - pkg: altune/go-api/internal/playback/adapters
-              desc: service is driven by ports, it never imports adapters
-            - pkg: altune/go-api/internal/feedback/adapters
               desc: service is driven by ports, it never imports adapters
             - pkg: altune/go-api/internal/acquisition/adapters
               desc: the eval harness may compose only the discoverybridge and tempfs adapters
@@ -200,8 +177,6 @@ linters:
               desc: ports are pure contracts, they never import the service
             - pkg: altune/go-api/internal/playback/service
               desc: ports are pure contracts, they never import the service
-            - pkg: altune/go-api/internal/feedback/service
-              desc: ports are pure contracts, they never import the service
             - pkg: altune/go-api/internal/acquisition/service
               desc: ports are pure contracts, they never import the service
             - pkg: altune/go-api/internal/catalog/adapters
@@ -209,8 +184,6 @@ linters:
             - pkg: altune/go-api/internal/discovery/adapters
               desc: ports are pure contracts, they never import adapters
             - pkg: altune/go-api/internal/playback/adapters
-              desc: ports are pure contracts, they never import adapters
-            - pkg: altune/go-api/internal/feedback/adapters
               desc: ports are pure contracts, they never import adapters
             - pkg: altune/go-api/internal/acquisition/adapters
               desc: ports are pure contracts, they never import adapters
