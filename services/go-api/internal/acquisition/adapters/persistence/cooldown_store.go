@@ -48,7 +48,6 @@ func (s *PgxCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, 
 	)
 	err := s.pool.QueryRow(ctx, reserveSQL, trackID.UUID(), string(kind), cooldown.Seconds()).Scan(&at, &ok, &waitSecs)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// A concurrent reservation committed after this statement's snapshot.
 		return time.Time{}, false, cooldown, nil
 	}
 	if err != nil {
