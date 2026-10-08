@@ -16,6 +16,7 @@ export function SessionExpiredNotice() {
         Sign in again to get back to your library. Nothing has been lost.
       </Text>
       <Button
+        action="auth.session_expired.sign_in_again"
         testID="session-expired-signin"
         label={state.status === 'loading' ? 'Signing out…' : 'Sign in again'}
         disabled={state.status === 'loading'}

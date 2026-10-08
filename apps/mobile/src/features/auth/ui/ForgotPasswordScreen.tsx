@@ -57,6 +57,7 @@ export function ForgotPasswordScreen(): ReactElement {
             <FieldError testID="email-error">Enter a valid email address.</FieldError>
           ) : null}
           <Button
+            action="auth.forgot_password.send_link"
             testID="submit-button"
             label="Send reset link"
             onPress={() => void requestReset(email)}
