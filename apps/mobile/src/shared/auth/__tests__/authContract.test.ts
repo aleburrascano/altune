@@ -76,7 +76,16 @@ const GO_HTTP_STATUS_CONSTANTS: Record<string, number> = {
 
 function middlewareSource(): string {
   return fs.readFileSync(
-    path.join(REPO_ROOT!, 'services', 'go-api', 'internal', 'auth', 'middleware.go'),
+    path.join(
+      REPO_ROOT!,
+      'services',
+      'go-api',
+      'internal',
+      'auth',
+      'adapters',
+      'middleware',
+      'middleware.go',
+    ),
     'utf8',
   );
 }
@@ -119,7 +128,7 @@ function deriveMobileSessionExpiredStatus(source: string): number {
   return Number(constant![1]);
 }
 
-describe('cross-surface 401 contract, derived from services/go-api/internal/auth/middleware.go at test time', () => {
+describe('cross-surface 401 contract, derived from services/go-api/internal/auth/adapters/middleware/middleware.go at test time', () => {
   it('finds the repo root to derive the contract from', () => {
     expect(REPO_ROOT).not.toBeNull();
   });
