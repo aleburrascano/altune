@@ -163,6 +163,9 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionDrainBudgetSeconds < 1 {
 		return fmt.Errorf("ACQUISITION_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.AcquisitionDrainBudgetSeconds)
 	}
+	if err := c.validateAudioSources(); err != nil {
+		return err
+	}
 	if err := c.validateCookieFile(); err != nil {
 		return err
 	}
@@ -173,6 +176,16 @@ func (c *Config) validateTuning() error {
 		return fmt.Errorf("ACQUISITION_CONFIDENCE_FLOOR must be between 0 and 1, got %v", c.AcquisitionConfidenceFloor)
 	}
 	return nil
+}
+
+func (c *Config) validateAudioSources() error {
+	if c.YtMusicEnabled || c.YtDLPEnabled || len(c.StreamripServices) > 0 {
+		return nil
+	}
+	if c.AcquisitionFixtureEnabled() || c.AcquisitionPaused {
+		return nil
+	}
+	return errors.New("no audio source enabled: enable at least one of YTMUSIC_ENABLED, YTDLP_ENABLED or STREAMRIP_SERVICES (or set ACQUISITION_PAUSED=true)")
 }
 
 func (c *Config) validateCookieFile() error {

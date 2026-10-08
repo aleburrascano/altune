@@ -3,11 +3,14 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"sync"
 )
+
+var ErrNoAudioSources = errors.New("no audio sources configured")
 
 type SourceRegistry struct {
 	sources []ports.AudioSource
@@ -30,7 +33,7 @@ func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]por
 
 func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error, error) {
 	if len(r.sources) == 0 {
-		return nil, nil, fmt.Errorf("no audio sources configured")
+		return nil, nil, ErrNoAudioSources
 	}
 
 	slots := make([][]ports.AudioCandidate, len(r.sources))
