@@ -5,7 +5,7 @@ import { useSession } from '@shared/auth/useSession';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 
-import { useRecoveryUnlocked } from '@features/auth/recoveryUnlock';
+import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
 import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/resetPasswordRoute';
 
 import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';

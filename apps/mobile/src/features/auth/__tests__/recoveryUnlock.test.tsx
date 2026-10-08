@@ -12,9 +12,9 @@ import {
   isRecoveryUnlocked,
   markRecoveryUnlocked,
   RECOVERY_UNLOCK_WINDOW_MS,
-  useRecoveryUnlocked,
   _listenerCountForTest,
 } from '@features/auth/recoveryUnlock';
+import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
@@ -83,6 +83,19 @@ describe('recoveryUnlock marker', () => {
     expect(_listenerCountForTest()).toBe(1);
     unmount();
     expect(_listenerCountForTest()).toBe(0);
+  });
+
+  it('reports locked when nothing was marked', () => {
+    const { result } = renderHook(() => useRecoveryUnlocked(VERIFIED_USER));
+
+    expect(result.current).toBe(false);
+  });
+
+  it('reports locked for a different user than the one marked', () => {
+    markRecoveryUnlocked(VERIFIED_USER);
+    const { result } = renderHook(() => useRecoveryUnlocked(OTHER_USER));
+
+    expect(result.current).toBe(false);
   });
 
   it('clearRecoveryUnlock when already locked emits nothing extra', () => {
@@ -196,6 +209,18 @@ describe('recoveryUnlock demotes a mounted subscriber the moment the window elap
   afterEach(() => {
     act(() => clearRecoveryUnlock());
     jest.useRealTimers();
+  });
+
+  it('flips from unlocked to locked once fake time passes the window', () => {
+    const { result } = renderHook(() => useRecoveryUnlocked(VERIFIED_USER));
+    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    expect(result.current).toBe(true);
+
+    act(() => {
+      jest.advanceTimersByTime(RECOVERY_UNLOCK_WINDOW_MS + 1);
+    });
+
+    expect(result.current).toBe(false);
   });
 
   it('holds a subscriber unlocked right up to the cutoff', () => {
