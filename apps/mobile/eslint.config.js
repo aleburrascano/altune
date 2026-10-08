@@ -27,7 +27,7 @@ const FEATURES = ['auth', 'detail', 'discover', 'library', 'playback', 'settings
 const TEST_FILES = ['**/__tests__/**'];
 
 const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
-  'src/app/_layout.tsx',
+  'src/features/playback/adapters/startPlaybackService.ts',
   'src/features/playback/hooks/PlaybackProvider.tsx',
 ];
 

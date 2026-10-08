@@ -28,7 +28,6 @@ M1 src/features/detail/save-all.ts loose root file
 M1 src/features/detail/save-cache.ts loose root file
 M1 src/features/detail/save-control-state.ts loose root file
 M1 src/features/detail/text-compare.ts loose root file
-M1 src/features/discover missing index.ts
 M1 src/features/library missing index.ts
 M1 src/features/library/activeView.ts loose root file
 M1 src/features/library/gridColumns.ts loose root file
@@ -37,18 +36,13 @@ M1 src/features/library/pinBatchSummary.ts loose root file
 M1 src/features/library/pinnedStatusDisplay.ts loose root file
 M1 src/features/library/selectionActions.ts loose root file
 M1 src/features/library/trackMenu.ts loose root file
-M1 src/features/playback missing index.ts
-M1 src/features/playback/playsThroughTrackPlayer.ts loose root file
-M1 src/features/playback/playsThroughTrackPlayer.web.ts loose root file
 M1 src/features/settings missing index.ts
 M2 src/app/(auth)/_layout.tsx deep import @features/auth/ui/hero/ArtworkBackground
 M2 src/app/(auth)/forgot-password.tsx deep import @features/auth/ui/ForgotPasswordScreen
 M2 src/app/(auth)/sign-in.tsx deep import @features/auth/ui/SignInScreen
 M2 src/app/(auth)/sign-up.tsx deep import @features/auth/ui/SignUpScreen
-M2 src/app/(tabs)/_layout.tsx deep import @features/playback/ui/MiniPlayer
 M2 src/app/(tabs)/discover/detail.tsx deep import @features/detail/ui/DetailScreen
 M2 src/app/(tabs)/discover/featuring.tsx deep import @features/library/ui/FeaturingScreen
-M2 src/app/(tabs)/discover/index.tsx deep import @features/discover/ui/DiscoverScreen
 M2 src/app/(tabs)/library/detail.tsx deep import @features/detail/ui/DetailScreen
 M2 src/app/(tabs)/library/featuring.tsx deep import @features/library/ui/FeaturingScreen
 M2 src/app/(tabs)/library/index.tsx deep import @features/library/ui/LibraryScreen
@@ -57,16 +51,9 @@ M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsS
 M2 src/app/_layout.tsx deep import @features/auth/hooks/useAuthDeepLink
 M2 src/app/_layout.tsx deep import @features/auth/ui/AuthGate
 M2 src/app/_layout.tsx deep import @features/auth/ui/TestAuthBridge
-M2 src/app/_layout.tsx deep import @features/playback/hooks/PlaybackProvider
-M2 src/app/_layout.tsx deep import @features/playback/native/registerPlaybackService
-M2 src/app/_layout.tsx deep import @features/playback/playsThroughTrackPlayer
-M2 src/app/_layout.tsx deep import @features/playback/ui/SleepTimerBridge
 M2 src/app/auth/callback.tsx deep import @features/auth/ui/AuthCallbackScreen
 M2 src/app/auth/confirm.tsx deep import @features/auth/ui/AuthCallbackScreen
 M2 src/app/auth/recovery.tsx deep import @features/auth/ui/AuthCallbackScreen
-M2 src/app/player/index.tsx deep import @features/playback/ui/FullPlayer
-M2 src/app/player/lyrics.tsx deep import @features/playback/ui/LyricsSheet
-M2 src/app/player/queue.tsx deep import @features/playback/ui/QueueSheet
 M2 src/app/reset-password.tsx deep import @features/auth/ui/SetNewPasswordScreen
 M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
 M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/

@@ -7,6 +7,16 @@ jest.mock(
   () => require('react-native-safe-area-context/jest/mock').default,
 );
 
+jest.mock('react-native-reanimated', () => ({
+  __esModule: true,
+  default: { View: jest.requireActual('react-native').View },
+  useAnimatedStyle: () => ({}),
+}));
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
+  __esModule: true,
+  default: ({ children }) => children,
+}));
+
 const { fakeFetch, __http } = require('./doubles/fetch.js');
 
 global.fetch = fakeFetch;
