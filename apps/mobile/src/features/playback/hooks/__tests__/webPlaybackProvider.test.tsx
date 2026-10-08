@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { ApiError } from '@shared/api-client';
 import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
@@ -12,11 +12,11 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import { recordPlaybackFailure } from '@features/playback/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
-
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
 jest.mock('@features/playback/playbackHealth', () => ({
   ...jest.requireActual('@features/playback/playbackHealth'),
@@ -24,7 +24,14 @@ jest.mock('@features/playback/playbackHealth', () => ({
 }));
 
 const recorded = recordPlaybackFailure as jest.MockedFunction<typeof recordPlaybackFailure>;
-const presign = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
+const presign = jest.fn<Promise<ResolvedAudioUrl[]>, [readonly string[]]>();
+let restorePort: () => void;
+beforeAll(() => {
+  restorePort = installPlaybackPort({ ...createMemoryPlaybackPort(), fetchAudioUrls: presign });
+});
+afterAll(() => {
+  restorePort();
+});
 
 const HAVE_ENOUGH_DATA = 4;
 
