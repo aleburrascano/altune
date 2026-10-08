@@ -30,7 +30,7 @@ func newSearchTelemetry(eventStore ports.EventStore, activity ports.ActivityFeed
 	return &SearchTelemetry{eventStore: eventStore, activity: activity, bg: bg}
 }
 
-func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) {
+func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, startedAt time.Time, shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) {
 	if t.eventStore == nil {
 		return
 	}
@@ -58,7 +58,7 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 		defer cancel()
 
 		event := domain.InteractionEvent{
-			OccurredAt: time.Now().UTC(),
+			OccurredAt: startedAt,
 			UserId:     userId,
 			Type:       domain.EventTypeSearchPerformed,
 			QueryNorm:  queryNorm,

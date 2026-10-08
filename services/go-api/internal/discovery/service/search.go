@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
@@ -205,6 +206,7 @@ type searchRun struct {
 	query       *domain.SearchQuery
 	queryNorm   string
 	saveHistory bool
+	startedAt   time.Time
 }
 
 func (s *Service) Execute(
@@ -223,6 +225,7 @@ func (s *Service) ExecutePage(
 	saveHistory bool,
 	continues uuid.UUID,
 ) (*SearchOutput, error) {
+	startedAt := time.Now().UTC()
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
@@ -235,6 +238,7 @@ func (s *Service) ExecutePage(
 		query:       query,
 		queryNorm:   queryNorm,
 		saveHistory: saveHistory,
+		startedAt:   startedAt,
 	}
 	ranked := s.favorites.lift(ctx, userId, resolution.ranked)
 
@@ -411,8 +415,8 @@ func (s *Service) recordFirstPageSideEffects(
 	run searchRun,
 	page firstPage,
 ) {
-	s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.saveHistory)
-	s.telemetry.emit(ctx, run.userId, run.searchId, run.queryNorm, page.shown,
+	s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.saveHistory, run.startedAt)
+	s.telemetry.emit(ctx, run.userId, run.searchId, run.queryNorm, run.startedAt, page.shown,
 		shownSignatures(page.fullSlate, page.related), page.explored, s.ranking.explorationRate)
 	s.vocab.ingest(ctx, page.organic)
 }

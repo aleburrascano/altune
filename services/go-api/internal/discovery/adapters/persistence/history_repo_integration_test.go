@@ -203,3 +203,63 @@ func TestClearSearchHistory_ALateEventCannotRestoreTheErasedText(t *testing.T) {
 		t.Errorf("an event flushed after the clear restored %v, want no stored search text", got)
 	}
 }
+
+func TestClearSearchHistory_ALateInsertOfASearchBegunBeforeTheClearLeavesNoRow(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	began := time.Now().UTC().Add(-time.Second)
+
+	clearSearchHistoryOf(t, pool, owner)
+	seedHistoryEntry(t, NewPgxSearchHistoryRepository(pool), owner, "late insert "+uuid.New().String()[:8], began)
+
+	if got := countOwnedRows(t, pool,
+		`SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner); got != 0 {
+		t.Errorf("history rows after a late insert = %d, want 0", got)
+	}
+}
+
+func TestClearSearchHistory_ALateSearchPerformedEventKeepsNoSearchText(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	began := time.Now().UTC().Add(-time.Second)
+
+	clearSearchHistoryOf(t, pool, owner)
+	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
+		QueryNorm: "late event " + uuid.New().String()[:8], SearchId: uuid.New().String(),
+		Payload: map[string]any{"zero_result": false},
+	})
+
+	if got := storedSearchTextsOf(t, pool, owner); len(got) != 0 {
+		t.Errorf("a search_performed event begun before the clear stored %v, want none", got)
+	}
+}
+
+func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	clearSearchHistoryOf(t, pool, owner)
+	query, err := domain.NewSearchQuery("after erase", domain.AllKinds(), 10)
+	if err != nil {
+		t.Fatalf("NewSearchQuery: %v", err)
+	}
+
+	service.NewRecordSearchHistoryService(NewPgxSearchHistoryRepository(pool)).
+		Record(context.Background(), owner, query, "after erase", true, time.Now().UTC())
+	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),
+		QueryNorm: "after erase", SearchId: uuid.New().String(),
+		Payload: map[string]any{"zero_result": false},
+	})
+
+	if got := countOwnedRows(t, pool,
+		`SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner); got != 1 {
+		t.Errorf("history rows for a search begun after the clear = %d, want 1", got)
+	}
+	if got := storedSearchTextsOf(t, pool, owner); len(got) != 1 {
+		t.Errorf("stored search text for a search begun after the clear = %v, want 1", got)
+	}
+}

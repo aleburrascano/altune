@@ -28,6 +28,7 @@ func (s *RecordSearchHistoryService) Record(
 	query *domain.SearchQuery,
 	queryNorm string,
 	saveHistory bool,
+	startedAt time.Time,
 ) {
 	if !saveHistory || s.historyRepo == nil {
 		return
@@ -40,7 +41,7 @@ func (s *RecordSearchHistoryService) Record(
 		UserId:     userId,
 		Query:      query.Raw,
 		QueryNorm:  queryNorm,
-		ExecutedAt: time.Now().UTC(),
+		ExecutedAt: startedAt.UTC(),
 	}
 	if err := s.historyRepo.Insert(ctx, entry); err != nil {
 		slog.WarnContext(ctx, "search.v2.history_persist_failed",
