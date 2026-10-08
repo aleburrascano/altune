@@ -6,7 +6,7 @@ import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 import { stashHandoffForDetail } from '@features/discover/handoff';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-type ResultTapHandler = (result: DiscoveryResult, position: number) => void;
+export type ResultTapHandler = (tapped: DiscoveryResult, position: number) => void;
 
 function sameSource(a: DiscoveryResult, b: DiscoveryResult): boolean {
   const sa = a.sources[0];

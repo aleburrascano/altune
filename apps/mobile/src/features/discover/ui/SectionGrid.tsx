@@ -8,6 +8,7 @@ import { kindLabel } from '@features/discover/kindLabel';
 import { resultKey } from '@features/discover/resultKey';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 
 function gridColumnsFor(contentWidth: number): number {
   if (contentWidth >= 1080) return 6;
@@ -47,8 +48,6 @@ function GridCardArt({ item }: { item: DiscoveryResult }): ReactElement {
   );
 }
 
-export type OnResultPress = (target: DiscoveryResult, at: number) => void;
-
 type GridCardBodyProps = { item: DiscoveryResult; cardStyle: (ViewStyle | null)[]; testID: string };
 
 function GridCardBody({ item, cardStyle, testID }: GridCardBodyProps): ReactElement {
@@ -62,7 +61,7 @@ function GridCardBody({ item, cardStyle, testID }: GridCardBodyProps): ReactElem
   );
 }
 
-type GridContext = { columns: number; onPress: OnResultPress };
+type GridContext = { columns: number; onPress: ResultTapHandler };
 
 function gridCardStyle(theme: ReturnType<typeof useTheme>, highlighted: boolean) {
   return [styles.gridCard, highlighted ? { borderColor: theme.color.accent } : null];

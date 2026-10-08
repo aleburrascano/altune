@@ -17,7 +17,7 @@ import {
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
 import { useResultsFilter } from '@features/discover/hooks/useResultsFilter';
 import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useClearSearchHistory';
-import { useResultTap } from '@features/discover/hooks/useResultTap';
+import { useResultTap, type ResultTapHandler } from '@features/discover/hooks/useResultTap';
 import { useSuggestionVisibility } from '@features/discover/hooks/useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from '@features/discover/hooks/useDegradedSearchTelemetry';
 import {
@@ -26,7 +26,6 @@ import {
   viewForState,
 } from '@features/discover/discoverView';
 import type {
-  DiscoveryResult,
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
@@ -52,7 +51,7 @@ export type DiscoverLogic = {
   filter: ResultsFilter;
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onHistoryTap: (item: SearchHistoryItem) => void;
-  onResultTap: (result: DiscoveryResult, position: number) => void;
+  onResultTap: ResultTapHandler;
   impression: ImpressionHandlers;
   onRetry: () => void;
   searchError: unknown;

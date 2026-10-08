@@ -6,12 +6,13 @@ import { spacing, useWideWebLayout } from '@shared/ui';
 import { DiscoverRow } from '@features/discover/ui/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discover/ui/ResultsList';
 import { SectionLabel } from '@features/discover/ui/SectionLabel';
-import { SectionGrid, useGridColumns, type OnResultPress } from '@features/discover/ui/SectionGrid';
+import { SectionGrid, useGridColumns } from '@features/discover/ui/SectionGrid';
 import { SeeAllLink } from '@features/discover/ui/SeeAllLink';
 import { TopResultCard } from '@features/discover/ui/TopResultCard';
 import { kindLabel } from '@features/discover/kindLabel';
 import { resultKey } from '@features/discover/resultKey';
 
+import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
 
 function isGridKind(kind: DiscoveryKind): boolean {
@@ -20,7 +21,7 @@ function isGridKind(kind: DiscoveryKind): boolean {
 
 export const SECTION_ITEM_CAP = 20;
 
-type SectionRowsProps = { items: DiscoveryResult[]; onPress: OnResultPress };
+type SectionRowsProps = { items: DiscoveryResult[]; onPress: ResultTapHandler };
 
 function SectionRows({ items, onPress }: SectionRowsProps): ReactElement {
   return (
@@ -35,7 +36,7 @@ function SectionRows({ items, onPress }: SectionRowsProps): ReactElement {
 type SectionActions = {
   columns: number;
   onSeeAll: (kind: DiscoveryKind) => void;
-  onPress: OnResultPress;
+  onPress: ResultTapHandler;
 };
 
 type SectionBlockProps = { section: ResultSection; asGrid: boolean; actions: SectionActions };
