@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
@@ -6,6 +7,7 @@ import tsParser from '@typescript-eslint/parser';
 import { loadRules } from '../eslint/consistency/index.js';
 
 const mobileRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const baselinePath = process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'consistency.baseline');
 
 const tsxParsing = {
   files: ['**/*.{ts,tsx}'],
@@ -42,8 +44,26 @@ async function lintFiles(rule, files) {
   );
 }
 
-export async function countViolations(rule, files = srcFiles()) {
-  return (await lintFiles(rule, files)).length;
+export function violationLine(rule, violation) {
+  return `${rule.id} ${violation.file} ${violation.message.replace(/\s+/g, ' ').trim()}`;
+}
+
+export function readBaseline(file = baselinePath) {
+  return fs.readFileSync(file, 'utf8').split('\n').filter((line) => line !== '');
+}
+
+// Multiset difference: a line listed once permits one occurrence.
+export function diffAgainstBaseline(found, baseline) {
+  const remaining = new Map();
+  for (const line of baseline) remaining.set(line, (remaining.get(line) ?? 0) + 1);
+  const added = [];
+  for (const line of found) {
+    const left = remaining.get(line) ?? 0;
+    if (left === 0) added.push(line);
+    else remaining.set(line, left - 1);
+  }
+  const fixed = [...remaining].flatMap(([line, count]) => Array(count).fill(line));
+  return { added, fixed };
 }
 
 export async function lintSource(rule, source, filename) {
@@ -65,20 +85,17 @@ async function main() {
     process.exit(1);
   }
 
-  let failed = false;
-
+  const found = [];
   for (const rule of rules) {
     const violations = await lintFiles(rule, files);
-    console.log(`${rule.id}: ${violations.length} / baseline ${rule.baseline}`);
-    if (violations.length === rule.baseline) continue;
-
-    failed = true;
-    for (const violation of violations) {
-      console.log(`  ${rule.id} ${violation.file}: ${violation.message}`);
-    }
-    const direction = violations.length > rule.baseline ? 'fix the new violation' : `lower baseline to ${violations.length}`;
-    console.log(`${rule.id}: ${direction} in apps/mobile/eslint/consistency/`);
+    console.log(`${rule.id}: ${violations.length}`);
+    found.push(...violations.map((violation) => violationLine(rule, violation)));
   }
+
+  const { added, fixed } = diffAgainstBaseline(found.sort(), readBaseline());
+  for (const line of added) console.log(`new violation: ${line}`);
+  for (const line of fixed) console.log(`fixed: remove it from the baseline: ${line}`);
+  const failed = added.length > 0 || fixed.length > 0;
 
   process.exit(failed ? 1 : 0);
 }

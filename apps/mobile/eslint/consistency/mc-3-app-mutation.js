@@ -1,7 +1,6 @@
 module.exports = {
   id: 'MC-3',
   description: 'No raw useMutation imports from @tanstack/react-query outside the telemetry seams',
-  baseline: 0,
   config: [
     {
       ignores: [

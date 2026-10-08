@@ -59,7 +59,6 @@ function importRule(allowed) {
 module.exports = {
   id: 'MC-2',
   description: 'Each mutating api-client function is imported only by its one owning hook',
-  baseline: 0,
   exempt: EXEMPT,
   config: [
     {

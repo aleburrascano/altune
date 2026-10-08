@@ -1,7 +1,6 @@
 module.exports = {
   id: 'MC-4b',
   description: 'No raw Pressable or Touchable* imports from react-native outside shared/ui primitives',
-  baseline: 52,
   config: [
     {
       ignores: ['src/shared/ui/primitives/**', 'src/shared/ui/navigation/**', '**/__tests__/**'],

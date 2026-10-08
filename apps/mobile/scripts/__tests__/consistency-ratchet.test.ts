@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -21,9 +22,13 @@ async function lintSnippet(rule: ReturnType<typeof loadRules>[number], source: s
   return JSON.parse(output) as { message: string; ruleId?: string | null }[];
 }
 
-function runRatchetCli() {
+function runRatchetCli(env: NodeJS.ProcessEnv = {}) {
   try {
-    const stdout = execFileSync('node', [ratchetScript], { cwd: mobileRoot, encoding: 'utf8' });
+    const stdout = execFileSync('node', [ratchetScript], {
+      cwd: mobileRoot,
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+    });
     return { status: 0, stdout };
   } catch (error) {
     const failure = error as { status: number | null; stdout?: string; stderr?: string };
@@ -68,15 +73,58 @@ test('running the real script exits 0 on the current src tree, one line per rule
 
   expect(status).toBe(0);
   for (const rule of rules) {
-    expect(stdout).toMatch(new RegExp(`^${rule.id}: \\d+ / baseline`, 'm'));
+    expect(stdout).toMatch(new RegExp(`^${rule.id}: \\d+$`, 'm'));
   }
 });
 
-test('running the real script reports MC-1 at its 9 supabaseClient imports and no raw network', () => {
+test('running the real script reports MC-1 at its baselined supabaseClient imports and no raw network', () => {
   const { status, stdout } = runRatchetCli();
 
   expect(status).toBe(0);
-  expect(stdout).toMatch(/^MC-1: 9 \/ baseline 9$/m);
+  expect(stdout).toMatch(/^MC-1: \d+$/m);
+  expect(stdout).not.toContain('new violation');
+});
+
+test('running the real script exits 1 when one violation is fixed and another added, count unchanged', () => {
+  const relativePath = path.join('src', '__consistency_ratchet_swap__.ts');
+  const fixturePath = path.join(mobileRoot, relativePath);
+  const baselineLines = fs
+    .readFileSync(path.join(mobileRoot, 'consistency.baseline'), 'utf8')
+    .split('\n')
+    .filter((line) => line !== '');
+  const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
+  const swapped = path.join(os.tmpdir(), `consistency-swap-${process.pid}.baseline`);
+  fs.writeFileSync(swapped, `${[...baselineLines, fixedLine].join('\n')}\n`);
+  fs.writeFileSync(fixturePath, "export function f() {\n  return fetch('https://example.com');\n}\n");
+
+  try {
+    const { status, stdout } = runRatchetCli({ CONSISTENCY_BASELINE_FILE: swapped });
+
+    expect(status).toBe(1);
+    expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
+    expect(stdout).toContain(`fixed: remove it from the baseline: ${fixedLine}`);
+  } finally {
+    fs.rmSync(fixturePath, { force: true });
+    fs.rmSync(swapped, { force: true });
+  }
+});
+
+test('running the real script exits 1 for a listed violation that no longer occurs', () => {
+  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
+  const listed = path.join(os.tmpdir(), `consistency-stale-${process.pid}.baseline`);
+  fs.writeFileSync(
+    listed,
+    `${fs.readFileSync(path.join(mobileRoot, 'consistency.baseline'), 'utf8')}${stale}\n`,
+  );
+
+  try {
+    const { status, stdout } = runRatchetCli({ CONSISTENCY_BASELINE_FILE: listed });
+
+    expect(status).toBe(1);
+    expect(stdout).toContain(`fixed: remove it from the baseline: ${stale}`);
+  } finally {
+    fs.rmSync(listed, { force: true });
+  }
 });
 
 test('running the real script exits 1 and names MC-1 and the file when a raw fetch is added', () => {
@@ -216,11 +264,11 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     expect(doc).toMatch(/^\| MC-8 \|/m);
   });
 
-  test('the real script prints MC-8 at its baseline of 2 and exits 0', () => {
+  test('the real script prints MC-8 and exits 0', () => {
     const { status, stdout } = runRatchetCli();
 
     expect(status).toBe(0);
-    expect(stdout).toMatch(/^MC-8: 2 \/ baseline 2$/m);
+    expect(stdout).toMatch(/^MC-8: \d+$/m);
   });
 
   test('flags a value import from the barrel in a feature hook', async () => {
