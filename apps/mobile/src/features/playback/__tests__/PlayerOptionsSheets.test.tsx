@@ -4,9 +4,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-import { usePlaybackRateStore } from '../playbackRateStore';
-import { useSleepTimerStore } from '../sleepTimerStore';
-import { PlayerOptionsSheets } from '../ui/PlayerOptionsSheets';
+import { usePlaybackRateStore } from '@features/playback/playbackRateStore';
+import { useSleepTimerStore } from '@features/playback/sleepTimerStore';
+import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 
 function renderSheets(setRate = jest.fn(), onClose = jest.fn()): void {
   const value = { setRate } as unknown as PlaybackContextValue;

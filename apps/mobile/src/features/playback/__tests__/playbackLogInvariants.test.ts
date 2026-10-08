@@ -8,14 +8,14 @@ import { fetchAudioUrls } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { ignoringNativeRejection } from '../native/createNativePlaybackActions';
-import { playbackService } from '../native/service';
-import { repairActiveToStreaming } from '../native/nativeTrackSwap';
-import { _resetPlaybackHealthForTest } from '../playbackHealth';
-import { reportingQueueFailure } from '../native/queueFailureReport';
-import { redactPlaybackErrorMessage, warnPlayback } from '../redactPlaybackError';
+import { ignoringNativeRejection } from '@features/playback/native/createNativePlaybackActions';
+import { playbackService } from '@features/playback/native/service';
+import { repairActiveToStreaming } from '@features/playback/native/nativeTrackSwap';
+import { _resetPlaybackHealthForTest } from '@features/playback/playbackHealth';
+import { reportingQueueFailure } from '@features/playback/native/queueFailureReport';
+import { redactPlaybackErrorMessage, warnPlayback } from '@features/playback/redactPlaybackError';
 
-import { libraryTrack } from './fixtures';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn().mockResolvedValue(undefined),

@@ -1,4 +1,4 @@
-import { clamp } from './clamp';
+import { clamp } from '@features/playback/clamp';
 
 function savedCursor(savedTrackIds: readonly string[], savedCurrentIndex: number): number {
   return savedTrackIds[savedCurrentIndex] === undefined ? 0 : savedCurrentIndex;

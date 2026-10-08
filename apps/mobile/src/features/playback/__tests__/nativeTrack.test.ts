@@ -5,9 +5,9 @@ import { ContractError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
-import { activeNativeTrackId, toNativeTrack } from '../native/nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
 
-import { libraryTrack, previewTrack } from './fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 
 const player = TrackPlayer as unknown as Record<string, jest.Mock>;
 

@@ -1,15 +1,26 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { clamp } from '../clamp';
-import { ensurePlayerSetup } from './initPlayer';
-import { onNativeQueueTimeout, withNativeQueue, type Fence } from './nativeQueueLock';
-import { activeNativeTrackId } from './nativeTrack';
-import { nativeTrackBuilder } from './nativeTrackBuilder';
-import { rebuildNativeTail, reorderUpcomingApplied } from './rebuildNativeTail';
-import { forgetAllSwaps } from './nativeTrackSwap';
-import { claimLoad, currentLoadToken, isStale, type LoadToken } from '../loadToken';
-import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
-import { NATIVE_QUEUE_WINDOW, markPresignedFrom, extendPresignWindow } from '../presignWindow';
+import { clamp } from '@features/playback/clamp';
+import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
+import {
+  onNativeQueueTimeout,
+  withNativeQueue,
+  type Fence,
+} from '@features/playback/native/nativeQueueLock';
+import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
+import { nativeTrackBuilder } from '@features/playback/native/nativeTrackBuilder';
+import {
+  rebuildNativeTail,
+  reorderUpcomingApplied,
+} from '@features/playback/native/rebuildNativeTail';
+import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
+import { claimLoad, currentLoadToken, isStale, type LoadToken } from '@features/playback/loadToken';
+import { beginNativeLoad, endNativeLoad } from '@features/playback/native/nativeSyncGuard';
+import {
+  NATIVE_QUEUE_WINDOW,
+  markPresignedFrom,
+  extendPresignWindow,
+} from '@features/playback/presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';

@@ -15,13 +15,13 @@ import type {
 import {
   createNativePlaybackActions,
   ignoringNativeRejection,
-} from './createNativePlaybackActions';
-import { derivePlaybackState, type PlayerPhase } from '../derivePlaybackState';
-import { ensurePlayerSetup } from './initPlayer';
-import { usePlaybackErrorFor } from '../playbackErrorStore';
-import { usePlaybackPosition } from './usePlaybackPosition';
-import { usePlaybackSignals } from './usePlaybackSignals';
-import { useQueueResume } from './useQueueResume';
+} from '@features/playback/native/createNativePlaybackActions';
+import { derivePlaybackState, type PlayerPhase } from '@features/playback/derivePlaybackState';
+import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
+import { usePlaybackErrorFor } from '@features/playback/playbackErrorStore';
+import { usePlaybackPosition } from '@features/playback/native/usePlaybackPosition';
+import { usePlaybackSignals } from '@features/playback/native/usePlaybackSignals';
+import { useQueueResume } from '@features/playback/native/useQueueResume';
 
 const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   off: RepeatMode.Off,

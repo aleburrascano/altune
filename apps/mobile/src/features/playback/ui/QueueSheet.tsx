@@ -14,10 +14,20 @@ import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
-import { queueMenuOptions } from '../queueMenuOptions';
-import { buildUpNextItems, formatSeconds, queueSourceLabel, type QueueItem } from '../queueItem';
-import { QueueRow } from './QueueRow';
-import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
+import { queueMenuOptions } from '@features/playback/queueMenuOptions';
+import {
+  buildUpNextItems,
+  formatSeconds,
+  queueSourceLabel,
+  type QueueItem,
+} from '@features/playback/queueItem';
+import { QueueRow } from '@features/playback/ui/QueueRow';
+import {
+  SheetHeader,
+  SheetHeaderCenter,
+  SheetHeaderTrailing,
+  SheetScreen,
+} from '@features/playback/ui/SheetHeader';
 
 export function QueueSheet(): ReactElement {
   const theme = useTheme();

@@ -1,12 +1,12 @@
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback/types';
 
-import { recordPlaybackFailure } from '../playbackHealth';
+import { recordPlaybackFailure } from '@features/playback/playbackHealth';
 import {
   redactPlaybackErrorMessage,
   warnPlayback,
   type RedactedPlaybackFailure,
-} from '../redactPlaybackError';
+} from '@features/playback/redactPlaybackError';
 import {
   IDLE_PLAYBACK,
   isSourceStale,
@@ -15,8 +15,12 @@ import {
   type LoadOptions,
   type SourceOutcome,
   type WebAudioPlayer,
-} from './webPlayer';
-import { prefetchNextTrack, resolveSource, takeNextPresign } from './webPresign';
+} from '@features/playback/web/webPlayer';
+import {
+  prefetchNextTrack,
+  resolveSource,
+  takeNextPresign,
+} from '@features/playback/web/webPresign';
 
 const MEDIA_ERR_NETWORK = 2;
 const MEDIA_ERR_DECODE = 3;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 
-import { minutesRemaining, useSleepTimerStore } from '../sleepTimerStore';
+import { minutesRemaining, useSleepTimerStore } from '@features/playback/sleepTimerStore';
 
 const SLEEP_OPTIONS_MIN = [15, 30, 45, 60];
 

@@ -12,14 +12,20 @@ import {
   repairActiveToStreaming,
   swapUpcomingToLocal,
   wasSwappedToLocal,
-} from '../native/nativeTrackSwap';
-import { usePlaybackErrorStore } from '../playbackErrorStore';
-import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
-import { resetPlaybackForSignOut } from '../native/service';
-import '../native/loadNativeTrack';
-import { NATIVE_QUEUE_OP_TIMEOUT_MS, withNativeQueue } from '../native/nativeQueueLock';
+} from '@features/playback/native/nativeTrackSwap';
+import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+} from '@features/playback/playbackHealth';
+import { resetPlaybackForSignOut } from '@features/playback/native/service';
+import '@features/playback/native/loadNativeTrack';
+import {
+  NATIVE_QUEUE_OP_TIMEOUT_MS,
+  withNativeQueue,
+} from '@features/playback/native/nativeQueueLock';
 
-import { libraryTrack, previewTrack } from './fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn().mockResolvedValue(undefined),

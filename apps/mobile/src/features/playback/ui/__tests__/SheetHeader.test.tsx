@@ -2,7 +2,12 @@ import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from '../SheetHeader';
+import {
+  SheetHeader,
+  SheetHeaderCenter,
+  SheetHeaderTrailing,
+  SheetScreen,
+} from '@features/playback/ui/SheetHeader';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 37, bottom: 0, left: 0, right: 0 }),

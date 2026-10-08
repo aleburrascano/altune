@@ -5,7 +5,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback/types';
 
-import { ExpoGoPlaybackProvider } from '../../native/expoGoPlaybackProvider';
+import { ExpoGoPlaybackProvider } from '@features/playback/native/expoGoPlaybackProvider';
 
 const devFlag = globalThis as unknown as { __DEV__: boolean };
 

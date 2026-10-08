@@ -17,13 +17,17 @@ import {
   evictCached as evictCachedFiles,
   extFromUrl,
   findCached,
-} from './audioCache';
-import { forgetSwap, swapUpcomingToLocal, type SwapOutcome } from './nativeTrackSwap';
-import { warnPlayback } from '../redactPlaybackError';
+} from '@features/playback/native/audioCache';
+import {
+  forgetSwap,
+  swapUpcomingToLocal,
+  type SwapOutcome,
+} from '@features/playback/native/nativeTrackSwap';
+import { warnPlayback } from '@features/playback/redactPlaybackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
-} from '../playbackHealth';
+} from '@features/playback/playbackHealth';
 
 const inflight = new Map<string, AbortController>();
 const invalidatedInflight = new Set<string>();

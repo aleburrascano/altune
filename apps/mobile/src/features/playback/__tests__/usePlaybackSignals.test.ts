@@ -3,9 +3,9 @@ import { act, renderHook } from '@testing-library/react-native';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { usePlaybackSignals } from '../native/usePlaybackSignals';
+import { usePlaybackSignals } from '@features/playback/native/usePlaybackSignals';
 
-import { previewTrack } from './fixtures';
+import { previewTrack } from '@features/playback/__tests__/fixtures';
 
 const mockMutate = jest.fn();
 

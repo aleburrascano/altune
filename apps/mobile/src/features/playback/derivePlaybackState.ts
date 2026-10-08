@@ -1,6 +1,6 @@
 import type { PlaybackState, PlaybackTrack } from '@shared/playback/types';
 
-import type { RedactedPlaybackFailure } from './redactPlaybackError';
+import type { RedactedPlaybackFailure } from '@features/playback/redactPlaybackError';
 
 export type PlayerPhase = 'loading' | 'playing' | 'paused' | 'ended';
 

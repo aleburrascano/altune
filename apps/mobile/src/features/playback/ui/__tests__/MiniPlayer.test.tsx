@@ -7,8 +7,8 @@ import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback/types';
 
-import { libraryTrack } from '../../__tests__/fixtures';
-import { MiniPlayer } from '../MiniPlayer';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import { MiniPlayer } from '@features/playback/ui/MiniPlayer';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),

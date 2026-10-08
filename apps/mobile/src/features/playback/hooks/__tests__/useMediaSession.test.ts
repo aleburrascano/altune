@@ -1,9 +1,9 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { usePlaybackRateStore } from '../../playbackRateStore';
-import { libraryTrack } from '../../__tests__/fixtures';
+import { usePlaybackRateStore } from '@features/playback/playbackRateStore';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import type { PlaybackContextValue } from '@shared/playback/types';
-import { useMediaSession } from '../useMediaSession';
+import { useMediaSession } from '@features/playback/hooks/useMediaSession';
 
 class FakeMediaSession {
   metadata: MediaMetadata | null = null;

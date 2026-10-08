@@ -9,9 +9,14 @@ import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
 import { spacing } from '@shared/ui/theme/tokens';
 
-import { useLyrics } from '../hooks/useLyrics';
-import { activeLineIndex, _lyricsView } from '../lyrics-sync';
-import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
+import { useLyrics } from '@features/playback/hooks/useLyrics';
+import { activeLineIndex, _lyricsView } from '@features/playback/lyrics-sync';
+import {
+  SheetHeader,
+  SheetHeaderCenter,
+  SheetHeaderTrailing,
+  SheetScreen,
+} from '@features/playback/ui/SheetHeader';
 
 const SCROLL_LEAD_PX = 140;
 
