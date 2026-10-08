@@ -40,6 +40,7 @@ G3 internal/acquisition/service/scheduler_enqueue.go:6 imports catalog outside a
 G3 internal/acquisition/service/step_store.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_store.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_update_track.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/catalog/adapters/discoverybridge imports nothing from discovery ports or service
 G3 internal/catalog/adapters/handler/audio_rate_limit.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/audio_url_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/featured_artist_handler.go:4 imports auth outside adapters/authbridge

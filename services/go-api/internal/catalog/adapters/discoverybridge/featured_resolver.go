@@ -1,21 +1,18 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/shared"
 	"context"
 	"log/slog"
 
 	catalogdomain "altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
-	discoverydomain "altune/go-api/internal/discovery/domain"
-	discoveryservice "altune/go-api/internal/discovery/service"
 )
 
 var _ catalogports.FeaturedArtistResolver = (*FeaturedResolver)(nil)
 
-var _ featuredArtistResolver = (*discoveryservice.FeaturedArtistResolver)(nil)
-
 type featuredArtistResolver interface {
-	Resolve(ctx context.Context, artist, title string) ([]discoverydomain.FeaturedArtist, error)
+	Resolve(ctx context.Context, artist, title string) ([]shared.FeaturedArtist, error)
 }
 
 type FeaturedResolver struct {
