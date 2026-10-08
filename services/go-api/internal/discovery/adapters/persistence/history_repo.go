@@ -60,7 +60,7 @@ func NewPgxSearchHistoryRepository(pool *pgxpool.Pool) *PgxSearchHistoryReposito
 }
 
 func (r *PgxSearchHistoryRepository) Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error {
-	_, err := r.pool.Exec(ctx,
+	err := execUnderSearchTextLock(ctx, r.pool, entry.UserId.UUID(),
 		`INSERT INTO discovery_search_history (id, user_id, query, query_norm, executed_at, result_clicked_signature)
 		SELECT $1, $2, $3, $4, $5, $6
 		WHERE NOT EXISTS (
@@ -93,11 +93,31 @@ func (r *PgxSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.
 	return nil
 }
 
+const lockSearchTextOfUserSQL = `SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text, 0))`
+
+const shareSearchTextLockOfUserSQL = `SELECT pg_advisory_xact_lock_shared(hashtextextended($1::uuid::text, 0))`
+
+func execUnderSearchTextLock(ctx context.Context, pool *pgxpool.Pool, userId uuid.UUID, sql string, args ...any) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, shareSearchTextLockOfUserSQL, userId); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, sql, args...); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 const stampHistoryClearedSQL = `INSERT INTO discovery_search_history_cleared (user_id, cleared_at)
 	VALUES ($1, clock_timestamp())
 	ON CONFLICT (user_id) DO UPDATE SET cleared_at = EXCLUDED.cleared_at`
 
 var eraseSearchTextOfUserSQL = []string{
+	lockSearchTextOfUserSQL,
 	stampHistoryClearedSQL,
 	`DELETE FROM discovery_search_history WHERE user_id = $1`,
 	eraseEventSearchTextOfUserSQL,

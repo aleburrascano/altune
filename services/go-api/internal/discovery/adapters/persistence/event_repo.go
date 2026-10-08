@@ -94,7 +94,7 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		occurredAt = time.Now().UTC()
 	}
 
-	_, err = r.pool.Exec(ctx, appendEventSQL,
+	err = execUnderSearchTextLock(ctx, r.pool, event.UserId.UUID(), appendEventSQL,
 		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
 		domain.EventTypeSearchPerformed.String(),
 	)
