@@ -164,7 +164,6 @@ func scanTrackClaim(row pgx.Row, trackID *domain.TrackId, userID *shared.UserId,
 	return nil
 }
 
-// execFenced runs a fence-guarded UPDATE and reports ports.ErrLeaseLost when no row matched.
 func (q *PgxJobQueue) execFenced(ctx context.Context, trackID domain.TrackId, op, sql string, args ...any) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
