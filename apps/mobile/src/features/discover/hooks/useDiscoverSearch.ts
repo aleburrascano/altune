@@ -5,10 +5,17 @@ import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api
 
 import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
-import { useDiscoverFetchEnabled, useGatedDiscoverCall } from '@features/discover/hooks/discoverFetchGate';
+import {
+  useDiscoverFetchEnabled,
+  useGatedDiscoverCall,
+} from '@features/discover/hooks/discoverFetchGate';
 import { useRefreshFromFirstPage } from '@features/discover/hooks/useRefreshFromFirstPage';
 import { useRestartOnExpiredSlate } from '@features/discover/hooks/useRestartOnExpiredSlate';
-import { MAX_SEARCH_OFFSET, MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '@features/discover/searchLimits';
+import {
+  MAX_SEARCH_OFFSET,
+  MAX_SEARCH_PAGES,
+  SEARCH_PAGE_SIZE,
+} from '@features/discover/searchLimits';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 

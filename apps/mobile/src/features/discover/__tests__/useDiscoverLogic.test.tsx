@@ -11,7 +11,11 @@ import {
 import { ApiError, NetworkError } from '@shared/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useDiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
-import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '@features/discover/searchLimits';
+import {
+  MAX_QUERY_LENGTH,
+  MIN_QUERY_LENGTH,
+  SEARCH_PAGE_SIZE,
+} from '@features/discover/searchLimits';
 import { setSearchState } from '@features/discover/searchState';
 import { DiscoverBody } from '@features/discover/ui/DiscoverBody';
 import { resultFixture } from '@features/discover/__tests__/fixtures';

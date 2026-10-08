@@ -6,15 +6,25 @@ import { setSearchState } from '@features/discover/searchState';
 import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
 import { isSearchableQuery } from '@features/discover/searchLimits';
-import { SEARCH_DEBOUNCE_MS, useAutocompleteSuggestions } from '@features/discover/hooks/useAutocompleteSuggestions';
-import { useImpressionLogger, type ImpressionHandlers } from '@features/discover/hooks/useImpressionLogger';
+import {
+  SEARCH_DEBOUNCE_MS,
+  useAutocompleteSuggestions,
+} from '@features/discover/hooks/useAutocompleteSuggestions';
+import {
+  useImpressionLogger,
+  type ImpressionHandlers,
+} from '@features/discover/hooks/useImpressionLogger';
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
 import { useResultsFilter } from '@features/discover/hooks/useResultsFilter';
 import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useClearSearchHistory';
 import { useResultTap } from '@features/discover/hooks/useResultTap';
 import { useSuggestionVisibility } from '@features/discover/hooks/useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from '@features/discover/hooks/useDegradedSearchTelemetry';
-import { correctionForResponse, resultsIncompleteForState, viewForState } from '@features/discover/discoverView';
+import {
+  correctionForResponse,
+  resultsIncompleteForState,
+  viewForState,
+} from '@features/discover/discoverView';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
