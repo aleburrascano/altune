@@ -361,14 +361,8 @@ func validateCaseExtensions(c Case) error {
 	return validateResolution(c)
 }
 
-var knownProvenances = []string{
-	string(domain.ProvenanceVerified),
-	string(domain.ProvenanceCorroborated),
-	string(domain.ProvenanceBestEffort),
-}
-
 func validateExpectProvenance(c Case) error {
-	if c.ExpectProvenance != "" && !slices.Contains(knownProvenances, c.ExpectProvenance) {
+	if c.ExpectProvenance != "" && !domain.AcquisitionProvenance(c.ExpectProvenance).Valid() {
 		return fmt.Errorf("case %q expects unknown provenance %q", c.ID, c.ExpectProvenance)
 	}
 	return nil
