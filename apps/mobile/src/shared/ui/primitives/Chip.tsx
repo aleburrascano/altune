@@ -6,6 +6,7 @@ import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { pressedStyle } from './pressedStyle';
 import { Text } from './Text';
+import type { TextTone } from './Text';
 import { recordTap } from './recordTap';
 
 type ChipBase = {
@@ -19,54 +20,81 @@ export type ChipProps =
   | (ChipBase & { onPress?: undefined; action?: undefined; trackId?: undefined })
   | (ChipBase & { onPress: () => void; action?: string; trackId?: string });
 
-export function Chip({
-  label,
-  onPress,
-  action,
-  trackId,
-  selected = false,
-  icon,
-  testID,
-}: ChipProps) {
+type PressableChipProps = ChipBase & { onPress: () => void; action?: string; trackId?: string };
+
+const bodyStyle = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: spacing.xs,
+  paddingVertical: spacing.md,
+  paddingHorizontal: spacing.lg,
+  borderRadius: radius.full,
+  minHeight: 44,
+} as const;
+
+function useChipColors(selected: boolean) {
   const theme = useTheme();
-  const body = (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.lg,
-        borderRadius: radius.full,
-        backgroundColor: selected ? theme.color.accent : theme.color.surface2,
-        minHeight: 44,
-      }}
-    >
+  return {
+    backgroundColor: selected ? theme.color.accent : theme.color.surface2,
+    tone: selected ? ('onAccent' as const) : ('secondary' as const),
+  };
+}
+
+function ChipLabel({ label, tone }: { label: string; tone: TextTone }) {
+  return (
+    <Text variant="label" tone={tone}>
+      {label}
+    </Text>
+  );
+}
+
+function ChipBody({ label, selected = false, icon }: ChipBase) {
+  const { backgroundColor, tone } = useChipColors(selected);
+  return (
+    <View style={[bodyStyle, { backgroundColor }]}>
       {icon != null ? icon : null}
-      <Text variant="label" tone={selected ? 'onAccent' : 'secondary'}>
-        {label}
-      </Text>
+      <ChipLabel label={label} tone={tone} />
     </View>
   );
+}
 
-  if (onPress) {
-    return (
-      <Pressable
-        testID={testID}
-        onPress={() => {
-          tapFeedback();
-          recordTap(action, trackId);
-          onPress();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{ selected }}
-        hitSlop={8}
-        style={({ pressed }) => pressedStyle(pressed)}
-      >
-        {body}
-      </Pressable>
-    );
+function handleChipPress({ onPress, action, trackId }: PressableChipProps) {
+  tapFeedback();
+  recordTap(action, trackId);
+  onPress();
+}
+
+const pressableBase = {
+  accessibilityRole: 'button',
+  hitSlop: 8,
+  style: ({ pressed }: { pressed: boolean }) => pressedStyle(pressed),
+} as const;
+
+function chipPressProps(props: PressableChipProps) {
+  return {
+    ...pressableBase,
+    testID: props.testID,
+    onPress: () => handleChipPress(props),
+    accessibilityLabel: props.label,
+    accessibilityState: { selected: props.selected ?? false },
+  };
+}
+
+function PressableChip(props: PressableChipProps) {
+  return (
+    <Pressable {...chipPressProps(props)}>
+      <ChipBody {...props} />
+    </Pressable>
+  );
+}
+
+export function Chip(props: ChipProps) {
+  if (props.onPress) {
+    return <PressableChip {...props} />;
   }
-  return <View testID={testID}>{body}</View>;
+  return (
+    <View testID={props.testID}>
+      <ChipBody {...props} />
+    </View>
+  );
 }
