@@ -933,6 +933,75 @@ describe('saving the queue state', () => {
       },
     );
   });
+
+  describe('useQueueResume save — skips unchanged state and stays within the server cap', () => {
+    it('sends one save for two ticks when nothing changed', async () => {
+      renderHook(() => useQueueResume());
+      await flush();
+
+      await backgroundApp();
+      await backgroundApp();
+
+      expect(mockedSave).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['position', () => void (nativePosition = 50)],
+      [
+        'index',
+        () => {
+          useQueueStore.getState().skipToIndex(2);
+          nativeIndex = 2;
+        },
+      ],
+      ['shuffle', () => useQueueStore.getState().toggleShuffle()],
+      ['repeat', () => useQueueStore.getState().setRepeatMode('all')],
+    ])('saves again after the %s changes', async (_name, change) => {
+      renderHook(() => useQueueResume());
+      await flush();
+      await backgroundApp();
+
+      act(() => {
+        change();
+      });
+      await backgroundApp();
+
+      expect(mockedSave).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries an unchanged queue after a failed save', async () => {
+      mockedSave.mockRejectedValueOnce(new Error('boom'));
+      renderHook(() => useQueueResume());
+      await flush();
+
+      await backgroundApp();
+      await backgroundApp();
+
+      expect(mockedSave).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([0, 6_000, 11_999])(
+      'caps a 12000-track queue at 10000 ids per list with the current track at %i',
+      async (index) => {
+        const big = tracks('t', 12_000);
+        useQueueStore.getState().clearQueue();
+        useQueueStore.getState().loadQueue(big, index, null);
+        await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), index, {
+          autoplay: false,
+        });
+        renderHook(() => useQueueResume());
+        await flush();
+
+        await backgroundApp();
+
+        const body = mockedSave.mock.calls[0]![0];
+        expect(body.track_ids.length).toBeLessThanOrEqual(10_000);
+        expect(body.natural_order.length).toBeLessThanOrEqual(10_000);
+        expect(body.track_ids[body.current_index]).toBe(`t${index}`);
+        expect([...body.natural_order].sort()).toEqual([...body.track_ids].sort());
+      },
+    );
+  });
 });
 
 describe('a save issued while another drains', () => {
