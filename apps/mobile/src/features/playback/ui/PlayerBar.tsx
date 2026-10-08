@@ -20,7 +20,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 import { canRetryPlaybackError } from '../retryPolicy';
-import { endedLabel, isPreviewTrack } from './playerStatus';
+import { endedLabel, isPreviewTrack, libraryTrackId } from './playerStatus';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { TransportControls } from './TransportControls';
@@ -53,7 +53,14 @@ function barStatus(transport: Transport) {
 
 function RetryOrSkip({ hasNext, onSkip }: { hasNext: boolean; onSkip: () => void }) {
   if (!hasNext) return null;
-  return <IconButton icon={SkipForward} onPress={onSkip} accessibilityLabel="Skip track" />;
+  return (
+    <IconButton
+      action="playback.bar.skip"
+      icon={SkipForward}
+      onPress={onSkip}
+      accessibilityLabel="Skip track"
+    />
+  );
 }
 
 type ErrorControlProps = {
@@ -65,7 +72,14 @@ type ErrorControlProps = {
 
 function ErrorControl({ errorKind, hasNext, onRetry, onSkip }: ErrorControlProps) {
   if (canRetryPlaybackError(errorKind))
-    return <IconButton icon={RotateCcw} onPress={onRetry} accessibilityLabel="Retry" />;
+    return (
+      <IconButton
+        action="playback.bar.retry"
+        icon={RotateCcw}
+        onPress={onRetry}
+        accessibilityLabel="Retry"
+      />
+    );
   return <RetryOrSkip hasNext={hasNext} onSkip={onSkip} />;
 }
 
@@ -130,12 +144,25 @@ function BarHeader({ track, line, onOpenPlayer }: BarHeaderProps) {
   );
 }
 
-type PlayPauseProps = { isPlaying: boolean; isEnded: boolean; onPlayPause: () => void };
+type PlayPauseProps = {
+  isPlaying: boolean;
+  isEnded: boolean;
+  onPlayPause: () => void;
+  trackId?: string | undefined;
+};
 
-function PlayPauseControl({ isPlaying, isEnded, onPlayPause }: PlayPauseProps) {
-  const icon = isPlaying ? Pause : isEnded ? RotateCcw : Play;
-  const label = isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play';
-  return <IconButton icon={icon} size={22} onPress={onPlayPause} accessibilityLabel={label} />;
+function playPausePress(p: PlayPauseProps) {
+  return {
+    icon: p.isPlaying ? Pause : p.isEnded ? RotateCcw : Play,
+    trackId: p.trackId,
+    onPress: p.onPlayPause,
+    accessibilityLabel: p.isPlaying ? 'Pause' : p.isEnded ? 'Play again' : 'Play',
+  };
+}
+
+function PlayPauseControl(props: PlayPauseProps) {
+  const press = playPausePress(props);
+  return <IconButton action="playback.bar.play_pause" size={22} {...press} />;
 }
 
 function transportFlags(transport: Transport) {
@@ -171,6 +198,7 @@ function BarTransport({ transport, theme }: { transport: Transport; theme: Theme
       isPlaying={transport.isPlaying}
       isEnded={transport.isEnded}
       onPlayPause={transport.onPlayPause}
+      trackId={libraryTrackId(transport.track!)}
     />
   );
   return (
@@ -208,9 +236,22 @@ type ActionsProps = { onLyrics: () => void; onQueue: () => void; onOptions: () =
 function BarActions({ onLyrics, onQueue, onOptions }: ActionsProps) {
   return (
     <>
-      <IconButton icon={Mic2} size={20} onPress={onLyrics} accessibilityLabel="View lyrics" />
-      <IconButton icon={ListMusic} size={20} onPress={onQueue} accessibilityLabel="View queue" />
       <IconButton
+        action="playback.bar.lyrics"
+        icon={Mic2}
+        size={20}
+        onPress={onLyrics}
+        accessibilityLabel="View lyrics"
+      />
+      <IconButton
+        action="playback.bar.queue"
+        icon={ListMusic}
+        size={20}
+        onPress={onQueue}
+        accessibilityLabel="View queue"
+      />
+      <IconButton
+        action="playback.bar.options"
         icon={MoreHorizontal}
         size={20}
         onPress={onOptions}

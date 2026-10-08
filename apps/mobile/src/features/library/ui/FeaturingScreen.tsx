@@ -91,7 +91,13 @@ export function FeaturingScreen(): ReactElement {
     return (
       <Screen>
         <View style={styles.header}>
-          <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
+          <IconButton
+            action="library.featuring.back"
+            icon={ChevronLeft}
+            size={24}
+            onPress={goBack}
+            accessibilityLabel="Back"
+          />
         </View>
         <View style={styles.centered}>
           <Text variant="body" tone="secondary" style={styles.emptyText}>
@@ -105,7 +111,13 @@ export function FeaturingScreen(): ReactElement {
   return (
     <Screen>
       <View style={styles.header}>
-        <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
+        <IconButton
+          action="library.featuring.back"
+          icon={ChevronLeft}
+          size={24}
+          onPress={goBack}
+          accessibilityLabel="Back"
+        />
         <View style={styles.headerText}>
           <Text variant="caption" tone="tertiary">
             Featuring
@@ -143,6 +155,7 @@ export function FeaturingScreen(): ReactElement {
               Nothing in your library featuring {fa.name} yet.
             </Text>
             <Button
+              action="library.featuring.explore"
               testID="featuring-explore"
               label={exploring ? 'Searching…' : `Search for ${fa.name}`}
               variant="ghost"

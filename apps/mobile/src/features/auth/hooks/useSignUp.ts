@@ -1,15 +1,15 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import type { TransientAuthReason } from '../errorReason';
-import { authRedirectUrl } from '../authRedirect';
+import type { TransientAuthReason } from '@features/auth/errorReason';
+import { authRedirectUrl } from '@features/auth/authRedirect';
 import {
   classifyAuthError,
   isAlreadyRegisteredError,
   isSignupDisabledError,
   isWeakPasswordError,
-} from '../supabaseAuthError';
+} from '@features/auth/supabaseAuthError';
 
-import { useAsyncAuthAction } from './useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 
 type SignUpResult =
   | { kind: 'idle' }

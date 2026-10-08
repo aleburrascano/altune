@@ -72,6 +72,7 @@ export function ReportFormView({
         {KINDS.map(({ kind: value, label, icon: Icon }) => (
           <Chip
             key={value}
+            action={`settings.report.kind.${value}`}
             testID={`report-issue-kind-${value}`}
             label={label}
             selected={kind === value}
@@ -111,8 +112,15 @@ export function ReportFormView({
       </Text>
 
       <View style={styles.actions}>
-        <Button label="Cancel" variant="secondary" onPress={onCancel} style={styles.action} />
         <Button
+          action="settings.report.cancel"
+          label="Cancel"
+          variant="secondary"
+          onPress={onCancel}
+          style={styles.action}
+        />
+        <Button
+          action="settings.report.submit"
           testID="report-issue-send"
           label={failure !== null ? 'Try again' : 'Send'}
           onPress={onSend}

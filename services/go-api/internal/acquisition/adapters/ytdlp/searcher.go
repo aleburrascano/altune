@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/sync/errgroup"
 
@@ -65,6 +66,22 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 	s.runSearch = s.runYtDlpSearch
 	s.inspect = s.runYtDlpInspect
 	return s
+}
+
+const maxEmbeddedStderrBytes = 2048
+
+const stderrTruncatedSuffix = "...(truncated)"
+
+func embeddedStderr(stderr string) string {
+	text := redact.LogText(stderr)
+	if len(text) <= maxEmbeddedStderrBytes {
+		return text
+	}
+	cut := maxEmbeddedStderrBytes
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + stderrTruncatedSuffix
 }
 
 func (s *YtDlpAudioSearcher) Available() bool {
@@ -195,7 +212,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	if err != nil {
-		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr), stderr, ports.RunTimedOut(ctx, searchCtx))
+		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, searchCtx))
 	}
 
 	candidates, skipped := candidatesFromEntryLines(lines)
@@ -264,7 +281,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	defer cancel()
 	_, stderr, err := execcmd.Run(runCtx, s.binary, args...)
 	if err != nil {
-		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr), stderr, ports.RunTimedOut(ctx, runCtx))
+		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
 	return largestMP3(outDir)

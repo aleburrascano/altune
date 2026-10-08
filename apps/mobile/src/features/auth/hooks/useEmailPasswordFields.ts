@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { isValidEmail } from '../validation';
+import { isValidEmail } from '@features/auth/validation';
 
 export function useEmailPasswordFields() {
   const [email, setEmail] = useState('');

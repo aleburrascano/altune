@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
@@ -16,5 +16,5 @@ export function DetailPortProvider({ port, children }: DetailPortProviderProps):
 }
 
 export function useDetailPort(): DetailPort {
-  return useContext(DetailPortContext);
+  return use(DetailPortContext);
 }

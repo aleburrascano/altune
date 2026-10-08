@@ -6,12 +6,15 @@ import { usePressScale } from '../motion/pressScale';
 import type { Theme } from '../theme/theme';
 import { minInteractiveHeight, radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
+import { recordTap } from './recordTap';
 import { Text } from './Text';
 import type { TextTone } from './Text';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
 export type ButtonProps = {
+  action?: string;
+  trackId?: string;
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
@@ -43,6 +46,8 @@ function labelTone(variant: ButtonVariant): TextTone {
 }
 
 export function Button({
+  action,
+  trackId,
   label,
   onPress,
   variant = 'primary',
@@ -63,6 +68,7 @@ export function Button({
     if (haptic) {
       tapFeedback();
     }
+    recordTap(action, trackId);
     onPress();
   };
 

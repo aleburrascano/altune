@@ -29,20 +29,20 @@ func NewFallbackCooldownStore(primary ports.CooldownStore) *FallbackCooldownStor
 	return &FallbackCooldownStore{primary: primary, mem: newMemoryCooldowns(time.Now)}
 }
 
-func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, error) {
-	if s.mem.active(trackID, kind, cooldown) {
-		return time.Time{}, false, nil
+func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+	if wait, active := s.mem.active(trackID, kind, cooldown); active {
+		return time.Time{}, false, wait, nil
 	}
-	at, ok, err := s.primary.Reserve(ctx, trackID, kind, cooldown)
+	at, ok, wait, err := s.primary.Reserve(ctx, trackID, kind, cooldown)
 	if isUndefinedTable(err) {
 		s.markDegraded(ctx, err)
-		at, ok = s.mem.reserve(trackID, kind, cooldown)
-		return at, ok, nil
+		at, ok, wait = s.mem.reserve(trackID, kind, cooldown)
+		return at, ok, wait, nil
 	}
 	if err == nil {
 		s.markRecovered(ctx)
 	}
-	return at, ok, err
+	return at, ok, wait, err
 }
 
 func (s *FallbackCooldownStore) Release(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
@@ -89,19 +89,23 @@ func newMemoryCooldowns(now func() time.Time) *memoryCooldowns {
 	return &memoryCooldowns{now: now, lastAt: make(map[memoryCooldownKey]time.Time)}
 }
 
-func (m *memoryCooldowns) active(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) bool {
+func (m *memoryCooldowns) active(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Duration, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	last, ok := m.lastAt[memoryCooldownKey{trackID, kind}]
-	return ok && m.now().Sub(last) < cooldown
+	if !ok {
+		return 0, false
+	}
+	elapsed := m.now().Sub(last)
+	return cooldown - elapsed, elapsed < cooldown
 }
 
-func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool) {
+func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now, key := m.now(), memoryCooldownKey{trackID, kind}
 	if last, ok := m.lastAt[key]; ok && now.Sub(last) < cooldown {
-		return time.Time{}, false
+		return time.Time{}, false, cooldown - now.Sub(last)
 	}
 	m.lastAt[key] = now
 	for k, v := range m.lastAt {
@@ -109,7 +113,7 @@ func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKin
 			delete(m.lastAt, k)
 		}
 	}
-	return now, true
+	return now, true, 0
 }
 
 func (m *memoryCooldowns) release(trackID domain.TrackId, kind ports.CooldownKind, at time.Time) bool {

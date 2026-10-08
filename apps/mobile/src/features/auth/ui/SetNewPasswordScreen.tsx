@@ -3,17 +3,17 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
-import { showAlert } from '@shared/ui/dialog/dialog';
+import { showFailureAlert } from '@shared/ui/failure/showFailure';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import { useUpdatePassword } from '../hooks/useUpdatePassword';
-import { clearRecoveryUnlock } from '../recoveryUnlock';
-import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '../validation';
-import { AuthErrorBanner } from './AuthErrorBanner';
-import { AuthHeroLayout } from './hero/AuthHeroLayout';
-import { FieldError } from './FieldError';
-import { NewPasswordField } from './NewPasswordField';
+import { useUpdatePassword } from '@features/auth/hooks/useUpdatePassword';
+import { clearRecoveryUnlock } from '@features/auth/recoveryUnlock';
+import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/auth/validation';
+import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
+import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
+import { FieldError } from '@features/auth/ui/FieldError';
+import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
 
 const OTHERS_NOT_REVOKED_TITLE = 'Password updated';
 const OTHERS_NOT_REVOKED_MESSAGE =
@@ -30,7 +30,13 @@ export function SetNewPasswordScreen(): ReactElement {
 
   useEffect(() => {
     if (state.kind === 'ok') {
-      if (!state.othersRevoked) showAlert(OTHERS_NOT_REVOKED_TITLE, OTHERS_NOT_REVOKED_MESSAGE);
+      if (!state.othersRevoked) {
+        showFailureAlert({
+          surface: 'auth.password.others_not_revoked',
+          title: OTHERS_NOT_REVOKED_TITLE,
+          message: OTHERS_NOT_REVOKED_MESSAGE,
+        });
+      }
       clearRecoveryUnlock();
       router.replace('/library');
     }
@@ -61,6 +67,7 @@ export function SetNewPasswordScreen(): ReactElement {
           <FieldError testID="confirm-error">Passwords don&apos;t match.</FieldError>
         ) : null}
         <Button
+          action="auth.set_new_password.submit"
           testID="submit-button"
           label="Update password"
           onPress={() => void updatePassword(password)}

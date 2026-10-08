@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpPlaylistsPort } from '../adapters/http/httpPlaylistsPort';
@@ -19,5 +19,5 @@ export function PlaylistsPortProvider({
 }
 
 export function usePlaylistsPort(): PlaylistsPort {
-  return useContext(PlaylistsPortContext);
+  return use(PlaylistsPortContext);
 }

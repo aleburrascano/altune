@@ -22,6 +22,7 @@ export function FavoriteButton({ target, testID, size = 18 }: FavoriteButtonProp
   return (
     <IconButton
       {...(testID != null ? { testID } : {})}
+      action="favorites.toggle"
       icon={Heart}
       size={size}
       color={saved ? theme.color.accent : theme.color.textTertiary}

@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 
-import { initialUrl, subscribeUrl } from '../native/linkEvents';
+import { initialUrl, subscribeUrl } from '@features/auth/native/linkEvents';
 
 jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),

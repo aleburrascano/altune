@@ -29,7 +29,12 @@ function ScreenErrorFallback({
       <Text variant="body" tone="secondary" style={styles.body}>
         This screen hit an unexpected error. You can try again.
       </Text>
-      <Button testID="screen-error-retry" label="Try again" onPress={onRetry} />
+      <Button
+        action="screen.error.retry"
+        testID="screen-error-retry"
+        label="Try again"
+        onPress={onRetry}
+      />
       {__DEV__ ? (
         <ScrollView style={styles.devBox} contentContainerStyle={styles.devContent}>
           <Text testID="screen-error-detail" variant="label" tone="tertiary" style={styles.devText}>

@@ -8,7 +8,10 @@
     "completeness": "complete"
   },
   "unused_files": [
-    "src/shared/telemetry/userTelemetry.ts"
+    "src/shared/telemetry/userTelemetry.ts",
+    "src/features/playback/adapters/http/httpPlaybackPort.ts",
+    "src/features/playback/ports/activePlaybackPort.ts",
+    "src/features/playback/ports/playbackPort.ts"
   ],
   "unused_exports": [
     "src/features/detail/navigation.ts:openDetail",
@@ -189,7 +192,17 @@
     "src/shared/ui/theme/index.ts:palette",
     "src/shared/ui/theme/index.ts:fontFamily",
     "src/shared/ui/theme/index.ts:typography",
-    "src/shared/ui/theme/themePreference.ts:setThemePreferenceFileStore"
+    "src/shared/ui/theme/themePreference.ts:setThemePreferenceFileStore",
+    "src/shared/playlists/index.ts:httpPlaylistsPort",
+    "src/shared/playlists/index.ts:PlaylistsPortProvider",
+    "src/shared/playlists/index.ts:usePlaylistsPort",
+    "src/features/detail/ports/DetailPortProvider.tsx:DetailPortProvider",
+    "src/shared/acquisition/ports/AcquisitionPortProvider.tsx:AcquisitionPortProvider",
+    "src/shared/api-client/index.ts:REQUEST_TIMEOUT_MS",
+    "src/shared/favorites/index.ts:FavoritesPortProvider",
+    "src/shared/favorites/ports/FavoritesPortProvider.tsx:FavoritesPortProvider",
+    "src/shared/playlists/ports/PlaylistsPortProvider.tsx:PlaylistsPortProvider",
+    "src/features/playback/adapters/http/httpPlaybackPort.ts:httpPlaybackPort"
   ],
   "unused_types": [
     "src/features/auth/completeAuthIntent.ts:AuthFailureCause",
@@ -231,7 +244,9 @@
     "src/shared/ui/primitives/index.ts:TextFieldProps",
     "src/shared/ui/primitives/index.ts:MenuAnchor",
     "src/shared/ui/theme/index.ts:ThemeColors",
-    "src/shared/ui/theme/themePreference.ts:ThemePreferenceState"
+    "src/shared/ui/theme/themePreference.ts:ThemePreferenceState",
+    "src/shared/playlists/index.ts:PlaylistsPort",
+    "src/features/playback/ports/playbackPort.ts:PlaybackPort"
   ],
   "private_type_leaks": [],
   "unused_dependencies": [],

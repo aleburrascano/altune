@@ -18,7 +18,12 @@ export function LibraryNoResults({ query, onClear }: LibraryNoResultsProps) {
       <Text variant="label" tone="secondary" style={styles.sub}>
         Your library is still here — it&apos;s just filtered by your search.
       </Text>
-      <Button testID="library-clear-search" label="Clear search" onPress={onClear} />
+      <Button
+        action="library.search.clear"
+        testID="library-clear-search"
+        label="Clear search"
+        onPress={onClear}
+      />
     </View>
   );
 }

@@ -27,6 +27,11 @@ jest.mock('expo-router', () => ({
   useSegments: () => ['(tabs)', 'library', 'featuring'],
 }));
 
+jest.mock('@shared/telemetry/userTelemetry', () => ({
+  recordUserAction: jest.fn(),
+  recordFailureShown: jest.fn(),
+}));
+
 jest.mock('@shared/playback/usePlayback', () => ({
   usePlayback: () => ({ status: 'idle', source: null }),
 }));

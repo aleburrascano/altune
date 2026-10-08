@@ -20,6 +20,10 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('@shared/telemetry/userTelemetry', () => ({
+  recordUserAction: jest.fn(),
+}));
+
 const mockSignOut = supabase.auth.signOut as jest.Mock;
 
 function makeProps(

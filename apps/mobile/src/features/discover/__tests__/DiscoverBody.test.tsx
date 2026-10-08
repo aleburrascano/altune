@@ -2,10 +2,10 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
-import { DiscoverBody } from '../ui/DiscoverBody';
-import { resultFixture } from './fixtures';
+import { DiscoverBody } from '@features/discover/ui/DiscoverBody';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
-import type { DiscoverView } from '../discoverView';
+import type { DiscoverView } from '@features/discover/discoverView';
 import { fireEvent } from '@testing-library/react-native';
 import type { ResultSection } from '@shared/api-client/discovery';
 
@@ -21,7 +21,7 @@ function useWebPlatform() {
   });
 }
 
-jest.mock('../hooks/usePreviewPlayback', () => ({
+jest.mock('@features/discover/hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
 }));
 

@@ -6,8 +6,8 @@ import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
-import type { DiscoverLogic } from '../hooks/useDiscoverLogic';
-import { DiscoverScreen } from '../ui/DiscoverScreen';
+import type { DiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
+import { DiscoverScreen } from '@features/discover/ui/DiscoverScreen';
 
 const mockPush = jest.fn();
 const focusEffects: Array<() => (() => void) | void> = [];
@@ -30,8 +30,8 @@ jest.mock('@shared/ui/primitives/SearchBar', () => {
   };
 });
 
-jest.mock('../ui/DiscoverBody', () => ({ DiscoverBody: () => null }));
-jest.mock('../ui/SuggestionsList', () => ({ SuggestionsList: () => null }));
+jest.mock('@features/discover/ui/DiscoverBody', () => ({ DiscoverBody: () => null }));
+jest.mock('@features/discover/ui/SuggestionsList', () => ({ SuggestionsList: () => null }));
 
 function mockDiscoverLogic(): DiscoverLogic {
   return {
@@ -75,7 +75,7 @@ function mockDiscoverLogic(): DiscoverLogic {
   };
 }
 
-jest.mock('../hooks/useDiscoverLogic', () => ({
+jest.mock('@features/discover/hooks/useDiscoverLogic', () => ({
   useDiscoverLogic: () => mockDiscoverLogic(),
 }));
 

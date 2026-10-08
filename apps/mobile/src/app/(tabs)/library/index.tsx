@@ -1,1 +1,1 @@
-export { LibraryScreen as default } from '../../../features/library/ui/LibraryScreen';
+export { LibraryScreen as default } from '@features/library/ui/LibraryScreen';

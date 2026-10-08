@@ -1,4 +1,4 @@
-import { resultSecondaryLine } from '../resultSecondaryLine';
+import { resultSecondaryLine } from '@features/discover/resultSecondaryLine';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 

@@ -5,6 +5,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 state=${E2E_STACK_DIR:-${TMPDIR:-/tmp}/altune-e2e-stack}
 health_attempts=${E2E_HEALTH_ATTEMPTS:-60}
 ready_attempts=${E2E_READY_ATTEMPTS:-60}
+metro_cache=${E2E_METRO_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/altune-e2e-metro}
 stub_rsa_modulus=0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw
 
 usage() {
@@ -72,7 +73,7 @@ web_serving() {
 
 bring_up_services() {
   start_container postgres -e POSTGRES_USER=altune -e POSTGRES_PASSWORD=altune_dev -e POSTGRES_DB=altune \
-    -p 127.0.0.1::5432 postgres:16-alpine
+    -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql/data:rw,size=2g postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off
   start_container redis -p 127.0.0.1::6379 redis:7-alpine
   wait_until "$ready_attempts" postgres_ready
   wait_until "$ready_attempts" redis_ready
@@ -105,9 +106,10 @@ start_api() {
 }
 
 export_and_serve_web() {
-  mkdir -p "$state/metro-tmp"
+  mkdir -p "$metro_cache"
+  find "$metro_cache" -type f -mtime +7 -delete 2>/dev/null || true
   (cd "$root/apps/mobile" && rm -rf dist \
-    && TMPDIR="$state/metro-tmp" EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
+    && TMPDIR="$metro_cache" flock "$metro_cache/.lock" env EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
       EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:1 EXPO_PUBLIC_SUPABASE_ANON_KEY=e2e-anon-key \
       npx expo export -p web --dev)
   start_detached web python3 -m http.server "$web_port" --bind 127.0.0.1 --directory "$root/apps/mobile/dist"

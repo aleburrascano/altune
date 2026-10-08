@@ -6,9 +6,9 @@ import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import { AuthErrorBanner } from './AuthErrorBanner';
-import { AuthHeroLayout } from './hero/AuthHeroLayout';
-import { OAuthButtons } from './OAuthButtons';
+import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
+import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
+import { OAuthButtons } from '@features/auth/ui/OAuthButtons';
 
 type AuthFormProps = {
   screenTestID: string;
@@ -47,6 +47,7 @@ export function AuthForm({
         {children}
         <AuthErrorBanner state={state} generic={generic} />
         <Button
+          action={linkHref === '/sign-up' ? 'auth.sign_in' : 'auth.sign_up'}
           testID="submit-button"
           label={submitLabel}
           onPress={onSubmit}

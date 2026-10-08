@@ -5,10 +5,10 @@ import { StyleSheet, View } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import { useEmailPasswordFields } from '../hooks/useEmailPasswordFields';
-import { useSignIn } from '../hooks/useSignIn';
-import { AuthForm } from './AuthForm';
-import { EmailPasswordFields } from './EmailPasswordFields';
+import { useEmailPasswordFields } from '@features/auth/hooks/useEmailPasswordFields';
+import { useSignIn } from '@features/auth/hooks/useSignIn';
+import { AuthForm } from '@features/auth/ui/AuthForm';
+import { EmailPasswordFields } from '@features/auth/ui/EmailPasswordFields';
 
 const GENERIC_SIGN_IN_ERROR = "Couldn't sign you in. Please try again.";
 

@@ -19,7 +19,7 @@ import {
 } from '@features/discover/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

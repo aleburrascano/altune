@@ -1,4 +1,4 @@
-import { newPasswordFormState } from '../validation';
+import { newPasswordFormState } from '@features/auth/validation';
 
 describe('newPasswordFormState', () => {
   const strong = 'Abcdef1!';

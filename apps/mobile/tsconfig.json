@@ -37,6 +37,9 @@
       ],
       "@shared/*": [
         "./src/shared/*"
+      ],
+      "@testing/*": [
+        "./jest/*"
       ]
     },
     "types": [
@@ -46,6 +49,8 @@
   },
   "include": [
     "src/**/*",
+    "jest/*.ts",
+    "jest/__tests__/**/*.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],

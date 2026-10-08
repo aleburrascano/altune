@@ -13,7 +13,13 @@ type AddTracksHeaderProps = {
 export function AddTracksHeader({ playlistName, onBack }: AddTracksHeaderProps): ReactElement {
   return (
     <View style={styles.header}>
-      <IconButton icon={ChevronLeft} size={24} onPress={onBack} accessibilityLabel="Back" />
+      <IconButton
+        action="library.add_tracks.back"
+        icon={ChevronLeft}
+        size={24}
+        onPress={onBack}
+        accessibilityLabel="Back"
+      />
       <Text variant="title" numberOfLines={1} style={styles.headerTitle}>
         Add to {playlistName}
       </Text>

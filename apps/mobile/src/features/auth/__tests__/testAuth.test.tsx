@@ -9,14 +9,14 @@ import {
   injectTestSession,
   isTestAuthEnabled,
   type TestLoginResponse,
-} from '../adapters/http/testAuth';
+} from '@features/auth/adapters/http/testAuth';
 import { supabase } from '@shared/auth/supabaseClient';
 import { markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 import { useSession } from '@shared/auth/useSession';
 
-jest.mock('@supabase/supabase-js', () => require('../../../../jest/doubles/supabase-js.js'));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const { __http } = require('../../../../jest/doubles/fetch.js') as {
+const { __http } = require('@testing/doubles/fetch.js') as {
   __http: {
     reply(spec: string, response: { status?: number; json?: unknown }): unknown;
   };

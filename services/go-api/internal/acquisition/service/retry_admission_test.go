@@ -63,18 +63,18 @@ func cooldownKey(trackID domain.TrackId, kind ports.CooldownKind) string {
 	return string(kind) + "/" + trackID.String()
 }
 
-func (s *fakeCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, error) {
+func (s *fakeCooldownStore) Reserve(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.reserveErr != nil {
-		return time.Time{}, false, s.reserveErr
+		return time.Time{}, false, 0, s.reserveErr
 	}
 	now, key := s.now(), cooldownKey(trackID, kind)
 	if last, ok := s.lastAt[key]; ok && now.Sub(last) < cooldown {
-		return time.Time{}, false, nil
+		return time.Time{}, false, cooldown - now.Sub(last), nil
 	}
 	s.lastAt[key] = now
-	return now, true, nil
+	return now, true, 0, nil
 }
 
 func (s *fakeCooldownStore) Release(_ context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {

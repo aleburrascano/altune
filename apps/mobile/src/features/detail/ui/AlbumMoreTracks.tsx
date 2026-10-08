@@ -83,6 +83,7 @@ function MoreTrackRows(props: AlbumMoreTracksProps): ReactElement[] {
 
 function moreSaveAllProps(props: AlbumMoreTracksProps) {
   return {
+    action: 'detail.album.save_all_more',
     testID: 'detail-save-all-more',
     label: props.savingAll ? 'Saving…' : 'Save all',
     variant: 'secondary' as const,

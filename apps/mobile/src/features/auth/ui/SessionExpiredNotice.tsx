@@ -2,7 +2,7 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 
-import { AuthFullScreenNotice } from './AuthFullScreenNotice';
+import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 
 export function SessionExpiredNotice() {
   const { state, signOut } = useSignOut();
@@ -16,6 +16,7 @@ export function SessionExpiredNotice() {
         Sign in again to get back to your library. Nothing has been lost.
       </Text>
       <Button
+        action="auth.session_expired.sign_in_again"
         testID="session-expired-signin"
         label={state.status === 'loading' ? 'Signing out…' : 'Sign in again'}
         disabled={state.status === 'loading'}

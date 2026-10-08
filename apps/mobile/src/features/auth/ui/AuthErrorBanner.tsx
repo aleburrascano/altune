@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 
 import { Banner } from '@shared/ui/primitives/Banner';
 
-import { authErrorText, type AuthErrorReason } from '../errorReason';
+import { authErrorText, type AuthErrorReason } from '@features/auth/errorReason';
 
 type AuthErrorBannerState =
   | { kind: 'error'; reason: AuthErrorReason }

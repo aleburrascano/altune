@@ -9,7 +9,7 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   SUGGEST_DEBOUNCE_MS,
   useAutocompleteSuggestions,
-} from '../hooks/useAutocompleteSuggestions';
+} from '@features/discover/hooks/useAutocompleteSuggestions';
 
 jest.mock('@shared/api-client/discovery', () => ({
   searchDiscovery: jest.fn(),
