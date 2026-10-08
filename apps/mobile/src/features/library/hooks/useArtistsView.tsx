@@ -1,10 +1,10 @@
 import type { ArtistGroup } from '@shared/api-client/library';
 
-import { useLibraryArtists } from './useLibraryArtists';
-import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
-import { ARTIST_SORT_OPTIONS, type SortKey } from '../domain/sort';
-import { ArtistsGrid } from '../ui/ArtistsGrid';
+import { useLibraryArtists } from '@features/library/hooks/useLibraryArtists';
+import type { ActiveView } from '@features/library/activeView';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
+import { ARTIST_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
+import { ArtistsGrid } from '@features/library/ui/ArtistsGrid';
 
 type ArtistsViewDeps = {
   query: string;

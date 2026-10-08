@@ -18,10 +18,14 @@ import {
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { logTrackMutationFailure } from './logTrackMutationFailure';
-import { failureLogFields } from '../domain/failureLogFields';
-import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError, failureTail, type LibraryFailure } from '../domain/state';
+import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import { failureLogFields } from '@features/library/domain/failureLogFields';
+import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import {
+  classifyLibraryError,
+  failureTail,
+  type LibraryFailure,
+} from '@features/library/domain/state';
 
 const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
 

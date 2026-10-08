@@ -4,8 +4,8 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { reportPinBatch, reportUnpinBatch } from './pinBatchSummary';
-import { offlineEligibility, type LibraryOffline } from './hooks/useLibraryOffline';
+import { reportPinBatch, reportUnpinBatch } from '@features/library/pinBatchSummary';
+import { offlineEligibility, type LibraryOffline } from '@features/library/hooks/useLibraryOffline';
 
 export type SelectionAction = {
   key: string;

@@ -3,7 +3,7 @@ import { libraryKeys } from '@shared/lib/query-keys';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { usePagedGroupQuery } from './usePagedGroupQuery';
+import { usePagedGroupQuery } from '@features/library/hooks/usePagedGroupQuery';
 
 export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: boolean) {
   const port = useLibraryPort();

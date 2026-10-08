@@ -16,19 +16,19 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 
-import { featuringDetailRoute } from '../domain/featuringDetailRoute';
-import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
-import { useDeleteTrack } from '../hooks/useDeleteTrack';
-import { useExploreArtist } from '../hooks/useExploreArtist';
-import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { useTrackMenu } from '../hooks/useTrackMenu';
+import { featuringDetailRoute } from '@features/library/domain/featuringDetailRoute';
+import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
+import { useDeleteTrack } from '@features/library/hooks/useDeleteTrack';
+import { useExploreArtist } from '@features/library/hooks/useExploreArtist';
+import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { useTrackMenu } from '@features/library/hooks/useTrackMenu';
 import {
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
-} from '../hooks/useTracksFeaturing';
-import { classifyLibraryError, failureTail } from '../domain/state';
-import { TracksList } from './TracksList';
+} from '@features/library/hooks/useTracksFeaturing';
+import { classifyLibraryError, failureTail } from '@features/library/domain/state';
+import { TracksList } from '@features/library/ui/TracksList';
 
 export function FeaturingScreen(): ReactElement {
   const params = useLocalSearchParams<{

@@ -7,7 +7,10 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 
 import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
-import { albumToDiscoveryResult, artistToDiscoveryResult } from '../domain/library-to-discovery';
+import {
+  albumToDiscoveryResult,
+  artistToDiscoveryResult,
+} from '@features/library/domain/library-to-discovery';
 
 const toDetail = (item: DiscoveryResult) => detailHref('/library/detail', item);
 

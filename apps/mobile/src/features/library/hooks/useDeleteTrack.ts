@@ -21,10 +21,10 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { deleteOne } from './useDeleteTracks';
-import { logTrackMutationFailure } from './logTrackMutationFailure';
-import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../domain/state';
+import { deleteOne } from '@features/library/hooks/useDeleteTracks';
+import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { classifyLibraryError } from '@features/library/domain/state';
 
 type RemovedTrack = { placements: TrackCachePlacement[]; status: TrackStatus | undefined };
 

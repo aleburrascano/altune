@@ -3,9 +3,9 @@ import { useMemo } from 'react';
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 
-import { useLibrarySearch } from '../hooks/useLibrarySearch';
-import { useLibraryTracks } from '../hooks/useLibraryTracks';
-import { useSelection, type Selection } from '../hooks/useSelection';
+import { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
+import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import { useSelection, type Selection } from '@features/library/hooks/useSelection';
 
 export type SearchApi = ReturnType<typeof useLibrarySearch>;
 export type TracksQuery = ReturnType<typeof useLibraryTracks>;

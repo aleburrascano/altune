@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text, spacing } from '@shared/ui';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 
-import { LibraryRowRetryAction } from './LibraryRowRetryAction';
+import { LibraryRowRetryAction } from '@features/library/ui/LibraryRowRetryAction';
 
 import type { FailedAcquisition, TrackFields } from '@shared/api-client/types';
 

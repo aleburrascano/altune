@@ -5,9 +5,9 @@ import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { buildTrackMenuItems } from '../trackMenu';
-import { useLibraryOffline } from './useLibraryOffline';
-import { useReacquireTrack } from './useReacquireTrack';
+import { buildTrackMenuItems } from '@features/library/trackMenu';
+import { useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
+import { useReacquireTrack } from '@features/library/hooks/useReacquireTrack';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
 

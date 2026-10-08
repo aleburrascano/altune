@@ -8,16 +8,16 @@ import type { Theme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { usePinnedStatus } from '../hooks/useLibraryOffline';
-import { LibraryRowDetails } from './LibraryRowDetails';
-import { LibraryRowFailure } from './LibraryRowFailure';
-import { LibraryRowMoreButton } from './LibraryRowMoreButton';
-import { LibraryRowPinnedIcon } from './LibraryRowPinnedIcon';
-import { LibraryRowPlayback } from './LibraryRowPlayback';
-import { LibraryRowSelection } from './LibraryRowSelection';
-import { libraryRowAccessibilityLabel } from './libraryRowLabels';
-import { libraryRowWideStyle } from './libraryRowWideStyle';
-import { WIDE_TRACK_COLUMNS } from './wideTrackColumns';
+import { usePinnedStatus } from '@features/library/hooks/useLibraryOffline';
+import { LibraryRowDetails } from '@features/library/ui/LibraryRowDetails';
+import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
+import { LibraryRowMoreButton } from '@features/library/ui/LibraryRowMoreButton';
+import { LibraryRowPinnedIcon } from '@features/library/ui/LibraryRowPinnedIcon';
+import { LibraryRowPlayback } from '@features/library/ui/LibraryRowPlayback';
+import { LibraryRowSelection } from '@features/library/ui/LibraryRowSelection';
+import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';
+import { libraryRowWideStyle } from '@features/library/ui/libraryRowWideStyle';
+import { WIDE_TRACK_COLUMNS } from '@features/library/ui/wideTrackColumns';
 
 import type { TrackResponse } from '@shared/api-client/types';
 

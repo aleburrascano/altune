@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { describeError } from '@shared/lib/describeError';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
-import { LibraryHeader } from './LibraryHeader';
+import { LibraryHeader } from '@features/library/ui/LibraryHeader';
 
 const SKELETON_TILES = [0, 1, 2, 3];
 

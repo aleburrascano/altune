@@ -16,11 +16,15 @@ import {
 import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCachePatch';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
-import { dropVanishedTrack } from './dropVanishedTrack';
-import { logTrackMutationFailure } from './logTrackMutationFailure';
-import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
-import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../domain/state';
+import { dropVanishedTrack } from '@features/library/hooks/dropVanishedTrack';
+import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import {
+  trackMutationKeys,
+  useOneRunPerTrack,
+  type TrackMutation,
+} from '@features/library/hooks/useOneRunPerTrack';
+import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { classifyLibraryError } from '@features/library/domain/state';
 
 type PriorAcquisition = { prior: AcquisitionTransition | undefined };
 type RetryContext = PriorAcquisition & { epoch: number };

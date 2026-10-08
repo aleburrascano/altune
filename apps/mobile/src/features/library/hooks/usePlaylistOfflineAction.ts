@@ -1,8 +1,8 @@
 import type { TrackResponse } from '@shared/api-client/types';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
-import { reportPinBatch, reportUnpinBatch } from '../pinBatchSummary';
-import { offlineEligibility, useLibraryOffline } from './useLibraryOffline';
+import { reportPinBatch, reportUnpinBatch } from '@features/library/pinBatchSummary';
+import { offlineEligibility, useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
 
 export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): ContextMenuItem {
   const offline = useLibraryOffline();

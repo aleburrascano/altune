@@ -5,12 +5,12 @@ import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { useRemoveTracksFromPlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
-import type { useLibraryNavigation } from './useLibraryNavigation';
+import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import {
   useTrackSelection,
   type TrackSelectionController,
   type TrackSelectionOptions,
-} from './useTrackSelection';
+} from '@features/library/hooks/useTrackSelection';
 
 type PlaylistTrackRemovalArgs = {
   playlistId: PlaylistId;

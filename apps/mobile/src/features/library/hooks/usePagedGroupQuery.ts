@@ -8,10 +8,10 @@ import {
 
 import type { LibrarySort } from '@shared/api-client/library';
 
-import { pagedListControls } from './pagedListControls';
-import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
-import type { LibraryChip } from '../activeView';
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../domain/groupPaging';
+import { pagedListControls } from '@features/library/hooks/pagedListControls';
+import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
+import type { LibraryChip } from '@features/library/activeView';
+import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '@features/library/domain/groupPaging';
 
 interface GroupPage<T> {
   items: T[];
