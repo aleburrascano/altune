@@ -11,7 +11,7 @@ import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import type { Selection } from '@features/library/hooks/useSelection';
-import type { ActiveView } from '@features/library/activeView';
+import type { ActiveView } from '@features/library/domain/activeView';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 import { TRACK_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
 import { TracksList } from '@features/library/ui/TracksList';

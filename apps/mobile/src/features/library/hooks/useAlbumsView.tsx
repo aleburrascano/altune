@@ -1,7 +1,7 @@
 import type { AlbumGroup } from '@shared/api-client/library';
 
 import { useLibraryAlbums } from '@features/library/hooks/useLibraryAlbums';
-import type { ActiveView } from '@features/library/activeView';
+import type { ActiveView } from '@features/library/domain/activeView';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 import { ALBUM_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
 import { AlbumsGrid } from '@features/library/ui/AlbumsGrid';

@@ -16,7 +16,6 @@ M1 src/features/detail/save-cache.ts loose root file
 M1 src/features/detail/save-control-state.ts loose root file
 M1 src/features/detail/text-compare.ts loose root file
 M1 src/features/library missing index.ts
-M1 src/features/library/activeView.ts loose root file
 M1 src/features/library/gridColumns.ts loose root file
 M1 src/features/library/libraryFailureAlert.ts loose root file
 M1 src/features/library/pinBatchSummary.ts loose root file
@@ -46,7 +45,6 @@ M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
 M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/
 M4 src/features/library/hooks/dropVanishedTrack.ts non-use* file in hooks/
 M4 src/features/library/hooks/logTrackMutationFailure.ts non-use* file in hooks/
-M4 src/features/library/hooks/pagedListControls.ts non-use* file in hooks/
 M4 src/features/library/ui/useAddableTracks.ts use* file outside hooks/
 M4 src/features/library/ui/useLibraryGridLayout.ts use* file outside hooks/
 M7 jest/factories.ts sessionFactory has no importer under src/

@@ -8,13 +8,15 @@ function domainFiles(): string[] {
 }
 
 describe('library layers convention doc and domain contents', () => {
-  it('keeps all eight pure files in domain/', () => {
+  it('keeps all ten pure files in domain/', () => {
     expect(domainFiles().sort()).toEqual([
+      'activeView.ts',
       'failureLogFields.ts',
       'featuringDetailRoute.ts',
       'goBackOrToLibrary.ts',
       'groupPaging.ts',
       'library-to-discovery.ts',
+      'pagedListControls.ts',
       'refresh.ts',
       'sort.ts',
       'state.ts',
@@ -49,7 +51,7 @@ describe('library layers convention doc and domain contents', () => {
     expect({ missing, undocumentedDomain, domainCount: domainFiles().length }).toEqual({
       missing: [],
       undocumentedDomain: [],
-      domainCount: 8,
+      domainCount: 10,
     });
   });
 });

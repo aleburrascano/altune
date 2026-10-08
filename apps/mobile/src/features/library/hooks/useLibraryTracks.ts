@@ -16,7 +16,7 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { failureLogFields } from '@features/library/domain/failureLogFields';
 import { classifyLibraryError, type LibraryFailure } from '@features/library/domain/state';
-import { pagedListControls } from '@features/library/hooks/pagedListControls';
+import { pagedListControls } from '@features/library/domain/pagedListControls';
 import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
 
 export const TRACKS_PAGE_SIZE = 200;

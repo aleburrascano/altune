@@ -29,7 +29,7 @@ import {
 } from '@features/library/ui/LibraryStateScreens';
 import { SortControl } from '@features/library/ui/SortControl';
 import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
-import type { LibraryChip } from '@features/library/activeView';
+import type { LibraryChip } from '@features/library/domain/activeView';
 import { type SortKey } from '@features/library/domain/sort';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 

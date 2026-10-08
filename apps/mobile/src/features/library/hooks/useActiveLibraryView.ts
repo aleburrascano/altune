@@ -11,7 +11,7 @@ import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import type { Selection } from '@features/library/hooks/useSelection';
 import { useTracksView } from '@features/library/hooks/useTracksView';
-import type { ActiveView, LibraryChip } from '@features/library/activeView';
+import type { ActiveView, LibraryChip } from '@features/library/domain/activeView';
 import type { SortKey } from '@features/library/domain/sort';
 
 type ActiveLibraryViewDeps = {

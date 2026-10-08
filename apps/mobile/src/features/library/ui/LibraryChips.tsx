@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 import { Chip, spacing } from '@shared/ui';
 
-import type { LibraryChip } from '@features/library/activeView';
+import type { LibraryChip } from '@features/library/domain/activeView';
 
 const CHIPS: { key: LibraryChip; label: string }[] = [
   { key: 'playlists', label: 'Playlists' },

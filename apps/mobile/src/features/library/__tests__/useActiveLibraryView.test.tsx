@@ -9,10 +9,10 @@ import {
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
-} from '../domain/sort';
+} from '@features/library/domain/sort';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
-import type { LibraryChip } from '../activeView';
+import type { LibraryChip } from '@features/library/domain/activeView';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 import { TracksList } from '../ui/TracksList';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
