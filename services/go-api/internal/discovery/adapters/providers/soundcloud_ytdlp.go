@@ -5,15 +5,26 @@ import (
 	"altune/go-api/internal/shared/ytdlp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
 
-type SoundCloudAdapter struct{}
+const maxConcurrentYtdlp = 3
+
+var ErrYtdlpBusy = errors.New("yt-dlp soundcloud search: all slots busy")
+
+type SoundCloudAdapter struct {
+	slots    chan struct{}
+	dumpJSON func(ctx context.Context, args []string) ([][]byte, string, error)
+}
 
 func NewSoundCloudAdapter() *SoundCloudAdapter {
-	return &SoundCloudAdapter{}
+	return &SoundCloudAdapter{
+		slots:    make(chan struct{}, maxConcurrentYtdlp),
+		dumpJSON: ytdlp.DumpJSON,
+	}
 }
 
 func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
@@ -31,6 +42,13 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 		return nil, nil
 	}
 
+	select {
+	case a.slots <- struct{}{}:
+		defer func() { <-a.slots }()
+	default:
+		return nil, ErrYtdlpBusy
+	}
+
 	args := []string{
 		"--dump-json",
 		"--flat-playlist",
@@ -38,7 +56,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 		fmt.Sprintf("scsearch5:%s", query),
 	}
 
-	lines, stderr, err := ytdlp.DumpJSON(ctx, args)
+	lines, stderr, err := a.dumpJSON(ctx, args)
 	if err != nil {
 		detail := strings.TrimSpace(stderr)
 		if detail != "" {

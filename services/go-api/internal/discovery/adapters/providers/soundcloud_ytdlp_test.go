@@ -2,7 +2,9 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"os/exec"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,5 +67,61 @@ func TestSoundCloudAdapter_Search_ContextCancelled(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
+	}
+}
+
+func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
+	release := make(chan struct{})
+	var running, peak atomic.Int32
+	adapter := NewSoundCloudAdapter()
+	adapter.dumpJSON = func(ctx context.Context, args []string) ([][]byte, string, error) {
+		n := running.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		<-release
+		running.Add(-1)
+		return nil, "", nil
+	}
+	kinds := map[domain.ResultKind]bool{domain.ResultKindTrack: true}
+
+	const calls = 10
+	errs := make(chan error, calls)
+	for i := 0; i < calls; i++ {
+		go func() {
+			_, err := adapter.Search(context.Background(), "q", kinds)
+			errs <- err
+		}()
+	}
+
+	shed := 0
+	deadline := time.After(2 * time.Second)
+	for shed < calls-maxConcurrentYtdlp {
+		select {
+		case err := <-errs:
+			if !errors.Is(err, ErrYtdlpBusy) {
+				t.Fatalf("unexpected early result: %v", err)
+			}
+			shed++
+		case <-deadline:
+			t.Fatalf("only %d calls shed promptly, want %d", shed, calls-maxConcurrentYtdlp)
+		}
+	}
+	if got := peak.Load(); got > maxConcurrentYtdlp {
+		t.Errorf("peak concurrency %d exceeds cap %d", got, maxConcurrentYtdlp)
+	}
+
+	close(release)
+	for i := 0; i < maxConcurrentYtdlp; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("admitted call failed: %v", err)
+		}
+	}
+
+	if _, err := adapter.Search(context.Background(), "q", kinds); err != nil {
+		t.Errorf("search after slots freed: %v", err)
 	}
 }
