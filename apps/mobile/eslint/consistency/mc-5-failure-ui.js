@@ -2,7 +2,6 @@ module.exports = {
   id: 'MC-5',
   description:
     'No Alert.alert or direct showAlert import outside the failure module and the dialog seam',
-  baseline: 0,
   config: [
     {
       ignores: [

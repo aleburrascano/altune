@@ -1,7 +1,6 @@
 module.exports = {
   id: 'MC-1',
   description: 'All network calls go through apiFetch or a named transport seam',
-  baseline: 9,
   config: [
     {
       ignores: [
