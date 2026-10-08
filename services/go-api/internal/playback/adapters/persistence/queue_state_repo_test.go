@@ -926,7 +926,7 @@ func (f failingStore) Exec(context.Context, string, ...any) (pgconn.CommandTag, 
 	return pgconn.CommandTag{}, f.err
 }
 
-func (f failingStore) QueryRow(context.Context, string, ...any) pgx.Row { return errRow{err: f.err} }
+func (f failingStore) QueryRow(context.Context, string, ...any) pgx.Row { return errRow(f) }
 
 func TestRunOp_TransientFault_CountsTransientNotTimeout(t *testing.T) {
 	m := &recordingMetrics{}
