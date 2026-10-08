@@ -1,5 +1,5 @@
-import type { FileStore } from '../fileStore';
-import { createWebFileStore, WebDownloadUnsupportedError } from '../web/webFileStore';
+import type { FileStore } from '@shared/files/fileStore';
+import { createWebFileStore, WebDownloadUnsupportedError } from '@shared/files/web/webFileStore';
 
 function fakeLocalStorage(): Storage {
   const data = new Map<string, string>();
@@ -165,7 +165,7 @@ describe('the webFileStore singleton', () => {
   it('never touches localStorage while the module is imported', async () => {
     await withThrowingLocalStorage((getter) => {
       jest.isolateModules(() => {
-        require('../web/webFileStore');
+        require('@shared/files/web/webFileStore');
       });
       expect(getter).not.toHaveBeenCalled();
     });
@@ -176,7 +176,7 @@ describe('the webFileStore singleton', () => {
       let webFileStore!: FileStore;
       let IsolatedUnsupportedError!: typeof WebDownloadUnsupportedError;
       jest.isolateModules(() => {
-        const isolated = require('../web/webFileStore');
+        const isolated = require('@shared/files/web/webFileStore');
         webFileStore = isolated.webFileStore;
         IsolatedUnsupportedError = isolated.WebDownloadUnsupportedError;
       });
@@ -202,7 +202,7 @@ describe('the webFileStore singleton', () => {
   it('falls back to an in-memory store when there is no localStorage at all, without throwing', () => {
     let webFileStore!: FileStore;
     jest.isolateModules(() => {
-      ({ webFileStore } = require('../web/webFileStore'));
+      ({ webFileStore } = require('@shared/files/web/webFileStore'));
     });
 
     const dir = webFileStore.openDirectory('contract');
@@ -217,7 +217,7 @@ describe('the webFileStore singleton', () => {
     try {
       let webFileStore!: FileStore;
       jest.isolateModules(() => {
-        ({ webFileStore } = require('../web/webFileStore'));
+        ({ webFileStore } = require('@shared/files/web/webFileStore'));
       });
 
       webFileStore.openDirectory('contract').create();

@@ -4,10 +4,10 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 
-import { useQueuePlayback } from '../useQueuePlayback';
-import { useQueueStore } from '../queueStore';
-import { PlaybackContext } from '../PlaybackContext';
-import type { PlaybackContextValue, PlaybackTrack } from '../types';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { useQueueStore } from '@shared/playback/queueStore';
+import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback/types';
 
 const INITIAL_STATE = useQueueStore.getState();
 

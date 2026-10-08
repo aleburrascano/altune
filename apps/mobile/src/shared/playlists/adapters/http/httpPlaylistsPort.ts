@@ -7,7 +7,7 @@ import {
   renamePlaylist,
 } from '@shared/api-client/playlists';
 
-import type { PlaylistsPort } from '../../ports/playlistsPort';
+import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 
 export const httpPlaylistsPort: PlaylistsPort = {
   getPlaylists: (...args) => getPlaylists(...args),

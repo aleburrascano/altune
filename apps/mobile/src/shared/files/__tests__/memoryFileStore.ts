@@ -1,4 +1,4 @@
-import type { FileStore, StoredDirectory, StoredFile } from '../fileStore';
+import type { FileStore, StoredDirectory, StoredFile } from '@shared/files/fileStore';
 
 export type MemoryFileStore = FileStore & {
   readonly files: Map<string, string>;

@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import type { AcquisitionPhase } from '../stagePhase';
-import { ACQUISITION_PHASES, STAGE_TO_PHASE, phaseLabel, stageToPhase } from '../stagePhase';
+import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
+import { ACQUISITION_PHASES, STAGE_TO_PHASE, phaseLabel, stageToPhase } from '@shared/acquisition/stagePhase';
 
 function findGoApiRoot(): string | null {
   let dir = __dirname;

@@ -11,7 +11,7 @@ import {
   useDownloadStore,
   type DownloadEntry,
   type DownloadPhase,
-} from '../downloadStore';
+} from '@shared/acquisition/downloadStore';
 import { asTrackId } from '@shared/api-client/ids';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 

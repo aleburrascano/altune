@@ -16,10 +16,10 @@ import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
-import { CreatePlaylistModal } from './CreatePlaylistModal';
-import { usePlaylistsPort } from '../ports/PlaylistsPortProvider';
-import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from '../mutations';
-import { useSingleFlightAction } from '../useSingleFlightAction';
+import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
+import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from '@shared/playlists/mutations';
+import { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
 
 const SHEET_PLAYLIST_CAP = 2000;
 

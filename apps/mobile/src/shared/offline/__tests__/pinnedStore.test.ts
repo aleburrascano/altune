@@ -14,7 +14,7 @@ import {
   MAX_PINNED_BYTES,
   MIN_FREE_BYTES,
   PIN_DOWNLOAD_TIMEOUT_MS,
-} from '../pinnedFiles';
+} from '@shared/offline/pinnedFiles';
 import {
   INDEX_WRITE_DELAY_MS,
   flushIndex,
@@ -24,7 +24,7 @@ import {
   scheduleSaveIndex,
   setPinnedIndexFileStore,
   writeOwner,
-} from '../pinnedIndex';
+} from '@shared/offline/pinnedIndex';
 import {
   usePinnedStore,
   type PinnedEntry,
@@ -32,7 +32,7 @@ import {
   resolvePinnedUri,
   repinIfPinned,
   claimPinnedDownloads,
-} from '../pinnedStore';
+} from '@shared/offline/pinnedStore';
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -569,7 +569,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('../pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
         reloadedEntries = mod.usePinnedStore.getState().entries;
       });
 
@@ -582,7 +582,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('../pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
         reloadedEntries = mod.usePinnedStore.getState().entries;
       });
 
@@ -597,7 +597,7 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('../pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
         reloadedEntries = mod.usePinnedStore.getState().entries;
       });
 
@@ -635,7 +635,7 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
   function importFreshEntries(): unknown {
     let entries: unknown;
     jest.isolateModules(() => {
-      const mod = require('../pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+      const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
       entries = mod.usePinnedStore.getState().entries;
     });
     return entries;
@@ -1265,7 +1265,7 @@ describe('reconcile squares the index with the files on disk', () => {
             },
           }),
         );
-        freshStoreModule = require('../pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        freshStoreModule = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
       });
 
       const freshFs = freshFsModule!.__fs;

@@ -3,7 +3,7 @@ import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { ApiError } from '@shared/errors';
 
-import type { PlaylistsPort } from '../ports/playlistsPort';
+import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 
 const NOT_FOUND_STATUS = 404;
 

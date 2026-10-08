@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-import { trackKey } from './trackKey';
-import type { PlaybackTrack, QueueSource, RepeatMode } from './types';
+import { trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack, QueueSource, RepeatMode } from '@shared/playback/types';
 
 interface QueueState {
   tracks: readonly PlaybackTrack[];

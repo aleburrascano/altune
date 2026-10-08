@@ -1,5 +1,5 @@
-export { AddToPlaylistSheet } from './ui/AddToPlaylistSheet';
-export { CreatePlaylistModal } from './ui/CreatePlaylistModal';
+export { AddToPlaylistSheet } from '@shared/playlists/ui/AddToPlaylistSheet';
+export { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
 export {
   useAddTracksToPlaylist,
   useCreatePlaylist,
@@ -7,8 +7,8 @@ export {
   useDeletePlaylist,
   useRemoveTracksFromPlaylist,
   useRenamePlaylist,
-} from './mutations';
-export { useSingleFlightAction } from './useSingleFlightAction';
-export { httpPlaylistsPort } from './adapters/http/httpPlaylistsPort';
-export { PlaylistsPortProvider, usePlaylistsPort } from './ports/PlaylistsPortProvider';
-export type { PlaylistsPort } from './ports/playlistsPort';
+} from '@shared/playlists/mutations';
+export { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
+export { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
+export { PlaylistsPortProvider, usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+export type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';

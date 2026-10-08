@@ -11,7 +11,7 @@ import {
   useRenamePlaylist,
   useCreatePlaylist,
   useCreatePlaylistWithTracks,
-} from '../mutations';
+} from '@shared/playlists/mutations';
 import { ContractError } from '@shared/errors';
 import { asPlaylistId, asTrackId, type TrackId, type PlaylistId } from '@shared/api-client/ids';
 import type {
@@ -26,7 +26,7 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import * as playlistsApi from '@shared/api-client/playlists';
 import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({
   ...jest.requireActual('@shared/telemetry/userTelemetry'),

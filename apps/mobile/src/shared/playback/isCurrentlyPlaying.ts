@@ -1,4 +1,4 @@
-import type { PlaybackContextValue, PlaybackSource } from './types';
+import type { PlaybackContextValue, PlaybackSource } from '@shared/playback/types';
 
 export function isCurrentlyPlaying(
   playback: Pick<PlaybackContextValue, 'status' | 'track'>,

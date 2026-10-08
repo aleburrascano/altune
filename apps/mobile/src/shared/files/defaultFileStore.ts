@@ -1,1 +1,1 @@
-export { deviceFileStore as defaultFileStore } from './fileStore';
+export { deviceFileStore as defaultFileStore } from '@shared/files/fileStore';

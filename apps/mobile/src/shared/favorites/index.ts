@@ -1,3 +1,3 @@
-export { useFavorites } from './useFavorites';
-export { FavoriteButton } from './ui/FavoriteButton';
-export { FavoritesPortProvider } from './ports/FavoritesPortProvider';
+export { useFavorites } from '@shared/favorites/useFavorites';
+export { FavoriteButton } from '@shared/favorites/ui/FavoriteButton';
+export { FavoritesPortProvider } from '@shared/favorites/ports/FavoritesPortProvider';

@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 
-import { usePlayback } from './usePlayback';
-import { orderedQueueTracks, useQueueStore } from './queueStore';
-import type { PlaybackTrack, QueueSource } from './types';
+import { usePlayback } from '@shared/playback/usePlayback';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
 
 interface QueuePlaybackControls {
   playFromList: (

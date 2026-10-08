@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { extFromUrl, formatBytes } from '../pinnedFiles';
+import { extFromUrl, formatBytes } from '@shared/offline/pinnedFiles';
 
 describe('law: extFromUrl always returns a non-empty extension beginning with a dot', () => {
   it('holds for any string input', () => {

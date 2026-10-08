@@ -1,7 +1,7 @@
 import { use } from 'react';
 
-import { PlaybackContext } from './PlaybackContext';
-import type { PlaybackContextValue } from './types';
+import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import type { PlaybackContextValue } from '@shared/playback/types';
 
 export function usePlayback(): PlaybackContextValue {
   const ctx = use(PlaybackContext);

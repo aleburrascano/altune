@@ -2,9 +2,9 @@ import fc from 'fast-check';
 
 import { asTrackId, asPlaylistId } from '@shared/api-client/ids';
 
-import { orderedQueueTracks, useQueueStore } from '../queueStore';
-import { trackKey } from '../trackKey';
-import type { PlaybackTrack, QueueSource, RepeatMode } from '../types';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack, QueueSource, RepeatMode } from '@shared/playback/types';
 
 const INITIAL_STATE = useQueueStore.getState();
 
