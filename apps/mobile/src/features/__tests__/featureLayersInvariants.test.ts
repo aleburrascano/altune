@@ -9,21 +9,6 @@ const FORBIDDEN_VALUE_SOURCE =
 
 const DISCOVER_DOMAIN_FILE_COUNT = 8;
 
-const ROOT_FILE_CEILING: Record<string, number> = {
-  auth: 12,
-  detail: 13,
-  discover: 0,
-  library: 7,
-  playback: 21,
-  settings: 0,
-};
-
-function featureNames(): string[] {
-  return readdirSync(FEATURES_ROOT, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name !== '__tests__')
-    .map((entry) => entry.name);
-}
-
 function domainFiles(featuresRoot: string = FEATURES_ROOT): { feature: string; file: string }[] {
   return readdirSync(featuresRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name !== '__tests__')
@@ -36,27 +21,11 @@ function domainFiles(featuresRoot: string = FEATURES_ROOT): { feature: string; f
     });
 }
 
-function rootFileCount(feature: string): number {
-  return readdirSync(join(FEATURES_ROOT, feature), { withFileTypes: true }).filter(
-    (entry) => entry.isFile() && /\.(ts|tsx)$/.test(entry.name),
-  ).length;
-}
-
 function forbiddenValueImports(source: string): string[] {
   return [...source.matchAll(IMPORT_STATEMENT)]
     .filter((match) => match[2] === undefined)
     .map((match) => match[4] ?? '')
     .filter((specifier) => FORBIDDEN_VALUE_SOURCE.test(specifier));
-}
-
-function ratchetProblem(feature: string, count: number, ceiling: number): string | null {
-  if (count > ceiling) {
-    return `${feature} has ${count} loose root files, over its ceiling of ${ceiling}: put new files in domain/ports/adapters/hooks/ui`;
-  }
-  if (count < ceiling) {
-    return `${feature} has ${count} loose root files, under its ceiling of ${ceiling}: lower the ceiling`;
-  }
-  return null;
 }
 
 describe('feature domain layers — pure rules import no framework, UI or outer layer', () => {
@@ -119,23 +88,5 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
       '@features/discover/hooks/useX',
     ]);
     expect(forbiddenValueImports("import { x } from './uiText';")).toEqual([]);
-  });
-});
-
-describe('feature root-file ratchet — loose root files may only go down', () => {
-  it.each(featureNames())('%s keeps exactly its ceiling of loose root files', (feature) => {
-    const ceiling = ROOT_FILE_CEILING[feature] ?? 0;
-    expect(ratchetProblem(feature, rootFileCount(feature), ceiling)).toBeNull();
-  });
-
-  it("reports discover at 0 on today's tree", () => {
-    expect(rootFileCount('discover')).toBe(0);
-  });
-
-  it('fails a count of ceiling+1 and asks to lower the ceiling when the count drops', () => {
-    expect(ratchetProblem('x', 9, 8)).toContain('over its ceiling');
-    expect(ratchetProblem('x', 7, 8)).toContain('lower the ceiling');
-    expect(ratchetProblem('x', 8, 8)).toBeNull();
-    expect(ratchetProblem('newFeature', 1, ROOT_FILE_CEILING['newFeature'] ?? 0)).not.toBeNull();
   });
 });

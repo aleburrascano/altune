@@ -1,0 +1,145 @@
+M1 src/features/auth missing domain/
+M1 src/features/auth missing index.ts
+M1 src/features/auth missing ports/
+M1 src/features/auth/attemptLockout.ts loose root file
+M1 src/features/auth/authDeadline.ts loose root file
+M1 src/features/auth/authRedirect.ts loose root file
+M1 src/features/auth/completeAuthIntent.ts loose root file
+M1 src/features/auth/errorDetail.ts loose root file
+M1 src/features/auth/errorReason.ts loose root file
+M1 src/features/auth/oauthResult.ts loose root file
+M1 src/features/auth/parseAuthLink.ts loose root file
+M1 src/features/auth/recoveryUnlock.ts loose root file
+M1 src/features/auth/resetPasswordRoute.ts loose root file
+M1 src/features/auth/supabaseAuthError.ts loose root file
+M1 src/features/auth/validation.ts loose root file
+M1 src/features/detail missing domain/
+M1 src/features/detail missing index.ts
+M1 src/features/detail/content-status.ts loose root file
+M1 src/features/detail/detailHealth.ts loose root file
+M1 src/features/detail/extras-accessors.ts loose root file
+M1 src/features/detail/featured-artists.ts loose root file
+M1 src/features/detail/handoff-context.ts loose root file
+M1 src/features/detail/navigation.ts loose root file
+M1 src/features/detail/owned-playback.ts loose root file
+M1 src/features/detail/play-source.ts loose root file
+M1 src/features/detail/resolve-entity-query.ts loose root file
+M1 src/features/detail/save-all.ts loose root file
+M1 src/features/detail/save-cache.ts loose root file
+M1 src/features/detail/save-control-state.ts loose root file
+M1 src/features/detail/text-compare.ts loose root file
+M1 src/features/discover missing index.ts
+M1 src/features/library missing index.ts
+M1 src/features/library/activeView.ts loose root file
+M1 src/features/library/gridColumns.ts loose root file
+M1 src/features/library/libraryFailureAlert.ts loose root file
+M1 src/features/library/pinBatchSummary.ts loose root file
+M1 src/features/library/pinnedStatusDisplay.ts loose root file
+M1 src/features/library/selectionActions.ts loose root file
+M1 src/features/library/trackMenu.ts loose root file
+M1 src/features/playback missing domain/
+M1 src/features/playback missing index.ts
+M1 src/features/playback/clamp.ts loose root file
+M1 src/features/playback/classifyPlaybackError.ts loose root file
+M1 src/features/playback/derivePlaybackState.ts loose root file
+M1 src/features/playback/loadToken.ts loose root file
+M1 src/features/playback/lyrics-sync.ts loose root file
+M1 src/features/playback/playbackErrorStore.ts loose root file
+M1 src/features/playback/playbackHealth.ts loose root file
+M1 src/features/playback/playbackRateStore.ts loose root file
+M1 src/features/playback/playsThroughTrackPlayer.ts loose root file
+M1 src/features/playback/playsThroughTrackPlayer.web.ts loose root file
+M1 src/features/playback/presignWindow.ts loose root file
+M1 src/features/playback/queueItem.ts loose root file
+M1 src/features/playback/queueMenuOptions.ts loose root file
+M1 src/features/playback/queueRebuildStrategies.ts loose root file
+M1 src/features/playback/queueStateWire.ts loose root file
+M1 src/features/playback/redactPlaybackError.ts loose root file
+M1 src/features/playback/resumeQueue.ts loose root file
+M1 src/features/playback/retryPolicy.ts loose root file
+M1 src/features/playback/signals.ts loose root file
+M1 src/features/playback/sleepTimerStore.ts loose root file
+M1 src/features/playback/time.ts loose root file
+M1 src/features/settings missing index.ts
+M2 src/app/(auth)/_layout.tsx deep import @features/auth/ui/hero/ArtworkBackground
+M2 src/app/(auth)/forgot-password.tsx deep import @features/auth/ui/ForgotPasswordScreen
+M2 src/app/(auth)/sign-in.tsx deep import @features/auth/ui/SignInScreen
+M2 src/app/(auth)/sign-up.tsx deep import @features/auth/ui/SignUpScreen
+M2 src/app/(tabs)/_layout.tsx deep import @features/playback/ui/MiniPlayer
+M2 src/app/(tabs)/discover/detail.tsx deep import @features/detail/ui/DetailScreen
+M2 src/app/(tabs)/discover/featuring.tsx deep import @features/library/ui/FeaturingScreen
+M2 src/app/(tabs)/discover/index.tsx deep import @features/discover/ui/DiscoverScreen
+M2 src/app/(tabs)/library/detail.tsx deep import @features/detail/ui/DetailScreen
+M2 src/app/(tabs)/library/featuring.tsx deep import @features/library/ui/FeaturingScreen
+M2 src/app/(tabs)/library/index.tsx deep import @features/library/ui/LibraryScreen
+M2 src/app/(tabs)/library/playlist/[id].tsx deep import @features/library/ui/PlaylistDetailScreen
+M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
+M2 src/app/_layout.tsx deep import @features/auth/hooks/useAuthDeepLink
+M2 src/app/_layout.tsx deep import @features/auth/ui/AuthGate
+M2 src/app/_layout.tsx deep import @features/auth/ui/TestAuthBridge
+M2 src/app/_layout.tsx deep import @features/playback/hooks/PlaybackProvider
+M2 src/app/_layout.tsx deep import @features/playback/native/registerPlaybackService
+M2 src/app/_layout.tsx deep import @features/playback/playsThroughTrackPlayer
+M2 src/app/_layout.tsx deep import @features/playback/ui/SleepTimerBridge
+M2 src/app/auth/callback.tsx deep import @features/auth/ui/AuthCallbackScreen
+M2 src/app/auth/confirm.tsx deep import @features/auth/ui/AuthCallbackScreen
+M2 src/app/auth/recovery.tsx deep import @features/auth/ui/AuthCallbackScreen
+M2 src/app/player/index.tsx deep import @features/playback/ui/FullPlayer
+M2 src/app/player/lyrics.tsx deep import @features/playback/ui/LyricsSheet
+M2 src/app/player/queue.tsx deep import @features/playback/ui/QueueSheet
+M2 src/app/reset-password.tsx deep import @features/auth/ui/SetNewPasswordScreen
+M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
+M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/
+M4 src/features/discover/hooks/discoverFetchGate.ts non-use* file in hooks/
+M4 src/features/discover/hooks/searchPages.ts non-use* file in hooks/
+M4 src/features/library/hooks/dropVanishedTrack.ts non-use* file in hooks/
+M4 src/features/library/hooks/logTrackMutationFailure.ts non-use* file in hooks/
+M4 src/features/library/hooks/pagedListControls.ts non-use* file in hooks/
+M4 src/features/library/ui/useAddableTracks.ts use* file outside hooks/
+M4 src/features/library/ui/useLibraryGridLayout.ts use* file outside hooks/
+M4 src/features/playback/hooks/PlaybackProvider.tsx non-use* file in hooks/
+M4 src/features/playback/hooks/PlaybackProvider.web.tsx non-use* file in hooks/
+M4 src/features/playback/native/usePlaybackPosition.ts use* file outside hooks/
+M4 src/features/playback/native/usePlaybackSignals.ts use* file outside hooks/
+M4 src/features/playback/native/useQueueResume.ts use* file outside hooks/
+M4 src/features/playback/ui/usePlaybackTransport.ts use* file outside hooks/
+M4 src/features/playback/ui/useScrubberGesture.ts use* file outside hooks/
+M4 src/features/playback/web/useMediaSession.ts use* file outside hooks/
+M7 jest/factories.ts sessionFactory has no importer under src/
+M7 jest/factories.ts trackResponseFactory has no importer under src/
+N1 src/shared/api-client/types.ts generic name
+N1 src/shared/lib generic name
+N1 src/shared/playback/constants.ts generic name
+N1 src/shared/playback/types.ts generic name
+N2 src/features/discover go-api module is discovery
+N3 src/features/auth/resetPasswordRoute.ts only export is RESET_PASSWORD_ROUTE_SEGMENT
+N3 src/features/detail/text-compare.ts only export is normalizeForCompare
+N3 src/features/detail/ui/albumDetailFacts.ts only export is buildAlbumFacts
+N3 src/features/detail/ui/color.ts only export is withAlpha
+N3 src/features/detail/ui/styles.ts only export is sharedStyles
+N3 src/features/detail/ui/trackDetailFacts.ts only export is buildTrackFacts
+N3 src/features/discover/domain/handoff.ts only export is stashHandoffForDetail
+N3 src/features/discover/domain/impressions.ts only export is buildImpressionRows
+N3 src/features/discover/hooks/useClearSearchHistory.ts only export is useDiscoverClearSearchHistory
+N3 src/features/library/libraryFailureAlert.ts only export is alertLibraryFailure
+N3 src/features/library/trackMenu.ts only export is buildTrackMenuItems
+N3 src/features/library/ui/libraryRowSurface.ts only export is rowSurfaceStyle
+N3 src/features/library/ui/listContentStyles.ts only export is listContent
+N3 src/features/playback/native/trackPlayerProvider.tsx only export is TrackPlayerPlaybackProvider
+N3 src/features/playback/retryPolicy.ts only export is canRetryPlaybackError
+N3 src/features/playback/web/webControls.ts only export is createWebControls
+N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
+N3 src/shared/api-client/queryString.ts only export is withQuery
+N3 src/shared/events/acquisitionEvents.ts only export is ACQUISITION_HANDLERS
+N3 src/shared/events/playlistEvents.ts only export is PLAYLIST_HANDLERS
+N3 src/shared/events/resyncEvents.ts only export is RESYNC_HANDLERS
+N3 src/shared/id/uuid.ts only export is randomUuid
+N3 src/shared/lib/track-to-discovery.ts only export is trackToDiscoveryResult
+N3 src/shared/offline/offlineSupport.ts only export is offlineDownloadsSupported
+N3 src/shared/playback/playFromList.ts only export is buildPlayableQueue
+N3 src/shared/telemetry/native/uncaughtErrors.ts only export is chainUncaughtErrorHandler
+N3 src/shared/ui/haptics.ts only export is tapFeedback
+N3 src/shared/ui/haptics.web.ts only export is tapFeedback
+N3 src/shared/ui/motion/pressScale.ts only export is usePressScale
+N3 src/shared/ui/navigation/pageTitle.ts only export is pageTitleFor
+N3 src/shared/ui/primitives/screenLayout.ts only export is SCREEN_HORIZONTAL_PADDING
