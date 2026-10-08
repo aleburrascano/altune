@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
@@ -174,5 +175,5 @@ func (a *ITunesAdapter) getJSON(ctx context.Context, u string, dst any) error {
 	if err := a.limiter.wait(ctx); err != nil {
 		return err
 	}
-	return getJSON(ctx, a.client, u, dst, withHeader("User-Agent", itunesUserAgent))
+	return providerhttp.GetJSON(ctx, a.client, u, dst, providerhttp.WithHeader("User-Agent", itunesUserAgent))
 }

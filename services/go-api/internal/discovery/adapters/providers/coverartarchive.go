@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -27,14 +28,14 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	u := fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-1200", url.PathEscape(mbid))
 
-	req, err := newHeadRequest(ctx, u, withHeader("Accept", "image/*"))
+	req, err := providerhttp.NewHeadRequest(ctx, u, providerhttp.WithHeader("Accept", "image/*"))
 	if err != nil {
-		return artworkFailure(domain.ProviderKeyCoverArtArchive, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
 
-	resp, err := sendRequest(r.client, req)
+	resp, err := providerhttp.Send(r.client, req)
 	if err != nil {
-		return artworkFailure(domain.ProviderKeyCoverArtArchive, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
 	_ = resp.Body.Close()
 
@@ -51,7 +52,7 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 		return u, nil
 	}
 
-	return artworkFailure(domain.ProviderKeyCoverArtArchive, httpStatusError{status: resp.StatusCode})
+	return providerhttp.ArtworkFailure(domain.ProviderKeyCoverArtArchive, providerhttp.StatusError{Status: resp.StatusCode})
 }
 
 func (*CoverArtArchiveResolver) ArtworkSource() domain.ProviderKey {

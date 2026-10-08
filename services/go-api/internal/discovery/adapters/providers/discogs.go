@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
@@ -38,7 +39,7 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 
 	artists, err := a.searchArtists(ctx, title)
 	if err != nil {
-		return artworkFailure(domain.ProviderKeyDiscogs, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyDiscogs, err)
 	}
 	if len(artists) == 0 {
 		return "", nil
@@ -52,7 +53,7 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 
 	detail, err := a.fetchArtistDetail(ctx, best.ID)
 	if err != nil {
-		return artworkFailure(domain.ProviderKeyDiscogs, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyDiscogs, err)
 	}
 	if len(detail.Images) == 0 {
 		return "", nil
@@ -79,7 +80,7 @@ func (a *DiscogsAdapter) ResolveByIdentity(ctx context.Context, kind domain.Resu
 	}
 	detail, err := a.fetchArtistDetail(ctx, discogsID)
 	if err != nil {
-		return artworkFailure(domain.ProviderKeyDiscogs, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyDiscogs, err)
 	}
 	if len(detail.Images) == 0 {
 		return "", nil
@@ -255,9 +256,9 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 	if err := a.limiter.wait(ctx); err != nil {
 		return nil, err
 	}
-	status, body, err := getBytes(ctx, a.client, rawURL,
-		withHeader("Authorization", "Discogs token="+a.token),
-		withHeader("User-Agent", a.userAgent))
+	status, body, err := providerhttp.GetBytes(ctx, a.client, rawURL,
+		providerhttp.WithHeader("Authorization", "Discogs token="+a.token),
+		providerhttp.WithHeader("User-Agent", a.userAgent))
 	if status == http.StatusTooManyRequests {
 		slog.WarnContext(ctx, "discogs.rate_limited", "path", urlPathOnly(rawURL))
 		return nil, fmt.Errorf("discogs rate limited")

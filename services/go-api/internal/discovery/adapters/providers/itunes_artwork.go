@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
@@ -26,7 +27,7 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	u := fmt.Sprintf(itunesAPIBaseURL+"/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
 	var body itunesResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {
-		return artworkFailure(domain.ProviderKeyITunes, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyITunes, err)
 	}
 	for _, item := range body.Results {
 		art := upscaleArtwork(item.ArtworkURL100, iTunesHeroArtworkSize)

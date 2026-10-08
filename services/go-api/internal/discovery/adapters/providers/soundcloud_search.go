@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
@@ -177,7 +178,7 @@ func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, kind domain.ResultKi
 		results, err = a.searchArtworkTracks(ctx, query)
 	}
 	if err != nil {
-		return artworkFailure(a.ArtworkSource(), err)
+		return providerhttp.ArtworkFailure(a.ArtworkSource(), err)
 	}
 	for _, r := range results {
 		if r.ImageURL != "" && scArtworkMatches(kind, title, subtitle, r) {

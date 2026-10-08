@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"context"
 	"sync"
 	"time"
@@ -96,7 +97,7 @@ func withAuthRetry[T comparable, R any](
 		return zero, err
 	}
 	res, status, err := do(ctx, cred)
-	if err != nil && isAuthStatus(status) {
+	if err != nil && providerhttp.IsAuthStatus(status) {
 		r.invalidate(cred)
 		cred, err = r.get(ctx)
 		if err != nil {
@@ -105,8 +106,8 @@ func withAuthRetry[T comparable, R any](
 		}
 		var retryStatus int
 		res, retryStatus, err = do(ctx, cred)
-		if err != nil && isAuthStatus(retryStatus) {
-			err = persistentAuthError{cause: err}
+		if err != nil && providerhttp.IsAuthStatus(retryStatus) {
+			err = providerhttp.PersistentAuthError{Cause: err}
 		}
 	}
 	return res, err

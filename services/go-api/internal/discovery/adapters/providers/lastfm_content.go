@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
@@ -48,7 +49,7 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 			} `json:"track"`
 		} `json:"toptracks"`
 	}
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := providerhttp.GetJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -88,7 +89,7 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 			} `json:"album"`
 		} `json:"topalbums"`
 	}
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := providerhttp.GetJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 

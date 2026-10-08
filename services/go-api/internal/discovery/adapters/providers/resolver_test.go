@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"context"
 	"errors"
 	"net/http"
@@ -362,7 +363,7 @@ func newRetryTestResolver() *cachedResolver[string] {
 func TestWithAuthRetry_authFailureAfterRefreshIsPersistent(t *testing.T) {
 	r := newRetryTestResolver()
 	_, err := withAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
-		return 0, http.StatusUnauthorized, httpStatusError{status: http.StatusUnauthorized}
+		return 0, http.StatusUnauthorized, providerhttp.StatusError{Status: http.StatusUnauthorized}
 	})
 	var marker persistentAuthMarker
 	if !errors.As(err, &marker) || !marker.PersistentAuthFailure() {
@@ -376,7 +377,7 @@ func TestWithAuthRetry_refreshThatFixesItIsNotAFailure(t *testing.T) {
 	got, err := withAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
 		calls++
 		if calls == 1 {
-			return 0, http.StatusUnauthorized, httpStatusError{status: http.StatusUnauthorized}
+			return 0, http.StatusUnauthorized, providerhttp.StatusError{Status: http.StatusUnauthorized}
 		}
 		return 7, http.StatusOK, nil
 	})
@@ -391,9 +392,9 @@ func TestWithAuthRetry_nonAuthFailureOnRetryIsNotPersistentAuth(t *testing.T) {
 	_, err := withAuthRetry(context.Background(), r, func(context.Context, string) (int, int, error) {
 		calls++
 		if calls == 1 {
-			return 0, http.StatusForbidden, httpStatusError{status: http.StatusForbidden}
+			return 0, http.StatusForbidden, providerhttp.StatusError{Status: http.StatusForbidden}
 		}
-		return 0, http.StatusInternalServerError, httpStatusError{status: http.StatusInternalServerError}
+		return 0, http.StatusInternalServerError, providerhttp.StatusError{Status: http.StatusInternalServerError}
 	})
 	var marker persistentAuthMarker
 	if errors.As(err, &marker) {

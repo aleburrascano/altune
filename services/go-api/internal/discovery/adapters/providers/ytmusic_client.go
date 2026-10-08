@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -113,10 +114,10 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 
 	params := url.Values{}
 	params.Add("key", ytmSearchKey)
-	_, raw, err := postBytesCappedOK(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
-		withHeader("Content-Type", "application/json; charset=utf-8"),
-		withHeader("Referer", "https://music.youtube.com/search"),
-		withHeader("User-Agent", ytmUserAgent))
+	_, raw, err := providerhttp.PostBytesCappedOK(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
+		providerhttp.WithHeader("Content-Type", "application/json; charset=utf-8"),
+		providerhttp.WithHeader("Referer", "https://music.youtube.com/search"),
+		providerhttp.WithHeader("User-Agent", ytmUserAgent))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic do: %w", err)
 	}

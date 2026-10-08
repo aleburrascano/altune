@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"context"
 	"errors"
 	"fmt"
@@ -33,7 +34,7 @@ func newClientIDResolver(client *http.Client) *clientIDResolver {
 const scResolveTimeout = 20 * time.Second
 
 func (r *clientIDResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	html, err := getText(ctx, r.client, r.siteURL, scMaxBodyBytes, scUserAgent)
+	html, err := providerhttp.GetText(ctx, r.client, r.siteURL, scMaxBodyBytes, scUserAgent)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("fetch soundcloud home: %w", err)
 	}
@@ -47,7 +48,7 @@ func (r *clientIDResolver) resolve(ctx context.Context) (string, time.Time, erro
 		if ctx.Err() != nil {
 			return "", time.Time{}, ctx.Err()
 		}
-		body, err := getText(ctx, r.client, assets[i], scMaxBodyBytes, scUserAgent)
+		body, err := providerhttp.GetText(ctx, r.client, assets[i], scMaxBodyBytes, scUserAgent)
 		if err != nil {
 			continue
 		}

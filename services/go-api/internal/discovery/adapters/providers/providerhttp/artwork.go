@@ -1,4 +1,4 @@
-package providers
+package providerhttp
 
 import (
 	"altune/go-api/internal/discovery/domain"
@@ -8,8 +8,8 @@ import (
 	"net/http"
 )
 
-func artworkFailure(source domain.ProviderKey, err error) (string, error) {
-	var statusErr httpStatusError
+func ArtworkFailure(source domain.ProviderKey, err error) (string, error) {
+	var statusErr StatusError
 	if errors.As(err, &statusErr) {
 		if statusErr.HTTPStatus() == http.StatusNotFound || statusErr.HTTPStatus() == http.StatusBadRequest {
 			return "", nil

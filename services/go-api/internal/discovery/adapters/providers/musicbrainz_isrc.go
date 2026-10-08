@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
@@ -19,9 +20,9 @@ func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) 
 	if err := a.limiter.wait(ctx); err != nil {
 		return nil, err
 	}
-	status, rawBody, err := getBytes(ctx, a.client, u,
-		withHeader("User-Agent", a.userAgent),
-		withHeader("Accept", "application/json"))
+	status, rawBody, err := providerhttp.GetBytes(ctx, a.client, u,
+		providerhttp.WithHeader("User-Agent", a.userAgent),
+		providerhttp.WithHeader("Accept", "application/json"))
 	if status == http.StatusNotFound {
 		return nil, nil
 	}
