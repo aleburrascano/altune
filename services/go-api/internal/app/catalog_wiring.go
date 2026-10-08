@@ -12,7 +12,6 @@ import (
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/observe/service/eventtap"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
@@ -31,12 +30,10 @@ import (
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 
-	catalogDomain "altune/go-api/internal/catalog/domain"
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
@@ -409,43 +406,9 @@ func missingAudioStoreError(cfg *config.Config) error {
 	)
 }
 
-type catalogOwnedTrackLister struct {
-	repo *persistence.PgxTrackRepository
-}
-
-func (l catalogOwnedTrackLister) ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]discoveryPorts.OwnedTrack, error) {
-	refs, err := l.repo.ListOwnedTrackRefs(ctx, userId)
-	if err != nil {
-		return nil, err
-	}
-	tracks := make([]discoveryPorts.OwnedTrack, 0, len(refs))
-	for _, ref := range refs {
-		tracks = append(tracks, discoveryPorts.OwnedTrack{
-			TrackID:           ref.ID,
-			Title:             ref.Title,
-			Artist:            ref.Artist,
-			AcquisitionStatus: ref.AcquisitionStatus,
-			TrackNumber:       ref.TrackNumber,
-		})
-	}
-	return tracks, nil
-}
-
-type catalogTrackNumberSetter struct {
-	svc *catalogService.SetTrackNumberService
-}
-
-func (s catalogTrackNumberSetter) Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error) {
-	id, err := catalogDomain.ParseTrackId(trackId)
-	if err != nil {
-		return false, fmt.Errorf("parse track id: %w", err)
-	}
-	return s.svc.Execute(ctx, userId, id, trackNumber)
-}
-
 func newOwnershipEnrichment(cat catalogWiring) *discoveryService.OwnershipEnrichmentService {
 	return discoveryService.NewOwnershipEnrichmentService(
-		discoveryCatalogBridge.NewOwnershipReader(catalogOwnedTrackLister{repo: cat.trackRepo}),
-		discoveryCatalogBridge.NewTrackNumberWriter(catalogTrackNumberSetter{svc: cat.setTrackNumberSvc}),
+		discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo),
+		discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc),
 	)
 }
