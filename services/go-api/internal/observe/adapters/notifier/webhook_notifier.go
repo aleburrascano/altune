@@ -1,6 +1,7 @@
-package alert
+package notifier
 
 import (
+	"altune/go-api/internal/observe/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -29,7 +30,7 @@ type webhookPayload struct {
 	Severity int    `json:"severity"`
 }
 
-func (n *WebhookNotifier) Notify(ctx context.Context, a Alert) error {
+func (n *WebhookNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	body, err := json.Marshal(webhookPayload{Title: a.Title, Message: a.Message, Severity: int(a.Severity)})
 	if err != nil {
 		return fmt.Errorf("encode alert: %w", err)

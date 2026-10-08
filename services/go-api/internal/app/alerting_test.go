@@ -12,7 +12,7 @@ import (
 	"time"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	observeAlert "altune/go-api/internal/observe/alert"
+	observeDomain "altune/go-api/internal/observe/domain"
 	observeHandler "altune/go-api/internal/observe/handler"
 	playbackPorts "altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/config"
@@ -114,8 +114,8 @@ func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	}
 }
 
-func evalTick(ctx context.Context, conds ...observeAlert.Condition) map[string]*observeAlert.Alert {
-	fired := make(map[string]*observeAlert.Alert)
+func evalTick(ctx context.Context, conds ...observeDomain.Condition) map[string]*observeDomain.Alert {
+	fired := make(map[string]*observeDomain.Alert)
 	for _, c := range conds {
 		if a := c.Eval(ctx); a != nil {
 			fired[c.Key] = a
@@ -143,7 +143,7 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 		if queryFailing.Key == gap.Key {
 			t.Errorf("failure signal shares key %q with the gap alert", gap.Key)
 		}
-		if alert.Severity != observeAlert.SeveritySignal {
+		if alert.Severity != observeDomain.SeveritySignal {
 			t.Errorf("severity = %v, want SeveritySignal", alert.Severity)
 		}
 		if strings.Contains(alert.Message, "relation") || strings.Contains(alert.Message, "zero_result") {

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/auth"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	"altune/go-api/internal/eventstream"
-	"altune/go-api/internal/observe/eventtap"
+	"altune/go-api/internal/observe/service/eventtap"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"

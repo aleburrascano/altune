@@ -1,6 +1,7 @@
-package alert
+package notifier
 
 import (
+	"altune/go-api/internal/observe/domain"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -18,14 +19,14 @@ func TestWebhookNotifier_PostsAlertJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewWebhookNotifier(srv.URL).Notify(context.Background(), Alert{Title: "t", Message: "m", Severity: SeveritySignal})
+	err := NewWebhookNotifier(srv.URL).Notify(context.Background(), domain.Alert{Title: "t", Message: "m", Severity: domain.SeveritySignal})
 	if err != nil {
 		t.Fatalf("Notify = %v, want nil", err)
 	}
 	if method != http.MethodPost || contentType != "application/json" {
 		t.Errorf("method %q content-type %q", method, contentType)
 	}
-	if got.Title != "t" || got.Message != "m" || got.Severity != int(SeveritySignal) {
+	if got.Title != "t" || got.Message != "m" || got.Severity != int(domain.SeveritySignal) {
 		t.Errorf("payload = %+v", got)
 	}
 }
@@ -36,7 +37,7 @@ func TestWebhookNotifier_ErrorsOnNon2xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewWebhookNotifier(srv.URL).Notify(context.Background(), Alert{}); err == nil {
+	if err := NewWebhookNotifier(srv.URL).Notify(context.Background(), domain.Alert{}); err == nil {
 		t.Fatal("Notify on 500 = nil, want error")
 	}
 }
@@ -46,7 +47,7 @@ func TestWebhookNotifier_ErrorsWhenUnreachable(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 
-	if err := NewWebhookNotifier(url).Notify(context.Background(), Alert{}); err == nil {
+	if err := NewWebhookNotifier(url).Notify(context.Background(), domain.Alert{}); err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
 	}
 }
@@ -56,7 +57,7 @@ func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
 	hookURL := srv.URL + "/hook/SECRET123"
 	srv.Close()
 
-	err := NewWebhookNotifier(hookURL).Notify(context.Background(), Alert{})
+	err := NewWebhookNotifier(hookURL).Notify(context.Background(), domain.Alert{})
 	if err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
 	}
@@ -66,7 +67,7 @@ func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
 }
 
 func TestWebhookNotifier_BadURLErrorNeverContainsWebhookURL(t *testing.T) {
-	err := NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), Alert{})
+	err := NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), domain.Alert{})
 	if err == nil {
 		t.Fatal("Notify to a malformed URL = nil, want error")
 	}

@@ -3,7 +3,7 @@ package handler
 import (
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/observe/evalmeter"
+	"altune/go-api/internal/observe/service/evalmeter"
 	"context"
 	"encoding/json"
 	"net/http"

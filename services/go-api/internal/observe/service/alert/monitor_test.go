@@ -1,6 +1,9 @@
 package alert
 
 import (
+	"altune/go-api/internal/observe/adapters/notifier"
+	"altune/go-api/internal/observe/domain"
+	"altune/go-api/internal/observe/ports"
 	"bytes"
 	"context"
 	"errors"
@@ -18,7 +21,7 @@ type stubNotifier struct {
 	err      error
 }
 
-func (s *stubNotifier) Notify(_ context.Context, a Alert) error {
+func (s *stubNotifier) Notify(_ context.Context, a domain.Alert) error {
 	s.calls++
 	s.messages = append(s.messages, a.Message)
 	return s.err
@@ -29,7 +32,7 @@ type flakyNotifier struct {
 	failCalls int
 }
 
-func (f *flakyNotifier) Notify(context.Context, Alert) error {
+func (f *flakyNotifier) Notify(context.Context, domain.Alert) error {
 	f.calls++
 	if f.calls <= f.failCalls {
 		return errors.New("transient push failure")
@@ -37,17 +40,17 @@ func (f *flakyNotifier) Notify(context.Context, Alert) error {
 	return nil
 }
 
-func newTestMonitor(n AlertNotifier, conds ...Condition) *Monitor {
+func newTestMonitor(n ports.AlertNotifier, conds ...domain.Condition) *Monitor {
 	m := NewMonitor(n, 0, conds...)
 	return m
 }
 
-func signalCond(key string, firing *bool) Condition {
-	return Condition{
+func signalCond(key string, firing *bool) domain.Condition {
+	return domain.Condition{
 		Key: key,
-		Eval: func(context.Context) *Alert {
+		Eval: func(context.Context) *domain.Alert {
 			if *firing {
-				return &Alert{Title: "t", Message: "state down", Severity: SeveritySignal}
+				return &domain.Alert{Title: "t", Message: "state down", Severity: domain.SeveritySignal}
 			}
 			return nil
 		},
@@ -85,10 +88,10 @@ func TestMonitor_RefiresAfterRecovery(t *testing.T) {
 
 func TestMonitor_NonSignalDoesNotPage(t *testing.T) {
 	n := &stubNotifier{}
-	cond := Condition{
+	cond := domain.Condition{
 		Key: "log-only",
-		Eval: func(context.Context) *Alert {
-			return &Alert{Title: "t", Message: "m", Severity: SeverityLog}
+		Eval: func(context.Context) *domain.Alert {
+			return &domain.Alert{Title: "t", Message: "m", Severity: domain.SeverityLog}
 		},
 	}
 	m := newTestMonitor(n, cond)
@@ -127,16 +130,16 @@ func TestMonitor_RetriesAfterFailedNotify(t *testing.T) {
 
 func TestMonitor_BlockingConditionDoesNotFreezeTicker(t *testing.T) {
 	secondRan := false
-	blocked := Condition{
+	blocked := domain.Condition{
 		Key: "stuck",
-		Eval: func(ctx context.Context) *Alert {
+		Eval: func(ctx context.Context) *domain.Alert {
 			<-ctx.Done()
 			return nil
 		},
 	}
-	second := Condition{
+	second := domain.Condition{
 		Key: "next",
-		Eval: func(context.Context) *Alert {
+		Eval: func(context.Context) *domain.Alert {
 			secondRan = true
 			return nil
 		},
@@ -198,9 +201,9 @@ func TestMonitor_NonPositiveIntervalDoesNotPanic(t *testing.T) {
 func TestMonitor_PanickingConditionDoesNotStopThePass(t *testing.T) {
 	firing := true
 	n := &stubNotifier{}
-	blowsUp := Condition{
+	blowsUp := domain.Condition{
 		Key:  "boom",
-		Eval: func(context.Context) *Alert { panic("condition blew up") },
+		Eval: func(context.Context) *domain.Alert { panic("condition blew up") },
 	}
 	m := newTestMonitor(n, blowsUp, signalCond("dep", &firing))
 
@@ -214,13 +217,13 @@ func TestMonitor_PanickingConditionDoesNotStopThePass(t *testing.T) {
 func TestMonitor_PanickingConditionHoldsItsPreviousState(t *testing.T) {
 	blowsUp := false
 	n := &stubNotifier{}
-	cond := Condition{
+	cond := domain.Condition{
 		Key: "dep",
-		Eval: func(context.Context) *Alert {
+		Eval: func(context.Context) *domain.Alert {
 			if blowsUp {
 				panic("condition blew up")
 			}
-			return &Alert{Title: "t", Message: "state down", Severity: SeveritySignal}
+			return &domain.Alert{Title: "t", Message: "state down", Severity: domain.SeveritySignal}
 		},
 	}
 	m := newTestMonitor(n, cond)
@@ -240,9 +243,9 @@ func TestMonitor_PauseMidPassStopsLaterNotifications(t *testing.T) {
 	var m *Monitor
 	firing := true
 	n := &stubNotifier{}
-	operatorPauses := Condition{
+	operatorPauses := domain.Condition{
 		Key: "slow",
-		Eval: func(context.Context) *Alert {
+		Eval: func(context.Context) *domain.Alert {
 			m.Pause()
 			return nil
 		},
@@ -272,31 +275,6 @@ func TestMonitor_ResumeRearmsAnIncidentThatWentUnnotified(t *testing.T) {
 	}
 }
 
-func TestNopNotifier(t *testing.T) {
-	if err := (NopNotifier{}).Notify(context.Background(), Alert{}); err != nil {
-		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
-	}
-}
-
-func TestNopNotifier_LogsFiringAlertAtError(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	if err := (NopNotifier{}).Notify(context.Background(), Alert{Title: "dep down", Message: "state down"}); err != nil {
-		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
-	}
-
-	out := buf.String()
-	if !strings.Contains(out, "level=ERROR") {
-		t.Fatalf("log = %q, want an ERROR-level line", out)
-	}
-	if !strings.Contains(out, "dep down") || !strings.Contains(out, "state down") {
-		t.Fatalf("log = %q, want it to carry the alert title and message", out)
-	}
-}
-
 func TestMonitorStatus_NotifyTimesFollowOutcome(t *testing.T) {
 	firing := true
 	m := newTestMonitor(&flakyNotifier{failCalls: 1}, signalCond("k", &firing))
@@ -315,7 +293,7 @@ func TestMonitorStatus_NotifyTimesFollowOutcome(t *testing.T) {
 
 func TestMonitorStatus_NopNotifierNeverRecordsSuccess(t *testing.T) {
 	firing := true
-	m := newTestMonitor(NopNotifier{}, signalCond("k", &firing))
+	m := newTestMonitor(notifier.NopNotifier{}, signalCond("k", &firing))
 	m.tick(context.Background())
 
 	if st := m.Status(); !st.LastNotifyOKAt.IsZero() || !st.NopNotifier {
@@ -356,7 +334,7 @@ func TestMonitorStatus_SuccessResetsFailures(t *testing.T) {
 }
 
 func TestMonitorStatus_NopNotifierIsReported(t *testing.T) {
-	if !newTestMonitor(NopNotifier{}).Status().NopNotifier {
+	if !newTestMonitor(notifier.NopNotifier{}).Status().NopNotifier {
 		t.Fatal("Nop notifier not reported")
 	}
 	if newTestMonitor(&stubNotifier{}).Status().NopNotifier {
@@ -365,7 +343,7 @@ func TestMonitorStatus_NopNotifierIsReported(t *testing.T) {
 }
 
 func TestMonitorStatus_PanicIsCounted(t *testing.T) {
-	m := newTestMonitor(NopNotifier{}, Condition{Key: "p", Eval: func(context.Context) *Alert { panic("boom") }})
+	m := newTestMonitor(notifier.NopNotifier{}, domain.Condition{Key: "p", Eval: func(context.Context) *domain.Alert { panic("boom") }})
 	m.tick(context.Background())
 
 	if got := m.Status().ContainedPanics; got != 1 {
@@ -394,7 +372,7 @@ func TestMonitor_NotifyFailedLogNeverContainsWebhookURL(t *testing.T) {
 	hookURL := srv.URL + "/hook/SECRET123"
 	srv.Close()
 	firing := true
-	m := newTestMonitor(NewWebhookNotifier(hookURL), signalCond("k", &firing))
+	m := newTestMonitor(notifier.NewWebhookNotifier(hookURL), signalCond("k", &firing))
 	var buf bytes.Buffer
 	m.logger = slog.New(slog.NewJSONHandler(&buf, nil))
 	m.tick(context.Background())

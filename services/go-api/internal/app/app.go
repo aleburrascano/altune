@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/acquisition/adapters/streamrip"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
-	"altune/go-api/internal/observe/evalmeter"
-	"altune/go-api/internal/observe/eventtap"
+	"altune/go-api/internal/observe/service/evalmeter"
+	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
@@ -25,7 +25,7 @@ import (
 	"time"
 
 	acqService "altune/go-api/internal/acquisition/service"
-	observeAlert "altune/go-api/internal/observe/alert"
+	observeAlert "altune/go-api/internal/observe/service/alert"
 
 	discoveryService "altune/go-api/internal/discovery/service"
 

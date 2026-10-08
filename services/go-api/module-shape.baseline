@@ -19,14 +19,6 @@ G1 internal/eventstream missing ports/
 G1 internal/eventstream missing service/
 G1 internal/eventstream/handler.go unexpected root entry
 G1 internal/eventstream/handler_test.go unexpected root entry
-G1 internal/observe missing ARCHITECTURE.md
-G1 internal/observe missing adapters/
-G1 internal/observe missing domain/
-G1 internal/observe missing ports/
-G1 internal/observe missing service/
-G1 internal/observe/alert unexpected root entry
-G1 internal/observe/evalmeter unexpected root entry
-G1 internal/observe/eventtap unexpected root entry
 G1 internal/observe/handler unexpected root entry
 G1 internal/playback missing ARCHITECTURE.md
 G1 internal/playback/doc.go unexpected root entry
@@ -188,7 +180,6 @@ G7 internal/eventstream/handler.go:resyncOutOfRange slog.Warn without context
 G7 internal/eventstream/handler.go:writeEvent slog.Warn without context
 G7 internal/eventstream/handler.go:writeHeartbeat slog.Warn without context
 G7 internal/eventstream/handler.go:writeLiveEvent slog.Warn without context
-G7 internal/observe/eventtap/feed.go:Start slog.Error without context
 G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:allow slog.Warn without context
 G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:recordFailure slog.Warn without context
 G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:recordSuccess slog.Info without context
@@ -216,7 +207,6 @@ N2 internal/auth is not a term in docs/ubiquitous-language.md
 N2 internal/discovery differs from mobile feature discover
 N2 internal/discovery is not a term in docs/ubiquitous-language.md
 N2 internal/eventstream is not a term in docs/ubiquitous-language.md
-N2 internal/observe is not a term in docs/ubiquitous-language.md
 N2 internal/playback is not a term in docs/ubiquitous-language.md
 N3 internal/acquisition/adapters/discoverybridge/recorded_resolver.go matches no exported identifier
 N3 internal/acquisition/adapters/persistence/cooldown_fallback.go matches no exported identifier
@@ -424,7 +414,6 @@ N3 internal/discovery/service/suggest.go matches no exported identifier
 N3 internal/discovery/service/telemetry.go matches no exported identifier
 N3 internal/discovery/service/vocab.go matches no exported identifier
 N3 internal/discovery/service/vocabulary_refresh.go matches no exported identifier
-N3 internal/observe/alert/notifier.go matches no exported identifier
 N3 internal/observe/handler/health.go matches no exported identifier
 N3 internal/playback/adapters/handler/queue_rate_limit.go matches no exported identifier
 N3 internal/playback/adapters/metrics/expvar_metrics.go matches no exported identifier
