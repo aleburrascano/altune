@@ -1,4 +1,4 @@
-package service
+package release
 
 import (
 	"testing"

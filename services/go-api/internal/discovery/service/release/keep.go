@@ -1,4 +1,4 @@
-package service
+package release
 
 func KeepRelease(m MergedRelease) bool {
 	return m.IDVerified

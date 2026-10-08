@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/release"
 	"context"
 	"log/slog"
 	"maps"
@@ -44,10 +45,10 @@ func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKin
 		return nil, false
 	}
 	titles, err := v.anchor.ReleaseGroupTitles(ctx, mbid)
-	if err != nil || len(titles) < mbAnchorMinReleaseGroups {
+	if err != nil || len(titles) < release.AnchorMinReleaseGroups {
 		return xref, true
 	}
-	mbSet := normalizeTitleSet(titles)
+	mbSet := release.NormalizeTitleSet(titles)
 
 	out := maps.Clone(xref)
 	for key, id := range xref {
@@ -72,7 +73,7 @@ func (v *IdentityVerifier) edgeMatches(ctx context.Context, mbid string, key dom
 	if err != nil || len(albums) == 0 {
 		return true
 	}
-	if groupMatchesAnchor(ReleaseGroup{Releases: albums}, mbSet) {
+	if release.MatchesAnchor(release.ReleaseGroup{Releases: albums}, mbSet) {
 		return true
 	}
 	slog.InfoContext(ctx, "identity.verify_dropped_edge",

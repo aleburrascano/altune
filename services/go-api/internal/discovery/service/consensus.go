@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -104,7 +105,7 @@ func (s *ConsensusService) BuildConsensus(
 ) []ConsensusAlbum {
 	cacheKey := textnorm.NormalizeForMatch(artistName)
 	if seedID != "" {
-		cacheKey += "|" + sourceKey(seedProvider, seedID)
+		cacheKey += "|" + release.SourceKey(seedProvider, seedID)
 	}
 	if cached, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
 		return cached

@@ -1,4 +1,4 @@
-package service
+package release
 
 import (
 	"altune/go-api/internal/discovery/domain"
@@ -231,5 +231,11 @@ func TestBestOfRelease_typedRecordTypeAndTierFallBack(t *testing.T) {
 	a.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionISRC)
 	if got := bestOfRelease(a, b); got.ResolutionTier != a.ResolutionTier {
 		t.Errorf("ResolutionTier = %+v, want a's stamp to win", got.ResolutionTier)
+	}
+}
+
+func TestSourceKey_distinguishesIDPrefixes(t *testing.T) {
+	if SourceKey(domain.ProviderDeezer, "1") == SourceKey(domain.ProviderDeezer, "11") {
+		t.Error(`SourceKey("deezer","1") collides with SourceKey("deezer","11")`)
 	}
 }

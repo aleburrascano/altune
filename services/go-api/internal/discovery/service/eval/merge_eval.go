@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/release"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -114,7 +114,7 @@ func provableIdentityKey(r domain.SearchResult) string {
 
 func resultSignature(r domain.SearchResult) string {
 	if len(r.Sources) > 0 && r.Sources[0].ExternalID != "" {
-		return service.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
+		return release.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
 	}
 	return r.Kind.String() + "|" + textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
 }
