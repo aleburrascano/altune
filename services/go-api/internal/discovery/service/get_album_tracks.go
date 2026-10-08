@@ -183,7 +183,7 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		return nil
 	}
 
-	tracks := s.firstMatchingTracklist(ctx, deezer, candidates, albumArtist)
+	tracks := s.firstMatchingTracklist(ctx, deezer, candidates, albumTitle, albumArtist)
 	if len(tracks) == 0 {
 		return nil
 	}
@@ -194,13 +194,20 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 	return resp
 }
 
-func (s *GetAlbumTracksService) firstMatchingTracklist(ctx context.Context, deezer ports.AlbumContentProvider, candidates []domain.SearchResult, albumArtist string) []domain.SearchResult {
+func isRequestedAlbum(candidate domain.SearchResult, albumTitle, albumArtist string) bool {
+	if len(candidate.Sources) == 0 {
+		return false
+	}
+	if textnorm.NormalizeForMatch(candidate.Title) != textnorm.NormalizeForMatch(albumTitle) {
+		return false
+	}
 	wantArtist := textnorm.NormalizeForMatch(albumArtist)
+	return wantArtist == "" || textnorm.NormalizeForMatch(candidate.Subtitle) == wantArtist
+}
+
+func (s *GetAlbumTracksService) firstMatchingTracklist(ctx context.Context, deezer ports.AlbumContentProvider, candidates []domain.SearchResult, albumTitle, albumArtist string) []domain.SearchResult {
 	for _, candidate := range candidates {
-		if len(candidate.Sources) == 0 {
-			continue
-		}
-		if wantArtist != "" && textnorm.NormalizeForMatch(candidate.Subtitle) != wantArtist {
+		if !isRequestedAlbum(candidate, albumTitle, albumArtist) {
 			continue
 		}
 		deezerAlbumID := candidate.Sources[0].ExternalID
