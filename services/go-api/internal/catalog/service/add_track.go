@@ -263,6 +263,6 @@ func trackAddedPayload(t *domain.Track) map[string]any {
 	raw, _ := json.Marshal(dto)
 	payload := map[string]any{}
 	_ = json.Unmarshal(raw, &payload)
-	payload["track_id"] = dto.ID.String()
+	payload["track_id"] = dto.ID
 	return payload
 }

@@ -42,3 +42,18 @@ func TestTrackToDTO_DoesNotSerializeAudioRef(t *testing.T) {
 		t.Error("track_added payload exposes audio_ref")
 	}
 }
+
+func TestTrackToDTO_IDMarshalsAsCanonicalUUID(t *testing.T) {
+	track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Midnight City", "M83", "")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	raw, err := json.Marshal(TrackToDTO(track))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want := `"id":"` + track.ID.UUID().String() + `"`
+	if !strings.Contains(string(raw), want) {
+		t.Errorf("TrackDTO JSON = %s, want it to contain %s", raw, want)
+	}
+}

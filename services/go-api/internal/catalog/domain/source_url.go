@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"golang.org/x/text/unicode/norm"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 func ValidateSourceURL(raw string) error {
@@ -60,7 +60,7 @@ func validateSourceHost(host string) error {
 }
 
 func canonicalSourceHost(host string) string {
-	host = norm.NFKC.String(host)
+	host = textnorm.NFKC(host)
 	host = strings.ReplaceAll(host, "。", ".")
 	return strings.TrimSuffix(strings.ToLower(host), ".")
 }

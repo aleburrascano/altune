@@ -1051,3 +1051,32 @@ func TestTrack_LegalAcquisitionTransitionsSucceed(t *testing.T) {
 		})
 	}
 }
+
+func TestTrackIdFromUUIDRoundTrips(t *testing.T) {
+	t.Parallel()
+	u := uuid.New()
+	if got := TrackIdFromUUID(u).UUID(); got != u {
+		t.Errorf("TrackIdFromUUID(u).UUID() = %v, want %v", got, u)
+	}
+}
+
+func TestTrackIdJSONUnchanged(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(TrackId{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	// Captured before TrackId embedded shared.EntityId.
+	if string(raw) != `{}` {
+		t.Errorf("json.Marshal(TrackId{}) = %s, want {}", raw)
+	}
+}
+
+func TestTrackIdIsMapKey(t *testing.T) {
+	t.Parallel()
+	a, b := NewTrackId(), NewTrackId()
+	m := map[TrackId]string{a: "a", b: "b"}
+	if m[a] != "a" || m[b] != "b" || len(m) != 2 {
+		t.Errorf("TrackId map lookup failed: %v", m)
+	}
+}

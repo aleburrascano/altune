@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"golang.org/x/text/unicode/norm"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 func computeDedupKey(title, artist, album string) string {
@@ -23,7 +23,7 @@ func normalizeForDedup(s string) string {
 }
 
 func canonicalizeField(s string) string {
-	s = norm.NFKC.String(s)
+	s = textnorm.NFKC(s)
 	s = strings.Join(strings.Fields(s), " ")
 	return strings.TrimSpace(s)
 }

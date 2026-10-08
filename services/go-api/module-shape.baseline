@@ -16,11 +16,6 @@ G2 internal/acquisition/service/eval/harness.go:4 service imports altune/go-api/
 G2 internal/acquisition/service/eval/harness.go:5 service imports altune/go-api/internal/acquisition/adapters/tempfs
 G2 internal/acquisition/service/step_store.go:13 service imports github.com/google/uuid
 G2 internal/acquisition/service/title_qualifiers.go:9 service imports golang.org/x/text/unicode/norm
-G2 internal/catalog/domain/dedup.go:7 domain imports golang.org/x/text/unicode/norm
-G2 internal/catalog/domain/playlist.go:8 domain imports github.com/google/uuid
-G2 internal/catalog/domain/source_url.go:8 domain imports golang.org/x/text/unicode/norm
-G2 internal/catalog/domain/track.go:12 domain imports github.com/google/uuid
-G2 internal/catalog/service/track_dto.go:7 service imports github.com/google/uuid
 G2 internal/discovery/domain/records.go:7 domain imports github.com/google/uuid
 G2 internal/discovery/service/artwork_fill.go:15 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/eval/coverage_signal_b.go:10 service imports golang.org/x/sync/errgroup
