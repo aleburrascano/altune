@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-import { getSearchState } from '@features/discover/searchState';
+import { getSearchState, setSearchState } from '@features/discover/searchState';
 import {
   MAX_QUERY_LENGTH,
   clampQueryWords,
@@ -39,6 +39,10 @@ export function useDebouncedSearch({
       debounceRef.current = null;
     }
   };
+
+  useEffect(() => {
+    setSearchState(committedQuery, inputValue);
+  }, [committedQuery, inputValue]);
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { setSearchState } from '@features/discover/searchState';
+import { getSearchState, setSearchState } from '@features/discover/searchState';
 import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
 import { MAX_QUERY_LENGTH } from '@features/discover/searchLimits';
 
@@ -462,5 +462,21 @@ describe('useDebouncedSearch never commits more words than the server accepts', 
     });
 
     expect(result.current.committedQuery).toBe(exact);
+  });
+});
+
+describe('useDebouncedSearch preserves the search it owns', () => {
+  it('writes the committed query and input value so a remount restores them', () => {
+    const first = renderHook(() => useDebouncedSearch(OPTIONS));
+    act(() => first.result.current.onChangeText('radiohead'));
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    first.unmount();
+
+    expect(getSearchState()).toEqual({ query: 'radiohead', inputValue: 'radiohead' });
+    const second = renderHook(() => useDebouncedSearch(OPTIONS));
+    expect(second.result.current.committedQuery).toBe('radiohead');
+    expect(second.result.current.inputValue).toBe('radiohead');
   });
 });
