@@ -3,12 +3,10 @@ package service
 import (
 	"altune/go-api/internal/catalog/domain"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type TrackDTO struct {
-	ID                uuid.UUID           `json:"id"`
+	ID                string              `json:"id"`
 	Title             string              `json:"title"`
 	Artist            string              `json:"artist"`
 	Album             *string             `json:"album"`
@@ -45,7 +43,7 @@ func TrackToDTO(t *domain.Track) TrackDTO {
 		failureMessage = &msg
 	}
 	return TrackDTO{
-		ID:                t.ID.UUID(),
+		ID:                t.ID.String(),
 		Title:             t.Title,
 		Artist:            t.Artist,
 		Album:             album,

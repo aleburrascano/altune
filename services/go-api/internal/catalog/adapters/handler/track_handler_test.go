@@ -185,7 +185,7 @@ func TestHandleCreateTrack(t *testing.T) {
 				if resp.Title != tt.wantField {
 					t.Errorf("Title = %q, want %q", resp.Title, tt.wantField)
 				}
-				if resp.ID == uuid.Nil {
+				if resp.ID == "" || resp.ID == uuid.Nil.String() {
 					t.Error("expected non-nil track ID in response")
 				}
 				if resp.AcquisitionStatus == "" {

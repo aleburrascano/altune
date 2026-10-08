@@ -4,33 +4,25 @@ import (
 	"altune/go-api/internal/shared"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-type PlaylistId struct {
-	value uuid.UUID
-}
+type PlaylistId struct{ shared.EntityId }
 
 func NewPlaylistId() PlaylistId {
-	return PlaylistId{value: uuid.New()}
+	return PlaylistId{shared.NewEntityId()}
 }
 
 func ParsePlaylistId(s string) (PlaylistId, error) {
-	id, err := uuid.Parse(s)
+	id, err := shared.ParseEntityId(s)
 	if err != nil {
 		return PlaylistId{}, err
 	}
-	return PlaylistId{value: id}, nil
+	return PlaylistId{id}, nil
 }
 
-func PlaylistIdFromUUID(id uuid.UUID) PlaylistId {
-	return PlaylistId{value: id}
+func PlaylistIdFromUUID(id [16]byte) PlaylistId {
+	return PlaylistId{shared.EntityIdFromBytes(id)}
 }
-
-func (p PlaylistId) UUID() uuid.UUID { return p.value }
-func (p PlaylistId) String() string  { return p.value.String() }
-func (p PlaylistId) IsZero() bool    { return p.value == uuid.Nil }
 
 type PlaylistTrack struct {
 	TrackId  TrackId

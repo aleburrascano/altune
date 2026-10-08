@@ -8,33 +8,25 @@ import (
 	"math"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-type TrackId struct {
-	value uuid.UUID
-}
+type TrackId struct{ shared.EntityId }
 
 func NewTrackId() TrackId {
-	return TrackId{value: uuid.New()}
+	return TrackId{shared.NewEntityId()}
 }
 
 func ParseTrackId(s string) (TrackId, error) {
-	id, err := uuid.Parse(s)
+	id, err := shared.ParseEntityId(s)
 	if err != nil {
 		return TrackId{}, err
 	}
-	return TrackId{value: id}, nil
+	return TrackId{id}, nil
 }
 
-func TrackIdFromUUID(id uuid.UUID) TrackId {
-	return TrackId{value: id}
+func TrackIdFromUUID(id [16]byte) TrackId {
+	return TrackId{shared.EntityIdFromBytes(id)}
 }
-
-func (t TrackId) UUID() uuid.UUID { return t.value }
-func (t TrackId) String() string  { return t.value.String() }
-func (t TrackId) IsZero() bool    { return t.value == uuid.Nil }
 
 type AcquisitionStatus int
 
@@ -262,7 +254,7 @@ func (t *Track) ReplaceAudio(audioRef string) error {
 func (t *Track) setReadyAudio(audioRef string) {
 	t.AcquisitionStatus = AcquisitionReady
 	t.AudioRef = &audioRef
-	t.AudioVersion = uuid.NewString()
+	t.AudioVersion = shared.NewEntityId().String()
 	t.FailureReason = nil
 	t.AcquisitionStartedAt = nil
 }
