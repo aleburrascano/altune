@@ -16,6 +16,10 @@ import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
   recordPresignOutcome,
+  recordQueueRestoreFailure,
+  recordQueueSaveFailure,
+  recordQueueStateRejected,
+  type QueueRestoreStage,
 } from '@features/playback/playbackHealth';
 import { playbackService } from '@features/playback/native/service';
 
@@ -139,6 +143,13 @@ describe('playback health metric', () => {
         playback_failed_queue_update_failed: 0,
         playback_failed_unknown: 0,
         audio_recovery_failed: 0,
+        queue_save_failed: 0,
+        queue_restore_failed_fetch: 0,
+        queue_restore_failed_placeholder: 0,
+        queue_restore_failed_tracks: 0,
+        queue_restore_failed_rebuild: 0,
+        queue_restore_failed_native: 0,
+        queue_state_rejected: 0,
       },
     ]);
   });
@@ -246,4 +257,28 @@ describe('playback health metric — user-visible failures', () => {
       expect.objectContaining({ playback_failed_auth: 1, audio_recovery_failed: 1 }),
     ]);
   });
+});
+
+describe('queue save and restore counters', () => {
+  it('counts a save failure and a rejected state', () => {
+    recordQueueSaveFailure();
+    recordQueueStateRejected();
+    flushPlaybackHealth();
+
+    expect(sentPayloads()).toEqual([
+      expect.objectContaining({ queue_save_failed: 1, queue_state_rejected: 1 }),
+    ]);
+  });
+
+  it.each<QueueRestoreStage>(['fetch', 'placeholder', 'tracks', 'rebuild', 'native'])(
+    'counts a restore failure at the %s stage',
+    (stage) => {
+      recordQueueRestoreFailure(stage);
+      flushPlaybackHealth();
+
+      expect(sentPayloads()).toEqual([
+        expect.objectContaining({ [`queue_restore_failed_${stage}`]: 1 }),
+      ]);
+    },
+  );
 });
