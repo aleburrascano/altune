@@ -28,7 +28,14 @@ import { playbackService, resetPlaybackForSignOut } from '@features/playback/nat
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 
-import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import {
+  libraryTrack,
+  previewTrack,
+  libraryTrackWithId,
+  libraryTrackList,
+  previewTrackList,
+  cdnAudioUrls,
+} from '@features/playback/__tests__/fixtures';
 import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
@@ -48,12 +55,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 let restorePort: (() => void) | null = null;
-
-function cdnUrls(ids: readonly string[]): NonNullable<MemoryPlaybackSeed['audioUrls']> {
-  return Object.fromEntries(
-    ids.map((id) => [id, { url: `https://cdn.example/${id}.mp3`, version: 'v1' }]),
-  );
-}
 
 function installMemoryPort(
   seed: MemoryPlaybackSeed = {},
@@ -120,15 +121,6 @@ afterEach(() => {
 });
 
 describe('loadNativeQueue rollback of a failed add', () => {
-  function makeTracks(count: number): PlaybackTrack[] {
-    return Array.from({ length: count }, (_, i) =>
-      previewTrack({
-        source: { kind: 'preview', previewUrl: `https://cdn.example/${i}.mp3` },
-        title: `Track ${i}`,
-      }),
-    );
-  }
-
   function lastCallOrder(fn: unknown): number {
     const order = (fn as jest.Mock).mock.invocationCallOrder;
     return order[order.length - 1] ?? -1;
@@ -139,7 +131,9 @@ describe('loadNativeQueue rollback of a failed add', () => {
       const addError = new Error('bridge dropped after 3 of 5 tracks');
       __player.failNext('add', addError);
 
-      await expect(loadNativeQueue(makeTracks(5), 2, { autoplay: false })).rejects.toBe(addError);
+      await expect(loadNativeQueue(previewTrackList(5), 2, { autoplay: false })).rejects.toBe(
+        addError,
+      );
 
       expect(__player.calls('add')).toHaveLength(1);
       expect(lastCallOrder(TrackPlayer.reset)).toBeGreaterThan(lastCallOrder(TrackPlayer.add));
@@ -154,7 +148,9 @@ describe('loadNativeQueue rollback of a failed add', () => {
         throw addError;
       });
 
-      await expect(loadNativeQueue(makeTracks(3), 0, { autoplay: false })).rejects.toBe(addError);
+      await expect(loadNativeQueue(previewTrackList(3), 0, { autoplay: false })).rejects.toBe(
+        addError,
+      );
       expect(lastCallOrder(TrackPlayer.reset)).toBeGreaterThan(lastCallOrder(TrackPlayer.add));
     });
 
@@ -165,12 +161,14 @@ describe('loadNativeQueue rollback of a failed add', () => {
         throw addError;
       });
 
-      await expect(loadNativeQueue(makeTracks(3), 0, { autoplay: false })).rejects.toBe(addError);
+      await expect(loadNativeQueue(previewTrackList(3), 0, { autoplay: false })).rejects.toBe(
+        addError,
+      );
       expect(lastCallOrder(TrackPlayer.reset)).toBeLessThan(lastCallOrder(TrackPlayer.add));
     });
 
     it('does not reset again when the add succeeds', async () => {
-      await loadNativeQueue(makeTracks(3), 1, { autoplay: false });
+      await loadNativeQueue(previewTrackList(3), 1, { autoplay: false });
 
       expect(__player.calls('reset')).toHaveLength(1);
       expect(lastCallOrder(TrackPlayer.skip)).toBeGreaterThan(lastCallOrder(TrackPlayer.add));
@@ -179,15 +177,6 @@ describe('loadNativeQueue rollback of a failed add', () => {
 });
 
 describe('native ops superseded by a newer load', () => {
-  function makeTracks(count: number): PlaybackTrack[] {
-    return Array.from({ length: count }, (_, i) =>
-      previewTrack({
-        source: { kind: 'preview', previewUrl: `https://cdn.example/${i}.mp3` },
-        title: `Track ${i}`,
-      }),
-    );
-  }
-
   function supersedeDuring(fn: unknown): void {
     (fn as jest.Mock).mockImplementationOnce(async () => {
       claimLoad();
@@ -198,7 +187,7 @@ describe('native ops superseded by a newer load', () => {
     it('queue load: no skip, seek or play after a newer load claimed the token during add', async () => {
       supersedeDuring(TrackPlayer.add);
 
-      await loadNativeQueue(makeTracks(3), 2, { startPositionMs: 5000 });
+      await loadNativeQueue(previewTrackList(3), 2, { startPositionMs: 5000 });
 
       expect(__player.calls('skip')).toHaveLength(0);
       expect(__player.calls('seekTo')).toHaveLength(0);
@@ -208,7 +197,7 @@ describe('native ops superseded by a newer load', () => {
     it('queue load: no seek or play after a newer load claimed the token during skip', async () => {
       supersedeDuring(TrackPlayer.skip);
 
-      await loadNativeQueue(makeTracks(3), 2, { startPositionMs: 5000 });
+      await loadNativeQueue(previewTrackList(3), 2, { startPositionMs: 5000 });
 
       expect(__player.calls('seekTo')).toHaveLength(0);
       expect(__player.calls('play')).toHaveLength(0);
@@ -217,7 +206,7 @@ describe('native ops superseded by a newer load', () => {
     it('queue load: no play after a newer load claimed the token during seekTo', async () => {
       supersedeDuring(TrackPlayer.seekTo);
 
-      await loadNativeQueue(makeTracks(3), 0, { startPositionMs: 5000 });
+      await loadNativeQueue(previewTrackList(3), 0, { startPositionMs: 5000 });
 
       expect(__player.calls('play')).toHaveLength(0);
     });
@@ -225,7 +214,7 @@ describe('native ops superseded by a newer load', () => {
     it('single-track load: no seek or play after a newer load claimed the token during add', async () => {
       supersedeDuring(TrackPlayer.add);
 
-      await loadNativeTrack(makeTracks(1)[0]!, { startPositionMs: 5000 });
+      await loadNativeTrack(previewTrackList(1)[0]!, { startPositionMs: 5000 });
 
       expect(__player.calls('seekTo')).toHaveLength(0);
       expect(__player.calls('play')).toHaveLength(0);
@@ -236,7 +225,7 @@ describe('native ops superseded by a newer load', () => {
       getActive.mockImplementationOnce(async () => undefined);
       supersedeDuring(getActive);
 
-      await reorderUpcomingNative(makeTracks(3));
+      await reorderUpcomingNative(previewTrackList(3));
 
       expect(__player.calls('removeUpcomingTracks')).toHaveLength(0);
       expect(__player.calls('add')).toHaveLength(0);
@@ -245,7 +234,7 @@ describe('native ops superseded by a newer load', () => {
     it('tail rebuild: no add after a newer load claimed the token during removeUpcomingTracks', async () => {
       supersedeDuring(TrackPlayer.removeUpcomingTracks);
 
-      await reorderUpcomingNative(makeTracks(3));
+      await reorderUpcomingNative(previewTrackList(3));
 
       expect(__player.calls('add')).toHaveLength(0);
     });
@@ -254,7 +243,7 @@ describe('native ops superseded by a newer load', () => {
 
 describe('presign failure and pinned audio', () => {
   const PINNED_URI = 'file:///document/offline-audio/t1.mp3';
-  const TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } });
+  const TRACK = libraryTrackWithId('t1');
 
   function pinnedVersion(trackId: string): string | undefined {
     const entry = usePinnedStore.getState().entries[trackId];
@@ -342,8 +331,8 @@ describe('presign failure and pinned audio', () => {
 });
 
 describe('native queue ops superseded by a sign-out or queue switch', () => {
-  const A_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-of-a') } });
-  const B_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-of-b') } });
+  const A_TRACK = libraryTrackWithId('trk-of-a');
+  const B_TRACK = libraryTrackWithId('trk-of-b');
 
   function nativeAddedIds(): string[] {
     const addCalls = __player.calls('add') as [{ id: string } | { id: string }[]][];
@@ -423,15 +412,6 @@ describe('native queue ops superseded by a sign-out or queue switch', () => {
 });
 
 describe('the presign window', () => {
-  function makeLibrary(count: number): PlaybackTrack[] {
-    return Array.from({ length: count }, (_, i) =>
-      libraryTrack({
-        source: { kind: 'library', trackId: asTrackId(`t${i}`) },
-        title: `Track t${i}`,
-      }),
-    );
-  }
-
   function presignedTrackIds(): Set<string> {
     const ids = new Set<string>();
     for (const req of __http.requests as { path: string; body?: string }[]) {
@@ -449,7 +429,7 @@ describe('the presign window', () => {
   }
 
   function loadedQueue(count: number, startIndex: number): Promise<void> {
-    useQueueStore.getState().loadQueue(makeLibrary(count), startIndex, null);
+    useQueueStore.getState().loadQueue(libraryTrackList(count), startIndex, null);
     return loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), startIndex, {
       autoplay: false,
     });
@@ -462,7 +442,7 @@ describe('the presign window', () => {
 
   describe('refreshUpcomingPresign — presign window slides beyond the first 25 as the queue advances', () => {
     it('presigns only the first 25 tracks at queue start', async () => {
-      const library = makeLibrary(60);
+      const library = libraryTrackList(60);
       useQueueStore.getState().loadQueue(library, 0, null);
 
       await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
@@ -474,7 +454,7 @@ describe('the presign window', () => {
     });
 
     it('presigns a track beyond the first 25 once the queue advances near the window edge', async () => {
-      const library = makeLibrary(60);
+      const library = libraryTrackList(60);
       useQueueStore.getState().loadQueue(library, 0, null);
       await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
       expect(presignedTrackIds().has('t30')).toBe(false);
@@ -486,7 +466,7 @@ describe('the presign window', () => {
     });
 
     it('does not re-presign while the active track is still deep inside the presigned window', async () => {
-      const library = makeLibrary(60);
+      const library = libraryTrackList(60);
       useQueueStore.getState().loadQueue(library, 0, null);
       await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
       const requestsAfterLoad = __http.countFor('POST /v1/audio-urls');
@@ -627,16 +607,12 @@ describe('the presign window', () => {
 describe('presign failure trace', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
-    installMemoryPort({ audioUrls: cdnUrls(['t0', 't1']) });
+    installMemoryPort({ audioUrls: cdnAudioUrls(['t0', 't1']) });
     player.getQueue.mockResolvedValue([]);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -658,7 +634,7 @@ describe('presign failure trace', () => {
         {},
         { fetchAudioUrls: () => Promise.reject(new ApiError(403, `GET ${SIGNED_URL} denied`)) },
       );
-      const tracks = [track('t0'), track('t1')];
+      const tracks = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
       useQueueStore.getState().loadQueue(tracks, 0, null);
 
       await loadNativeQueue(tracks, 0, { autoplay: false });
@@ -675,7 +651,7 @@ describe('presign failure trace', () => {
     it('logs the track ids it could not presign and still loads the queue', async () => {
       const boom = new Error('presign 503');
       installMemoryPort({}, { fetchAudioUrls: () => Promise.reject(boom) });
-      const tracks = [track('t0'), track('t1')];
+      const tracks = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
       useQueueStore.getState().loadQueue(tracks, 0, null);
 
       await loadNativeQueue(tracks, 0, { autoplay: false });
@@ -696,13 +672,9 @@ describe('insertNativeTrackNext', () => {
 
   const player = TrackPlayer as unknown as Record<string, jest.Mock>;
 
-  function track(id: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } });
-  }
-
-  const A = track('a');
-  const B = track('b');
-  const C = track('c');
+  const A = libraryTrackWithId('a');
+  const B = libraryTrackWithId('b');
+  const C = libraryTrackWithId('c');
 
   afterEach(() => {
     restorePlayerDefault('add');
@@ -766,14 +738,10 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
     for (let i = 0; i < 10; i++) await Promise.resolve();
   }
 
-  function track(id: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } });
-  }
-
-  const A = track('a');
-  const B = track('b');
-  const C = track('c');
-  const D = track('d');
+  const A = libraryTrackWithId('a');
+  const B = libraryTrackWithId('b');
+  const C = libraryTrackWithId('c');
+  const D = libraryTrackWithId('d');
 
   afterEach(() => {
     for (const name of [
@@ -937,15 +905,11 @@ describe('reorderUpcomingNative against the live store queue', () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   }
 
-  function track(id: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } });
-  }
-
-  const A = track('a');
-  const B = track('b');
-  const C = track('c');
-  const D = track('d');
-  const E = track('e');
+  const A = libraryTrackWithId('a');
+  const B = libraryTrackWithId('b');
+  const C = libraryTrackWithId('c');
+  const D = libraryTrackWithId('d');
+  const E = libraryTrackWithId('e');
 
   function nativeKeys(): string[] {
     return nativeQueue.map((item) => item.id);
@@ -1048,12 +1012,8 @@ describe('reorderUpcomingNative against the live store queue', () => {
       markPresignedFrom(0, 0);
     });
 
-    function library(count: number): PlaybackTrack[] {
-      return Array.from({ length: count }, (_, i) => track(`p${i}`));
-    }
-
     it('re-presigns on the next refresh after a rebuild that went stale', async () => {
-      const tracks = library(60);
+      const tracks = libraryTrackList(60);
       useQueueStore.getState().loadQueue(tracks, 20, null);
       modelNativePlayer(tracks.slice(0, 21), 20);
       const release = deferredUrls();
@@ -1063,18 +1023,18 @@ describe('reorderUpcomingNative against the live store queue', () => {
       claimLoad();
       release();
       await stale;
-      installMemoryPort({ audioUrls: cdnUrls(tracks.map((_, i) => `p${i}`)) });
+      installMemoryPort({ audioUrls: cdnAudioUrls(tracks.map((_, i) => `t${i}`)) });
       await refreshUpcomingPresign(20);
 
-      expect(nativeQueue[21]).toMatchObject({ url: 'https://cdn.example/p21.mp3' });
+      expect(nativeQueue[21]).toMatchObject({ url: 'https://cdn.example/t21.mp3' });
     });
 
     it('skips the next refresh once a rebuild applied', async () => {
-      const tracks = library(60);
+      const tracks = libraryTrackList(60);
       useQueueStore.getState().loadQueue(tracks, 20, null);
       modelNativePlayer(tracks.slice(0, 21), 20);
 
-      installMemoryPort({ audioUrls: cdnUrls(tracks.map((_, i) => `p${i}`)) });
+      installMemoryPort({ audioUrls: cdnAudioUrls(tracks.map((_, i) => `t${i}`)) });
       await refreshUpcomingPresign(20);
       const rebuiltTail = [...nativeQueue];
       player.removeUpcomingTracks!.mockClear();
@@ -1087,13 +1047,9 @@ describe('reorderUpcomingNative against the live store queue', () => {
 });
 
 describe('loadNativeQueue presign window', () => {
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   it('presigns only from startIndex while still adding the tracks before it', async () => {
-    const tracks = ['a', 'b', 'c'].map(track);
-    installMemoryPort({ audioUrls: cdnUrls(['a', 'b', 'c']) });
+    const tracks = ['a', 'b', 'c'].map(libraryTrackWithId);
+    installMemoryPort({ audioUrls: cdnAudioUrls(['a', 'b', 'c']) });
 
     await loadNativeQueue(tracks, 1, { autoplay: false });
 
@@ -1110,8 +1066,8 @@ describe('loadNativeQueue presign window', () => {
   });
 
   it('presigns the last track when startIndex is past the end', async () => {
-    const tracks = ['a', 'b', 'c'].map(track);
-    installMemoryPort({ audioUrls: cdnUrls(['a', 'b', 'c']) });
+    const tracks = ['a', 'b', 'c'].map(libraryTrackWithId);
+    installMemoryPort({ audioUrls: cdnAudioUrls(['a', 'b', 'c']) });
 
     await loadNativeQueue(tracks, 7, { autoplay: false });
 
@@ -1120,8 +1076,8 @@ describe('loadNativeQueue presign window', () => {
   });
 
   it('presigns from track 0 when startIndex is negative', async () => {
-    const tracks = ['a', 'b', 'c'].map(track);
-    installMemoryPort({ audioUrls: cdnUrls(['a', 'b', 'c']) });
+    const tracks = ['a', 'b', 'c'].map(libraryTrackWithId);
+    installMemoryPort({ audioUrls: cdnAudioUrls(['a', 'b', 'c']) });
 
     await loadNativeQueue(tracks, -1, { autoplay: false });
 
@@ -1130,7 +1086,7 @@ describe('loadNativeQueue presign window', () => {
   });
 
   it('keeps auth headers on a library track before startIndex when only previews follow', async () => {
-    const tracks = [track('a'), previewTrack()];
+    const tracks = [libraryTrackWithId('a'), previewTrack()];
     installMemoryPort({}, { audioRequestHeaders: async () => ({ Authorization: 'Bearer tok' }) });
 
     await loadNativeQueue(tracks, 1, { autoplay: false });
@@ -1145,15 +1101,11 @@ describe('loadNativeQueue presign window', () => {
 describe('a tail rebuild that outlived the lock deadline', () => {
   const player = TrackPlayer as unknown as Record<string, jest.Mock>;
 
-  function track(id: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } });
-  }
-
-  const A = track('a');
-  const B = track('b');
-  const C = track('c');
-  const D = track('d');
-  const E = track('e');
+  const A = libraryTrackWithId('a');
+  const B = libraryTrackWithId('b');
+  const C = libraryTrackWithId('c');
+  const D = libraryTrackWithId('d');
+  const E = libraryTrackWithId('e');
 
   let nativeQueue: { id: string }[];
 

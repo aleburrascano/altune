@@ -1,7 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { PlaybackTrack } from '@shared/playback/types';
 
 import {
   buildCacheFileName,
@@ -13,7 +12,7 @@ import {
   findCached,
 } from '@features/playback/native/audioCache';
 
-import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { previewTrack, libraryTrackWithId } from '@features/playback/__tests__/fixtures';
 
 const { __fs } = FileSystem as unknown as {
   __fs: {
@@ -34,13 +33,6 @@ function cachedNames(): string[] {
   return Object.keys(__fs.allFiles())
     .map((uri) => uri.slice(CACHE_DIR_URI.length + 1))
     .sort();
-}
-
-function libraryTrackWithId(trackId: string): PlaybackTrack {
-  return libraryTrack({
-    source: { kind: 'library', trackId: asTrackId(trackId) },
-    title: `Track ${trackId}`,
-  });
 }
 
 describe('cacheDir', () => {
@@ -259,10 +251,6 @@ describe('a download left unfinished by a killed app', () => {
   const FINAL_URI = `${CACHE_DIR_URI}/t1.v1.mp3`;
   const LEFTOVER_URI = `${CACHE_DIR_URI}/t1.v1.mp3.part`;
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   describe('findCached — a download left unfinished by a killed app', () => {
     it('is not returned as a cache hit', () => {
       __fs.seedFile(LEFTOVER_URI, 'trunc');
@@ -282,7 +270,7 @@ describe('a download left unfinished by a killed app', () => {
     it('is purged once its track leaves the retention window', () => {
       __fs.seedFile(LEFTOVER_URI, 'trunc');
 
-      evict([track('t9')], 0);
+      evict([libraryTrackWithId('t9')], 0);
 
       expect(cachedNames()).toEqual([]);
     });

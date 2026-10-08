@@ -29,7 +29,11 @@ import {
   flushPlaybackHealth,
 } from '@features/playback/playbackHealth';
 
-import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import {
+  libraryTrack,
+  libraryTrackWithId,
+  cdnAudioUrls,
+} from '@features/playback/__tests__/fixtures';
 import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
@@ -49,16 +53,10 @@ jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
 const UPCOMING_IDS = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'];
 
-function cdnUrls(ids: readonly string[]): NonNullable<MemoryPlaybackSeed['audioUrls']> {
-  return Object.fromEntries(
-    ids.map((id) => [id, { url: `https://cdn.example/${id}.mp3`, version: 'v1' }]),
-  );
-}
-
 let restorePort: (() => void) | null = null;
 
 function installMemoryPort(
-  seed: MemoryPlaybackSeed = { audioUrls: cdnUrls(UPCOMING_IDS) },
+  seed: MemoryPlaybackSeed = { audioUrls: cdnAudioUrls(UPCOMING_IDS) },
   override: Partial<PlaybackPort> = {},
 ): PlaybackPort {
   restorePort?.();
@@ -107,10 +105,6 @@ describe('bounded downloads', () => {
 
   const CACHE_DIR_URI = 'file:///cache/audio-prefetch';
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   function cachedNames(): string[] {
     return Object.keys(__fs.allFiles())
       .map((uri) => uri.slice(CACHE_DIR_URI.length + 1))
@@ -155,8 +149,8 @@ describe('bounded downloads', () => {
   describe('prefetchNext — stalled download', () => {
     it('times out, clears the in-flight marker and removes the partial file', async () => {
       jest.useFakeTimers();
-      const active = track('t0');
-      const next = track('t1');
+      const active = libraryTrackWithId('t0');
+      const next = libraryTrackWithId('t1');
       useQueueStore.getState().loadQueue([active, next], 0, null);
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
@@ -185,7 +179,9 @@ describe('bounded downloads', () => {
 
     it('does not time out a slow download that keeps making progress', async () => {
       jest.useFakeTimers();
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
       player.getQueue.mockResolvedValue([]);
 
       let progress: DownloadOptions['onProgress'];
@@ -220,8 +216,10 @@ describe('bounded downloads', () => {
   describe('prefetchNext — superseded download', () => {
     it('cancels the download of a track skipped past before it finished', async () => {
       const ids = ['t0', 't1', 't2', 't3'];
-      useQueueStore.getState().loadQueue(ids.map(track), 0, null);
-      player.getQueue.mockResolvedValue(ids.map((id) => ({ id: trackKey(track(id)) })));
+      useQueueStore.getState().loadQueue(ids.map(libraryTrackWithId), 0, null);
+      player.getQueue.mockResolvedValue(
+        ids.map((id) => ({ id: trackKey(libraryTrackWithId(id)) })),
+      );
 
       const started: string[] = [];
       const signals: AbortSignal[] = [];
@@ -247,7 +245,9 @@ describe('bounded downloads', () => {
     });
 
     it('leaves the download running when the same track is still next', async () => {
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
       player.getQueue.mockResolvedValue([]);
 
       const started: string[] = [];
@@ -267,8 +267,8 @@ describe('bounded downloads', () => {
 
   describe('prefetchNext — oversized download', () => {
     it('abandons a download that grows past the per-file byte cap', async () => {
-      const active = track('t0');
-      const next = track('t1');
+      const active = libraryTrackWithId('t0');
+      const next = libraryTrackWithId('t1');
       useQueueStore.getState().loadQueue([active, next], 0, null);
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
@@ -300,10 +300,6 @@ describe('eviction', () => {
   type NativeAdd = [{ id: string; url: string }, number?];
 
   const CACHE_DIR_URI = 'file:///cache/audio-prefetch';
-
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
 
   function nativeUrlOf(track: PlaybackTrack): string | undefined {
     const writes = (player.add.mock.calls as NativeAdd[]).filter(
@@ -340,11 +336,11 @@ describe('eviction', () => {
 
   describe('prefetchNext — cache-hit eviction uses fresh queue state', () => {
     it('does not evict the new window when the active track advances during the url fetch', async () => {
-      useQueueStore.getState().loadQueue(ids.map(track), 0, null);
+      useQueueStore.getState().loadQueue(ids.map(libraryTrackWithId), 0, null);
       for (const id of ids) __fs.seedFile(`${CACHE_DIR_URI}/${id}.v1.mp3`, id);
       player.getQueue.mockResolvedValue([]);
 
-      const fake = createMemoryPlaybackPort({ audioUrls: cdnUrls(UPCOMING_IDS) });
+      const fake = createMemoryPlaybackPort({ audioUrls: cdnAudioUrls(UPCOMING_IDS) });
       let advanced = false;
       installMemoryPort(undefined, {
         fetchAudioUrls: async (trackIds) => {
@@ -371,8 +367,8 @@ describe('eviction', () => {
 
   describe('prefetchNext — invalidation racing an in-flight download', () => {
     it('neither keeps nor swaps in a download whose track was invalidated mid-flight', async () => {
-      const active = track('t0');
-      const next = track('t1');
+      const active = libraryTrackWithId('t0');
+      const next = libraryTrackWithId('t1');
       useQueueStore.getState().loadQueue([active, next], 0, null);
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
@@ -397,7 +393,9 @@ describe('eviction', () => {
     });
 
     it('removes a partial file left by a download that fails after the track was invalidated', async () => {
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       const gate = deferred();
       const started = deferred();
@@ -426,8 +424,8 @@ describe('eviction', () => {
     });
 
     it('a later prefetch of the invalidated track downloads and swaps normally', async () => {
-      const active = track('t0');
-      const next = track('t1');
+      const active = libraryTrackWithId('t0');
+      const next = libraryTrackWithId('t1');
       useQueueStore.getState().loadQueue([active, next], 0, null);
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
@@ -455,7 +453,7 @@ describe('eviction', () => {
 
   describe('the swapped-to-local set against the routine eviction pass', () => {
     it('keeps the entry for a track whose file the window pass dropped under its native slot', async () => {
-      const queue = ids.map(track);
+      const queue = ids.map(libraryTrackWithId);
       useQueueStore.getState().loadQueue(queue, 0, null);
       player.getQueue.mockResolvedValue(queue.map((t) => ({ id: trackKey(t) })));
       await prefetchNext(0);
@@ -473,10 +471,6 @@ describe('eviction', () => {
 });
 
 describe('cache file construction', () => {
-  function track(trackId: string) {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   describe('prefetchNext cache file construction failure', () => {
     it('is traced as the download stage', async () => {
       forgetAllSwaps();
@@ -487,7 +481,9 @@ describe('cache file construction', () => {
       jest.spyOn(audioCache, 'cacheDir').mockImplementation(() => {
         throw new Error('no cache dir');
       });
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -513,10 +509,6 @@ describe('failure trace', () => {
     __player: { failNext: (method: string, error: Error) => void };
   };
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
@@ -535,7 +527,9 @@ describe('failure trace', () => {
     it('logs the track and stage when fetchAudioUrls throws', async () => {
       const boom = new Error('network down');
       installMemoryPort(undefined, { fetchAudioUrls: () => Promise.reject(boom) });
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await expect(prefetchNext(0)).resolves.toBeUndefined();
 
@@ -549,7 +543,9 @@ describe('failure trace', () => {
     it('logs a download that fails on its own (e.g. disk full)', async () => {
       const diskFull = new Error('ENOSPC');
       jest.spyOn(File, 'downloadFileAsync').mockRejectedValueOnce(diskFull);
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -565,7 +561,9 @@ describe('failure trace', () => {
         options?.onProgress?.({ bytesWritten: MAX_PREFETCH_FILE_BYTES + 1, totalBytes: -1 });
         return new Promise<{ uri: string }>(() => {});
       }) as DownloadWithProgress);
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -581,7 +579,9 @@ describe('failure trace', () => {
       jest.spyOn(audioCache, 'evict').mockImplementation(() => {
         throw boom;
       });
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -594,7 +594,7 @@ describe('failure trace', () => {
 
     it('logs the swap stage when removing the upcoming native slot fails', async () => {
       const boom = new Error('native remove failed');
-      const [active, next] = [track('t0'), track('t1')];
+      const [active, next] = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
       useQueueStore.getState().loadQueue([active, next], 0, null);
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
       __player.failNext('remove', boom);
@@ -609,7 +609,7 @@ describe('failure trace', () => {
     });
 
     it('stays quiet when a download is superseded by a skip', async () => {
-      useQueueStore.getState().loadQueue(['t0', 't1', 't2', 't3'].map(track), 0, null);
+      useQueueStore.getState().loadQueue(['t0', 't1', 't2', 't3'].map(libraryTrackWithId), 0, null);
       jest
         .spyOn(File, 'downloadFileAsync')
         .mockImplementationOnce(() => new Promise<{ uri: string }>(() => {}));
@@ -624,7 +624,9 @@ describe('failure trace', () => {
     });
 
     it('stays quiet on a successful prefetch', async () => {
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -644,7 +646,9 @@ describe('failure trace', () => {
       jest
         .spyOn(File, 'downloadFileAsync')
         .mockRejectedValueOnce(new Error(`Unable to open ${SIGNED_URL} (403)`));
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -660,7 +664,9 @@ describe('failure trace', () => {
       jest
         .spyOn(File, 'downloadFileAsync')
         .mockRejectedValueOnce(`download of ${SIGNED_URL} failed`);
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -674,7 +680,9 @@ describe('failure trace', () => {
 
     it('logs only the type of a rejection that is not an Error, never its fields', async () => {
       jest.spyOn(File, 'downloadFileAsync').mockRejectedValueOnce({ requestUrl: SIGNED_URL });
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
       await prefetchNext(0);
 
@@ -692,7 +700,7 @@ describe('cache path containment', () => {
   const { __http } = require('@testing/doubles/fetch.js');
   const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
-  function track(trackId: string): PlaybackTrack {
+  function libraryTrackWithId(trackId: string): PlaybackTrack {
     return libraryTrack({ source: { kind: 'library', trackId: trackId as TrackId } });
   }
 
@@ -701,7 +709,9 @@ describe('cache path containment', () => {
   }
 
   async function prefetchSecondTrack(trackId: string, version = 'v1'): Promise<string[]> {
-    useQueueStore.getState().loadQueue([track('active'), track(trackId)], 0, null);
+    useQueueStore
+      .getState()
+      .loadQueue([libraryTrackWithId('active'), libraryTrackWithId(trackId)], 0, null);
     __http.reply('POST /v1/audio-urls', {
       json: { urls: [{ track_id: trackId, url: 'https://cdn.example/a.mp3', version }] },
     });
@@ -763,10 +773,6 @@ describe('remote kill switch', () => {
   const { __http } = require('@testing/doubles/fetch.js');
   const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   function replyAudioUrls(prefetchEnabled?: boolean): void {
     __http.reply('POST /v1/audio-urls', {
       json: {
@@ -785,7 +791,9 @@ describe('remote kill switch', () => {
   beforeEach(async () => {
     await serverSays(true);
     useQueueStore.getState().clearQueue();
-    useQueueStore.getState().loadQueue([track('trk-1'), track('trk-2')], 0, null);
+    useQueueStore
+      .getState()
+      .loadQueue([libraryTrackWithId('trk-1'), libraryTrackWithId('trk-2')], 0, null);
   });
 
   afterEach(async () => {
@@ -878,10 +886,6 @@ describe('a download left unfinished by a killed app', () => {
     url: string;
   }
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   function cachedNames(): string[] {
     return Object.keys(__fs.allFiles())
       .map((uri) => uri.slice(CACHE_DIR_URI.length + 1))
@@ -904,7 +908,7 @@ describe('a download left unfinished by a killed app', () => {
   }
 
   function loadNextTrackQueue(): NativeEntry[] {
-    const tracks = [track('t0'), track('t1')];
+    const tracks = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
     useQueueStore.getState().loadQueue(tracks, 0, null);
     return modelNativeQueue(tracks);
   }
@@ -975,10 +979,6 @@ describe('prefetch health tally', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
   const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   function tally(): Record<string, number> {
     flushPlaybackHealth();
     const [event] = recordEventMock.mock.calls[0] ?? [];
@@ -986,7 +986,7 @@ describe('prefetch health tally', () => {
   }
 
   async function prefetchWithUpcomingSlot(): Promise<void> {
-    const [active, next] = [track('t0'), track('t1')];
+    const [active, next] = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
     useQueueStore.getState().loadQueue([active, next], 0, null);
     player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
     await prefetchNext(0);
@@ -1013,7 +1013,9 @@ describe('prefetch health tally', () => {
     });
 
     it('counts no prefetch_ok when the upcoming slot is gone', async () => {
-      useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+      useQueueStore
+        .getState()
+        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
       player.getQueue.mockResolvedValue([]);
 
       await prefetchNext(0);
@@ -1051,7 +1053,7 @@ describe('playback port wiring', () => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
     installMemoryPort(
-      { audioUrls: cdnUrls(['p0', 'p1']) },
+      { audioUrls: cdnAudioUrls(['p0', 'p1']) },
       { isAudioPrefetchEnabled: () => false },
     );
     useQueueStore.getState().loadQueue(
@@ -1105,7 +1107,7 @@ describe('playback port wiring', () => {
     it('stops prefetching on the second call once the prefetch flag turns off', async () => {
       let enabled = true;
       installMemoryPort(
-        { audioUrls: cdnUrls(['p1', 'p2']) },
+        { audioUrls: cdnAudioUrls(['p1', 'p2']) },
         { isAudioPrefetchEnabled: () => enabled },
       );
       queueOf(['p0', 'p1', 'p2']);

@@ -9,7 +9,7 @@ import {
   shouldApplyActiveIndex,
 } from '@features/playback/native/nativeSyncGuard';
 
-import { previewTrack } from '@features/playback/__tests__/fixtures';
+import { previewTrackList } from '@features/playback/__tests__/fixtures';
 
 beforeEach(() => {
   endNativeLoad();
@@ -62,15 +62,6 @@ describe('endNativeLoad — cancelling an in-flight load', () => {
 });
 
 describe('the sync guard under rapid skips and overlapping loads', () => {
-  function makeTracks(count: number): PlaybackTrack[] {
-    return Array.from({ length: count }, (_, i) =>
-      previewTrack({
-        source: { kind: 'preview', previewUrl: `https://cdn.example/${i}.mp3` },
-        title: `Track ${i}`,
-      }),
-    );
-  }
-
   function fireActiveTrackChanged(index: number, key: string | undefined): void {
     if (!shouldApplyActiveIndex(index)) return;
     useQueueStore.getState().syncCurrentIndex(index, key);
@@ -106,7 +97,7 @@ describe('the sync guard under rapid skips and overlapping loads', () => {
 
   describe('rapid skip burst — store cursor stays glued to the native active track', () => {
     it('tracks every native skip in a fast burst and ends in sync', async () => {
-      const tracks = makeTracks(10);
+      const tracks = previewTrackList(10);
       useQueueStore.getState().loadQueue(tracks, 0, null);
       await loadNativeQueue(tracks, 0, { autoplay: false });
 
@@ -121,7 +112,7 @@ describe('the sync guard under rapid skips and overlapping loads', () => {
 
   describe('a load whose target event is lost to a skip burst — no wedge', () => {
     it('still applies a later skip-to-top index-0 event instead of suppressing it', async () => {
-      const tracks = makeTracks(10);
+      const tracks = previewTrackList(10);
       useQueueStore.getState().loadQueue(tracks, 5, null);
 
       await loadNativeQueue(tracks, 5, { autoplay: false });
@@ -135,7 +126,7 @@ describe('the sync guard under rapid skips and overlapping loads', () => {
 
   describe('overlapping loads — each keeps its own suppression', () => {
     it('suppresses priming index-0 until every in-flight load has released', () => {
-      useQueueStore.getState().loadQueue(makeTracks(10), 0, null);
+      useQueueStore.getState().loadQueue(previewTrackList(10), 0, null);
 
       const first = beginNativeLoad(5);
       const second = beginNativeLoad(8);
@@ -150,7 +141,7 @@ describe('the sync guard under rapid skips and overlapping loads', () => {
     });
 
     it('reconciles the store to the native resting track after overlapping loads settle', () => {
-      const tracks = makeTracks(10);
+      const tracks = previewTrackList(10);
       useQueueStore.getState().loadQueue(tracks, 0, null);
 
       const first = beginNativeLoad(5);
