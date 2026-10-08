@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
+import { NetworkError } from '@shared/errors';
 import { Text } from '@shared/ui/primitives/Text';
 
 import {
@@ -9,12 +10,15 @@ import {
   type AuthRouter,
   completeAuthIntent,
 } from '@features/auth/completeAuthIntent';
+import { thrownErrorDetail } from '@features/auth/errorDetail';
 import { type AuthLinkIntent, parseAuthLink } from '@features/auth/parseAuthLink';
 
 import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
 
-type ScreenState = 'pending' | 'error';
+type FailureState = 'refused' | 'unreachable';
+type Failure = (state: FailureState) => void;
+type ScreenState = 'pending' | FailureState;
 
 function currentUrl(): string | null {
   return typeof window !== 'undefined' ? window.location.href : null;
@@ -39,20 +43,45 @@ function navigateToLanding(intent: AuthLinkIntent, router: AuthRouter): 'ok' {
   return 'ok';
 }
 
-async function completeCallback(router: AuthRouter): Promise<'ok' | 'error'> {
-  const url = currentUrl();
-  stripCredentialsFromUrl();
-  if (!url) return 'error';
-  const intent = parseAuthLink(url);
-  const outcome = await completeAuthIntent(intent, router, supabase.auth);
-  return landed(outcome) ? navigateToLanding(intent, router) : 'error';
+function reportRefusal(kind: AuthLinkIntent['kind'], outcome: AuthIntentResult): void {
+  if (outcome.kind !== 'failure') return;
+  console.warn('[auth] web callback exchange failed', {
+    intent: kind,
+    cause: outcome.cause,
+    error: outcome.error,
+  });
 }
 
-function onMountCompleteCallback(router: AuthRouter, onError: () => void): () => void {
+async function exchangeUrl(url: string, router: AuthRouter): Promise<'ok' | 'refused'> {
+  const intent = parseAuthLink(url);
+  const outcome = await completeAuthIntent(intent, router, supabase.auth);
+  if (landed(outcome)) return navigateToLanding(intent, router);
+  reportRefusal(intent.kind, outcome);
+  return 'refused';
+}
+
+async function completeCallback(router: AuthRouter): Promise<'ok' | 'refused'> {
+  const url = currentUrl();
+  stripCredentialsFromUrl();
+  if (url) return exchangeUrl(url, router);
+  console.warn('[auth] web callback has no url to read');
+  return 'refused';
+}
+
+function failureStateFor(err: unknown): FailureState {
+  return err instanceof NetworkError ? 'unreachable' : 'refused';
+}
+
+function reportThrown(err: unknown): void {
+  console.warn('[auth] web callback exchange threw', thrownErrorDetail(err));
+}
+
+function onMountCompleteCallback(router: AuthRouter, onFailure: Failure): () => void {
   let active = true;
+  const fail = (state: FailureState): void => (active ? onFailure(state) : undefined);
   completeCallback(router)
-    .then((outcome) => (active && outcome === 'error' ? onError() : undefined))
-    .catch(() => (active ? onError() : undefined));
+    .then((outcome) => (outcome === 'refused' ? fail('refused') : undefined))
+    .catch((err: unknown) => (reportThrown(err), fail(failureStateFor(err))));
   return () => {
     active = false;
   };
@@ -60,7 +89,7 @@ function onMountCompleteCallback(router: AuthRouter, onError: () => void): () =>
 
 function useAuthCallbackState(router: AuthRouter): ScreenState {
   const [state, setState] = useState<ScreenState>('pending');
-  useEffect(() => onMountCompleteCallback(router, () => setState('error')), [router]);
+  useEffect(() => onMountCompleteCallback(router, setState), [router]);
   return state;
 }
 
@@ -82,19 +111,24 @@ function AuthCallbackErrorHeading(): ReactElement {
   );
 }
 
-function AuthCallbackErrorBody(): ReactElement {
+const ERROR_COPY: Record<FailureState, string> = {
+  refused: 'It may have expired or already been used. Request a new one from the sign-in screen.',
+  unreachable: 'We could not reach the server. Check your connection and open the link again.',
+};
+
+function AuthCallbackErrorBody({ state }: { state: FailureState }): ReactElement {
   return (
     <Text variant="body" tone="secondary" style={{ textAlign: 'center' }}>
-      It may have expired or already been used. Request a new one from the sign-in screen.
+      {ERROR_COPY[state]}
     </Text>
   );
 }
 
-function AuthCallbackError(): ReactElement {
+function AuthCallbackError({ state }: { state: FailureState }): ReactElement {
   return (
     <AuthFullScreenNotice testID="auth-callback-error" padded>
       <AuthCallbackErrorHeading />
-      <AuthCallbackErrorBody />
+      <AuthCallbackErrorBody state={state} />
       <BackToSignInLink testID="auth-callback-signin" />
     </AuthFullScreenNotice>
   );
@@ -103,5 +137,5 @@ function AuthCallbackError(): ReactElement {
 export function AuthCallbackScreen(): ReactElement {
   const router = useRouter();
   const state = useAuthCallbackState(router);
-  return state === 'error' ? <AuthCallbackError /> : <AuthCallbackPending />;
+  return state === 'pending' ? <AuthCallbackPending /> : <AuthCallbackError state={state} />;
 }
