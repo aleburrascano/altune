@@ -988,3 +988,45 @@ func TestService_Search_CancelledCallerDoesNotFailSharedFanOut(t *testing.T) {
 		t.Errorf("surviving caller got %+v, want one non-partial result", out)
 	}
 }
+
+type panickingBridge struct{}
+
+func (panickingBridge) ExternalIDs(context.Context, domain.ResultKind, string) (map[domain.ProviderKey]string, bool) {
+	panic("bridge bug")
+}
+
+func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
+	p := &fakeProvider{
+		name:    domain.ProviderDeezer,
+		results: []domain.SearchResult{withMBID(deezerTrack("Humble", "Kendrick Lamar", 80), "mbid-1")},
+		delay:   150 * time.Millisecond,
+	}
+	cache := newFakeResultCache()
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(),
+		WithIdentityBridge(panickingBridge{}), WithResultCache(cache))
+
+	const callers = 2
+	outs := make([]*SearchOutput, callers)
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			outs[i], errs[i] = svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
+		}()
+	}
+	wg.Wait()
+
+	for i := range callers {
+		if errs[i] != nil {
+			t.Fatalf("caller %d: Execute: %v", i, errs[i])
+		}
+		if !outs[i].Partial {
+			t.Errorf("caller %d: want partial=true after a panic in resolveCold", i)
+		}
+	}
+	if cache.sets != 0 {
+		t.Errorf("a degraded answer was cached: sets=%d", cache.sets)
+	}
+}
