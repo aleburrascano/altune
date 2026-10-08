@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const rollbackDeleteTries = 3
@@ -31,7 +29,7 @@ type StoreStep struct {
 func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *StoreStep {
 	s := &StoreStep{
 		audioStore:  audioStore,
-		attemptID:   uuid.NewString,
+		attemptID:   shared.RandomID,
 		deleteTries: rollbackDeleteTries,
 		sleep:       time.Sleep,
 	}

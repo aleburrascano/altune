@@ -1156,3 +1156,19 @@ func TestLogCandidateEvaluated_CarriesScoresAndCandidateAttributes(t *testing.T)
 		t.Errorf("missing score attributes: %v", rec)
 	}
 }
+
+func TestUnrequestedQualifiers_FullwidthBracketsGetTheSameVetoAsAscii(t *testing.T) {
+	wantVeto, _ := UnrequestedQualifiers("Song", "Artist", "Artist - Song [Slowed]")
+	veto, fallback := UnrequestedQualifiers("Song", "Artist", "Artist - Song ［Ｓｌｏｗｅｄ］")
+	assertQualifiers(t, "veto", veto, wantVeto)
+	assertQualifiers(t, "fallback", fallback, nil)
+	if len(veto) == 0 {
+		t.Fatal("veto is empty, want the slowed qualifier")
+	}
+}
+
+func TestUnrequestedQualifiers_TitleWithoutBracketHasNoVeto(t *testing.T) {
+	veto, fallback := UnrequestedQualifiers("Song", "Artist", "Artist - Song")
+	assertQualifiers(t, "veto", veto, nil)
+	assertQualifiers(t, "fallback", fallback, nil)
+}
