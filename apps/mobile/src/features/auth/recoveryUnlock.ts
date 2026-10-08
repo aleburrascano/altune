@@ -1,5 +1,3 @@
-import { useSyncExternalStore } from 'react';
-
 import { onSignOut } from '@shared/session/signOutCleanup';
 
 export const RECOVERY_UNLOCK_WINDOW_MS = 5 * 60 * 1000;
@@ -64,21 +62,13 @@ export function isRecoveryUnlocked(
   return unlock.userId === userId && remainingWindowMs(unlock, now, tick) > 0;
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribeRecoveryUnlock(listener: () => void): () => void {
   listeners.add(listener);
   closeWindowWhenSpent(Date.now(), monotonicNow());
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0) stopWindowTimer();
   };
-}
-
-export function useRecoveryUnlocked(userId: string | null): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => isRecoveryUnlocked(userId),
-    () => isRecoveryUnlocked(userId),
-  );
 }
 
 export function _listenerCountForTest(): number {
