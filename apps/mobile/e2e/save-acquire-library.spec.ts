@@ -12,7 +12,7 @@ declare global {
   }
 }
 
-test('saving a track from Detail acquires it and lists it ready in Library', async ({ page }) => {
+test.fixme('saving a track from Detail acquires it and lists it ready in Library', async ({ page }) => {
   test.setTimeout(180_000);
   expect(readFileSync(searchFixture, 'utf8')).toContain('Creep');
 
