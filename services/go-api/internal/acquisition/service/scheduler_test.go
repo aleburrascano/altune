@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	acqports "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -520,7 +521,7 @@ func TestReacquireAdmission_PlainJobInFlight_RefusesAndRefundsCooldown(t *testin
 	admission := NewReacquireAdmission(newFakeCooldownStore())
 	replace := func() error { return scheduler.ScheduleReplace(context.Background(), track.UserId, track.ID) }
 
-	if err := admission.Admit(context.Background(), track, replace); !errors.Is(err, ErrTrackJobInFlight) {
+	if err := admission.Admit(context.Background(), track, replace); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
 		t.Fatalf("reacquire while a plain job runs = %v, want ErrTrackJobInFlight", err)
 	}
 	drain()
@@ -538,7 +539,7 @@ func TestRetryAdmission_ReplaceInFlight_RefusesAndRefundsCooldown(t *testing.T) 
 	admission := NewRetryAdmission(newFakeCooldownStore())
 	retry := func() error { return scheduler.Schedule(context.Background(), track.UserId, track.ID, "") }
 
-	if err := admission.Admit(context.Background(), track, retry); !errors.Is(err, ErrTrackJobInFlight) {
+	if err := admission.Admit(context.Background(), track, retry); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
 		t.Fatalf("retry while a replace runs = %v, want ErrTrackJobInFlight", err)
 	}
 	drain()
@@ -710,7 +711,7 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 
 	scheduler.Shutdown(context.Background())
 	err := scheduler.ScheduleReplace(context.Background(), userId, domain.NewTrackId())
-	if !errors.Is(err, ErrSchedulerShutdown) {
+	if !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 		t.Fatalf("schedule after shutdown err = %v, want ErrSchedulerShutdown", err)
 	}
 	if got := scheduler.Status().Rejected; got != 1 {
@@ -1064,10 +1065,10 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 		t.Fatal("Status().Paused = false after Pause, want true")
 	}
 	paused := domain.NewTrackId()
-	if err := scheduler.Schedule(context.Background(), user, paused, ""); !errors.Is(err, ErrAcquisitionPaused) {
+	if err := scheduler.Schedule(context.Background(), user, paused, ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
-	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, ErrAcquisitionPaused) {
+	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("replace while paused = %v, want ErrAcquisitionPaused", err)
 	}
 
@@ -1103,7 +1104,7 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 
 	scheduler.Pause()
 	user := shared.NewUserId(uuid.New())
-	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); !errors.Is(err, ErrAcquisitionPaused) {
+	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
 	time.Sleep(50 * time.Millisecond)
@@ -1144,7 +1145,7 @@ func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 
 	scheduler.Pause()
 	queued := domain.NewTrackId()
-	if err := scheduler.Schedule(context.Background(), user, queued, ""); !errors.Is(err, ErrAcquisitionPaused) {
+	if err := scheduler.Schedule(context.Background(), user, queued, ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
 
@@ -1391,7 +1392,7 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	<-repo.holding
 	scheduler.closed.Store(true)
 
-	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); !errors.Is(err, ErrSchedulerShutdown) {
+	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 		t.Errorf("Schedule once admission is closed = %v, want ErrSchedulerShutdown", err)
 	}
 
@@ -1471,7 +1472,7 @@ func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	scheduler.Shutdown(context.Background())
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); !errors.Is(err, ErrSchedulerShutdown) {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 		t.Errorf("Schedule after shutdown = %v, want ErrSchedulerShutdown", err)
 	}
 }
@@ -1480,7 +1481,7 @@ func TestAdmission_ScheduleSkippedWhenNotAdmitted(t *testing.T) {
 	called := false
 	schedule := func() error { called = true; return nil }
 
-	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), readyTrack(t), schedule); !errors.Is(err, ErrRetryNotFailed) {
+	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), readyTrack(t), schedule); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
 		t.Fatalf("Admit = %v, want ErrRetryNotFailed", err)
 	}
 	a := NewRetryAdmission(newFakeCooldownStore())
@@ -1488,7 +1489,7 @@ func TestAdmission_ScheduleSkippedWhenNotAdmitted(t *testing.T) {
 	if err := a.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
 	}
-	if err := a.Admit(context.Background(), track, schedule); !errors.Is(err, ErrCooldownActive) {
+	if err := a.Admit(context.Background(), track, schedule); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Fatalf("second Admit = %v, want ErrCooldownActive", err)
 	}
 	if called {
@@ -2404,10 +2405,10 @@ func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 	scheduler.Pause()
 
 	refused := domain.NewTrackId()
-	if err := scheduler.Schedule(context.Background(), user, refused, ""); !errors.Is(err, ErrAcquisitionPaused) {
+	if err := scheduler.Schedule(context.Background(), user, refused, ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
-	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, ErrAcquisitionPaused) {
+	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("replace while paused = %v, want ErrAcquisitionPaused", err)
 	}
 	if _, queued := settledJob(scheduler, refused.String()); queued {
@@ -2518,7 +2519,7 @@ func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *te
 	ctx := logging.WithCorrelationID(context.Background(), "corr-rejected")
 	err := scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
 
-	if !errors.Is(err, ErrTrackJobInFlight) {
+	if !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
 		t.Fatalf("schedule = %v, want ErrTrackJobInFlight", err)
 	}
 	if got := countCorrIDs(scheduler); got != 0 {
@@ -2542,7 +2543,7 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 	if err := scheduler.Schedule(first, userId, trackId, ""); err != nil {
 		t.Fatalf("first schedule: %v", err)
 	}
-	if err := scheduler.Schedule(second, userId, trackId, ""); !errors.Is(err, ErrTrackJobInFlight) {
+	if err := scheduler.Schedule(second, userId, trackId, ""); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
 		t.Fatalf("second schedule = %v, want ErrTrackJobInFlight", err)
 	}
 	close(queue.gate)

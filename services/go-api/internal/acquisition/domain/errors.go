@@ -1,4 +1,4 @@
-package service
+package domain
 
 type admissionError struct {
 	msg    string

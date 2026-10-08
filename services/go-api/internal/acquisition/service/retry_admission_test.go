@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -134,10 +135,10 @@ func TestAdmission_CooldownSurvivesRestart(t *testing.T) {
 	if err := NewReacquireAdmission(store).Admit(context.Background(), reacquireTrack, scheduleQueued); err != nil {
 		t.Fatalf("first reacquire Admit = %v, want nil", err)
 	}
-	if err := NewRetryAdmission(store).Admit(context.Background(), retryTrack, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+	if err := NewRetryAdmission(store).Admit(context.Background(), retryTrack, scheduleQueued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("retry Admit after restart = %v, want ErrCooldownActive", err)
 	}
-	if err := NewReacquireAdmission(store).Admit(context.Background(), reacquireTrack, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+	if err := NewReacquireAdmission(store).Admit(context.Background(), reacquireTrack, scheduleQueued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("reacquire Admit after restart = %v, want ErrCooldownActive", err)
 	}
 }
@@ -184,14 +185,14 @@ func TestCooldownGate_ReleaseFailureReturnsScheduleError(t *testing.T) {
 func TestRetryAdmission_Admit(t *testing.T) {
 	t.Run("not failed yields ErrRetryNotFailed", func(t *testing.T) {
 		a := NewRetryAdmission(newFakeCooldownStore())
-		if err := a.Admit(context.Background(), pendingTrackOnly(t), scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
+		if err := a.Admit(context.Background(), pendingTrackOnly(t), scheduleQueued); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
 			t.Errorf("Admit = %v, want ErrRetryNotFailed", err)
 		}
 	})
 
 	t.Run("ready is not failed", func(t *testing.T) {
 		a := NewRetryAdmission(newFakeCooldownStore())
-		if err := a.Admit(context.Background(), readyTrack(t), scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
+		if err := a.Admit(context.Background(), readyTrack(t), scheduleQueued); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
 			t.Errorf("Admit = %v, want ErrRetryNotFailed", err)
 		}
 	})
@@ -209,7 +210,7 @@ func TestRetryAdmission_Admit(t *testing.T) {
 		if err := a.Admit(context.Background(), track, scheduleQueued); err != nil {
 			t.Fatalf("first Admit = %v, want nil", err)
 		}
-		if err := a.Admit(context.Background(), track, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+		if err := a.Admit(context.Background(), track, scheduleQueued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 			t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 		}
 	})
@@ -228,14 +229,14 @@ func TestRetryAdmission_Admit(t *testing.T) {
 func TestReacquireAdmission_Admit(t *testing.T) {
 	t.Run("not streamable yields ErrReacquireNotReady", func(t *testing.T) {
 		a := NewReacquireAdmission(newFakeCooldownStore())
-		if err := a.Admit(context.Background(), pendingTrackOnly(t), scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
+		if err := a.Admit(context.Background(), pendingTrackOnly(t), scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
 			t.Errorf("Admit = %v, want ErrReacquireNotReady", err)
 		}
 	})
 
 	t.Run("failed track is not streamable", func(t *testing.T) {
 		a := NewReacquireAdmission(newFakeCooldownStore())
-		if err := a.Admit(context.Background(), failedTrack(t), scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
+		if err := a.Admit(context.Background(), failedTrack(t), scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
 			t.Errorf("Admit = %v, want ErrReacquireNotReady", err)
 		}
 	})
@@ -253,7 +254,7 @@ func TestReacquireAdmission_Admit(t *testing.T) {
 		if err := a.Admit(context.Background(), track, scheduleQueued); err != nil {
 			t.Fatalf("first Admit = %v, want nil", err)
 		}
-		if err := a.Admit(context.Background(), track, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+		if err := a.Admit(context.Background(), track, scheduleQueued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 			t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 		}
 	})
@@ -263,7 +264,7 @@ func TestReacquireAdmission(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	pending, _ := domain.NewTrack(userId, "T", "A", "B")
-	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), pending, scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
+	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), pending, scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
 		t.Errorf("pending track: err = %v, want ErrReacquireNotReady", err)
 	}
 
@@ -272,7 +273,7 @@ func TestReacquireAdmission(t *testing.T) {
 		t.Fatalf("NewTrack: %v", err)
 	}
 	_ = failed.MarkFailed("boom")
-	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
+	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, acqdomain.ErrReacquireNotReady) {
 		t.Errorf("failed track: err = %v, want ErrReacquireNotReady", err)
 	}
 
@@ -285,7 +286,7 @@ func TestReacquireAdmission(t *testing.T) {
 	if err := admission.Admit(context.Background(), ready, scheduleQueued); err != nil {
 		t.Fatalf("ready track: err = %v, want admitted", err)
 	}
-	if err := admission.Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+	if err := admission.Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }
@@ -298,7 +299,7 @@ func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
 		t.Fatalf("NewTrack: %v", err)
 	}
 	_ = ready.MarkReady("u/a/b/c.mp3")
-	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
+	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
 		t.Errorf("ready track: err = %v, want ErrRetryNotFailed", err)
 	}
 
@@ -311,7 +312,7 @@ func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
 	if err := admission.Admit(context.Background(), failed, scheduleQueued); err != nil {
 		t.Fatalf("failed track: err = %v, want admitted", err)
 	}
-	if err := admission.Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+	if err := admission.Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }

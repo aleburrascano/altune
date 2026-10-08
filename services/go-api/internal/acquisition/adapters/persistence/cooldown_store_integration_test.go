@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
@@ -66,7 +67,7 @@ func TestPgxCooldownStore_SurvivesRestart(t *testing.T) {
 		t.Fatalf("first Admit = %v, want nil", err)
 	}
 	err := service.NewRetryAdmission(NewPgxCooldownStore(second)).Admit(ctx, track, queued)
-	if !errors.Is(err, service.ErrCooldownActive) {
+	if !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("Admit from restarted process = %v, want ErrCooldownActive", err)
 	}
 }

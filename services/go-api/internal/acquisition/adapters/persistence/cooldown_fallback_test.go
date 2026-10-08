@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
@@ -91,7 +92,7 @@ func TestFallbackCooldownStore_MissingTableStillEnforcesCooldown(t *testing.T) {
 	if err := admission.Admit(ctx, track, func() error { return nil }); err != nil {
 		t.Fatalf("first Admit = %v, want nil (no 500 while the table is missing)", err)
 	}
-	if err := admission.Admit(ctx, track, func() error { return nil }); !errors.Is(err, service.ErrCooldownActive) {
+	if err := admission.Admit(ctx, track, func() error { return nil }); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 	}
 }
@@ -109,7 +110,7 @@ func TestFallbackCooldownStore_MissingTableRefundsRefusedSchedule(t *testing.T) 
 	if err := admission.Admit(ctx, track, func() error { return nil }); err != nil {
 		t.Errorf("Admit after refund = %v, want nil", err)
 	}
-	if err := admission.Admit(ctx, track, func() error { return nil }); !errors.Is(err, service.ErrCooldownActive) {
+	if err := admission.Admit(ctx, track, func() error { return nil }); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("Admit after queued = %v, want ErrCooldownActive", err)
 	}
 }
@@ -153,10 +154,10 @@ func TestFallbackCooldownStore_ResumesDurablePathOnceTableExists(t *testing.T) {
 	if primary.reserves != 1 {
 		t.Errorf("durable reserves = %d, want 1 (the post-migration Admit must hit the database)", primary.reserves)
 	}
-	if err := admission.Admit(ctx, freshTrack, queued); !errors.Is(err, service.ErrCooldownActive) {
+	if err := admission.Admit(ctx, freshTrack, queued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("second durable Admit = %v, want ErrCooldownActive", err)
 	}
-	if err := admission.Admit(ctx, degradedTrack, queued); !errors.Is(err, service.ErrCooldownActive) {
+	if err := admission.Admit(ctx, degradedTrack, queued); !errors.Is(err, acqdomain.ErrCooldownActive) {
 		t.Errorf("Admit of a track reserved while degraded = %v, want ErrCooldownActive", err)
 	}
 

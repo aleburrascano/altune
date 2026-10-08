@@ -21,8 +21,8 @@ below exists to keep those apart. Where the module is weakest is where it curren
 
 Acquisition is a **customer of catalog**, not an aggregate owner. It consumes
 `catalog/domain.Track` and its `MarkReady` / `MarkFailed` / `RevertToPending`
-invariants; there is deliberately no `domain/` folder here, because the context is
-orchestration-heavy rather than aggregate-heavy. The candidate type
+invariants; `domain/` holds only the admission errors (`domain/errors.go`); the context is
+orchestration-heavy rather than aggregate-heavy, so it owns no aggregate. The candidate type
 (`ports.AudioCandidate`) lives in `ports/` and doubles as the pipeline's working
 type — a service-side twin would duplicate its fields inside one bounded context.
 
@@ -204,7 +204,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
   joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
-  admission_errors.go    admissionError and the admission sentinels
+  domain/errors.go       admissionError and the admission sentinels (package domain)
   audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
   eval/                  the offline selection gate — real CoreSteps against committed goldens (§7.8)

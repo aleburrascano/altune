@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"context"
@@ -18,8 +19,8 @@ type cooldownRefusal struct {
 	wait time.Duration
 }
 
-func (e cooldownRefusal) Error() string             { return ErrCooldownActive.Error() }
-func (e cooldownRefusal) Unwrap() error             { return ErrCooldownActive }
+func (e cooldownRefusal) Error() string             { return acqdomain.ErrCooldownActive.Error() }
+func (e cooldownRefusal) Unwrap() error             { return acqdomain.ErrCooldownActive }
 func (e cooldownRefusal) RetryAfter() time.Duration { return max(e.wait, time.Second) }
 
 const releaseTimeout = 5 * time.Second
@@ -63,7 +64,7 @@ func NewRetryAdmission(store ports.CooldownStore) *RetryAdmission {
 
 func (a *RetryAdmission) Admit(ctx context.Context, track *domain.Track, schedule func() error) error {
 	if track.AcquisitionStatus != domain.AcquisitionFailed {
-		return ErrRetryNotFailed
+		return acqdomain.ErrRetryNotFailed
 	}
 	return a.gate.run(ctx, track.ID, schedule)
 }
@@ -78,7 +79,7 @@ func NewReacquireAdmission(store ports.CooldownStore) *ReacquireAdmission {
 
 func (a *ReacquireAdmission) Admit(ctx context.Context, track *domain.Track, schedule func() error) error {
 	if !track.IsStreamable() {
-		return ErrReacquireNotReady
+		return acqdomain.ErrReacquireNotReady
 	}
 	return a.gate.run(ctx, track.ID, schedule)
 }
