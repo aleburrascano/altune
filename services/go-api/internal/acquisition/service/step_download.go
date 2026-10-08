@@ -397,9 +397,6 @@ func (s *DownloadStep) fetchFull(
 	return filePath, nil
 }
 
-// candidateTimedOut reclassifies a per-candidate deadline as the source being
-// unavailable. The deadline error is deliberately not wrapped: failureCode
-// reads any context.DeadlineExceeded in the chain as job cancellation.
 func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCandidate, err error) error {
 	if !ports.RunTimedOut(jobCtx, fetchCtx) {
 		return err
