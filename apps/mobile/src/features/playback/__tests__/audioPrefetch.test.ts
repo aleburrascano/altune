@@ -335,6 +335,7 @@ describe('eviction', () => {
       await prefetchNext(0);
 
       expect(cachedNames()).toEqual([
+        't2.v1.mp3',
         't3.v1.mp3',
         't4.v1.mp3',
         't5.v1.mp3',

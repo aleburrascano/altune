@@ -90,7 +90,11 @@ function sizeOf(file: File): number {
 
 function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): string[] {
   const ids = new Set<string>();
-  for (let i = currentIndex; i < ordered.length && i <= currentIndex + KEEP_WINDOW; i++) {
+  for (
+    let i = Math.max(0, currentIndex - 1);
+    i < ordered.length && i <= currentIndex + KEEP_WINDOW;
+    i++
+  ) {
     const t = ordered[i];
     if (t && t.source.kind === 'library') ids.add(t.source.trackId);
   }

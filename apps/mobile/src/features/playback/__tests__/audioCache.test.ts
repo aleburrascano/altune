@@ -157,20 +157,42 @@ describe('evictAllCached', () => {
 });
 
 describe('evict — KEEP_WINDOW retention', () => {
-  it('keeps library tracks from the current index through current+4 and deletes the rest', () => {
-    const ordered = ['t0', 't1', 't2', 't3', 't4', 't5', 't6'].map(libraryTrackWithId);
-    for (const t of ['t0', 't1', 't2', 't3', 't4', 't5', 't6'])
-      __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
+  const all = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'];
+
+  it('keeps the previous track through current+4 and deletes the rest', () => {
+    const ordered = all.map(libraryTrackWithId);
+    for (const t of all) __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
+
+    evict(ordered, 2);
+
+    expect(cachedNames()).toEqual(['t1', 't2', 't3', 't4', 't5', 't6'].map((t) => `${t}.v1.mp3`));
+  });
+
+  it('deletes a file past current+4', () => {
+    const ordered = all.map(libraryTrackWithId);
+    for (const t of all) __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
 
     evict(ordered, 1);
 
-    expect(cachedNames()).toEqual([
-      't1.v1.mp3',
-      't2.v1.mp3',
-      't3.v1.mp3',
-      't4.v1.mp3',
-      't5.v1.mp3',
-    ]);
+    expect(cachedNames()).toEqual(['t0', 't1', 't2', 't3', 't4', 't5'].map((t) => `${t}.v1.mp3`));
+  });
+
+  it('starts the window at 0 when the current track is the first', () => {
+    const ordered = all.map(libraryTrackWithId);
+    for (const t of all) __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
+
+    evict(ordered, 0);
+
+    expect(cachedNames()).toEqual(['t0', 't1', 't2', 't3', 't4'].map((t) => `${t}.v1.mp3`));
+  });
+
+  it('over the byte cap, drops the previous track after the files ahead of the current one', () => {
+    const ids = ['t0', 't1', 't2', 't3', 't4'];
+    for (const t of ids) __fs.seedFile(cachedUri(`${t}.v1.mp3`), 'x'.repeat(10));
+
+    evict(ids.map(libraryTrackWithId), 1, 30);
+
+    expect(cachedNames()).toEqual(['t0.v1.mp3', 't1.v1.mp3', 't2.v1.mp3']);
   });
 
   it('keeps evicting the rest of the pass when one stale entry fails to delete', () => {
