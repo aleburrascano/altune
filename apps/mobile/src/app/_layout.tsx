@@ -21,9 +21,7 @@ import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '@shared/events/useServerEvents';
 import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
 import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
-import { PlaybackProvider } from '@features/playback/hooks/PlaybackProvider';
-import { playsThroughTrackPlayer } from '@features/playback/playsThroughTrackPlayer';
-import { SleepTimerBridge } from '@features/playback/ui/SleepTimerBridge';
+import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/playback';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
@@ -32,9 +30,7 @@ import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { AppChrome } from '@/app-shell/AppChrome';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/app-shell/platformExtras';
 
-if (playsThroughTrackPlayer) {
-  require('@features/playback/native/registerPlaybackService').registerPlaybackService();
-}
+startPlaybackService();
 
 void SplashScreen.preventAutoHideAsync();
 
