@@ -1,4 +1,4 @@
-import type { Href } from './expoRouterNavigator';
+import type { Href } from '@shared/navigation/expoRouterNavigator';
 
 export interface Navigator {
   push(href: Href): void;

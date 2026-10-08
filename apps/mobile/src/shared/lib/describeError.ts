@@ -1,6 +1,6 @@
 import { ApiError, isServerFaultStatus, type ContractError } from '@shared/errors';
 
-import { isNetworkError } from './isNetworkError';
+import { isNetworkError } from '@shared/lib/isNetworkError';
 
 export interface ErrorCopy {
   readonly title: string;

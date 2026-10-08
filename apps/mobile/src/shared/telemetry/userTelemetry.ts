@@ -1,4 +1,4 @@
-import { recordEvent } from './recordEvent';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 
 const MAX_TRIMMED_LENGTH = 300;
 

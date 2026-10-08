@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import * as SessionNamespace from '../session';
+import * as SessionNamespace from '@shared/telemetry/session';
 
 type AppStateChangeHandler = (state: string) => void;
 
@@ -44,7 +44,7 @@ function fakeClock(initialNow: number) {
 
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
-  const rawSession: typeof SessionNamespace = require('../session');
+  const rawSession: typeof SessionNamespace = require('@shared/telemetry/session');
   const clock = fakeClock(initialNow);
   const session = { getSessionId: () => rawSession.getSessionId(clock.now, clock.monotonic) };
 

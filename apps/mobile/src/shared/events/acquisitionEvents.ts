@@ -32,15 +32,15 @@ import {
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
-import { forgetTrack } from './forgetTrack';
-import { asString, asTrackIdOrNull, type ServerEventHandlers } from './eventPayload';
+import { forgetTrack } from '@shared/events/forgetTrack';
+import { asString, asTrackIdOrNull, type ServerEventHandlers } from '@shared/events/eventPayload';
 import {
   getTrackFromCaches,
   invalidateLibraryDerived,
   scheduleTrackPatch,
   upsertTrackInCaches,
-} from './trackCachePatch';
-import type { ServerEvent } from './sse-client';
+} from '@shared/events/trackCachePatch';
+import type { ServerEvent } from '@shared/events/sse-client';
 
 type AcquisitionEventType =
   | 'track_added_to_library'

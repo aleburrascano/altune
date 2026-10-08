@@ -2,10 +2,10 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
-import { useRecordEvent } from '../useRecordEvent';
-import { recordEvent, type DiscoveryEvent } from '../recordEvent';
+import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
 
-jest.mock('../recordEvent', () => ({ recordEvent: jest.fn() }));
+jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
 const mockRecordEvent = recordEvent as jest.Mock;
 

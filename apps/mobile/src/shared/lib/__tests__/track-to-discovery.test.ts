@@ -1,4 +1,4 @@
-import { trackToDiscoveryResult } from '../track-to-discovery';
+import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';

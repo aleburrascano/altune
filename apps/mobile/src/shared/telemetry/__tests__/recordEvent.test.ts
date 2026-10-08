@@ -1,22 +1,26 @@
 import { ApiError, NetworkError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { recordEvent, type DiscoveryEvent, TelemetryGatedError } from '../recordEvent';
-import { getSessionId } from '../session';
+import {
+  recordEvent,
+  type DiscoveryEvent,
+  TelemetryGatedError,
+} from '@shared/telemetry/recordEvent';
+import { getSessionId } from '@shared/telemetry/session';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '../outbox';
-import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
+import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '@shared/telemetry/outbox';
+import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
-jest.mock('../session', () => ({ getSessionId: jest.fn() }));
+jest.mock('@shared/telemetry/session', () => ({ getSessionId: jest.fn() }));
 
-jest.mock('../outboxStore', () => ({
+jest.mock('@shared/telemetry/outboxStore', () => ({
   loadPersistedOutbox: jest.fn(),
   persistOutbox: jest.fn(),
 }));

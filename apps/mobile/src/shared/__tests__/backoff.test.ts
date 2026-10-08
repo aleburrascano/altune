@@ -1,4 +1,4 @@
-import { clampedExponent, equalJitterMs } from '../backoff';
+import { clampedExponent, equalJitterMs } from '@shared/backoff';
 
 describe('clampedExponent', () => {
   it.each([

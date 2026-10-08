@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 
-import type { Navigator } from './navigator';
+import type { Navigator } from '@shared/navigation/navigator';
 
 export type { Href } from 'expo-router';
 

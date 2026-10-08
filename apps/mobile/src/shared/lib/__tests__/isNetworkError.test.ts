@@ -1,9 +1,9 @@
-import { isNetworkError } from '../isNetworkError';
+import { isNetworkError } from '@shared/lib/isNetworkError';
 import { apiFetch } from '@shared/api-client';
 import { ApiError } from '@shared/errors';
 import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { describeError } from '../describeError';
+import { describeError } from '@shared/lib/describeError';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -59,7 +59,7 @@ describe('isNetworkError — adversarial catch-block payloads', () => {
 });
 
 describe('the NetworkError the api-client throws', () => {
-  const { __http } = require('../../../../jest/doubles/fetch.js');
+  const { __http } = require('@testing/doubles/fetch.js');
 
   const getSession = supabase.auth.getSession as jest.Mock;
 

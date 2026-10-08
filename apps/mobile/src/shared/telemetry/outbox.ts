@@ -7,8 +7,8 @@ import { isTelemetryGated } from '@shared/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-import { loadPersistedOutbox, persistOutbox } from './outboxStore';
-import { recordEvent, type DiscoveryEvent } from './recordEvent';
+import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
+import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
 
 export type OutboxEntry = DiscoveryEvent & {
   event_id: string;

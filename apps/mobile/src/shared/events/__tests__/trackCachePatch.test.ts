@@ -1,4 +1,4 @@
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import {
   InfiniteQueryObserver,
   notifyManager,
@@ -27,8 +27,8 @@ import {
   restoreTrackPlacements,
   scheduleTrackPatch,
   upsertTrackInCaches,
-} from '../trackCachePatch';
-import { settleTrackPatches } from './settleTrackPatches';
+} from '@shared/events/trackCachePatch';
+import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
