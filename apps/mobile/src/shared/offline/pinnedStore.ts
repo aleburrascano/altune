@@ -124,11 +124,7 @@ function withoutRemoved(
   return kept;
 }
 
-function removeChunk(
-  set: UnpinSetter,
-  get: () => PinnedState,
-  chunk: readonly TrackId[],
-): TrackId[] {
+function removeChunk(set: UnpinSetter, get: () => PinnedState, chunk: readonly TrackId[]) {
   const stillOnDisk = deletePinnedMany(chunk);
   const entries = withoutRemoved(get().entries, chunk, stillOnDisk);
   scheduleSaveIndex(entries);
@@ -162,19 +158,23 @@ async function removeInChunks(
 
 const LOGGED_TRACK_IDS = 20;
 
+function warnDeleteFailed(requested: number, deleteFailed: readonly TrackId[]): void {
+  console.warn(
+    `[offline] ${deleteFailed.length} of ${requested} download(s) could not be removed: file delete failed`,
+    { trackIds: deleteFailed.slice(0, LOGGED_TRACK_IDS) },
+  );
+}
+
+function warnDeadlineStopped(requested: number, untried: number): void {
+  console.warn(
+    `[offline] unpin stopped by the ${UNPIN_DEADLINE_MS}ms deadline; ${untried} of ${requested} download(s) not tried`,
+    { untried },
+  );
+}
+
 function warnUnpinIncomplete(requested: number, run: UnpinRun): void {
-  if (run.deleteFailed.length > 0) {
-    console.warn(
-      `[offline] ${run.deleteFailed.length} of ${requested} download(s) could not be removed: file delete failed`,
-      { trackIds: run.deleteFailed.slice(0, LOGGED_TRACK_IDS) },
-    );
-  }
-  if (run.untried > 0) {
-    console.warn(
-      `[offline] unpin stopped by the ${UNPIN_DEADLINE_MS}ms deadline; ${run.untried} of ${requested} download(s) not tried`,
-      { untried: run.untried },
-    );
-  }
+  if (run.deleteFailed.length > 0) warnDeleteFailed(requested, run.deleteFailed);
+  if (run.untried > 0) warnDeadlineStopped(requested, run.untried);
 }
 
 export type PinnedState = {
