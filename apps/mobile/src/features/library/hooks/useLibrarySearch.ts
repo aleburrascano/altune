@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 const DEBOUNCE_MS = 300;
 const MIN_CHARS = 2;
 
+function committableOf(text: string): string {
+  const trimmed = text.trim();
+  return trimmed.length < MIN_CHARS ? '' : trimmed;
+}
+
 interface UseLibrarySearchReturn {
   inputValue: string;
   onChangeText: (text: string) => void;
@@ -29,19 +34,19 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
   const onChangeText = (text: string): void => {
     setInputValue(text);
     clearDebounce();
-    const trimmed = text.trim();
-    if (trimmed.length < MIN_CHARS) {
+    const committable = committableOf(text);
+    if (committable === '') {
       setCommittedQuery('');
     } else {
       debounceRef.current = setTimeout(() => {
-        setCommittedQuery(trimmed);
+        setCommittedQuery(committable);
       }, DEBOUNCE_MS);
     }
   };
 
   const onSubmit = (): void => {
     clearDebounce();
-    setCommittedQuery(inputValue.trim());
+    setCommittedQuery(committableOf(inputValue));
   };
 
   const onClear = (): void => {

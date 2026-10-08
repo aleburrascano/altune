@@ -83,6 +83,21 @@ describe('useLibrarySearch — a 300ms debounce over a 2-character minimum', () 
     expect(result.current.query).toBe('daft');
   });
 
+  it('onSubmit on a single character commits nothing, matching onChangeText', () => {
+    const { result } = renderHook(() => useLibrarySearch());
+    act(() => result.current.onChangeText('a'));
+    act(() => result.current.onSubmit());
+    expect(result.current.query).toBe('');
+    expect(result.current.hasQuery).toBe(false);
+  });
+
+  it('onSubmit on two characters commits at once, without waiting for the debounce', () => {
+    const { result } = renderHook(() => useLibrarySearch());
+    act(() => result.current.onChangeText('ab'));
+    act(() => result.current.onSubmit());
+    expect(result.current.query).toBe('ab');
+  });
+
   it('onSubmit cancels a pending debounce so a stale timer cannot overwrite the submitted query', () => {
     const { result } = renderHook(() => useLibrarySearch());
     act(() => result.current.onChangeText('daft'));
