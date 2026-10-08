@@ -4,7 +4,6 @@ import { inspect } from 'util';
 
 import { Event } from 'react-native-track-player';
 
-import { fetchAudioUrls } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
@@ -15,7 +14,10 @@ import { _resetPlaybackHealthForTest } from '@features/playback/playbackHealth';
 import { reportingQueueFailure } from '@features/playback/native/queueFailureReport';
 import { redactPlaybackErrorMessage, warnPlayback } from '@features/playback/redactPlaybackError';
 
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn().mockResolvedValue(undefined),
@@ -29,17 +31,20 @@ jest.mock('@shared/auth/supabaseClient', () => ({
     },
   },
 }));
-jest.mock('@shared/api-client/audio', () => ({
-  ...jest.requireActual('@shared/api-client/audio'),
-  fetchAudioUrls: jest.fn(),
-}));
-
 const leaky = () =>
   new Error(
     'GET https://cdn.example/a.mp3?X-Amz-Signature=deadbeef failed, Authorization: Bearer abc.def.ghi',
   );
-const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 let warn: jest.SpyInstance;
+let restorePort: (() => void) | null = null;
+
+function useFailingPresign(error: Error): void {
+  restorePort?.();
+  restorePort = installPlaybackPort({
+    ...createMemoryPlaybackPort(),
+    fetchAudioUrls: () => Promise.reject(error),
+  });
+}
 
 function expectLoggedClean(): void {
   expect(warn).toHaveBeenCalled();
@@ -56,13 +61,15 @@ beforeEach(() => {
 
 afterEach(() => {
   warn.mockRestore();
+  restorePort?.();
+  restorePort = null;
 });
 
 describe('playback logs redact rejections', () => {
   const track = () => libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } });
 
   it('swap-path presign failure', async () => {
-    fetchUrls.mockRejectedValue(leaky());
+    useFailingPresign(leaky());
     await repairActiveToStreaming(track());
     expectLoggedClean();
   });
