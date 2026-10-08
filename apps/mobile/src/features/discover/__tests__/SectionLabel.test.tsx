@@ -38,24 +38,30 @@ function styleOfLabel(text: string): TextStyle {
 function renderHistoryBody(): void {
   render(
     <DiscoverBody
-      view="empty-no-query"
-      searchData={undefined}
-      historyItems={[
-        { query: 'radiohead', query_norm: 'radiohead', executed_at: '2026-01-01T00:00:00.000Z' },
-      ]}
-      filter="all"
-      onFilterChange={jest.fn()}
-      onHistoryTap={jest.fn()}
-      onClearHistory={jest.fn()}
-      onResultTap={jest.fn()}
-      impression={commonProps().impression}
-      onRetry={jest.fn()}
-      onEndReached={jest.fn()}
-      isFetchingNextPage={false}
-      onRefresh={jest.fn()}
-      isRefreshing={false}
-      correction={null}
-      onSearchOriginal={jest.fn()}
+      results={{
+        view: 'empty-no-query',
+        searchData: undefined,
+        filter: 'all',
+        setFilter: jest.fn(),
+        onResultTap: jest.fn(),
+        impression: commonProps().impression,
+        onRetry: jest.fn(),
+        onRefresh: jest.fn(),
+        isRefreshing: false,
+        correction: null,
+        onSearchOriginal: jest.fn(),
+      }}
+      pagination={{
+        onEndReached: jest.fn(),
+        isFetchingNextPage: false,
+      }}
+      history={{
+        items: [
+          { query: 'radiohead', query_norm: 'radiohead', executed_at: '2026-01-01T00:00:00.000Z' },
+        ],
+        onTap: jest.fn(),
+        onClear: jest.fn(),
+      }}
     />,
   );
 }

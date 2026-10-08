@@ -83,8 +83,8 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
 
     const { result, rerender } = renderHook(() => useDiscoverLogic(), { wrapper });
 
-    await waitFor(() => expect(result.current.view).toBe('results'));
-    expect(result.current.resultsIncomplete).toBe(true);
+    await waitFor(() => expect(result.current.results.view).toBe('results'));
+    expect(result.current.results.resultsIncomplete).toBe(true);
     await waitFor(() => expect(degradedEvents()).toHaveLength(1));
     expect(degradedEvents()[0]).toEqual({
       type: 'search_degraded',
@@ -109,14 +109,14 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
-    await waitFor(() => expect(result.current.view).toBe('results'));
+    await waitFor(() => expect(result.current.results.view).toBe('results'));
     expect(degradedEvents()).toHaveLength(0);
 
     act(() => {
-      result.current.onEndReached();
+      result.current.pagination.onEndReached();
     });
 
-    await waitFor(() => expect(result.current.resultsIncomplete).toBe(true));
+    await waitFor(() => expect(result.current.results.resultsIncomplete).toBe(true));
     await waitFor(() => expect(degradedEvents()).toHaveLength(1));
     expect(degradedEvents()[0]).toEqual({
       type: 'search_degraded',
@@ -133,9 +133,9 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
-    await waitFor(() => expect(result.current.view).toBe('results'));
+    await waitFor(() => expect(result.current.results.view).toBe('results'));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    expect(result.current.resultsIncomplete).toBe(false);
+    expect(result.current.results.resultsIncomplete).toBe(false);
     expect(degradedEvents()).toHaveLength(0);
   });
 });

@@ -46,32 +46,7 @@ export function DiscoverScreen(): ReactElement {
             <SuggestionsList suggestions={d.suggestionItems} onSelect={d.onSuggestionSelect} />
           )}
         </SearchBar>
-        <DiscoverBody
-          view={d.view}
-          searchData={d.searchData}
-          resultsIncomplete={d.resultsIncomplete}
-          historyItems={d.historyItems}
-          filter={d.filter}
-          onFilterChange={d.setFilter}
-          onHistoryTap={d.onHistoryTap}
-          onResultTap={d.onResultTap}
-          impression={d.impression}
-          onRetry={d.onRetry}
-          searchError={d.searchError}
-          onEndReached={d.onEndReached}
-          isFetchingNextPage={d.isFetchingNextPage}
-          onRefresh={d.onRefresh}
-          isRefreshing={d.isRefreshing}
-          correction={d.correction}
-          onSearchOriginal={d.onSearchOriginal}
-          onClearHistory={d.onClearHistory}
-          nextPageFailed={d.nextPageFailed}
-          onRetryNextPage={d.onRetryNextPage}
-          clearHistoryFailed={d.clearHistoryFailed}
-          historyFailed={d.historyFailed}
-          onRetryHistory={d.onRetryHistory}
-          refreshFailed={d.refreshFailed}
-        />
+        <DiscoverBody results={d.results} pagination={d.pagination} history={d.history} />
       </DismissKeyboardArea>
     </Screen>
   );

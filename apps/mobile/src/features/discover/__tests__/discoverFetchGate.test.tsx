@@ -162,9 +162,9 @@ describe('discover fetches — remote kill switch', () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     await settle();
 
-    expect(result.current.view).toBe('unavailable');
+    expect(result.current.results.view).toBe('unavailable');
     expect(result.current.suggestionItems).toEqual([]);
-    expect(result.current.historyItems).toEqual([]);
+    expect(result.current.history.items).toEqual([]);
   });
 
   it('searches again when the switch is turned back on, without a remount', async () => {
@@ -201,7 +201,7 @@ describe('discover fetches — remote kill switch', () => {
     async function failHistoryLoad() {
       mockHistory.mockRejectedValue(new Error('history down'));
       const hook = renderHook(() => useDiscoverLogic(), { wrapper });
-      await waitFor(() => expect(hook.result.current.historyFailed).toBe(true));
+      await waitFor(() => expect(hook.result.current.history.failed).toBe(true));
       return hook;
     }
 
@@ -211,7 +211,7 @@ describe('discover fetches — remote kill switch', () => {
       switchDiscoveryFetches(false);
 
       await act(async () => {
-        result.current.onRetryHistory();
+        result.current.history.onRetry();
         await Promise.resolve();
       });
 
@@ -223,7 +223,7 @@ describe('discover fetches — remote kill switch', () => {
       mockHistory.mockClear().mockResolvedValue(HISTORY);
 
       await act(async () => {
-        result.current.onRetryHistory();
+        result.current.history.onRetry();
         await Promise.resolve();
       });
 
