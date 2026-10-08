@@ -612,7 +612,7 @@ func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
 		return []domain.SearchResult{trackResult(provider, "t1", "Track", "Artist", nil)}, nil
 	}
 
-	groups, partial := svc.fanOutByIdentity(context.Background(), identity, "Artist", fetch)
+	groups, partial := svc.fanOutByIdentity(context.Background(), identity, fetch)
 
 	if len(groups) != 1 {
 		t.Fatalf("groups = %d, want 1 (the non-panicking provider)", len(groups))

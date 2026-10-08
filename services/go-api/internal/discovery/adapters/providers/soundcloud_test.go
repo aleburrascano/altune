@@ -843,52 +843,6 @@ func TestSoundCloud_doSearch_cancelledAfterFirstPageReturnsPartialSuccess(t *tes
 	}
 }
 
-func TestSoundCloudAPIAdapter_ResolveArtistID(t *testing.T) {
-	t.Run("top user hit wins", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.URL.Path, "/search/users") {
-				t.Errorf("unexpected path %q", r.URL.Path)
-			}
-			_, _ = w.Write([]byte(`{"collection":[
-				{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"},
-				{"id":42,"kind":"user","username":"Che Fan Page","permalink_url":"https://soundcloud.com/chefan"}
-			]}`))
-		}))
-		defer srv.Close()
-
-		a := newTestSoundCloudAPI(srv, nil)
-		id, ok := a.ResolveArtistID(context.Background(), "Che")
-		if !ok || id != "909010162" {
-			t.Errorf("ResolveArtistID = (%q, %v), want the top hit's numeric id", id, ok)
-		}
-	})
-
-	t.Run("blank name sits out without a request", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			t.Error("no HTTP request expected for a blank name")
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer srv.Close()
-
-		a := newTestSoundCloudAPI(srv, nil)
-		if id, ok := a.ResolveArtistID(context.Background(), "   "); ok || id != "" {
-			t.Errorf("ResolveArtistID = (%q, %v), want a silent miss", id, ok)
-		}
-	})
-
-	t.Run("search error is a miss not an error", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer srv.Close()
-
-		a := newTestSoundCloudAPI(srv, nil)
-		if id, ok := a.ResolveArtistID(context.Background(), "Che"); ok || id != "" {
-			t.Errorf("ResolveArtistID = (%q, %v), want ok=false so the provider sits out", id, ok)
-		}
-	})
-}
-
 func TestSoundCloud_doSearch_capsAtMaxResults(t *testing.T) {
 	var pages int
 	var srv *httptest.Server

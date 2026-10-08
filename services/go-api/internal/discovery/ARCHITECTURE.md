@@ -533,7 +533,6 @@ can. The capability seams (all in `ports/`):
 | `ArtworkResolver` + `IdentityArtworkResolver` + `SourcedArtworkResolver` + `TaggingArtworkResolver` | the artwork chain (chain-member vs service-facing) |
 | `MetadataEnricher` / `DiscogsEnricher` / `LastFmEnricher` / `DeezerEnricher` / `LyricsProvider` | detail-open enrichment |
 | `MBDiscographyAnchor` | the MB release-group set for the detail verifier |
-| `ArtistIDResolver` | name→id (SoundCloud fallback only) |
 | `RelatedTracksProvider` | "related tracks" (SoundCloud) |
 | `ChartProvider` | Last.fm charts |
 | `ArtistIdentityResolver` / `RelationshipQuerier` | MB identity + consensus |

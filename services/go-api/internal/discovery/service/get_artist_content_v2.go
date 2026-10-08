@@ -44,7 +44,7 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 }
 
 func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) (releaseGroups []ReleaseGroup, partial bool) {
-	idGroups, partial := s.fanOutByIdentity(ctx, identity, "", fetch)
+	idGroups, partial := s.fanOutByIdentity(ctx, identity, fetch)
 	groups := make([]ReleaseGroup, 0, len(idGroups))
 	for _, g := range idGroups {
 		groups = append(groups, ReleaseGroup{Releases: g, IDVerified: true})

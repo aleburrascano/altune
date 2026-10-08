@@ -30,10 +30,6 @@ type MBDiscographyAnchor interface {
 	ReleaseGroupTitles(ctx context.Context, mbid string) ([]string, error)
 }
 
-type ArtistIDResolver interface {
-	ResolveArtistID(ctx context.Context, name string) (externalID string, ok bool)
-}
-
 type RelatedTracksProvider interface {
 	GetRelatedTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
