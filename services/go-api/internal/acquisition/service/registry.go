@@ -62,16 +62,6 @@ func (r *SourceRegistry) FindReportingOutage(ctx context.Context, req ports.Find
 	return mergeSlotsReportingOutage(ctx, r.sources, slots, errs)
 }
 
-func mergeSlots(
-	ctx context.Context,
-	sources []ports.AudioSource,
-	slots [][]ports.AudioCandidate,
-	errs []error,
-) ([]ports.AudioCandidate, error) {
-	merged, _, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
-	return merged, err
-}
-
 func mergeSlotsReportingOutage(
 	ctx context.Context,
 	sources []ports.AudioSource,
