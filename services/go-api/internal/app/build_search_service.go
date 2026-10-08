@@ -238,8 +238,7 @@ func BuildDiscoveryProviders(ctx context.Context, cfg *config.Config, transport 
 func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
 
-	deezerClient := cf.discovery()
-	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
+	providerList = append(providerList, providers.NewDeezerAdapter(cf.discovery()))
 
 	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
 		providerList = append(providerList, am)

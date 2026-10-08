@@ -347,16 +347,9 @@ func (a *App) buildAudioStore(ctx context.Context) (catalogPorts.AudioStore, err
 		return nil, missingAudioStoreError(a.cfg)
 	}
 	if a.cfg.HasOCIS3() {
-		store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
-			Endpoint:  a.cfg.OCIS3Endpoint,
-			AccessKey: a.cfg.OCIS3AccessKey,
-			SecretKey: a.cfg.OCIS3SecretKey,
-			Bucket:    a.cfg.OCIS3Bucket,
-			Region:    a.cfg.OCIS3Region,
-		})
+		store, err := a.buildOCIAudioStore(ctx)
 		if err == nil {
-			slog.InfoContext(ctx, "audio store: OCI Object Storage")
-			return a.scopeAudioStore(ctx, store), nil
+			return store, nil
 		}
 		if a.cfg.MusicDir == "" {
 			return nil, fmt.Errorf("audio store: OCI S3 is configured but failed to initialize and no MUSIC_DIR fallback is set: %w", err)
@@ -370,6 +363,21 @@ func (a *App) buildAudioStore(ctx context.Context) (catalogPorts.AudioStore, err
 	}
 
 	return nil, missingAudioStoreError(a.cfg)
+}
+
+func (a *App) buildOCIAudioStore(ctx context.Context) (catalogPorts.AudioStore, error) {
+	store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
+		Endpoint:  a.cfg.OCIS3Endpoint,
+		AccessKey: a.cfg.OCIS3AccessKey,
+		SecretKey: a.cfg.OCIS3SecretKey,
+		Bucket:    a.cfg.OCIS3Bucket,
+		Region:    a.cfg.OCIS3Region,
+	})
+	if err != nil {
+		return nil, err
+	}
+	slog.InfoContext(ctx, "audio store: OCI Object Storage")
+	return a.scopeAudioStore(ctx, store), nil
 }
 
 func (a *App) scopeAudioStore(ctx context.Context, store catalogPorts.AudioStore) catalogPorts.AudioStore {

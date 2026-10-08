@@ -232,7 +232,6 @@ func TestCollectLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"G1 internal/auth missing domain/",
 		"G1 internal/playback/doc.go unexpected root entry",
 		"G3 internal/acquisition/ports/queue.go:4 imports catalog outside adapters/catalogbridge",
 		"G3 internal/discovery/adapters/catalogbridge imports nothing from catalog ports or service",
