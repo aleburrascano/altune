@@ -2,8 +2,12 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { useAlbumDiscovery } from '../hooks/useAlbumDiscovery';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
+import { useAlbumDiscovery } from '@/features/detail/hooks/useAlbumDiscovery';
+import {
+  createTestQueryClient,
+  createWrapper,
+  mockSupabaseSession,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -12,7 +16,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 const mockResolveEntityQuery = jest.fn();
-jest.mock('../resolve-entity-query', () => ({
+jest.mock('@/features/detail/domain/resolveEntityQuery', () => ({
   resolveEntityQuery: (...args: unknown[]) => mockResolveEntityQuery(...args),
 }));
 
@@ -28,7 +32,7 @@ describe('bounding the fetch', () => {
 
   beforeEach(() => {
     mockResolveEntityQuery.mockImplementation(
-      jest.requireActual('../resolve-entity-query').resolveEntityQuery,
+      jest.requireActual('../domain/resolveEntityQuery').resolveEntityQuery,
     );
   });
 
@@ -130,7 +134,7 @@ describe('useAlbumDiscovery reopened against the 30-minute content cache window'
 
   beforeEach(() => {
     mockResolveEntityQuery.mockImplementation(
-      jest.requireActual('../resolve-entity-query').resolveEntityQuery,
+      jest.requireActual('../domain/resolveEntityQuery').resolveEntityQuery,
     );
     (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
   });

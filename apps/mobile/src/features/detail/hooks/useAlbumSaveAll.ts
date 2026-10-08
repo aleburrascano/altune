@@ -4,11 +4,15 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
 
-import { toCreateTrackRequest } from '../save-cache';
-import { runBounded, SAVE_ALL_CONCURRENCY, type BatchOutcome } from '../save-all';
-import { trackExtras } from '../extras-accessors';
-import { ownedFromExtras } from './useOwnedTrack';
-import type { useSaveTrack } from './useSaveTrack';
+import { toCreateTrackRequest } from '@/features/detail/save-cache';
+import {
+  runBounded,
+  SAVE_ALL_CONCURRENCY,
+  type BatchOutcome,
+} from '@/features/detail/domain/save-all';
+import { trackExtras } from '@/features/detail/extras-accessors';
+import { ownedFromExtras } from '@/features/detail/hooks/useOwnedTrack';
+import type { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
 
 function _albumExtras(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult['extras'] {
   const ownExtras = trackExtras(track.extras);

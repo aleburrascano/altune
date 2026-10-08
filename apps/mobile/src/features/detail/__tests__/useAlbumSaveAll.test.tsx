@@ -4,8 +4,8 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import { useAlbumSaveAll } from '../hooks/useAlbumSaveAll';
-import { SAVE_ALL_CONCURRENCY } from '../save-all';
+import { useAlbumSaveAll } from '@/features/detail/hooks/useAlbumSaveAll';
+import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/save-all';
 
 const album: DiscoveryResult = {
   kind: 'album',

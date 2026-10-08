@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { resolveEntityQuery } from '../resolve-entity-query';
-import { normalizeForCompare } from '../text-compare';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled } from './detailFetchGate';
+import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
+import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/detailFetchGate';
 
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
   useEffect(() => {

@@ -2,8 +2,8 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
-import { SAVE_ALL_CONCURRENCY } from '../save-all';
+import { useAlbumDetailState } from '@/features/detail/hooks/useAlbumDetailState';
+import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/save-all';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
 
 jest.mock('expo-router', () => ({
@@ -14,16 +14,16 @@ const mockUseSaveTrack = jest.fn();
 const mockUseAlbumTracks = jest.fn();
 const mockUseLibraryTracksForAlbum = jest.fn();
 
-jest.mock('../hooks/useSaveTrack', () => ({
+jest.mock('@/features/detail/hooks/useSaveTrack', () => ({
   useSaveTrack: () => mockUseSaveTrack(),
 }));
-jest.mock('../hooks/useAlbumTracks', () => ({
+jest.mock('@/features/detail/hooks/useAlbumTracks', () => ({
   useAlbumTracks: () => mockUseAlbumTracks(),
 }));
-jest.mock('../hooks/useLibraryTracks', () => ({
+jest.mock('@/features/detail/hooks/useLibraryTracks', () => ({
   useLibraryTracksForAlbum: () => mockUseLibraryTracksForAlbum(),
 }));
-jest.mock('../hooks/useAlbumDiscovery', () => ({
+jest.mock('@/features/detail/hooks/useAlbumDiscovery', () => ({
   useAlbumDiscovery: () => ({
     tracks: [],
     isLoading: false,
@@ -32,7 +32,7 @@ jest.mock('../hooks/useAlbumDiscovery', () => ({
     refetch: jest.fn(),
   }),
 }));
-jest.mock('../hooks/useOwnedPlayback', () => ({
+jest.mock('@/features/detail/hooks/useOwnedPlayback', () => ({
   useOwnedPlayback: () => ({
     owned: { playable: [], unownedCount: mockUnownedCount, acquiringCount: 0 },
     playButton: { label: 'Play', disabled: true },

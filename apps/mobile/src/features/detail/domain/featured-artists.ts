@@ -1,6 +1,6 @@
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import { trackExtras } from './extras-accessors';
+import { trackExtras } from '@/features/detail/extras-accessors';
 
 const _FEAT_RE = /(?:\(|\[)?\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+?)(?:\)|\]|$)/i;
 

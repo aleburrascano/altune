@@ -1,4 +1,4 @@
-import { runBounded, SAVE_ALL_CONCURRENCY } from '../save-all';
+import { runBounded, SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/save-all';
 
 type Deferred = { resolve: () => void; reject: (e: unknown) => void };
 

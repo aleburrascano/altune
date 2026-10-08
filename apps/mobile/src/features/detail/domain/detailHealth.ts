@@ -4,7 +4,7 @@ import { isAbort } from '@shared/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
 
-import { hasDegradedStatus } from './content-status';
+import { hasDegradedStatus } from '@/features/detail/domain/content-status';
 
 export type EnrichmentProvider = 'musicbrainz' | 'deezer' | 'lastfm';
 

@@ -29,10 +29,14 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
-import { useDetailHandoff } from '../handoff-context';
-import type { DetailPort } from '../ports/detailPort';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { optimisticTrack, optimisticTrackId, saveIdempotencyKey } from '../save-cache';
+import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import {
+  optimisticTrack,
+  optimisticTrackId,
+  saveIdempotencyKey,
+} from '@/features/detail/save-cache';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 

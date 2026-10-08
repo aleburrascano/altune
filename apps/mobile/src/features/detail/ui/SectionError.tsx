@@ -5,7 +5,7 @@ import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import type { ContentFailure } from '@features/detail/content-status';
+import type { ContentFailure } from '@features/detail/domain/content-status';
 
 import { sharedStyles } from '@features/detail/ui/styles';
 

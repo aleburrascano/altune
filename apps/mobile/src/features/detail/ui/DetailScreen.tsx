@@ -9,8 +9,8 @@ import { useArtistDiscovery } from '@features/detail/hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
 import { useLateralNav } from '@features/detail/hooks/useLateralNav';
-import { DetailHandoffProvider } from '@features/detail/handoff-context';
-import { detailRouteFor } from '@features/detail/navigation';
+import { DetailHandoffProvider } from '@features/detail/hooks/useDetailHandoff';
+import { detailRouteFor } from '@features/detail/domain/detailNavigation';
 
 import { TrackDetailBody } from '@features/detail/ui/TrackDetailBody';
 import { AlbumDetailBody } from '@features/detail/ui/AlbumDetailBody';

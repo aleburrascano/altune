@@ -1,4 +1,4 @@
-import { normalizeForCompare } from '../text-compare';
+import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
 
 describe('normalizeForCompare', () => {
   it('matches two titles differing only in case and surrounding whitespace', () => {

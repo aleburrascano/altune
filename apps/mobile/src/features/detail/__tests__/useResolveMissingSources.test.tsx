@@ -4,12 +4,15 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
-import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
-import { createTestQueryClient, createWrapper } from './support/queryHarness';
+import { useResolveMissingSources } from '@/features/detail/hooks/useResolveMissingSources';
+import {
+  createTestQueryClient,
+  createWrapper,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const mockQueryFn = jest.fn<Promise<DiscoveryResult[]>, []>();
 
-jest.mock('../resolve-entity-query', () => ({
+jest.mock('@/features/detail/domain/resolveEntityQuery', () => ({
   resolveEntityQuery: (kind: string, q: string, limit: number, _port: unknown) => ({
     queryKey: ['resolve-entity', kind, q, limit],
     queryFn: () => mockQueryFn(),

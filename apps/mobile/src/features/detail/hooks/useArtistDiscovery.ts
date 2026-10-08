@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { resolveEntityQuery } from '../resolve-entity-query';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
-import { useLoggedSearchFailure } from './useLoggedSearchFailure';
+import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled, useGatedRefetch } from '@/features/detail/hooks/detailFetchGate';
+import { useLoggedSearchFailure } from '@/features/detail/hooks/useLoggedSearchFailure';
 
 const LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
 

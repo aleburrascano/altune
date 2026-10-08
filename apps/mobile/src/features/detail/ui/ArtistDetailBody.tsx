@@ -12,7 +12,7 @@ import {
   useArtistDetailState,
   type ArtistDetailState,
 } from '@features/detail/hooks/useArtistDetailState';
-import type { DetailRoute } from '@features/detail/navigation';
+import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { compactCount } from '@features/detail/ui/formatters';
 import { buildArtistFacts } from '@features/detail/ui/artistDetailFacts';

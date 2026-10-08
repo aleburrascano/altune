@@ -2,12 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { contentFailure, DETAIL_CONTENT_STALE_MS, type ContentFailure } from '../content-status';
-import { fetchTallyingOutcome } from '../detailHealth';
-import type { DetailPort } from '../ports/detailPort';
-import { useDetailPort } from '../ports/DetailPortProvider';
-import { useDetailFetchEnabled } from './detailFetchGate';
-import { useContentFetchRetry } from './useContentFetchRetry';
+import {
+  contentFailure,
+  DETAIL_CONTENT_STALE_MS,
+  type ContentFailure,
+} from '@/features/detail/domain/content-status';
+import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/detailFetchGate';
+import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];

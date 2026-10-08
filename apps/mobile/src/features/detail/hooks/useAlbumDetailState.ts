@@ -3,19 +3,24 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
-import { type OwnedSplit } from '../owned-playback';
-import { type ContentFailure } from '../content-status';
+import { type OwnedSplit } from '@/features/detail/owned-playback';
+import { type ContentFailure } from '@/features/detail/domain/content-status';
 
-import { useOpenDetail, type DetailRoute } from '../navigation';
-import { useAlbumDiscovery } from './useAlbumDiscovery';
-import { useAlbumTracks } from './useAlbumTracks';
-import { useLibraryTracksForAlbum } from './useLibraryTracks';
-import { useSaveTrack } from './useSaveTrack';
-import { enrichAlbumTrack, useAlbumSaveAll, type LastBatch } from './useAlbumSaveAll';
-import { useOwnedPlayback } from './useOwnedPlayback';
-import { trackExtras } from '../extras-accessors';
-import { normalizeForCompare } from '../text-compare';
-import type { OwnedTrack } from './useOwnedTrack';
+import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
+import { useOpenDetail } from '@/features/detail/hooks/useOpenDetail';
+import { useAlbumDiscovery } from '@/features/detail/hooks/useAlbumDiscovery';
+import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
+import { useLibraryTracksForAlbum } from '@/features/detail/hooks/useLibraryTracks';
+import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
+import {
+  enrichAlbumTrack,
+  useAlbumSaveAll,
+  type LastBatch,
+} from '@/features/detail/hooks/useAlbumSaveAll';
+import { useOwnedPlayback } from '@/features/detail/hooks/useOwnedPlayback';
+import { trackExtras } from '@/features/detail/extras-accessors';
+import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
+import type { OwnedTrack } from '@/features/detail/hooks/useOwnedTrack';
 
 function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
   return ownedTitles.has(normalizeForCompare(title));

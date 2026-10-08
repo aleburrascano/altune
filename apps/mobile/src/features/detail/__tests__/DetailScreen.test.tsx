@@ -4,8 +4,8 @@ import { render, screen } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { clearDetailHandoffs, detailHref } from '@shared/lib/detail-handoff';
 
-import { useDetailHandoff } from '../handoff-context';
-import { DetailScreen } from '../ui/DetailScreen';
+import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
+import { DetailScreen } from '@/features/detail/ui/DetailScreen';
 
 let mockParams: { handoff?: string } = {};
 jest.mock('expo-router', () => {
@@ -22,29 +22,29 @@ jest.mock('expo-router', () => {
     Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
   };
 });
-jest.mock('../hooks/useResolveMissingSources', () => ({
+jest.mock('@/features/detail/hooks/useResolveMissingSources', () => ({
   useResolveMissingSources: (result: unknown) => ({ resolved: result }),
 }));
-jest.mock('../hooks/useArtistDiscovery', () => ({
+jest.mock('@/features/detail/hooks/useArtistDiscovery', () => ({
   useArtistDiscovery: () => ({ imageUrl: null }),
 }));
-jest.mock('../hooks/useDetailEnrichments', () => ({
+jest.mock('@/features/detail/hooks/useDetailEnrichments', () => ({
   useDetailEnrichments: () => ({
     errors: { musicbrainz: false, deezer: false, lastfm: false },
   }),
 }));
-jest.mock('../hooks/useLateralNav', () => ({ useLateralNav: () => ({}) }));
-jest.mock('../ui/secondaryLine', () => ({ secondaryLine: () => null }));
+jest.mock('@/features/detail/hooks/useLateralNav', () => ({ useLateralNav: () => ({}) }));
+jest.mock('@/features/detail/ui/secondaryLine', () => ({ secondaryLine: () => null }));
 
 function MockHandoffProbe({ result }: { result: DiscoveryResult }) {
   const handoff = useDetailHandoff();
   return <Text>{`${result.title}|${handoff?.searchId ?? 'none'}`}</Text>;
 }
-jest.mock('../ui/TrackDetailBody', () => ({
+jest.mock('@/features/detail/ui/TrackDetailBody', () => ({
   TrackDetailBody: (props: { result: DiscoveryResult }) => <MockHandoffProbe {...props} />,
 }));
-jest.mock('../ui/AlbumDetailBody', () => ({ AlbumDetailBody: () => null }));
-jest.mock('../ui/ArtistDetailBody', () => ({ ArtistDetailBody: () => null }));
+jest.mock('@/features/detail/ui/AlbumDetailBody', () => ({ AlbumDetailBody: () => null }));
+jest.mock('@/features/detail/ui/ArtistDetailBody', () => ({ ArtistDetailBody: () => null }));
 
 function track(title: string): DiscoveryResult {
   return {
@@ -108,7 +108,7 @@ describe('DetailScreen back button', () => {
         };
       });
       freshDetailHref = require('@shared/lib/detail-handoff').detailHref;
-      FreshDetailScreen = require('../ui/DetailScreen').DetailScreen;
+      FreshDetailScreen = require('@/features/detail/ui/DetailScreen').DetailScreen;
     });
 
     const first = freshDetailHref('/discover/detail', track('First'));
