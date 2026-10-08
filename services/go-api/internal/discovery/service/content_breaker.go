@@ -66,8 +66,6 @@ func guardedFetch[T any](
 	return runAdmitted(callerCtx, c, breakerOutcome, call)
 }
 
-// runAdmitted runs call for an already admitted breakerCall and settles it with
-// outcome(err); a panic in call records a failure before it propagates.
 func runAdmitted[T any](
 	callerCtx context.Context,
 	c breakerCall,
