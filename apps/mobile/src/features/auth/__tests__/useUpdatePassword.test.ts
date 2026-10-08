@@ -268,3 +268,24 @@ describe('useUpdatePassword: reporting whether the other sessions were revoked',
     expect(signOut).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('useUpdatePassword: failure logging', () => {
+  it('warns with the projected detail and no password', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    updateUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: 'AuthApiError', status: 400, code: 'bad', message: 'Nope' },
+    });
+
+    await updatePassword();
+
+    expect(warn).toHaveBeenCalledWith('[auth] password update failed', {
+      name: 'AuthApiError',
+      code: 'bad',
+      status: 400,
+      message: 'Nope',
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('new-password');
+    warn.mockRestore();
+  });
+});

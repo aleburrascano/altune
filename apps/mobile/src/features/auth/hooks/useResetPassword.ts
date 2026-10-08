@@ -1,6 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '@features/auth/attemptLockout';
+import { supabaseErrorDetail } from '@features/auth/errorDetail';
 import type { TransientAuthReason } from '@features/auth/errorReason';
 import { authRedirectUrl } from '@features/auth/authRedirect';
 import { classifyAuthError, type SupabaseAuthErrorLike } from '@features/auth/supabaseAuthError';
@@ -25,6 +26,7 @@ async function requestReset(email: string) {
 }
 
 function failure(error: SupabaseAuthErrorLike) {
+  console.warn('[auth] password reset request failed', supabaseErrorDetail(error));
   return { kind: 'error', reason: classifyAuthError(error) } as const;
 }
 
