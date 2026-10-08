@@ -648,3 +648,11 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 		t.Error("scheduler must not be wired when the audio store fails")
 	}
 }
+
+func TestAcquisitionSources_ProviderReplayUsesOnlyFixture(t *testing.T) {
+	cfg := &config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: t.TempDir(), YtDLPEnabled: true}
+	sources, _ := (&App{cfg: cfg}).acquisitionSources()
+	if names := sourceNames(sources); len(names) != 1 || names[0] != fixture.SourceName {
+		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
+	}
+}
