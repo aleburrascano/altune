@@ -6,7 +6,8 @@ type ProviderComponent = ComponentType<{ children: ReactNode }>;
 
 function selectPlaybackProvider(): ProviderComponent {
   if (playsThroughTrackPlayer)
-    return require('@features/playback/native/trackPlayerPlaybackProvider').TrackPlayerPlaybackProvider;
+    return require('@features/playback/native/trackPlayerPlaybackProvider')
+      .TrackPlayerPlaybackProvider;
   return require('@features/playback/native/expoGoPlaybackProvider').ExpoGoPlaybackProvider;
 }
 
