@@ -1,0 +1,21 @@
+{
+  "in_flight": 1,
+  "succeeded": 2,
+  "failed": 3,
+  "rejected": 4,
+  "paused": false,
+  "queue_depth": 5,
+  "queue_capacity": 6,
+  "oldest_pending_age_ms": 0,
+  "queue_depth_known": false,
+  "verification": {
+    "ffprobe": false,
+    "ffmpeg": false,
+    "fpcalc": false,
+    "yt_dlp": false,
+    "streamrip": false
+  },
+  "jobs": [],
+  "recent": []
+}
+
