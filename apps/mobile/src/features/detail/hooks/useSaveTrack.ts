@@ -2,7 +2,6 @@ import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanst
 
 import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
-import { createTrack } from '@shared/api-client/tracks';
 import { acquisitionOf, toTrackStatus } from '@shared/api-client/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
@@ -23,6 +22,8 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { useDetailHandoff } from '../handoff-context';
+import type { DetailPort } from '../ports/detailPort';
+import { useDetailPort } from '../ports/DetailPortProvider';
 import { optimisticTrack, optimisticTrackId, saveIdempotencyKey } from '../save-cache';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
@@ -55,8 +56,8 @@ function saveFailure(error: Error | null, body: SaveBody): SaveFailure | null {
 
 type Handoff = ReturnType<typeof useDetailHandoff>;
 
-function sendSave(body: CreateTrackRequest): Promise<TrackResponse> {
-  return createTrack(body, saveIdempotencyKey(body)).then((saved) => {
+function sendSave(port: DetailPort, body: CreateTrackRequest): Promise<TrackResponse> {
+  return port.createTrack(body, saveIdempotencyKey(body)).then((saved) => {
     rememberDownloadMeta(saved.id, {
       title: saved.title,
       artist: saved.artist,
@@ -138,10 +139,11 @@ function settleFailed(
 export function useSaveTrack(): SaveTrack {
   const queryClient = useQueryClient();
   const handoff = useDetailHandoff();
+  const port = useDetailPort();
 
   const mutation = useAppMutation({
     ...guardedMutationOptions<TrackResponse, CreateTrackRequest, SaveContext>({
-      mutationFn: sendSave,
+      mutationFn: (body) => sendSave(port, body),
       onMutate: (body) => placeOptimistic(queryClient, body),
       onSuccess: (saved, body, context) => {
         adoptSaved(queryClient, saved, context);

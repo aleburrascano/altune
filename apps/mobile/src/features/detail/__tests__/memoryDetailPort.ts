@@ -163,6 +163,7 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): DetailPort 
   const albumTracks = { ...seed.albumTracks };
   const relatedTracks = { ...seed.relatedTracksByExternalId };
   const artistContent = { ...seed.artistContent };
+  const createdByKey = new Map<string, TrackResponse>();
   let created = 0;
 
   return {
@@ -183,10 +184,13 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): DetailPort 
         signal,
         () => artistContent[artistName] ?? { top_tracks: emptyContent(), albums: emptyContent() },
       ),
-    createTrack: async (body) => {
+    createTrack: async (body, idempotencyKey) => {
+      const replayed = idempotencyKey === undefined ? undefined : createdByKey.get(idempotencyKey);
+      if (replayed !== undefined) return replayed;
       created += 1;
       const track = trackFrom(body, `created-${created}`);
       tracks.push(track);
+      if (idempotencyKey !== undefined) createdByKey.set(idempotencyKey, track);
       return track;
     },
     getTracks: ({ limit, offset }, signal) =>

@@ -5,21 +5,22 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useRetryTrack } from '../hooks/useRetryTrack';
-import { createTestQueryClient, createWrapper } from './support/queryHarness';
+import { createMemoryDetailPort } from './memoryDetailPort';
+import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 const mockEnqueueCritical = jest.fn();
 jest.mock('@shared/telemetry/outbox', () => ({
   enqueueCritical: (event: unknown) => mockEnqueueCritical(event),
 }));
-jest.mock('@shared/api-client/tracks', () => ({
-  retryAcquisition: (trackId: unknown) => mockRetryAcquisition(trackId),
-}));
 
-let wrapper: ReturnType<typeof createWrapper>;
+let wrapper: ReturnType<typeof createPortWrapper>;
 
 beforeEach(() => {
-  wrapper = createWrapper(createTestQueryClient({ mutations: true }));
+  wrapper = createPortWrapper(createTestQueryClient({ mutations: true }), {
+    detail: createMemoryDetailPort(),
+    acquisition: { retryAcquisition: (trackId) => mockRetryAcquisition(trackId) },
+  });
 });
 
 const TRACK_ID = asTrackId('server-1');
