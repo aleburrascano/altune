@@ -13,7 +13,7 @@ import {
   type ListTracksResponse,
   type TrackAcquisition,
   type TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/trackResponse';
 import {
   asCount,
   parseArray,

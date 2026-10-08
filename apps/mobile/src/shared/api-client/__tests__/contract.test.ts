@@ -439,13 +439,13 @@ describe('routes contract, derived from services/go-api and the api-client sourc
   });
 });
 
-describe('TrackResponse (types.ts) <-> service.TrackDTO (aliased TrackResponse in track_handler.go)', () => {
+describe('TrackResponse (trackResponse.ts) <-> service.TrackDTO (aliased TrackResponse in track_handler.go)', () => {
   const trackDtoSource = fs.readFileSync(
     goPath('internal', 'catalog', 'service', 'track_dto.go'),
     'utf8',
   );
   const goFields = deriveGoFields(trackDtoSource, extractGoStruct(trackDtoSource, 'TrackDTO'));
-  const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
+  const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
   const tsLines = extractTsTypeLines(typesSource, 'TrackResponse');
 
   const hiddenGoFields = [
@@ -477,7 +477,7 @@ describe('TrackResponse (types.ts) <-> service.TrackDTO (aliased TrackResponse i
   });
 });
 
-describe('ListTracksResponse (types.ts) <-> ListTracksResponse (track_handler.go)', () => {
+describe('ListTracksResponse (trackResponse.ts) <-> ListTracksResponse (track_handler.go)', () => {
   it('has the same field set on both sides', () => {
     const trackHandlerSource = fs.readFileSync(
       goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
@@ -487,7 +487,7 @@ describe('ListTracksResponse (types.ts) <-> ListTracksResponse (track_handler.go
       trackHandlerSource,
       extractGoStruct(trackHandlerSource, 'ListTracksResponse'),
     );
-    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'ListTracksResponse');
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -496,7 +496,7 @@ describe('ListTracksResponse (types.ts) <-> ListTracksResponse (track_handler.go
   });
 });
 
-describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go)', () => {
+describe('CreateTrackRequest (trackResponse.ts) <-> CreateTrackRequest (track_handler.go)', () => {
   it('has the same field set on both sides, including the track_number the album-context save sends', () => {
     const trackHandlerSource = fs.readFileSync(
       goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
@@ -506,7 +506,7 @@ describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go
       trackHandlerSource,
       extractGoStruct(trackHandlerSource, 'CreateTrackRequest'),
     );
-    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -524,7 +524,7 @@ describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go
       trackHandlerSource,
       extractGoStruct(trackHandlerSource, 'CreateTrackRequest'),
     );
-    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'trackResponse.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
     const omitemptyFields = [...goFields.entries()].filter(([, f]) => f.omitempty).map(([k]) => k);
@@ -535,12 +535,12 @@ describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go
   });
 });
 
-describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
+describe('Playlist DTOs (playlist_handler.go) <-> playlistResponse.ts', () => {
   const playlistHandlerSource = fs.readFileSync(
     goPath('internal', 'catalog', 'adapters', 'handler', 'playlist_handler.go'),
     'utf8',
   );
-  const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
+  const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'playlistResponse.ts'), 'utf8');
 
   it.each([
     'PlaylistResponse',

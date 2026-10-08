@@ -133,7 +133,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
       goKinds.add(match[1]!);
     }
 
-    const typesSource = fs.readFileSync(path.join(__dirname, '..', 'types.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(__dirname, '..', 'queueSource.ts'), 'utf8');
     const queueSourceBlock = typesSource.slice(typesSource.indexOf('export type QueueSource ='));
     const tsKinds = new Set<string>();
     for (const match of queueSourceBlock.matchAll(/kind:\s*'(\w+)'/g)) {
