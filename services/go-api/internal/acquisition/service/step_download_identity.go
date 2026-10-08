@@ -122,7 +122,11 @@ func (s *DownloadStep) fetchPreview(
 	defer s.limiter.Release()
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	return previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
+	path, err := previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
+	if err != nil {
+		return "", candidateTimedOut(ctx, fetchCtx, candidate, err)
+	}
+	return path, nil
 }
 
 func (s *DownloadStep) identify(

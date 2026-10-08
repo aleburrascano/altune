@@ -388,12 +388,26 @@ func (s *DownloadStep) fetchFull(
 	defer cancel()
 	filePath, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
 	if err != nil {
+		err = candidateTimedOut(ctx, fetchCtx, candidate, err)
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", logSafeError(err))
 		return "", &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
 	}
 	return filePath, nil
+}
+
+// candidateTimedOut reclassifies a per-candidate deadline as the source being
+// unavailable. The deadline error is deliberately not wrapped: failureCode
+// reads any context.DeadlineExceeded in the chain as job cancellation.
+func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCandidate, err error) error {
+	if !ports.RunTimedOut(jobCtx, fetchCtx) {
+		return err
+	}
+	return &ports.SourceUnavailableError{
+		Source: candidate.Source,
+		Err:    fmt.Errorf("candidate timed out: %s", logSafeError(err)),
+	}
 }
 
 type verificationResult struct {

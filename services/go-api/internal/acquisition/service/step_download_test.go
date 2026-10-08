@@ -1713,6 +1713,22 @@ func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T
 	}
 }
 
+func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
+	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[ports.SourceName]int{}}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "u1", Source: "streamrip"}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := NewDownloadStep(fetcher, WithCandidateTimeout(20*time.Millisecond)).Execute(ctx, ac, afterSelect{})
+
+	if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != domain.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s (err=%v)", code, domain.FailureSourceUnavailable, err)
+	}
+	if !willRetry(withJobAttempt(ctx, 1), err) {
+		t.Fatalf("willRetry = false for %v", err)
+	}
+}
+
 func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 	for _, width := range []int{1, 2} {
 		t.Run(fmt.Sprintf("width%d", width), func(t *testing.T) {
