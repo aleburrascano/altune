@@ -8,7 +8,10 @@ import { Text } from '@shared/ui/primitives/Text';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 
-import { useArtistDetailState, type ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
+import {
+  useArtistDetailState,
+  type ArtistDetailState,
+} from '@features/detail/hooks/useArtistDetailState';
 import type { DetailRoute } from '@features/detail/navigation';
 
 import { compactCount } from '@features/detail/ui/formatters';

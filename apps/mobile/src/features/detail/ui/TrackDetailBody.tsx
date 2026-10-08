@@ -7,11 +7,18 @@ import { AddToPlaylistSheet } from '@shared/playlists';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import { useTrackDetailActions, type TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
+import {
+  useTrackDetailActions,
+  type TrackDetailActions,
+} from '@features/detail/hooks/useTrackDetailActions';
 import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
 import { type DetailRoute } from '@features/detail/navigation';
 
-import { DetailActions, SecondaryAction, type PrimaryAction } from '@features/detail/ui/DetailActions';
+import {
+  DetailActions,
+  SecondaryAction,
+  type PrimaryAction,
+} from '@features/detail/ui/DetailActions';
 import { DetailFacts } from '@features/detail/ui/DetailFacts';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
 import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';

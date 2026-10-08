@@ -8,7 +8,10 @@ import { Text } from '@shared/ui/primitives/Text';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { useAlbumDetailState, type AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
+import {
+  useAlbumDetailState,
+  type AlbumDetailState,
+} from '@features/detail/hooks/useAlbumDetailState';
 import type { DetailRoute } from '@features/detail/navigation';
 
 import { albumYear } from '@features/detail/ui/formatters';
