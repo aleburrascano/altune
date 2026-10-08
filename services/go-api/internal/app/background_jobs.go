@@ -26,7 +26,7 @@ func (a *App) startSimpleJob(
 	run func(context.Context) error,
 	startedAttrs ...any,
 ) {
-	a.startLoggedJob(name, interval, func(ctx context.Context) error {
+	a.startLoggedJob(context.Background(), name, interval, func(ctx context.Context) error {
 		if err := run(ctx); err != nil {
 			slog.WarnContext(ctx, string(name)+" failed", "error", err)
 			return err
@@ -36,13 +36,14 @@ func (a *App) startSimpleJob(
 }
 
 func (a *App) startLoggedJob(
+	ctx context.Context,
 	name jobName,
 	interval time.Duration,
 	run func(context.Context) error,
 	startedAttrs ...any,
 ) {
 	a.startTicker(name, interval, run)
-	slog.Info(string(name)+" started", startedAttrs...)
+	slog.InfoContext(ctx, string(name)+" started", startedAttrs...)
 }
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
@@ -116,7 +117,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	a.startLoggedJob(jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
@@ -135,7 +136,7 @@ type discoveryEventRetentionPruner interface {
 }
 
 func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRetentionPruner) {
-	a.startLoggedJob(jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
 		now := time.Now().UTC()
 		discographyPruned, err := pruner.PruneDiscographyObserved(ctx, now)
 		if err != nil {
@@ -162,7 +163,7 @@ type acquisitionRetentionPruner interface {
 }
 
 func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections acquisitionRetentionPruner) {
-	a.startLoggedJob(jobAcquisitionPrune, acquisitionPruneInterval, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobAcquisitionPrune, acquisitionPruneInterval, func(ctx context.Context) error {
 		now := time.Now().UTC()
 		outcomesPruned, err := outcomes.Prune(ctx, now)
 		if err != nil {

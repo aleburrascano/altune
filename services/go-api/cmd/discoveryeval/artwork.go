@@ -29,7 +29,7 @@ func runArtworkEval(
 		return fmt.Errorf("no artists found in library")
 	}
 
-	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 	defer drain()
 
 	concurrency := opts.concurrency

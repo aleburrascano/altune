@@ -90,7 +90,7 @@ func (a *App) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
 		addr := fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port)
-		slog.Info("server listening", "addr", addr)
+		slog.InfoContext(ctx, "server listening", "addr", addr)
 		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
@@ -100,21 +100,21 @@ func (a *App) Run(ctx context.Context) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		slog.Info("shutting down")
+		slog.InfoContext(ctx, "shutting down")
 	}
 
 	a.drainServer(serverDrainTimeout)
 
-	slog.Info("waiting for background tasks")
+	slog.InfoContext(ctx, "waiting for background tasks")
 	outcomes := a.runShutdownSequence()
 
 	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {
-		slog.Warn("closing DB/Redis while components are still shutting down",
+		slog.WarnContext(ctx, "closing DB/Redis while components are still shutting down",
 			"components", strings.Join(unstopped, ", "))
 	}
 
-	a.cleanup(!leadershipRetained(outcomes))
-	slog.Info("shutdown complete")
+	a.cleanup(ctx, !leadershipRetained(outcomes))
+	slog.InfoContext(ctx, "shutdown complete")
 	return nil
 }
 
@@ -133,26 +133,26 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("provider replay: %w", err)
 	}
 
-	if err := a.applyDisabledJobs(); err != nil {
+	if err := a.applyDisabledJobs(ctx); err != nil {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 
 	disc := a.wireDiscovery(ctx, newClientFactory(clientTransport))
 	a.searchSvc = disc.searchSvc
-	cat, err := a.wireCatalog(tap, disc)
+	cat, err := a.wireCatalog(ctx, tap, disc)
 	if err != nil {
 		return fmt.Errorf("catalog: %w", err)
 	}
 	a.scheduler = cat.scheduler
-	if err := a.applyStartupSwitches(); err != nil {
+	if err := a.applyStartupSwitches(ctx); err != nil {
 		return fmt.Errorf("startup switches: %w", err)
 	}
-	playback := a.wirePlayback(cat.trackRepo)
+	playback := a.wirePlayback(ctx, cat.trackRepo)
 	disc.handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
 
 	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler)
 	if testAuth != nil {
-		mountTestLogin(r, testAuth)
+		mountTestLogin(ctx, r, testAuth)
 	}
 	a.startAlertMonitor(ctx)
 	a.wireObserve(ctx, r, verifier, tap)
@@ -208,25 +208,25 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 	}
 }
 
-func (a *App) applyDisabledJobs() error {
+func (a *App) applyDisabledJobs(ctx context.Context) error {
 	for _, raw := range a.cfg.DisabledJobs {
 		name := jobName(raw)
 		if !isKnownJobName(name) {
 			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
 		}
 		if a.job(name).DisableIfEnabled() {
-			slog.Info("job disabled at startup", "job", raw)
+			slog.InfoContext(ctx, "job disabled at startup", "job", raw)
 		}
 	}
 	return nil
 }
 
-func (a *App) applyStartupSwitches() error {
+func (a *App) applyStartupSwitches(ctx context.Context) error {
 	if a.cfg.AcquisitionPaused && a.scheduler != nil {
 		a.scheduler.Pause()
-		slog.Info("acquisition started paused")
+		slog.InfoContext(ctx, "acquisition started paused")
 	}
-	if err := a.applyDisabledJobs(); err != nil {
+	if err := a.applyDisabledJobs(ctx); err != nil {
 		return err
 	}
 	for _, raw := range a.cfg.StreamripServices {
@@ -255,16 +255,16 @@ func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server 
 	}
 }
 
-func (a *App) cleanup(closePool bool) {
+func (a *App) cleanup(ctx context.Context, closePool bool) {
 	if !closePool {
-		slog.Error("leaving DB pool open so process exit releases the retained leader lock")
+		slog.ErrorContext(ctx, "leaving DB pool open so process exit releases the retained leader lock")
 	}
 	if closePool && a.pool != nil {
 		a.pool.Close()
 	}
 	if a.redisClient != nil {
 		if err := a.redisClient.Close(); err != nil {
-			slog.Error("redis client close error", "error", err)
+			slog.ErrorContext(ctx, "redis client close error", "error", err)
 		}
 	}
 }

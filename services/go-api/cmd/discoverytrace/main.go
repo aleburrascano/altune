@@ -57,7 +57,7 @@ func runPipeline(rec *httptrace.Recorder, query string, kinds map[domain.ResultK
 		fmt.Fprintf(os.Stderr, "error: config.Load: %v\n", err)
 		os.Exit(1)
 	}
-	provs := app.BuildDiscoveryProviders(cfg, rec)
+	provs := app.BuildDiscoveryProviders(context.Background(), cfg, rec)
 	qNorm := textnorm.NormalizeForMatch(service.CleanQuery(query))
 
 	fmt.Printf("discoverytrace pipeline: query=%q qnorm=%q kinds=%v providers=%d\n\n", query, qNorm, flagList(kinds), len(provs))

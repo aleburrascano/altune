@@ -29,7 +29,7 @@ func runReplay(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	fmt.Fprintf(os.Stderr, "behavioral corpus: %d entries (%d positive, %d negative) from %s\n",
 		len(corpus.Entries), len(corpus.Positives()), len(corpus.Negatives()), corpus.GeneratedFrom)
 
-	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 	ranking, failed := discoveryEval.BuildRankingCountingFailures(ctx, corpus, searcher)
 	drain()
 

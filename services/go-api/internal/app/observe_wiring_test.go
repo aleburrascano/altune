@@ -475,7 +475,7 @@ func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
 }
 
 func TestEvalMeterRunner_NilWhileTheMeterIsDisabled(t *testing.T) {
-	if run := (&App{cfg: &config.Config{EvalMeterEnabled: false}}).evalMeterRunner(); run != nil {
+	if run := (&App{cfg: &config.Config{EvalMeterEnabled: false}}).evalMeterRunner(t.Context()); run != nil {
 		t.Error("runner is non-nil with the eval meter disabled, want nil so the meter treats it as unset")
 	}
 }

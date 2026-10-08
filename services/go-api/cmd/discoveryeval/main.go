@@ -175,7 +175,7 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	}
 
 	fmt.Fprintf(os.Stderr, "health pass over %d entities (concurrency=%d)...\n", len(entities), opts.concurrency)
-	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 	report := discoveryEval.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
 	drain()
 
@@ -220,7 +220,7 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
-		svc := app.BuildSearchService(cfg, pool, redisClient, nil)
+		svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
 		vs := variantSearchAdapter{svc: svc}
 		report := discoveryEval.RunDiversityEvalMode(ctx, corpusEnts, vs, opts.concurrency, opts.topK, mode, progress)
 		svc.WaitForBackground()
@@ -306,7 +306,7 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "merge-eval over %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
-		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 		report := discoveryEval.RunMergeEval(ctx, entities, searcher, opts.concurrency, progress)
 		drain()
 		return report, nil
@@ -336,7 +336,7 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
-		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 		report := discoveryEval.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
 		drain()
 		return report, nil
@@ -374,7 +374,7 @@ func runEvalFixtures(
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "REPLAYING %d entities from %s (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
-		searcher, err := buildReplaySearcher(cfg, pool, opts.fixtures)
+		searcher, err := buildReplaySearcher(ctx, cfg, pool, opts.fixtures)
 		if err != nil {
 			return discoveryEval.EvalReport{}, err
 		}
@@ -384,13 +384,13 @@ func runEvalFixtures(
 	return runHarness("eval", once, human, opts)
 }
 
-func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryEval.Searcher, func()) {
-	svc := app.BuildSearchService(cfg, pool, redisClient, nil)
+func buildEvalSearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryEval.Searcher, func()) {
+	svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
 	return searchAdapter{svc: svc}, svc.WaitForBackground
 }
 
 func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 	results, err := searcher.Search(ctx, opts.query)
 	drain()
 	if err != nil {
@@ -488,7 +488,7 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 		}
 		once := func() (discoveryEval.HarnessReport, error) {
 			fmt.Fprintf(os.Stderr, "REPLAYING %d artists from %s (corpus=%s, prominence=%v, concurrency=%d, top-%d)...\n", len(artists), opts.fixtures, opts.corpus, cfg.CrossKindProminenceEnabled, opts.concurrency, opts.topK)
-			searcher, err := buildReplaySearcher(cfg, pool, opts.fixtures)
+			searcher, err := buildReplaySearcher(ctx, cfg, pool, opts.fixtures)
 			if err != nil {
 				return discoveryEval.ArtistIntentReport{}, err
 			}
@@ -500,7 +500,7 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "artist-intent over %d distinct artists (corpus=%s, concurrency=%d, top-%d)...\n", len(artists), opts.corpus, opts.concurrency, opts.topK)
-		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
 		report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
 		drain()
 		return report, nil

@@ -132,7 +132,7 @@ func TestRawSQLGuardPackageHasNoRawSQL(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no non-test files found; the guard checked nothing")
 	}
-	if _, err := os.Stat("common.go"); err != nil {
+	if _, err := os.Stat("audio_store.go"); err != nil {
 		t.Fatalf("guard is not running in the commands package: %v", err)
 	}
 }

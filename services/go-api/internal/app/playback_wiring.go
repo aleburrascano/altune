@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/playback/adapters/catalogbridge"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/config"
+	"context"
 	"log/slog"
 
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
@@ -18,10 +19,10 @@ type playbackWiring struct {
 	forgetDeletedIdentities *playbackService.ForgetDeletedIdentitiesService
 }
 
-func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) playbackWiring {
+func (a *App) wirePlayback(ctx context.Context, trackRepo *persistence.PgxTrackRepository) playbackWiring {
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool, playbackPersistence.WithQueueStateMetrics(metrics))
-	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
+	queueSvc := newQueueService(ctx, queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
 	return playbackWiring{
 		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
 		forgetDeletedIdentities: playbackService.NewForgetDeletedIdentitiesService(
@@ -37,13 +38,14 @@ type playbackMetricsSink interface {
 }
 
 func newQueueService(
+	ctx context.Context,
 	queueStateRepo ports.QueueStateRepository,
 	trackRepo *persistence.PgxTrackRepository,
 	metrics playbackMetricsSink,
 	enrichmentEnabled bool,
 ) *playbackService.QueueService {
 	if !enrichmentEnabled {
-		slog.Info("playback: now-playing enrichment disabled via PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
+		slog.InfoContext(ctx, "playback: now-playing enrichment disabled via PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
 	}
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo, catalogbridge.WithNowPlayingMetrics(metrics))
 	return playbackService.NewQueueService(queueStateRepo, nowPlayingReader,

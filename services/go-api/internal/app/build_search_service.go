@@ -19,15 +19,17 @@ import (
 )
 
 func BuildSearchService(
+	ctx context.Context,
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	eventStore discoveryPorts.EventStore,
 ) *discoveryService.Service {
-	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, nil)
+	return BuildSearchServiceWithTransport(ctx, cfg, pool, redisClient, eventStore, nil, nil)
 }
 
 func BuildSearchServiceWithTransport(
+	ctx context.Context,
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
@@ -36,18 +38,19 @@ func BuildSearchServiceWithTransport(
 	vocabStore discoveryPorts.VocabularyStore,
 	extra ...discoveryService.Option,
 ) *discoveryService.Service {
-	w := newSearchWiring(cfg, transport)
+	w := newSearchWiring(ctx, cfg, transport)
 	opts := contentServiceOptions(w, cfg, pool, redisClient, eventStore, vocabStore)
 	return w.service(append(opts, extra...))
 }
 
 func BuildRankingOnlySearchService(
+	ctx context.Context,
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	transport http.RoundTripper,
 ) *discoveryService.Service {
-	w := newSearchWiring(cfg, transport)
+	w := newSearchWiring(ctx, cfg, transport)
 	return w.service(rankingOnlyServiceOptions(w, cfg, pool, redisClient))
 }
 
@@ -58,13 +61,13 @@ type searchWiring struct {
 	breaker   *discoveryService.CircuitBreaker
 }
 
-func newSearchWiring(cfg *config.Config, transport http.RoundTripper) searchWiring {
+func newSearchWiring(ctx context.Context, cfg *config.Config, transport http.RoundTripper) searchWiring {
 	cf := newClientFactory(transport)
 	sharedMB := buildMusicBrainzAdapter(cf, cfg)
 	return searchWiring{
 		cf:        cf,
 		sharedMB:  sharedMB,
-		providers: buildSearchProviderList(cf, cfg, sharedMB),
+		providers: buildSearchProviderList(ctx, cf, cfg, sharedMB),
 		breaker:   discoveryService.NewCircuitBreaker(),
 	}
 }
@@ -226,17 +229,16 @@ func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore
 	return opts
 }
 
-func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
+func BuildDiscoveryProviders(ctx context.Context, cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
 	cf := newClientFactory(transport)
 	mb := buildMusicBrainzAdapter(cf, cfg)
-	return buildSearchProviderList(cf, cfg, mb)
+	return buildSearchProviderList(ctx, cf, cfg, mb)
 }
 
-func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
+func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
 
-	deezerClient := cf.discovery()
-	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
+	providerList = append(providerList, providers.NewDeezerAdapter(cf.discovery()))
 
 	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
 		providerList = append(providerList, am)
@@ -252,7 +254,7 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 
 	providerList = append(providerList, buildScrapedSearchProviders(cf, cfg)...)
 
-	slog.Info("discovery providers configured", "count", len(providerList))
+	slog.InfoContext(ctx, "discovery providers configured", "count", len(providerList))
 	return providerList
 }
 

@@ -82,7 +82,7 @@ func recordCorpus(
 	progress func(done, total int),
 ) (discoveryEval.HarnessReport, error) {
 	rec := httptrace.NewRecorder(providerhttp.NewLiveTransport())
-	svc := app.BuildRankingOnlySearchService(cfg, pool, nil, rec)
+	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
 	searcher := searchAdapter{svc: svc}
 
 	report := discoveryEval.RunLibraryEvalMode(ctx, ents, searcher, concurrency, topK, mode, progress)
@@ -106,7 +106,7 @@ func recordArtistCorpus(
 	progress func(done, total int),
 ) (discoveryEval.HarnessReport, error) {
 	rec := httptrace.NewRecorder(providerhttp.NewLiveTransport())
-	svc := app.BuildRankingOnlySearchService(cfg, pool, nil, rec)
+	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
 	searcher := searchAdapter{svc: svc}
 
 	report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
@@ -119,12 +119,12 @@ func recordArtistCorpus(
 	return report, nil
 }
 
-func buildReplaySearcher(cfg *config.Config, pool *pgxpool.Pool, dir string) (searchAdapter, error) {
+func buildReplaySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, dir string) (searchAdapter, error) {
 	exchanges, err := loadAllFixtures(dir)
 	if err != nil {
 		return searchAdapter{}, err
 	}
 	replayer := httptrace.NewReplayer(exchanges)
-	svc := app.BuildRankingOnlySearchService(cfg, pool, nil, replayer)
+	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, replayer)
 	return searchAdapter{svc: svc}, nil
 }

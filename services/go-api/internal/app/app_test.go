@@ -25,7 +25,7 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 		sem: make(chan struct{}, 1),
 	}
 
-	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 	}
 	a.scheduler = wired.scheduler
 
-	if err := a.applyStartupSwitches(); err != nil {
+	if err := a.applyStartupSwitches(t.Context()); err != nil {
 		t.Fatalf("applyStartupSwitches: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
 	a := &App{cfg: &config.Config{AcquisitionPaused: true}}
 
-	if err := a.applyStartupSwitches(); err != nil {
+	if err := a.applyStartupSwitches(t.Context()); err != nil {
 		t.Fatalf("applyStartupSwitches: %v", err)
 	}
 }
@@ -54,7 +54,7 @@ func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
 func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
 	a := &App{cfg: &config.Config{DisabledJobs: []string{"eval meter", "stream recovery"}}}
 
-	if err := a.applyStartupSwitches(); err != nil {
+	if err := a.applyStartupSwitches(t.Context()); err != nil {
 		t.Fatalf("applyStartupSwitches: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
 func TestApplyStartupSwitches_DisabledJobsUnknownNameFailsStartup(t *testing.T) {
 	a := &App{cfg: &config.Config{DisabledJobs: []string{"nope"}}}
 
-	err := a.applyStartupSwitches()
+	err := a.applyStartupSwitches(t.Context())
 	if err == nil {
 		t.Fatal("applyStartupSwitches: want error for unknown job, got nil")
 	}
@@ -92,7 +92,7 @@ func TestApplyStartupSwitches_StreamripServices(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: &config.Config{StreamripServices: tt.services}}
 
-			err := a.applyStartupSwitches()
+			err := a.applyStartupSwitches(t.Context())
 			if tt.wantErr == "" {
 				if err != nil {
 					t.Fatalf("applyStartupSwitches: unexpected error %v", err)
@@ -153,7 +153,7 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); a.wg.Wait() })
 
-	if err := a.applyDisabledJobs(); err != nil {
+	if err := a.applyDisabledJobs(t.Context()); err != nil {
 		t.Fatalf("applyDisabledJobs: %v", err)
 	}
 	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
@@ -170,7 +170,7 @@ func TestWhenLeaderUnlessDisabled_DisabledMonitorsNeverStart(t *testing.T) {
 			a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
 			var started atomic.Bool
 			a.whenLeaderUnlessDisabled(name, func(context.Context) { started.Store(true) })
-			if err := a.applyDisabledJobs(); err != nil {
+			if err := a.applyDisabledJobs(t.Context()); err != nil {
 				t.Fatalf("applyDisabledJobs: %v", err)
 			}
 
