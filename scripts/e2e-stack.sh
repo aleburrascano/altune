@@ -53,10 +53,18 @@ postgres_ready() {
   docker exec "$(cat "$state/postgres.cid")" pg_isready -q -h 127.0.0.1 -p 5432 -U altune -d altune
 }
 
+make_s3_cert() {
+  mkdir -p "$state/tls"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1 \
+    -keyout "$state/tls/rustfs_key.pem" -out "$state/tls/rustfs_cert.pem" 2>/dev/null
+  chmod 644 "$state/tls/rustfs_key.pem" "$state/tls/rustfs_cert.pem"
+  cat /etc/ssl/certs/ca-certificates.crt "$state/tls/rustfs_cert.pem" >"$state/ca-bundle.pem"
+}
+
 audio_bucket_ready() {
-  python3 - "http://127.0.0.1:$(host_port_of s3 9000)" "$audio_bucket" "$s3_key" "$s3_secret" <<'PY'
-import datetime, hashlib, hmac, sys, urllib.request
-endpoint, bucket, key, secret = sys.argv[1:5]
+  python3 - "https://127.0.0.1:$(host_port_of s3 9000)" "$audio_bucket" "$s3_key" "$s3_secret" "$state/tls/rustfs_cert.pem" <<'PY'
+import datetime, hashlib, hmac, ssl, sys, urllib.request
+endpoint, bucket, key, secret, cert = sys.argv[1:6]
 host = endpoint.split("://", 1)[1]
 now = datetime.datetime.now(datetime.timezone.utc)
 amz_date, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
@@ -74,7 +82,7 @@ req = urllib.request.Request(f"{endpoint}/{bucket}", method="PUT", headers={
     "x-amz-content-sha256": payload, "x-amz-date": amz_date,
     "Authorization": f"AWS4-HMAC-SHA256 Credential={key}/{scope}, SignedHeaders={signed}, Signature={signature}"})
 try:
-    urllib.request.urlopen(req, timeout=5)
+    urllib.request.urlopen(req, timeout=5, context=ssl.create_default_context(cafile=cert))
 except urllib.error.HTTPError as e:
     if b"BucketAlreadyOwnedByYou" not in e.read():
         sys.exit(1)
@@ -105,15 +113,16 @@ bring_up_services() {
   start_container postgres -e POSTGRES_USER=altune -e POSTGRES_PASSWORD=altune_dev -e POSTGRES_DB=altune \
     -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql/data:rw,size=2g postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off
   start_container redis -p 127.0.0.1::6379 redis:7-alpine
+  make_s3_cert
   start_container s3 -p 127.0.0.1::9000 -e RUSTFS_ACCESS_KEY="$s3_key" -e RUSTFS_SECRET_KEY="$s3_secret" \
-    --tmpfs /data:rw,size=1g,uid=10001 --tmpfs /logs:rw,uid=10001 rustfs/rustfs:1.0.1
+    -e RUSTFS_TLS_PATH=/opt/tls -v "$state/tls:/opt/tls:ro" --tmpfs /data:rw,size=1g,uid=10001 --tmpfs /logs:rw,uid=10001 rustfs/rustfs:1.0.1
   wait_until "$ready_attempts" postgres_ready
   wait_until "$ready_attempts" redis_ready
   wait_until "$ready_attempts" audio_bucket_ready
   apply_migrations
   database_url="postgres://altune:altune_dev@127.0.0.1:$(host_port_of postgres 5432)/altune?sslmode=disable"
   redis_url="redis://127.0.0.1:$(host_port_of redis 6379)"
-  s3_endpoint="http://127.0.0.1:$(host_port_of s3 9000)"
+  s3_endpoint="https://127.0.0.1:$(host_port_of s3 9000)"
 }
 
 start_jwks_stub() {
@@ -133,7 +142,7 @@ start_api() {
     SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
     AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
     OCI_S3_ENDPOINT="$s3_endpoint" OCI_S3_ACCESS_KEY="$s3_key" OCI_S3_SECRET_KEY="$s3_secret" \
-    OCI_S3_BUCKET="$audio_bucket" OCI_S3_REGION=us-east-1 \
+    OCI_S3_BUCKET="$audio_bucket" OCI_S3_REGION=us-east-1 SSL_CERT_FILE="$state/ca-bundle.pem" \
     MUSIC_DIR="$state/music" DATABASE_URL="$database_url" REDIS_URL="$redis_url" \
     SUPABASE_PROJECT_URL="http://127.0.0.1:$jwks_port" \
     SUPABASE_JWT_JWKS_URL="http://127.0.0.1:$jwks_port/jwks.json" \
