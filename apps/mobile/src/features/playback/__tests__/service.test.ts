@@ -15,21 +15,21 @@ import { setSignedInUser } from '@shared/session/signOutCleanup';
 import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
-} from '../native/queueFailureReport';
-import { usePlaybackErrorStore } from '../playbackErrorStore';
-import { redactPlaybackErrorMessage } from '../redactPlaybackError';
+} from '@features/playback/native/queueFailureReport';
+import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
+import { redactPlaybackErrorMessage } from '@features/playback/redactPlaybackError';
 import {
   MAX_TRACKED_RECOVERIES,
   RECOVERY_ATTEMPTS_PER_TRACK,
   RECOVERY_COOLDOWN_BASE_MS,
-} from '../native/recoveryBudget';
-import * as nativeTrackSwap from '../native/nativeTrackSwap';
-import { playbackService, resetPlaybackForSignOut } from '../native/service';
+} from '@features/playback/native/recoveryBudget';
+import * as nativeTrackSwap from '@features/playback/native/nativeTrackSwap';
+import { playbackService, resetPlaybackForSignOut } from '@features/playback/native/service';
 
-import { libraryTrack, previewTrack } from './fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 
 const { __player } = jest.requireMock('react-native-track-player');
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {

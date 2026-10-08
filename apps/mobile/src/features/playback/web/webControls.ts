@@ -2,9 +2,15 @@ import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
 
-import { loadIfPresent, loadTrack, playAudio, represignAndResume, stopPlayer } from './webLoad';
-import { isSourceStale, secondsToMs, type WebAudioPlayer } from './webPlayer';
-import { prefetchNextTrack } from './webPresign';
+import {
+  loadIfPresent,
+  loadTrack,
+  playAudio,
+  represignAndResume,
+  stopPlayer,
+} from '@features/playback/web/webLoad';
+import { isSourceStale, secondsToMs, type WebAudioPlayer } from '@features/playback/web/webPlayer';
+import { prefetchNextTrack } from '@features/playback/web/webPresign';
 
 function resumeAudio(player: WebAudioPlayer): void {
   if (player.audio.src === '') return;

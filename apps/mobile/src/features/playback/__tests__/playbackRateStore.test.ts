@@ -1,4 +1,8 @@
-import { PLAYBACK_RATES, rateLabel, usePlaybackRateStore } from '../playbackRateStore';
+import {
+  PLAYBACK_RATES,
+  rateLabel,
+  usePlaybackRateStore,
+} from '@features/playback/playbackRateStore';
 
 afterEach(() => {
   usePlaybackRateStore.setState({ rate: 1 });

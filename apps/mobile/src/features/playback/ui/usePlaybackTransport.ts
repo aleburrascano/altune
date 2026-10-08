@@ -3,7 +3,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/types';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { statusFlagsOf } from './playerStatus';
+import { statusFlagsOf } from '@features/playback/ui/playerStatus';
 
 function useQueueTransportState() {
   const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();

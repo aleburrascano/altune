@@ -4,7 +4,7 @@ import {
   isSavedCurrentResumable,
   reconstructPlayOrder,
   resolveResumeStartIndex,
-} from '../resumeQueue';
+} from '@features/playback/resumeQueue';
 
 describe('currentTrackId — resolving the saved cursor to an id', () => {
   it('returns the id at the saved index when it is in range', () => {

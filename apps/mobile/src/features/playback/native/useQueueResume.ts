@@ -11,18 +11,23 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 
-import { loadNativeQueue } from './loadNativeTrack';
-import { withNativeQueue } from './nativeQueueLock';
-import { activeNativeTrackId } from './nativeTrack';
-import { reportLoadFailure } from '../playbackErrorStore';
+import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
+import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
+import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
+import { reportLoadFailure } from '@features/playback/playbackErrorStore';
 import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
   type RungOutcome,
-} from '../queueRebuildStrategies';
-import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
-import { warnPlayback } from '../redactPlaybackError';
-import { progressSecondsToRoundedMs } from '../time';
+} from '@features/playback/queueRebuildStrategies';
+import {
+  asRepeatMode,
+  fromWireSource,
+  parseQueueState,
+  toWireSource,
+} from '@features/playback/queueStateWire';
+import { warnPlayback } from '@features/playback/redactPlaybackError';
+import { progressSecondsToRoundedMs } from '@features/playback/time';
 
 import { useAppStateChange } from '@shared/lifecycle';
 

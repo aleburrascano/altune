@@ -1,8 +1,8 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { formatSeconds, type QueueItem } from '../../queueItem';
-import { QueueRow } from '../QueueRow';
+import { formatSeconds, type QueueItem } from '@features/playback/queueItem';
+import { QueueRow } from '@features/playback/ui/QueueRow';
 
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,

@@ -4,15 +4,15 @@ import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue, PlaybackState } from '@shared/playback/types';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-import { derivePlaybackState } from '../derivePlaybackState';
-import { useMediaSession } from '../hooks/useMediaSession';
+import { derivePlaybackState } from '@features/playback/derivePlaybackState';
+import { useMediaSession } from '@features/playback/hooks/useMediaSession';
 import {
   advanceOnEnded,
   endForSignOut,
   markRecovered,
   reportMediaError,
   stopPlayer,
-} from './webLoad';
+} from '@features/playback/web/webLoad';
 import {
   createWebAudioPlayer,
   IDLE_PLAYBACK,
@@ -20,8 +20,8 @@ import {
   syncPhase,
   type WebAudioPlayer,
   type WebPlayback,
-} from './webPlayer';
-import { createWebControls } from './webControls';
+} from '@features/playback/web/webPlayer';
+import { createWebControls } from '@features/playback/web/webControls';
 
 const PHASE_EVENTS = ['play', 'pause', 'waiting', 'seeked'];
 

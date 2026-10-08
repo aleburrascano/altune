@@ -5,15 +5,18 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { QueueSource } from '@shared/playback/types';
 
-import { recordQueueRebuildOutcome, type QueueRebuildRung } from './playbackHealth';
-import { fromWireSource } from './queueStateWire';
+import {
+  recordQueueRebuildOutcome,
+  type QueueRebuildRung,
+} from '@features/playback/playbackHealth';
+import { fromWireSource } from '@features/playback/queueStateWire';
 import {
   currentOccurrence,
   currentTrackId,
   isSavedCurrentResumable,
   reconstructPlayOrder,
   resolveResumeStartIndex,
-} from './resumeQueue';
+} from '@features/playback/resumeQueue';
 
 export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): number | null {
   if (!saved.current_track || !canPlay(saved.current_track.acquisition_status)) return null;

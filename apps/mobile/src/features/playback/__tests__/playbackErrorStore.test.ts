@@ -5,20 +5,26 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
-import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
-import { classifyNativePlaybackError, classifyPlaybackFailure } from '../classifyPlaybackError';
+import {
+  classifyNativePlaybackError,
+  classifyPlaybackFailure,
+} from '@features/playback/classifyPlaybackError';
 import {
   clearPlaybackError,
   reportLoadFailure,
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
-} from '../playbackErrorStore';
-import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
-import { canRetryPlaybackError } from '../retryPolicy';
+} from '@features/playback/playbackErrorStore';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+} from '@features/playback/playbackHealth';
+import { canRetryPlaybackError } from '@features/playback/retryPolicy';
 
-import { libraryTrack } from './fixtures';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 

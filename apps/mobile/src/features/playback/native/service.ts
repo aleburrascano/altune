@@ -14,20 +14,40 @@ import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInv
 import { recoverAudio } from '@shared/api-client/audio';
 import { parseTrackId } from '@shared/api-client/ids';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
-import { discardPrefetchedAudio, evictCached, prefetchNext } from './audioPrefetch';
-import { refreshUpcomingPresign } from './loadNativeTrack';
-import { claimRecoveryAttempt, resetRecoveryBudget } from './recoveryBudget';
-import { claimSessionReset } from '../loadToken';
-import { withNativeQueue } from './nativeQueueLock';
-import { shouldApplyActiveIndex } from './nativeSyncGuard';
-import { activeNativeTrackId } from './nativeTrack';
-import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './nativeTrackSwap';
-import { classifyNativePlaybackError } from '../classifyPlaybackError';
-import { clearPlaybackError, reportPlaybackError } from '../playbackErrorStore';
-import { recordAudioRecoveryFailure, recordPlaybackFailure } from '../playbackHealth';
-import { redactedPlaybackFailure, redactPlaybackErrorMessage } from '../redactPlaybackError';
-import { progressSecondsToMs } from '../time';
-import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
+import {
+  discardPrefetchedAudio,
+  evictCached,
+  prefetchNext,
+} from '@features/playback/native/audioPrefetch';
+import { refreshUpcomingPresign } from '@features/playback/native/loadNativeTrack';
+import {
+  claimRecoveryAttempt,
+  resetRecoveryBudget,
+} from '@features/playback/native/recoveryBudget';
+import { claimSessionReset } from '@features/playback/loadToken';
+import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
+import { shouldApplyActiveIndex } from '@features/playback/native/nativeSyncGuard';
+import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
+import {
+  forgetAllSwaps,
+  repairActiveToStreaming,
+  wasSwappedToLocal,
+} from '@features/playback/native/nativeTrackSwap';
+import { classifyNativePlaybackError } from '@features/playback/classifyPlaybackError';
+import { clearPlaybackError, reportPlaybackError } from '@features/playback/playbackErrorStore';
+import {
+  recordAudioRecoveryFailure,
+  recordPlaybackFailure,
+} from '@features/playback/playbackHealth';
+import {
+  redactedPlaybackFailure,
+  redactPlaybackErrorMessage,
+} from '@features/playback/redactPlaybackError';
+import { progressSecondsToMs } from '@features/playback/time';
+import {
+  reportingQueueFailure,
+  reportQueueFailure,
+} from '@features/playback/native/queueFailureReport';
 
 export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();

@@ -6,11 +6,11 @@ import {
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
-import { classifyPlaybackFailure } from '../classifyPlaybackError';
-import { warnPlayback } from '../redactPlaybackError';
-import { recordPresignOutcome } from '../playbackHealth';
-import { MAX_PRESIGN } from '../presignWindow';
-import { toNativeTrack } from './nativeTrack';
+import { classifyPlaybackFailure } from '@features/playback/classifyPlaybackError';
+import { warnPlayback } from '@features/playback/redactPlaybackError';
+import { recordPresignOutcome } from '@features/playback/playbackHealth';
+import { MAX_PRESIGN } from '@features/playback/presignWindow';
+import { toNativeTrack } from '@features/playback/native/nativeTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 function headersFor(tracks: readonly PlaybackTrack[]): Promise<Record<string, string>> {

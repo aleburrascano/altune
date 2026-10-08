@@ -14,12 +14,12 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import { useQueueResume } from '../native/useQueueResume';
-import { loadNativeQueue } from '../native/loadNativeTrack';
-import { _resetPlaybackHealthForTest } from '../playbackHealth';
-import { usePlaybackErrorStore } from '../playbackErrorStore';
+import { useQueueResume } from '@features/playback/native/useQueueResume';
+import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
+import { _resetPlaybackHealthForTest } from '@features/playback/playbackHealth';
+import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
 
-import { libraryTrack, previewTrack } from './fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 
 jest.mock('@shared/api-client/playback', () => ({
   getQueueState: jest.fn(),

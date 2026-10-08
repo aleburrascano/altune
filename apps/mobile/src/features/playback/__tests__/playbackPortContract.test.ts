@@ -7,7 +7,7 @@ import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackP
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 
-const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

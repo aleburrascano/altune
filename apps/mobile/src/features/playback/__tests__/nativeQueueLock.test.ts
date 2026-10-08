@@ -3,7 +3,7 @@ import {
   NativeQueueTimeoutError,
   onNativeQueueTimeout,
   withNativeQueue,
-} from '../native/nativeQueueLock';
+} from '@features/playback/native/nativeQueueLock';
 
 function deferred<T>(): {
   promise: Promise<T>;

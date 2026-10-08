@@ -6,8 +6,8 @@ import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
-import { buildTrackPayload, hasCrossedListenThreshold } from '../signals';
-import { progressSecondsToMs, progressSecondsToRoundedMs } from '../time';
+import { buildTrackPayload, hasCrossedListenThreshold } from '@features/playback/signals';
+import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/playback/time';
 
 const COMPLETION_EPSILON_MS = 2000;
 

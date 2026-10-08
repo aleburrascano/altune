@@ -5,19 +5,22 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { createNativePlaybackActions } from '../native/createNativePlaybackActions';
-import { swapUpcomingToLocal, wasSwappedToLocal } from '../native/nativeTrackSwap';
-import { NativeQueueTimeoutError, withNativeQueue } from '../native/nativeQueueLock';
-import { usePlaybackErrorStore } from '../playbackErrorStore';
+import { createNativePlaybackActions } from '@features/playback/native/createNativePlaybackActions';
+import { swapUpcomingToLocal, wasSwappedToLocal } from '@features/playback/native/nativeTrackSwap';
+import {
+  NativeQueueTimeoutError,
+  withNativeQueue,
+} from '@features/playback/native/nativeQueueLock';
+import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
 import {
   classifyNativeQueueFailure,
   isIndexOutOfBounds,
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
   reportingQueueFailure,
-} from '../native/queueFailureReport';
+} from '@features/playback/native/queueFailureReport';
 
-import { previewTrack } from './fixtures';
+import { previewTrack } from '@features/playback/__tests__/fixtures';
 
 const { __player } = jest.requireMock('react-native-track-player');
 

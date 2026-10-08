@@ -6,9 +6,12 @@ import {
   hasCrossedListenThreshold,
   LISTEN_THRESHOLD_MS,
   listenThresholdMs,
-} from '../signals';
+} from '@features/playback/signals';
 
-import { libraryTrack as buildLibraryTrack, previewTrack as buildPreviewTrack } from './fixtures';
+import {
+  libraryTrack as buildLibraryTrack,
+  previewTrack as buildPreviewTrack,
+} from '@features/playback/__tests__/fixtures';
 
 const libraryTrack = buildLibraryTrack();
 const previewTrack = buildPreviewTrack();

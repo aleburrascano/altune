@@ -7,8 +7,8 @@ import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-import { libraryTrack } from '../../__tests__/fixtures';
-import { PlayerBar } from '../PlayerBar';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
+import { PlayerBar } from '@features/playback/ui/PlayerBar';
 
 const mockPush = jest.fn();
 
