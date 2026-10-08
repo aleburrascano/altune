@@ -13,10 +13,14 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { useQueueResume } from '@features/playback/native/useQueueResume';
 import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
-import { _resetPlaybackHealthForTest } from '@features/playback/playbackHealth';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+} from '@features/playback/playbackHealth';
 import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
 
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
@@ -25,6 +29,7 @@ jest.mock('@shared/api-client/playback', () => ({
   getQueueState: jest.fn(),
   saveQueueState: jest.fn(async () => undefined),
 }));
+jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 jest.mock('@shared/api-client/tracks', () => ({ getTracks: jest.fn(), getAllTracks: jest.fn() }));
 jest.mock('@shared/api-client/audio', () => ({
   audioStreamUrl: (id: string) => `https://api.example/audio/${id}`,
@@ -49,6 +54,7 @@ const defaultPlayerImpls = new Map(
 
 beforeEach(() => {
   _resetPlaybackHealthForTest();
+  (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
   for (const name of STUBBED_PLAYER_METHODS) {
     nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
   }
@@ -1012,5 +1018,109 @@ describe('restoring a saved queue when the library read hit its cap', () => {
 
     expect(useQueueStore.getState().tracks).toHaveLength(0);
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('hit its cap'));
+  });
+});
+
+describe('queue save and restore failures move playback_health counters', () => {
+  const wire = {
+    track_ids: ['x', 'y'],
+    current_index: 1,
+    position_ms: 5000,
+    shuffled: false,
+    repeat_mode: 'off',
+    source: { kind: 'playlist', playlist_id: 'p1', name: 'Chill' },
+    natural_order: ['x', 'y'],
+  };
+
+  function readyTrack(id: string): TrackResponse {
+    return { id, title: id, artist: 'A', acquisition_status: 'ready' } as TrackResponse;
+  }
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+    });
+  }
+
+  function flushedPayloads(): Record<string, unknown>[] {
+    flushPlaybackHealth();
+    return (recordEvent as jest.Mock).mock.calls.map(([event]) => event.payload);
+  }
+
+  beforeEach(() => {
+    useQueueStore.getState().clearQueue();
+    (getQueueState as jest.Mock).mockReset().mockResolvedValue(wire);
+    (saveQueueState as jest.Mock).mockReset().mockResolvedValue(undefined);
+    (getAllTracks as jest.Mock)
+      .mockReset()
+      .mockResolvedValue({ items: ['x', 'y'].map(readyTrack), truncated: false });
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('counts a rejected save', async () => {
+    const appStateListeners: ((state: AppStateStatus) => void)[] = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListeners.push(listener as (state: AppStateStatus) => void);
+      return { remove: jest.fn() };
+    });
+    const queue = [libraryTrack(), libraryTrack()];
+    useQueueStore.getState().loadQueue(queue, 0, null);
+    nativePlayer.getActiveTrack!.mockResolvedValue({ id: trackKey(queue[0]!) });
+    (getQueueState as jest.Mock).mockResolvedValue({ ...wire, track_ids: [], natural_order: [] });
+    (saveQueueState as jest.Mock).mockRejectedValue(new Error('boom'));
+
+    renderHook(() => useQueueResume());
+    await settle();
+    await act(async () => {
+      for (const l of [...appStateListeners]) l('background');
+    });
+    await settle();
+
+    expect(saveQueueState).toHaveBeenCalled();
+    expect(flushedPayloads()).toEqual([expect.objectContaining({ queue_save_failed: 1 })]);
+  });
+
+  it('counts a failed state fetch as a fetch-stage restore failure', async () => {
+    (getQueueState as jest.Mock).mockRejectedValue(new Error('down'));
+    renderHook(() => useQueueResume());
+    await settle();
+
+    expect(flushedPayloads()).toEqual([
+      expect.objectContaining({ queue_restore_failed_fetch: 1, queue_state_rejected: 0 }),
+    ]);
+  });
+
+  it('counts a failed library read as a tracks-stage restore failure', async () => {
+    (getAllTracks as jest.Mock).mockRejectedValue(new Error('down'));
+    renderHook(() => useQueueResume());
+    await settle();
+
+    expect(flushedPayloads()).toEqual([
+      expect.objectContaining({ queue_restore_failed_tracks: 1 }),
+    ]);
+  });
+
+  it('counts a failed native load as a native-stage restore failure', async () => {
+    nativePlayer.add!.mockRejectedValue(new Error('native'));
+    renderHook(() => useQueueResume());
+    await settle();
+
+    expect(flushedPayloads()).toEqual([
+      expect.objectContaining({ queue_restore_failed_native: 1 }),
+    ]);
+  });
+
+  it('counts a malformed saved state as rejected, not as a restore failure', async () => {
+    (getQueueState as jest.Mock).mockResolvedValue({ ...wire, track_ids: 'x,y' });
+    renderHook(() => useQueueResume());
+    await settle();
+
+    expect(flushedPayloads()).toEqual([
+      expect.objectContaining({ queue_state_rejected: 1, queue_restore_failed_fetch: 0 }),
+    ]);
   });
 });

@@ -4,6 +4,8 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 
 export type PrefetchFailureStage = 'resolve' | 'download' | 'swap';
 
+export type QueueRestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
+
 export type QueueRebuildRung = 'natural' | 'play_order' | 'exhausted';
 
 export const PLAYBACK_HEALTH_BATCH = 25;
@@ -26,6 +28,13 @@ type Tally = {
   playback_failed_queue_update_failed: number;
   playback_failed_unknown: number;
   audio_recovery_failed: number;
+  queue_save_failed: number;
+  queue_restore_failed_fetch: number;
+  queue_restore_failed_placeholder: number;
+  queue_restore_failed_tracks: number;
+  queue_restore_failed_rebuild: number;
+  queue_restore_failed_native: number;
+  queue_state_rejected: number;
 };
 
 const emptyTally = (): Tally => ({
@@ -46,6 +55,13 @@ const emptyTally = (): Tally => ({
   playback_failed_queue_update_failed: 0,
   playback_failed_unknown: 0,
   audio_recovery_failed: 0,
+  queue_save_failed: 0,
+  queue_restore_failed_fetch: 0,
+  queue_restore_failed_placeholder: 0,
+  queue_restore_failed_tracks: 0,
+  queue_restore_failed_rebuild: 0,
+  queue_restore_failed_native: 0,
+  queue_state_rejected: 0,
 });
 
 let tally = emptyTally();
@@ -77,6 +93,18 @@ export function recordPlaybackFailure(kind: PlaybackErrorKind): void {
 
 export function recordAudioRecoveryFailure(): void {
   count('audio_recovery_failed');
+}
+
+export function recordQueueSaveFailure(): void {
+  count('queue_save_failed');
+}
+
+export function recordQueueRestoreFailure(stage: QueueRestoreStage): void {
+  count(`queue_restore_failed_${stage}`);
+}
+
+export function recordQueueStateRejected(): void {
+  count('queue_state_rejected');
 }
 
 export function flushPlaybackHealth(): void {

@@ -26,6 +26,12 @@ import {
   parseQueueState,
   toWireSource,
 } from '@features/playback/queueStateWire';
+import {
+  recordQueueRestoreFailure,
+  recordQueueSaveFailure,
+  recordQueueStateRejected,
+  type QueueRestoreStage,
+} from '@features/playback/playbackHealth';
 import { warnPlayback } from '@features/playback/redactPlaybackError';
 import { progressSecondsToRoundedMs } from '@features/playback/time';
 
@@ -91,6 +97,7 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
     });
   } catch (err) {
     warnPlayback('failed to save queue state', {}, err);
+    recordQueueSaveFailure();
   }
 }
 
@@ -146,9 +153,10 @@ async function resumeNativeQueue(positionMs: number): Promise<void> {
   });
 }
 
-type RestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
-
-function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: RestoreStage): void {
+function clearUnbackedPlaceholder(
+  placeholderGeneration: number | null,
+  stage: QueueRestoreStage,
+): void {
   if (placeholderGeneration == null) return;
   if (useQueueStore.getState().generation !== placeholderGeneration) return;
   useQueueStore.getState().clearQueue();
@@ -165,7 +173,7 @@ function reportUnbackedRebuild(rebuiltGeneration: number | null, err: unknown): 
 async function restoreSavedQueue(
   markPlaceholderGeneration: (generation: number) => void,
 ): Promise<void> {
-  let stage: RestoreStage = 'fetch';
+  let stage: QueueRestoreStage = 'fetch';
   let placeholderGeneration: number | null = null;
   let rebuiltGeneration: number | null = null;
   try {
@@ -174,6 +182,7 @@ async function restoreSavedQueue(
     const parsed = parseQueueState(await getQueueState());
     if (!parsed.ok) {
       console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
+      recordQueueStateRejected();
       return;
     }
     const saved = parsed.state;
@@ -208,6 +217,7 @@ async function restoreSavedQueue(
     await resumeNativeQueue(resumeMs);
   } catch (err) {
     warnPlayback('failed to restore the saved queue', { stage }, err);
+    recordQueueRestoreFailure(stage);
     if (stage === 'native') reportUnbackedRebuild(rebuiltGeneration, err);
   } finally {
     clearUnbackedPlaceholder(placeholderGeneration, stage);
