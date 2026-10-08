@@ -79,6 +79,7 @@ if touches '^services/go-api/'; then
     check "go-api no new comments" $m go run ./scripts/lintcomments "$base"
     check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
+    check "go-api module shape" $m go run ./scripts/moduleshape
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
     test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
