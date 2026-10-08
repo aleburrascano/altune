@@ -196,4 +196,38 @@ describe('discover fetches — remote kill switch', () => {
     await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
+
+  describe('history retry', () => {
+    async function failHistoryLoad() {
+      mockHistory.mockRejectedValue(new Error('history down'));
+      const hook = renderHook(() => useDiscoverLogic(), { wrapper });
+      await waitFor(() => expect(hook.result.current.historyFailed).toBe(true));
+      return hook;
+    }
+
+    it('sends no request when tapped while the switch is off', async () => {
+      const { result } = await failHistoryLoad();
+      mockHistory.mockClear();
+      switchDiscoveryFetches(false);
+
+      await act(async () => {
+        result.current.onRetryHistory();
+        await Promise.resolve();
+      });
+
+      expect(mockHistory).not.toHaveBeenCalled();
+    });
+
+    it('refetches when tapped while the switch is on', async () => {
+      const { result } = await failHistoryLoad();
+      mockHistory.mockClear().mockResolvedValue(HISTORY);
+
+      await act(async () => {
+        result.current.onRetryHistory();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(mockHistory).toHaveBeenCalledTimes(1));
+    });
+  });
 });

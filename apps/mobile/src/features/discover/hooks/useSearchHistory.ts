@@ -4,7 +4,10 @@ import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discover
 
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
-import { useDiscoverFetchEnabled } from '@features/discover/hooks/discoverFetchGate';
+import {
+  useDiscoverFetchEnabled,
+  useGatedDiscoverCall,
+} from '@features/discover/hooks/discoverFetchGate';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 export function useSearchHistory() {
@@ -14,7 +17,7 @@ export function useSearchHistory() {
   const {
     data: response,
     error,
-    refetch,
+    refetch: refetchHistory,
   } = useQuery<DiscoverySearchHistoryResponse>({
     queryKey: discoveryKeys.history,
     queryFn: () => port.listSearchHistory({ limit: 10 }),
@@ -22,6 +25,8 @@ export function useSearchHistory() {
   });
 
   useReportQueryFailure(error, 'history');
+
+  const refetch = useGatedDiscoverCall(refetchHistory);
 
   return { data: response, error, refetch };
 }
