@@ -1,6 +1,7 @@
 package goapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -288,5 +289,90 @@ func TestContract_QualityFixtureDecodes(t *testing.T) {
 	}
 	if len(got.Cases[0].ProviderCounts) == 0 {
 		t.Error("ProviderCounts is empty")
+	}
+}
+
+func sseFrame(t *testing.T, name string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, loadContractFixture(t, name)); err != nil {
+		t.Fatalf("compact %s: %v", name, err)
+	}
+	return "data: " + buf.String() + "\n\n"
+}
+
+func TestContract_EventFrameFixtureDecodes(t *testing.T) {
+	var got Event
+	assertFixtureDecodes(t, "observe_events_frame.json", &got)
+	assertFixtureStrictlyCovered(t, "observe_events_frame.json", reflect.TypeOf(got))
+	assertEventFields(t, got)
+
+	viaSSE, err := newSSEDecoder(strings.NewReader(sseFrame(t, "observe_events_frame.json"))).next()
+	if err != nil {
+		t.Fatalf("sseDecoder.next: %v", err)
+	}
+	assertEventFields(t, viaSSE)
+	if !viaSSE.Timestamp.Equal(got.Timestamp) || viaSSE != got {
+		t.Errorf("sseDecoder event = %+v, want %+v", viaSSE, got)
+	}
+}
+
+func assertFixtureStrictlyCovered(t *testing.T, name string, typ reflect.Type) {
+	t.Helper()
+	for _, path := range uncoveredKeysStrict(loadContractFixture(t, name), typ) {
+		t.Errorf("%s does not carry %s", name, path)
+	}
+}
+
+func assertEventFields(t *testing.T, ev Event) {
+	t.Helper()
+	if ev.Type == "" {
+		t.Error("Type is empty")
+	}
+	if ev.Timestamp.IsZero() {
+		t.Error("Timestamp is zero")
+	}
+	if ev.CorrID != "contract-corr" {
+		t.Errorf("CorrID = %q, want contract-corr", ev.CorrID)
+	}
+}
+
+func assertLogFields(t *testing.T, rec LogRecord) {
+	t.Helper()
+	if rec.Level != "INFO" {
+		t.Errorf("Level = %q, want INFO", rec.Level)
+	}
+	if rec.Message == "" {
+		t.Error("Message is empty")
+	}
+	if rec.Fields["stage"] != "resolve" {
+		t.Errorf("Fields[stage] = %q, want resolve", rec.Fields["stage"])
+	}
+}
+
+func TestContract_LogFrameFixtureDecodes(t *testing.T) {
+	var got LogRecord
+	assertFixtureDecodes(t, "observe_logs_frame.json", &got)
+	assertLogFields(t, got)
+
+	viaSSE, err := newLogSSEDecoder(strings.NewReader(sseFrame(t, "observe_logs_frame.json"))).next()
+	if err != nil {
+		t.Fatalf("logSSEDecoder.next: %v", err)
+	}
+	assertLogFields(t, viaSSE)
+	if !viaSSE.Time.Equal(got.Time) || viaSSE.Message != got.Message {
+		t.Errorf("logSSEDecoder record = %+v, want %+v", viaSSE, got)
+	}
+}
+
+func TestContract_LogFrameLookAlikeIsRefused(t *testing.T) {
+	data := loadContractFixture(t, "observe_logs_frame.json")
+	lookAlike := strings.Replace(string(data), `"msg"`, `"message"`, 1)
+	if lookAlike == string(data) {
+		t.Fatal("fixture has no msg key to rename")
+	}
+	got := uncoveredKeys(json.RawMessage(lookAlike), reflect.TypeOf(LogRecord{}))
+	if !reflect.DeepEqual(got, []string{"msg"}) {
+		t.Errorf("uncoveredKeys = %q, want [msg]", got)
 	}
 }
