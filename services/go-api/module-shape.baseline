@@ -8,8 +8,6 @@ G1 internal/playback missing ARCHITECTURE.md
 G1 internal/playback/doc.go unexpected root entry
 G2 internal/acquisition/service/eval/harness.go:4 service imports altune/go-api/internal/acquisition/adapters/discoverybridge
 G2 internal/acquisition/service/eval/harness.go:5 service imports altune/go-api/internal/acquisition/adapters/tempfs
-G2 internal/acquisition/service/step_store.go:13 service imports github.com/google/uuid
-G2 internal/acquisition/service/title_qualifiers.go:9 service imports golang.org/x/text/unicode/norm
 G2 internal/discovery/domain/records.go:7 domain imports github.com/google/uuid
 G2 internal/discovery/service/artwork_fill.go:15 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/eval/coverage_signal_b.go:10 service imports golang.org/x/sync/errgroup

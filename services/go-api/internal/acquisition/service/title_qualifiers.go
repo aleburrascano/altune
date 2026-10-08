@@ -5,8 +5,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-
-	"golang.org/x/text/unicode/norm"
 )
 
 var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
@@ -46,7 +44,7 @@ var qualifierRe = regexp.MustCompile(`[\(\[\{]([^\)\]\}]*)[\)\]\}]`)
 
 func qualifierTokens(title string) map[string]bool {
 	tokens := make(map[string]bool)
-	for _, segment := range qualifierRe.FindAllStringSubmatch(norm.NFKC.String(title), -1) {
+	for _, segment := range qualifierRe.FindAllStringSubmatch(textnorm.NFKC(title), -1) {
 		if featuredRe.MatchString(segment[1]) {
 			continue
 		}
@@ -127,7 +125,7 @@ func longestPhraseIn(lexicon []qualifierEntry) int {
 var titleSeparatorRe = regexp.MustCompile(`\s+[\p{Pd}\x{2212}|/]\s+`)
 
 func withoutFeatureCredits(title string) string {
-	pieces := titleSeparatorRe.Split(norm.NFKC.String(title), -1)
+	pieces := titleSeparatorRe.Split(textnorm.NFKC(title), -1)
 	for i, piece := range pieces {
 		pieces[i] = featuredRe.ReplaceAllString(piece, "")
 	}
