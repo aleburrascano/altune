@@ -1,7 +1,6 @@
-package app
+package reqmetrics
 
 import (
-	"altune/go-api/internal/shared/reqmetrics"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -14,7 +13,7 @@ import (
 func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 	panicRec := func(string, time.Duration, int) { panic("boom") }
 	r := chi.NewRouter()
-	r.Use(latencyMiddleware(panicRec))
+	r.Use(Middleware(panicRec))
 	r.Get("/v1/tracks/{trackId}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 		_, _ = w.Write([]byte("ok"))
@@ -35,7 +34,7 @@ func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 	var gotRoute atomic.Value
 	rec := func(route string, _ time.Duration, _ int) { gotRoute.Store(route) }
 	r := chi.NewRouter()
-	r.Use(latencyMiddleware(rec))
+	r.Use(Middleware(rec))
 	r.Get("/v1/tracks/{trackId}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -51,7 +50,7 @@ func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
 	var gotStatus atomic.Int64
 	rec := func(_ string, _ time.Duration, status int) { gotStatus.Store(int64(status)) }
 	r := chi.NewRouter()
-	r.Use(latencyMiddleware(rec))
+	r.Use(Middleware(rec))
 	r.Get("/v1/tracks/{trackId}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
@@ -64,11 +63,11 @@ func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
 }
 
 func BenchmarkRecordLatency(b *testing.B) {
-	reqmetrics.Observe("/v1/tracks/{trackId}", time.Millisecond, 200)
+	Observe("/v1/tracks/{trackId}", time.Millisecond, 200)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		recordLatency(reqmetrics.Observe, "/v1/tracks/{trackId}", 2*time.Millisecond, 200)
+		recordLatency(Observe, "/v1/tracks/{trackId}", 2*time.Millisecond, 200)
 	}
 }
 
