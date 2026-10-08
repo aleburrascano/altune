@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 
-import { confirm, showAlert } from '../dialog';
-import * as webDialog from '../dialog.web';
+import { confirm, showAlert } from '@shared/ui/dialog/dialog';
+import * as webDialog from '@shared/ui/dialog/dialog.web';
 
 describe('dialog (native)', () => {
   it('confirm() shows a cancel button and a destructive button running onConfirm', () => {

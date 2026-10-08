@@ -1,6 +1,6 @@
 import { Alert } from 'react-native';
 
-import { confirmDestructive } from '../confirmDestructive';
+import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
 describe('confirmDestructive (native)', () => {
   it('shows a cancel and a destructive button whose press runs onConfirm', () => {

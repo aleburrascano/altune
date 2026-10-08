@@ -1,7 +1,7 @@
 import { Text as RNText, View } from 'react-native';
 
-import { fontFamily } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
+import { fontFamily } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
 
 export type WordmarkProps = {
   size?: number;

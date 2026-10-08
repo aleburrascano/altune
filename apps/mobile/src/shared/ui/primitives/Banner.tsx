@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { recordFailureShown } from '../../telemetry/userTelemetry';
-import type { Theme } from '../theme/theme';
-import { radius, spacing } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
-import { Text } from './Text';
+import { recordFailureShown } from '@shared/telemetry/userTelemetry';
+import type { Theme } from '@shared/ui/theme/theme';
+import { radius, spacing } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { Text } from '@shared/ui/primitives/Text';
 
 type BannerTone = 'danger' | 'info';
 

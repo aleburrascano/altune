@@ -1,15 +1,15 @@
-import * as primitives from '../index';
-import { ActionSheet } from '../ActionSheet';
-import { Artwork } from '../Artwork';
-import { SearchBar } from '../SearchBar';
-import { TextField } from '../TextField';
+import * as primitives from '@shared/ui/primitives/index';
+import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
+import { Artwork } from '@shared/ui/primitives/Artwork';
+import { SearchBar } from '@shared/ui/primitives/SearchBar';
+import { TextField } from '@shared/ui/primitives/TextField';
 import type {
   ActionSheetOption,
   ArtworkProps,
   MenuAnchor,
   SearchBarProps,
   TextFieldProps,
-} from '../index';
+} from '@shared/ui/primitives/index';
 
 type BarrelTypes = [ActionSheetOption, ArtworkProps, MenuAnchor, SearchBarProps, TextFieldProps];
 const typesReachable: BarrelTypes | null = null;

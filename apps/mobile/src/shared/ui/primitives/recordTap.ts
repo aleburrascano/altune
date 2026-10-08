@@ -1,4 +1,4 @@
-import { recordUserAction } from '../../telemetry/userTelemetry';
+import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
 export function recordTap(action: string | undefined, trackId: string | undefined): void {
   if (action === undefined) {

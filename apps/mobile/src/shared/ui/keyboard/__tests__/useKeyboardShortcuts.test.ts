@@ -9,7 +9,7 @@ import {
   FOCUS_REQUEST_TTL_MS,
   registerSearchFocus,
   useKeyboardShortcuts,
-} from '../useKeyboardShortcuts';
+} from '@shared/ui/keyboard/useKeyboardShortcuts';
 
 const mockPush = jest.fn();
 

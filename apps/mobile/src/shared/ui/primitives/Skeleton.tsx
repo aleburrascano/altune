@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Animated } from 'react-native';
 import type { DimensionValue, StyleProp, ViewStyle } from 'react-native';
 
-import { useReduceMotion } from '../motion/useReduceMotion';
-import { radius as radiusTokens } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
+import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
+import { radius as radiusTokens } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
 
 export type SkeletonProps = {
   width?: DimensionValue;

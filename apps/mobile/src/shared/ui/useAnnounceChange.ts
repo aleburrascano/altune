@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { announce } from './announce';
+import { announce } from '@shared/ui/announce';
 
 export function useAnnounceChange(message: string): void {
   const previous = useRef<string | null>(null);

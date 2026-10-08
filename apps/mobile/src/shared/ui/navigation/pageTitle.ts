@@ -1,4 +1,4 @@
-import { TAB_ROUTE_INFO_BY_ROUTE, TAB_ROUTES } from './tabRoutes';
+import { TAB_ROUTE_INFO_BY_ROUTE, TAB_ROUTES } from '@shared/ui/navigation/tabRoutes';
 
 const APP_NAME = 'Altune';
 const GENERIC_PLAYLIST_TITLE = 'Playlist';

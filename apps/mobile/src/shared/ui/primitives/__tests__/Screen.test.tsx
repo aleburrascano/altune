@@ -2,8 +2,8 @@ import { Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type { ReactTestRendererJSON } from 'react-test-renderer';
 
-import { CONTENT_MAX_WIDTH } from '../../layout/useLayoutMode';
-import { Screen } from '../Screen';
+import { CONTENT_MAX_WIDTH } from '@shared/ui/layout/useLayoutMode';
+import { Screen } from '@shared/ui/primitives/Screen';
 
 function singleChild(
   tree: ReactTestRendererJSON | ReactTestRendererJSON[] | null,

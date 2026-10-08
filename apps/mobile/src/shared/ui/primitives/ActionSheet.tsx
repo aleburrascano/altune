@@ -1,10 +1,10 @@
 import type { ReactElement } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { pressedStyle } from './pressedStyle';
-import { Text } from './Text';
-import { useTheme } from '../theme/useTheme';
-import { radius, spacing } from '../theme/tokens';
+import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
+import { Text } from '@shared/ui/primitives/Text';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { radius, spacing } from '@shared/ui/theme/tokens';
 
 export type ActionSheetOption = {
   label: string;

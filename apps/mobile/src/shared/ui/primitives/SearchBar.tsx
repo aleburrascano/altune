@@ -2,7 +2,7 @@ import { forwardRef, type ForwardedRef, type ReactElement, type ReactNode } from
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Search, X } from 'lucide-react-native';
 
-import { fontFamily, radius, spacing, typography } from '../theme/tokens';
+import { fontFamily, radius, spacing, typography } from '@shared/ui/theme/tokens';
 
 interface SearchBarTheme {
   color: {

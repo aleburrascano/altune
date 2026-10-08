@@ -3,10 +3,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { reportClientError } from '@shared/telemetry/clientErrorReporting';
 
-import { Button } from './primitives/Button';
-import { Text } from './primitives/Text';
-import { spacing } from './theme/tokens';
-import { useTheme } from './theme/useTheme';
+import { Button } from '@shared/ui/primitives/Button';
+import { Text } from '@shared/ui/primitives/Text';
+import { spacing } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
 
 type ScreenBoundaryProps = { children: ReactNode };
 type ScreenBoundaryState = { error: Error | null; componentStack: string | null };

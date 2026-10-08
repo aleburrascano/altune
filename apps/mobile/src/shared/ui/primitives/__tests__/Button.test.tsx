@@ -1,13 +1,13 @@
 import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { recordUserAction } from '../../../telemetry/userTelemetry';
-import { Button } from '../Button';
-import { Chip } from '../Chip';
-import { IconButton } from '../IconButton';
+import { recordUserAction } from '@shared/telemetry/userTelemetry';
+import { Button } from '@shared/ui/primitives/Button';
+import { Chip } from '@shared/ui/primitives/Chip';
+import { IconButton } from '@shared/ui/primitives/IconButton';
 
-jest.mock('../../../telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
-jest.mock('../../haptics', () => ({ tapFeedback: jest.fn() }));
+jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
+jest.mock('@shared/ui/haptics', () => ({ tapFeedback: jest.fn() }));
 
 const record = recordUserAction as jest.Mock;
 

@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { useWideWebLayout } from '../useWideWebLayout';
+import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
 
 let mockWindowWidth = 390;
 

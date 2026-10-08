@@ -2,10 +2,14 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Text } from '../primitives/Text';
-import { spacing } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
-import { TAB_ROUTE_INFO_BY_ROUTE, TAB_ROUTES, type TabRoute } from './tabRoutes';
+import { Text } from '@shared/ui/primitives/Text';
+import { spacing } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import {
+  TAB_ROUTE_INFO_BY_ROUTE,
+  TAB_ROUTES,
+  type TabRoute,
+} from '@shared/ui/navigation/tabRoutes';
 
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();

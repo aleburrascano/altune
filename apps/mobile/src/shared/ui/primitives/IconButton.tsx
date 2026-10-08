@@ -1,8 +1,8 @@
 import type { ComponentType } from 'react';
 import { Pressable } from 'react-native';
 
-import { useTheme } from '../theme/useTheme';
-import { recordTap } from './recordTap';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { recordTap } from '@shared/ui/primitives/recordTap';
 
 export type IconButtonProps = {
   action?: string;
