@@ -21,7 +21,6 @@ const (
 
 var wiringOnlyAllowlist = map[string]string{
 	"sse_handler.go":    "SSE ServeHTTP handler with a mutex and an event select loop",
-	"live_transport.go": "RoundTrip transport with mutex-guarded state",
 	"leader_ticker.go":  "leader ticker with recover and a for/select loop",
 	"jobs.go":           "job runner holding mutex and atomic state",
 	"app.go":            "App struct holding the jobsMu mutex",
@@ -207,8 +206,8 @@ func TestWiringOnly_ViolatingFilesEqualAllowlist(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("files with violations = %v, want exactly the allowlist %v", got, want)
 	}
-	if len(want) != 7 {
-		t.Errorf("allowlist has %d entries, want 7 at the start", len(want))
+	if len(want) != 6 {
+		t.Errorf("allowlist has %d entries, want 6 at the start", len(want))
 	}
 }
 
