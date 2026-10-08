@@ -1,14 +1,13 @@
 package evalmeter
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const (

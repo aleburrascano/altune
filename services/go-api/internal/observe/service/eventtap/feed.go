@@ -23,7 +23,7 @@ func NewFeed() *Feed {
 func (f *Feed) Start(ctx context.Context, tap *Tap) {
 	ch, cancelTap, err := tap.SubscribeAll()
 	if err != nil {
-		slog.Error("admin.event_feed_unavailable", "error", err)
+		slog.ErrorContext(ctx, "admin.event_feed_unavailable", "error", err)
 		return
 	}
 	f.available.Store(true)

@@ -6,10 +6,11 @@ import (
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	observeAlert "altune/go-api/internal/observe/alert"
-	"altune/go-api/internal/observe/evalmeter"
-	"altune/go-api/internal/observe/eventtap"
+	observeNotifier "altune/go-api/internal/observe/adapters/notifier"
 	observeHandler "altune/go-api/internal/observe/handler"
+	observeAlert "altune/go-api/internal/observe/service/alert"
+	"altune/go-api/internal/observe/service/evalmeter"
+	"altune/go-api/internal/observe/service/eventtap"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
@@ -356,7 +357,7 @@ func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
-	a := &App{alertMonitor: observeAlert.NewMonitor(observeAlert.NopNotifier{}, time.Second)}
+	a := &App{alertMonitor: observeAlert.NewMonitor(observeNotifier.NopNotifier{}, time.Second)}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)

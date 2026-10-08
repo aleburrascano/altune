@@ -2,8 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/observe/evalmeter"
-	"altune/go-api/internal/observe/eventtap"
+	"altune/go-api/internal/observe/service/evalmeter"
+	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/logging"
 	"net/http"
 	"time"

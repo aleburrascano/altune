@@ -1,6 +1,8 @@
 package alert
 
 import (
+	"altune/go-api/internal/observe/domain"
+	"altune/go-api/internal/observe/ports"
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
@@ -9,29 +11,6 @@ import (
 	"time"
 )
 
-type Severity int
-
-const (
-	SeverityFix Severity = iota
-	SeverityLog
-	SeveritySignal
-)
-
-type Alert struct {
-	Title    string
-	Message  string
-	Severity Severity
-}
-
-type AlertNotifier interface {
-	Notify(ctx context.Context, a Alert) error
-}
-
-type Condition struct {
-	Key  string
-	Eval func(ctx context.Context) *Alert
-}
-
 const defaultEvalTimeout = 10 * time.Second
 
 const defaultInterval = 30 * time.Second
@@ -39,8 +18,8 @@ const defaultInterval = 30 * time.Second
 type LeadershipScope = runloop.LeadershipScope
 
 type Monitor struct {
-	notifier    AlertNotifier
-	conditions  []Condition
+	notifier    ports.AlertNotifier
+	conditions  []domain.Condition
 	interval    time.Duration
 	evalTimeout time.Duration
 	logger      *slog.Logger
@@ -95,15 +74,13 @@ const (
 )
 
 func (m *Monitor) notifierKind() string {
-	switch m.notifier.(type) {
-	case NopNotifier, *NopNotifier:
+	if s, ok := m.notifier.(ports.SilentNotifier); ok && s.Silent() {
 		return notifierKindNop
-	default:
-		return notifierKindCustom
 	}
+	return notifierKindCustom
 }
 
-func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Condition) *Monitor {
+func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, conditions ...domain.Condition) *Monitor {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
@@ -185,7 +162,7 @@ func (m *Monitor) evaluate(ctx context.Context) {
 	}
 }
 
-func (m *Monitor) settleCondition(ctx context.Context, c Condition) {
+func (m *Monitor) settleCondition(ctx context.Context, c domain.Condition) {
 	fired, known := m.runCondition(ctx, c)
 	if !known {
 		return
@@ -208,8 +185,8 @@ func (m *Monitor) recordRecovery(ctx context.Context, key string) {
 	m.logger.InfoContext(ctx, "alert.recovered", "key", key)
 }
 
-func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
-	if fired.Severity != SeveritySignal {
+func (m *Monitor) raise(ctx context.Context, key string, fired domain.Alert) {
+	if fired.Severity != domain.SeveritySignal {
 		m.logger.InfoContext(ctx, "alert.condition_firing", "key", key, "severity", int(fired.Severity))
 		m.firing[key] = true
 		return
@@ -231,7 +208,7 @@ func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
 	m.firing[key] = true
 }
 
-func (m *Monitor) runCondition(ctx context.Context, c Condition) (fired *Alert, known bool) {
+func (m *Monitor) runCondition(ctx context.Context, c domain.Condition) (fired *domain.Alert, known bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			m.panics.Add(1)

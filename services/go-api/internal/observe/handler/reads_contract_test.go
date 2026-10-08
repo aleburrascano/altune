@@ -4,7 +4,7 @@ import (
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/discovery/adapters/providermetrics"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/observe/evalmeter"
+	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"testing"
