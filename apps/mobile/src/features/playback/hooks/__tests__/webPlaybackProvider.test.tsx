@@ -14,6 +14,7 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 import { recordPlaybackFailure } from '@features/playback/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
+import { resolveSource } from '@features/playback/web/webPresign';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
@@ -1373,5 +1374,23 @@ describe('WebPlaybackProvider failure health', () => {
     expect(logged).toContain('play() rejected');
     expect(logged).not.toMatch(/deadbeef|X-Amz|cdn\.example/);
     expect(view.playback().status).toBe('paused');
+  });
+});
+
+describe('resolveSource preview url trust', () => {
+  it.each(['http://x/a.mp3', 'javascript:alert(1)', 'data:audio/mp3;base64,AAAA'])(
+    'refuses %s',
+    async (previewUrl) => {
+      const outcome = await resolveSource({ kind: 'preview', previewUrl });
+      expect(outcome).toHaveProperty('failure');
+    },
+  );
+
+  it('still resolves an https preview url', async () => {
+    expect(
+      await resolveSource({ kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' }),
+    ).toEqual({
+      url: 'https://cdn.example/p.mp3',
+    });
   });
 });
