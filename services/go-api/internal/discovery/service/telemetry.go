@@ -37,7 +37,18 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 	if err := shared.GuardNotSystem(userId); err != nil {
 		return
 	}
+	event := domain.InteractionEvent{
+		OccurredAt: startedAt,
+		UserId:     userId,
+		Type:       domain.EventTypeSearchPerformed,
+		QueryNorm:  queryNorm,
+		SearchId:   searchId,
+		Payload:    searchPerformedPayload(shown, shownSigs, explored, explorationRate),
+	}
+	t.bg.launch(parentCtx, "telemetry.emit", func(ctx context.Context) { t.append(ctx, event) })
+}
 
+func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) map[string]any {
 	payload := map[string]any{
 		"result_count":                   len(shown),
 		domain.PayloadKeyZeroResult:      len(shown) == 0,
@@ -52,28 +63,20 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 	if top := buildShownTop(shown); len(top) > 0 {
 		payload["top"] = top
 	}
+	return payload
+}
 
-	t.bg.launch(parentCtx, "telemetry.emit", func(ctx context.Context) {
-		emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
-		defer cancel()
-
-		event := domain.InteractionEvent{
-			OccurredAt: startedAt,
-			UserId:     userId,
-			Type:       domain.EventTypeSearchPerformed,
-			QueryNorm:  queryNorm,
-			SearchId:   searchId,
-			Payload:    payload,
-		}
-		if err := t.eventStore.Append(emitCtx, event); err != nil {
-			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed",
-				"search_id", searchId,
-				"user_id", userId.String(),
-				"error", err)
-			return
-		}
-		t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())
-	})
+func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEvent) {
+	emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
+	defer cancel()
+	if err := t.eventStore.Append(emitCtx, event); err != nil {
+		slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed",
+			"search_id", event.SearchId,
+			"user_id", event.UserId.String(),
+			"error", err)
+		return
+	}
+	t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())
 }
 
 func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup) []string {
