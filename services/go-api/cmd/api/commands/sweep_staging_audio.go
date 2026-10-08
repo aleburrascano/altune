@@ -110,7 +110,6 @@ func sweepObjects(ctx context.Context, store ports.AudioStore, objects []ports.O
 	return deleted, keptReferenced, keptFresh, failed
 }
 
-// sweepObject reports whether the unreferenced object was swept (or would be, on a dry run).
 func sweepObject(ctx context.Context, store ports.AudioStore, obj ports.ObjectAge, age time.Duration, execute bool) bool {
 	fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
 	if !execute {
