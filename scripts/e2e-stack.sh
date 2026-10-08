@@ -96,7 +96,7 @@ start_api() {
   ENV=test TEST_AUTH_ENABLED=true HOST=127.0.0.1 PORT="$api_port" \
     PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR="$root/apps/mobile/e2e/fixtures/providers" \
     SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
-    AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
+    AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false ACQUISITION_PAUSED=true \
     MUSIC_DIR="$state/music" DATABASE_URL="$database_url" REDIS_URL="$redis_url" \
     SUPABASE_PROJECT_URL="http://127.0.0.1:$jwks_port" \
     SUPABASE_JWT_JWKS_URL="http://127.0.0.1:$jwks_port/jwks.json" \
