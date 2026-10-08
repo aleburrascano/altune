@@ -2,11 +2,17 @@ import type * as Haptics from 'expo-haptics';
 
 import type { tapFeedback as tapFeedbackType } from '@shared/ui/haptics';
 
+import { impactAsync, selectionAsync } from 'expo-haptics';
+
+import { tapFeedback as tapFeedbackWeb } from '../haptics.web';
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn().mockResolvedValue(undefined),
   selectionAsync: jest.fn().mockResolvedValue(undefined),
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' },
 }));
+
+beforeEach(() => jest.clearAllMocks());
 
 function runOn(
   os: string,
@@ -22,29 +28,23 @@ function runOn(
 
 describe('tapFeedback on web', () => {
   it('never calls expo-haptics for the default kind', () => {
-    runOn('web', (tapFeedback, Haptics) => {
-      tapFeedback();
+    tapFeedbackWeb();
 
-      expect(Haptics.impactAsync).not.toHaveBeenCalled();
-      expect(Haptics.selectionAsync).not.toHaveBeenCalled();
-    });
+    expect(impactAsync).not.toHaveBeenCalled();
+    expect(selectionAsync).not.toHaveBeenCalled();
   });
 
   it('never calls expo-haptics for a selection tap', () => {
-    runOn('web', (tapFeedback, Haptics) => {
-      tapFeedback('selection');
+    tapFeedbackWeb('selection');
 
-      expect(Haptics.selectionAsync).not.toHaveBeenCalled();
-      expect(Haptics.impactAsync).not.toHaveBeenCalled();
-    });
+    expect(selectionAsync).not.toHaveBeenCalled();
+    expect(impactAsync).not.toHaveBeenCalled();
   });
 
   it('never calls expo-haptics for a medium tap', () => {
-    runOn('web', (tapFeedback, Haptics) => {
-      tapFeedback('medium');
+    tapFeedbackWeb('medium');
 
-      expect(Haptics.impactAsync).not.toHaveBeenCalled();
-    });
+    expect(impactAsync).not.toHaveBeenCalled();
   });
 });
 
@@ -63,6 +63,26 @@ describe('tapFeedback on native', () => {
 
       expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
       expect(Haptics.impactAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  it('picks the behaviour from the file, not the runtime flag', () => {
+    runOn('web', (tapFeedback, Haptics) => {
+      tapFeedback('light');
+
+      expect(Haptics.impactAsync).toHaveBeenCalledTimes(1);
+      expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
+    });
+  });
+
+  it('follows the kind across consecutive calls', () => {
+    runOn('ios', (tapFeedback, Haptics) => {
+      tapFeedback('selection');
+      tapFeedback('medium');
+
+      expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
+      expect(Haptics.impactAsync).toHaveBeenCalledTimes(1);
+      expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Medium);
     });
   });
 });
