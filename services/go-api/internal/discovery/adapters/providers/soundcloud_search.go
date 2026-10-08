@@ -126,22 +126,6 @@ func (a *SoundCloudAPIAdapter) searchArtists(ctx context.Context, query string) 
 	}, mapSoundCloudAPIUser)
 }
 
-func (a *SoundCloudAPIAdapter) ResolveArtistID(ctx context.Context, name string) (string, bool) {
-	if strings.TrimSpace(name) == "" {
-		return "", false
-	}
-	results, err := a.searchArtists(ctx, name)
-	if err != nil || len(results) == 0 {
-		return "", false
-	}
-	for _, r := range results {
-		if len(r.Sources) > 0 && r.Sources[0].ExternalID != "" {
-			return r.Sources[0].ExternalID, true
-		}
-	}
-	return "", false
-}
-
 func scFetchList[T any](
 	ctx context.Context,
 	a *SoundCloudAPIAdapter,

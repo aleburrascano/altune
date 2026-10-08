@@ -90,7 +90,7 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 
 var detailFanOutTimeout = consensusTimeout
 
-func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) (groups [][]domain.SearchResult, partial bool) {
+func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) (groups [][]domain.SearchResult, partial bool) {
 	callerCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, detailFanOutTimeout)
 	defer cancel()
@@ -105,16 +105,13 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	for _, name := range orderedProviderNames(s.providers) {
 		call, ok := admitProviderCall(s.breaker, name)
 		if !ok {
-			if providerContentID(identity, name) != "" || artistName != "" {
+			if providerContentID(identity, name) != "" {
 				partial = true
 			}
 			continue
 		}
 		p := s.providers[name]
 		id := providerContentID(identity, name)
-		if id == "" {
-			id = resolveArtistIDByName(ctx, p, artistName)
-		}
 		if id == "" {
 			call.release()
 			continue

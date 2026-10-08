@@ -54,17 +54,3 @@ func providerContentID(identity ResolvedArtistIdentity, name domain.ProviderName
 	}
 	return ""
 }
-
-func resolveArtistIDByName(ctx context.Context, p ports.ArtistContentProvider, artistName string) string {
-	if artistName == "" {
-		return ""
-	}
-	resolver, ok := p.(ports.ArtistIDResolver)
-	if !ok {
-		return ""
-	}
-	if id, ok := resolver.ResolveArtistID(ctx, artistName); ok {
-		return id
-	}
-	return ""
-}
