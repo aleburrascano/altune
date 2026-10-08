@@ -1,6 +1,8 @@
 package providerhttp
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"io"
@@ -8,9 +10,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 func TestGetJSON_non200IsError(t *testing.T) {

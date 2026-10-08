@@ -187,14 +187,14 @@ func PostJSON(ctx context.Context, client *http.Client, rawURL string, body []by
 }
 
 func PostBytesCappedOK(ctx context.Context, client *http.Client, rawURL string, body io.Reader, limit int64, opts ...ReqOption) (int, []byte, error) {
-	status, data, err := PostBytesCapped(ctx, client, rawURL, body, limit, opts...)
+	status, payload, err := PostBytesCapped(ctx, client, rawURL, body, limit, opts...)
 	if err != nil {
-		return status, data, err
+		return status, payload, err
 	}
 	if status != http.StatusOK {
-		return status, data, StatusError{Status: status}
+		return status, payload, StatusError{Status: status}
 	}
-	return status, data, nil
+	return status, payload, nil
 }
 
 func PostBytesCapped(ctx context.Context, client *http.Client, rawURL string, body io.Reader, limit int64, opts ...ReqOption) (int, []byte, error) {
@@ -207,9 +207,9 @@ func PostBytesCapped(ctx context.Context, client *http.Client, rawURL string, bo
 		return 0, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	data, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
+	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
 	if readErr != nil {
 		return resp.StatusCode, nil, readErr
 	}
-	return resp.StatusCode, data, nil
+	return resp.StatusCode, payload, nil
 }
