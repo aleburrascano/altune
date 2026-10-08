@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/playback/adapters/catalogbridge"
 	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/shared/config"
 	"log/slog"
 
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
@@ -22,7 +23,7 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) playbackWi
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool, playbackPersistence.WithQueueStateMetrics(metrics))
 	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
 	return playbackWiring{
-		handler: newQueueHandler(queueSvc, metrics),
+		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
 		forgetDeletedIdentities: playbackService.NewForgetDeletedIdentitiesService(
 			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool), queueSvc,
 			playbackService.WithErasureSweepMetrics(metrics),
@@ -49,6 +50,12 @@ func newQueueService(
 		playbackService.WithNowPlayingEnrichment(enrichmentEnabled))
 }
 
-func newQueueHandler(queueSvc *playbackService.QueueService, metrics playbackMetricsSink) *playbackHandler.QueueHandler {
-	return playbackHandler.NewQueueHandler(queueSvc, playbackHandler.WithQueueStateRateLimitMetrics(metrics))
+func newQueueHandler(queueSvc *playbackService.QueueService, metrics playbackMetricsSink, limit playbackHandler.QueueStateRateLimit) *playbackHandler.QueueHandler {
+	return playbackHandler.NewQueueHandler(queueSvc,
+		playbackHandler.WithQueueStateRateLimit(limit),
+		playbackHandler.WithQueueStateRateLimitMetrics(metrics))
+}
+
+func queueRateLimit(cfg *config.Config) playbackHandler.QueueStateRateLimit {
+	return playbackHandler.QueueStateRateLimit{Every: cfg.PlaybackQueueRateEvery, Burst: cfg.PlaybackQueueRateBurst}
 }

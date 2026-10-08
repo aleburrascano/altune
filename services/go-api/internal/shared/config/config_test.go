@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoad_MinimalValid(t *testing.T) {
@@ -514,7 +515,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"GITEA_ISSUE_URL", "GITEA_ISSUE_REPO", "GITEA_ISSUE_TOKEN", "EXPLORATION_RATE",
-		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
+		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
@@ -1845,5 +1846,47 @@ func TestLoad_YtDLPRemoteComponents(t *testing.T) {
 	setEnv(t, env)
 	if _, err = Load(); err == nil || !searchString(err.Error(), "YTDLP_REMOTE_COMPONENTS") {
 		t.Fatalf("want error naming YTDLP_REMOTE_COMPONENTS, got %v", err)
+	}
+}
+
+func TestLoad_PlaybackQueueRateDefaults(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.PlaybackQueueRateEvery != 2*time.Second || cfg.PlaybackQueueRateBurst != 20 {
+		t.Errorf("defaults = %s/%d, want 2s/20", cfg.PlaybackQueueRateEvery, cfg.PlaybackQueueRateBurst)
+	}
+}
+
+func TestLoad_PlaybackQueueRateOverride(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"PLAYBACK_QUEUE_RATE_EVERY": "500ms", "PLAYBACK_QUEUE_RATE_BURST": "5",
+	}))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.PlaybackQueueRateEvery != 500*time.Millisecond || cfg.PlaybackQueueRateBurst != 5 {
+		t.Errorf("got %s/%d, want 500ms/5", cfg.PlaybackQueueRateEvery, cfg.PlaybackQueueRateBurst)
+	}
+}
+
+func TestLoad_PlaybackQueueRateRejectsBadValues(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"malformed every": {"PLAYBACK_QUEUE_RATE_EVERY": "fast"},
+		"malformed burst": {"PLAYBACK_QUEUE_RATE_BURST": "many"},
+		"zero every":      {"PLAYBACK_QUEUE_RATE_EVERY": "0s"},
+		"zero burst":      {"PLAYBACK_QUEUE_RATE_BURST": "0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(env))
+			if _, err := Load(); err == nil {
+				t.Fatal("expected Load to fail")
+			}
+		})
 	}
 }
