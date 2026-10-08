@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
 import { useResultTap } from '@features/discover/hooks/useResultTap';
-import { stashHandoffForDetail } from '@features/discover/handoff';
+import { stashHandoffForDetail } from '@features/discover/domain/handoff';
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -18,7 +18,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
   useFocusEffect: (effect: () => void) => mockUseFocusEffect(effect),
 }));
-jest.mock('@features/discover/handoff', () => ({
+jest.mock('@features/discover/domain/handoff', () => ({
   stashHandoffForDetail: jest.fn(() => '/discover/detail'),
 }));
 

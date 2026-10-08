@@ -8,7 +8,7 @@ import { Text, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { CorrectionBanner } from '@features/discover/ui/CorrectionBanner';
 import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 import type { ImpressionHandlers } from '@features/discover/hooks/useImpressionLogger';
-import type { SearchCorrection } from '@features/discover/discoverView';
+import type { SearchCorrection } from '@features/discover/domain/discoverView';
 
 export type ResultsCommonProps = {
   onResultTap: ResultTapHandler;

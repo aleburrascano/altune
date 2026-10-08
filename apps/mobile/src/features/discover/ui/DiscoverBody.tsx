@@ -11,7 +11,7 @@ import { FilteredResults } from '@features/discover/ui/FilteredResults';
 import { IncompleteResultsBanner } from '@features/discover/ui/IncompleteResultsBanner';
 import { RefreshFailedNotice } from '@features/discover/ui/RefreshFailedNotice';
 import { RecentSearches } from '@features/discover/ui/RecentSearches';
-import { searchAnnouncement, asyncViewForDiscoverView } from '@features/discover/discoverView';
+import { searchAnnouncement, asyncViewForDiscoverView } from '@features/discover/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discover/ui/ResultsList';
 import type { DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
 import type {

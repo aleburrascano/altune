@@ -1,4 +1,4 @@
-import { kindLabel } from '@features/discover/kindLabel';
+import { kindLabel } from '@features/discover/domain/kindLabel';
 
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 

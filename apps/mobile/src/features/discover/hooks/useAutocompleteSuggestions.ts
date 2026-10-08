@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from '@features/discover/hooks/discoverFetchGate';
-import { isSearchableQuery } from '@features/discover/searchLimits';
+import { isSearchableQuery } from '@features/discover/domain/searchLimits';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 export const SUGGEST_DEBOUNCE_MS = 150;

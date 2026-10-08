@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-import { getSearchState, setSearchState } from '@features/discover/searchState';
+import { getSearchState, setSearchState } from '@features/discover/domain/searchState';
 import {
   MAX_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
   sliceCodePoints,
-} from '@features/discover/searchLimits';
+} from '@features/discover/domain/searchLimits';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;

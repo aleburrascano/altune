@@ -15,8 +15,8 @@ import {
   MAX_QUERY_LENGTH,
   MIN_QUERY_LENGTH,
   SEARCH_PAGE_SIZE,
-} from '@features/discover/searchLimits';
-import { setSearchState } from '@features/discover/searchState';
+} from '@features/discover/domain/searchLimits';
+import { setSearchState } from '@features/discover/domain/searchState';
 import { DiscoverBody } from '@features/discover/ui/DiscoverBody';
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 
