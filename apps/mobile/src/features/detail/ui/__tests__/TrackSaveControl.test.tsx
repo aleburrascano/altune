@@ -360,6 +360,7 @@ describe('TrackSaveControl tap guard', () => {
     const onPress = renderRow({
       trackId: 'failed-oblivion' as TrackId,
       acquisitionStatus: 'failed',
+      retryable: true,
       failureMessage: 'network error',
     });
 
@@ -388,7 +389,11 @@ describe('TrackSaveControl tap guard', () => {
 describe('TrackSaveControl after a fast-failing retry', () => {
   it('lets a failed track be pressed again once a retry patched pending then failed in one act', () => {
     const trackId = 'failed-again' as TrackId;
-    const failed = { acquisitionStatus: 'failed' as const, failureMessage: 'boom' };
+    const failed = {
+      acquisitionStatus: 'failed' as const,
+      failureMessage: 'boom',
+      retryable: true,
+    };
     patchTrackStatus(trackId, failed);
     const onPress = jest.fn();
     render(

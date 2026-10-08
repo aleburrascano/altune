@@ -1,14 +1,25 @@
 import { create } from 'zustand';
 
 import type { TrackId } from '@shared/api-client/ids';
-import type { TrackStatus } from '@shared/api-client/trackAcquisition';
+import type { TrackStatus as AcquisitionTrackStatus } from '@shared/api-client/trackAcquisition';
+import { isRetryable } from '@shared/errors';
 import { onSignOut } from '@shared/session/signOutCleanup';
 import {
   recordStatusChanged,
   type StatusChangeSource,
 } from '@shared/acquisition/acquisitionTelemetry';
 
-export type { TrackStatus };
+export type TrackStatus =
+  | Exclude<AcquisitionTrackStatus, { acquisitionStatus: 'failed' }>
+  | (Extract<AcquisitionTrackStatus, { acquisitionStatus: 'failed' }> & { retryable?: boolean });
+
+export function failedTrackStatus(error: Error): TrackStatus {
+  return {
+    acquisitionStatus: 'failed',
+    failureMessage: error.message,
+    retryable: isRetryable(error),
+  };
+}
 
 type TrackStatusState = {
   statuses: Record<string, TrackStatus>;

@@ -70,6 +70,7 @@ describe('useRetryTrack', () => {
     expect(useTrackStatusStore.getState().statuses[TRACK_ID]).toEqual({
       acquisitionStatus: 'failed',
       failureMessage: '502 bad gateway',
+      retryable: false,
     });
     warnSpy.mockRestore();
   });

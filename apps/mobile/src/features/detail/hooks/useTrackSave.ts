@@ -28,7 +28,7 @@ function rememberedFailure(owned: OwnedTrack | null): SaveFailure | null {
   if (owned?.acquisitionStatus !== 'failed' || owned.failureMessage === null) {
     return null;
   }
-  return { message: owned.failureMessage, isRetryable: true };
+  return { message: owned.failureMessage, isRetryable: owned.retryable };
 }
 
 function deriveState(
@@ -39,6 +39,8 @@ function deriveState(
   if (!canSave) return 'disabled';
   if (save.failure !== null) return failureState(save.failure);
   if (save.isPending) return 'saving';
+  const remembered = rememberedFailure(owned);
+  if (remembered !== null) return failureState(remembered);
   return saveControlState(owned);
 }
 
@@ -83,7 +85,8 @@ export function useTrackSave(track: DiscoveryResult, owned: OwnedTrack | null): 
   const retry = useRetryTrack('detail');
   const canSave = (track.subtitle ?? '').length > 0;
   const state = deriveState(canSave, save, owned);
-  const failure = save.failure ?? (state === 'failed' ? rememberedFailure(owned) : null);
+  const failure =
+    save.failure ?? (state === 'failed' || state === 'rejected' ? rememberedFailure(owned) : null);
   const onSave = buildOnSave(state, { owned, track, save, retry }, guarded);
   return { state, failure, onSave };
 }

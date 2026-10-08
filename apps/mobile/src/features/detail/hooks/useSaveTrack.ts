@@ -14,6 +14,7 @@ import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
 import {
   adoptResponseStatus,
   linkTrackIdentity,
+  failedTrackStatus,
   patchTrackStatus,
   removeTrackStatus,
   trackIdentityKey,
@@ -134,8 +135,7 @@ function warnSaveFailed(error: Error, body: CreateTrackRequest): void {
 }
 
 function markFailed(trackId: TrackId, error: Error): void {
-  const failed = { acquisitionStatus: 'failed', failureMessage: error.message } as const;
-  patchTrackStatus(trackId, failed, 'response');
+  patchTrackStatus(trackId, failedTrackStatus(error), 'response');
 }
 
 function settleFailed(
