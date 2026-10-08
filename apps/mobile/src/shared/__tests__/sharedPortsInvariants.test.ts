@@ -32,8 +32,6 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
-// import/export ... from '...' across newlines; the clause alphabet excludes `;` and quotes
-// so a match cannot run on into a neighbouring statement.
 const FROM_STATEMENT = /\b(?:import|export)\s+(type\s+)?([\w\s{},*$]*?)\s*from\s*['"]([^'"]+)['"]/g;
 const SIDE_EFFECT_IMPORT = /\bimport\s*['"]([^'"]+)['"]/g;
 const CALL_LOAD = /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
@@ -52,7 +50,6 @@ function clauseIsTypeOnly(clause: string): boolean {
   return named.length > 0 && named.every((s) => /^type\s+\S/.test(s));
 }
 
-/** Specifiers of value-level api-client imports; `@shared/api-client/ids` and type-only imports are fine. */
 export function apiClientValueImports(source: string): string[] {
   const code = stripComments(source);
   const offenders: string[] = [];
