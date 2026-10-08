@@ -1062,13 +1062,12 @@ func TestTrackIdFromUUIDRoundTrips(t *testing.T) {
 
 func TestTrackIdJSONUnchanged(t *testing.T) {
 	t.Parallel()
-	raw, err := json.Marshal(TrackId{})
+	raw, err := json.Marshal(struct{ ID TrackId }{})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	// Captured before TrackId embedded shared.EntityId.
-	if string(raw) != `{}` {
-		t.Errorf("json.Marshal(TrackId{}) = %s, want {}", raw)
+	if string(raw) != `{"ID":{}}` {
+		t.Errorf("json.Marshal(TrackId) = %s, want {\"ID\":{}}", raw)
 	}
 }
 

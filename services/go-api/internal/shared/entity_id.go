@@ -2,8 +2,6 @@ package shared
 
 import "github.com/google/uuid"
 
-// EntityId is the shared identity of a catalog entity. It has no text or JSON
-// marshaller on purpose: embedding types keep their existing wire encoding.
 type EntityId struct {
 	value uuid.UUID
 }
