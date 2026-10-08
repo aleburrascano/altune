@@ -191,7 +191,7 @@ func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
 		t.Errorf("record lost when every bound attr was redacted: %s", out)
 	}
 	snap := ring.Snapshot()
-	if len(snap) != 1 || snap[0].Attrs["name"] != "lastfm" {
+	if len(snap) != 1 || snap[0].Attrs["provider.name"] != "lastfm" {
 		t.Errorf("ring lost the record when every bound attr was redacted: %+v", snap)
 	}
 }
