@@ -47,7 +47,6 @@ func TestArtworkFailureHandlers_AllFail(t *testing.T) {
 			if resp.Header.Get("Content-Type") == "text/html" {
 				return
 			}
-			// A 200 must carry a body that is not a JSON object.
 			if len(b) > 0 && b[0] == '{' && b[len(b)-1] == '}' {
 				t.Errorf("200 with well-formed object body %q", b)
 			}
@@ -61,8 +60,9 @@ func TestCancelMidRequestServer_CancelsContextOnRequest(t *testing.T) {
 		t.Fatal("context cancelled before any request")
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
-	_, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err == nil {
+		resp.Body.Close()
 		t.Fatal("expected the request to fail once cancelled")
 	}
 	select {

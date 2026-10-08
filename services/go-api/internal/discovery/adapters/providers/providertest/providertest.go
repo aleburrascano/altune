@@ -1,5 +1,3 @@
-// Package providertest holds the HTTP test doubles shared by the provider
-// packages' tests.
 package providertest
 
 import (
@@ -23,13 +21,19 @@ func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-// NewClient returns a client that sends every request to serverURL, keeping the path and query.
 func NewClient(serverURL string) *http.Client {
 	return &http.Client{Transport: &redirectTransport{targetURL: serverURL}}
 }
 
-// ArtworkFailureHandlers returns server behaviours an artwork provider must report as unavailable.
 func ArtworkFailureHandlers() map[string]http.HandlerFunc {
+	handlers := artworkStatusFailureHandlers()
+	for name, h := range artworkBodyFailureHandlers() {
+		handlers[name] = h
+	}
+	return handlers
+}
+
+func artworkStatusFailureHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"429 with Retry-After": func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Retry-After", "1")
@@ -38,6 +42,17 @@ func ArtworkFailureHandlers() map[string]http.HandlerFunc {
 		"503": func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		},
+		"redirect loop": func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, r.URL.Path+"x", http.StatusFound)
+		},
+		"302 without a Location": func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusFound)
+		},
+	}
+}
+
+func artworkBodyFailureHandlers() map[string]http.HandlerFunc {
+	return map[string]http.HandlerFunc{
 		"200 with truncated JSON": func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"response":{"hits":[{"result":`))
@@ -50,16 +65,9 @@ func ArtworkFailureHandlers() map[string]http.HandlerFunc {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`["not","an","object"]`))
 		},
-		"redirect loop": func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, r.URL.Path+"x", http.StatusFound)
-		},
-		"302 without a Location": func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusFound)
-		},
 	}
 }
 
-// ArtworkVerifiedMissHandlers returns server behaviours that mean the provider verified there is no artwork.
 func ArtworkVerifiedMissHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"404": func(w http.ResponseWriter, _ *http.Request) {
@@ -78,7 +86,6 @@ func ArtworkVerifiedMissHandlers() map[string]http.HandlerFunc {
 	}
 }
 
-// CancelMidRequestServer returns a server and a context that is cancelled once a request reaches the server.
 func CancelMidRequestServer(t *testing.T) (*httptest.Server, context.Context) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
