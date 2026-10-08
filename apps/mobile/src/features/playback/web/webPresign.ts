@@ -1,4 +1,5 @@
 import { fetchAudioUrls } from '@shared/api-client/audio';
+import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import type { PlaybackSource, PlaybackTrack } from '@shared/playback/types';
@@ -56,7 +57,11 @@ export function takeNextPresign(
 }
 
 export async function resolveSource(source: PlaybackSource): Promise<SourceOutcome> {
-  if (source.kind === 'preview') return { url: source.previewUrl };
+  if (source.kind === 'preview') {
+    return isPlayablePreviewUrl(source.previewUrl)
+      ? { url: source.previewUrl }
+      : { failure: NO_AUDIO_URL };
+  }
   try {
     const urls = await fetchAudioUrls([source.trackId]);
     const match = urls.find((resolved) => resolved.trackId === source.trackId);
