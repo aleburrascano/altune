@@ -383,6 +383,94 @@ func (r *PgxTrackRepository) listOwnedTrackRefsPage(
 	return scanOwnedTrackRefs(rows)
 }
 
+var maxReadyAudioTracks = 50_000
+
+var readyAudioTracksPageSize = domain.MaxLibraryPageSize
+
+func (r *PgxTrackRepository) ListReadyAudioTracks(ctx context.Context) ([]ports.ReadyAudioTrack, error) {
+	tracks := []ports.ReadyAudioTrack{}
+	after := uuid.Nil
+	for len(tracks) < maxReadyAudioTracks {
+		limit := min(readyAudioTracksPageSize, maxReadyAudioTracks-len(tracks))
+		page, err := r.listReadyAudioTracksPage(ctx, after, limit)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, page...)
+		if len(page) < limit {
+			return tracks, nil
+		}
+		after = page[len(page)-1].Id.UUID()
+	}
+	slog.Warn("ready audio tracks truncated at ceiling", "ceiling", maxReadyAudioTracks)
+	return tracks, nil
+}
+
+func (r *PgxTrackRepository) listReadyAudioTracksPage(
+	ctx context.Context,
+	after uuid.UUID,
+	limit int,
+) ([]ports.ReadyAudioTrack, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, user_id, title, artist, audio_ref
+		FROM tracks
+		WHERE acquisition_status = 'ready' AND audio_ref IS NOT NULL AND id > $1
+		ORDER BY id
+		LIMIT $2`,
+		after, limit,
+	)
+	if err != nil {
+		return nil, classifyDBError(fmt.Errorf("list ready audio tracks: %w", err))
+	}
+	defer rows.Close()
+
+	page := []ports.ReadyAudioTrack{}
+	for rows.Next() {
+		var id, userId uuid.UUID
+		var t ports.ReadyAudioTrack
+		if err := rows.Scan(&id, &userId, &t.Title, &t.Artist, &t.AudioRef); err != nil {
+			return nil, classifyDBError(fmt.Errorf("scan ready audio track: %w", err))
+		}
+		t.Id = domain.TrackIdFromUUID(id)
+		t.UserId = shared.NewUserId(userId)
+		page = append(page, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, classifyDBError(fmt.Errorf("list ready audio tracks: %w", err))
+	}
+	return page, nil
+}
+
+func (r *PgxTrackRepository) AudioRefsUnderPrefix(ctx context.Context, prefix string) (map[string]bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT audio_ref FROM tracks WHERE starts_with(audio_ref, $1)`,
+		prefix,
+	)
+	if err != nil {
+		return nil, classifyDBError(fmt.Errorf("list audio refs under prefix: %w", err))
+	}
+	defer rows.Close()
+
+	refs := map[string]bool{}
+	for rows.Next() {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
+			return nil, classifyDBError(fmt.Errorf("scan audio ref: %w", err))
+		}
+		refs[ref] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, classifyDBError(fmt.Errorf("list audio refs under prefix: %w", err))
+	}
+	return refs, nil
+}
+
 func scanOwnedTrackRefs(rows pgx.Rows) ([]domain.OwnedTrackRef, error) {
 	refs := []domain.OwnedTrackRef{}
 	for rows.Next() {
