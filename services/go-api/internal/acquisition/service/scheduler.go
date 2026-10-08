@@ -574,8 +574,6 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	}
 }
 
-// pendingDepth reports whether the depth was actually read; a queue that cannot
-// be read or errors yields known=false so a zero is not mistaken for idle.
 func (s *BackgroundAcquisitionScheduler) pendingDepth() (int, time.Duration, bool) {
 	reader, ok := s.queue.(ports.QueueDepthReader)
 	if !ok {
