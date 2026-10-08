@@ -3,7 +3,10 @@ import { Platform } from 'react-native';
 import { LOCKOUT_AFTER_FAILURES } from '@features/auth/attemptLockout';
 import { useResetPassword } from '@features/auth/hooks/useResetPassword';
 
-import { createSupabaseAuthMock, runAsyncAuthHook } from '@features/auth/__tests__/testUtils/authTestUtils';
+import {
+  createSupabaseAuthMock,
+  runAsyncAuthHook,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 

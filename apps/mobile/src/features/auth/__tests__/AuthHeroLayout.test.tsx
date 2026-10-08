@@ -11,7 +11,9 @@ function adjustsInsetsOn(os: 'ios' | 'android'): unknown {
     jest.doMock('react', () => sharedReact);
     jest.doMock('react-native', () => sharedReactNative);
     sharedReactNative.Platform.OS = os;
-    loaded = jest.requireActual<typeof AuthHeroLayoutExports>('@features/auth/ui/hero/AuthHeroLayout');
+    loaded = jest.requireActual<typeof AuthHeroLayoutExports>(
+      '@features/auth/ui/hero/AuthHeroLayout',
+    );
   });
   render(<loaded.AuthHeroLayout background={false}>{null}</loaded.AuthHeroLayout>);
   return screen.UNSAFE_getByType(ScrollView).props.automaticallyAdjustKeyboardInsets;

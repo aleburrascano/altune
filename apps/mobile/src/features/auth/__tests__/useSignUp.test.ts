@@ -5,7 +5,10 @@ import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
 
 import { useSignUp } from '@features/auth/hooks/useSignUp';
 
-import { createSupabaseAuthMock, runAsyncAuthHook } from '@features/auth/__tests__/testUtils/authTestUtils';
+import {
+  createSupabaseAuthMock,
+  runAsyncAuthHook,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
