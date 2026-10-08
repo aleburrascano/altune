@@ -41,10 +41,14 @@ React or the platform. Library (`apps/mobile/src/features/library`) is the worke
   [mobile-consistency.md](mobile-consistency.md)) bans value imports from `@shared/api-client`
   outside `adapters/`.
 - `__tests__/libraryPortInvariants.test.ts` pins library's port boundary.
-- `__tests__/libraryLayersInvariants.test.ts` checks every file in `domain/` stays pure.
+- `__tests__/libraryLayersInvariants.test.ts` pins library's domain files and this doc.
 - `features/__tests__/featurePortInvariants.test.ts` checks library, discover and auth make no
   api-client value import outside `adapters/`, and settings makes none besides its feedback files
   (`hooks/useSubmitReport.ts`, `ui/ReportIssueModal.tsx`).
+- `features/__tests__/featureLayersInvariants.test.ts` runs the domain purity check over every
+  `features/*/domain/` folder. Every feature uses the domain/ports/adapters/hooks/ui layout, and
+  the same test ratchets the loose `.ts`/`.tsx` files at each feature root: a count over its
+  ceiling fails, and a count under it fails with "lower the ceiling", so moves only ever lower it.
 
 ## The purity rule
 
