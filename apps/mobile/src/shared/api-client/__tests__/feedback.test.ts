@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { submitReport } from '@shared/api-client/feedback';
 import type { SubmitReportInput } from '@shared/api-client/feedback';
 import type { ApiError } from '@shared/api-client/index';
@@ -122,5 +123,39 @@ describe('submitReport', () => {
 
     expect(__http.last().url).not.toContain('leak-check-token');
     expect(thrown.message).not.toContain('leak-check-token');
+  });
+});
+
+describe('submitReport idempotency key', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('sends the id minted by the uuid port as the Idempotency-Key', async () => {
+    jest.spyOn(Crypto, 'randomUUID').mockReturnValue('fixed-report-id');
+    __http.reply('POST /v1/feedback/reports', {
+      status: 201,
+      json: { issue_number: 1, issue_url: 'https://github.com/x/y/issues/1' },
+    });
+
+    await submitReport(input);
+
+    expect(__http.last().headers['Idempotency-Key']).toBe('fixed-report-id');
+  });
+
+  it('sends a different key on a second unstubbed submission', async () => {
+    __http.reply('POST /v1/feedback/reports', {
+      status: 201,
+      json: { issue_number: 1, issue_url: 'https://github.com/x/y/issues/1' },
+    });
+
+    await submitReport(input);
+    const first = __http.last().headers['Idempotency-Key'];
+    await submitReport(input);
+    const second = __http.last().headers['Idempotency-Key'];
+
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
   });
 });

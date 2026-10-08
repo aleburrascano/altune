@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import {
   backfillFeaturedArtists,
   createTrack,
@@ -754,5 +755,17 @@ describe('getAllTracks truncation and cancellation', () => {
       expect(isAbort(error)).toBe(true);
       expect(__http.countFor('GET /v1/tracks')).toBe(0);
     });
+  });
+});
+
+describe('makeIdempotencyKey via the uuid port', () => {
+  it('sends the id minted by the uuid port as the Idempotency-Key', async () => {
+    jest.spyOn(Crypto, 'randomUUID').mockReturnValue('fixed-track-id');
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
+
+    await createTrack(baseCreateBody());
+
+    expect(makeIdempotencyKey()).toBe('fixed-track-id');
+    expect(__http.last().headers['Idempotency-Key']).toBe('fixed-track-id');
   });
 });

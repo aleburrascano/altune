@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import { randomUuid } from '@shared/id/uuid';
 import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { ApiError, NetworkError } from '@shared/api-client';
@@ -27,7 +27,7 @@ export const FLUSH_BACKOFF_BASE_MS = 2_000;
 export const FLUSH_BACKOFF_CAP_MS = 5 * 60 * 1000;
 
 export function makeEventId(): string {
-  return Crypto.randomUUID();
+  return randomUuid();
 }
 
 export function withEnvelope(
