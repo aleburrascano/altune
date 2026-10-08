@@ -243,3 +243,17 @@ func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(
 		t.Errorf("stored rows = %+v, want %+v (nothing erased)", got, want)
 	}
 }
+
+func TestMigrations_NoTableKeepsPerUserSearchClicks(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+
+	var found *string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT to_regclass('discovery_search_clicks')::text`).Scan(&found); err != nil {
+		t.Fatalf("look up discovery_search_clicks: %v", err)
+	}
+	if found != nil {
+		t.Errorf("discovery_search_clicks still exists as %q; no writer and no erase path covers it", *found)
+	}
+}
