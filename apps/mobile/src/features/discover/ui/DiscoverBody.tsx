@@ -19,6 +19,7 @@ import type {
 } from '@shared/api-client/discovery';
 import type { DiscoverView, SearchCorrection } from '@features/discover/discoverView';
 import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
+import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 import type { ImpressionHandlers } from '@features/discover/hooks/useImpressionLogger';
 
 type SlotBuilders = Pick<AsyncSectionProps, 'skeleton' | 'error' | 'empty'>;
@@ -38,7 +39,7 @@ interface DiscoverBodyProps {
   filter: ResultsFilter;
   onFilterChange: (filter: ResultsFilter) => void;
   onHistoryTap: (item: SearchHistoryItem) => void;
-  onResultTap: (result: DiscoveryResult, position: number) => void;
+  onResultTap: ResultTapHandler;
   impression: ImpressionHandlers;
   onRetry: () => void;
   searchError?: unknown;

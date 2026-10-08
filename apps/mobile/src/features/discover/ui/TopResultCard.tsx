@@ -7,6 +7,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { SectionLabel } from '@features/discover/ui/SectionLabel';
 import { kindLabel } from '@features/discover/kindLabel';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 
 function buildHighlightProps(setHovered: (v: boolean) => void, setFocused: (v: boolean) => void) {
   return {
@@ -28,7 +29,7 @@ export function TopResultCard({
   onPress,
 }: {
   result: DiscoveryResult;
-  onPress: (result: DiscoveryResult, position: number) => void;
+  onPress: ResultTapHandler;
 }): ReactElement {
   const isArtist = result.kind === 'artist';
   const label = kindLabel(result.kind);

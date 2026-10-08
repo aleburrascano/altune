@@ -8,6 +8,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { FavoriteButton } from '@shared/favorites';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 
 import { resultSecondaryLine } from '@features/discover/resultSecondaryLine';
 import { usePreviewPlayback } from '@features/discover/hooks/usePreviewPlayback';
@@ -15,7 +16,7 @@ import { usePreviewPlayback } from '@features/discover/hooks/usePreviewPlayback'
 type DiscoverRowProps = {
   result: DiscoveryResult;
   position: number;
-  onPress: (result: DiscoveryResult, position: number) => void;
+  onPress: ResultTapHandler;
 };
 
 export const ART_SIZE = 56;
