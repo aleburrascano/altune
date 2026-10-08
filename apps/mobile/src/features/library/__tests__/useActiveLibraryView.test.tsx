@@ -180,7 +180,12 @@ function playlist(id: string, name: string, createdAt: string): PlaylistResponse
 
 function sortedIds(playlists: PlaylistResponse[], sort: 'recent' | 'az'): string[] {
   const deps = {
-    pl: { playlists, isRefetchingPlaylists: false, refetchPlaylists: jest.fn() },
+    pl: {
+      playlists,
+      isRefetchingPlaylists: false,
+      refetchPlaylists: jest.fn(),
+      loadMorePlaylists: jest.fn(),
+    },
     navigation: {
       navigateToTrack: jest.fn(),
       navigateToAlbum: jest.fn(),
