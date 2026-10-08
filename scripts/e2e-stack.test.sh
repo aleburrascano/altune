@@ -6,7 +6,6 @@ fail=0
 scratch=$(mktemp -d); trap 'rm -rf "$scratch"' EXIT
 stubbin="$scratch/stubbin"; mkdir -p "$stubbin"
 export E2E_STACK_DIR="$scratch/state"
-export E2E_METRO_CACHE="$scratch/metro"
 export E2E_HEALTH_ATTEMPTS=1 E2E_READY_ATTEMPTS=1
 export STUB_LOG="$scratch/calls.log"
 export STUB_API_ENV="$scratch/api.env"
@@ -71,7 +70,7 @@ done
 grep -q "^API_URL=http://127.0.0.1:[0-9]*$" <<<"$OUT" || { echo "FAIL API_URL should be a loopback URL"; fail=1; }
 grep -q "^DATABASE_URL=postgres://altune:altune_dev@127.0.0.1:5555/altune" <<<"$OUT" || { echo "FAIL DATABASE_URL should use the mapped port"; fail=1; }
 grep -q "expo export -p web --dev TEST_AUTH=1" "$STUB_LOG" || { echo "FAIL web export should run with --dev and test auth"; fail=1; }
-grep -q "expo export -p web --dev TEST_AUTH=1 TMPDIR=$E2E_METRO_CACHE$" "$STUB_LOG" || { echo "FAIL web export should reuse the metro cache across runs"; fail=1; }
+grep -q "expo export -p web --dev TEST_AUTH=1 TMPDIR=$E2E_STACK_DIR/metro-tmp$" "$STUB_LOG" || { echo "FAIL web export should keep its metro cache inside this run"; fail=1; }
 [ -d "$E2E_STACK_DIR" ] || { echo "FAIL state should exist while the stack is up"; fail=1; }
 [ "$(grep -c '^docker run' "$STUB_LOG")" = "$(grep -c '^docker run .*--label altune-ci=1 ' "$STUB_LOG")" ] || { echo "FAIL every docker run should carry the altune-ci label"; fail=1; }
 
