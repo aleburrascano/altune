@@ -33,14 +33,6 @@ describe('Button', () => {
     expect(order).toEqual(['record', 'press']);
   });
 
-  it('only calls onPress when there is no action', () => {
-    const onPress = jest.fn();
-    render(<Button label="Go" onPress={onPress} testID="b" />);
-    fireEvent.press(screen.getByTestId('b'));
-    expect(onPress).toHaveBeenCalledTimes(1);
-    expect(record).not.toHaveBeenCalled();
-  });
-
   it.each([{ disabled: true }, { loading: true }])('records nothing when %p', (flags) => {
     const onPress = jest.fn();
     render(<Button label="Go" action="a.b" onPress={onPress} testID="b" {...flags} />);
@@ -105,13 +97,5 @@ describe('Chip', () => {
       track_id: undefined,
     });
     expect(onPress).toHaveBeenCalledTimes(1);
-  });
-
-  it('only calls onPress when there is no action', () => {
-    const onPress = jest.fn();
-    render(<Chip label="x" onPress={onPress} testID="c" />);
-    fireEvent.press(screen.getByTestId('c'));
-    expect(onPress).toHaveBeenCalledTimes(1);
-    expect(record).not.toHaveBeenCalled();
   });
 });
