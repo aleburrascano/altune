@@ -140,6 +140,103 @@ func TestCollectN1(t *testing.T) {
 	})
 }
 
+func TestCollectG4(t *testing.T) {
+	handler := "internal/m/adapters/handler/h.go"
+	httpError := "package x\n\nfunc serve() { http.Error(w, \"x\", 500) }\n"
+	coded := "package x\n\ntype boom struct{}\n\nfunc (*boom) ErrorCode() string { return \"m.boom\" }\n"
+	runCases(t, []checkCase{
+		{"handler error helper", fullModule("m", map[string]string{handler: "package x\n\nfunc serve() { httputil.HandleServiceError(w, err) }\n"}), nil},
+		{"http.Error in handler", fullModule("m", map[string]string{handler: httpError}), []string{"G4 " + handler + ":serve http.Error outside shared/httputil"}},
+		{"http.Error in httputil", join(fullModule("m", nil), map[string]string{"internal/shared/httputil/e.go": httpError}), nil},
+		{"coded error in domain", fullModule("m", map[string]string{"internal/m/domain/errors.go": coded}), nil},
+		{"coded error in service", fullModule("m", map[string]string{"internal/m/service/e.go": coded}), []string{"G4 internal/m/service/e.go boom coded error declared outside domain"}},
+	})
+}
+
+func TestCollectG5(t *testing.T) {
+	handler := "internal/m/adapters/handler/h.go"
+	runCases(t, []checkCase{
+		{"named constructor", fullModule("m", map[string]string{handler: "package x\n\ntype H struct{}\n\nfunc NewQueueHandler() int { return 1 }\n"}), nil},
+		{"bare New", fullModule("m", map[string]string{handler: "package x\n\ntype H struct{}\n\nfunc New() int { return 1 }\n"}), []string{"G5 " + handler + ":New constructor is not New<Resource>Handler"}},
+		{"New outside handler", fullModule("m", map[string]string{"internal/m/service/s.go": "package x\n\ntype S struct{}\n\nfunc New() int { return 1 }\n"}), nil},
+	})
+}
+
+func TestCollectG6(t *testing.T) {
+	fake := "package x\n\ntype fakeRepo struct{}\n"
+	runCases(t, []checkCase{
+		{"fake in one test file", fullModule("m", map[string]string{"internal/m/service/a_test.go": fake}), nil},
+		{"fake in two test files", fullModule("m", map[string]string{"internal/m/service/a_test.go": fake, "internal/m/adapters/b_test.go": fake}), []string{"G6 internal/m/service/a_test.go fakeRepo declared in several test files", "G6 internal/m/adapters/b_test.go fakeRepo declared in several test files"}},
+		{"stub in two test files", fullModule("m", map[string]string{"internal/m/service/a_test.go": "package x\n\ntype stubRepo struct{}\n", "internal/m/adapters/b_test.go": "package x\n\ntype stubRepo struct{}\n"}), []string{"G6 internal/m/service/a_test.go stubRepo declared in several test files", "G6 internal/m/adapters/b_test.go stubRepo declared in several test files"}},
+		{"other types", fullModule("m", map[string]string{"internal/m/service/a_test.go": "package x\n\ntype repo struct{}\n", "internal/m/adapters/b_test.go": "package x\n\ntype repo struct{}\n"}), nil},
+	})
+}
+
+func TestCollectG7(t *testing.T) {
+	logFile := "internal/m/service/log.go"
+	logging := func(call string) string { return "package x\n\nfunc run() { " + call + " }\n" }
+	runCases(t, []checkCase{
+		{"context call", fullModule("m", map[string]string{logFile: logging("slog.InfoContext(ctx, \"x\")")}), nil},
+		{"plain call", fullModule("m", map[string]string{logFile: logging("slog.Warn(\"x\")")}), []string{"G7 " + logFile + ":run slog.Warn without context"}},
+		{"plain call in test", fullModule("m", map[string]string{"internal/m/service/log_test.go": logging("slog.Warn(\"x\")")}), nil},
+	})
+}
+
+func conceptTree(t *testing.T, files map[string]string) string {
+	t.Helper()
+	repo := writeTree(t, files)
+	return filepath.Join(repo, "services", "go-api")
+}
+
+func TestCollectN2(t *testing.T) {
+	doc := "docs/ubiquitous-language.md"
+	module := func(name string) map[string]string {
+		files := map[string]string{}
+		for path, body := range fullModule(name, nil) {
+			files["services/go-api/"+path] = body
+		}
+		return files
+	}
+	cases := []struct {
+		name  string
+		files map[string]string
+		want  []string
+	}{
+		{"bold term", join(module("catalog"), map[string]string{doc: "the **catalog** context\n"}), nil},
+		{"heading term", join(module("catalog"), map[string]string{doc: "### Catalog\n"}), nil},
+		{"unknown term", join(module("gadgets"), map[string]string{doc: "the **catalog** context\n"}), []string{"N2 internal/gadgets is not a term in docs/ubiquitous-language.md"}},
+		{"mobile differs", join(module("discovery"), map[string]string{doc: "**Discovery**\n", "apps/mobile/src/features/discover/index.ts": "x\n"}), []string{"N2 internal/discovery differs from mobile feature discover"}},
+		{"mobile same", join(module("playback"), map[string]string{doc: "**Playback**\n", "apps/mobile/src/features/playback/index.ts": "x\n"}), nil},
+		{"no glossary", module("gadgets"), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := collect(conceptTree(t, tc.files))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, normalize(tc.want)) {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCollectN3(t *testing.T) {
+	typed := "package x\n\ntype AudioURLHandler struct{}\n"
+	runCases(t, []checkCase{
+		{"file named for type", fullModule("m", map[string]string{"internal/m/service/audio_url_handler.go": typed}), nil},
+		{"file named for function", fullModule("m", map[string]string{"internal/m/service/run_job.go": "package x\n\nfunc RunJob() {}\n"}), nil},
+		{"file named otherwise", fullModule("m", map[string]string{"internal/m/service/endpoints.go": typed}), []string{"N3 internal/m/service/endpoints.go matches no exported identifier"}},
+		{"no exported identifier", fullModule("m", map[string]string{"internal/m/service/endpoints.go": "package x\n\nfunc run() {}\n"}), nil},
+		{"test file", fullModule("m", map[string]string{"internal/m/service/endpoints_test.go": typed}), nil},
+	})
+}
+
+func shapeLine(line string) bool {
+	return strings.HasPrefix(line, "G1 ") || strings.HasPrefix(line, "G2 ") || strings.HasPrefix(line, "G3 ")
+}
+
 func TestCollectLive(t *testing.T) {
 	got, err := collect("../..")
 	if err != nil {
@@ -152,13 +249,15 @@ func TestCollectLive(t *testing.T) {
 		"G3 internal/discovery/adapters/catalogbridge imports nothing from catalog ports or service",
 		"N1 cmd/api/commands/common.go banned name common",
 		"N1 deploy/lib.sh banned name lib",
+		"G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler",
+		"N2 internal/discovery differs from mobile feature discover",
 	} {
 		if !slices.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
 	for _, line := range got {
-		if strings.Contains(line, "internal/playback/adapters/catalogbridge") || strings.Contains(line, "internal/app/") {
+		if shapeLine(line) && (strings.Contains(line, "internal/playback/adapters/catalogbridge") || strings.Contains(line, "internal/app/")) {
 			t.Errorf("unexpected %q", line)
 		}
 	}

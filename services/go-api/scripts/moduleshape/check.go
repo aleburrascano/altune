@@ -45,6 +45,19 @@ type importRef struct {
 
 func collect(root string) ([]string, error) {
 	var found []string
+	steps := []func(string) ([]string, error){checkModules, checkNames, checkSources, checkConcepts}
+	for _, step := range steps {
+		lines, err := step(root)
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, lines...)
+	}
+	return normalize(found), nil
+}
+
+func checkModules(root string) ([]string, error) {
+	var found []string
 	modules, err := moduleNames(root)
 	if err != nil {
 		return nil, err
@@ -56,11 +69,7 @@ func collect(root string) ([]string, error) {
 		}
 		found = append(found, lines...)
 	}
-	names, err := checkNames(root)
-	if err != nil {
-		return nil, err
-	}
-	return normalize(append(found, names...)), nil
+	return found, nil
 }
 
 func moduleNames(root string) ([]string, error) {
