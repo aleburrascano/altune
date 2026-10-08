@@ -1,7 +1,8 @@
 package testauth
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -98,8 +99,8 @@ func TestVerify_RejectsForgedRealUserSub(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Verify accepted a token claiming sub=%s, returned %s", realUser, verified.UserID)
 	}
-	var tokenErr *auth.InvalidTokenError
-	if !errors.As(err, &tokenErr) || tokenErr.Reason != auth.ReasonClaimInvalidSUB {
+	var tokenErr *authdomain.InvalidTokenError
+	if !errors.As(err, &tokenErr) || tokenErr.Reason != authdomain.ReasonClaimInvalidSUB {
 		t.Fatalf("want ReasonClaimInvalidSUB, got %v", err)
 	}
 }
@@ -161,9 +162,9 @@ func TestCombine_AcceptsTestTokenWithoutCallingReal(t *testing.T) {
 	token, _, _ := ta.IssueToken()
 
 	realCalled := false
-	fallback := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	fallback := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
 		realCalled = true
-		return auth.VerifiedToken{}, errors.New("real should not run")
+		return authdomain.VerifiedToken{}, errors.New("real should not run")
 	})
 
 	verified, err := Combine(ta, fallback).Verify(context.Background(), token)
@@ -181,8 +182,8 @@ func TestCombine_AcceptsTestTokenWithoutCallingReal(t *testing.T) {
 func TestCombine_FallsThroughToRealForNonTestToken(t *testing.T) {
 	ta := mustNew(t)
 	want := shared.NewUserId(uuid.New())
-	fallback := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{UserID: want, ExpiresAt: time.Now().Add(time.Hour)}, nil
+	fallback := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+		return authdomain.VerifiedToken{UserID: want, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 
 	verified, err := Combine(ta, fallback).Verify(context.Background(), "some.supabase.token")
@@ -196,9 +197,9 @@ func TestCombine_FallsThroughToRealForNonTestToken(t *testing.T) {
 
 func assertInvalidToken(t *testing.T, err error) {
 	t.Helper()
-	var tokenErr *auth.InvalidTokenError
+	var tokenErr *authdomain.InvalidTokenError
 	if !errors.As(err, &tokenErr) {
-		t.Fatalf("expected *auth.InvalidTokenError, got %T: %v", err, err)
+		t.Fatalf("expected *authdomain.InvalidTokenError, got %T: %v", err, err)
 	}
 }
 
@@ -221,8 +222,8 @@ func TestVerify_ReportsIssuedTokenExpiry(t *testing.T) {
 func TestCombine_TestTokenKeepsItsExpiry(t *testing.T) {
 	ta := mustNew(t)
 	token, exp, _ := ta.IssueToken()
-	fallback := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{}, errors.New("real should not run")
+	fallback := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+		return authdomain.VerifiedToken{}, errors.New("real should not run")
 	})
 
 	verified, err := Combine(ta, fallback).Verify(context.Background(), token)
@@ -236,9 +237,9 @@ func TestCombine_TestTokenKeepsItsExpiry(t *testing.T) {
 
 func TestCombine_RealTokenKeepsItsExpiry(t *testing.T) {
 	ta := mustNew(t)
-	want := auth.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}
+	want := authdomain.VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}
 
-	fallback := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	fallback := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
 		return want, nil
 	})
 

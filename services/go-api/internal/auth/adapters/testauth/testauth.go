@@ -1,7 +1,8 @@
 package testauth
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"crypto/rand"
@@ -63,7 +64,7 @@ func (t *TestAuth) IssueToken() (string, time.Time, error) {
 	return string(signed), exp, nil
 }
 
-func (t *TestAuth) Verify(_ context.Context, tokenStr string) (auth.VerifiedToken, error) {
+func (t *TestAuth) Verify(_ context.Context, tokenStr string) (authdomain.VerifiedToken, error) {
 	tok, err := jwt.Parse(
 		[]byte(tokenStr),
 		jwt.WithKey(signingAlg, t.key),
@@ -74,19 +75,19 @@ func (t *TestAuth) Verify(_ context.Context, tokenStr string) (auth.VerifiedToke
 		jwt.WithClock(jwt.ClockFunc(t.now)),
 	)
 	if err != nil {
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: err.Error()}
+		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid, Detail: err.Error()}
 	}
 	if tok.Subject() != testUserUUID.String() {
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{
-			Reason: auth.ReasonClaimInvalidSUB,
+		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{
+			Reason: authdomain.ReasonClaimInvalidSUB,
 			Detail: "test token subject is not the dedicated test user",
 		}
 	}
-	return auth.VerifiedToken{UserID: TestUserId(), ExpiresAt: tok.Expiration()}, nil
+	return authdomain.VerifiedToken{UserID: TestUserId(), ExpiresAt: tok.Expiration()}, nil
 }
 
-func Combine(test, fallback auth.TokenVerifier) auth.TokenVerifier {
-	return auth.VerifierFunc(func(ctx context.Context, token string) (auth.VerifiedToken, error) {
+func Combine(test, fallback authports.TokenVerifier) authports.TokenVerifier {
+	return authports.VerifierFunc(func(ctx context.Context, token string) (authdomain.VerifiedToken, error) {
 		if verified, err := test.Verify(ctx, token); err == nil {
 			return verified, nil
 		}

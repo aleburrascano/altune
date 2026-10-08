@@ -3,6 +3,8 @@ package handler
 import (
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"io"
@@ -22,8 +24,8 @@ var (
 	retryTestUserId   = shared.NewUserId(retryTestUserUUID)
 )
 
-var retryVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-	return auth.VerifiedToken{UserID: retryTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
+var retryVerifyAsTestUser = authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+	return authdomain.VerifiedToken{UserID: retryTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 type retryFakeTrackRepo struct {

@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
@@ -23,7 +23,7 @@ const supabaseAuthPathSuffix = "/auth/v1"
 
 const maxAccessTokenLifetime = time.Hour
 
-const reasonRevoked auth.TokenRejectReason = "revoked"
+const reasonRevoked authdomain.TokenRejectReason = "revoked"
 
 var jwksFetchTimeout = 10 * time.Second
 
@@ -138,10 +138,10 @@ func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
 	)
 }
 
-func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (auth.VerifiedToken, error) {
+func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (authdomain.VerifiedToken, error) {
 	keySet, err := v.fetchFreshKeySet(ctx)
 	if err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
 
 	token, err := v.parse(tokenStr, keySet)
@@ -149,19 +149,23 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (auth
 		token, err = v.retryAfterKeyRefresh(ctx, tokenStr, err)
 	}
 	if err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
 
+	return v.verifyClaims(ctx, token)
+}
+
+func (v *SupabaseJWTVerifier) verifyClaims(ctx context.Context, token jwt.Token) (authdomain.VerifiedToken, error) {
 	if err := checkLifetime(token); err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
 
 	verified, err := verifiedToken(token)
 	if err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
 	if err := v.checkRevoked(ctx, verified.UserID, token.IssuedAt()); err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
 	return verified, nil
 }
@@ -172,20 +176,20 @@ func (v *SupabaseJWTVerifier) checkRevoked(ctx context.Context, userID shared.Us
 		return fmt.Errorf("check token revocation: %w", err)
 	}
 	if revoked {
-		return &auth.InvalidTokenError{Reason: reasonRevoked, Detail: "token revoked"}
+		return &authdomain.InvalidTokenError{Reason: reasonRevoked, Detail: "token revoked"}
 	}
 	return nil
 }
 
-func verifiedToken(token jwt.Token) (auth.VerifiedToken, error) {
+func verifiedToken(token jwt.Token) (authdomain.VerifiedToken, error) {
 	if token.Expiration().IsZero() {
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonClaimMissingEXP, Detail: "missing exp claim"}
+		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonClaimMissingEXP, Detail: "missing exp claim"}
 	}
 	userID, err := extractUserID(token)
 	if err != nil {
-		return auth.VerifiedToken{}, err
+		return authdomain.VerifiedToken{}, err
 	}
-	return auth.VerifiedToken{UserID: userID, ExpiresAt: token.Expiration()}, nil
+	return authdomain.VerifiedToken{UserID: userID, ExpiresAt: token.Expiration()}, nil
 }
 
 func (v *SupabaseJWTVerifier) parse(tokenStr string, keySet jwk.Set) (jwt.Token, error) {
@@ -198,14 +202,14 @@ func (v *SupabaseJWTVerifier) parse(tokenStr string, keySet jwk.Set) (jwt.Token,
 		jwt.WithAcceptableSkew(acceptableSkew),
 	)
 	if err != nil {
-		return nil, &auth.InvalidTokenError{Reason: classifyJWTError(err), Detail: err.Error()}
+		return nil, &authdomain.InvalidTokenError{Reason: classifyJWTError(err), Detail: err.Error()}
 	}
 	return token, nil
 }
 
 func isSignatureRejection(err error) bool {
-	var tokenErr *auth.InvalidTokenError
-	return errors.As(err, &tokenErr) && tokenErr.Reason == auth.ReasonSignatureInvalid
+	var tokenErr *authdomain.InvalidTokenError
+	return errors.As(err, &tokenErr) && tokenErr.Reason == authdomain.ReasonSignatureInvalid
 }
 
 func (v *SupabaseJWTVerifier) retryAfterKeyRefresh(ctx context.Context, tokenStr string, rejection error) (jwt.Token, error) {
@@ -225,14 +229,14 @@ func (v *SupabaseJWTVerifier) retryAfterKeyRefresh(ctx context.Context, tokenStr
 func checkLifetime(token jwt.Token) error {
 	iat := token.IssuedAt()
 	if iat.IsZero() {
-		return &auth.InvalidTokenError{
-			Reason: auth.ReasonClaimInvalidIAT,
+		return &authdomain.InvalidTokenError{
+			Reason: authdomain.ReasonClaimInvalidIAT,
 			Detail: "missing iat claim",
 		}
 	}
 	if lifetime := token.Expiration().Sub(iat); lifetime > maxAccessTokenLifetime+acceptableSkew {
-		return &auth.InvalidTokenError{
-			Reason: auth.ReasonClaimInvalidIAT,
+		return &authdomain.InvalidTokenError{
+			Reason: authdomain.ReasonClaimInvalidIAT,
 			Detail: fmt.Sprintf("token lifetime %s exceeds maximum %s", lifetime, maxAccessTokenLifetime),
 		}
 	}
@@ -290,16 +294,16 @@ func (v *SupabaseJWTVerifier) CheckHealth(ctx context.Context) error {
 func extractUserID(token jwt.Token) (shared.UserId, error) {
 	sub := token.Subject()
 	if sub == "" {
-		return shared.UserId{}, &auth.InvalidTokenError{
-			Reason: auth.ReasonClaimInvalidSUB,
+		return shared.UserId{}, &authdomain.InvalidTokenError{
+			Reason: authdomain.ReasonClaimInvalidSUB,
 			Detail: "missing sub claim",
 		}
 	}
 
 	userId, err := shared.ParseUserId(sub)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{
-			Reason: auth.ReasonClaimInvalidSUB,
+		return shared.UserId{}, &authdomain.InvalidTokenError{
+			Reason: authdomain.ReasonClaimInvalidSUB,
 			Detail: "invalid sub claim: " + err.Error(),
 		}
 	}

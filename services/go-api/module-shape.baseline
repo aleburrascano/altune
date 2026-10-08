@@ -1,15 +1,9 @@
 G1 internal/auth missing ARCHITECTURE.md
-G1 internal/auth missing domain/
-G1 internal/auth missing service/
-G1 internal/auth/context.go unexpected root entry
-G1 internal/auth/context_test.go unexpected root entry
 G1 internal/auth/failure_throttle.go unexpected root entry
 G1 internal/auth/failure_throttle_test.go unexpected root entry
 G1 internal/auth/middleware.go unexpected root entry
 G1 internal/auth/middleware_test.go unexpected root entry
-G1 internal/auth/verifier.go unexpected root entry
 G1 internal/eventstream missing ARCHITECTURE.md
-G1 internal/eventstream missing adapters/
 G1 internal/eventstream missing domain/
 G1 internal/eventstream missing ports/
 G1 internal/eventstream missing service/
@@ -79,7 +73,6 @@ G3 internal/discovery/adapters/handler/favorites_endpoints.go:4 imports auth out
 G3 internal/discovery/adapters/handler/ownership_stamp.go:6 imports auth outside adapters/authbridge
 G3 internal/discovery/adapters/handler/search_endpoints.go:4 imports auth outside adapters/authbridge
 G3 internal/discovery/adapters/handler/search_rate_limit.go:4 imports auth outside adapters/authbridge
-G3 internal/eventstream/handler.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge

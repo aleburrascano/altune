@@ -1,7 +1,7 @@
 package eventstream
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/eventstream/adapters/authbridge"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
@@ -137,7 +137,7 @@ func (h *Handler) setup(
 	w http.ResponseWriter,
 	r *http.Request,
 ) (*sseConn, <-chan events.Event, func(), bool) {
-	userId, ok := auth.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return nil, nil, nil, false
 	}
@@ -179,7 +179,7 @@ func (h *Handler) serveLive(
 	}
 	slog.InfoContext(r.Context(), "sse.connected", "user_id", conn.userId.String())
 
-	ctx, cancel := auth.UntilTokenExpiry(r.Context())
+	ctx, cancel := authbridge.UntilTokenExpiry(r.Context())
 	defer cancel()
 	h.stream(ctx, conn, ch, replayed)
 }
@@ -205,7 +205,7 @@ func connLimitLogEvent(err error) string {
 }
 
 func disconnectLogEvent(ctx context.Context) string {
-	if errors.Is(context.Cause(ctx), auth.ErrTokenExpired) {
+	if errors.Is(context.Cause(ctx), authbridge.ErrTokenExpired) {
 		return "sse.token_expired"
 	}
 	return "sse.disconnected"

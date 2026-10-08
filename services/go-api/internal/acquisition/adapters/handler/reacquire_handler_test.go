@@ -3,6 +3,8 @@ package handler
 import (
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
@@ -22,8 +24,8 @@ var (
 	reacquireTestUserId   = shared.NewUserId(reacquireTestUserUUID)
 )
 
-var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-	return auth.VerifiedToken{UserID: reacquireTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
+var reacquireVerifyAsTestUser = authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
+	return authdomain.VerifiedToken{UserID: reacquireTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 type reacquireFakeScheduler struct {

@@ -1,23 +1,12 @@
-package auth
+package service
 
 import (
-	"altune/go-api/internal/shared"
+	"altune/go-api/internal/auth/domain"
 	"context"
-	"errors"
 	"time"
 )
 
-type contextKey struct{}
-
 type tokenExpiryKey struct{}
-
-var userIDKey contextKey
-
-var ErrTokenExpired = errors.New("auth: token expired")
-
-func ContextWithUserID(ctx context.Context, id shared.UserId) context.Context {
-	return context.WithValue(ctx, userIDKey, id)
-}
 
 func ContextWithTokenExpiry(ctx context.Context, expiresAt time.Time) context.Context {
 	return context.WithValue(ctx, tokenExpiryKey{}, expiresAt)
@@ -33,10 +22,5 @@ func UntilTokenExpiry(ctx context.Context) (context.Context, context.CancelFunc)
 	if !ok {
 		return context.WithCancel(ctx)
 	}
-	return context.WithDeadlineCause(ctx, expiresAt, ErrTokenExpired)
-}
-
-func UserIDFromContext(ctx context.Context) (shared.UserId, bool) {
-	id, ok := ctx.Value(userIDKey).(shared.UserId)
-	return id, ok
+	return context.WithDeadlineCause(ctx, expiresAt, domain.ErrTokenExpired)
 }

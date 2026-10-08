@@ -1,8 +1,10 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
+	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"bytes"
@@ -30,12 +32,12 @@ var (
 	errNotSupabse = errors.New("not a supabase token")
 )
 
-func stubSupabaseVerifier() auth.TokenVerifier {
-	return auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+func stubSupabaseVerifier() authports.TokenVerifier {
+	return authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == realTokenStr {
-			return auth.VerifiedToken{UserID: realUser, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return authdomain.VerifiedToken{UserID: realUser, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: errNotSupabse.Error()}
+		return authdomain.VerifiedToken{}, &authdomain.InvalidTokenError{Reason: authdomain.ReasonSignatureInvalid, Detail: errNotSupabse.Error()}
 	})
 }
 
@@ -52,7 +54,7 @@ func buildRouter(t *testing.T, cfg testAuthConfig) chi.Router {
 	r.Group(func(gr chi.Router) {
 		gr.Use(authMiddleware(verifier))
 		gr.Get("/whoami", func(w http.ResponseWriter, req *http.Request) {
-			uid, _ := auth.UserIDFromContext(req.Context())
+			uid, _ := authservice.UserIDFromContext(req.Context())
 			_, _ = w.Write([]byte(uid.String()))
 		})
 	})

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/observe/domain"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/httputil"
@@ -34,7 +34,7 @@ func auditStreamOpen(next http.Handler) http.Handler {
 }
 
 func streamActor(ctx context.Context) string {
-	if id, known := auth.UserIDFromContext(ctx); known {
+	if id, known := authservice.UserIDFromContext(ctx); known {
 		return id.String()
 	}
 	return "unknown"

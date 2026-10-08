@@ -1,25 +1,25 @@
 package providers
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
 	"errors"
 	"strings"
 
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-func classifyJWTError(err error) auth.TokenRejectReason {
+func classifyJWTError(err error) authdomain.TokenRejectReason {
 	switch {
 	case errors.Is(err, jwt.ErrTokenExpired()):
-		return auth.ReasonExpired
+		return authdomain.ReasonExpired
 	case errors.Is(err, jwt.ErrInvalidIssuer()):
-		return auth.ReasonClaimInvalidISS
+		return authdomain.ReasonClaimInvalidISS
 	case errors.Is(err, jwt.ErrInvalidAudience()):
-		return auth.ReasonClaimInvalidAUD
+		return authdomain.ReasonClaimInvalidAUD
 	case hasUntypedSignatureFailure(err):
-		return auth.ReasonSignatureInvalid
+		return authdomain.ReasonSignatureInvalid
 	default:
-		return auth.ReasonMalformed
+		return authdomain.ReasonMalformed
 	}
 }
 

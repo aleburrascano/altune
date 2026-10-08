@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/database"
@@ -20,7 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *eventtap.Tap) {
+func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier authports.TokenVerifier, tap *eventtap.Tap) {
 	a.startObserveSources(ctx, tap)
 	deps := observeHandler.Deps{
 		Health:      a.dependencyHealth,
@@ -43,7 +43,7 @@ func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
 	a.whenLeaderUnlessDisabled(jobEvalMeter, a.evalMeter.Start)
 }
 
-func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *observeHandler.Handler) {
+func mountObserve(r chi.Router, verifier authports.TokenVerifier, principalID string, h *observeHandler.Handler) {
 	r.Route("/observe", func(or chi.Router) {
 		or.Use(observeHandler.NoStoreAndNosniff)
 		or.Use(authMiddleware(verifier))

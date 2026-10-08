@@ -22,6 +22,6 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*authProviders.Su
 	)
 }
 
-func authMiddleware(verifier auth.TokenVerifier) func(http.Handler) http.Handler {
+func authMiddleware(verifier authPorts.TokenVerifier) func(http.Handler) http.Handler {
 	return auth.Middleware(verifier, auth.WithMetrics(authMetrics.NewExpvarAuthMetrics()))
 }

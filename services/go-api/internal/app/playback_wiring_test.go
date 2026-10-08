@@ -1,7 +1,9 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
+	authservice "altune/go-api/internal/auth/service"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackMetrics "altune/go-api/internal/playback/adapters/metrics"
@@ -75,11 +77,11 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playbackHandler.DefaultQueueStateRateLimit)
 
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
-			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return auth.VerifiedToken{}, errors.New("bad token")
+		return authdomain.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
@@ -152,11 +154,11 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 		newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
 		metrics, playbackHandler.DefaultQueueStateRateLimit)
 
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
-			return auth.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return authdomain.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return auth.VerifiedToken{}, errors.New("bad token")
+		return authdomain.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}))
@@ -218,7 +220,7 @@ func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
 	for range 3 {
 		req := httptest.NewRequest(http.MethodPut, "/queue-state",
 			strings.NewReader(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`))
-		req = req.WithContext(auth.ContextWithUserID(req.Context(), user))
+		req = req.WithContext(authservice.ContextWithUserID(req.Context(), user))
 		rec := httptest.NewRecorder()
 		routes.ServeHTTP(rec, req)
 		codes = append(codes, rec.Code)

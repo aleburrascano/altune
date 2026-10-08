@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -14,7 +16,7 @@ import (
 	"time"
 )
 
-func Middleware(verifier TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
+func Middleware(verifier ports.TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
 	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics()}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -36,47 +38,70 @@ func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
 	}
 }
 
-func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {
-	rej := rejecter{metrics: metrics}
+func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {
+	a := authenticator{verifier: verifier, throttle: throttle, rej: rejecter{metrics: metrics}}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				rej.rejectToken(w, r, ReasonMissing, "missing authorization header", nil)
-				return
-			}
-
-			token, ok := bearerToken(authHeader)
+			token, ok := a.bearer(w, r)
 			if !ok {
-				rej.rejectToken(w, r, ReasonMalformed, "malformed authorization header", nil)
 				return
 			}
-
-			attempt, retryAfter, admitted := throttle.admit(clientKey(r))
-			if !admitted {
-				rej.rejectThrottled(w, r, retryAfter)
+			verified, ok := a.verify(w, r, token)
+			if !ok {
 				return
 			}
-
-			verified, err := verifier.Verify(r.Context(), token)
-			if err != nil {
-				rej.rejectFailedVerification(w, r, err)
-				return
-			}
-			if verified.ExpiresAt.IsZero() {
-				rej.rejectToken(w, r, ReasonClaimMissingEXP, "invalid token", nil)
-				return
-			}
-			attempt.succeeded()
 
 			slog.DebugContext(r.Context(), "auth.verified",
 				"user_id", verified.UserID.String(),
 				"path", r.URL.Path,
 			)
 
-			next.ServeHTTP(w, r.WithContext(verified.contextFor(r.Context())))
+			next.ServeHTTP(w, r.WithContext(contextFor(r.Context(), verified)))
 		})
 	}
+}
+
+type authenticator struct {
+	verifier ports.TokenVerifier
+	throttle *failureThrottle
+	rej      rejecter
+}
+
+func (a authenticator) bearer(w http.ResponseWriter, r *http.Request) (string, bool) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		a.rej.rejectToken(w, r, domain.ReasonMissing, "missing authorization header", nil)
+		return "", false
+	}
+	token, ok := bearerToken(authHeader)
+	if !ok {
+		a.rej.rejectToken(w, r, domain.ReasonMalformed, "malformed authorization header", nil)
+		return "", false
+	}
+	return token, true
+}
+
+func (a authenticator) verify(w http.ResponseWriter, r *http.Request, token string) (domain.VerifiedToken, bool) {
+	attempt, retryAfter, admitted := a.throttle.admit(clientKey(r))
+	if !admitted {
+		a.rej.rejectThrottled(w, r, retryAfter)
+		return domain.VerifiedToken{}, false
+	}
+	verified, err := a.verifier.Verify(r.Context(), token)
+	if err != nil {
+		a.rej.rejectFailedVerification(w, r, err)
+		return domain.VerifiedToken{}, false
+	}
+	if verified.ExpiresAt.IsZero() {
+		a.rej.rejectToken(w, r, domain.ReasonClaimMissingEXP, "invalid token", nil)
+		return domain.VerifiedToken{}, false
+	}
+	attempt.succeeded()
+	return verified, true
+}
+
+func contextFor(ctx context.Context, t domain.VerifiedToken) context.Context {
+	return service.ContextWithTokenExpiry(service.ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
 }
 
 const maxBearerTokenBytes = 8 << 10
@@ -99,7 +124,7 @@ type rejecter struct {
 }
 
 func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error) {
-	var invalidToken *InvalidTokenError
+	var invalidToken *domain.InvalidTokenError
 	if errors.As(err, &invalidToken) {
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
@@ -138,12 +163,12 @@ func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Req
 	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 }
 
-func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
+func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {
 	rej.metrics.TokenRejected(string(reason))
 	writeUnauthorized(w, r, reason, detail, err)
 }
 
-func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
+func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {
 	attrs := []any{
 		"reason", string(reason),
 		"detail", detail,
@@ -163,9 +188,9 @@ func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason TokenRejec
 }
 
 func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
-	id, ok := UserIDFromContext(r.Context())
+	id, ok := service.UserIDFromContext(r.Context())
 	if !ok {
-		writeUnauthorized(w, r, ReasonMissing, "authentication required", nil)
+		writeUnauthorized(w, r, domain.ReasonMissing, "authentication required", nil)
 		return shared.UserId{}, false
 	}
 	return id, true

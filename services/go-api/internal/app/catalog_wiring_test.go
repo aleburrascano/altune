@@ -8,7 +8,8 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
+	authdomain "altune/go-api/internal/auth/domain"
+	authports "altune/go-api/internal/auth/ports"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
@@ -498,11 +499,11 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("wireCatalog: %v", err)
 	}
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
-			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return authdomain.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return auth.VerifiedToken{}, errors.New("bad token")
+		return authdomain.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat,
 		playbackHandler.NewQueueHandler(nil),
