@@ -42,7 +42,7 @@ func newAppleMusicTokenResolver(client *http.Client) *appleMusicTokenResolver {
 const appleMusicResolveTimeout = 20 * time.Second
 
 func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	html, err := r.fetchText(ctx, r.siteURL)
+	html, err := getText(ctx, r.client, r.siteURL, appleMusicMaxBody, appleMusicUserAgent)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("fetch apple music page: %w", err)
 	}
@@ -52,7 +52,7 @@ func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Tim
 		return "", time.Time{}, errors.New("no index bundle found on apple music page")
 	}
 
-	js, err := r.fetchText(ctx, r.bundleBaseURL+bundlePath)
+	js, err := getText(ctx, r.client, r.bundleBaseURL+bundlePath, appleMusicMaxBody, appleMusicUserAgent)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("fetch apple music bundle: %w", err)
 	}
@@ -63,17 +63,6 @@ func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Tim
 	}
 
 	return token, expiry, nil
-}
-
-func (r *appleMusicTokenResolver) fetchText(ctx context.Context, u string) (string, error) {
-	status, body, err := getBytesCapped(ctx, r.client, u, appleMusicMaxBody, withHeader("User-Agent", appleMusicUserAgent))
-	if err != nil {
-		if status != 0 {
-			return "", fmt.Errorf("GET %s: status %d", u, status)
-		}
-		return "", err
-	}
-	return string(body), nil
 }
 
 func extractAppleMusicToken(js string) (token string, expiry time.Time, ok bool) {

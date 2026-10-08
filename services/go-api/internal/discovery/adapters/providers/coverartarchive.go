@@ -27,13 +27,12 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	u := fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-1200", url.PathEscape(mbid))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, http.NoBody)
+	req, err := newHeadRequest(ctx, u, withHeader("Accept", "image/*"))
 	if err != nil {
 		return artworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
-	req.Header.Set("Accept", "image/*")
 
-	resp, err := r.client.Do(req)
+	resp, err := sendRequest(r.client, req)
 	if err != nil {
 		return artworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
