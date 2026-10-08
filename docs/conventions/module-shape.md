@@ -86,6 +86,58 @@ That is 2 + 3 + 4 + 1 = 10 discovery lines, 0 unassigned. Catalog and acquisitio
 - `x/text/unicode/norm` with the existing `shared/textnorm` (not new work for `shared.Id`): catalog `domain/dedup.go:7`, `domain/source_url.go:8`; acquisition `service/title_qualifiers.go:9`. If `textnorm` lacks the exact call, add one function there.
 - Not covered here: `acquisition/service/eval/harness.go:4` and `:5` import adapters, which is a different G2 cause.
 
+## Reaching catalog
+
+Acquisition consumes `catalog/domain.Track` and drives its guards (`MarkReady`, `MarkFailed`, `FailAcquisition`, `RevertToPending`, glossary: `docs/ubiquitous-language.md:38`). The baseline has 25 catalog G3 lines (`services/go-api/module-shape.baseline:42-66`, one more than the pitch counted; line 41 is the auth line, out of scope until the auth `context.go` move above). They sit in 3 `ports/` files, 14 `service/` files (13 plus `service/eval/case.go`), 3 handler files and 3 persistence files. Five service files and `ports/writer.go` also take `catalog/ports` (`OrphanedAudioRecorder`, `OrphanedAudio`) in `acquire.go`, `orphan_queue.go` and `step_store.go`.
+
+G2 stops `service/` importing `adapters/`, so the bridge cannot be what `service/` and `ports/` call. They need types acquisition owns, with the bridge implementing them.
+
+What acquisition uses, from `grep` over the non-test files:
+
+- Identity and vocabulary: `TrackId` (151 uses, most of them `NewTrackId` in tests), `FailureCode` with the `Failure*` constants, `JoinFailureReason`, `SplitFailureReason`, `FailureMessage`. These are values with no behaviour that changes with catalog's rules.
+- The aggregate: `Track` read-only for 20-odd fields (title, artist, album, duration, ISRC, `AudioRef`, `RejectedSourceKeys`, `Version`, `AcquisitionStatus`) and written through `SetDuration`, `SetAcquisitionProvenance`, `RejectAudioSource`, `SetAudioSource`, `SetAcquisitionConfidence`, `ReplaceAudio`, `MarkReady`, `FailAcquisition`, `RevertToPending`, then one `Update(track, expectedVersion)`.
+- Status and provenance: `AcquisitionStatus` (+ `Pending/Ready/Failed`), `AcquisitionProvenance` (+ 3 values), `ErrIllegalAcquisitionTransition`.
+- The catalog port `OrphanedAudioRecorder` and its `OrphanedAudio` row.
+
+| Option | Files touched | New types | Guards in one place | Diff |
+|---|---|---|---|---|
+| (a) acquisition-owned `ports.TrackRef` snapshot plus `ports.TrackLedger` (`Get`, `Complete`, `Fail`, `Revert`), `ports.OrphanedAudio`/`OrphanedAudioRecorder`, and `adapters/catalogbridge` over `catalog/ports.TrackRepository` | all 25 lines' files, 1 new bridge package, `app/` wiring | `TrackRef`, `TrackLedger`, `TrackId`, `FailureCode`, status and provenance enums, orphan types; ids and failure codes would be copied and converted both ways in the bridge | yes: the bridge calls catalog's `Track` methods, catalog's guards stay | large: ~690 `TrackId` uses plus the Track-shaped tests (63 `domain.Track`, 51 `domain.NewTrack`) change |
+| (b) `TrackId`, `FailureCode` and the failure helpers move to `shared/`; (a) only for the Track aggregate and orphan types | same files, but ids and codes need no conversion; bridge converts only `Track`, status, provenance | `shared.TrackId`, `shared.FailureCode`; `TrackRef`, `TrackLedger`, orphan types in acquisition `ports/` | yes, same as (a) | ~49 files for the id rename (mechanical, cross-module), then the Track part; split into tickets under 200KB each |
+| (c) amend G3: acquisition may import catalog `domain/` as a published language | `module-shape.md`, `check.go`, baseline | none | yes, trivially (acquisition mutates catalog's `Track` itself) | smallest, but weakens G3 for every module; `domain/` of the other module is exactly what G3 exists to keep out; `OrphanedAudioRecorder` is in `catalog/ports`, so (c) would also need to cover `ports/` |
+
+**Chosen: (b).** Ids and failure codes are plain values that both sides already agree on and that other modules (discovery eval, auth failure throttle) also name, so `shared/` is the right owner and the bridge never converts them. `shared/userid.go` and `shared.Id` (previous section) set the precedent. The `Track` aggregate stays in catalog with its guards; acquisition sees a `TrackRef` and asks the ledger to transition, and the bridge calls the same `Track` methods, so the transition rules exist once. (a) alone pays a copy-and-convert for two types that have no catalog-specific behaviour. (c) is rejected: it is an owner call that opens G3 for the next module, and it does not cover `catalog/ports`.
+
+The pieces:
+
+- `shared/trackid.go`: `type TrackId struct{ value uuid.UUID }` with `NewTrackId`, `ParseTrackId`, `TrackIdFromUUID`, `UUID`, `String`, `IsZero`, moved from `catalog/domain/track.go:15-37` and the catalog call sites renamed to `shared.TrackId` (no alias left behind).
+- `shared/failure.go`: `FailureCode`, the `Failure*` constants, `JoinFailureReason`, `SplitFailureReason`, `FailureMessage`, moved from `catalog/domain/failure.go` with its test.
+- `acquisition/ports/track.go`: `TrackRef` (the fields acquisition reads, plus `Version`), `TrackStatus` and `Provenance` owned by acquisition, `ErrIllegalTransition`, and `TrackLedger`:
+  - `Get(ctx, id, user) (TrackRef, error)`
+  - `Complete(ctx, ref, Completion) error`, where `Completion` carries duration, provenance, confidence and evidence, source URL or rejected key, and audio ref. One call replaces the setters plus `MarkReady` plus `Update`, so the single optimistic-version write is kept.
+  - `Fail(ctx, ref, reason) error`, `Revert(ctx, ref) error`
+  - `AudioRefInUse` stays on `ports.AudioRefLookup` with `shared.TrackId`.
+- `acquisition/ports/orphan.go`: `OrphanedAudio` and `OrphanedAudioRecorder` with `shared.TrackId` and `shared.UserId`.
+- `acquisition/adapters/catalogbridge/`: imports `catalog/ports` (`TrackRepository`, `OrphanedAudioQueue`) and `catalog/domain`; maps `TrackRef` to `Track`, calls the guards, maps `ErrIllegalAcquisitionTransition` and `ErrTrackVersionConflict` to acquisition errors. Handlers and `persistence` use `ports` and `shared` only.
+
+**Throwaway-branch run** (`go run ./scripts/moduleshape` from `services/go-api`, branch deleted afterwards, `work` clean):
+
+- `internal/shared/trackid.go` holding `type TrackId struct{ value uuid.UUID }`, and `ports/cooldown.go` importing `altune/go-api/internal/shared` with `shared.TrackId` instead of `catalog/domain`: the check printed `fixed: remove it from the baseline: G3 internal/acquisition/ports/cooldown.go:4 imports catalog outside adapters/catalogbridge` and no new G3 line. The only other output was `N3 internal/shared/trackid.go matches no exported identifier`, from the scratch file having no methods, which the real move has.
+- The same file back on `catalog/domain`: no new line, the G3 line stays matched by baseline line 48.
+
+**Behaviour that stays identical.** `Complete` applies the same setters in the same order as `step_update_track.go:36-83`, so `ReplaceAudio` and `MarkReady` keep their order and error text, and one `Update` carries `expectedVersion`. A bridge test pins each guard: `Complete` on a track not pending returns `ErrIllegalTransition`, as `MarkReady` returns `ErrIllegalAcquisitionTransition` today. Wire values (`FailureCode` strings, `TrackId.String()`) do not change because the constants and uuid format move unchanged.
+
+Follow-up tickets, in order. Each removes its baseline lines in the same commit and stays under 200KB of diff (the two renames are mechanical).
+
+1. Move `TrackId` to `shared/trackid.go` and rename every user in one commit, because removing it from `catalog/domain` breaks each importer: 638 lines in 49 files outside tests of other modules and inside acquisition, about 110KB of diff (53KB of matching lines, removed and added). Clears nothing in acquisition by itself except where a file imported `catalog/domain` only for `TrackId`: `ports/cooldown.go`, `ports/queue.go`, `adapters/persistence/cooldown_store.go`, `cooldown_fallback.go` and `job_queue.go` (baseline lines 45-49), which this ticket removes.
+2. Move `FailureCode`, the `Failure*` constants and the three helpers to `shared/failure.go` with their test, and rename catalog, discovery eval, auth and acquisition users (222 lines, about 30KB). Clears `service/failure_reason.go` (line 55).
+3. Acquisition `ports/track.go` (`TrackRef`, `TrackLedger`), the bridge's ledger over `catalog/ports.TrackRepository` with the guard tests, and `ports/writer.go` loses `TrackRepository` and its `Track` import. Clears line 50. The ledger has no caller yet.
+4. Acquisition-owned `ports/orphan.go`; `acquire.go`, `orphan_queue.go`, `step_store.go` switch to it, and `adapters/catalogbridge` gets the recorder adapter plus `app/` wiring. Clears the `catalog/ports` lines (52, 58, 65).
+5. Service read side: `matching`, `audio_ref`, `retry_admission`, `reacquire`, `scheduler*`, `mem_job_queue`, `pipeline`, `buildsteps`, `failure_reason`, `eval/case.go` read `TrackRef`, `shared.TrackId` and `shared.FailureCode`. Clears the remaining lines in those files.
+6. Service write side: `step_update_track.go` and the `acquire.go` fail path call `TrackLedger.Complete/Fail/Revert`; the three handlers (`command.go`, `reacquire_handler.go`, `retry_handler.go`) take `shared.TrackId`. Clears lines 42-44, 51 and 66.
+7. Tests: acquisition fakes for `TrackLedger` in the module test package, tests drop `catalog/domain.NewTrack`. Clears no baseline line (the checker skips `_test.go`); needed so the tests stop importing catalog. Edit `ARCHITECTURE.md:22-24` to say acquisition reaches catalog through `catalogbridge` and `ports.TrackLedger`.
+
+After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --exclude='*_test.go'` shows only `adapters/catalogbridge/`.
+
 ## mobile: `apps/mobile/src/features/<feature>/`
 
 | ID | Rule |
