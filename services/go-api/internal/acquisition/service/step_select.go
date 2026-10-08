@@ -21,6 +21,9 @@ func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afte
 		ranked = ranked[1:]
 	}
 	if len(ranked) == 0 {
+		if ac.SearchUnavailable != nil {
+			return afterSelect{}, fmt.Errorf("no candidates passed matching gates: %w", ac.SearchUnavailable)
+		}
 		return afterSelect{}, fmt.Errorf("no candidates passed matching gates")
 	}
 	ac.Ranked = ranked

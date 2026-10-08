@@ -174,3 +174,44 @@ func TestSearchStep_Name(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", got, "search")
 	}
 }
+
+func searchWithAllExcluded(t *testing.T, down findOnlySource) (context.Context, error) {
+	t.Helper()
+	const url = "https://example.com/a"
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{{URL: url}}}
+	ctx := withJobAttempt(context.Background(), 1)
+	ac := &AcquisitionContext{Replace: ReplaceState{ExcludeKeys: []string{sourceKey(url)}}}
+	_, err := NewSearchStep(NewSourceRegistry(down, healthy)).Execute(ctx, ac, pipelineStart{})
+	if err == nil {
+		t.Fatal("expected a search error")
+	}
+	return ctx, err
+}
+
+func TestSearchStep_OutageWithAllExcluded_IsRetryable(t *testing.T) {
+	ctx, err := searchWithAllExcluded(t, outageSource())
+
+	if !ports.IsSourceUnavailable(err) || !willRetry(ctx, err) {
+		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
+	}
+}
+
+func TestSearchStep_PlainSourceErrorWithAllExcluded_StaysPermanent(t *testing.T) {
+	ctx, err := searchWithAllExcluded(t, findOnlySource{name: "down", err: errors.New("exit 1")})
+
+	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
+		t.Fatalf("err = %v, want a permanent failure", err)
+	}
+}
+
+func TestSearchStep_HealthyAllExcluded_StaysNoMatchFound(t *testing.T) {
+	ctx, err := searchWithAllExcluded(t, findOnlySource{name: "quiet"})
+
+	if got := err.Error(); got != "no candidates found" {
+		t.Errorf("error = %q", got)
+	}
+	wrapped := &StepError{Step: stepNameSearch, Err: err}
+	if got := failureReason(wrapped); got != "no_match_found" || willRetry(ctx, wrapped) {
+		t.Errorf("failureReason = %q, want permanent no_match_found", got)
+	}
+}

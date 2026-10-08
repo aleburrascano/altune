@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -130,5 +131,97 @@ func TestSelectStep_Name(t *testing.T) {
 	step := NewSelectStep()
 	if got := step.Name(); got != "select" {
 		t.Errorf("Name() = %q, want %q", got, "select")
+	}
+}
+
+func searchOutageThenSelect(t *testing.T, down findOnlySource, healthy findOnlySource, replace ReplaceState) (context.Context, error) {
+	t.Helper()
+	ctx := withJobAttempt(context.Background(), 1)
+	ac := &AcquisitionContext{
+		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Replace: replace,
+	}
+	if _, err := NewSearchStep(NewSourceRegistry(down, healthy)).Execute(ctx, ac, pipelineStart{}); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	_, err := NewSelectStep().Execute(ctx, ac, afterSearch{})
+	if err == nil {
+		t.Fatal("expected a select error")
+	}
+	return ctx, err
+}
+
+var (
+	rejectedCandidate = ports.AudioCandidate{Title: "Cooking Tutorial Episode 47", Channel: "CookingChannel", Duration: 20, URL: "https://example.com/cook"}
+	matchingCandidate = ports.AudioCandidate{Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200, URL: "https://example.com/match"}
+)
+
+func outageSource() findOnlySource {
+	return findOnlySource{name: "down", err: &ports.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+}
+
+func TestSelectStep_SearchOutageWithAllRejected_IsRetryable(t *testing.T) {
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+
+	ctx, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
+
+	if !ports.IsSourceUnavailable(err) || !willRetry(ctx, err) {
+		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
+	}
+}
+
+func TestSelectStep_SearchOutageWithSkipTopRanked_IsSourceUnavailable(t *testing.T) {
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{matchingCandidate}}
+
+	_, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{SkipTopRanked: true})
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Fatalf("err = %v, want source-unavailable", err)
+	}
+}
+
+func TestSelectStep_PlainSourceErrorWithAllRejected_StaysPermanent(t *testing.T) {
+	down := findOnlySource{name: "down", err: errors.New("exit 1")}
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+
+	ctx, err := searchOutageThenSelect(t, down, healthy, ReplaceState{})
+
+	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
+		t.Fatalf("err = %v, want a permanent failure", err)
+	}
+}
+
+func TestSelectStep_HealthyNoCandidates_StaysNoMatchFound(t *testing.T) {
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+
+	ctx, err := searchOutageThenSelect(t, findOnlySource{name: "quiet"}, healthy, ReplaceState{})
+
+	if got := err.Error(); got != "no candidates passed matching gates" {
+		t.Errorf("error = %q", got)
+	}
+	wrapped := &StepError{Step: stepNameSelect, Err: err}
+	if got := failureReason(wrapped); got != "no_match_found" || willRetry(ctx, wrapped) {
+		t.Errorf("failureReason = %q, want permanent no_match_found", got)
+	}
+}
+
+func TestSelectStep_OutageDoesNotLeakIntoNextAttempt(t *testing.T) {
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+	searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
+
+	ctx2 := withJobAttempt(context.Background(), 2)
+	_, err := searchOutageThenSelect(t, findOnlySource{name: "quiet"}, healthy, ReplaceState{})
+
+	if ports.IsSourceUnavailable(err) || willRetry(ctx2, err) {
+		t.Fatalf("err = %v, want a permanent failure on attempt 2", err)
+	}
+}
+
+func TestSelectStep_WrappedOutageOnFinalAttempt_DoesNotRetry(t *testing.T) {
+	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+	_, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
+
+	if willRetry(withJobAttempt(context.Background(), maxAcquisitionAttempts), err) {
+		t.Fatal("willRetry at the final attempt must be false")
 	}
 }
