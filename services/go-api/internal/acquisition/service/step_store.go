@@ -90,7 +90,14 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
-	if ac.AudioRef == "" || s.stillServesATrack(ctx, ac) {
+	if ac.AudioRef == "" {
+		return nil
+	}
+	if rollbackHandedOver(ctx) && ac.AudioRef != ac.Replace.PreservedRef {
+		recordOrphanedAudio(ctx, s.orphans, s.userID, s.ownTrackID, ac.AudioRef)
+		return nil
+	}
+	if s.stillServesATrack(ctx, ac) {
 		return nil
 	}
 	err := s.deleteWithRetry(ctx, ac.AudioRef)

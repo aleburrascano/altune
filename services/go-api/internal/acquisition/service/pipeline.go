@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -144,9 +145,28 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 
 const rollbackBudget = 30 * time.Second
 
+type rollbackHandedOverKey struct{}
+
+func withRollbackHandedOver(ctx context.Context) context.Context {
+	return context.WithValue(ctx, rollbackHandedOverKey{}, true)
+}
+
+func rollbackHandedOver(ctx context.Context) bool {
+	handedOver, _ := ctx.Value(rollbackHandedOverKey{}).(bool)
+	return handedOver
+}
+
+func schedulerHandedOver(ctx context.Context) bool {
+	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
+	return ownedByScheduler && errors.Is(ctx.Err(), context.Canceled)
+}
+
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := detachedTimeout(ctx, rollbackBudget)
 	defer cancel()
+	if schedulerHandedOver(ctx) {
+		rbCtx = withRollbackHandedOver(rbCtx)
+	}
 
 	for i := len(completed) - 1; i >= 0; i-- {
 		step := completed[i]
