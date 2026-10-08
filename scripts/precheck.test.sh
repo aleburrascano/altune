@@ -447,6 +447,34 @@ run_script_with_stubs
 expect_npx "eventContract.test.ts"
 expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
 
+add_gate_parity_stub() {
+    (
+        cd "$WORK/repo" || exit 1
+        printf 'process.exit(%s);\n' "$1" >scripts/gate-parity.mjs
+        printf 'echo true\n' >scripts/worktree-deps.sh
+        git add -A
+        git commit -qm "gate parity fixture"
+        git update-ref refs/remotes/gitea/main HEAD
+        printf 'notes\n' >README.md
+        git add -A
+        git commit -qm "docs only"
+    )
+}
+
+CASE="gate parity runs on a change that touches no code"
+new_repo
+add_gate_parity_stub 0
+run_script
+expect_rc 0
+expect_out "ok    gate parity with main"
+
+CASE="a gate parity gap turns precheck red"
+new_repo
+add_gate_parity_stub 1
+run_script
+expect_rc 1
+expect_out "FAIL  gate parity with main"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

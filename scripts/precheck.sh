@@ -81,7 +81,20 @@ if touches '^services/go-api/'; then
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
+    test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
   fi
+fi
+
+if touches '^services/go-api/deploy/|^\.github/workflows/test-backend-shellcheck\.sh$' && need shellcheck "go-api deploy shellcheck"; then
+  check "go-api deploy shellcheck" services/go-api bash "$root/.github/workflows/test-backend-shellcheck.sh"
+fi
+
+if touches '^scripts/uptime/'; then
+  test_check "uptime probe self-tests" . sh -c 'bash scripts/uptime/journey_test.sh && bash scripts/uptime/check_test.sh'
+fi
+
+if touches '^(scripts/supabase-auth|supabase/auth/)'; then
+  test_check "supabase auth config self-tests" . bash scripts/supabase-auth_test.sh
 fi
 
 if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes"; then
@@ -98,8 +111,7 @@ if touches '^services/overseer/'; then
     check "overseer strict linters" $m "${heavy[@]}" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive --allow-serial-runners
     check "overseer no new comments" services/go-api go run ./scripts/lintcomments "$base" ../overseer
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
-    mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && test_check "overseer tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
+    test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
@@ -107,6 +119,7 @@ if touches '^services/overseer/'; then
       check "overseer web lint" $m/web "${heavy[@]}" npm run --silent lint
       check "overseer web no new comments" $m/web node scripts/lint-changed-comments.mjs "$base"
       test_check "overseer web test" $m/web "${heavy[@]}" npm run --silent test
+      check "overseer web build and bundle budget" $m/web "${heavy[@]}" sh -c 'out=$(mktemp -d) && npx tsc --noEmit && npx vite build --outDir "$out" --emptyOutDir >/dev/null && node scripts/size.mjs "$out"; rc=$?; rm -rf "$out"; exit $rc'
     else
       echo "SKIP  overseer web: no node_modules here or in $main_tree"; missing=1
     fi
@@ -200,6 +213,10 @@ fi
 
 if touches '^\.gitea/workflows/pr-shape'; then
   test_check "pr-shape tests" . bash .gitea/workflows/pr-shape.test.sh
+fi
+
+if [ -f scripts/gate-parity.mjs ] && need node "gate parity" && link_deps .; then
+  check "gate parity with main" . node scripts/gate-parity.mjs
 fi
 
 if touches '\.(go|ts|tsx)$' && need npx "cycles"; then
