@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"altune/go-api/internal/catalog/adapters/persistence"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 )
@@ -19,10 +22,8 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 	}
 	defer pool.Close()
 
-	orphanedDB := 0
-	fixed := 0
-
-	tracks, err := loadReadyTracks(ctx, pool, "", "")
+	repo := persistence.NewPgxTrackRepository(pool)
+	tracks, err := repo.ListReadyAudioTracks(ctx)
 	if err != nil {
 		return err
 	}
@@ -34,19 +35,7 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 		return err
 	}
 
-	for _, t := range tracks {
-		exists, err := audioStore.Exists(ctx, t.AudioRef)
-		if err != nil || !exists {
-			orphanedDB++
-			fmt.Printf("  ORPHANED: %s — %s  (id=%s, ref=%s)\n", t.Title, t.Artist, t.Id, t.AudioRef)
-
-			if fix {
-				_ = markTrackFailed(ctx, pool, t.Id, t.UserId, "Audio file missing from storage (health-check)")
-				fixed++
-				fmt.Println("    → FIXED: marked as failed")
-			}
-		}
-	}
+	orphanedDB, fixed := checkReadyTracks(ctx, tracks, audioStore, repo, fix)
 
 	printSummary("Health check complete:")
 	fmt.Printf("  Tracks checked:    %d\n", totalChecked)
@@ -63,4 +52,38 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 		"orphaned_db", orphanedDB,
 		"fixed", fixed)
 	return nil
+}
+
+const missingAudioReason = "Audio file missing from storage (health-check)"
+
+func checkReadyTracks(ctx context.Context, tracks []ports.ReadyAudioTrack, store ports.AudioStore, repo ports.TrackReadWriter, fix bool) (orphaned, fixed int) {
+	for _, t := range tracks {
+		exists, err := store.Exists(ctx, t.AudioRef)
+		if err == nil && exists {
+			continue
+		}
+		orphaned++
+		fmt.Printf("  ORPHANED: %s — %s  (id=%s, ref=%s)\n", t.Title, t.Artist, t.Id, t.AudioRef)
+
+		if fix {
+			_ = markTrackFailed(ctx, repo, t)
+			fixed++
+			fmt.Println("    → FIXED: marked as failed")
+		}
+	}
+	return orphaned, fixed
+}
+
+func markTrackFailed(ctx context.Context, repo ports.TrackReadWriter, t ports.ReadyAudioTrack) error {
+	track, err := repo.GetByID(ctx, t.Id, t.UserId)
+	if err != nil {
+		return err
+	}
+	if track == nil {
+		return errors.New("track disappeared")
+	}
+	if err := track.MarkFailed(missingAudioReason); err != nil {
+		return err
+	}
+	return repo.Update(ctx, track, track.Version)
 }
