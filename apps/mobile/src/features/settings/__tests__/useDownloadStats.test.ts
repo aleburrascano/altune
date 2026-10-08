@@ -2,9 +2,12 @@ import { renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
-import { useDownloadStats } from '../hooks/useDownloadStats';
-import { downloadStats } from '../downloadStatsModel';
-import { buildDangerZoneActions, type ClearHistoryState } from '../dangerZoneActions';
+import { useDownloadStats } from '@features/settings/hooks/useDownloadStats';
+import { downloadStats } from '@features/settings/downloadStatsModel';
+import {
+  buildDangerZoneActions,
+  type ClearHistoryState,
+} from '@features/settings/dangerZoneActions';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/offline/pinnedStore', () => {

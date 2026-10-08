@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
-import appJson from '../../../../app.json';
-import { reportDiagnostics, type ReportDiagnostics } from '../reportDiagnostics';
+import appJson from '@/../app.json';
+import { reportDiagnostics, type ReportDiagnostics } from '@features/settings/reportDiagnostics';
 
 type ReportDiagnosticsModule = { reportDiagnostics: (screen: string) => ReportDiagnostics };
 
@@ -13,7 +13,7 @@ function loadWithExpoConfig(
     __esModule: true,
     default: { expoConfig },
   }));
-  return require('../reportDiagnostics') as ReportDiagnosticsModule;
+  return require('@features/settings/reportDiagnostics') as ReportDiagnosticsModule;
 }
 
 function withPlatform<T>(overrides: { OS?: string; Version?: string | number }, run: () => T): T {

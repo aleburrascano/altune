@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 
-import { accountEmail } from '../hooks/useAccountEmail';
+import { accountEmail } from '@features/settings/hooks/useAccountEmail';
 
 jest.mock('@shared/auth/useSession', () => ({}));
 

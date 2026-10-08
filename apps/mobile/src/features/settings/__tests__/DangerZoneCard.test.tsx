@@ -10,10 +10,10 @@ import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 import { asTrackId } from '@shared/api-client/ids';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
-import { useRemoveDownloads } from '../hooks/useRemoveDownloads';
-import { downloadUsage } from '../downloadStatsModel';
-import type { ClearHistoryState } from '../dangerZoneActions';
-import { DangerZoneCard } from '../ui/DangerZoneCard';
+import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
+import { downloadUsage } from '@features/settings/downloadStatsModel';
+import type { ClearHistoryState } from '@features/settings/dangerZoneActions';
+import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },

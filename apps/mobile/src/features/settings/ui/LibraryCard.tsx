@@ -2,10 +2,14 @@ import { Sparkles } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 
 import { Text } from '@shared/ui';
-import { backfillActionLabel, backfillActionTone, backfillDetail } from '../backfillStatus';
-import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
-import { SettingsCard } from './SettingsCard';
-import { SettingsRow } from './SettingsRow';
+import {
+  backfillActionLabel,
+  backfillActionTone,
+  backfillDetail,
+} from '@features/settings/backfillStatus';
+import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
+import { SettingsCard } from '@features/settings/ui/SettingsCard';
+import { SettingsRow } from '@features/settings/ui/SettingsRow';
 
 type Backfill = ReturnType<typeof useBackfillFeatured>;
 
