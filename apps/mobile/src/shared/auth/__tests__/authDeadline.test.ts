@@ -1,6 +1,6 @@
-import { AUTH_FETCH_TIMEOUT_MS, fetchWithinAuthDeadline } from '../authDeadline';
+import { AUTH_FETCH_TIMEOUT_MS, fetchWithinAuthDeadline } from '@shared/auth/authDeadline';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 const AUTH_TOKEN_URL = 'https://fixture.supabase.co/auth/v1/token';
 
@@ -117,11 +117,13 @@ describe('supabase client construction', () => {
     jest.isolateModules(() => {
       const createClient = jest.fn(() => ({}));
       jest.doMock('@supabase/supabase-js', () => ({ createClient }));
-      require('../supabaseClient');
+      require('@shared/auth/supabaseClient');
       const options = (createClient.mock.calls[0] as unknown[])[2] as {
         global?: { fetch?: unknown };
       };
-      expect(options.global?.fetch).toBe(require('../authDeadline').fetchWithinAuthDeadline);
+      expect(options.global?.fetch).toBe(
+        require('@shared/auth/authDeadline').fetchWithinAuthDeadline,
+      );
     });
   });
 });

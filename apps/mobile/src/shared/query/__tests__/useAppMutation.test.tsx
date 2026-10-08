@@ -7,8 +7,8 @@ import { guardedMutationOptions, runSignOutCleanups } from '@shared/session/sign
 import { reportClientError } from '@shared/telemetry/clientErrorReporting';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
-import { appMutationCache, appQueryCache, useAppMutation } from '../useAppMutation';
-import { useOptimisticMutation } from '../useOptimisticMutation';
+import { appMutationCache, appQueryCache, useAppMutation } from '@shared/query/useAppMutation';
+import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
 jest.mock('@shared/telemetry/clientErrorReporting', () => ({ reportClientError: jest.fn() }));

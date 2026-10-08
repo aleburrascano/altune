@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { apiFetch, apiBase, ApiError, NetworkError } from '../index';
+import { apiFetch, apiBase, ApiError, NetworkError } from '@shared/api-client/index';
 import { supabase } from '@shared/auth/supabaseClient';
 import {
   clearSessionExpired,
@@ -9,7 +9,7 @@ import {
 import { ContractError } from '@shared/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -769,7 +769,7 @@ describe('failure logging', () => {
 });
 
 describe('stale session', () => {
-  const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+  const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
   function withSession(accessToken = 'tok-a') {
     getSession.mockResolvedValue({

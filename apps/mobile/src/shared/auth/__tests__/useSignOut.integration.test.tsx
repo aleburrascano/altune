@@ -5,9 +5,9 @@ import * as SecureStore from 'expo-secure-store';
 
 import { apiFetch } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
-import { useSignOut } from '../useSignOut';
+import { useSignOut } from '@shared/auth/useSignOut';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 function makeWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {

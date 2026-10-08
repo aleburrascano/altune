@@ -1,7 +1,7 @@
-import { addFavorite, listFavorites, removeFavorite } from '../favorites';
+import { addFavorite, listFavorites, removeFavorite } from '@shared/api-client/favorites';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

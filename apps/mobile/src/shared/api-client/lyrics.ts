@@ -1,6 +1,6 @@
-import { apiFetch } from './index';
-import { withQuery } from './queryString';
-import { asNumber, asRecord, asString, parseArray } from './wireDecoders';
+import { apiFetch } from '@shared/api-client/index';
+import { withQuery } from '@shared/api-client/queryString';
+import { asNumber, asRecord, asString, parseArray } from '@shared/api-client/wireDecoders';
 
 export type SyncedLine = {
   timecode: string;

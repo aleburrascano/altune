@@ -1,9 +1,9 @@
-import { getQueueState, saveQueueState } from '../playback';
-import type { SaveQueueStateRequest } from '../playback';
-import { ApiError, NetworkError } from '../index';
+import { getQueueState, saveQueueState } from '@shared/api-client/playback';
+import type { SaveQueueStateRequest } from '@shared/api-client/playback';
+import { ApiError, NetworkError } from '@shared/api-client/index';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

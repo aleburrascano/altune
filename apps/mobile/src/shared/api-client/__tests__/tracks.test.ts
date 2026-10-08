@@ -12,13 +12,13 @@ import {
   parseListTracksResponse,
   parseTrackResponse,
   tryParseTrackResponse,
-} from '../tracks';
+} from '@shared/api-client/tracks';
 import { ContractError, NetworkError, isAbort } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
+import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '@shared/api-client/types';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

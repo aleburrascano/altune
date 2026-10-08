@@ -7,8 +7,8 @@ import {
   markSessionExpired,
   useSessionExpired,
   getSessionExpired,
-} from '../sessionExpired';
-import type * as SessionExpiredModule from '../sessionExpired';
+} from '@shared/auth/sessionExpired';
+import type * as SessionExpiredModule from '@shared/auth/sessionExpired';
 
 function SessionGate() {
   const expired = useSessionExpired();
@@ -139,7 +139,7 @@ describe('module state', () => {
       let freshModule!: typeof SessionExpiredModule;
 
       jest.isolateModules(() => {
-        freshModule = require('../sessionExpired');
+        freshModule = require('@shared/auth/sessionExpired');
       });
 
       expect(freshModule.getSessionExpired()).toBe(false);

@@ -11,7 +11,7 @@ import {
   setSignedInUser,
   notifyIdentityChange,
   onIdentityChange,
-} from '../signOutCleanup';
+} from '@shared/session/signOutCleanup';
 
 describe('signOutCleanup registry', () => {
   it('runs every registered cleanup, once per registration', () => {

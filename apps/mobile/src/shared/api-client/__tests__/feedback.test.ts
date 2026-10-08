@@ -1,10 +1,10 @@
-import { submitReport } from '../feedback';
-import type { SubmitReportInput } from '../feedback';
-import type { ApiError } from '../index';
-import { NetworkError } from '../index';
+import { submitReport } from '@shared/api-client/feedback';
+import type { SubmitReportInput } from '@shared/api-client/feedback';
+import type { ApiError } from '@shared/api-client/index';
+import { NetworkError } from '@shared/api-client/index';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

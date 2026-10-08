@@ -1,6 +1,6 @@
-import { asFavoriteKey, type FavoriteKey } from './ids';
-import { apiFetch, signalInit } from './index';
-import { withQuery } from './queryString';
+import { asFavoriteKey, type FavoriteKey } from '@shared/api-client/ids';
+import { apiFetch, signalInit } from '@shared/api-client/index';
+import { withQuery } from '@shared/api-client/queryString';
 import {
   parseArray,
   parseListEnvelope,
@@ -10,7 +10,7 @@ import {
   asString,
   member,
   nullableString,
-} from './wireDecoders';
+} from '@shared/api-client/wireDecoders';
 
 export const DISCOVERY_KINDS = ['artist', 'album', 'track'] as const;
 const DISCOVERY_CONFIDENCES = ['high', 'medium', 'low'] as const;

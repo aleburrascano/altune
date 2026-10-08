@@ -3,9 +3,9 @@ import { useState } from 'react';
 
 import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/errors';
 
-import { withinAuthDeadline } from './authDeadline';
-import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
-import { clearPersistedAuthSession, supabase } from './supabaseClient';
+import { withinAuthDeadline } from '@shared/auth/authDeadline';
+import { forgetPreviousUsersLocalData } from '@shared/auth/forgetPreviousUsersLocalData';
+import { clearPersistedAuthSession, supabase } from '@shared/auth/supabaseClient';
 
 export type SignOutResult =
   | { status: 'idle' }

@@ -1,10 +1,10 @@
 import * as Crypto from 'expo-crypto';
 
 import { ContractError } from '@shared/errors';
-import { apiFetch, apiSend, LONG_REQUEST_TIMEOUT_MS, signalInit } from './index';
-import { asTrackId, idPathSegment, type TrackId } from './ids';
-import type { LibrarySort } from './library';
-import { withQuery } from './queryString';
+import { apiFetch, apiSend, LONG_REQUEST_TIMEOUT_MS, signalInit } from '@shared/api-client/index';
+import { asTrackId, idPathSegment, type TrackId } from '@shared/api-client/ids';
+import type { LibrarySort } from '@shared/api-client/library';
+import { withQuery } from '@shared/api-client/queryString';
 import {
   ACQUISITION_STATUSES,
   type AcquisitionStatus,
@@ -13,7 +13,7 @@ import {
   type ListTracksResponse,
   type TrackAcquisition,
   type TrackResponse,
-} from './types';
+} from '@shared/api-client/types';
 import {
   asCount,
   parseArray,
@@ -25,7 +25,7 @@ import {
   member,
   nullableNumber,
   nullableString,
-} from './wireDecoders';
+} from '@shared/api-client/wireDecoders';
 
 function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
   const r = asRecord(value, at);

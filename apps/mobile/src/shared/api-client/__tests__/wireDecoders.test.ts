@@ -9,7 +9,7 @@ import {
   nullableNumber,
   nullableString,
   parseErrorBody,
-} from '../wireDecoders';
+} from '@shared/api-client/wireDecoders';
 
 describe('primitive narrowers return the value or throw a ContractError', () => {
   it('asRecord accepts a plain object and rejects a number, null, and an array', () => {

@@ -1,7 +1,7 @@
-import { apiFetch, apiSend, signalInit } from './index';
-import { asPlaylistId, idPathSegment, type PlaylistId } from './ids';
-import { withQuery } from './queryString';
-import { parseTrackResponse } from './tracks';
+import { apiFetch, apiSend, signalInit } from '@shared/api-client/index';
+import { asPlaylistId, idPathSegment, type PlaylistId } from '@shared/api-client/ids';
+import { withQuery } from '@shared/api-client/queryString';
+import { parseTrackResponse } from '@shared/api-client/tracks';
 import type {
   AddTracksToPlaylistRequest,
   AddTracksToPlaylistResponse,
@@ -11,7 +11,7 @@ import type {
   PlaylistResponse,
   RemoveTracksFromPlaylistRequest,
   RemoveTracksFromPlaylistResponse,
-} from './types';
+} from '@shared/api-client/types';
 import {
   asCount,
   asNumber,
@@ -19,7 +19,7 @@ import {
   asString,
   parseArray,
   parseListEnvelope,
-} from './wireDecoders';
+} from '@shared/api-client/wireDecoders';
 
 function buildPlaylistResponse(r: Record<string, unknown>, at: string): PlaylistResponse {
   return {

@@ -4,12 +4,16 @@ import {
   listSearchHistory,
   clearSearchHistory,
   parseDiscoverySearchResponse,
-} from '../discovery';
-import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '../discovery';
-import { apiBase, ApiError, ContractError } from '../index';
+} from '@shared/api-client/discovery';
+import type {
+  DiscoveryKind,
+  DiscoveryResult,
+  DiscoverySearchResponse,
+} from '@shared/api-client/discovery';
+import { apiBase, ApiError, ContractError } from '@shared/api-client/index';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
