@@ -7,8 +7,6 @@ const IMPORT_STATEMENT = /^\s*(import|export)\s+(type\s+)?([^;]*?\s+from\s+)?['"
 const FORBIDDEN_VALUE_SOURCE =
   /^(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
 
-// Loose .ts/.tsx files each feature still keeps at its root. Moves into the layer folders may
-// only lower these; a feature missing from the map has ceiling 0.
 const ROOT_FILE_CEILING: Record<string, number> = {
   auth: 12,
   detail: 13,
