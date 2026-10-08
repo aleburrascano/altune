@@ -3,7 +3,10 @@ import type { ReactNode } from 'react';
 
 import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
 import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
-import { PlaylistsPortProvider, usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+import {
+  PlaylistsPortProvider,
+  usePlaylistsPort,
+} from '@shared/playlists/ports/PlaylistsPortProvider';
 
 describe('usePlaylistsPort', () => {
   it('hands back the HTTP port when no provider is mounted', () => {
