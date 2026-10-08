@@ -43,14 +43,12 @@ func jsonTagName(f reflect.StructField) (name string, omitEmpty, ok bool) {
 	return name, omitEmpty, true
 }
 
-// uncoveredKeys lists the paths of typ's non-omitempty json keys that the
-// fixture does not carry, so a decode of the fixture proves nothing about them.
 func uncoveredKeys(fixture json.RawMessage, typ reflect.Type) []string {
 	return walkUncovered("", fixture, typ)
 }
 
 func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type) []string {
-	for typ.Kind() == reflect.Ptr {
+	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	if typ == timeType {
@@ -120,7 +118,7 @@ func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type) []str
 }
 
 func needsKeys(typ reflect.Type) bool {
-	for typ.Kind() == reflect.Ptr {
+	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	return typ.Kind() == reflect.Struct && typ != timeType
