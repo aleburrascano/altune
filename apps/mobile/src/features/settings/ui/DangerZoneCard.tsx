@@ -1,3 +1,4 @@
+import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 import { useState, type ReactElement } from 'react';
 
 import { Text } from '@shared/ui';
@@ -5,9 +6,15 @@ import { ConfirmModal } from '@features/settings/ui/ConfirmModal';
 import {
   buildDangerZoneActions,
   type DangerZoneActionKey,
-} from '@features/settings/dangerZoneActions';
+} from '@features/settings/domain/dangerZoneActions';
 import { SettingsCard } from '@features/settings/ui/SettingsCard';
 import { SettingsRow } from '@features/settings/ui/SettingsRow';
+
+const DANGER_ZONE_ICONS: Record<DangerZoneActionKey, LucideIcon> = {
+  downloads: Trash2,
+  history: Eraser,
+  'sign-out': LogOut,
+};
 
 type DangerZoneCardProps = Parameters<typeof buildDangerZoneActions>[0];
 
@@ -20,12 +27,12 @@ export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
   return (
     <>
       <SettingsCard label="Danger zone" danger>
-        {visibleRows.map(({ key, icon, row }, index) => (
+        {visibleRows.map(({ key, row }, index) => (
           <SettingsRow
             key={key}
             testID={row.testID}
             first={index === 0}
-            icon={icon}
+            icon={DANGER_ZONE_ICONS[key]}
             tone="danger"
             label={row.label}
             detail={row.detail}
@@ -42,12 +49,12 @@ export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
         ))}
       </SettingsCard>
 
-      {actions.map(({ key, icon, confirm }) => (
+      {actions.map(({ key, confirm }) => (
         <ConfirmModal
           key={key}
           testID={confirm.testID}
           visible={confirming === key}
-          icon={icon}
+          icon={DANGER_ZONE_ICONS[key]}
           title={confirm.title}
           body={confirm.body}
           confirmLabel={confirm.confirmLabel}

@@ -7,7 +7,7 @@ import { downloadStats } from '@features/settings/domain/downloadStatsModel';
 import {
   buildDangerZoneActions,
   type ClearHistoryState,
-} from '@features/settings/dangerZoneActions';
+} from '@features/settings/domain/dangerZoneActions';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/offline/pinnedStore', () => {
