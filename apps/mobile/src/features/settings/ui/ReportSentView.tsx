@@ -34,6 +34,7 @@ export function ReportSentView({
       </View>
       <View style={styles.actions}>
         <Button
+          action="settings.report_sent.done"
           testID="report-issue-done"
           label="Done"
           variant="secondary"
@@ -41,6 +42,7 @@ export function ReportSentView({
           style={styles.action}
         />
         <Button
+          action="settings.report_sent.send_another"
           testID="report-issue-another"
           label="Send another"
           onPress={onSendAnother}

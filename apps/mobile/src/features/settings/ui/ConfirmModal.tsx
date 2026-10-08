@@ -45,8 +45,15 @@ export function ConfirmModal({
       </View>
       <Text tone="secondary">{body}</Text>
       <View style={styles.actions}>
-        <Button label="Cancel" variant="secondary" onPress={onClose} style={styles.action} />
         <Button
+          action="settings.confirm.cancel"
+          label="Cancel"
+          variant="secondary"
+          onPress={onClose}
+          style={styles.action}
+        />
+        <Button
+          action="settings.confirm.accept"
           testID={`${testID}-confirm`}
           label={confirmLabel}
           onPress={confirm}
