@@ -11,7 +11,7 @@ import {
   type DiscoverySearchResponse,
 } from '@shared/api-client/discovery';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
+import { MAX_SEARCH_OFFSET, MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { resultFixture } from './fixtures';
 
@@ -110,14 +110,20 @@ describe('useDiscoverSearch merges its pages once and retains a bounded number o
     expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE * 2);
   });
 
-  it('stops fetching at the page cap however long the server says results run', async () => {
+  it('stops fetching at the server offset ceiling however long the server says results run', async () => {
     const { result } = await renderWithFirstPage();
+    const lastAllowedPage = MAX_SEARCH_OFFSET / SEARCH_PAGE_SIZE + 1;
 
     await fetchWhileOffered(result, MAX_SEARCH_PAGES + 1);
 
     expect(result.current.hasNextPage).toBe(false);
-    expect(mockSearch).toHaveBeenCalledTimes(MAX_SEARCH_PAGES);
-    expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE * MAX_SEARCH_PAGES);
+    expect(result.current.isFetchNextPageError).toBe(false);
+    expect(mockSearch).toHaveBeenCalledTimes(lastAllowedPage);
+    const offsets = mockSearch.mock.calls.map(
+      ([request]) => (request as { offset: number }).offset,
+    );
+    expect(Math.max(...offsets)).toBe(MAX_SEARCH_OFFSET);
+    expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE * lastAllowedPage);
   });
 
   it('keeps the oldest page at the cap rather than dropping it', async () => {
