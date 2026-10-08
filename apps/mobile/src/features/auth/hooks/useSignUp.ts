@@ -1,5 +1,6 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
+import { supabaseErrorDetail } from '@features/auth/errorDetail';
 import type { TransientAuthReason } from '@features/auth/errorReason';
 import { authRedirectUrl } from '@features/auth/authRedirect';
 import {
@@ -28,7 +29,12 @@ type SignUpResponseData = { user?: { identities?: unknown } | null; session?: un
 function signUpOutcome(data: SignUpResponseData): SettledSignUp {
   if (data?.session) return { kind: 'ok' };
   const identities = data?.user?.identities;
-  if (!Array.isArray(identities)) return { kind: 'error', reason: 'unknown' };
+  if (!Array.isArray(identities)) {
+    console.warn('[auth] sign-up response carried no identities list', {
+      identitiesType: typeof identities,
+    });
+    return { kind: 'error', reason: 'unknown' };
+  }
   return identities.length === 0
     ? { kind: 'error', reason: 'already_registered' }
     : { kind: 'awaiting-confirmation' };
@@ -43,6 +49,7 @@ export function useSignUp() {
         options: { emailRedirectTo: authRedirectUrl('confirm') },
       });
       if (error) {
+        console.warn('[auth] sign-up failed', supabaseErrorDetail(error));
         return {
           kind: 'error',
           reason: classifyAuthError(error, [

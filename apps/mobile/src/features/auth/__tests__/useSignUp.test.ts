@@ -269,3 +269,33 @@ describe('useSignUp: the confirmation redirect on native (#2837)', () => {
     );
   });
 });
+
+describe('useSignUp: failure logging', () => {
+  it('warns when the response carries no identities list', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    supabaseSignUp.mockResolvedValue({ data: { user: { identities: undefined } }, error: null });
+
+    await signUp();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('warns with the projected detail and never the email or password', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    supabaseSignUp.mockResolvedValue({
+      data: null,
+      error: { name: 'AuthApiError', status: 400, code: 'x', message: 'Bad', extra: 'drop' },
+    });
+
+    await signUp();
+
+    expect(warn).toHaveBeenCalledWith('[auth] sign-up failed', {
+      name: 'AuthApiError',
+      code: 'x',
+      status: 400,
+      message: 'Bad',
+    });
+    warn.mockRestore();
+  });
+});

@@ -56,6 +56,7 @@ export function useUpdatePassword() {
     if (!error) {
       return { kind: 'ok', othersRevoked: await revokeOtherSessions() };
     }
+    console.warn('[auth] password update failed', supabaseErrorDetail(error));
     return {
       kind: 'error',
       reason: classifyAuthError(error, [[isWeakPasswordError, 'weak_password']]),
