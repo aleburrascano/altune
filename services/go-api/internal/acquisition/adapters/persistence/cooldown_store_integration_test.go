@@ -1,7 +1,6 @@
 package persistence
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -14,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
