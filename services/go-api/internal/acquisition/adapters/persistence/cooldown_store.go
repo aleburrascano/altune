@@ -25,26 +25,39 @@ func NewPgxCooldownStore(pool *pgxpool.Pool) *PgxCooldownStore {
 }
 
 const reserveSQL = `
+WITH up AS (
 INSERT INTO acquisition_cooldowns (track_id, kind, admitted_at)
 VALUES ($1, $2, clock_timestamp())
 ON CONFLICT (track_id, kind) DO UPDATE
 	SET admitted_at = EXCLUDED.admitted_at
 	WHERE acquisition_cooldowns.admitted_at <= EXCLUDED.admitted_at - make_interval(secs => $3)
-RETURNING admitted_at`
+RETURNING admitted_at)
+SELECT admitted_at, true, 0::float8 FROM up
+UNION ALL
+SELECT c.admitted_at, false, EXTRACT(EPOCH FROM c.admitted_at + make_interval(secs => $3) - clock_timestamp())::float8
+FROM acquisition_cooldowns c WHERE c.track_id = $1 AND c.kind = $2 AND NOT EXISTS (SELECT 1 FROM up)`
 
-func (s *PgxCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, error) {
+func (s *PgxCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	var at time.Time
-	err := s.pool.QueryRow(ctx, reserveSQL, trackID.UUID(), string(kind), cooldown.Seconds()).Scan(&at)
+	var (
+		at       time.Time
+		ok       bool
+		waitSecs float64
+	)
+	err := s.pool.QueryRow(ctx, reserveSQL, trackID.UUID(), string(kind), cooldown.Seconds()).Scan(&at, &ok, &waitSecs)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return time.Time{}, false, nil
+		// A concurrent reservation committed after this statement's snapshot.
+		return time.Time{}, false, cooldown, nil
 	}
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("reserve cooldown: %w", err)
+		return time.Time{}, false, 0, fmt.Errorf("reserve cooldown: %w", err)
 	}
-	return at, true, nil
+	if !ok {
+		return time.Time{}, false, time.Duration(waitSecs * float64(time.Second)), nil
+	}
+	return at, true, 0, nil
 }
 
 func (s *PgxCooldownStore) Release(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
