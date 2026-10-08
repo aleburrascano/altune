@@ -17,25 +17,13 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	s.closeAdmission()
 	defer s.pending.sweep()
 
-	done := make(chan struct{})
-	go func() {
-		s.jobsWG.Wait()
-		close(done)
-	}()
+	done := s.jobsDone()
 
-	drained := s.awaitJobsWG(done, s.drainBudget, ctx)
-	if drained {
-		slog.Info("acquisition scheduler drained")
-	} else {
-		slog.Warn("acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
-	}
+	drained := s.awaitDrainBudget(done, ctx)
 
 	s.cancel()
 	if !drained {
-		drained = s.awaitJobsWG(done, 0, ctx)
-		if !drained {
-			slog.Warn("acquisition scheduler drain timed out waiting for cancelled jobs to release")
-		}
+		drained = s.awaitCancelledJobs(done, ctx)
 	}
 
 	s.waitRunners(ctx)
@@ -44,6 +32,33 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 		return
 	}
 	s.waitOutcomes(ctx)
+}
+
+func (s *BackgroundAcquisitionScheduler) awaitDrainBudget(done <-chan struct{}, ctx context.Context) bool {
+	drained := s.awaitJobsWG(done, s.drainBudget, ctx)
+	if drained {
+		slog.Info("acquisition scheduler drained")
+	} else {
+		slog.Warn("acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
+	}
+	return drained
+}
+
+func (s *BackgroundAcquisitionScheduler) jobsDone() <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		s.jobsWG.Wait()
+		close(done)
+	}()
+	return done
+}
+
+func (s *BackgroundAcquisitionScheduler) awaitCancelledJobs(done <-chan struct{}, ctx context.Context) bool {
+	if s.awaitJobsWG(done, 0, ctx) {
+		return true
+	}
+	slog.Warn("acquisition scheduler drain timed out waiting for cancelled jobs to release")
+	return false
 }
 
 func (s *BackgroundAcquisitionScheduler) awaitJobsWG(done <-chan struct{}, budget time.Duration, ctx context.Context) bool {

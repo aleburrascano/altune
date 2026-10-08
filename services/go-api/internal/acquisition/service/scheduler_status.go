@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
+func (s *BackgroundAcquisitionScheduler) workerCount() int {
+	return max(cap(s.sem), 1)
+}
+
 func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
-	workers := cap(s.sem)
-	if workers < 1 {
-		workers = 1
-	}
 	pending, oldestAge, depthKnown := s.pendingDepth()
 	return ports.AcquisitionStatus{
 		InFlight:         int(s.inflightCount.Load()),
@@ -24,7 +24,7 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 		QueueDepth:       pending,
 		OldestPendingAge: oldestAge,
 		QueueDepthKnown:  depthKnown,
-		QueueCapacity:    workers,
+		QueueCapacity:    s.workerCount(),
 		Verification:     s.verificationStatus(),
 		ActiveJobs:       jobs,
 		Recent:           recent,
