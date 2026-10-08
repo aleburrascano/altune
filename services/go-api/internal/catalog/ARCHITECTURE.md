@@ -1,11 +1,72 @@
-# Catalog — Data Retention & Deletion Policy
+# Catalog — Module Architecture
+
+The catalog bounded context (`services/go-api/internal/catalog/`) owns a user's
+library: tracks, playlists, featured artists, and the audio objects that back ready
+tracks. Every row is user-scoped (`shared.UserId`). Acquisition is a customer of
+catalog: it consumes `domain.Track` and its `MarkReady` / `MarkFailed` /
+`RevertToPending` invariants.
+
+The module root holds only the four layers, `catalogtest/` and this file.
+
+## Layering
+
+```
+catalog/
+├── domain/                      aggregates and value objects, no I/O
+│   ├── track.go                 Track aggregate and its status transitions
+│   ├── failure.go               acquisition failure classification
+│   ├── playlist.go              Playlist aggregate and membership
+│   ├── featured_artist.go       featured-artist value objects
+│   ├── library_lens.go          library lens (filtered views of the library)
+│   ├── dedup.go                 duplicate-track detection key
+│   ├── source_url.go            validated source URL value
+│   └── errors.go                domain errors
+├── ports/                       interfaces the services depend on
+│   ├── track_repo.go            track persistence
+│   ├── playlist_repo.go         playlist persistence
+│   ├── audio_store.go           audio object storage
+│   ├── audio_store_metrics.go   audio-store counters (incl. orphaned delete)
+│   ├── orphaned_audio.go        orphaned-audio recorder and queue
+│   ├── acquisition_scheduler.go hand-off to acquisition
+│   ├── featured_resolver.go     featured-artist resolution
+│   ├── db_call_metrics.go       database call metrics
+│   └── db_errors.go             database error classes
+├── service/                     use cases
+│   ├── add_track.go             save a track and schedule acquisition
+│   ├── delete_track.go          delete a track row, then its audio object
+│   ├── reconcile_orphaned_audio.go  retry deletion of orphaned audio
+│   ├── list_tracks.go           list a user's tracks
+│   ├── list_featuring.go        list tracks featuring an artist
+│   ├── get_track_status.go      track acquisition status
+│   ├── set_track_number.go      set a track number
+│   ├── stream_track.go          stream a track's audio
+│   ├── audio_url.go             audio URL issuing
+│   ├── playlists.go             playlist CRUD
+│   ├── playlist_membership.go   add/remove/reorder playlist tracks
+│   ├── library_lenses.go        library lens queries
+│   ├── backfill_featured.go     featured-artist backfill
+│   ├── backfill_admission.go    backfill admission control
+│   ├── track_dto.go             track DTO mapping
+│   ├── options.go               service options
+│   └── errors.go                service errors
+├── adapters/
+│   ├── handler/                 HTTP handlers (tracks, playlists, library, stream, audio URL, featured artists) and audio rate limit
+│   ├── persistence/             Postgres repositories and connection pool
+│   ├── storage/                 audio store: filesystem, object storage, scoped store
+│   ├── metrics/                 expvar metrics
+│   └── discoverybridge/         featured-artist resolver backed by discovery
+└── catalogtest/                 in-memory fakes for catalog ports
+
+```
+
+## Data retention & deletion
 
 This document records the retention/deletion story for catalog's personal data and
 the explicit design decision about a bulk per-user erasure path. It is the written
 companion to the playback module's erasure precedent
 (`internal/playback/ports/queue_state_repo.go`, `DeleteForUser`).
 
-## What personal data catalog holds
+### What personal data catalog holds
 
 - **Track rows** — a user's library metadata (title, artist, album, featured
   artists, acquisition status, audio reference).
@@ -16,7 +77,7 @@ companion to the playback module's erasure precedent
 Every catalog row is user-scoped (`shared.UserId`), so all catalog PII is
 partitioned by user.
 
-## Deletion path (present tense)
+### Deletion path (present tense)
 
 Deletion is **per item**, driven by the caller:
 
@@ -27,7 +88,7 @@ Deletion is **per item**, driven by the caller:
 - After the track row is deleted, `DeleteTrackService.Execute` deletes the audio
   object through `AudioStore.Delete`.
 
-### Partial-deletion handling (audio orphans)
+#### Partial-deletion handling (audio orphans)
 
 A track delete touches two stores: the database and the audio store. The database
 delete can succeed while the audio-store delete fails, leaving a user's personal
@@ -62,7 +123,7 @@ Until migration 021 is applied the record write fails with SQLSTATE 42P01: the
 delete keeps its prior outcome (log line, counter, `ErrAudioOrphaned`) and the
 sweep idles.
 
-## Decision: no dedicated bulk per-user erasure method (for now)
+### Decision: no dedicated bulk per-user erasure method (for now)
 
 Playback exposes `QueueStateRepository.DeleteForUser` because its queue state is a
 single per-user blob with free-text PII that has no other deletion trigger.
