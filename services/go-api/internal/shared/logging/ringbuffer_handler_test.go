@@ -283,3 +283,46 @@ func TestRingHandler_ShortRecordStoredUnchangedAndInnerGetsFullText(t *testing.T
 		t.Errorf("inner handler got %d bytes, want %d", len(inner.messages[1]), len(long))
 	}
 }
+
+func TestRingHandler_WithGroupPrefixesLaterAttrs(t *testing.T) {
+	logger, ring := newCaptureLogger(t, 10)
+
+	logger.WithGroup("g").With("k", 1).Info("grouped", "r", 2)
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("want 1 record, got %+v", snap)
+	}
+	attrs := snap[0].Attrs
+	if attrs["g.k"] != "1" || attrs["g.r"] != "2" {
+		t.Fatalf("group prefix lost: %+v", attrs)
+	}
+	if _, ok := attrs["k"]; ok {
+		t.Fatalf("unprefixed key leaked: %+v", attrs)
+	}
+}
+
+func TestRingHandler_SiblingGroupsWriteDistinctKeys(t *testing.T) {
+	logger, ring := newCaptureLogger(t, 10)
+
+	logger.WithGroup("a").With("k", 1).Info("a")
+	logger.WithGroup("b").With("k", 2).Info("b")
+	logger.With("k", 3).Info("plain")
+
+	for _, rec := range ring.Snapshot() {
+		switch rec.Message {
+		case "a":
+			if rec.Attrs["a.k"] != "1" {
+				t.Fatalf("a: %+v", rec.Attrs)
+			}
+		case "b":
+			if rec.Attrs["b.k"] != "2" {
+				t.Fatalf("b: %+v", rec.Attrs)
+			}
+		case "plain":
+			if rec.Attrs["k"] != "3" {
+				t.Fatalf("plain: %+v", rec.Attrs)
+			}
+		}
+	}
+}

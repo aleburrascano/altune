@@ -25,7 +25,7 @@ func (h *ringHandler) flattenedAttrs(r slog.Record) map[string]string {
 		flattenAttr(attrs, "", a)
 	}
 	r.Attrs(func(a slog.Attr) bool {
-		flattenAttr(attrs, "", a)
+		flattenAttr(attrs, h.prefix, a)
 		return true
 	})
 	return attrs
