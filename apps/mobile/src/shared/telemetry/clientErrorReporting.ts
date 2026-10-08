@@ -1,8 +1,7 @@
-import ErrorUtils from 'react-native/Libraries/vendor/core/ErrorUtils';
-
 import { appVersion } from '@shared/device/device';
 
 import { enqueueCritical } from '@shared/telemetry/outbox';
+import { chainUncaughtErrorHandler } from '@shared/telemetry/native/uncaughtErrors';
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_STACK_LENGTH = 4_000;
@@ -132,14 +131,6 @@ export function reportClientError(error: unknown, source: ClientErrorSource): vo
 
 let installed = false;
 
-function chainUncaughtHandler(): void {
-  const previousHandler = ErrorUtils.getGlobalHandler();
-  ErrorUtils.setGlobalHandler((error, isFatal) => {
-    reportClientError(error, 'uncaught');
-    previousHandler(error, isFatal);
-  });
-}
-
 type RejectionTrackingOptions = {
   allRejections: boolean;
   onUnhandled: (id: number, error: unknown) => void;
@@ -166,7 +157,7 @@ function trackUnhandledRejections(): void {
 export function installGlobalErrorReporting(): void {
   if (installed) return;
   installed = true;
-  chainUncaughtHandler();
+  chainUncaughtErrorHandler((error) => reportClientError(error, 'uncaught'));
   trackUnhandledRejections();
 }
 

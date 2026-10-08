@@ -1,5 +1,3 @@
-import { Directory, File, Paths } from 'expo-file-system';
-
 export type StoredFile = {
   readonly uri: string;
   readonly exists: boolean;
@@ -29,68 +27,25 @@ export type FileStore = {
   availableBytes(): number;
 };
 
-function fileHandle(file: File): StoredFile {
-  return {
-    uri: file.uri,
-    get exists() {
-      return file.exists;
-    },
-    get size() {
-      return file.exists ? file.size : null;
-    },
-    textSync: () => file.textSync(),
-    write: (contents) => file.write(contents),
-    delete: () => file.delete(),
-    moveTo: (dest) => file.moveSync(new File(dest.uri), { overwrite: true }),
-  };
-}
-
-function directoryHandle(dir: Directory): StoredDirectory {
-  return {
-    uri: dir.uri,
-    get exists() {
-      return dir.exists;
-    },
-    create: () => dir.create({ intermediates: true }),
-    list: () =>
-      dir
-        .list()
-        .filter((entry): entry is File => entry instanceof File)
-        .map(fileHandle),
-    openFile: (name) => fileHandle(new File(dir, name)),
-  };
-}
-
-export { fileHandle };
-
-export const deviceFileStore: FileStore = {
-  openDirectory: (name) => directoryHandle(new Directory(Paths.document, name)),
-  download: (url, dest, signal, onProgress) =>
-    File.downloadFileAsync(url, new File(dest.uri), {
-      idempotent: true,
-      signal,
-      ...(onProgress === undefined ? {} : { onProgress }),
-    }).then((file) => file.uri),
-  availableBytes: () => Paths.availableDiskSpace,
-};
-
 export type FileStoreSlot = {
   get(): FileStore;
   set(store?: FileStore): void;
   ensureDir(name: string): StoredDirectory;
 };
 
-export function createFileStoreSlot(defaultStore: FileStore = deviceFileStore): FileStoreSlot {
+function ensureDirectory(store: FileStore, name: string): StoredDirectory {
+  const dir = store.openDirectory(name);
+  if (!dir.exists) dir.create();
+  return dir;
+}
+
+export function createFileStoreSlot(defaultStore: FileStore): FileStoreSlot {
   let store = defaultStore;
   return {
     get: () => store,
     set: (next = defaultStore) => {
       store = next;
     },
-    ensureDir: (name) => {
-      const dir = store.openDirectory(name);
-      if (!dir.exists) dir.create();
-      return dir;
-    },
+    ensureDir: (name) => ensureDirectory(store, name),
   };
 }

@@ -9,7 +9,7 @@ module.exports = {
         'src/shared/auth/authDeadline.ts',
         'src/shared/killSwitch/killSwitchPoll.ts',
         'src/shared/events/sse-client.ts',
-        'src/shared/files/fileStore.ts',
+        'src/shared/files/native/deviceFileStore.ts',
         'src/features/auth/adapters/http/testAuth.ts',
         'src/features/auth/adapters/http/reportSignInFailure.ts',
         '**/__tests__/**',
