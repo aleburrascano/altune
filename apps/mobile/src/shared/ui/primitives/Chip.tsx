@@ -6,16 +6,28 @@ import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { pressedStyle } from './pressedStyle';
 import { Text } from './Text';
+import { recordTap } from './recordTap';
 
-export type ChipProps = {
+type ChipBase = {
   label: string;
-  onPress?: () => void;
   selected?: boolean;
   icon?: ReactNode;
   testID?: string;
 };
 
-export function Chip({ label, onPress, selected = false, icon, testID }: ChipProps) {
+export type ChipProps =
+  | (ChipBase & { onPress?: undefined; action?: undefined; trackId?: undefined })
+  | (ChipBase & { onPress: () => void; action?: string; trackId?: string });
+
+export function Chip({
+  label,
+  onPress,
+  action,
+  trackId,
+  selected = false,
+  icon,
+  testID,
+}: ChipProps) {
   const theme = useTheme();
   const body = (
     <View
@@ -43,6 +55,7 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
         testID={testID}
         onPress={() => {
           tapFeedback();
+          recordTap(action, trackId);
           onPress();
         }}
         accessibilityRole="button"
