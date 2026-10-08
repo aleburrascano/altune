@@ -12,7 +12,7 @@ import {
 import type { TrackExtras } from '../extras-accessors';
 
 export type OwnedTrack = { trackId: TrackId } & (
-  | { acquisitionStatus: 'failed'; failureMessage: string | null }
+  | { acquisitionStatus: 'failed'; failureMessage: string | null; retryable: boolean }
   | { acquisitionStatus: Exclude<AcquisitionStatus, 'failed'> }
 );
 
@@ -25,9 +25,10 @@ export function ownedTrack(
   trackId: TrackId,
   acquisitionStatus: AcquisitionStatus,
   failureMessage: string | null,
+  retryable = true,
 ): OwnedTrack {
   if (acquisitionStatus === 'failed') {
-    return { trackId, acquisitionStatus, failureMessage };
+    return { trackId, acquisitionStatus, failureMessage, retryable };
   }
   return { trackId, acquisitionStatus };
 }
@@ -50,7 +51,8 @@ function ownedFromLiveStatus(
 ): OwnedTrack | null {
   if (trackId === null) return null;
   if (!live) return stamped;
-  return ownedTrack(trackId, live.acquisitionStatus, live.failureMessage);
+  const retryable = live.acquisitionStatus === 'failed' ? live.retryable : undefined;
+  return ownedTrack(trackId, live.acquisitionStatus, live.failureMessage, retryable);
 }
 
 export function useResolvedOwnedTrack(

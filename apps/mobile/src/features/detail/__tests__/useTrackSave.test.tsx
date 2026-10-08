@@ -341,3 +341,39 @@ describe('useTrackSave double tap', () => {
     await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
   });
 });
+
+describe('useTrackSave remembered failures', () => {
+  it('is rejected after a remount when the stored failure was not retryable', () => {
+    const owned = ownedTrack(asTrackId('server-1'), 'failed', 'bad request', false);
+    const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
+
+    expect(result.current.state).toBe('rejected');
+    expect(result.current.failure?.isRetryable).toBe(false);
+  });
+
+  it('is failed after a remount when the stored failure was retryable', () => {
+    const owned = ownedTrack(asTrackId('server-1'), 'failed', 'unavailable');
+    const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
+
+    expect(result.current.state).toBe('failed');
+    expect(result.current.failure?.isRetryable).toBe(true);
+  });
+
+  it('keeps the retryable flag in the store when a retry is rejected', async () => {
+    mockRetryAcquisition.mockRejectedValue(new ApiError(422, '422 unprocessable'));
+    const trackId = asTrackId('server-1');
+    const owned = ownedTrack(trackId, 'failed', 'network error');
+    const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+    });
+
+    await waitFor(() =>
+      expect(useTrackStatusStore.getState().statuses[trackId]).toMatchObject({
+        acquisitionStatus: 'failed',
+        retryable: false,
+      }),
+    );
+  });
+});

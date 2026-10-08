@@ -2,7 +2,7 @@ import { type UseMutationResult } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { recordRetryTapped, type RetryEntryPoint } from '@shared/acquisition/acquisitionTelemetry';
-import { patchTrackStatus } from '@shared/acquisition/trackStatusStore';
+import { failedTrackStatus, patchTrackStatus } from '@shared/acquisition/trackStatusStore';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
 export type RetryTrack = Pick<UseMutationResult<void, unknown, TrackId>, 'mutate' | 'isPending'>;
@@ -16,7 +16,7 @@ function markPending(trackId: TrackId): Record<string, never> {
 
 function markFailed(error: Error, trackId: TrackId): void {
   console.warn('[detail] retry track failed', { trackId, error: error.message });
-  patchTrackStatus(trackId, { acquisitionStatus: 'failed', failureMessage: error.message });
+  patchTrackStatus(trackId, failedTrackStatus(error));
 }
 
 function useRetryMutation(entryPoint: RetryEntryPoint) {
