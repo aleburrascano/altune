@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -42,8 +43,8 @@ func (a *SpotifyArtworkResolver) ResolveByIdentity(ctx context.Context, kind dom
 	var body struct {
 		ThumbnailURL string `json:"thumbnail_url"`
 	}
-	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
-		return artworkFailure(domain.ProviderKeySpotify, err)
+	if err := providerhttp.GetJSON(ctx, a.client, u, &body, providerhttp.WithHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
+		return providerhttp.ArtworkFailure(domain.ProviderKeySpotify, err)
 	}
 	return upgradeSpotifyImageSize(body.ThumbnailURL), nil
 }

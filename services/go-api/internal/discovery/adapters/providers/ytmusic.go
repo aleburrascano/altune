@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
@@ -71,7 +72,7 @@ func isRetryableProviderError(err error) bool {
 }
 
 func isTransientStatus(code int) bool {
-	return code >= http.StatusInternalServerError || code == http.StatusTooManyRequests || isAuthStatus(code)
+	return code >= http.StatusInternalServerError || code == http.StatusTooManyRequests || providerhttp.IsAuthStatus(code)
 }
 
 func ytmRetryBackoff() time.Duration {
@@ -253,7 +254,7 @@ func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.R
 	}
 	result, err := ytmSearchRetry(ctx, a.client, title, ytmArtistFilter)
 	if err != nil {
-		return artworkFailure(a.ArtworkSource(), err)
+		return providerhttp.ArtworkFailure(a.ArtworkSource(), err)
 	}
 	url := pickArtistArtwork(result.Artists, title, ytArtworkHeroSize)
 	if url != "" {

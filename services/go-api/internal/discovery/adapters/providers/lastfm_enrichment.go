@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,7 +50,7 @@ func (e *lastfmAPIError) Error() string {
 }
 
 func (a *LastFmAdapter) getInfo(ctx context.Context, u string) ([]byte, error) {
-	status, body, err := getBytes(ctx, a.client, u)
+	status, body, err := providerhttp.GetBytes(ctx, a.client, u)
 	var envelope lastfmAPIError
 	if len(body) > 0 && json.Unmarshal(body, &envelope) == nil && envelope.Code != 0 {
 		if envelope.Code == lastfmErrNotFound {

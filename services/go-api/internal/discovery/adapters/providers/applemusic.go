@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
@@ -118,10 +119,10 @@ func (a *AppleMusicAdapter) fetchAlbumTracks(ctx context.Context, token, albumID
 }
 
 func (a *AppleMusicAdapter) getCatalogJSON(ctx context.Context, token, u string, dst any, what string) (int, error) {
-	status, err := getJSONWithStatus(ctx, a.client, u, dst,
-		withHeader("Authorization", "Bearer "+token),
-		withHeader("Origin", appleMusicOrigin),
-		withHeader("User-Agent", appleMusicUserAgent))
+	status, err := providerhttp.GetJSONWithStatus(ctx, a.client, u, dst,
+		providerhttp.WithHeader("Authorization", "Bearer "+token),
+		providerhttp.WithHeader("Origin", appleMusicOrigin),
+		providerhttp.WithHeader("User-Agent", appleMusicUserAgent))
 	if err != nil && status == http.StatusOK {
 		return status, fmt.Errorf("decode %s: %w", what, err)
 	}

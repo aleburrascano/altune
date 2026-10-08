@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
@@ -130,7 +131,7 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return 0, err
 	}
-	status, raw, err := postBytesCappedOK(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerBodyCap, spotifyPathfinderHeaders(sess)...)
+	status, raw, err := providerhttp.PostBytesCappedOK(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerhttp.BodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return status, err
 	}

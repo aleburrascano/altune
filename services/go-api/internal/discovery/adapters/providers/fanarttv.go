@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
@@ -28,8 +29,8 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	}
 	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
 	var data map[string]any
-	if err := getJSON(ctx, r.client, u, &data); err != nil {
-		return artworkFailure(domain.ProviderKeyFanart, err)
+	if err := providerhttp.GetJSON(ctx, r.client, u, &data); err != nil {
+		return providerhttp.ArtworkFailure(domain.ProviderKeyFanart, err)
 	}
 
 	if kind == domain.ResultKindArtist {

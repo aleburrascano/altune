@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -37,7 +38,7 @@ func newAmazonMusicSessionResolver(client *http.Client) *amazonMusicSessionResol
 const amzResolveTimeout = 10 * time.Second
 
 func (r *amazonMusicSessionResolver) resolve(ctx context.Context) (*amazonMusicSession, time.Time, error) {
-	status, body, err := getBytes(ctx, r.client, r.configURL, withHeader("User-Agent", amzUserAgent))
+	status, body, err := providerhttp.GetBytes(ctx, r.client, r.configURL, providerhttp.WithHeader("User-Agent", amzUserAgent))
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("fetch config.json: status %d: %w", status, err)
 	}

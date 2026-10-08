@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"encoding/json"
@@ -29,7 +30,7 @@ func (a *LastFmAdapter) fetchChart(
 		method, limit, a.apiKey,
 	)
 	var raw json.RawMessage
-	if err := getJSON(ctx, a.client, u, &raw); err != nil {
+	if err := providerhttp.GetJSON(ctx, a.client, u, &raw); err != nil {
 		return nil, err
 	}
 	return parseLastFmChartResponse(raw, method), nil

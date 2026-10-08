@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
@@ -21,7 +22,7 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	u := fmt.Sprintf(deezerAPIBaseURL+"/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
 	var body deezerSearchResponse
 	if err := a.getJSON(ctx, u, &body); err != nil {
-		return artworkFailure(domain.ProviderKeyDeezer, err)
+		return providerhttp.ArtworkFailure(domain.ProviderKeyDeezer, err)
 	}
 	for _, item := range body.Data {
 		var img string

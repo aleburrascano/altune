@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"encoding/json"
@@ -83,7 +84,7 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 	}
 
 	var body spotifySearchResponse
-	status, err := postJSON(ctx, a.client, a.pathfinderURL, payload, &body, spotifyPathfinderHeaders(sess)...)
+	status, err := providerhttp.PostJSON(ctx, a.client, a.pathfinderURL, payload, &body, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return nil, status, err
 	}
@@ -112,14 +113,14 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 	return results, status, nil
 }
 
-func spotifyPathfinderHeaders(sess *spotifySession) []reqOption {
-	return []reqOption{
-		withHeader("Content-Type", "application/json;charset=UTF-8"),
-		withHeader("Accept", "application/json"),
-		withHeader("Authorization", "Bearer "+sess.accessToken),
-		withHeader("client-token", sess.clientToken),
-		withHeader("app-platform", "WebPlayer"),
-		withHeader("User-Agent", spotifyUserAgent),
+func spotifyPathfinderHeaders(sess *spotifySession) []providerhttp.ReqOption {
+	return []providerhttp.ReqOption{
+		providerhttp.WithHeader("Content-Type", "application/json;charset=UTF-8"),
+		providerhttp.WithHeader("Accept", "application/json"),
+		providerhttp.WithHeader("Authorization", "Bearer "+sess.accessToken),
+		providerhttp.WithHeader("client-token", sess.clientToken),
+		providerhttp.WithHeader("app-platform", "WebPlayer"),
+		providerhttp.WithHeader("User-Agent", spotifyUserAgent),
 	}
 }
 

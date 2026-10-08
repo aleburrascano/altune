@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"encoding/json"
 	"errors"
 	"io"
@@ -101,7 +102,7 @@ func spotifyTokenResolverServing(t *testing.T, clientToken http.HandlerFunc) *sp
 }
 
 func TestSpotifyTokenResolver_clientTokenOversizedBodyIsRejected(t *testing.T) {
-	oversized := `{"granted_token":{"token":"` + strings.Repeat("x", providerBodyCap+1024) + `"}}`
+	oversized := `{"granted_token":{"token":"` + strings.Repeat("x", providerhttp.BodyCap+1024) + `"}}`
 	r := spotifyTokenResolverServing(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(oversized))
@@ -110,10 +111,10 @@ func TestSpotifyTokenResolver_clientTokenOversizedBodyIsRejected(t *testing.T) {
 	token, _, err := r.resolveClientToken(t.Context())
 	if err == nil {
 		t.Fatalf("resolveClientToken took a %d-byte token off a %d-byte body; want the body capped at %d and the decode rejected",
-			len(token), len(oversized), providerBodyCap)
+			len(token), len(oversized), providerhttp.BodyCap)
 	}
-	if len(token) > providerBodyCap {
-		t.Errorf("len(token) = %d, want nothing beyond the %d-byte cap buffered", len(token), providerBodyCap)
+	if len(token) > providerhttp.BodyCap {
+		t.Errorf("len(token) = %d, want nothing beyond the %d-byte cap buffered", len(token), providerhttp.BodyCap)
 	}
 }
 

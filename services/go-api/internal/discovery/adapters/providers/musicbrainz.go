@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -93,9 +94,9 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 	if err := a.limiter.wait(ctx); err != nil {
 		return nil, err
 	}
-	status, rawBody, err := getBytes(ctx, a.client, u,
-		withHeader("User-Agent", a.userAgent),
-		withHeader("Accept", "application/json"))
+	status, rawBody, err := providerhttp.GetBytes(ctx, a.client, u,
+		providerhttp.WithHeader("User-Agent", a.userAgent),
+		providerhttp.WithHeader("Accept", "application/json"))
 	if err != nil {
 		return nil, fmt.Errorf("musicbrainz status %d: %w", status, err)
 	}
@@ -288,9 +289,9 @@ func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) err
 	if err := a.limiter.wait(ctx); err != nil {
 		return err
 	}
-	return getJSON(ctx, a.client, u, out,
-		withHeader("User-Agent", a.userAgent),
-		withHeader("Accept", "application/json"))
+	return providerhttp.GetJSON(ctx, a.client, u, out,
+		providerhttp.WithHeader("User-Agent", a.userAgent),
+		providerhttp.WithHeader("Accept", "application/json"))
 }
 
 func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query string) ([]mbRecording, error) {

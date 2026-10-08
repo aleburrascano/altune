@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providerhttp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -58,7 +59,7 @@ func (a *SoundCloudAPIAdapter) resolveAndFetch(ctx context.Context, fetch func(c
 }
 
 func (a *SoundCloudAPIAdapter) getJSON(ctx context.Context, u string, dst any) (int, error) {
-	status, body, err := getBytes(ctx, a.client, u, withHeader("User-Agent", scUserAgent))
+	status, body, err := providerhttp.GetBytes(ctx, a.client, u, providerhttp.WithHeader("User-Agent", scUserAgent))
 	if err != nil {
 		return status, fmt.Errorf("soundcloud api-v2: %w", err)
 	}
