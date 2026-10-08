@@ -26,3 +26,8 @@ const (
 	ExtraRecordType         = "record_type"
 	ExtraResolutionTier     = "resolution_tier"
 )
+
+func StringExtra(extras map[string]any, key string) string {
+	v, _ := extras[key].(string)
+	return v
+}
