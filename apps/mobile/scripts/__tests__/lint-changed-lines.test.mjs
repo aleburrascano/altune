@@ -1,12 +1,14 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'lint-changed-lines.mjs');
+const mobile = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const MOBILE_LINT_SETUP = ['eslint.config.js', 'eslint-rules/no-comments.js', 'tsconfig.json'];
 
 function git(cwd, ...args) {
   const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -206,5 +208,54 @@ describe('lint-changed-lines leaves comments to the whole-file lint rule', () =>
     const r = await lint(root, base);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.doesNotMatch(r.stdout, /comment/);
+  });
+});
+
+function mobileRepo(t, baseFiles, changedFiles) {
+  const made = repo(t, baseFiles, {});
+  for (const path of MOBILE_LINT_SETUP) {
+    mkdirSync(dirname(join(made.root, path)), { recursive: true });
+    copyFileSync(join(mobile, path), join(made.root, path));
+  }
+  symlinkSync(join(mobile, 'node_modules'), join(made.root, 'node_modules'));
+  git(made.root, 'add', '-A', '--', ...MOBILE_LINT_SETUP);
+  git(made.root, 'commit', '-qm', 'lint setup');
+  const base = git(made.root, 'rev-parse', 'HEAD');
+  write(made.root, changedFiles);
+  git(made.root, 'add', '-A', '--', 'src');
+  git(made.root, 'commit', '-qm', 'change', '--allow-empty');
+  return { root: made.root, base };
+}
+
+const DEP = { 'src/dep.ts': 'export const a = 1;\n' };
+const HOUSE_VIOLATIONS = [
+  "import { a } from './dep';",
+  '',
+  'export function scaled(items: string[] | undefined): number {',
+  '  const list = items ?? [];',
+  '  return list.length * 37 + a;',
+  '}',
+  '',
+].join('\n');
+const HOUSE_RULES = ['house/no-relative-imports', '@typescript-eslint/no-magic-numbers', 'house/no-empty-fallbacks'];
+
+describe('lint-changed-lines runs the house lint on added lines', { concurrency: true }, () => {
+  for (const path of ['src/scaled.ts', 'src/__tests__/scaled.test.ts']) {
+    test(`fails a relative import, a magic number and an empty fallback added in ${path}`, async (t) => {
+      const { root, base } = mobileRepo(t, DEP, { [path]: HOUSE_VIOLATIONS });
+      const r = await lint(root, base);
+      assert.equal(r.status, 1, r.stdout + r.stderr);
+      for (const rule of HOUSE_RULES) assert.match(r.stdout, new RegExp(rule));
+    });
+  }
+
+  test('passes the same violations on lines the change did not add', async (t) => {
+    const { root, base } = mobileRepo(
+      t,
+      { ...DEP, 'src/scaled.ts': HOUSE_VIOLATIONS },
+      { 'src/scaled.ts': `${HOUSE_VIOLATIONS}export const label = 'scaled';\n` },
+    );
+    const r = await lint(root, base);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
   });
 });

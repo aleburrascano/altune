@@ -95,6 +95,7 @@
     "babel-preset-expo": "~57.0.0",
     "eslint": "^9.39.4",
     "eslint-config-expo": "~57.0.2",
+    "eslint-config-house-ts": "file:vendor/eslint-config-house-ts",
     "fallow": "^3.25.0",
     "fast-check": "^4.9.0",
     "fishery": "2.4.0",
