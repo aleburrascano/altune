@@ -84,89 +84,86 @@ interface SavedLists {
   current_index: number;
 }
 
-function cappedSavedLists(s: QueueStore): SavedLists {
-  const ordered = libraryIds(orderedQueueTracks(s));
-  const natural = libraryIds(s.tracks);
-  const currentIndex = savedCurrentIndex(s);
-  if (ordered.length <= MAX_SAVED_QUEUE_IDS) {
-    return { track_ids: ordered, natural_order: natural, current_index: currentIndex };
-  }
-  const half = Math.floor(MAX_SAVED_QUEUE_IDS / 2);
-  const start = Math.min(Math.max(currentIndex - half, 0), ordered.length - MAX_SAVED_QUEUE_IDS);
-  const window = ordered.slice(start, start + MAX_SAVED_QUEUE_IDS);
-  const idsLeftInWindow = new Map<string, number>();
-  for (const id of window) idsLeftInWindow.set(id, (idsLeftInWindow.get(id) ?? 0) + 1);
-  const keptNatural = natural.filter((id) => {
-    const left = idsLeftInWindow.get(id) ?? 0;
-    if (left === 0) return false;
-    idsLeftInWindow.set(id, left - 1);
-    return true;
+function windowStart(currentIndex: number, length: number): number {
+  const centered = currentIndex - Math.floor(MAX_SAVED_QUEUE_IDS / 2);
+  return Math.max(Math.min(centered, length - MAX_SAVED_QUEUE_IDS), 0);
+}
+
+function naturalWithin(natural: readonly string[], window: readonly string[]): string[] {
+  const left = new Map<string, number>();
+  for (const id of window) left.set(id, (left.get(id) ?? 0) + 1);
+  return natural.filter((id) => {
+    const count = left.get(id) ?? 0;
+    left.set(id, count - 1);
+    return count > 0;
   });
-  return { track_ids: window, natural_order: keptNatural, current_index: currentIndex - start };
 }
 
-interface SaveFingerprint {
-  tracks: QueueStore['tracks'];
-  playOrder: QueueStore['playOrder'];
-  source: QueueStore['source'];
-  currentIndex: number;
-  shuffled: boolean;
-  repeatMode: QueueStore['repeatMode'];
-  positionMs: number;
+function windowOf(ordered: readonly string[], currentIndex: number) {
+  const start = windowStart(currentIndex, ordered.length);
+  return { ids: ordered.slice(start, start + MAX_SAVED_QUEUE_IDS), start };
 }
 
-function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
+function cappedSavedLists(s: QueueStore): SavedLists {
+  const currentIndex = savedCurrentIndex(s);
+  const { ids, start } = windowOf(libraryIds(orderedQueueTracks(s)), currentIndex);
   return {
-    tracks: s.tracks,
-    playOrder: s.playOrder,
-    source: s.source,
-    currentIndex: s.currentIndex,
-    shuffled: s.shuffled,
-    repeatMode: s.repeatMode,
-    positionMs,
+    track_ids: ids,
+    natural_order: naturalWithin(libraryIds(s.tracks), ids),
+    current_index: currentIndex - start,
   };
 }
 
+type SaveFingerprint = readonly unknown[];
+
+function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
+  return [s.tracks, s.playOrder, s.source, s.currentIndex, s.shuffled, s.repeatMode, positionMs];
+}
+
 function sameFingerprint(a: SaveFingerprint | null, b: SaveFingerprint): boolean {
-  return (
-    a !== null &&
-    a.tracks === b.tracks &&
-    a.playOrder === b.playOrder &&
-    a.source === b.source &&
-    a.currentIndex === b.currentIndex &&
-    a.shuffled === b.shuffled &&
-    a.repeatMode === b.repeatMode &&
-    a.positionMs === b.positionMs
-  );
+  return a !== null && a.every((value, i) => Object.is(value, b[i]));
+}
+
+async function sendSave(s: QueueStore, positionMs: number): Promise<void> {
+  await saveQueueState({
+    ...cappedSavedLists(s),
+    position_ms: positionMs,
+    shuffled: s.shuffled,
+    repeat_mode: s.repeatMode,
+    source: toWireSource(s.source),
+  });
+}
+
+async function readSaveSnapshot(
+  isSkippable: (state: QueueStore) => boolean,
+): Promise<ConsistentSnapshot | null> {
+  if (isSkippable(useQueueStore.getState())) return null;
+  const epoch = currentSessionEpoch();
+  const snapshot = await readConsistentSnapshot();
+  if (!snapshot || isSkippable(snapshot.state) || !isSameSession(epoch)) return null;
+  return snapshot;
+}
+
+async function sendSaveReportingFailure(snapshot: ConsistentSnapshot): Promise<boolean> {
+  try {
+    await sendSave(snapshot.state, snapshot.positionMs);
+    return true;
+  } catch (err) {
+    warnPlayback('failed to save queue state', {}, err);
+    recordQueueSaveFailure();
+    return false;
+  }
 }
 
 async function saveOnce(
   isSkippable: (state: QueueStore) => boolean,
   lastSaved: { current: SaveFingerprint | null },
 ): Promise<void> {
-  if (isSkippable(useQueueStore.getState())) return;
-
-  const epoch = currentSessionEpoch();
-  const snapshot = await readConsistentSnapshot();
-  if (!snapshot || isSkippable(snapshot.state) || !isSameSession(epoch)) return;
-  const { state: s, positionMs } = snapshot;
-
-  const fingerprint = fingerprintOf(s, positionMs);
+  const snapshot = await readSaveSnapshot(isSkippable);
+  if (!snapshot) return;
+  const fingerprint = fingerprintOf(snapshot.state, snapshot.positionMs);
   if (sameFingerprint(lastSaved.current, fingerprint)) return;
-
-  try {
-    await saveQueueState({
-      ...cappedSavedLists(s),
-      position_ms: positionMs,
-      shuffled: s.shuffled,
-      repeat_mode: s.repeatMode,
-      source: toWireSource(s.source),
-    });
-    lastSaved.current = fingerprint;
-  } catch (err) {
-    warnPlayback('failed to save queue state', {}, err);
-    recordQueueSaveFailure();
-  }
+  if (await sendSaveReportingFailure(snapshot)) lastSaved.current = fingerprint;
 }
 
 function userTookOver(owned: number): boolean {
