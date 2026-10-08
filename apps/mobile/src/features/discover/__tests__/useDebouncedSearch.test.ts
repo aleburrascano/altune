@@ -400,6 +400,25 @@ describe('useDebouncedSearch applies one trim and length rule to every commit pa
 
     expect(result.current.committedQuery).toHaveLength(MAX_QUERY_LENGTH);
   });
+
+  it('onChangeText and setQuery cut by code point, leaving no lone surrogate', () => {
+    const text = `${'a'.repeat(MAX_QUERY_LENGTH - 1)}😀😀`;
+    const expected = `${'a'.repeat(MAX_QUERY_LENGTH - 1)}😀`;
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText(text);
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current.inputValue).toBe(expected);
+    expect(result.current.committedQuery).toBe(expected);
+
+    act(() => {
+      result.current.setQuery(text);
+    });
+    expect(result.current.inputValue).toBe(expected);
+    expect(result.current.committedQuery).toBe(expected);
+  });
 });
 
 const SERVER_WORD_CAP = 32;
