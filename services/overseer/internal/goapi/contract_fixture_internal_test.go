@@ -44,10 +44,16 @@ func jsonTagName(f reflect.StructField) (name string, omitEmpty, ok bool) {
 }
 
 func uncoveredKeys(fixture json.RawMessage, typ reflect.Type) []string {
-	return walkUncovered("", fixture, typ)
+	return walkUncovered("", fixture, typ, false)
 }
 
-func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type) []string {
+// uncoveredKeysStrict also reports omitempty fields the fixture lacks, so a
+// rename on the go-api side of an optional field still fails a test.
+func uncoveredKeysStrict(fixture json.RawMessage, typ reflect.Type) []string {
+	return walkUncovered("", fixture, typ, true)
+}
+
+func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type, strict bool) []string {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
@@ -72,12 +78,12 @@ func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type) []str
 			}
 			value, present := obj[name]
 			if !present {
-				if !omitEmpty {
+				if !omitEmpty || strict {
 					out = append(out, child)
 				}
 				continue
 			}
-			out = append(out, walkUncovered(child, value, typ.Field(i).Type)...)
+			out = append(out, walkUncovered(child, value, typ.Field(i).Type, strict)...)
 		}
 		return out
 	case reflect.Slice, reflect.Array:
@@ -91,7 +97,7 @@ func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type) []str
 			}
 			return nil
 		}
-		return walkUncovered(path+"[0]", items[0], typ.Elem())
+		return walkUncovered(path+"[0]", items[0], typ.Elem(), strict)
 	case reflect.Map:
 		var entries map[string]json.RawMessage
 		if err := json.Unmarshal(fixture, &entries); err != nil {
@@ -110,7 +116,7 @@ func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type) []str
 		sort.Strings(keys)
 		var out []string
 		for _, k := range keys {
-			out = append(out, walkUncovered(path+"."+k, entries[k], typ.Elem())...)
+			out = append(out, walkUncovered(path+"."+k, entries[k], typ.Elem(), strict)...)
 		}
 		return out
 	}
@@ -204,5 +210,88 @@ func TestContract_HealthFixtureDecodesIntoOperatorHealth(t *testing.T) {
 	}
 	if got.Healthy() {
 		t.Error("Healthy() = true, want false")
+	}
+}
+
+// decodeFixtureStrict decodes the fixture and fails on every key of out's type
+// the fixture lacks, omitempty ones included, except the exempt paths.
+func decodeFixtureStrict(t *testing.T, name string, out any, exempt ...string) {
+	t.Helper()
+	data := loadContractFixture(t, name)
+	if err := json.Unmarshal(data, out); err != nil {
+		t.Fatalf("decode %s: %v", name, err)
+	}
+	skip := map[string]bool{}
+	for _, p := range exempt {
+		skip[p] = true
+	}
+	for _, path := range uncoveredKeysStrict(data, reflect.TypeOf(out).Elem()) {
+		if !skip[path] {
+			t.Errorf("%s does not cover %s", name, path)
+		}
+	}
+}
+
+func TestContract_MetricsLiveFixtureDecodes(t *testing.T) {
+	var live LiveMetrics
+	decodeFixtureStrict(t, "observe_metrics_live.json", &live)
+	if got := live.Latency.Routes["/v1/tracks/{trackId}"].Count; got < 1 {
+		t.Errorf("track route count = %d, want >= 1", got)
+	}
+	var usage providerUsageEnvelope
+	decodeFixtureStrict(t, "observe_metrics_live.json", &usage)
+	if len(usage.Providers) == 0 {
+		t.Error("Providers is empty")
+	}
+}
+
+func TestContract_EvalFixtureDecodes(t *testing.T) {
+	var got EvalStatus
+	// error is only present when the last run failed; this fixture is a healthy run.
+	decodeFixtureStrict(t, "observe_eval.json", &got, "error")
+	if !got.Scored() {
+		t.Error("Scored() = false, want true")
+	}
+	if got.Baseline == nil {
+		t.Error("Baseline is nil")
+	}
+	if got.LastRun == nil {
+		t.Error("LastRun is nil")
+	}
+	if len(got.Queries) != 1 {
+		t.Errorf("len(Queries) = %d, want 1", len(got.Queries))
+	}
+}
+
+func TestContract_EvalFixtureLookAlikeIsRefused(t *testing.T) {
+	data := loadContractFixture(t, "observe_eval.json")
+	lookAlike := strings.Replace(string(data), `"queries"`, `"query"`, 1)
+	if lookAlike == string(data) {
+		t.Fatal("fixture has no queries key to rename")
+	}
+	got := uncoveredKeysStrict(json.RawMessage(lookAlike), reflect.TypeOf(EvalStatus{}))
+	want := []string{"error", "queries"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("uncoveredKeysStrict = %q, want %q", got, want)
+	}
+}
+
+func TestContract_AcquisitionFixtureDecodes(t *testing.T) {
+	var got AcquisitionStatus
+	decodeFixtureStrict(t, "observe_acquisition.json", &got)
+	if got.InFlight == 0 || got.Succeeded == 0 || got.Failed == 0 || got.Rejected == 0 ||
+		got.QueueDepth == 0 || got.QueueCapacity == 0 {
+		t.Errorf("a counter is zero: %+v", got)
+	}
+}
+
+func TestContract_QualityFixtureDecodes(t *testing.T) {
+	var got DiscographyQuality
+	decodeFixtureStrict(t, "observe_quality_discography.json", &got)
+	if len(got.Cases) != 1 {
+		t.Fatalf("len(Cases) = %d, want 1", len(got.Cases))
+	}
+	if len(got.Cases[0].ProviderCounts) == 0 {
+		t.Error("ProviderCounts is empty")
 	}
 }

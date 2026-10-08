@@ -1,0 +1,236 @@
+{
+  "latency": {
+    "routes": {
+      "/v1/tracks/{trackId}": {
+        "count": 1,
+        "sum_ms": 5,
+        "buckets": [
+          {
+            "le_ms": "1",
+            "count": 0
+          },
+          {
+            "le_ms": "5",
+            "count": 1
+          },
+          {
+            "le_ms": "10",
+            "count": 0
+          },
+          {
+            "le_ms": "25",
+            "count": 0
+          },
+          {
+            "le_ms": "50",
+            "count": 0
+          },
+          {
+            "le_ms": "100",
+            "count": 0
+          },
+          {
+            "le_ms": "250",
+            "count": 0
+          },
+          {
+            "le_ms": "500",
+            "count": 0
+          },
+          {
+            "le_ms": "1000",
+            "count": 0
+          },
+          {
+            "le_ms": "2500",
+            "count": 0
+          },
+          {
+            "le_ms": "5000",
+            "count": 0
+          },
+          {
+            "le_ms": "+Inf",
+            "count": 0
+          }
+        ],
+        "status": {
+          "2xx": 1,
+          "4xx": 0,
+          "5xx": 0
+        }
+      },
+      "overflow": {
+        "count": 0,
+        "sum_ms": 0,
+        "buckets": [
+          {
+            "le_ms": "1",
+            "count": 0
+          },
+          {
+            "le_ms": "5",
+            "count": 0
+          },
+          {
+            "le_ms": "10",
+            "count": 0
+          },
+          {
+            "le_ms": "25",
+            "count": 0
+          },
+          {
+            "le_ms": "50",
+            "count": 0
+          },
+          {
+            "le_ms": "100",
+            "count": 0
+          },
+          {
+            "le_ms": "250",
+            "count": 0
+          },
+          {
+            "le_ms": "500",
+            "count": 0
+          },
+          {
+            "le_ms": "1000",
+            "count": 0
+          },
+          {
+            "le_ms": "2500",
+            "count": 0
+          },
+          {
+            "le_ms": "5000",
+            "count": 0
+          },
+          {
+            "le_ms": "+Inf",
+            "count": 0
+          }
+        ],
+        "status": {
+          "2xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        }
+      },
+      "unmatched": {
+        "count": 0,
+        "sum_ms": 0,
+        "buckets": [
+          {
+            "le_ms": "1",
+            "count": 0
+          },
+          {
+            "le_ms": "5",
+            "count": 0
+          },
+          {
+            "le_ms": "10",
+            "count": 0
+          },
+          {
+            "le_ms": "25",
+            "count": 0
+          },
+          {
+            "le_ms": "50",
+            "count": 0
+          },
+          {
+            "le_ms": "100",
+            "count": 0
+          },
+          {
+            "le_ms": "250",
+            "count": 0
+          },
+          {
+            "le_ms": "500",
+            "count": 0
+          },
+          {
+            "le_ms": "1000",
+            "count": 0
+          },
+          {
+            "le_ms": "2500",
+            "count": 0
+          },
+          {
+            "le_ms": "5000",
+            "count": 0
+          },
+          {
+            "le_ms": "+Inf",
+            "count": 0
+          }
+        ],
+        "status": {
+          "2xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        }
+      }
+    }
+  },
+  "providers": {
+    "amazonmusic": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "applemusic": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "deezer": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "itunes": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "lastfm": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "musicbrainz": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "other": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "soundcloud": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "spotify": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    },
+    "youtube": {
+      "ok": 0,
+      "quota": 0,
+      "error": 0
+    }
+  }
+}
+
