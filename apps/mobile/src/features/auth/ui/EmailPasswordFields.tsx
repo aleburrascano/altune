@@ -2,9 +2,9 @@ import type { ReactElement } from 'react';
 
 import { TextField } from '@shared/ui/primitives/TextField';
 
-import { PASSWORD_REQUIREMENTS_HINT } from '../validation';
-import { FieldError } from './FieldError';
-import { NewPasswordField } from './NewPasswordField';
+import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/validation';
+import { FieldError } from '@features/auth/ui/FieldError';
+import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
 
 type EmailPasswordFieldsProps = {
   email: string;

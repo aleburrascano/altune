@@ -7,12 +7,12 @@ import { Text } from '@shared/ui/primitives/Text';
 import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
-import { useResetPassword } from '../hooks/useResetPassword';
-import { isValidEmail } from '../validation';
-import { AuthErrorBanner } from './AuthErrorBanner';
-import { BackToSignInLink } from './BackToSignInLink';
-import { FieldError } from './FieldError';
-import { AuthHeroLayout } from './hero/AuthHeroLayout';
+import { useResetPassword } from '@features/auth/hooks/useResetPassword';
+import { isValidEmail } from '@features/auth/validation';
+import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
+import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
+import { FieldError } from '@features/auth/ui/FieldError';
+import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
 const SENT_COPY =

@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { NETWORK_ERROR_COPY } from '../errorReason';
-import { useOAuth } from '../hooks/useOAuth';
-import { OAuthButtons } from '../ui/OAuthButtons';
+import { NETWORK_ERROR_COPY } from '@features/auth/errorReason';
+import { useOAuth } from '@features/auth/hooks/useOAuth';
+import { OAuthButtons } from '@features/auth/ui/OAuthButtons';
 
-jest.mock('../hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
+jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
 
 const mockUseOAuth = useOAuth as jest.Mock;
 

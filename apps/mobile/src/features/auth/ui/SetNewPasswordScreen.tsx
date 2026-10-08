@@ -7,13 +7,13 @@ import { showFailureAlert } from '@shared/ui/failure/showFailure';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import { useUpdatePassword } from '../hooks/useUpdatePassword';
-import { clearRecoveryUnlock } from '../recoveryUnlock';
-import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '../validation';
-import { AuthErrorBanner } from './AuthErrorBanner';
-import { AuthHeroLayout } from './hero/AuthHeroLayout';
-import { FieldError } from './FieldError';
-import { NewPasswordField } from './NewPasswordField';
+import { useUpdatePassword } from '@features/auth/hooks/useUpdatePassword';
+import { clearRecoveryUnlock } from '@features/auth/recoveryUnlock';
+import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/auth/validation';
+import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
+import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
+import { FieldError } from '@features/auth/ui/FieldError';
+import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
 
 const OTHERS_NOT_REVOKED_TITLE = 'Password updated';
 const OTHERS_NOT_REVOKED_MESSAGE =

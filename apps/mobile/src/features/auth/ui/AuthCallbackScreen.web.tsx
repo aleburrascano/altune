@@ -4,11 +4,15 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { supabase } from '@shared/auth/supabaseClient';
 import { Text } from '@shared/ui/primitives/Text';
 
-import { type AuthIntentResult, type AuthRouter, completeAuthIntent } from '../completeAuthIntent';
-import { type AuthLinkIntent, parseAuthLink } from '../parseAuthLink';
+import {
+  type AuthIntentResult,
+  type AuthRouter,
+  completeAuthIntent,
+} from '@features/auth/completeAuthIntent';
+import { type AuthLinkIntent, parseAuthLink } from '@features/auth/parseAuthLink';
 
-import { AuthFullScreenNotice } from './AuthFullScreenNotice';
-import { BackToSignInLink } from './BackToSignInLink';
+import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
+import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
 
 type ScreenState = 'pending' | 'error';
 

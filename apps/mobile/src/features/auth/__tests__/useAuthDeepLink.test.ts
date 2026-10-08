@@ -3,8 +3,8 @@ import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
 import { showAlert } from '@shared/ui/dialog/dialog';
-import { completeAuthIntent } from '../completeAuthIntent';
-import { useAuthDeepLink } from '../hooks/useAuthDeepLink';
+import { completeAuthIntent } from '@features/auth/completeAuthIntent';
+import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-linking', () => ({
@@ -13,7 +13,7 @@ jest.mock('expo-linking', () => ({
 }));
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
-jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('@features/auth/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
 const mockComplete = completeAuthIntent as jest.Mock;

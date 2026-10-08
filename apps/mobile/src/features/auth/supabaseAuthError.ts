@@ -1,4 +1,4 @@
-import type { AuthErrorReason } from './errorReason';
+import type { AuthErrorReason } from '@features/auth/errorReason';
 
 export type SupabaseAuthErrorLike = {
   name?: string | undefined;

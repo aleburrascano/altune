@@ -1,16 +1,16 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { withAuthDeadline } from '../authDeadline';
+import { withAuthDeadline } from '@features/auth/authDeadline';
 import {
   type SupabaseErrorDetail,
   type ThrownErrorDetail,
   supabaseErrorDetail,
   thrownErrorDetail,
-} from '../errorDetail';
-import type { TransientAuthReason } from '../errorReason';
-import { classifyAuthError, isWeakPasswordError } from '../supabaseAuthError';
+} from '@features/auth/errorDetail';
+import type { TransientAuthReason } from '@features/auth/errorReason';
+import { classifyAuthError, isWeakPasswordError } from '@features/auth/supabaseAuthError';
 
-import { useAsyncAuthAction } from './useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 
 type UpdatePasswordResult =
   | { kind: 'idle' }

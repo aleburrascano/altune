@@ -1,12 +1,12 @@
 import { render, screen, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
-import { AuthGate } from '../ui/AuthGate';
+import { AuthGate } from '@features/auth/ui/AuthGate';
 import {
   clearRecoveryUnlock,
   markRecoveryUnlocked,
   RECOVERY_UNLOCK_WINDOW_MS,
-} from '../recoveryUnlock';
+} from '@features/auth/recoveryUnlock';
 
 let mockSegments: string[] = [];
 const mockReplace = jest.fn();

@@ -14,7 +14,7 @@ import {
   RECOVERY_UNLOCK_WINDOW_MS,
   useRecoveryUnlocked,
   _listenerCountForTest,
-} from '../recoveryUnlock';
+} from '@features/auth/recoveryUnlock';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {

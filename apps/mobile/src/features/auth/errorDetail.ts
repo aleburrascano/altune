@@ -1,4 +1,4 @@
-import type { SupabaseAuthErrorLike } from './supabaseAuthError';
+import type { SupabaseAuthErrorLike } from '@features/auth/supabaseAuthError';
 
 export type ThrownErrorDetail = { name: string; message: string };
 

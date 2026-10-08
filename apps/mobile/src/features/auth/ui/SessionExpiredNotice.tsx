@@ -2,7 +2,7 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 
-import { AuthFullScreenNotice } from './AuthFullScreenNotice';
+import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 
 export function SessionExpiredNotice() {
   const { state, signOut } = useSignOut();
