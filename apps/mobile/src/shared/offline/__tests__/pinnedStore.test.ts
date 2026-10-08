@@ -569,7 +569,9 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        const mod = require('@shared/offline/pinnedStore') as {
+          usePinnedStore: typeof usePinnedStore;
+        };
         reloadedEntries = mod.usePinnedStore.getState().entries;
       });
 
@@ -582,7 +584,9 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        const mod = require('@shared/offline/pinnedStore') as {
+          usePinnedStore: typeof usePinnedStore;
+        };
         reloadedEntries = mod.usePinnedStore.getState().entries;
       });
 
@@ -597,7 +601,9 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       let reloadedEntries: Record<string, PinnedEntry> | undefined;
       jest.isolateModules(() => {
-        const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        const mod = require('@shared/offline/pinnedStore') as {
+          usePinnedStore: typeof usePinnedStore;
+        };
         reloadedEntries = mod.usePinnedStore.getState().entries;
       });
 
@@ -635,7 +641,9 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
   function importFreshEntries(): unknown {
     let entries: unknown;
     jest.isolateModules(() => {
-      const mod = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+      const mod = require('@shared/offline/pinnedStore') as {
+        usePinnedStore: typeof usePinnedStore;
+      };
       entries = mod.usePinnedStore.getState().entries;
     });
     return entries;
@@ -1265,7 +1273,9 @@ describe('reconcile squares the index with the files on disk', () => {
             },
           }),
         );
-        freshStoreModule = require('@shared/offline/pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+        freshStoreModule = require('@shared/offline/pinnedStore') as {
+          usePinnedStore: typeof usePinnedStore;
+        };
       });
 
       const freshFs = freshFsModule!.__fs;

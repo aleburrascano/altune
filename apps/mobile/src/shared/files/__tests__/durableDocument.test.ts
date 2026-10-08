@@ -8,7 +8,10 @@ import {
   type SchemaSpec,
 } from '@shared/files/durableDocument';
 import type { StoredDirectory } from '@shared/files/fileStore';
-import { createMemoryFileStore, type MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@shared/files/__tests__/memoryFileStore';
 
 const DIR_URI = 'memory://document/docs';
 const FILE_URI = `${DIR_URI}/doc.json`;

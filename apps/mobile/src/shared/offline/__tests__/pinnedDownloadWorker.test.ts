@@ -8,7 +8,11 @@ import {
 } from '@shared/files/__tests__/memoryFileStore';
 
 import { DOWNLOAD_RETRY_BASE_MS, runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
-import { MIN_FREE_BYTES, PIN_DOWNLOAD_TIMEOUT_MS, setPinnedFileStore } from '@shared/offline/pinnedFiles';
+import {
+  MIN_FREE_BYTES,
+  PIN_DOWNLOAD_TIMEOUT_MS,
+  setPinnedFileStore,
+} from '@shared/offline/pinnedFiles';
 import type { PinnedEntry } from '@shared/offline/pinnedIndex';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';

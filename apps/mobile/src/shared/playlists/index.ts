@@ -10,5 +10,8 @@ export {
 } from '@shared/playlists/mutations';
 export { useSingleFlightAction } from '@shared/playlists/useSingleFlightAction';
 export { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
-export { PlaylistsPortProvider, usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
+export {
+  PlaylistsPortProvider,
+  usePlaylistsPort,
+} from '@shared/playlists/ports/PlaylistsPortProvider';
 export type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
