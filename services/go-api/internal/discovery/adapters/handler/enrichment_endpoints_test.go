@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
 	"errors"
@@ -595,4 +596,118 @@ func TestHandleEnrichment_UnconfiguredIsNotEmptySuccess(t *testing.T) {
 	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
 
 	assertErrorCode(t, rec, http.StatusServiceUnavailable, "enrichment_unavailable")
+}
+
+type namedEnrichmentCase struct {
+	name        string
+	path        string
+	router      func(err error) chi.Router
+	emptyFields []string
+}
+
+func namedEnrichmentCases() []namedEnrichmentCase {
+	return []namedEnrichmentCase{
+		{
+			name: "lastfm",
+			path: "/discovery/enrichment/lastfm",
+			router: func(err error) chi.Router {
+				r, _ := lastfmRouter(&scriptedLastFmEnricher{err: err})
+				return r
+			},
+			emptyFields: []string{"tags", "similar"},
+		},
+		{
+			name: "deezer",
+			path: "/discovery/enrichment/deezer",
+			router: func(err error) chi.Router {
+				r, _ := deezerRouter(&scriptedDeezerEnricher{resolveErr: err})
+				return r
+			},
+			emptyFields: []string{"genres"},
+		},
+	}
+}
+
+func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
+	for _, tc := range namedEnrichmentCases() {
+		t.Run(tc.name+" missing title is 400", func(t *testing.T) {
+			rec := discServe(t, tc.router(nil), http.MethodGet, tc.path+"?kind=artist", nil)
+			discAssertStatus(t, rec, http.StatusBadRequest)
+			var resp httputil.ErrorResponse
+			discDecodeJSON(t, rec, &resp)
+			if resp.Code != requestCodeInvalidParam {
+				t.Errorf("code = %q, want %q", resp.Code, requestCodeInvalidParam)
+			}
+			if resp.Detail != "title is required" {
+				t.Errorf("detail = %q, want %q", resp.Detail, "title is required")
+			}
+		})
+
+		t.Run(tc.name+" invalid kind is 400", func(t *testing.T) {
+			rec := discServe(t, tc.router(nil), http.MethodGet, tc.path+"?kind=albumx&title=Nas", nil)
+			assertErrorCode(t, rec, http.StatusBadRequest, requestCodeInvalidKind)
+		})
+
+		t.Run(tc.name+" nil enricher is 200 with the empty DTO", func(t *testing.T) {
+			router := buildEnrichersRouter(DetailEnrichers{})
+			rec := discServe(t, router, http.MethodGet, tc.path+"?kind=artist&title=Nas", nil)
+			discAssertStatus(t, rec, http.StatusOK)
+			var raw map[string]json.RawMessage
+			discDecodeJSON(t, rec, &raw)
+			for _, f := range tc.emptyFields {
+				if string(raw[f]) != "[]" {
+					t.Errorf("%s = %s, want []", f, raw[f])
+				}
+			}
+			if string(raw["degraded"]) != "false" {
+				t.Errorf("degraded = %s, want false", raw["degraded"])
+			}
+		})
+
+		t.Run(tc.name+" ErrDegraded is 200 with degraded true", func(t *testing.T) {
+			rec := discServe(t, tc.router(enrich.ErrDegraded), http.MethodGet, tc.path+"?kind=album&title=Illmatic&subtitle=Nas", nil)
+			discAssertStatus(t, rec, http.StatusOK)
+			var raw map[string]json.RawMessage
+			discDecodeJSON(t, rec, &raw)
+			if string(raw["degraded"]) != "true" {
+				t.Errorf("degraded = %s, want true", raw["degraded"])
+			}
+		})
+	}
+}
+
+func TestServeNamedEnrichment_OtherErrorUsesServiceErrorStatus(t *testing.T) {
+	failing := statusCodedError{status: http.StatusServiceUnavailable, code: "enrichment_unavailable"}
+	run := func(call func(w http.ResponseWriter, r *http.Request)) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/x?kind=artist&title=Nas", nil)
+		rec := httptest.NewRecorder()
+		call(rec, req)
+		return rec
+	}
+
+	t.Run("lastfm shapes", func(t *testing.T) {
+		rec := run(func(w http.ResponseWriter, r *http.Request) {
+			serveNamedEnrichment(w, r, true,
+				func(context.Context, discdomain.ResultKind, string, string) (discdomain.LastFmEnrichment, error) {
+					return discdomain.EmptyLastFmEnrichment(), failing
+				},
+				discdomain.EmptyLastFmEnrichment(), lastfmEnrichmentToDTO,
+				func(d *LastFmEnrichmentResponseDTO, v bool) { d.Degraded = v },
+				"lastfm enrichment failed")
+		})
+		assertErrorCode(t, rec, http.StatusServiceUnavailable, "enrichment_unavailable")
+	})
+
+	t.Run("deezer shapes", func(t *testing.T) {
+		rec := run(func(w http.ResponseWriter, r *http.Request) {
+			serveNamedEnrichment(w, r, true,
+				func(context.Context, discdomain.ResultKind, string, string) (discdomain.DeezerEnrichment, error) {
+					return discdomain.EmptyDeezerEnrichment(), errors.New("boom")
+				},
+				discdomain.EmptyDeezerEnrichment(), deezerEnrichmentToDTO,
+				func(d *DeezerEnrichmentResponseDTO, v bool) { d.Degraded = v },
+				"deezer enrichment failed")
+		})
+		assertErrorCode(t, rec, http.StatusInternalServerError, "internal")
+	})
 }

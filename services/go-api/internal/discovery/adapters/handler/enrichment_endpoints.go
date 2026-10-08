@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/httputil"
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -172,28 +173,51 @@ func nonNilStrings(s []string) []string {
 	return s
 }
 
-func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
+func namedEnrichmentParams(w http.ResponseWriter, r *http.Request) (domain.ResultKind, string, string, bool) {
 	kind, ok := parseKindParam(w, r)
 	if !ok {
-		return
+		return 0, "", "", false
 	}
 	title, subtitle, ok := titleAndSubtitle(w, r)
-	if !ok {
-		return
+	if !ok || !requireTitle(w, title) {
+		return 0, "", "", false
 	}
-	if !requireTitle(w, title) {
+	return kind, title, subtitle, true
+}
+
+func serveNamedEnrichment[E, D any](
+	w http.ResponseWriter,
+	r *http.Request,
+	available bool,
+	exec func(ctx context.Context, kind domain.ResultKind, title, subtitle string) (E, error),
+	empty E,
+	toDTO func(E) D,
+	stamp func(*D, bool),
+	logMsg string,
+) {
+	kind, title, subtitle, ok := namedEnrichmentParams(w, r)
+	if !ok {
 		return
 	}
 
-	withEnricher(w, r, h.enrichers.LastFm != nil,
-		func() any { return lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()) },
+	withEnricher(w, r, available,
+		func() any { return toDTO(empty) },
 		degradedCall(
-			func() (domain.LastFmEnrichment, error) {
-				return h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
-			},
-			lastfmEnrichmentToDTO,
-			func(d *LastFmEnrichmentResponseDTO, v bool) { d.Degraded = v }),
-		"lastfm enrichment failed", "kind", kind.String(), "title", title)
+			func() (E, error) { return exec(r.Context(), kind, title, subtitle) },
+			toDTO, stamp),
+		logMsg, "kind", kind.String(), "title", title)
+}
+
+func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
+	svc := h.enrichers.LastFm
+	var exec func(context.Context, domain.ResultKind, string, string) (domain.LastFmEnrichment, error)
+	if svc != nil {
+		exec = svc.Execute
+	}
+	serveNamedEnrichment(w, r, svc != nil, exec,
+		domain.EmptyLastFmEnrichment(), lastfmEnrichmentToDTO,
+		func(d *LastFmEnrichmentResponseDTO, v bool) { d.Degraded = v },
+		"lastfm enrichment failed")
 }
 
 type LastFmEnrichmentResponseDTO struct {
@@ -224,27 +248,15 @@ func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDT
 }
 
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
-	kind, ok := parseKindParam(w, r)
-	if !ok {
-		return
+	svc := h.enrichers.Deezer
+	var exec func(context.Context, domain.ResultKind, string, string) (domain.DeezerEnrichment, error)
+	if svc != nil {
+		exec = svc.Execute
 	}
-	title, subtitle, ok := titleAndSubtitle(w, r)
-	if !ok {
-		return
-	}
-	if !requireTitle(w, title) {
-		return
-	}
-
-	withEnricher(w, r, h.enrichers.Deezer != nil,
-		func() any { return deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()) },
-		degradedCall(
-			func() (domain.DeezerEnrichment, error) {
-				return h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
-			},
-			deezerEnrichmentToDTO,
-			func(d *DeezerEnrichmentResponseDTO, v bool) { d.Degraded = v }),
-		"deezer enrichment failed", "kind", kind.String(), "title", title)
+	serveNamedEnrichment(w, r, svc != nil, exec,
+		domain.EmptyDeezerEnrichment(), deezerEnrichmentToDTO,
+		func(d *DeezerEnrichmentResponseDTO, v bool) { d.Degraded = v },
+		"deezer enrichment failed")
 }
 
 type DeezerEnrichmentResponseDTO struct {
