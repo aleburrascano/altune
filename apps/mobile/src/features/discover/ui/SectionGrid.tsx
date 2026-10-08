@@ -41,14 +41,9 @@ function useHighlighted(): [boolean, ReturnType<typeof buildHighlightProps>] {
 }
 
 function GridCardArt({ item }: { item: DiscoveryResult }): ReactElement {
-  const isArtist = item.kind === 'artist';
+  const artRadius = item.kind === 'artist' ? radius.full : radius.md;
   return (
-    <Artwork
-      uri={item.image_url}
-      size={96}
-      radius={isArtist ? radius.full : radius.md}
-      accessibilityLabel={item.title}
-    />
+    <Artwork uri={item.image_url} size={96} radius={artRadius} accessibilityLabel={item.title} />
   );
 }
 
