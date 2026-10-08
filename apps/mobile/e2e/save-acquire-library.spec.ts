@@ -12,7 +12,7 @@ declare global {
   }
 }
 
-test.fixme('saving a track from Detail acquires it and lists it ready in Library', async ({ page }) => {
+test('saving a track from Detail acquires it and lists it ready in Library', async ({ page }) => {
   test.setTimeout(180_000);
   expect(readFileSync(searchFixture, 'utf8')).toContain('Creep');
 
@@ -57,6 +57,7 @@ test.fixme('saving a track from Detail acquires it and lists it ready in Library
   await expect(page.getByTestId('detail-save-error')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: 'Tracks', exact: true }).click();
   const list = page.getByTestId('library-tracks-list');
   await expect(list).toBeVisible();
   const row = list
