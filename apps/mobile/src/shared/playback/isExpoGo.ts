@@ -1,3 +1,3 @@
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isExpoGoRuntime } from '@shared/device/device';
 
-export const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+export const isExpoGo = isExpoGoRuntime();

@@ -1,3 +1,3 @@
-import { Platform } from 'react-native';
+import { isWebPlatform } from '@shared/device/device';
 
-export const offlineDownloadsSupported: boolean = Platform.OS !== 'web';
+export const offlineDownloadsSupported: boolean = !isWebPlatform();

@@ -1,11 +1,11 @@
-import { Platform } from 'react-native';
+import { isWebPlatform } from '@shared/device/device';
 
 export const CORRELATION_HEADER = 'X-Correlation-ID';
 
 const ID_BYTES = 8;
 
 export function newCorrelationId(): string | null {
-  if (Platform.OS === 'web') return null;
+  if (isWebPlatform()) return null;
   let id = '';
   for (let i = 0; i < ID_BYTES; i += 1) {
     id += Math.floor(Math.random() * 256)

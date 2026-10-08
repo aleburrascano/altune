@@ -1,4 +1,5 @@
 function loadIsExpoGo(executionEnvironment: string): boolean {
+  jest.resetModules();
   let isExpoGo: boolean | undefined;
   jest.isolateModules(() => {
     jest.doMock('expo-constants', () => ({

@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { isWebPlatform } from '@shared/device/device';
 import { supabase } from '@shared/auth/supabaseClient';
 import { withinAuthDeadline } from '@shared/auth/authDeadline';
 import {
@@ -132,7 +132,7 @@ export function logFailure(
 }
 
 function tunnelWarningHeader(): Record<string, string> {
-  if (Platform.OS === 'web') return {};
+  if (isWebPlatform()) return {};
   return { 'ngrok-skip-browser-warning': '1' };
 }
 
