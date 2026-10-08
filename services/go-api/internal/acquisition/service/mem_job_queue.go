@@ -24,6 +24,7 @@ type memJob struct {
 	availableAt time.Time
 	leaseUntil  time.Time
 	attempts    int
+	fence       int
 	run         int
 	leased      bool
 	reenqueued  bool
@@ -61,6 +62,9 @@ func (q *memJobQueue) Enqueue(_ context.Context, trackID domain.TrackId, kind po
 	availableAt := q.now().Add(delay)
 	if held, err := q.enqueueLive(j, kind, availableAt); held {
 		return err
+	}
+	if j.leased {
+		j.fence++
 	}
 	j.kind = kind
 	j.availableAt = availableAt
@@ -115,9 +119,10 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	best.leased = true
 	best.leaseUntil = now.Add(lease)
 	best.attempts++
+	best.fence++
 	best.run++
 	best.reenqueued = false
-	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Run: best.run, Fence: ports.Fence(best.attempts)}, nil
+	return ports.Job{TrackID: bestID, UserID: best.userID, Kind: best.kind, Attempts: best.attempts, Run: best.run, Fence: ports.Fence(best.fence)}, nil
 }
 
 func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {
@@ -165,7 +170,7 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence
 	if !ok {
 		return fmt.Errorf("heartbeat acquisition job: track %s not found", trackID)
 	}
-	if !j.leased || ports.Fence(j.attempts) != fence {
+	if !j.leased || ports.Fence(j.fence) != fence {
 		return ports.ErrLeaseLost
 	}
 	j.leaseUntil = q.now().Add(lease)
@@ -179,7 +184,7 @@ func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence p
 	if !ok {
 		return fmt.Errorf("release acquisition job: track %s not found", trackID)
 	}
-	if ports.Fence(j.attempts) != fence {
+	if ports.Fence(j.fence) != fence {
 		return ports.ErrLeaseLost
 	}
 	j.leased = false
@@ -195,7 +200,7 @@ func (q *memJobQueue) Settle(_ context.Context, trackID domain.TrackId, fence po
 	if !ok {
 		return nil
 	}
-	if ports.Fence(j.attempts) != fence {
+	if ports.Fence(j.fence) != fence {
 		return ports.ErrLeaseLost
 	}
 	if j.reenqueued {

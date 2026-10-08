@@ -223,3 +223,28 @@ func TestMemJobQueue_ReleaseWithADelayIsClaimableOnlyOnceTheQueueClockPassesIt(t
 		t.Fatalf("Claim after the delay elapsed = %v, want the job", err)
 	}
 }
+
+func TestMemJobQueue_SettleWithAnExpiredClaimsFenceKeepsAJobEnqueuedAfterTheLeaseExpired(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q := newMemJobQueueWithClock(nil, func() time.Time { return clock })
+	ctx := context.Background()
+	trackID := domain.NewTrackId()
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	stale, err := q.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v", err)
+	}
+	clock = clock.Add(2 * time.Minute)
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue after lease expiry = %v", err)
+	}
+
+	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+		t.Fatalf("Settle with the expired claim's fence = %v, want ErrLeaseLost", err)
+	}
+	if _, err := q.Claim(ctx, time.Minute); err != nil {
+		t.Fatalf("Claim after the stale Settle = %v, want the enqueued job", err)
+	}
+}
