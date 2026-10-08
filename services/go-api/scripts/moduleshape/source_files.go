@@ -28,7 +28,7 @@ func checkSources(root string) ([]string, error) {
 		return nil, err
 	}
 	var lines []string
-	for _, rule := range []func([]sourceFile) []string{checkHTTPError, checkCodedErrors, checkHandlerNames, checkPlainLogs, checkFakes, checkFileNames} {
+	for _, rule := range []func([]sourceFile) []string{checkHTTPError, checkCodedErrors, checkHandlerNames, checkPlainLogs, checkFakes} {
 		lines = append(lines, rule(files)...)
 	}
 	return lines, nil

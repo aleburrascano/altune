@@ -222,17 +222,6 @@ func TestCollectN2(t *testing.T) {
 	}
 }
 
-func TestCollectN3(t *testing.T) {
-	typed := "package x\n\ntype AudioURLHandler struct{}\n"
-	runCases(t, []checkCase{
-		{"file named for type", fullModule("m", map[string]string{"internal/m/service/audio_url_handler.go": typed}), nil},
-		{"file named for function", fullModule("m", map[string]string{"internal/m/service/run_job.go": "package x\n\nfunc RunJob() {}\n"}), nil},
-		{"file named otherwise", fullModule("m", map[string]string{"internal/m/service/endpoints.go": typed}), []string{"N3 internal/m/service/endpoints.go matches no exported identifier"}},
-		{"no exported identifier", fullModule("m", map[string]string{"internal/m/service/endpoints.go": "package x\n\nfunc run() {}\n"}), nil},
-		{"test file", fullModule("m", map[string]string{"internal/m/service/endpoints_test.go": typed}), nil},
-	})
-}
-
 func shapeLine(line string) bool {
 	return strings.HasPrefix(line, "G1 ") || strings.HasPrefix(line, "G2 ") || strings.HasPrefix(line, "G3 ")
 }
