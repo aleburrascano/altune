@@ -108,15 +108,15 @@ flowchart LR
 The eval runs the real identity resolution, and the *Drinking in L.A.* golden goes in. The operator runs `go run ./cmd/acquisitioneval -v` and sees the real-world class scored. The golden reproduces the remix-MBID trap through the resolver: it fails with #3130 reverted and passes with #3130. CI's acquisition gate runs it on every PR. Every later slice is measured against this.
 
 ## Must-holds
-1. Audio whose fingerprint hits any recording registered to the track's ISRC is accepted, even when the resolved MBID is a different recording. [repo-test: services/go-api/internal/acquisition/adapters/eval/goldens/realworld.json]
+1. Audio whose fingerprint hits any recording registered to the track's ISRC is accepted, even when the resolved MBID is a different recording. [repo-test: services/go-api/internal/acquisition/service/eval/goldens/realworld.json]
    - Example: *Drinking in L.A.*, ISRC CAA509814003, resolved MBID the "(Who Mix?)" remix d3dc2825; a candidate fingerprinting to AcoustID 5d5d307d, which links 5d6efd30 → stored with provenance `verified`.
 2. A candidate whose linked recordings, after the length filter, all carry an unrequested qualifier or a different title is never stored while any other candidate is still untried within the budget. [repo-test: services/go-api/internal/acquisition/service/audio_verdict_test.go]
    - Example: Pavarotti "Nessun dorma" candidate whose surviving links are live recordings → `other_version`, rejected. A candidate whose AcoustID links both a 220s and a 342s recording, for a 236s track → the length filter (max(5s, 3%)) keeps the 236s link and drops the 220s and 342s links.
 3. A plain retry never downloads a candidate rejected for a lasting reason in the last 30 days, unless nothing else is left. [repo-test: services/go-api/internal/acquisition/service/acquire_test.go]
    - Example: the retry of track 3b0fe67b after soundcloud.com/bran-van-3000/drinking-in-l-a-3 was rejected as `drm` → that URL is not attempted.
-4. With an `unknown` verdict, a candidate is stored only when its confidence is at least the floor, and then as `best_effort`, never `verified`. [repo-test: services/go-api/internal/acquisition/adapters/eval/goldens/verification.json]
+4. With an `unknown` verdict, a candidate is stored only when its confidence is at least the floor, and then as `best_effort`, never `verified`. [repo-test: services/go-api/internal/acquisition/service/eval/goldens/verification.json]
    - Example: unknown fingerprint, Topic channel, duration within 2s → stored as `best_effort` with confidence ≥ 0.5. Unknown fingerprint, non-Topic channel, 20s off → fails as `no_confident_match`.
-5. A candidate whose title carries a veto-family qualifier the track didn't ask for is never stored, even when its fingerprint verdict is `hard`. [repo-test: services/go-api/internal/acquisition/adapters/eval/goldens/realworld.json]
+5. A candidate whose title carries a veto-family qualifier the track didn't ask for is never stored, even when its fingerprint verdict is `hard`. [repo-test: services/go-api/internal/acquisition/service/eval/goldens/realworld.json]
    - Example: track "Rollacoasta" by prettifun, candidate "prettifun - Rollacoasta (Instrumental) [100% Accurate]" fingerprinting to the vocal recording b29ac684 at 0.908 → rejected as `qualifier`. "Lucy Bedroque - SPEED DEMON (Instrumental)" → rejected. "ImDontai Reacts To Drake 8AM In Charlotte" → rejected.
 6. A preview fingerprint is looked up with the candidate's full duration, not the preview's length. [repo-test: services/go-api/internal/acquisition/adapters/chromaprint/identifier_test.go]
    - Example: a 130s preview of a 236s candidate → the AcoustID request carries `duration=236`.
@@ -128,7 +128,7 @@ The eval runs the real identity resolution, and the *Drinking in L.A.* golden go
    - Example: the ISRC query returns 10 hits → the "title artist" and "title artist audio" queries still run, and their candidates are merged.
 10. Soft agreement is stored as `verified` only when the core title matches with no extra qualifiers, the artists overlap, and the length is within tolerance. [repo-test: services/go-api/internal/acquisition/service/audio_verdict_test.go]
     - Example: Cutting Crew "(I Just) Died in Your Arms" audio linking a sibling recording of the same title and length, not the ISRC's recording → `soft`, stored as `verified` with confidence below `hard`'s.
-11. An edit or radio edit is stored only as `best_effort`, only when no clean candidate passed, and only when its length matches the track. [repo-test: services/go-api/internal/acquisition/adapters/eval/goldens/selection.json]
+11. An edit or radio edit is stored only as `best_effort`, only when no clean candidate passed, and only when its length matches the track. [repo-test: services/go-api/internal/acquisition/service/eval/goldens/selection.json]
     - Example: a 236s track with a clean 237s Topic upload and a "(Radio Edit)" 205s upload → the Topic upload is stored. With only the radio edit available → fails as `no_confident_match`, because the length disagrees.
 12. The acquisition eval never scores below its baseline on accuracy, simulated time-to-acquire, or attempts. [repo-test: services/go-api/cmd/acquisitioneval/baselines.json]
     - Example: a change that stores the remix for *Drinking in L.A.* → `acquisitioneval -baseline` exits non-zero in CI.
