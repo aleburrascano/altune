@@ -203,3 +203,119 @@ func TestClearSearchHistory_ALateEventCannotRestoreTheErasedText(t *testing.T) {
 		t.Errorf("an event flushed after the clear restored %v, want no stored search text", got)
 	}
 }
+
+func TestClearSearchHistory_ALateInsertOfASearchBegunBeforeTheClearLeavesNoRow(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	began := time.Now().UTC().Add(-time.Second)
+
+	clearSearchHistoryOf(t, pool, owner)
+	seedHistoryEntry(t, NewPgxSearchHistoryRepository(pool), owner, "late insert "+uuid.New().String()[:8], began)
+
+	if got := countOwnedRows(t, pool,
+		`SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner); got != 0 {
+		t.Errorf("history rows after a late insert = %d, want 0", got)
+	}
+}
+
+func TestClearSearchHistory_ALateSearchPerformedEventKeepsNoSearchText(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	began := time.Now().UTC().Add(-time.Second)
+
+	clearSearchHistoryOf(t, pool, owner)
+	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
+		QueryNorm: "late event " + uuid.New().String()[:8], SearchId: uuid.New().String(),
+		Payload: map[string]any{"zero_result": false},
+	})
+
+	if got := storedSearchTextsOf(t, pool, owner); len(got) != 0 {
+		t.Errorf("a search_performed event begun before the clear stored %v, want none", got)
+	}
+}
+
+func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	clearSearchHistoryOf(t, pool, owner)
+	query, err := domain.NewSearchQuery("after erase", domain.AllKinds(), 10)
+	if err != nil {
+		t.Fatalf("NewSearchQuery: %v", err)
+	}
+
+	service.NewRecordSearchHistoryService(NewPgxSearchHistoryRepository(pool)).
+		Record(context.Background(), owner, query, "after erase", true, time.Now().UTC())
+	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),
+		QueryNorm: "after erase", SearchId: uuid.New().String(),
+		Payload: map[string]any{"zero_result": false},
+	})
+
+	if got := countOwnedRows(t, pool,
+		`SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner); got != 1 {
+		t.Errorf("history rows for a search begun after the clear = %d, want 1", got)
+	}
+	if got := storedSearchTextsOf(t, pool, owner); len(got) != 1 {
+		t.Errorf("stored search text for a search begun after the clear = %v, want 1", got)
+	}
+}
+
+func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	owner := newClearHistoryTestUser(t, pool)
+	ctx := context.Background()
+	began := time.Now().UTC().Add(-time.Second)
+	suffix := uuid.New().String()[:8]
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin erase: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, eraseSQL := range eraseSearchTextOfUserSQL {
+		if _, err := tx.Exec(ctx, eraseSQL, owner.UUID()); err != nil {
+			t.Fatalf("erase step: %v", err)
+		}
+	}
+
+	written := make(chan error, 2)
+	go func() {
+		written <- NewPgxSearchHistoryRepository(pool).Insert(ctx, &domain.SearchHistoryEntry{
+			ID: uuid.New(), UserId: owner, Query: "racing " + suffix, QueryNorm: "racing " + suffix, ExecutedAt: began,
+		})
+	}()
+	go func() {
+		written <- NewPgxEventStore(pool).Append(ctx, domain.InteractionEvent{
+			UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
+			QueryNorm: "racing " + suffix, SearchId: uuid.New().String(),
+			Payload: map[string]any{"zero_result": false},
+		})
+	}()
+
+	select {
+	case err := <-written:
+		t.Fatalf("a write finished while the erase was still open (err %v), want it held until the erase commits", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit erase: %v", err)
+	}
+	for range 2 {
+		if err := <-written; err != nil {
+			t.Fatalf("racing write: %v", err)
+		}
+	}
+
+	if got := countOwnedRows(t, pool,
+		`SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner); got != 0 {
+		t.Errorf("history rows after an insert raced the open erase = %d, want 0", got)
+	}
+	if got := storedSearchTextsOf(t, pool, owner); len(got) != 0 {
+		t.Errorf("stored search text after an append raced the open erase = %v, want none", got)
+	}
+}

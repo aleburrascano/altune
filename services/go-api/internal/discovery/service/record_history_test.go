@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
@@ -18,7 +19,7 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	const raw = "zqxj private diagnosis clinic"
 	ring := captureDetachedLogs(t)
 
-	NewRecordSearchHistoryService(repo).Record(context.Background(), user, newQuery(t, raw), raw, true)
+	NewRecordSearchHistoryService(repo).Record(context.Background(), user, newQuery(t, raw), raw, true, time.Now())
 
 	rec := onlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {

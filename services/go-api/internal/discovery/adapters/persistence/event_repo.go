@@ -34,7 +34,12 @@ func NewPgxEventStore(pool *pgxpool.Pool) *PgxEventStore {
 const appendEventSQL = `INSERT INTO discovery_events
 		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
 	VALUES ($1, $2::text,
-		CASE WHEN $2::text = $9::text THEN $3::text ELSE (
+		CASE WHEN $2::text = $9::text THEN (
+			CASE WHEN EXISTS (
+				SELECT 1 FROM discovery_search_history_cleared c
+				WHERE c.user_id = $1 AND c.cleared_at > $8
+			) THEN NULL ELSE $3::text END
+		) ELSE (
 			SELECT sp.query_norm FROM discovery_events sp
 			WHERE sp.search_id = $4::uuid
 				AND sp.user_id = $1
@@ -88,7 +93,7 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		occurredAt = time.Now().UTC()
 	}
 
-	_, err = r.pool.Exec(ctx, appendEventSQL,
+	err = execUnderSearchTextLock(ctx, r.pool, event.UserId.UUID(), appendEventSQL,
 		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
 		domain.EventTypeSearchPerformed.String(),
 	)
