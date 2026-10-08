@@ -5,6 +5,7 @@ import { onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
+import { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
 import { runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
 import {
   deleteAllPinned,
@@ -50,7 +51,7 @@ function runDownloadQueueIfSupported(
   set: Parameters<typeof runDownloadQueue>[0],
   get: Parameters<typeof runDownloadQueue>[1],
 ): void {
-  if (offlineDownloadsSupported) void runDownloadQueue(set, get);
+  if (offlineDownloadsSupported) void runDownloadQueue(set, get, httpOfflinePort);
 }
 
 function recordedVersion(entry: PinnedEntry): string | undefined {

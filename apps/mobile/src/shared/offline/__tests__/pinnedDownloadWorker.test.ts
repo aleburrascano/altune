@@ -1,29 +1,32 @@
 import * as FileSystem from 'expo-file-system';
 
-import { fetchAudioUrls } from '@shared/api-client/audio';
 import { ApiError, NetworkError } from '@shared/errors';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
 } from '@shared/files/__tests__/memoryFileStore';
 
+import { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
 import { DOWNLOAD_RETRY_BASE_MS, runDownloadQueue } from '@shared/offline/pinnedDownloadWorker';
 import {
   MIN_FREE_BYTES,
   PIN_DOWNLOAD_TIMEOUT_MS,
   setPinnedFileStore,
 } from '@shared/offline/pinnedFiles';
+import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import type { PinnedEntry } from '@shared/offline/pinnedIndex';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn(() => Promise.resolve()),
 }));
 
 const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
-const fetchAudioUrlsMock = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
+const seededUrls: Record<string, { url: string; version: string }> = {};
+const memoryPort = createMemoryOfflinePort({ urls: seededUrls });
+const fetchAudioUrlsMock = jest.fn(memoryPort.fetchAudioUrls);
+const port: OfflinePort = { fetchAudioUrls: fetchAudioUrlsMock };
 
 const { __fs } = FileSystem as unknown as {
   __fs: { reset(): void; readFile(uri: string): string | undefined };
@@ -36,7 +39,8 @@ type Update = Partial<State> | ((s: State) => Partial<State>);
 
 beforeEach(() => {
   __fs.reset();
-  fetchAudioUrlsMock.mockReset();
+  for (const trackId of Object.keys(seededUrls)) delete seededUrls[trackId];
+  fetchAudioUrlsMock.mockReset().mockImplementation(memoryPort.fetchAudioUrls);
 });
 
 describe('runDownloadQueue', () => {
@@ -57,9 +61,8 @@ describe('runDownloadQueue', () => {
       if (updaters === 2) state = { ...state, entries: {} };
       state = { ...state, ...update(state) };
     };
-    fetchAudioUrlsMock.mockResolvedValue([]);
 
-    await runDownloadQueue(set, get);
+    await runDownloadQueue(set, get, port);
 
     expect(state.entries).toEqual({});
     expect(state.queue).toEqual([]);
@@ -120,7 +123,7 @@ describe('a transient pinned-download failure is retried before the track is fai
     fetchAudioUrlsMock.mockRejectedValue(new NetworkError('transport', 'the API is unreachable'));
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await settleMicrotasks();
     expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
 
@@ -146,12 +149,11 @@ describe('a transient pinned-download failure is retried before the track is fai
   });
 
   it('ends ready when a transient 5xx clears on a retry, so no re-tap of pin is needed', async () => {
-    fetchAudioUrlsMock
-      .mockRejectedValueOnce(new ApiError(503, 'audio urls unavailable'))
-      .mockResolvedValue([{ trackId: 't1', url: signedUrl('t1'), version: 'v3' }]);
+    seededUrls['t1'] = { url: signedUrl('t1'), version: 'v3' };
+    fetchAudioUrlsMock.mockRejectedValueOnce(new ApiError(503, 'audio urls unavailable'));
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS);
     await drained;
 
@@ -168,7 +170,7 @@ describe('a transient pinned-download failure is retried before the track is fai
     store.freeBytes = MIN_FREE_BYTES - 1;
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await settleMicrotasks();
 
     expect(track.entry?.status).toBe('failed');
@@ -180,7 +182,7 @@ describe('a transient pinned-download failure is retried before the track is fai
     fetchAudioUrlsMock.mockRejectedValue(new NetworkError('transport', 'the API is unreachable'));
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await settleMicrotasks();
     track.unpin();
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS * 4);
@@ -197,10 +199,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
 
   beforeEach(() => {
     __fs.reset();
-    fetchAudioUrlsMock.mockReset();
-    fetchAudioUrlsMock.mockResolvedValue([
-      { trackId: 't1', url: 'https://cdn.example.com/t1.mp3?sig=x', version: 'v1' },
-    ]);
+    seededUrls['t1'] = { url: 'https://cdn.example.com/t1.mp3?sig=x', version: 'v1' };
     store = createMemoryFileStore();
     setPinnedFileStore(store);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -222,7 +221,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
     };
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await jest.advanceTimersByTimeAsync(10_000);
     await drained;
 
@@ -234,7 +233,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
     store.download = () => new Promise(() => {});
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS * 3 + 30_000);
     await drained;
 
@@ -246,7 +245,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
     store.freeBytes = MIN_FREE_BYTES - 1;
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await jest.advanceTimersByTimeAsync(10_000);
     await drained;
 
@@ -279,12 +278,10 @@ describe('download_failed telemetry', () => {
     const store = createMemoryFileStore();
     setPinnedFileStore(store);
     store.download = () => Promise.reject(new Error('net'));
-    fetchAudioUrlsMock.mockResolvedValue([
-      { trackId: 'tel-1', url: signedUrl('tel-1'), version: 'v1' },
-    ]);
+    seededUrls['tel-1'] = { url: signedUrl('tel-1'), version: 'v1' };
     const track = queuedTrack(asTrackId('tel-1'));
 
-    const drained = runDownloadQueue(track.set, track.get);
+    const drained = runDownloadQueue(track.set, track.get, port);
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS * 10);
     await drained;
 
@@ -301,7 +298,7 @@ describe('download_failed telemetry', () => {
     fetchAudioUrlsMock.mockRejectedValue(new ApiError(404, 'gone'));
     const track = queuedTrack(asTrackId('tel-2'));
 
-    await runDownloadQueue(track.set, track.get);
+    await runDownloadQueue(track.set, track.get, port);
 
     expect(track.entry?.status).toBe('failed');
     expect(eventsFor('tel-2')).toHaveLength(1);

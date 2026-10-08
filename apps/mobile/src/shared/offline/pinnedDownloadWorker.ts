@@ -1,4 +1,4 @@
-import { fetchAudioUrls } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { equalJitterMs } from '@shared/backoff';
 import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
@@ -12,6 +12,7 @@ import {
   unsignedUrl,
   withPinnedBytesCached,
 } from '@shared/offline/pinnedFiles';
+import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import {
   type PinnedEntry,
   downloadingEntry,
@@ -31,51 +32,63 @@ type QueueState = {
 type Setter = (partial: Partial<QueueState> | ((s: QueueState) => Partial<QueueState>)) => void;
 type Getter = () => QueueState;
 
-export async function runDownloadQueue(set: Setter, get: Getter): Promise<void> {
+export async function runDownloadQueue(set: Setter, get: Getter, port: OfflinePort): Promise<void> {
   if (get().isWorking) return;
   set({ isWorking: true });
   try {
-    await withPinnedBytesCached(() => drainQueue(set, get));
+    await withPinnedBytesCached(() => drainQueue(set, get, port));
   } finally {
     set({ isWorking: false });
     flushIndex();
   }
 }
 
-async function drainQueue(set: Setter, get: Getter): Promise<void> {
+async function drainQueue(set: Setter, get: Getter, port: OfflinePort): Promise<void> {
   for (;;) {
     const trackId = get().queue[0];
     if (trackId === undefined || !isLoopEnabled('offlineDownloads')) break;
     set((s) => ({ queue: s.queue.slice(1) }));
-    await downloadOne(trackId, set, get);
+    await downloadOne(trackId, set, get, port);
   }
 }
 
-async function downloadOne(trackId: TrackId, set: Setter, get: Getter): Promise<void> {
-  if (get().entries[trackId] === undefined) return;
+function markEntry(set: Setter, trackId: TrackId, entry: PinnedEntry): void {
+  set((s) => {
+    if (s.entries[trackId] === undefined) return {};
+    const entries = { ...s.entries, [trackId]: entry };
+    tagChangedEntries(entries, [trackId]);
+    scheduleSaveIndex(entries);
+    return { entries };
+  });
+}
 
-  const mark = (entry: PinnedEntry): void => {
-    set((s) => {
-      if (s.entries[trackId] === undefined) return {};
-      const entries = { ...s.entries, [trackId]: entry };
-      tagChangedEntries(entries, [trackId]);
-      scheduleSaveIndex(entries);
-      return { entries };
-    });
-  };
-
-  mark(downloadingEntry(trackId));
+function jobFor(trackId: TrackId, get: Getter, port: OfflinePort): DownloadJob {
   const isStillDownloading = (): boolean => get().entries[trackId]?.status === 'downloading';
+  return { trackId, isStillDownloading, port };
+}
 
-  const outcome = await downloadWithRetries(trackId, isStillDownloading);
+function settledEntry(trackId: TrackId, outcome: Attempt): PinnedEntry {
+  return outcome.ok ? readyEntry(trackId, outcome.uri, outcome.version) : failedEntry(trackId);
+}
 
-  const supersededWhileDownloading = !isStillDownloading();
-  if (supersededWhileDownloading) {
-    deletePinned(trackId);
+async function settleDownload(set: Setter, job: DownloadJob): Promise<void> {
+  const outcome = await downloadWithRetries(job);
+  if (!job.isStillDownloading()) {
+    deletePinned(job.trackId);
     return;
   }
+  markEntry(set, job.trackId, settledEntry(job.trackId, outcome));
+}
 
-  mark(outcome.ok ? readyEntry(trackId, outcome.uri, outcome.version) : failedEntry(trackId));
+async function downloadOne(
+  trackId: TrackId,
+  set: Setter,
+  get: Getter,
+  port: OfflinePort,
+): Promise<void> {
+  if (get().entries[trackId] === undefined) return;
+  markEntry(set, trackId, downloadingEntry(trackId));
+  await settleDownload(set, jobFor(trackId, get, port));
 }
 
 const MAX_DOWNLOAD_ATTEMPTS = 3;
@@ -97,41 +110,56 @@ function stillDownloadingAfter(ms: number, isStillDownloading: () => boolean): P
 type FailedAttempt = { ok: false; error: unknown; url: string | undefined };
 type Attempt = { ok: true; uri: string; version: string } | FailedAttempt;
 
-function warnAttemptFailed(trackId: TrackId, attempt: FailedAttempt, retryIn: number | null): void {
-  const retry = retryIn === null ? '' : `, retrying in ${retryIn}ms`;
+function recordDownloadFailed(trackId: TrackId, willRetry: boolean): void {
   recordEvent({
     type: 'download_failed',
-    payload: { track_id: trackId, will_retry: retryIn !== null },
+    payload: { track_id: trackId, will_retry: willRetry },
   }).catch(() => undefined);
+}
+
+function warnAttemptFailed(trackId: TrackId, attempt: FailedAttempt, retryIn: number | null): void {
+  const retry = retryIn === null ? '' : `, retrying in ${retryIn}ms`;
+  recordDownloadFailed(trackId, retryIn !== null);
   console.warn(`[offline] pinned download failed for track ${trackId}${retry}`, {
     url: unsignedUrl(attempt.url),
     error: attempt.error,
   });
 }
 
-async function downloadWithRetries(
-  trackId: TrackId,
-  isStillDownloading: () => boolean,
-  attemptNumber = 1,
-): Promise<Attempt> {
-  const outcome = await attemptDownload(trackId);
+type DownloadJob = {
+  trackId: TrackId;
+  isStillDownloading: () => boolean;
+  port: OfflinePort;
+};
+
+async function downloadWithRetries(job: DownloadJob, attemptNumber = 1): Promise<Attempt> {
+  const outcome = await attemptDownload(job);
   if (outcome.ok) return outcome;
   const retryIn = retryDelayMs(outcome.error, attemptNumber);
-  warnAttemptFailed(trackId, outcome, retryIn);
+  warnAttemptFailed(job.trackId, outcome, retryIn);
   if (retryIn === null) return outcome;
-  if (!(await stillDownloadingAfter(retryIn, isStillDownloading))) return outcome;
-  return downloadWithRetries(trackId, isStillDownloading, attemptNumber + 1);
+  if (!(await stillDownloadingAfter(retryIn, job.isStillDownloading))) return outcome;
+  return downloadWithRetries(job, attemptNumber + 1);
 }
 
-async function attemptDownload(trackId: TrackId): Promise<Attempt> {
+async function resolveSignedUrl(job: DownloadJob): Promise<ResolvedAudioUrl> {
+  if (pinStorageFull()) throw new Error('pinned storage is full');
+  const [resolved] = await job.port.fetchAudioUrls([job.trackId]);
+  if (!resolved) throw new Error('no signed url');
+  return resolved;
+}
+
+async function downloadResolved(trackId: TrackId, resolved: ResolvedAudioUrl): Promise<Attempt> {
+  const uri = await downloadPinned(trackId, resolved.url);
+  return { ok: true, uri, version: resolved.version };
+}
+
+async function attemptDownload(job: DownloadJob): Promise<Attempt> {
   let url: string | undefined;
   try {
-    if (pinStorageFull()) throw new Error('pinned storage is full');
-    const [resolved] = await fetchAudioUrls([trackId]);
-    if (!resolved) throw new Error('no signed url');
+    const resolved = await resolveSignedUrl(job);
     url = resolved.url;
-    const uri = await downloadPinned(trackId, resolved.url);
-    return { ok: true, uri, version: resolved.version };
+    return await downloadResolved(job.trackId, resolved);
   } catch (error) {
     return { ok: false, error, url };
   }
