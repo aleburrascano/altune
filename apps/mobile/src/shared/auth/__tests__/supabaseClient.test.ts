@@ -108,8 +108,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  const RN = require('react-native') as { Platform: { OS: string } };
-  RN.Platform.OS = 'ios';
+  jest.dontMock('@shared/auth/authStorage');
   installWorkingLocalStorage();
   jest.resetModules();
   remockCreateClient();
@@ -266,8 +265,9 @@ function webStorageUnder(
   let backing = new Map<string, string>();
 
   jest.isolateModules(() => {
-    const RN = require('react-native') as { Platform: { OS: string } };
-    RN.Platform.OS = 'web';
+    jest.doMock('@shared/auth/authStorage', () =>
+      jest.requireActual('@shared/auth/authStorage.web'),
+    );
     SecureStore = require('expo-secure-store') as SecureStoreDouble;
     SecureStore.__secureStore.reset();
 
@@ -451,6 +451,29 @@ describe('webStorage adapter — the session survives a page reload (localStorag
   });
 });
 
+describe('native storage — a look-alike window.localStorage is never consulted', () => {
+  it('reads and writes go to the keychain with 0 localStorage calls', async () => {
+    const getItem = jest.fn(() => 'from-local-storage');
+    const setItem = jest.fn();
+    const removeItem = jest.fn();
+    Object.defineProperty(window, 'localStorage', {
+      value: { getItem, setItem, removeItem },
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    const { storage } = freshModules();
+
+    await storage.setItem('sb-fixture-auth-token', 'v');
+    await expect(storage.getItem('sb-fixture-auth-token')).resolves.toBe('v');
+    await storage.removeItem('sb-fixture-auth-token');
+
+    expect(getItem).toHaveBeenCalledTimes(0);
+    expect(setItem).toHaveBeenCalledTimes(0);
+    expect(removeItem).toHaveBeenCalledTimes(0);
+  });
+});
+
 describe('clearPersistedAuthSession() — the sign-out guarantee independent of the network call', () => {
   it('removes the persisted auth session key from localStorage on web', async () => {
     const sameBrowserProfile = new Map<string, string>([
@@ -459,8 +482,9 @@ describe('clearPersistedAuthSession() — the sign-out guarantee independent of 
     let clearPersistedAuthSession: (() => Promise<void>) | undefined;
 
     jest.isolateModules(() => {
-      const RN = require('react-native') as { Platform: { OS: string } };
-      RN.Platform.OS = 'web';
+      jest.doMock('@shared/auth/authStorage', () =>
+        jest.requireActual('@shared/auth/authStorage.web'),
+      );
       installWorkingLocalStorage(sameBrowserProfile);
       ({ clearPersistedAuthSession } = require('@shared/auth/supabaseClient') as {
         clearPersistedAuthSession: () => Promise<void>;
@@ -505,8 +529,9 @@ describe('the wired real client — a session written by sign-in is readable aft
 
     jest.isolateModules(() => {
       jest.unmock('@supabase/supabase-js');
-      const RN = require('react-native') as { Platform: { OS: string } };
-      RN.Platform.OS = 'web';
+      jest.doMock('@shared/auth/authStorage', () =>
+        jest.requireActual('@shared/auth/authStorage.web'),
+      );
       installWorkingLocalStorage(sameBrowserProfile);
       ({ supabase: realSupabase } =
         require('@shared/auth/supabaseClient') as typeof realSupabase extends never

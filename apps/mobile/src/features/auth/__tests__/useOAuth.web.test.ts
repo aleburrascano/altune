@@ -7,6 +7,13 @@ import { useOAuth } from '@features/auth/hooks/useOAuth.web';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
+jest.mock('@shared/device/webOrigin', () => ({
+  webOrigin: (): string | null =>
+    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
+      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
+      : null,
+}));
+
 const mockStateUpdates: unknown[] = [];
 
 jest.mock('react', () => {

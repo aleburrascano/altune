@@ -33,8 +33,4 @@ export function isExpoGoRuntime(): boolean {
   return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
-export function webOrigin(): string | null {
-  return Platform.OS === 'web' && typeof window !== 'undefined'
-    ? window.location?.origin || null
-    : null;
-}
+export { webOrigin } from './webOrigin';
