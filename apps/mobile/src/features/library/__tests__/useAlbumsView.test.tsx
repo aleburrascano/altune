@@ -11,7 +11,7 @@ import {
 } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 
-import type { ActiveView } from '../activeView';
+import type { ActiveView } from '../domain/activeView';
 import { useAlbumsView } from '../hooks/useAlbumsView';
 import { SortControl } from '../ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';

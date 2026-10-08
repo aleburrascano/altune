@@ -1,7 +1,7 @@
 import type { ArtistGroup } from '@shared/api-client/library';
 
 import { useLibraryArtists } from '@features/library/hooks/useLibraryArtists';
-import type { ActiveView } from '@features/library/activeView';
+import type { ActiveView } from '@features/library/domain/activeView';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 import { ARTIST_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
 import { ArtistsGrid } from '@features/library/ui/ArtistsGrid';

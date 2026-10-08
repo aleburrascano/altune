@@ -8,7 +8,7 @@ import { useCreatePlaylist } from '@shared/playlists';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { pagedListControls } from '@features/library/hooks/pagedListControls';
+import { pagedListControls } from '@features/library/domain/pagedListControls';
 import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
 import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '@features/library/domain/groupPaging';
 

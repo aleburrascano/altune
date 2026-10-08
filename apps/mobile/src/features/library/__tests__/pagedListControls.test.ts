@@ -1,4 +1,4 @@
-import { pagedListControls } from '../hooks/pagedListControls';
+import { pagedListControls } from '../domain/pagedListControls';
 
 function build(over: Partial<Parameters<typeof pagedListControls>[0]> = {}) {
   const fetchNextPage = jest.fn();
