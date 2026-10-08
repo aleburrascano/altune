@@ -71,11 +71,7 @@ export function withoutTrack(indices: readonly number[], removed: number): numbe
   return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
 }
 
-export function currentAfterMove(
-  currentIndex: number,
-  fromIndex: number,
-  toIndex: number,
-): number {
+export function currentAfterMove(currentIndex: number, fromIndex: number, toIndex: number): number {
   if (fromIndex === currentIndex) return toIndex;
   if (fromIndex < currentIndex && toIndex >= currentIndex) return currentIndex - 1;
   if (fromIndex > currentIndex && toIndex <= currentIndex) return currentIndex + 1;
@@ -112,17 +108,13 @@ interface FreshQueueOptions {
   generation: number;
 }
 
+const NOTHING_QUEUED = { upNext: [], appended: [], resumePositionMs: 0 };
+
 export function freshQueue({
   generation,
   ...loaded
 }: FreshQueueOptions): Omit<QueueState, 'repeatMode'> {
-  return {
-    ...loaded,
-    upNext: [],
-    appended: [],
-    resumePositionMs: 0,
-    generation: generation + 1,
-  };
+  return { ...loaded, ...NOTHING_QUEUED, generation: generation + 1 };
 }
 
 export function survivingPositions(

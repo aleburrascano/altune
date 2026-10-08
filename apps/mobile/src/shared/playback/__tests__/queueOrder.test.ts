@@ -121,27 +121,33 @@ describe('withAppended', () => {
   });
 });
 
+const TWO = 2;
+const THREE = 3;
+const FOUR = 4;
+const FIVE = 5;
+const SIX = 6;
+
 describe('currentAfterMove', () => {
   it('follows the current track when it is moved', () => {
-    expect(currentAfterMove(2, 2, 0)).toBe(0);
+    expect(currentAfterMove(TWO, TWO, 0)).toBe(0);
   });
 
   it('shifts down when a track before current moves to or past it', () => {
-    expect(currentAfterMove(2, 0, 3)).toBe(1);
+    expect(currentAfterMove(TWO, 0, THREE)).toBe(1);
   });
 
   it('shifts up when a track after current moves to or before it', () => {
-    expect(currentAfterMove(2, 4, 1)).toBe(3);
+    expect(currentAfterMove(TWO, FOUR, 1)).toBe(THREE);
   });
 
   it('stays put when the move is entirely after current', () => {
-    expect(currentAfterMove(2, 3, 4)).toBe(2);
+    expect(currentAfterMove(TWO, THREE, FOUR)).toBe(TWO);
   });
 });
 
 describe('movedOrder', () => {
   it('moves the first entry to the end', () => {
-    expect(movedOrder([0, 1, 2], 0, 2)).toEqual([1, 2, 0]);
+    expect(movedOrder([0, 1, TWO], 0, TWO)).toEqual([1, TWO, 0]);
   });
 
   it('returns a single-entry order unchanged', () => {
@@ -149,9 +155,9 @@ describe('movedOrder', () => {
   });
 
   it('does not mutate its input', () => {
-    const order = [0, 1, 2];
-    movedOrder(order, 0, 2);
-    expect(order).toEqual([0, 1, 2]);
+    const order = [0, 1, TWO];
+    movedOrder(order, 0, TWO);
+    expect(order).toEqual([0, 1, TWO]);
   });
 });
 
@@ -161,15 +167,15 @@ describe('currentAfterRemoval', () => {
   });
 
   it('clamps when the last track, which is current, is removed', () => {
-    expect(currentAfterRemoval(3, 3, 3)).toBe(2);
+    expect(currentAfterRemoval(THREE, THREE, THREE)).toBe(TWO);
   });
 
   it('shifts down when a track before current is removed', () => {
-    expect(currentAfterRemoval(3, 1, 4)).toBe(2);
+    expect(currentAfterRemoval(THREE, 1, FOUR)).toBe(TWO);
   });
 
   it('stays put when a track after current is removed', () => {
-    expect(currentAfterRemoval(1, 2, 4)).toBe(1);
+    expect(currentAfterRemoval(1, TWO, FOUR)).toBe(1);
   });
 });
 
@@ -183,16 +189,16 @@ describe('freshQueue', () => {
   };
 
   it('bumps the generation and clears user-queued state', () => {
-    const fresh = freshQueue({ ...base, generation: 4 });
-    expect(fresh.generation).toBe(5);
+    const fresh = freshQueue({ ...base, generation: FOUR });
+    expect(fresh.generation).toBe(FIVE);
     expect(fresh.upNext).toEqual([]);
     expect(fresh.appended).toEqual([]);
     expect(fresh.resumePositionMs).toBe(0);
   });
 
   it('increments from the generation passed in each time', () => {
-    expect(freshQueue({ ...base, generation: 4 }).generation).toBe(5);
-    expect(freshQueue({ ...base, generation: 4 }).generation).toBe(5);
-    expect(freshQueue({ ...base, generation: 5 }).generation).toBe(6);
+    expect(freshQueue({ ...base, generation: FOUR }).generation).toBe(FIVE);
+    expect(freshQueue({ ...base, generation: FOUR }).generation).toBe(FIVE);
+    expect(freshQueue({ ...base, generation: FIVE }).generation).toBe(SIX);
   });
 });
