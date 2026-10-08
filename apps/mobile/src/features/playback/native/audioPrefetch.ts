@@ -48,7 +48,6 @@ function evictAgainstLiveQueue(): void {
   evict(orderedQueueTracks(s), s.currentIndex);
 }
 
-// Mirrors REQUEST_TIMEOUT_MS; pinned by the audioPrefetch test.
 export const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 
 function deleteQuietly(file: File): void {
