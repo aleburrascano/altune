@@ -5,7 +5,7 @@ import type { PlaybackContextValue, PlaybackState } from '@shared/playback/types
 import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { derivePlaybackState } from '@features/playback/derivePlaybackState';
-import { useMediaSession } from '@features/playback/hooks/useMediaSession';
+import { useMediaSession } from '@features/playback/web/useMediaSession';
 import {
   advanceOnEnded,
   endForSignOut,
