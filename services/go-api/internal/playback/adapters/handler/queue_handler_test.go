@@ -472,3 +472,41 @@ func TestHandleSave_TransientFailureIsRetryable503(t *testing.T) {
 		t.Errorf("body = %q, want code playback.unavailable", rec.Body.String())
 	}
 }
+
+func TestHandleSave_UnavailableWireFormat(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	newHandler(&unavailableRepo{}).Routes().ServeHTTP(rec, savePut(validSaveBody))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503, body %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After = %q, want 1", got)
+	}
+	const want = `{"detail":"queue state temporarily unavailable","code":"playback.unavailable"}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Errorf("body = %s, want %s", got, want)
+	}
+}
+
+type lookAlikeRepo struct {
+	recordingRepo
+}
+
+func (lookAlikeRepo) Upsert(_ context.Context, _ *domain.QueueState) error {
+	return errors.New("queue state temporarily unavailable")
+}
+
+func TestHandleSave_LookAlikeUnavailableTextIsNot503(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	newHandler(&lookAlikeRepo{}).Routes().ServeHTTP(rec, savePut(validSaveBody))
+
+	if rec.Code == http.StatusServiceUnavailable {
+		t.Fatalf("a plain error with the same text must not map to 503, body %q", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "playback.unavailable") {
+		t.Errorf("body = %q, must not carry the unavailable code", rec.Body.String())
+	}
+}
