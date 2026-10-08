@@ -14,6 +14,6 @@ const (
 )
 
 type CooldownStore interface {
-	Reserve(ctx context.Context, trackID domain.TrackId, kind CooldownKind, cooldown time.Duration) (at time.Time, ok bool, err error)
+	Reserve(ctx context.Context, trackID domain.TrackId, kind CooldownKind, cooldown time.Duration) (at time.Time, ok bool, wait time.Duration, err error)
 	Release(ctx context.Context, trackID domain.TrackId, kind CooldownKind, at time.Time) error
 }
