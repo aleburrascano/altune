@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
 )
@@ -14,7 +14,7 @@ func (h *DiscoveryHandler) writeContentFetch(
 	resp *service.ContentFetchResponse,
 ) {
 	dto := contentFetchToDTO(resp)
-	if userId, ok := authservice.UserIDFromContext(r.Context()); ok {
+	if userId, ok := authbridge.UserIDFromContext(r.Context()); ok {
 		h.ownership.StampOwnership(r.Context(), userId, ownableItems(dto.Items))
 	}
 	status, _ := contentFetchOutcome(resp)

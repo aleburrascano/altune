@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/httputil"
@@ -126,7 +126,7 @@ func noStorePerUser(next http.Handler) http.Handler {
 
 func requireUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := auth.RequireUserID(w, r); !ok {
+		if _, ok := authbridge.RequireUserID(w, r); !ok {
 			return
 		}
 		next.ServeHTTP(w, r)

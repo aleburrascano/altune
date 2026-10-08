@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
@@ -26,7 +26,7 @@ type FavoriteRequest struct {
 }
 
 func (h *DiscoveryHandler) handleListFavorites(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -94,7 +94,7 @@ func (h *DiscoveryHandler) handleRemoveFavorite(w http.ResponseWriter, r *http.R
 }
 
 func decodeFavorite(w http.ResponseWriter, r *http.Request) (shared.UserId, domain.ResultKind, FavoriteRequest, bool) {
-	userId, ok := auth.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return userId, domain.ResultKindUnknown, FavoriteRequest{}, false
 	}
