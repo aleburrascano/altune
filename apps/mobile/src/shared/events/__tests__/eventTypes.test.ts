@@ -1,4 +1,8 @@
-import { SERVER_EVENT_TYPES, isServerEventType, recordUnhandledEvent } from '@shared/events/eventTypes';
+import {
+  SERVER_EVENT_TYPES,
+  isServerEventType,
+  recordUnhandledEvent,
+} from '@shared/events/eventTypes';
 
 describe('isServerEventType', () => {
   it.each(SERVER_EVENT_TYPES)('accepts %s as a known server event type', (type) => {

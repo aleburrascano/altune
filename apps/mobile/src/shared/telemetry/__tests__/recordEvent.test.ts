@@ -1,7 +1,11 @@
 import { ApiError, NetworkError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { recordEvent, type DiscoveryEvent, TelemetryGatedError } from '@shared/telemetry/recordEvent';
+import {
+  recordEvent,
+  type DiscoveryEvent,
+  TelemetryGatedError,
+} from '@shared/telemetry/recordEvent';
 import { getSessionId } from '@shared/telemetry/session';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';

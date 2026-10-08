@@ -426,7 +426,9 @@ describe('Reducer: ensureRestored (cold start, driven through a fresh module ins
       recordEventModule.recordEvent.mockResolvedValue(undefined);
       freshPersistOutbox = outboxStoreModule.persistOutbox;
       freshRecordEvent = recordEventModule.recordEvent;
-      freshFlushOutbox = (require('@shared/telemetry/outbox') as { flushOutbox: typeof flushOutbox }).flushOutbox;
+      freshFlushOutbox = (
+        require('@shared/telemetry/outbox') as { flushOutbox: typeof flushOutbox }
+      ).flushOutbox;
     });
 
     await freshFlushOutbox();
@@ -553,8 +555,9 @@ describe('Idempotence: a foreground transition arriving twice', () => {
       listeners = appStateModule.__listeners;
       freshPersistOutbox = outboxStoreModule.persistOutbox;
       freshRecordEvent = recordEventModule.recordEvent;
-      freshEnqueue = (require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical })
-        .enqueueCritical;
+      freshEnqueue = (
+        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
+      ).enqueueCritical;
     });
 
     await freshEnqueue(event({ search_id: 'q' }));
@@ -599,8 +602,9 @@ describe('Idempotence: a foreground transition arriving twice', () => {
       recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
       listeners = appStateModule.__listeners;
       freshRecordEvent = recordEventModule.recordEvent;
-      freshEnqueue = (require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical })
-        .enqueueCritical;
+      freshEnqueue = (
+        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
+      ).enqueueCritical;
     });
 
     await freshEnqueue(event({ search_id: 'q' }));
@@ -635,8 +639,9 @@ describe('Regression: repeated enqueueCritical calls must not accumulate AppStat
       outboxStoreModule.loadPersistedOutbox.mockReturnValue([]);
       recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
       listeners = appStateModule.__listeners;
-      freshEnqueue = (require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical })
-        .enqueueCritical;
+      freshEnqueue = (
+        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
+      ).enqueueCritical;
     });
 
     const listenerCountBefore = listeners.length;
