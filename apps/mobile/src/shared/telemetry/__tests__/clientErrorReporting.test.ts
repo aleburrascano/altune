@@ -1,19 +1,19 @@
 import { apiFetch } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
-import { enqueueCritical } from '../outbox';
+import { enqueueCritical } from '@shared/telemetry/outbox';
 import {
   _resetGlobalErrorReportingForTest,
   installGlobalErrorReporting,
   reportClientError,
-} from '../clientErrorReporting';
+} from '@shared/telemetry/clientErrorReporting';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
-jest.mock('../outbox', () => ({ enqueueCritical: jest.fn() }));
+jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 const mockPreviousHandler = jest.fn();
 const mockSetGlobalHandler = jest.fn();

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { getSessionId } from '../session';
+import { getSessionId } from '@shared/telemetry/session';
 
 function findRepoRoot(): string | null {
   let dir = __dirname;

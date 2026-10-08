@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { withEnvelope, makeEventId } from '../outbox';
-import type { DiscoveryEvent } from '../recordEvent';
+import { withEnvelope, makeEventId } from '@shared/telemetry/outbox';
+import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
 
 function findRepoRoot(): string {
   let dir = __dirname;

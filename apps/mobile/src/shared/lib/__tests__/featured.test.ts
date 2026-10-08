@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { featuredArtistsFromExtras, withFeaturing } from '../featured';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 
 import type { FeaturedArtist } from '@shared/api-client/types';
 

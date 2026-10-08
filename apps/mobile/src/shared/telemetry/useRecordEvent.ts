@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { isTelemetryGated } from '@shared/errors';
 
-import { recordEvent, type DiscoveryEvent } from './recordEvent';
+import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
 
 export function useRecordEvent() {
   return useMutation<void, Error, DiscoveryEvent>({

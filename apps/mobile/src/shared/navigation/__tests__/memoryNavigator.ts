@@ -1,4 +1,4 @@
-import type { Href, Navigator } from '../index';
+import type { Href, Navigator } from '@shared/navigation/index';
 
 export function createMemoryNavigator(initial: Href = '/'): Navigator & { current(): Href } {
   const behind: Href[] = [];

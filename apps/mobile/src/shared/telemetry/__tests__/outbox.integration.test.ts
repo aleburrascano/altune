@@ -1,9 +1,9 @@
-import type * as OutboxNamespace from '../outbox';
-import type { DiscoveryEvent } from '../recordEvent';
+import type * as OutboxNamespace from '@shared/telemetry/outbox';
+import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
 
 type OutboxEntry = OutboxNamespace.OutboxEntry;
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -57,7 +57,7 @@ const booted: OutboxModule[] = [];
 
 function bootApp(): OutboxModule {
   configureSession();
-  const outbox = require('../outbox') as OutboxModule;
+  const outbox = require('@shared/telemetry/outbox') as OutboxModule;
   booted.push(outbox);
   return outbox;
 }

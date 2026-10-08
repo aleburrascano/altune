@@ -1,4 +1,4 @@
-import { clearDetailHandoffs, detailHref, readDetailHandoff } from '../detail-handoff';
+import { clearDetailHandoffs, detailHref, readDetailHandoff } from '@shared/lib/detail-handoff';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 

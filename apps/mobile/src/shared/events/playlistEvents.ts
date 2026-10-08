@@ -9,14 +9,14 @@ import {
   stringArray,
   type ServerEventHandler,
   type ServerEventHandlers,
-} from './eventPayload';
+} from '@shared/events/eventPayload';
 import {
   patchPlaylistName,
   removeTrackFromPlaylistCache,
   removeTracksFromPlaylistCache,
   reorderPlaylistCache,
-} from './playlistCachePatch';
-import type { ServerEvent } from './sse-client';
+} from '@shared/events/playlistCachePatch';
+import type { ServerEvent } from '@shared/events/sse-client';
 
 type PlaylistEventType =
   | 'track_added_to_playlist'

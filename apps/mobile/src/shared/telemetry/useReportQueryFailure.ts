@@ -3,7 +3,7 @@ import { isCancelledError } from '@tanstack/react-query';
 
 import { ApiError, correlationIdOf } from '@shared/errors';
 
-import { useRecordEvent } from './useRecordEvent';
+import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 export type QueryFailureSource = 'search' | 'suggest' | 'history' | 'clear_history';
 

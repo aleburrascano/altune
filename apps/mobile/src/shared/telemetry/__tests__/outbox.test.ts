@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { ApiError, NetworkError } from '@shared/api-client';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import type { OutboxEntry } from '../outbox';
+import type { OutboxEntry } from '@shared/telemetry/outbox';
 import {
   enqueueCritical,
   flushOutbox,
@@ -18,24 +18,24 @@ import {
   capOutbox,
   dedupeById,
   withEnvelope,
-} from '../outbox';
-import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
+} from '@shared/telemetry/outbox';
+import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
 import {
   recordEvent,
   type DiscoveryEvent,
   type TelemetryGatedError as TelemetryGatedErrorClass,
-} from '../recordEvent';
+} from '@shared/telemetry/recordEvent';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
 type AppStateChangeHandler = (state: string) => void;
 
-jest.mock('../outboxStore', () => ({
+jest.mock('@shared/telemetry/outboxStore', () => ({
   loadPersistedOutbox: jest.fn(),
   persistOutbox: jest.fn(),
 }));
 
-jest.mock('../recordEvent', () => ({ recordEvent: jest.fn() }));
+jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
 jest.mock('react-native/Libraries/AppState/AppState', () => {
   const listeners: AppStateChangeHandler[] = [];
@@ -321,11 +321,11 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
     let dropped: number | undefined;
 
     jest.isolateModules(() => {
-      const outboxStoreModule = require('../outboxStore') as {
+      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
         loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
         persistOutbox: jest.MockedFunction<typeof persistOutbox>;
       };
-      const recordEventModule = require('../recordEvent') as {
+      const recordEventModule = require('@shared/telemetry/recordEvent') as {
         recordEvent: jest.MockedFunction<typeof recordEvent>;
       };
       const overfull: OutboxEntry[] = Array.from({ length: MAX_ENTRIES + 2 }, (_, i) => ({
@@ -336,7 +336,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
       outboxStoreModule.loadPersistedOutbox.mockReturnValue(overfull);
       recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
 
-      const outbox = require('../outbox') as {
+      const outbox = require('@shared/telemetry/outbox') as {
         flushOutbox: typeof flushOutbox;
         droppedCriticalCount: typeof droppedCriticalCount;
       };
@@ -411,11 +411,11 @@ describe('Reducer: ensureRestored (cold start, driven through a fresh module ins
     let freshPersistOutbox!: jest.MockedFunction<typeof persistOutbox>;
 
     jest.isolateModules(() => {
-      const outboxStoreModule = require('../outboxStore') as {
+      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
         loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
         persistOutbox: jest.MockedFunction<typeof persistOutbox>;
       };
-      const recordEventModule = require('../recordEvent') as {
+      const recordEventModule = require('@shared/telemetry/recordEvent') as {
         recordEvent: jest.MockedFunction<typeof recordEvent>;
       };
       outboxStoreModule.loadPersistedOutbox.mockReturnValue([
@@ -426,7 +426,7 @@ describe('Reducer: ensureRestored (cold start, driven through a fresh module ins
       recordEventModule.recordEvent.mockResolvedValue(undefined);
       freshPersistOutbox = outboxStoreModule.persistOutbox;
       freshRecordEvent = recordEventModule.recordEvent;
-      freshFlushOutbox = (require('../outbox') as { flushOutbox: typeof flushOutbox }).flushOutbox;
+      freshFlushOutbox = (require('@shared/telemetry/outbox') as { flushOutbox: typeof flushOutbox }).flushOutbox;
     });
 
     await freshFlushOutbox();
@@ -538,11 +538,11 @@ describe('Idempotence: a foreground transition arriving twice', () => {
     let freshPersistOutbox!: jest.MockedFunction<typeof persistOutbox>;
 
     jest.isolateModules(() => {
-      const outboxStoreModule = require('../outboxStore') as {
+      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
         loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
         persistOutbox: jest.MockedFunction<typeof persistOutbox>;
       };
-      const recordEventModule = require('../recordEvent') as {
+      const recordEventModule = require('@shared/telemetry/recordEvent') as {
         recordEvent: jest.MockedFunction<typeof recordEvent>;
       };
       const appStateModule = require('react-native/Libraries/AppState/AppState') as {
@@ -553,7 +553,7 @@ describe('Idempotence: a foreground transition arriving twice', () => {
       listeners = appStateModule.__listeners;
       freshPersistOutbox = outboxStoreModule.persistOutbox;
       freshRecordEvent = recordEventModule.recordEvent;
-      freshEnqueue = (require('../outbox') as { enqueueCritical: typeof enqueueCritical })
+      freshEnqueue = (require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical })
         .enqueueCritical;
     });
 
@@ -585,11 +585,11 @@ describe('Idempotence: a foreground transition arriving twice', () => {
     let freshRecordEvent!: jest.MockedFunction<typeof recordEvent>;
 
     jest.isolateModules(() => {
-      const outboxStoreModule = require('../outboxStore') as {
+      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
         loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
         persistOutbox: jest.MockedFunction<typeof persistOutbox>;
       };
-      const recordEventModule = require('../recordEvent') as {
+      const recordEventModule = require('@shared/telemetry/recordEvent') as {
         recordEvent: jest.MockedFunction<typeof recordEvent>;
       };
       const appStateModule = require('react-native/Libraries/AppState/AppState') as {
@@ -599,7 +599,7 @@ describe('Idempotence: a foreground transition arriving twice', () => {
       recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
       listeners = appStateModule.__listeners;
       freshRecordEvent = recordEventModule.recordEvent;
-      freshEnqueue = (require('../outbox') as { enqueueCritical: typeof enqueueCritical })
+      freshEnqueue = (require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical })
         .enqueueCritical;
     });
 
@@ -622,11 +622,11 @@ describe('Regression: repeated enqueueCritical calls must not accumulate AppStat
     let freshEnqueue!: typeof enqueueCritical;
 
     jest.isolateModules(() => {
-      const outboxStoreModule = require('../outboxStore') as {
+      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
         loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
         persistOutbox: jest.MockedFunction<typeof persistOutbox>;
       };
-      const recordEventModule = require('../recordEvent') as {
+      const recordEventModule = require('@shared/telemetry/recordEvent') as {
         recordEvent: jest.MockedFunction<typeof recordEvent>;
       };
       const appStateModule = require('react-native/Libraries/AppState/AppState') as {
@@ -635,7 +635,7 @@ describe('Regression: repeated enqueueCritical calls must not accumulate AppStat
       outboxStoreModule.loadPersistedOutbox.mockReturnValue([]);
       recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
       listeners = appStateModule.__listeners;
-      freshEnqueue = (require('../outbox') as { enqueueCritical: typeof enqueueCritical })
+      freshEnqueue = (require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical })
         .enqueueCritical;
     });
 
@@ -1159,7 +1159,7 @@ describe('pure helpers', () => {
 describe('recordEvent gated after the switch check', () => {
   const { TelemetryGatedError } = jest.requireActual<{
     TelemetryGatedError: typeof TelemetryGatedErrorClass;
-  }>('../recordEvent');
+  }>('@shared/telemetry/recordEvent');
 
   function queuedIds(): (string | undefined)[] {
     return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
