@@ -7,6 +7,8 @@ const IMPORT_STATEMENT = /^\s*(import|export)\s+(type\s+)?([^;]*?\s+from\s+)?['"
 const FORBIDDEN_VALUE_SOURCE =
   /^(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
 
+const DISCOVER_DOMAIN_FILE_COUNT = 8;
+
 const ROOT_FILE_CEILING: Record<string, number> = {
   auth: 12,
   detail: 13,
@@ -76,7 +78,9 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
   );
 
   it('covers all 8 discover domain files', () => {
-    expect(files.filter(({ feature }) => feature === 'discover')).toHaveLength(8);
+    expect(files.filter(({ feature }) => feature === 'discover')).toHaveLength(
+      DISCOVER_DOMAIN_FILE_COUNT,
+    );
   });
 
   it('adds no cases and does not throw for a feature with no domain/ folder', () => {
