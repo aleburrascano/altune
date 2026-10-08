@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/catalog/catalogtest"
@@ -108,7 +108,7 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(verifyAsTestUser))
+	r.Use(middleware.Middleware(verifyAsTestUser))
 	r.Route("/tracks", func(r chi.Router) {
 		r.Mount("/", h.Routes())
 	})
@@ -120,7 +120,7 @@ func buildPlaylistHandler(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.
 	membershipSvc := service.NewPlaylistMembershipService(plRepo, trRepo)
 	h := NewPlaylistHandler(lifecycleSvc, membershipSvc)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(verifyAsTestUser))
+	r.Use(middleware.Middleware(verifyAsTestUser))
 	r.Mount("/playlists", h.Routes())
 	return h, r
 }
@@ -133,7 +133,7 @@ func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtes
 	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, service.WithStreamScheduler(sched))
 	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(verifyAsTestUser))
+	r.Use(middleware.Middleware(verifyAsTestUser))
 	r.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
 	return h, r
 }
@@ -193,7 +193,7 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	)
 
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(verifyBearerAsUser))
+	r.Use(middleware.Middleware(verifyBearerAsUser))
 	r.Route("/tracks", func(r chi.Router) { r.Mount("/", trackH.Routes()) })
 	r.Mount("/playlists", playlistH.Routes())
 	return &writeRig{router: r, tracks: tracks, playlists: playlists}

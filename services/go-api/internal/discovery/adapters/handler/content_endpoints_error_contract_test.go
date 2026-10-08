@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"context"
@@ -63,7 +63,7 @@ func errorContractRouter(t *testing.T) chi.Router {
 		}, service.WithRelatedCircuitBreaker(breaker)),
 	})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
 	router.Mount("/discovery", h.Routes())
 	return router
 }

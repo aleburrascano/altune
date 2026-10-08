@@ -1,7 +1,7 @@
 package authbridge
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared"
 	"context"
@@ -18,7 +18,7 @@ func TestRequireUserID_NoUserMatchesRootResponse(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 
 	wantRec := httptest.NewRecorder()
-	if _, ok := auth.RequireUserID(wantRec, req); ok {
+	if _, ok := middleware.RequireUserID(wantRec, req); ok {
 		t.Fatal("root RequireUserID accepted a request without a user")
 	}
 	gotRec := httptest.NewRecorder()
@@ -73,7 +73,7 @@ func TestClientKey_MatchesRoot(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 	req.RemoteAddr = "10.0.0.5:4242"
 	req.Header.Set("X-Forwarded-For", "203.0.113.9")
-	if got, want := ClientKey(req), auth.ClientKey(req); got != want {
+	if got, want := ClientKey(req), middleware.ClientKey(req); got != want {
 		t.Fatalf("ClientKey = %q, want %q", got, want)
 	}
 }

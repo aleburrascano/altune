@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	authservice "altune/go-api/internal/auth/service"
@@ -815,7 +815,7 @@ func TestSSEHandler_TokenWithoutExpiryOpensNoStream(t *testing.T) {
 	verifier := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
 		return authdomain.VerifiedToken{UserID: uid}, nil
 	})
-	srv := httptest.NewServer(auth.Middleware(verifier)(NewEventStreamHandler(bus, 0)))
+	srv := httptest.NewServer(middleware.Middleware(verifier)(NewEventStreamHandler(bus, 0)))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)

@@ -4,7 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
@@ -56,7 +56,7 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	store.now = func() time.Time { return clock }
 	h := NewRetryHandler(repo, &retryFakeScheduler{}, service.NewRetryAdmission(store))
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(retryVerifyAsTestUser))
+	router.Use(middleware.Middleware(retryVerifyAsTestUser))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 	path := "/tracks/" + track.ID.UUID().String() + "/retry"
 
@@ -180,7 +180,7 @@ func TestHandleRetryAcquisition_UsesTheInjectedAdmission(t *testing.T) {
 	scheduler := &retryFakeScheduler{}
 	h := NewRetryHandler(repo, scheduler, admitAlways{})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(retryVerifyAsTestUser))
+	router.Use(middleware.Middleware(retryVerifyAsTestUser))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 
 	rec := retryServe(t, router, http.MethodPost, "/tracks/"+track.ID.UUID().String()+"/retry")
@@ -198,7 +198,7 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 	scheduler := &reacquireFakeScheduler{}
 	h := NewReacquireHandler(repo, scheduler, admitAlways{})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(reacquireVerifyAsTestUser))
+	router.Use(middleware.Middleware(reacquireVerifyAsTestUser))
 	router.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
 
 	rec := retryServe(t, router, http.MethodPost, "/tracks/"+track.ID.UUID().String()+"/reacquire")

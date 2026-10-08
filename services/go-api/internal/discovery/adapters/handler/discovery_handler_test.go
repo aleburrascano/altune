@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/discovery/ports"
@@ -215,7 +215,7 @@ func buildDiscoveryRouter(
 	})
 
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -251,7 +251,7 @@ func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 		Event:  service.NewRecordEventService(nopEventStore{}),
 	})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
 	router.Mount("/discovery", h.Routes())
 
 	t.Run("server-reserved type returns 400", func(t *testing.T) {
@@ -631,7 +631,7 @@ func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ discdomain.ResultKind
 func buildEnrichmentRouter(svc *enrich.EnrichmentService) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Enrich: svc})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -713,7 +713,7 @@ func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
 
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

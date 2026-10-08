@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
@@ -25,7 +25,7 @@ type acquisitionCommand struct {
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
+	userId, ok := middleware.RequireUserID(w, r)
 	if !ok {
 		return
 	}

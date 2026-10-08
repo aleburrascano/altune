@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"context"
@@ -35,7 +35,7 @@ func buildFavoritesRouter(err error) chi.Router {
 	svc := service.NewFavoritesService(erroringFavoritesRepo{err: err})
 	h := NewDiscoveryHandler(DiscoveryServices{Favorites: svc})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -103,7 +103,7 @@ func buildFavoritesLimitedRouter(limits DiscoveryRateLimits) chi.Router {
 		Favorites: service.NewFavoritesService(erroringFavoritesRepo{}),
 	}).WithRateLimits(limits)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

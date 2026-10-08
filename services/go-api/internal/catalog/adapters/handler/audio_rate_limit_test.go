@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/catalog/catalogtest"
@@ -86,7 +86,7 @@ func newAudioRig(streamOpts []func(*StreamHandler), urlOpts []func(*AudioURLHand
 	urlSvc := service.NewAudioURLService(repo, store)
 
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(verifyBearerAsUser))
+	r.Use(middleware.Middleware(verifyBearerAsUser))
 	NewStreamHandler(streamSvc, streamOpts...).Routes(r)
 	NewAudioURLHandler(urlSvc, urlOpts...).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}

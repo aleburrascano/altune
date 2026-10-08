@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"net/http"
@@ -23,5 +23,5 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*authProviders.Su
 }
 
 func authMiddleware(verifier authPorts.TokenVerifier) func(http.Handler) http.Handler {
-	return auth.Middleware(verifier, auth.WithMetrics(authMetrics.NewExpvarAuthMetrics()))
+	return middleware.Middleware(verifier, middleware.WithMetrics(authMetrics.NewExpvarAuthMetrics()))
 }

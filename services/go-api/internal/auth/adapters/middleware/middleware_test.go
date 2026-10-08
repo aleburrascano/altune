@@ -1,7 +1,6 @@
-package auth
+package middleware
 
 import (
-	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	"altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/auth/service"
@@ -19,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 
 	"github.com/google/uuid"
 )

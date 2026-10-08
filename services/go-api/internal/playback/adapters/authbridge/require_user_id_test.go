@@ -1,7 +1,7 @@
 package authbridge
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authservice "altune/go-api/internal/auth/service"
 	"altune/go-api/internal/shared"
 	"context"
@@ -14,7 +14,7 @@ import (
 
 func TestRequireUserID_NoUserMatchesAuthResponse(t *testing.T) {
 	want := httptest.NewRecorder()
-	auth.RequireUserID(want, httptest.NewRequest(http.MethodGet, "/", nil))
+	middleware.RequireUserID(want, httptest.NewRequest(http.MethodGet, "/", nil))
 	rec := httptest.NewRecorder()
 
 	got, ok := RequireUserID(rec, httptest.NewRequest(http.MethodGet, "/", nil))
