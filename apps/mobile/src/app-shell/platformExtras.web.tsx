@@ -14,7 +14,7 @@ export function SystemNavigationBar(_props: { scheme: 'light' | 'dark' }): React
 
 export function PlaybackShortcuts(): null {
   const playback = usePlayback();
-  useKeyboardShortcuts(playback);
+  useKeyboardShortcuts(playback, window);
   return null;
 }
 

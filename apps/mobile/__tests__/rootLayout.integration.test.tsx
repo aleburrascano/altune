@@ -122,7 +122,7 @@ function idleWrapper({ children }: { children: ReactNode }) {
 
 function WebPlaybackShortcutsBridgeStandIn() {
   const playback = usePlayback();
-  useKeyboardShortcuts(playback);
+  useKeyboardShortcuts(playback, window);
   return null;
 }
 

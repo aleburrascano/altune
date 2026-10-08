@@ -423,11 +423,56 @@ describe('useKeyboardShortcuts caller edges', () => {
     unregister();
   });
 
-  it('does nothing and does not throw on native with no target', () => {
+  it('ignores a target whose addEventListener is not a function', () => {
     const controls = controlsFixture({ status: 'playing' });
+    const removeEventListener = jest.fn();
+    const target = { addEventListener: 'nope', removeEventListener } as unknown as Window;
     expect(() =>
-      renderHook(() => useKeyboardShortcuts(controls), { wrapper: wrapperFor(controls) }).unmount(),
+      renderHook(() => useKeyboardShortcuts(controls, target), {
+        wrapper: wrapperFor(controls),
+      }).unmount(),
     ).not.toThrow();
+    expect(removeEventListener).toHaveBeenCalledTimes(0);
+  });
+
+  it('refuses a look-alike target with no addEventListener', () => {
+    const controls = controlsFixture({ status: 'playing' });
+    const target = {} as Window;
+    expect(() =>
+      renderHook(() => useKeyboardShortcuts(controls, target), {
+        wrapper: wrapperFor(controls),
+      }).unmount(),
+    ).not.toThrow();
+  });
+
+  it('adds one keydown listener on mount and removes one on unmount', () => {
+    const win = createFakeWindow();
+    const { unmount } = setup(win, controlsFixture());
+    expect(win.addEventListener).toHaveBeenCalledTimes(1);
+    expect(win.addEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
+    expect(win.removeEventListener).not.toHaveBeenCalled();
+    unmount();
+    expect(win.removeEventListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebinds to the new playback when it is swapped between renders', () => {
+    const win = createFakeWindow();
+    const a = controlsFixture({ status: 'paused' });
+    const b = controlsFixture({ status: 'paused' });
+    let current = a;
+    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(PlaybackContext.Provider, { value: current }, children),
+    });
+
+    current = b;
+    rerender({});
+    win.dispatch({ key: ' ' });
+
+    expect(win.addEventListener).toHaveBeenCalledTimes(2);
+    expect(win.removeEventListener).toHaveBeenCalledTimes(1);
+    expect(b.resume).toHaveBeenCalledTimes(1);
+    expect(a.resume).not.toHaveBeenCalled();
   });
 
   it('does not re-push while a navigation to Discover is already pending', () => {
