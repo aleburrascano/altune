@@ -3,11 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
 
-import { CorrectionBanner } from './CorrectionBanner';
-import { DiscoverRow } from './DiscoverRow';
-import { ResultsList, type ResultsCommonProps } from './ResultsList';
-import { kindLabel } from '../kindLabel';
-import { resultKey } from '../resultKey';
+import { CorrectionBanner } from '@features/discover/ui/CorrectionBanner';
+import { DiscoverRow } from '@features/discover/ui/DiscoverRow';
+import { ResultsList, type ResultsCommonProps } from '@features/discover/ui/ResultsList';
+import { kindLabel } from '@features/discover/kindLabel';
+import { resultKey } from '@features/discover/resultKey';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
 

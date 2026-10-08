@@ -4,7 +4,7 @@ import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discover
 
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
-import { useDiscoverFetchEnabled } from './discoverFetchGate';
+import { useDiscoverFetchEnabled } from '@features/discover/hooks/discoverFetchGate';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 export function useSearchHistory() {

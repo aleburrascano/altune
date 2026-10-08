@@ -4,11 +4,11 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { darkTheme } from '@shared/ui/theme';
 
-import { CorrectionBanner } from '../ui/CorrectionBanner';
-import { DiscoverRow } from '../ui/DiscoverRow';
-import { resultFixture } from './fixtures';
+import { CorrectionBanner } from '@features/discover/ui/CorrectionBanner';
+import { DiscoverRow } from '@features/discover/ui/DiscoverRow';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
-jest.mock('../hooks/usePreviewPlayback', () => ({
+jest.mock('@features/discover/hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
 }));
 

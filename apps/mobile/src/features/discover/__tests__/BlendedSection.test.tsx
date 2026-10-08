@@ -2,13 +2,13 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import { fireEvent } from '@testing-library/react-native';
 
-import { BlendedSection, SECTION_ITEM_CAP } from '../ui/BlendedSection';
-import { resultFixture } from './fixtures';
+import { BlendedSection, SECTION_ITEM_CAP } from '@features/discover/ui/BlendedSection';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 import type { DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
-import type { ResultsCommonProps } from '../ui/ResultsList';
+import type { ResultsCommonProps } from '@features/discover/ui/ResultsList';
 
-jest.mock('../hooks/usePreviewPlayback', () => ({
+jest.mock('@features/discover/hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
 }));
 

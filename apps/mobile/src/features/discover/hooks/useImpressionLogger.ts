@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
-import { buildImpressionRows } from '../impressions';
+import { buildImpressionRows } from '@features/discover/impressions';
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 export type ImpressionHandlers = {

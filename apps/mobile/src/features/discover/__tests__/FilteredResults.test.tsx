@@ -1,14 +1,14 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 
-import { FilteredResults } from '../ui/FilteredResults';
-import { resultFixture } from './fixtures';
+import { FilteredResults } from '@features/discover/ui/FilteredResults';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { SearchCorrection } from '../discoverView';
-import type { ResultsCommonProps } from '../ui/ResultsList';
+import type { SearchCorrection } from '@features/discover/discoverView';
+import type { ResultsCommonProps } from '@features/discover/ui/ResultsList';
 
-jest.mock('../hooks/usePreviewPlayback', () => ({
+jest.mock('@features/discover/hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
 }));
 

@@ -2,27 +2,27 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
-import { setSearchState } from '../searchState';
-import { useDebouncedSearch } from './useDebouncedSearch';
-import { useDiscoverSearch } from './useDiscoverSearch';
-import { isSearchableQuery } from '../searchLimits';
-import { SEARCH_DEBOUNCE_MS, useAutocompleteSuggestions } from './useAutocompleteSuggestions';
-import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
-import { useSearchHistory } from './useSearchHistory';
-import { useResultsFilter } from './useResultsFilter';
-import { useDiscoverClearSearchHistory } from './useClearSearchHistory';
-import { useResultTap } from './useResultTap';
-import { useSuggestionVisibility } from './useSuggestionVisibility';
-import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
-import { correctionForResponse, resultsIncompleteForState, viewForState } from '../discoverView';
+import { setSearchState } from '@features/discover/searchState';
+import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
+import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
+import { isSearchableQuery } from '@features/discover/searchLimits';
+import { SEARCH_DEBOUNCE_MS, useAutocompleteSuggestions } from '@features/discover/hooks/useAutocompleteSuggestions';
+import { useImpressionLogger, type ImpressionHandlers } from '@features/discover/hooks/useImpressionLogger';
+import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
+import { useResultsFilter } from '@features/discover/hooks/useResultsFilter';
+import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useClearSearchHistory';
+import { useResultTap } from '@features/discover/hooks/useResultTap';
+import { useSuggestionVisibility } from '@features/discover/hooks/useSuggestionVisibility';
+import { useDegradedSearchTelemetry } from '@features/discover/hooks/useDegradedSearchTelemetry';
+import { correctionForResponse, resultsIncompleteForState, viewForState } from '@features/discover/discoverView';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, SearchCorrection } from '../discoverView';
-import type { ResultsFilter } from './useResultsFilter';
+import type { DiscoverView, SearchCorrection } from '@features/discover/discoverView';
+import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
 
 export type DiscoverLogic = {
   inputValue: string;

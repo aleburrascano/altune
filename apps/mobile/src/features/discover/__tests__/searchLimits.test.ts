@@ -3,7 +3,7 @@ import {
   MIN_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
-} from '../searchLimits';
+} from '@features/discover/searchLimits';
 
 describe('isSearchableQuery', () => {
   it('rejects text whose trimmed length is below the minimum', () => {

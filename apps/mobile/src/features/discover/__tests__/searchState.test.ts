@@ -1,6 +1,6 @@
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { getSearchState, resetSearchState, setSearchState } from '../searchState';
-import type * as SearchStateModule from '../searchState';
+import { getSearchState, resetSearchState, setSearchState } from '@features/discover/searchState';
+import type * as SearchStateModule from '@features/discover/searchState';
 
 beforeEach(() => {
   setSearchState('', '');
@@ -39,7 +39,7 @@ describe('searchState preserves the last query across a detail round trip', () =
 
   it('defaults both fields to empty strings before anything has been written', () => {
     jest.isolateModules(() => {
-      const fresh: typeof SearchStateModule = require('../searchState');
+      const fresh: typeof SearchStateModule = require('@features/discover/searchState');
 
       expect(fresh.getSearchState()).toEqual({ query: '', inputValue: '' });
     });

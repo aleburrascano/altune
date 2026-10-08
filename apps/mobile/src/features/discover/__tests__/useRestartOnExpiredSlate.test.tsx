@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
-import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
-import { resultFixture } from './fixtures';
+import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 jest.mock('@shared/api-client/discovery', () => ({ searchDiscovery: jest.fn() }));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));

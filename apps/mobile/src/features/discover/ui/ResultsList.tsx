@@ -5,10 +5,10 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 
 import { Text, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 
-import { CorrectionBanner } from './CorrectionBanner';
+import { CorrectionBanner } from '@features/discover/ui/CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
-import type { SearchCorrection } from '../discoverView';
+import type { ImpressionHandlers } from '@features/discover/hooks/useImpressionLogger';
+import type { SearchCorrection } from '@features/discover/discoverView';
 
 export type ResultsCommonProps = {
   onResultTap: (result: DiscoveryResult, position: number) => void;

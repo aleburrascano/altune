@@ -9,9 +9,9 @@ import {
   type DiscoverySearchResponse,
 } from '@shared/api-client/discovery';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { setSearchState } from '../searchState';
-import { resultFixture } from './fixtures';
+import { useDiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
+import { setSearchState } from '@features/discover/searchState';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 jest.mock('@shared/api-client/discovery', () => ({
   searchDiscovery: jest.fn(),

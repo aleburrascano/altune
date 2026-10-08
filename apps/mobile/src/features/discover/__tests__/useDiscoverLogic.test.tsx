@@ -10,11 +10,11 @@ import {
 } from '@shared/api-client/discovery';
 import { ApiError, NetworkError } from '@shared/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '../searchLimits';
-import { setSearchState } from '../searchState';
-import { DiscoverBody } from '../ui/DiscoverBody';
-import { resultFixture } from './fixtures';
+import { useDiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
+import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '@features/discover/searchLimits';
+import { setSearchState } from '@features/discover/searchState';
+import { DiscoverBody } from '@features/discover/ui/DiscoverBody';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
