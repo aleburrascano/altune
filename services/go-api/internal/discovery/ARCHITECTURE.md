@@ -552,7 +552,7 @@ contamination-prone):
 | YouTube Music | ✅ | ❌ not wired | ✅ name | ✅ artist img (id) |
 | Amazon Music | ✅ | ❌ not wired | — | — |
 | Discogs | — | — | ✅ name | ✅ (id) |
-| TheAudioDB | — | — | — | ✅ (id) |
+| TheAudioDB (`adapters/providers/theaudiodb`) | — | — | — | ✅ (id) |
 | Fanart.tv | — | — | — | ✅ (MBID) |
 | Genius | — | — | — | ✅ name (last) |
 

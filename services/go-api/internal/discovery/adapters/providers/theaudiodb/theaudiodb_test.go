@@ -1,6 +1,7 @@
-package providers
+package theaudiodb
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers/providertest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -28,7 +29,7 @@ func TestTheAudioDBAdapter_Search(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "coldplay", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -70,7 +71,7 @@ func TestTheAudioDBAdapter_Search_Empty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "nonexistent artist xyz", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -88,7 +89,7 @@ func TestTheAudioDBAdapter_Search_UnsupportedKind(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
@@ -113,7 +114,7 @@ func TestTheAudioDBAdapter_Resolve_Artist(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Coldplay", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -138,7 +139,7 @@ func TestTheAudioDBAdapter_Resolve_Album(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -155,7 +156,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistSearchNoResultsIsEmptyMiss(t *testing.T
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Nobody", "", "")
 	if err != nil || url != "" {
 		t.Errorf("Resolve with zero results = (%q, %v), want (\"\", nil) — a verified miss", url, err)
@@ -168,7 +169,7 @@ func TestTheAudioDBAdapter_Resolve_AlbumSearchHTTPErrorIsUnavailable(t *testing.
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
 	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
@@ -184,7 +185,7 @@ func TestTheAudioDBAdapter_Search_transportErrorSurfaces(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -209,7 +210,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistByMBID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "mbid-che-1")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -233,7 +234,7 @@ func TestTheAudioDBAdapter_Resolve_MBIDMissFallsBackToNameSearch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "mbid-unknown")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -249,7 +250,7 @@ func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsUnavailableNotEmpty(t *tes
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "")
 	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on 500 = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
@@ -266,7 +267,7 @@ func TestTheAudioDBAdapter_Resolve_AlbumWithoutSubtitleIsEmpty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "", "")
 	if err != nil || url != "" {
 		t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
@@ -279,7 +280,7 @@ func TestTheAudioDBAdapter_Search_http500Propagates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	adapter := New(providertest.NewClient(server.URL))
 	_, err := adapter.Search(context.Background(), "che", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -289,7 +290,7 @@ func TestTheAudioDBAdapter_Search_http500Propagates(t *testing.T) {
 }
 
 func TestTheAudioDBAdapter_meta(t *testing.T) {
-	adapter := NewTheAudioDBAdapter(http.DefaultClient)
+	adapter := New(http.DefaultClient)
 	if adapter.Name() != domain.ProviderTheAudioDB {
 		t.Errorf("Name = %v", adapter.Name())
 	}
@@ -303,13 +304,13 @@ func TestTheAudioDBAdapter_meta(t *testing.T) {
 }
 
 func TestTheAudioDBAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
-	for name, handler := range artworkProviderFailureHandlers() {
+	for name, handler := range providertest.ArtworkFailureHandlers() {
 		for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
 			t.Run(name+" "+kind.String(), func(t *testing.T) {
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				adapter := NewTheAudioDBAdapter(newTestClient(srv.URL))
+				adapter := New(providertest.NewClient(srv.URL))
 				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
 				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
@@ -323,7 +324,7 @@ func TestTheAudioDBAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
 }
 
 func TestTheAudioDBAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
-	handlers := artworkProviderVerifiedMissHandlers()
+	handlers := providertest.ArtworkVerifiedMissHandlers()
 	handlers["200 with no albums"] = func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"album":null}`))
@@ -338,7 +339,7 @@ func TestTheAudioDBAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T)
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				adapter := NewTheAudioDBAdapter(newTestClient(srv.URL))
+				adapter := New(providertest.NewClient(srv.URL))
 				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
 				if url != "" || err != nil {
 					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
@@ -351,9 +352,9 @@ func TestTheAudioDBAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T)
 func TestTheAudioDBAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
 	for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
 		t.Run(kind.String(), func(t *testing.T) {
-			srv, ctx := cancelMidRequestServer(t)
+			srv, ctx := providertest.CancelMidRequestServer(t)
 
-			adapter := NewTheAudioDBAdapter(newTestClient(srv.URL))
+			adapter := New(providertest.NewClient(srv.URL))
 			url, err := adapter.Resolve(ctx, kind, "OK Computer", "Radiohead", "")
 			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 				t.Errorf("Resolve(%s) cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", kind, url, err)

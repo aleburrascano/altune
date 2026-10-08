@@ -146,7 +146,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			consens: []string{"itunes", "ytmusic", "soundcloud"},
 			artwork: []string{
 				"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver", "*providers.SpotifyArtworkResolver",
-				"*providers.TheAudioDBAdapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
+				"*theaudiodb.Adapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
 				"*providers.YouTubeMusicArtworkResolver", "*providers.SoundCloudAPIAdapter",
 			},
 		},
@@ -157,7 +157,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			search:  []string{"*providers.DeezerAdapter", "*providers.YouTubeMusicAdapter"},
 			consens: []string{"itunes", "ytmusic"},
 			artwork: []string{
-				"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver", "*providers.TheAudioDBAdapter",
+				"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver", "*theaudiodb.Adapter",
 				"*providers.DeezerAdapter", "*providers.ITunesAdapter", "*providers.YouTubeMusicArtworkResolver",
 			},
 		},
@@ -331,7 +331,7 @@ func TestAllKeysProviderOrder(t *testing.T) {
 		"*providers.CoverArtArchiveResolver", "providers.CoverArtArchiveIdentityResolver",
 		"*providers.SpotifyArtworkResolver", "*providers.DiscogsAdapter",
 		"*providers.FanartTvArtworkResolver", "*providers.GeniusArtworkResolver",
-		"*providers.TheAudioDBAdapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
+		"*theaudiodb.Adapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
 		"*providers.YouTubeMusicArtworkResolver", "*providers.SoundCloudAPIAdapter",
 	})
 }
