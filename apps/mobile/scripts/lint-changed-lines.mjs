@@ -68,9 +68,7 @@ const addedLinesByFile = (pathspec) => {
   return byFile;
 };
 
-const files = changedFiles('src').filter(
-  (f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'),
-);
+const files = changedFiles('src').filter((f) => /\.(ts|tsx)$/.test(f));
 const addedByFile = addedLinesByFile('src');
 
 let total = 0;

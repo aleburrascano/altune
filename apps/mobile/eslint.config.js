@@ -1,6 +1,7 @@
 const expoConfig = require('eslint-config-expo/flat');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
+const house = require('eslint-config-house-ts');
 const typedLinting = [
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -233,6 +234,13 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
           files: QUERY_ADAPTER_HOOKS,
           rules: { 'max-lines-per-function': 'off' },
         },
+        ...house.configs.recommended,
+        ...house.configs.typed.map((block) => ({
+          ...block,
+          files: typedLinting[0].files,
+          ignores: typedLinting[0].ignores,
+          languageOptions: typedLinting[0].languageOptions,
+        })),
       ]
     : [];
 
