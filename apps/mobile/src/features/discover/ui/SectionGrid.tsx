@@ -48,7 +48,6 @@ function GridCardArt({ item }: { item: DiscoveryResult }): ReactElement {
   );
 }
 
-
 type GridCardBodyProps = { item: DiscoveryResult; cardStyle: (ViewStyle | null)[]; testID: string };
 
 function GridCardBody({ item, cardStyle, testID }: GridCardBodyProps): ReactElement {
