@@ -1,5 +1,5 @@
 import { usePinnedStore, type UnpinAllOutcome } from '@shared/offline/pinnedStore';
-import type { DownloadStats } from '@features/settings/downloadStatsModel';
+import type { DownloadStats } from '@features/settings/domain/downloadStatsModel';
 
 export type RemoveDownloads = {
   stats: DownloadStats;

@@ -1,4 +1,4 @@
-import { downloadStats, downloadUsage } from '@features/settings/downloadStatsModel';
+import { downloadStats, downloadUsage } from '@features/settings/domain/downloadStatsModel';
 import {
   buildDangerZoneActions,
   type ClearHistoryState,

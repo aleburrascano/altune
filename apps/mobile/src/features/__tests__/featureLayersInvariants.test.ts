@@ -15,7 +15,7 @@ const ROOT_FILE_CEILING: Record<string, number> = {
   discover: 0,
   library: 7,
   playback: 21,
-  settings: 4,
+  settings: 1,
 };
 
 function featureNames(): string[] {
@@ -81,6 +81,12 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     expect(files.filter(({ feature }) => feature === 'discover')).toHaveLength(
       DISCOVER_DOMAIN_FILE_COUNT,
     );
+  });
+
+  it('covers the 3 settings domain files', () => {
+    expect(
+      files.filter(({ feature }) => feature === 'settings').map(({ file }) => file).sort(),
+    ).toEqual(['backfillStatus.ts', 'downloadStatsModel.ts', 'failureCopyForAction.ts']);
   });
 
   it('adds no cases and does not throw for a feature with no domain/ folder', () => {

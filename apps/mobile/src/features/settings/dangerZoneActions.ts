@@ -2,8 +2,8 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import type { TextTone } from '@shared/ui/primitives/Text';
-import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/downloadStatsModel';
-import { failureCopyForAction } from '@features/settings/failureCopyForAction';
+import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/domain/downloadStatsModel';
+import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
 import type { RemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
 
 export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
