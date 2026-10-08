@@ -1,10 +1,8 @@
 import { useCallback, useState } from 'react';
-import { useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { SearchPages } from '@features/discover/hooks/searchPages';
 
-type SearchPageParam = { offset: number; searchId: string | undefined };
-type SearchPages = InfiniteData<DiscoverySearchResponse, SearchPageParam>;
 type HeldSlate = { key: readonly unknown[]; pages: SearchPages | undefined };
 type RefetchResult = { isError: boolean };
 type Refetch = () => Promise<RefetchResult>;

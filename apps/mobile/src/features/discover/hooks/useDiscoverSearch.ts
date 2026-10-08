@@ -16,12 +16,11 @@ import {
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
 } from '@features/discover/searchLimits';
+import type { SearchPageParam, SearchPages } from '@features/discover/hooks/searchPages';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
-
-type SearchPageParam = { offset: number; searchId: string | undefined };
 
 const firstPageParam: SearchPageParam = { offset: 0, searchId: undefined };
 
@@ -78,7 +77,13 @@ type SearchQueryArgs = {
 };
 
 function useSearchInfiniteQuery(args: SearchQueryArgs) {
-  return useInfiniteQuery({
+  return useInfiniteQuery<
+    DiscoverySearchResponse,
+    Error,
+    SearchPages,
+    readonly unknown[],
+    SearchPageParam
+  >({
     queryKey: args.queryKey,
     initialPageParam: firstPageParam,
     queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed, args.claimHistorySave),

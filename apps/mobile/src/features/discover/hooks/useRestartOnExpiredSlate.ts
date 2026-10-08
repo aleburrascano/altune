@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import type { InfiniteData } from '@tanstack/react-query';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 import { useDiscoverFetchEnabled } from '@features/discover/hooks/discoverFetchGate';
+import type { SearchPageParam, SearchPages } from '@features/discover/hooks/searchPages';
 
-type SearchPageParam = { offset: number; searchId: string | undefined };
-type SearchPages = InfiniteData<DiscoverySearchResponse, unknown>;
-
-function slateMismatch(page: DiscoverySearchResponse, pageParam: unknown): boolean {
-  const sentId = (pageParam as SearchPageParam | undefined)?.searchId;
+function slateMismatch(
+  page: DiscoverySearchResponse,
+  pageParam: SearchPageParam | undefined,
+): boolean {
+  const sentId = pageParam?.searchId;
   return sentId !== undefined && page.search_id !== sentId;
 }
 
