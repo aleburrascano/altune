@@ -1,6 +1,8 @@
 package catalogbridge
 
 import (
+	catalogdomain "altune/go-api/internal/catalog/domain"
+	catalogservice "altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 	"context"
@@ -10,7 +12,7 @@ import (
 var _ ports.OwnershipReader = (*OwnershipReader)(nil)
 
 type ownedTrackLister interface {
-	ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]ports.OwnedTrack, error)
+	ListOwnedTrackRefs(ctx context.Context, userId shared.UserId) ([]catalogdomain.OwnedTrackRef, error)
 }
 
 type OwnershipReader struct {
@@ -25,13 +27,20 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 	ctx context.Context,
 	userId shared.UserId,
 ) (map[string]ports.OwnedTrack, error) {
-	tracks, err := r.tracks.ListOwnedTracks(ctx, userId)
+	refs, err := r.tracks.ListOwnedTrackRefs(ctx, userId)
 	if err != nil {
 		return nil, fmt.Errorf("read owned tracks: %w", err)
 	}
 
-	owned := make(map[string]ports.OwnedTrack, len(tracks))
-	for _, track := range tracks {
+	owned := make(map[string]ports.OwnedTrack, len(refs))
+	for _, ref := range refs {
+		track := ports.OwnedTrack{
+			TrackID:           ref.ID,
+			Title:             ref.Title,
+			Artist:            ref.Artist,
+			AcquisitionStatus: ref.AcquisitionStatus,
+			TrackNumber:       ref.TrackNumber,
+		}
 		key := ports.OwnershipKey(track.Title, track.Artist)
 		if _, taken := owned[key]; taken {
 			continue
@@ -41,10 +50,13 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 	return owned, nil
 }
 
-var _ ports.TrackNumberFiller = (*TrackNumberWriter)(nil)
+var (
+	_ ports.TrackNumberFiller = (*TrackNumberWriter)(nil)
+	_ trackNumberSetter       = (*catalogservice.SetTrackNumberService)(nil)
+)
 
 type trackNumberSetter interface {
-	Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error)
+	Execute(ctx context.Context, userId shared.UserId, trackId catalogdomain.TrackId, trackNumber int) (bool, error)
 }
 
 type TrackNumberWriter struct {
@@ -61,7 +73,11 @@ func (w *TrackNumberWriter) FillTrackNumber(
 	trackId string,
 	trackNumber int,
 ) error {
-	if _, err := w.setter.Execute(ctx, userId, trackId, trackNumber); err != nil {
+	id, err := catalogdomain.ParseTrackId(trackId)
+	if err != nil {
+		return fmt.Errorf("parse track id: %w", err)
+	}
+	if _, err := w.setter.Execute(ctx, userId, id, trackNumber); err != nil {
 		return fmt.Errorf("fill track number: %w", err)
 	}
 	return nil

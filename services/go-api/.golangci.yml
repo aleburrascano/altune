@@ -45,6 +45,7 @@ linters:
             - "**/internal/discovery/service/**"
             - "**/internal/discovery/ports/**"
             - "**/internal/discovery/adapters/**"
+            - "!**/internal/discovery/adapters/catalogbridge/**"
           deny:
             - pkg: altune/go-api/internal/catalog
               desc: discovery reaches catalog only through adapters/catalogbridge

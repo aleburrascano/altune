@@ -54,7 +54,6 @@ G3 internal/catalog/adapters/handler/library_handler.go:4 imports auth outside a
 G3 internal/catalog/adapters/handler/playlist_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/stream_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/track_handler.go:4 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/catalogbridge imports nothing from catalog ports or service
 G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
