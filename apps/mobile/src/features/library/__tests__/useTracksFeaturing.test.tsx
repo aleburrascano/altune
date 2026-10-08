@@ -4,25 +4,30 @@ import type { ReactNode } from 'react';
 
 import type { FeaturedArtist } from '@shared/api-client/types';
 
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+
 import {
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
 } from '../hooks/useTracksFeaturing';
 
-const mockListTracksFeaturing = jest.fn();
-jest.mock('@shared/api-client/tracks', () => ({
-  listTracksFeaturing: (fa: FeaturedArtist) => mockListTracksFeaturing(fa),
-}));
+const memory = createMemoryLibraryPort();
+const mockListTracksFeaturing = jest.fn(memory.listTracksFeaturing);
+const port = { ...memory, listTracksFeaturing: mockListTracksFeaturing };
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+    </QueryClientProvider>
+  );
 }
 
 beforeEach(() => {
-  mockListTracksFeaturing.mockReset();
-  mockListTracksFeaturing.mockResolvedValue({ items: [] });
+  mockListTracksFeaturing.mockClear();
 });
 
 describe('parseDeezerIdParam', () => {
@@ -81,7 +86,7 @@ describe('useTracksFeaturing', () => {
     renderHook(() => useTracksFeaturing(fa), { wrapper });
 
     await waitFor(() => expect(mockListTracksFeaturing).toHaveBeenCalled());
-    expect(mockListTracksFeaturing.mock.calls[0][0].deezer_id).toBeNull();
+    expect(mockListTracksFeaturing.mock.calls[0]?.[0].deezer_id).toBeNull();
   });
 
   it('passes a valid deezer_id through', async () => {

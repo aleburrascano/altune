@@ -3,19 +3,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, View } from 'react-native';
 
-import type { AlbumGroup, LibraryQuery } from '@shared/api-client/library';
+import type { AlbumGroup } from '@shared/api-client/library';
+
+import {
+  createMemoryLibraryPort,
+  type MemoryLibrarySeed,
+} from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 
 import type { ActiveView } from '../activeView';
 import { useAlbumsView } from '../hooks/useAlbumsView';
 import { SortControl } from '../ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
-const mockGetLibraryAlbums = jest.fn();
 let mockGroupPageSize = 50;
-
-jest.mock('@shared/api-client/library', () => ({
-  getLibraryAlbums: (query: LibraryQuery) => mockGetLibraryAlbums(query),
-}));
 
 jest.mock('../domain/groupPaging', () => {
   const actual = jest.requireActual('../domain/groupPaging');
@@ -31,6 +32,11 @@ jest.mock('../domain/groupPaging', () => {
 
 const noop = () => undefined;
 
+function spiedPort(seed: MemoryLibrarySeed) {
+  const memory = createMemoryLibraryPort(seed);
+  return { ...memory, getLibraryAlbums: jest.fn(memory.getLibraryAlbums) };
+}
+
 function WarmUpAlbumsScreen() {
   const view = useAlbumsView({ query: '', sort: 'recent', isActive: true, onAlbumPress: noop });
   return view.content;
@@ -38,23 +44,20 @@ function WarmUpAlbumsScreen() {
 
 warmUpFirstRender(async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockGetLibraryAlbums.mockResolvedValue({ items: [], total: 0 });
+  const port = spiedPort({});
   render(
     <QueryClientProvider client={client}>
-      <WarmUpAlbumsScreen />
+      <LibraryPortProvider port={port}>
+        <WarmUpAlbumsScreen />
+      </LibraryPortProvider>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(mockGetLibraryAlbums).toHaveBeenCalled());
+  await waitFor(() => expect(port.getLibraryAlbums).toHaveBeenCalled());
 });
 
 describe('a library grid holding more rows than one page', () => {
   const SERVER_DEFAULT_LIMIT = 50;
   const LIBRARY_SIZE = 60;
-
-  function servePage<TGroup>(rows: readonly TGroup[], { limit, offset = 0 }: LibraryQuery) {
-    const items = rows.slice(offset, offset + (limit ?? SERVER_DEFAULT_LIMIT));
-    return Promise.resolve({ items, total: items.length });
-  }
 
   const albums: AlbumGroup[] = Array.from({ length: LIBRARY_SIZE }, (_, i) => ({
     key: `al${i}`,
@@ -83,8 +86,13 @@ describe('a library grid holding more rows than one page', () => {
   }
 
   let client: QueryClient;
+  let port: ReturnType<typeof spiedPort>;
   function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </QueryClientProvider>
+    );
   }
 
   function scrollToEnd(gridTestID: string): void {
@@ -93,8 +101,7 @@ describe('a library grid holding more rows than one page', () => {
 
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockGetLibraryAlbums.mockReset();
-    mockGetLibraryAlbums.mockImplementation((query: LibraryQuery) => servePage(albums, query));
+    port = spiedPort({ albums });
   });
 
   afterEach(() => client.clear());
@@ -129,7 +136,7 @@ describe('a library grid holding more rows than one page', () => {
     scrollToEnd('library-albums-grid');
     scrollToEnd('library-albums-grid');
 
-    expect(mockGetLibraryAlbums).toHaveBeenCalledTimes(2);
+    expect(port.getLibraryAlbums).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -147,7 +154,10 @@ describe('a library list whose next page fails to load', () => {
     most_recent_added_at: '2026-01-01T00:00:00Z',
   });
 
-  const rows = <T,>(make: (i: number) => T): T[] => Array.from({ length: PAGE }, (_, i) => make(i));
+  const rows = <T,>(count: number, make: (i: number) => T): T[] =>
+    Array.from({ length: count }, (_, i) => make(i));
+
+  const libraryRows = rows(PAGE * 2 + 1, album);
 
   function Screen({ view }: { view: ActiveView }): ReactElement {
     return view.error ? <View testID="library-error" /> : <>{view.content}</>;
@@ -159,13 +169,18 @@ describe('a library list whose next page fails to load', () => {
   }
 
   let client: QueryClient;
+  let port: ReturnType<typeof spiedPort>;
   function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </QueryClientProvider>
+    );
   }
 
   beforeEach(() => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockGetLibraryAlbums.mockReset();
+    port = spiedPort({ albums: libraryRows });
     mockGroupPageSize = PAGE;
   });
 
@@ -183,9 +198,9 @@ describe('a library list whose next page fails to load', () => {
       'Album 0',
       AlbumsScreen,
       () => {
-        mockGetLibraryAlbums.mockResolvedValueOnce({ items: rows(album), total: 200 });
-        mockGetLibraryAlbums.mockImplementationOnce(failure);
-        mockGetLibraryAlbums.mockResolvedValueOnce({ items: [album(900)], total: 200 });
+        const { getLibraryAlbums: servePage } = createMemoryLibraryPort({ albums: libraryRows });
+        port.getLibraryAlbums.mockImplementationOnce(servePage);
+        port.getLibraryAlbums.mockImplementationOnce(failure);
       },
     ],
   ])('keeps the loaded %s and offers a retry', async (_noun, listId, firstRow, Component, seed) => {
@@ -206,7 +221,7 @@ describe('a library list whose next page fails to load', () => {
   });
 
   it('still shows the error screen when the first page fails', async () => {
-    mockGetLibraryAlbums.mockImplementation(failure);
+    port.getLibraryAlbums.mockImplementation(failure);
     render(<AlbumsScreen />, { wrapper });
 
     await waitFor(() => expect(screen.getByTestId('library-error')).toBeTruthy());

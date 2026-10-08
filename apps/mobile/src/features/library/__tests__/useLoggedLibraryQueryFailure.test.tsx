@@ -4,39 +4,35 @@ import type { ReactNode } from 'react';
 
 import { ApiError, NetworkError } from '@shared/errors';
 
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+
 import { useLibraryAlbums } from '../hooks/useLibraryAlbums';
 import { useLibraryArtists } from '../hooks/useLibraryArtists';
 import { useLibraryTracks } from '../hooks/useLibraryTracks';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { usePlaylistsView } from '../hooks/usePlaylistsView';
 
-const mockGetTracks = jest.fn();
-const mockGetLibraryAlbums = jest.fn();
-const mockGetLibraryArtists = jest.fn();
-const mockGetPlaylists = jest.fn();
-
-jest.mock('@shared/api-client/tracks', () => ({
-  getTracks: () => mockGetTracks(),
-  getAllTracks: jest.fn(),
-}));
-jest.mock('@shared/api-client/library', () => ({
-  getLibraryAlbums: () => mockGetLibraryAlbums(),
-  getLibraryArtists: () => mockGetLibraryArtists(),
-}));
-
-jest.mock('@shared/api-client/playlists', () => ({
-  getPlaylists: () => mockGetPlaylists(),
-}));
-
 const SECRET = 'daft punk discovery bootleg';
-const emptyTracksPage = { items: [], total: 0, limit: 200, offset: 0, has_more: false };
-const emptyGroups = { items: [], total: 0 };
+
+type FailingMethod = 'getTracks' | 'getLibraryAlbums' | 'getLibraryArtists';
 
 let client: QueryClient;
 let warnSpy: jest.SpyInstance;
 
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+function wrapperFor(port: LibraryPort) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </QueryClientProvider>
+    );
+  };
+}
+
+function failingPort(method: FailingMethod, err: Error): LibraryPort {
+  return { ...createMemoryLibraryPort(), [method]: jest.fn(() => Promise.reject(err)) };
 }
 
 function loggedText(): string {
@@ -48,10 +44,6 @@ function loggedText(): string {
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  mockGetTracks.mockReset();
-  mockGetLibraryAlbums.mockReset();
-  mockGetLibraryArtists.mockReset();
-  mockGetPlaylists.mockReset();
 });
 
 afterEach(() => {
@@ -60,13 +52,13 @@ afterEach(() => {
 });
 
 describe.each([
-  ['tracks', useLibraryTracks, () => mockGetTracks, emptyTracksPage],
-  ['albums', useLibraryAlbums, () => mockGetLibraryAlbums, emptyGroups],
-  ['artists', useLibraryArtists, () => mockGetLibraryArtists, emptyGroups],
-] as const)('a failed useLibrary%s load', (chip, useHook, fetcher, emptyResponse) => {
+  ['tracks', useLibraryTracks, 'getTracks'],
+  ['albums', useLibraryAlbums, 'getLibraryAlbums'],
+  ['artists', useLibraryArtists, 'getLibraryArtists'],
+] as const)('a failed useLibrary%s load', (chip, useHook, method) => {
   it('logs the chip, its sort, the status and the failure class', async () => {
-    fetcher().mockRejectedValue(new ApiError(503, SECRET, 'library_unavailable', 'corr-1'));
-    const { result } = renderHook(() => useHook('', 'az', true), { wrapper });
+    const port = failingPort(method, new ApiError(503, SECRET, 'library_unavailable', 'corr-1'));
+    const { result } = renderHook(() => useHook('', 'az', true), { wrapper: wrapperFor(port) });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
 
@@ -81,8 +73,10 @@ describe.each([
   });
 
   it('classifies an unreachable API as a network failure of a search', async () => {
-    fetcher().mockRejectedValue(new NetworkError('transport', `API ${SECRET} is unreachable`));
-    const { result } = renderHook(() => useHook(SECRET, 'recent', true), { wrapper });
+    const port = failingPort(method, new NetworkError('transport', `API ${SECRET} is unreachable`));
+    const { result } = renderHook(() => useHook(SECRET, 'recent', true), {
+      wrapper: wrapperFor(port),
+    });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
 
@@ -95,8 +89,9 @@ describe.each([
   });
 
   it('logs nothing while the query keeps answering', async () => {
-    fetcher().mockResolvedValue(emptyResponse);
-    const { result } = renderHook(() => useHook('', 'recent', true), { wrapper });
+    const { result } = renderHook(() => useHook('', 'recent', true), {
+      wrapper: wrapperFor(createMemoryLibraryPort()),
+    });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -106,13 +101,17 @@ describe.each([
 
 describe('a failed usePlaylistActions load', () => {
   it('logs the chip and surfaces the error on the playlists view', async () => {
-    mockGetPlaylists.mockRejectedValue(new ApiError(500, SECRET, 'internal', 'corr-2'));
+    const memory = createMemoryLibraryPort();
+    const port = {
+      ...memory,
+      getPlaylists: jest.fn(() => Promise.reject(new ApiError(500, SECRET, 'internal', 'corr-2'))),
+    };
     const { result } = renderHook(
       () => {
         const pl = usePlaylistActions();
         return usePlaylistsView({ pl, sort: 'az', onPlaylistPress: jest.fn() });
       },
-      { wrapper },
+      { wrapper: wrapperFor(port) },
     );
 
     await waitFor(() => expect(result.current.view.error).not.toBeNull());
