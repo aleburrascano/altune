@@ -15,8 +15,6 @@ import (
 
 const defaultProviderTimeout = 1500 * time.Millisecond
 
-var ErrAllProvidersFailed = errors.New("all providers failed")
-
 func (s *Service) fanOut(
 	ctx context.Context,
 	searchQuery string,
