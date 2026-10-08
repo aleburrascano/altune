@@ -1,10 +1,11 @@
-package eventstream
+package handler
 
 import (
 	"altune/go-api/internal/auth"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/eventstream/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -20,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,7 +29,7 @@ import (
 
 func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
 	t.Helper()
-	h := NewHandler(bus, 0)
+	h := NewEventStreamHandler(bus, 0)
 	h.heartbeat = heartbeat
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
@@ -227,7 +227,7 @@ func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	const corrID = "corr-sse-1234"
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := NewHandler(bus, 0)
+	h := NewEventStreamHandler(bus, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := logging.WithCorrelationID(authservice.ContextWithUserID(r.Context(), uid), corrID)
@@ -352,7 +352,7 @@ func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 
 	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
-	h := NewHandler(overflowing, 0)
+	h := NewEventStreamHandler(overflowing, 0)
 	h.heartbeat = time.Hour
 	srv := serveSSE(t, h, uid)
 
@@ -382,7 +382,7 @@ func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid shared.UserId) s
 	return strconv.FormatUint((<-ch).ID, 10)
 }
 
-func serveSSE(t *testing.T, h *Handler, uid shared.UserId) *httptest.Server {
+func serveSSE(t *testing.T, h *EventStreamHandler, uid shared.UserId) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
@@ -397,7 +397,7 @@ func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, real, uid)
 
-	h := NewHandler(&busWithGapPublish{InProcessBus: real, uid: uid}, 0)
+	h := NewEventStreamHandler(&busWithGapPublish{InProcessBus: real, uid: uid}, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := serveSSE(t, h, uid)
 
@@ -422,7 +422,7 @@ func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, real, uid)
 
-	h := NewHandler(&busWithDupPublish{InProcessBus: real, uid: uid}, 0)
+	h := NewEventStreamHandler(&busWithDupPublish{InProcessBus: real, uid: uid}, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := serveSSE(t, h, uid)
 
@@ -531,7 +531,7 @@ func (w *blockingFlushWriter) FlushError() error {
 func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := NewHandler(bus, 0)
+	h := NewEventStreamHandler(bus, 0)
 	h.writeTimeout = 150 * time.Millisecond
 
 	w := newBlockingFlushWriter()
@@ -555,7 +555,7 @@ func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := NewHandler(bus, 0)
+	h := NewEventStreamHandler(bus, 0)
 	h.heartbeat = time.Hour
 
 	ctx, cancel := context.WithCancel(authservice.ContextWithUserID(context.Background(), uid))
@@ -578,11 +578,48 @@ func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 	}
 }
 
+func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithPlainText(t *testing.T) {
+	uid := shared.NewUserId(uuid.New())
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
+	h.heartbeat = time.Hour
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(authservice.ContextWithUserID(r.Context(), uid)))
+	}))
+	defer srv.Close()
+
+	for i := 0; i < 8; i++ {
+		resp, err := http.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("open stream %d: %v", i+1, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("stream %d status = %d, want 200", i+1, resp.StatusCode)
+		}
+	}
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("ninth stream: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("ninth status = %d, want 429", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("content type = %q", got)
+	}
+	if string(body) != "too many event streams\n" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
 func TestSSEHandler_PerUserConnectionCapRejectsOverflow(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := NewHandler(bus, 0)
-	h.limiter = newConnLimiter(2, 0)
+	h := NewEventStreamHandler(bus, 0)
+	h.limiter = service.NewConnLimiter(2, 0)
 	h.heartbeat = time.Hour
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -612,74 +649,10 @@ func TestSSEHandler_PerUserConnectionCapRejectsOverflow(t *testing.T) {
 	}
 }
 
-func TestConnLimiter(t *testing.T) {
-	l := newConnLimiter(2, 0)
-	if err := l.acquire("u"); err != nil {
-		t.Fatalf("first acquire should succeed: %v", err)
-	}
-	if err := l.acquire("u"); err != nil {
-		t.Fatalf("second acquire should succeed: %v", err)
-	}
-	if err := l.acquire("u"); !errors.Is(err, errUserConnLimit) {
-		t.Fatalf("third acquire = %v, want errUserConnLimit at the cap", err)
-	}
-	l.release("u")
-	if err := l.acquire("u"); err != nil {
-		t.Fatalf("acquire should succeed after a release frees a slot: %v", err)
-	}
-	if err := l.acquire("v"); err != nil {
-		t.Fatalf("a different user must have an independent budget: %v", err)
-	}
-}
-
-func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
-	l := newConnLimiter(1, 2)
-	if err := l.acquire("a"); err != nil {
-		t.Fatalf("a: %v", err)
-	}
-	if err := l.acquire("a"); !errors.Is(err, errUserConnLimit) {
-		t.Fatalf("a again = %v, want errUserConnLimit", err)
-	}
-	if err := l.acquire("b"); err != nil {
-		t.Fatalf("b must fit: the per-user rejection must not hold a global slot: %v", err)
-	}
-	if err := l.acquire("c"); !errors.Is(err, errGlobalConnLimit) {
-		t.Fatalf("c = %v, want errGlobalConnLimit", err)
-	}
-	l.release("never-acquired")
-	if err := l.acquire("c"); !errors.Is(err, errGlobalConnLimit) {
-		t.Fatalf("c after stray release = %v, want errGlobalConnLimit", err)
-	}
-	l.release("a")
-	if err := l.acquire("c"); err != nil {
-		t.Fatalf("c after a real release should fit: %v", err)
-	}
-}
-
-func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
-	const limit, attempts = 5, 200
-	l := newConnLimiter(defaultMaxConnsPerUser, limit)
-	var granted atomic.Int64
-	var wg sync.WaitGroup
-	for i := 0; i < attempts; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if l.acquire(uuid.NewString()) == nil {
-				granted.Add(1)
-			}
-		}()
-	}
-	wg.Wait()
-	if got := granted.Load(); got != limit {
-		t.Fatalf("granted %d slots, want exactly %d", got, limit)
-	}
-}
-
 func TestSSEHandler_GlobalConnectionCapRejectsOverflowAcrossUsers(t *testing.T) {
 	const globalCap = 3
 	bus := events.NewInProcessBus()
-	h := NewHandler(bus, globalCap)
+	h := NewEventStreamHandler(bus, globalCap)
 	h.heartbeat = time.Hour
 	srv := newMultiUserSSEServer(t, h)
 
@@ -712,7 +685,7 @@ func TestSSEHandler_GlobalConnectionCapRejectsOverflowAcrossUsers(t *testing.T) 
 	waitForSlotRelease(t, srv.URL)
 }
 
-func newMultiUserSSEServer(t *testing.T, h *Handler) *httptest.Server {
+func newMultiUserSSEServer(t *testing.T, h *EventStreamHandler) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uid, err := uuid.Parse(r.Header.Get("X-Test-User"))
@@ -765,7 +738,7 @@ func waitForSlotRelease(t *testing.T, url string) {
 	t.Fatal("closing an open stream never freed a global slot")
 }
 
-func serveSSEWithTokenExpiry(t *testing.T, h *Handler, uid shared.UserId, expiresAt time.Time) *httptest.Server {
+func serveSSEWithTokenExpiry(t *testing.T, h *EventStreamHandler, uid shared.UserId, expiresAt time.Time) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := authservice.ContextWithTokenExpiry(authservice.ContextWithUserID(r.Context(), uid), expiresAt)
@@ -793,7 +766,7 @@ func readToEOF(t *testing.T, body io.Reader, within time.Duration) error {
 func TestSSEHandler_StreamEndsAtTokenExpiry(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := NewHandler(bus, 0)
+	h := NewEventStreamHandler(bus, 0)
 	h.heartbeat = 20 * time.Millisecond
 	srv := serveSSEWithTokenExpiry(t, h, uid, time.Now().Add(300*time.Millisecond))
 
@@ -813,8 +786,8 @@ func TestSSEHandler_StreamEndsAtTokenExpiry(t *testing.T) {
 func TestSSEHandler_StreamEndingAtTokenExpiryFreesUserSlot(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := NewHandler(bus, 0)
-	h.limiter = newConnLimiter(1, 0)
+	h := NewEventStreamHandler(bus, 0)
+	h.limiter = service.NewConnLimiter(1, 0)
 	srv := serveSSEWithTokenExpiry(t, h, uid, time.Now().Add(200*time.Millisecond))
 
 	first, err := http.Get(srv.URL)
@@ -842,7 +815,7 @@ func TestSSEHandler_TokenWithoutExpiryOpensNoStream(t *testing.T) {
 	verifier := authports.VerifierFunc(func(context.Context, string) (authdomain.VerifiedToken, error) {
 		return authdomain.VerifiedToken{UserID: uid}, nil
 	})
-	srv := httptest.NewServer(auth.Middleware(verifier)(NewHandler(bus, 0)))
+	srv := httptest.NewServer(auth.Middleware(verifier)(NewEventStreamHandler(bus, 0)))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)
@@ -864,7 +837,7 @@ func TestSSEHandler_TokenWithoutExpiryOpensNoStream(t *testing.T) {
 func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	done := make(chan struct{})
-	h := NewHandler(events.NewInProcessBus(), 0).WithShutdown(done)
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0).WithShutdown(done)
 	h.heartbeat = time.Hour
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).
 		WithContext(authservice.ContextWithUserID(context.Background(), uid))
@@ -889,7 +862,7 @@ func TestSSEHandler_DroppedTailEventResyncsAtNextHeartbeat(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 
 	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
-	h := NewHandler(overflowing, 0)
+	h := NewEventStreamHandler(overflowing, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := serveSSE(t, h, uid)
 
@@ -957,7 +930,7 @@ func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T)
 }
 
 func TestSSEHandler_RequestWithoutUserIsRejected(t *testing.T) {
-	h := NewHandler(events.NewInProcessBus(), 0)
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
@@ -980,7 +953,7 @@ func (w *nonFlushingWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (w *nonFlushingWriter) WriteHeader(status int)      { w.status = status }
 
 func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
-	h := NewHandler(events.NewInProcessBus(), 0)
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
 	w := &nonFlushingWriter{header: http.Header{}}
 	uid := shared.NewUserId(uuid.New())
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
@@ -991,10 +964,37 @@ func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
 	if w.status != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", w.status)
 	}
-	if h.limiter.total != 0 {
-		t.Fatal("rejected request held a connection slot")
+	if err := h.limiter.Acquire(uid.String()); err != nil {
+		t.Fatalf("rejected request held a connection slot: %v", err)
 	}
 }
+
+func TestSSEHandler_WriterWithoutFlushGetsPlainTextBody(t *testing.T) {
+	h := NewEventStreamHandler(events.NewInProcessBus(), 0)
+	uid := shared.NewUserId(uuid.New())
+	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
+	r = r.WithContext(authservice.ContextWithUserID(r.Context(), uid))
+	rec := httptest.NewRecorder()
+	w := &bodyCapturingWriter{rec: rec}
+
+	h.ServeHTTP(w, r)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("content type = %q", got)
+	}
+	if got := rec.Body.String(); got != "streaming not supported\n" {
+		t.Fatalf("body = %q", got)
+	}
+}
+
+type bodyCapturingWriter struct{ rec *httptest.ResponseRecorder }
+
+func (w *bodyCapturingWriter) Header() http.Header         { return w.rec.Header() }
+func (w *bodyCapturingWriter) Write(b []byte) (int, error) { return w.rec.Write(b) }
+func (w *bodyCapturingWriter) WriteHeader(status int)      { w.rec.WriteHeader(status) }
 
 func TestSSEHandler_ResumeAfterUserStateLostResyncsWithNothingPublished(t *testing.T) {
 	bus := events.NewInProcessBus()

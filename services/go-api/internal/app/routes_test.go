@@ -5,7 +5,7 @@ import (
 	authports "altune/go-api/internal/auth/ports"
 	authservice "altune/go-api/internal/auth/service"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
-	"altune/go-api/internal/eventstream"
+	eventstream "altune/go-api/internal/eventstream/adapters/handler"
 	"altune/go-api/internal/observe/service/eventtap"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	"altune/go-api/internal/shared"
@@ -67,7 +67,7 @@ func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
 
 const routeWriteDeadline = 150 * time.Millisecond
 
-func newDeadlineRouter(uid shared.UserId, sse *eventstream.Handler, bulkErrs chan<- error) *chi.Mux {
+func newDeadlineRouter(uid shared.UserId, sse *eventstream.EventStreamHandler, bulkErrs chan<- error) *chi.Mux {
 	a := &App{cfg: &config.Config{Env: "test"}}
 	r := a.newRouter(routeWriteDeadline)
 	r.Get("/v1/bulk", func(w http.ResponseWriter, _ *http.Request) {
@@ -89,7 +89,7 @@ func newDeadlineRouter(uid shared.UserId, sse *eventstream.Handler, bulkErrs cha
 
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
-	sse := eventstream.NewHandler(events.NewInProcessBus(), 0)
+	sse := eventstream.NewEventStreamHandler(events.NewInProcessBus(), 0)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(shared.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
@@ -111,7 +111,7 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	sse := eventstream.NewHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
+	sse := eventstream.NewEventStreamHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
 	conn, br := httputiltest.Get(t, srv, "/v1/events", nil)
@@ -134,7 +134,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	sse := eventstream.NewHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
+	sse := eventstream.NewEventStreamHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
 	srv := httputiltest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
