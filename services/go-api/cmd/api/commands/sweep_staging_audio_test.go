@@ -1,14 +1,13 @@
 package commands
 
 import (
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared/config"
 )
 
 func TestOldEnoughToSweep(t *testing.T) {
@@ -37,8 +36,6 @@ func (f *fakeRefLister) AudioRefsUnderPrefix(context.Context, string) (map[strin
 	return f.refs, nil
 }
 
-// newSweepFixture builds a staging-scoped store holding the given refs, all
-// modified at mtime, and returns the store plus a path resolver.
 func newSweepFixture(t *testing.T, mtime time.Time, refs ...string) (*config.Config, func(string) string) {
 	t.Helper()
 	dir := t.TempDir()
