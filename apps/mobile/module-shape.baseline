@@ -1,5 +1,4 @@
 M1 src/features/auth missing index.ts
-M1 src/features/auth missing ports/
 M1 src/features/detail missing domain/
 M1 src/features/detail missing index.ts
 M1 src/features/detail/content-status.ts loose root file
