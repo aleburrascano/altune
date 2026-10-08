@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
 
-import { SessionExpiredNotice } from '../SessionExpiredNotice';
+import { SessionExpiredNotice } from '@features/auth/ui/SessionExpiredNotice';
 
 const mockSignOut = jest.fn();
 let mockState: SignOutResult = { status: 'idle' };

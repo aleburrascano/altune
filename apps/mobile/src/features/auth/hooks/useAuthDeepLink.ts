@@ -3,10 +3,10 @@ import { useEffect } from 'react';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
 import { showFailureAlert } from '@shared/ui/failure/showFailure';
-import { type AuthIntentResult, completeAuthIntent } from '../completeAuthIntent';
-import { thrownErrorDetail } from '../errorDetail';
-import { initialUrl, subscribeUrl } from '../native/linkEvents';
-import { type AuthLinkIntent, parseAuthLink } from '../parseAuthLink';
+import { type AuthIntentResult, completeAuthIntent } from '@features/auth/completeAuthIntent';
+import { thrownErrorDetail } from '@features/auth/errorDetail';
+import { initialUrl, subscribeUrl } from '@features/auth/native/linkEvents';
+import { type AuthLinkIntent, parseAuthLink } from '@features/auth/parseAuthLink';
 
 type LinkKind = AuthLinkIntent['kind'];
 

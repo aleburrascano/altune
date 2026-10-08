@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { completeAuthIntent } from '../completeAuthIntent';
-import { AuthCallbackScreen } from '../ui/AuthCallbackScreen';
+import { completeAuthIntent } from '@features/auth/completeAuthIntent';
+import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen';
 
 const mockRouter = { replace: jest.fn() };
 
@@ -26,7 +26,7 @@ jest.mock('expo-router', () => {
   };
 });
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('@features/auth/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const mockComplete = completeAuthIntent as jest.Mock;
 

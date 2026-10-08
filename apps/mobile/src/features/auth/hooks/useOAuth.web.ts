@@ -2,21 +2,21 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { withAuthDeadline } from '../authDeadline';
+import { withAuthDeadline } from '@features/auth/authDeadline';
 import {
   failureReason,
   thrownFailure,
   type OAuthFailure,
   type OAuthProvider,
-} from '../oauthResult';
-import { authRedirectUrl } from '../authRedirect';
-import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
+} from '@features/auth/oauthResult';
+import { authRedirectUrl } from '@features/auth/authRedirect';
+import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
 
-import { useOAuthFlow } from './useOAuthFlow';
+import { useOAuthFlow } from '@features/auth/hooks/useOAuthFlow';
 
 WebBrowser.maybeCompleteAuthSession();
 
-export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthResult';
+export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/auth/oauthResult';
 
 async function redirectToProvider(provider: OAuthProvider): Promise<OAuthFailure | null> {
   const { error } = await withAuthDeadline(

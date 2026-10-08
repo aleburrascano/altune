@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
-import { withAuthDeadline } from '../authDeadline';
-import { thrownErrorDetail } from '../errorDetail';
+import { withAuthDeadline } from '@features/auth/authDeadline';
+import { thrownErrorDetail } from '@features/auth/errorDetail';
 
 function reportUnrecognizedFailure(err: unknown): void {
   console.warn('[auth] an auth action failed for an unrecognized reason', thrownErrorDetail(err));

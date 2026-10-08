@@ -6,7 +6,7 @@ import {
   TOO_MANY_ATTEMPTS_COPY,
   authErrorText,
   type AuthErrorReason,
-} from '../errorReason';
+} from '@features/auth/errorReason';
 
 const GENERIC = "Couldn't sign you in. Please try again.";
 

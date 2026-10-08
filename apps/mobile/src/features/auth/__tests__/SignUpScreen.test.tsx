@@ -1,10 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { useOAuth } from '../hooks/useOAuth';
-import { useSignUp } from '../hooks/useSignUp';
-import { SignUpScreen } from '../ui/SignUpScreen';
-import { PASSWORD_REQUIREMENTS_HINT } from '../validation';
+import { useOAuth } from '@features/auth/hooks/useOAuth';
+import { useSignUp } from '@features/auth/hooks/useSignUp';
+import { SignUpScreen } from '@features/auth/ui/SignUpScreen';
+import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/validation';
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
@@ -16,9 +16,9 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('../hooks/useSignUp', () => ({ useSignUp: jest.fn() }));
+jest.mock('@features/auth/hooks/useSignUp', () => ({ useSignUp: jest.fn() }));
 
-jest.mock('../hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
+jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
 
 const signUp = jest.fn();
 

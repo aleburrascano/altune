@@ -1,11 +1,11 @@
 import { Platform } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '../authDeadline';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/authDeadline';
 
-import { useSignUp } from '../hooks/useSignUp';
+import { useSignUp } from '@features/auth/hooks/useSignUp';
 
-import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
+import { createSupabaseAuthMock, runAsyncAuthHook } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 

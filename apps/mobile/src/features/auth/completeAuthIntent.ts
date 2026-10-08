@@ -1,12 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Navigator } from '@shared/navigation';
 
-import { withAuthDeadline } from './authDeadline';
-import { type SupabaseErrorDetail, supabaseErrorDetail, thrownErrorDetail } from './errorDetail';
-import type { AuthLinkIntent, AuthLinkParams } from './parseAuthLink';
-import { markRecoveryUnlocked } from './recoveryUnlock';
-import { RESET_PASSWORD_ROUTE_SEGMENT } from './resetPasswordRoute';
-import type { SupabaseAuthErrorLike } from './supabaseAuthError';
+import { withAuthDeadline } from '@features/auth/authDeadline';
+import { type SupabaseErrorDetail, supabaseErrorDetail, thrownErrorDetail } from '@features/auth/errorDetail';
+import type { AuthLinkIntent, AuthLinkParams } from '@features/auth/parseAuthLink';
+import { markRecoveryUnlocked } from '@features/auth/recoveryUnlock';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/resetPasswordRoute';
+import type { SupabaseAuthErrorLike } from '@features/auth/supabaseAuthError';
 
 type AuthClient = Pick<
   SupabaseClient['auth'],

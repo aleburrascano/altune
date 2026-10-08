@@ -2,10 +2,10 @@ import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
 
-import { withAuthDeadline } from '../authDeadline';
-import { authRedirectUrl } from '../authRedirect';
-import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
-import { dismissAuthSession, openAuthSession } from '../native/authBrowser';
+import { withAuthDeadline } from '@features/auth/authDeadline';
+import { authRedirectUrl } from '@features/auth/authRedirect';
+import { completeAuthIntent, type AuthRouter } from '@features/auth/completeAuthIntent';
+import { dismissAuthSession, openAuthSession } from '@features/auth/native/authBrowser';
 import {
   failureReason,
   OAUTH_BROWSER_TIMEOUT_MS,
@@ -13,13 +13,13 @@ import {
   type OAuthFailure,
   type OAuthOutcome,
   type OAuthProvider,
-} from '../oauthResult';
-import { parseAuthLink } from '../parseAuthLink';
-import { reportSignInFailure } from '../adapters/http/reportSignInFailure';
+} from '@features/auth/oauthResult';
+import { parseAuthLink } from '@features/auth/parseAuthLink';
+import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
 
-import { useOAuthFlow } from './useOAuthFlow';
+import { useOAuthFlow } from '@features/auth/hooks/useOAuthFlow';
 
-export { OAUTH_BROWSER_TIMEOUT_MS } from '../oauthResult';
+export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/auth/oauthResult';
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
 
