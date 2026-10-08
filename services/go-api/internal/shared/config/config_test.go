@@ -1171,8 +1171,9 @@ func TestLoad_YtProviderTogglesDefaultEnabled(t *testing.T) {
 
 func TestLoad_YtProviderTogglesRespectEnv(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{
-		"YTMUSIC_ENABLED": "false",
-		"YTDLP_ENABLED":   "false",
+		"YTMUSIC_ENABLED":    "false",
+		"YTDLP_ENABLED":      "false",
+		"ACQUISITION_PAUSED": "true",
 	}))
 
 	cfg, err := Load()
@@ -1745,6 +1746,42 @@ func TestLoad_AlertingSettingsAccepted(t *testing.T) {
 
 			if _, err := Load(); err != nil {
 				t.Fatalf("expected load to succeed, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidate_NoAudioSources(t *testing.T) {
+	allOff := map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false"}
+	cases := []struct {
+		name    string
+		env     map[string]string
+		wantErr bool
+	}{
+		{name: "all off", env: allOff, wantErr: true},
+		{name: "fixture", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false", "ACQUISITION_FIXTURE_ENABLED": "true"}},
+		{name: "paused", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false", "ACQUISITION_PAUSED": "true"}},
+		{name: "ytmusic only", env: map[string]string{"YTMUSIC_ENABLED": "true", "YTDLP_ENABLED": "false"}},
+		{name: "ytdlp only", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "true"}},
+		{name: "streamrip only", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false", "STREAMRIP_SERVICES": "qobuz"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(tc.env))
+			_, err := Load()
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected an error when no audio source is enabled")
+			}
+			for _, name := range []string{"YTMUSIC_ENABLED", "YTDLP_ENABLED", "STREAMRIP_SERVICES"} {
+				if !strings.Contains(err.Error(), name) {
+					t.Errorf("error %q does not name %s", err, name)
+				}
 			}
 		})
 	}

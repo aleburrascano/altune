@@ -57,8 +57,8 @@ func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
 func TestSourceRegistry_FindNoSourcesConfigured(t *testing.T) {
 	reg := NewSourceRegistry()
 	_, err := reg.Find(context.Background(), ports.FindRequest{})
-	if err == nil || !strings.Contains(err.Error(), "no audio sources configured") {
-		t.Fatalf("err = %v, want no audio sources configured", err)
+	if !errors.Is(err, ErrNoAudioSources) {
+		t.Fatalf("err = %v, want ErrNoAudioSources", err)
 	}
 }
 
