@@ -156,10 +156,10 @@ After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --ex
 |---|---|
 | N1 | No file or folder is named `util`, `utils`, `helper`, `helpers`, `common`, `misc`, `lib`, `core`, `manager`, `base`, `generic`, `data`, `stuff`, `tmp`, `temp`, `new`, `old`, `types` or `constants`. Name it for the one thing it holds. `index.ts` as a barrel is allowed. |
 | N2 | A module or feature folder is named for a domain concept in [ubiquitous-language.md](../ubiquitous-language.md), and the same concept has the same name in every stack. |
-| N3 | A file holds one concept and is named for it: the main type or function it exports, in the stack's casing. |
+| N3 | Mobile only: a file with a single export is named for that export, in the stack's casing. Go files often hold several related declarations, so go-api has no N3; N1 and N2 still apply there. |
 
 ## Where the checks live
 
-- go-api: one Go test walks `internal/` with `go/parser` for G1 to G7 and N1 to N3. Baseline: `services/go-api/module-shape.baseline`.
+- go-api: one Go test walks `internal/` with `go/parser` for G1 to G7, N1 and N2. Baseline: `services/go-api/module-shape.baseline`.
 - mobile: one jest test walks `src/features/` and `src/shared/` for M1, M2, M4 and N1 to N3. ESLint zones carry M3 and M5. Baseline: `apps/mobile/module-shape.baseline`.
 - Both run in `scripts/precheck.sh`, so a PR that adds drift fails before review.
