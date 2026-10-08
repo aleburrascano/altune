@@ -38,7 +38,12 @@ export function DiscoverFullError({ error, onRetry }: FullErrorProps): ReactElem
   return (
     <View testID="discover-full-error" style={styles.center}>
       <ErrorCopy {...copy} />
-      <Button testID="discover-retry" label="Retry" onPress={onRetry} />
+      <Button
+        action="discover.error.retry"
+        testID="discover-retry"
+        label="Retry"
+        onPress={onRetry}
+      />
     </View>
   );
 }

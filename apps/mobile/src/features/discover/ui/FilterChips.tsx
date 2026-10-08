@@ -29,6 +29,7 @@ export function FilterChips({
       {FILTER_CHIPS.map(({ filter, label, testID }) => (
         <Chip
           key={filter}
+          action={`discover.filter.${filter}`}
           testID={testID}
           label={label}
           selected={active === filter}
