@@ -1,6 +1,7 @@
 package handler
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
@@ -114,7 +115,7 @@ func newTrackOrFatal(t *testing.T, userId shared.UserId) *catdomain.Track {
 
 func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
-	scheduler := &retryFakeScheduler{err: service.ErrSchedulerShutdown}
+	scheduler := &retryFakeScheduler{err: acqdomain.ErrSchedulerShutdown}
 	track := newTrackOrFatal(t, retryTestUserId)
 	_ = track.MarkFailed("download error")
 	repo.seed(track)
@@ -133,7 +134,7 @@ func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testi
 
 func TestHandleReacquire_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := newRetryFakeTrackRepo()
-	scheduler := &reacquireFakeScheduler{err: service.ErrSchedulerShutdown}
+	scheduler := &reacquireFakeScheduler{err: acqdomain.ErrSchedulerShutdown}
 	track := newTrackOrFatal(t, reacquireTestUserId)
 	_ = track.MarkReady("audio/ready.opus")
 	repo.seed(track)

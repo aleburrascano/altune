@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -22,12 +23,12 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
-		return ErrSchedulerShutdown
+		return acqdomain.ErrSchedulerShutdown
 	}
 	if s.paused.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.schedule_while_paused", "track_id", trackId.String())
-		return ErrAcquisitionPaused
+		return acqdomain.ErrAcquisitionPaused
 	}
 
 	key := trackId.String()
@@ -70,7 +71,7 @@ func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context,
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.job_in_flight",
 			"track_id", trackId.String(), "requested_kind", string(kind))
-		return ErrTrackJobInFlight
+		return acqdomain.ErrTrackJobInFlight
 	}
 	return err
 }

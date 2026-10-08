@@ -1,4 +1,3 @@
-G1 internal/acquisition missing domain/
 G1 internal/auth missing ARCHITECTURE.md
 G1 internal/auth missing domain/
 G1 internal/auth missing service/
@@ -58,9 +57,9 @@ G3 internal/acquisition/service/orphan_queue.go:4 imports catalog outside adapte
 G3 internal/acquisition/service/orphan_queue.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/pipeline.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/reacquire.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/retry_admission.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/retry_admission.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/scheduler.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/scheduler_enqueue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/scheduler_enqueue.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_store.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_store.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_update_track.go:5 imports catalog outside adapters/catalogbridge
@@ -86,7 +85,6 @@ G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
 G3 internal/playback/adapters/handler/queue_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/playback/adapters/handler/queue_rate_limit.go:4 imports auth outside adapters/authbridge
-G4 internal/acquisition/service/admission_errors.go admissionError coded error declared outside domain
 G4 internal/discovery/adapters/handler/search_rate_limit.go rateLimitedError coded error declared outside domain
 G4 internal/discovery/service/favorites.go favoritesFullError coded error declared outside domain
 G4 internal/discovery/service/favorites.go invalidFavoriteError coded error declared outside domain
@@ -194,7 +192,6 @@ N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/providers/helpers_test.go banned name helpers
 N1 internal/discovery/service/helpers_test.go banned name helpers
 N1 internal/shared/events/types.go banned name types
-N2 internal/acquisition is not a term in docs/ubiquitous-language.md
 N2 internal/auth is not a term in docs/ubiquitous-language.md
 N2 internal/discovery differs from mobile feature discover
 N2 internal/discovery is not a term in docs/ubiquitous-language.md
