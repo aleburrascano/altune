@@ -217,55 +217,77 @@ func (h *Handler) releaseSlot(userId shared.UserId) {
 	}
 }
 
-func (h *Handler) stream(
-	ctx context.Context,
-	conn *sseConn,
-	ch <-chan events.Event,
-	replayed replayOutcome,
-) {
-	interval := h.heartbeat
-	if interval <= 0 {
-		interval = defaultHeartbeatInterval
-	}
-	heartbeat := time.NewTicker(interval)
+func (h *Handler) stream(ctx context.Context, conn *sseConn, ch <-chan events.Event, replayed replayOutcome) {
+	heartbeat := time.NewTicker(h.heartbeatInterval())
 	defer heartbeat.Stop()
 
-	deliveredThroughID := replayed.deliveredThroughID
-	if deliveredThroughID == 0 {
-		deliveredThroughID = h.bus.LatestID(conn.userId)
-	}
+	deliveredThroughID := h.startingID(conn, replayed)
 	for {
+		var keepGoing bool
 		select {
 		case <-ctx.Done():
-			slog.InfoContext(ctx, disconnectLogEvent(ctx), "user_id", conn.userId.String())
-			return
+			logDisconnect(ctx, conn, disconnectLogEvent(ctx))
 		case <-h.shutdown:
-			slog.InfoContext(ctx, "sse.disconnected", "user_id", conn.userId.String())
-			return
+			logDisconnect(ctx, conn, "sse.disconnected")
 		case evt := <-ch:
-			if evt.ID <= replayed.dedupThroughID {
-				continue
-			}
-			if err := h.writeLiveEvent(conn, evt, deliveredThroughID); err != nil {
-				return
-			}
-			deliveredThroughID = evt.ID
+			deliveredThroughID, keepGoing = h.deliverLive(conn, evt, replayed.dedupThroughID, deliveredThroughID)
 		case <-heartbeat.C:
-			if err := conn.writeFrame(":ping\n\n"); err != nil {
-				return
-			}
-			latestID := h.bus.LatestID(conn.userId)
-			if len(ch) == 0 && latestID > deliveredThroughID {
-				slog.Warn("sse.stream_gap_at_heartbeat",
-					"user_id", conn.userId.String(), "delivered_through_id", deliveredThroughID,
-					"latest_id", latestID)
-				if err := conn.writeResync(); err != nil {
-					return
-				}
-				deliveredThroughID = latestID
-			}
+			deliveredThroughID, keepGoing = h.beat(conn, ch, deliveredThroughID)
+		}
+		if !keepGoing {
+			return
 		}
 	}
+}
+
+func logDisconnect(ctx context.Context, conn *sseConn, event string) {
+	slog.InfoContext(ctx, event, "user_id", conn.userId.String())
+}
+
+func (h *Handler) heartbeatInterval() time.Duration {
+	if h.heartbeat <= 0 {
+		return defaultHeartbeatInterval
+	}
+	return h.heartbeat
+}
+
+func (h *Handler) startingID(conn *sseConn, replayed replayOutcome) uint64 {
+	if replayed.deliveredThroughID == 0 {
+		return h.bus.LatestID(conn.userId)
+	}
+	return replayed.deliveredThroughID
+}
+
+func (h *Handler) deliverLive(conn *sseConn, evt events.Event, dedupThroughID, deliveredThroughID uint64) (uint64, bool) {
+	if evt.ID <= dedupThroughID {
+		return deliveredThroughID, true
+	}
+	if err := h.writeLiveEvent(conn, evt, deliveredThroughID); err != nil {
+		return deliveredThroughID, false
+	}
+	return evt.ID, true
+}
+
+func (h *Handler) beat(conn *sseConn, ch <-chan events.Event, deliveredThroughID uint64) (uint64, bool) {
+	through, err := h.writeHeartbeat(conn, ch, deliveredThroughID)
+	return through, err == nil
+}
+
+func (h *Handler) writeHeartbeat(conn *sseConn, ch <-chan events.Event, deliveredThroughID uint64) (uint64, error) {
+	if err := conn.writeFrame(":ping\n\n"); err != nil {
+		return deliveredThroughID, err
+	}
+	latestID := h.bus.LatestID(conn.userId)
+	if len(ch) != 0 || latestID <= deliveredThroughID {
+		return deliveredThroughID, nil
+	}
+	slog.Warn("sse.stream_gap_at_heartbeat",
+		"user_id", conn.userId.String(), "delivered_through_id", deliveredThroughID,
+		"latest_id", latestID)
+	if err := conn.writeResync(); err != nil {
+		return deliveredThroughID, err
+	}
+	return latestID, nil
 }
 
 func (h *Handler) writeLiveEvent(conn *sseConn, evt events.Event, deliveredThroughID uint64) error {
@@ -325,12 +347,12 @@ func (c *sseConn) writeFrame(frame string) error {
 }
 
 func (c *sseConn) writeEvent(evt events.Event) error {
-	data, err := json.Marshal(evt.Payload)
+	body, err := json.Marshal(evt.Payload)
 	if err != nil {
 		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
 		return c.writeResync()
 	}
-	return c.writeFrame(fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data))
+	return c.writeFrame(fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, body))
 }
 
 func (c *sseConn) writeResync() error {
