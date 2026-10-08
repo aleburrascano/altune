@@ -1,1 +1,1 @@
-export { DiscoverScreen } from './ui/DiscoverScreen';
+export { DiscoverScreen } from '@features/discover/ui/DiscoverScreen';

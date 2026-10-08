@@ -15,6 +15,7 @@ module.exports = {
         'src/app/**',
         'src/app-shell/**',
         'src/features/*/adapters/**',
+        'src/features/*/index.ts',
         '**/__tests__/**',
       ],
       rules: {
