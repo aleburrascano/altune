@@ -86,12 +86,6 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 	return p
 }
 
-type fakeResolver struct{}
-
-func (fakeResolver) Resolve(_ context.Context, _, _ string) ([]catdomain.FeaturedArtist, error) {
-	return nil, nil
-}
-
 func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.Scheduler) (*TrackHandler, chi.Router) {
 	var addOpts []func(*service.AddTrackService)
 	if scheduler != nil {
@@ -103,7 +97,7 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
 
 	getStatusSvc := service.NewGetTrackStatusService(trackRepo)
-	backfillSvc := service.NewBackfillFeaturedService(trackRepo, trackRepo, fakeResolver{})
+	backfillSvc := service.NewBackfillFeaturedService(trackRepo, trackRepo, catalogtest.FeaturedResolver{})
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)
@@ -174,7 +168,7 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	tracks := catalogtest.NewTrackRepo()
 	playlists := catalogtest.NewPlaylistRepo()
 	featured := NewFeaturedArtistHandler(
-		service.NewBackfillFeaturedService(tracks, tracks, fakeResolver{}),
+		service.NewBackfillFeaturedService(tracks, tracks, catalogtest.FeaturedResolver{}),
 		service.NewListFeaturingService(tracks),
 	)
 	trackH := NewTrackHandler(

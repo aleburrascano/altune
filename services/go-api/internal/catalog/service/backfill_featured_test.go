@@ -15,18 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type fakeResolver struct {
-	byTitle map[string][]domain.FeaturedArtist
-	err     error
-}
-
-func (f fakeResolver) Resolve(_ context.Context, _, title string) ([]domain.FeaturedArtist, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.byTitle[title], nil
-}
-
 func newTrackFeat(t *testing.T, userId shared.UserId, title string) *domain.Track {
 	t.Helper()
 	track, err := domain.NewTrack(userId, title, "Artist", "Album")
@@ -47,7 +35,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo.Seed(t1)
 		repo.Seed(t2)
 
-		resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
+		resolver := catalogtest.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{
 			"Track A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 		}}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
@@ -76,7 +64,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("per-track resolver error is skipped, not fatal", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{err: errors.New("provider down")})
+		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{Err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -89,7 +77,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("resolver error is counted as failed", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{err: errors.New("provider down")})
+		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{Err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -113,7 +101,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo.Seed(t2)
 		repo.Seed(t3)
 
-		resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
+		resolver := catalogtest.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{
 			"Track 1": {{Name: "Guest 1", MBID: "m1", Role: domain.RoleFeatured}},
 			"Track 2": {{Name: "Guest 2", MBID: "m2", Role: domain.RoleFeatured}},
 			"Track 3": {{Name: "Guest 3", MBID: "m3", Role: domain.RoleFeatured}},
@@ -144,7 +132,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			page[i] = newTrackFeat(t, userId, "Untagged")
 		}
 		repo := &unboundedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), page: page}
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -252,7 +240,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("run within cooldown is rejected until the window passes", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
 		clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		svc.admission = newBackfillAdmission(backfillCooldown, func() time.Time { return clock })
 
@@ -276,7 +264,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("a negative offset is refused without spending the cooldown", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
 
 		res, err := svc.Execute(ctx, userId, -1)
 		if res != nil {
@@ -293,7 +281,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("canceled run still starts the cooldown", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
 
@@ -314,7 +302,7 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 	const tail = 5
 
 	repo := newNumberedTrackRepo(t, userId, capTracks+tail)
-	resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
+	resolver := catalogtest.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{
 		pastTheCap: {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 	}}
 	svc := NewBackfillFeaturedService(repo, repo, resolver)
@@ -529,7 +517,7 @@ func TestBackfill_TimeBudgetSpentInsideListing_TruncatesAndSkipsCooldown(t *test
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	repo := &stallingListRepo{TrackRepo: catalogtest.NewTrackRepo()}
-	svc := NewBackfillFeaturedService(repo, repo, fakeResolver{}, WithBackfillTimeBudget(50*time.Millisecond))
+	svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{}, WithBackfillTimeBudget(50*time.Millisecond))
 
 	res, err := svc.Execute(ctx, userId, 7)
 	if err != nil {

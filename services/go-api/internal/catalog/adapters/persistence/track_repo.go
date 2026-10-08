@@ -356,7 +356,7 @@ func (r *PgxTrackRepository) ListOwnedTrackRefs(
 			return nil, fmt.Errorf("parse owned track ref id: %w", err)
 		}
 	}
-	slog.Warn("owned track refs truncated at ceiling", "user_id", userId.UUID(), "ceiling", maxOwnedTrackRefs)
+	slog.WarnContext(ctx, "owned track refs truncated at ceiling", "user_id", userId.UUID(), "ceiling", maxOwnedTrackRefs)
 	return refs, nil
 }
 
@@ -408,7 +408,7 @@ func (r *PgxTrackRepository) ListReadyAudioTracks(ctx context.Context) ([]ports.
 		}
 		after = page[len(page)-1].Id.UUID()
 	}
-	slog.Warn("ready audio tracks truncated at ceiling", "ceiling", maxReadyAudioTracks)
+	slog.WarnContext(ctx, "ready audio tracks truncated at ceiling", "ceiling", maxReadyAudioTracks)
 	return tracks, nil
 }
 

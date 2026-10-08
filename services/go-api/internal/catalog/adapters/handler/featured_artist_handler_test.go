@@ -146,7 +146,7 @@ func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
 
 func backfillRouter(repo *listFailsAfterFirstPage) chi.Router {
 	featured := NewFeaturedArtistHandler(
-		service.NewBackfillFeaturedService(repo, repo, fakeResolver{}),
+		service.NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{}),
 		service.NewListFeaturingService(repo),
 	)
 	router := chi.NewRouter()
