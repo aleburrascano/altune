@@ -4,11 +4,14 @@ import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types'
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+} from '@features/playback/playbackHealth';
 import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
-} from '../queueRebuildStrategies';
+} from '@features/playback/queueRebuildStrategies';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 

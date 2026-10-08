@@ -133,3 +133,51 @@ func TestNewProviderResult_BlanksUnsafeImageURL(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeImageURL(t *testing.T) {
+	allowed := []string{
+		"https://img.example/a.jpg",
+		"https://img.example/a.jpg?w=300#x",
+		"HTTPS://img.example/a.jpg",
+		"https://img.example:8443/a.jpg",
+	}
+	for _, raw := range allowed {
+		t.Run("allowed "+raw, func(t *testing.T) {
+			if got := SafeImageURL(raw); got != raw {
+				t.Errorf("SafeImageURL(%q) = %q, want it unchanged", raw, got)
+			}
+		})
+	}
+
+	refused := map[string]string{
+		"empty":           "",
+		"scheme only":     "https://",
+		"scheme-relative": "//img.example/a.jpg",
+		"opaque":          "https:img.example/a.jpg",
+		"ftp":             "ftp://img.example/a.jpg",
+		"httpss":          "httpss://img.example/a.jpg",
+		"leading space":   " https://img.example/a.jpg",
+		"http":            "http://img.example/a.jpg",
+	}
+	for name, raw := range refused {
+		t.Run("refused "+name, func(t *testing.T) {
+			if got := SafeImageURL(raw); got != "" {
+				t.Errorf("SafeImageURL(%q) = %q, want empty", raw, got)
+			}
+		})
+	}
+}
+
+func TestNewProviderResult_KeepsHTTPSImageURLAndDoesNotLeakAcrossCalls(t *testing.T) {
+	source := SourceRef{Provider: ProviderDeezer, ExternalID: "1"}
+
+	valid := NewProviderResult(ResultKindTrack, "T", "S", "https://img.example/a.jpg", source, nil)
+	if valid.ImageURL != "https://img.example/a.jpg" {
+		t.Errorf("ImageURL = %q, want the https URL unchanged", valid.ImageURL)
+	}
+
+	unsafe := NewProviderResult(ResultKindTrack, "T", "S", "http://img.example/a.jpg", source, nil)
+	if unsafe.ImageURL != "" {
+		t.Errorf("ImageURL = %q, want empty after an earlier valid call", unsafe.ImageURL)
+	}
+}

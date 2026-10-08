@@ -1,8 +1,8 @@
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { QueueSource } from '@shared/playback/types';
 
-import { buildUpNextItems, queueSourceLabel } from '../queueItem';
-import { libraryTrack } from './fixtures';
+import { buildUpNextItems, queueSourceLabel } from '@features/playback/queueItem';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
 
 describe('queueSourceLabel', () => {
   it.each<[string, QueueSource | null, string]>([

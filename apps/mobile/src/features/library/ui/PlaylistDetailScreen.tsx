@@ -6,12 +6,15 @@ import { NO_PLAYLIST_ID, parsePlaylistId, type PlaylistId } from '@shared/api-cl
 import { Screen, Skeleton, spacing } from '@shared/ui';
 import type { PlaylistDetailResponse } from '@shared/api-client/types';
 
-import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
-import { useLoggedPlaylistDetailFailure } from '../hooks/useLoggedPlaylistDetailFailure';
-import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
-import { BackHeader } from './BackHeader';
-import { PlaylistDetailContent, type ContentProps } from './PlaylistDetailContent';
-import { PlaylistDetailFailure } from './PlaylistDetailFailure';
+import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
+import { useLoggedPlaylistDetailFailure } from '@features/library/hooks/useLoggedPlaylistDetailFailure';
+import { usePlaylistDetail } from '@features/library/hooks/usePlaylistDetail';
+import { BackHeader } from '@features/library/ui/BackHeader';
+import {
+  PlaylistDetailContent,
+  type ContentProps,
+} from '@features/library/ui/PlaylistDetailContent';
+import { PlaylistDetailFailure } from '@features/library/ui/PlaylistDetailFailure';
 
 type Router = ReturnType<typeof useRouter>;
 

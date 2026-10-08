@@ -10,11 +10,15 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { dropVanishedTrack } from './dropVanishedTrack';
-import { logTrackMutationFailure } from './logTrackMutationFailure';
-import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
-import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../domain/state';
+import { dropVanishedTrack } from '@features/library/hooks/dropVanishedTrack';
+import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import {
+  trackMutationKeys,
+  useOneRunPerTrack,
+  type TrackMutation,
+} from '@features/library/hooks/useOneRunPerTrack';
+import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { classifyLibraryError } from '@features/library/domain/state';
 
 const reacquireEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/reacquire`;
 

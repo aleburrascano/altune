@@ -8,9 +8,9 @@ import { useCreatePlaylist } from '@shared/playlists';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { pagedListControls } from './pagedListControls';
-import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../domain/groupPaging';
+import { pagedListControls } from '@features/library/hooks/pagedListControls';
+import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
+import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '@features/library/domain/groupPaging';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];

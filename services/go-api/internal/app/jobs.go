@@ -1,10 +1,6 @@
 package app
 
-import (
-	"sort"
-	"sync/atomic"
-	"time"
-)
+import "altune/go-api/internal/shared/runloop"
 
 type jobName string
 
@@ -65,101 +61,18 @@ func isKnownJobName(name jobName) bool {
 	return false
 }
 
-type jobControl struct {
-	disabled    atomic.Bool
-	failures    atomic.Int64
-	consecutive atomic.Int64
-	skipped     atomic.Int64
-	lastSuccess atomic.Int64
-	lastFailure atomic.Int64
-}
-
-func (jc *jobControl) admit() bool {
-	if jc.disabled.Load() {
-		jc.skipped.Add(1)
-		return false
-	}
-	return true
-}
-
-func (jc *jobControl) record(err error) {
-	now := time.Now().UnixNano()
-	if err != nil {
-		jc.failures.Add(1)
-		jc.consecutive.Add(1)
-		jc.lastFailure.Store(now)
-		return
-	}
-	jc.consecutive.Store(0)
-	jc.lastSuccess.Store(now)
-}
-
-type JobHealth struct {
-	Name        string
-	Enabled     bool
-	Failures    int64
-	Skipped     int64
-	LastSuccess time.Time
-	LastFailure time.Time
-}
-
-func (a *App) job(name jobName) *jobControl {
-	a.jobsMu.Lock()
-	defer a.jobsMu.Unlock()
-	if a.jobs == nil {
-		a.jobs = make(map[jobName]*jobControl)
-	}
-	jc, ok := a.jobs[name]
-	if !ok {
-		jc = &jobControl{}
-		a.jobs[name] = jc
-	}
-	return jc
+func (a *App) job(name jobName) *runloop.JobControl {
+	return a.jobs.Control(string(name))
 }
 
 func (a *App) jobSwitch(name jobName) func() bool {
-	jc := a.job(name)
-	return func() bool {
-		return jc.admit()
-	}
+	return a.job(name).Admit
 }
 
-func (a *App) SetJobEnabled(name jobName, enabled bool) (JobHealth, bool) {
-	a.jobsMu.Lock()
-	defer a.jobsMu.Unlock()
-	jc, ok := a.jobs[name]
-	if !ok {
-		return JobHealth{}, false
-	}
-	jc.disabled.Store(!enabled)
-	return jc.snapshot(name), true
+func (a *App) SetJobEnabled(name jobName, enabled bool) (runloop.JobHealth, bool) {
+	return a.jobs.SetEnabled(string(name), enabled)
 }
 
-func (a *App) JobHealth() []JobHealth {
-	a.jobsMu.Lock()
-	defer a.jobsMu.Unlock()
-	out := make([]JobHealth, 0, len(a.jobs))
-	for name, jc := range a.jobs {
-		out = append(out, jc.snapshot(name))
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
-}
-
-func (jc *jobControl) snapshot(name jobName) JobHealth {
-	return JobHealth{
-		Name:        string(name),
-		Enabled:     !jc.disabled.Load(),
-		Failures:    jc.failures.Load(),
-		Skipped:     jc.skipped.Load(),
-		LastSuccess: nanosToTime(jc.lastSuccess.Load()),
-		LastFailure: nanosToTime(jc.lastFailure.Load()),
-	}
-}
-
-func nanosToTime(nanos int64) time.Time {
-	if nanos == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, nanos).UTC()
+func (a *App) JobHealth() []runloop.JobHealth {
+	return a.jobs.Health()
 }

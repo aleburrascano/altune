@@ -4,7 +4,7 @@ import type { StyleProp, TextStyle } from 'react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
 
-import { WIDE_TRACK_COLUMNS } from './wideTrackColumns';
+import { WIDE_TRACK_COLUMNS } from '@features/library/ui/wideTrackColumns';
 
 const styles = StyleSheet.create({
   row: {

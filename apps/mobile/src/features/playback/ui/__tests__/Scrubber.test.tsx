@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import { Scrubber } from '../Scrubber';
+import { Scrubber } from '@features/playback/ui/Scrubber';
 
 function touchEvent(pageX: number, timeStamp: number) {
   const touch = {

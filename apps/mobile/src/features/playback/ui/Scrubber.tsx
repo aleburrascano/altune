@@ -4,7 +4,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
-import { useScrubberGesture } from './useScrubberGesture';
+import { useScrubberGesture } from '@features/playback/ui/useScrubberGesture';
 
 interface ScrubberProps {
   positionMs: number;

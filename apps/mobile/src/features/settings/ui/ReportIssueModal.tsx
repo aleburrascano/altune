@@ -2,13 +2,13 @@ import { useRef, useState, type ReactElement } from 'react';
 
 import { makeReportIdempotencyKey } from '@shared/api-client/feedback';
 import type { ReportKind } from '@shared/api-client/feedback';
-import { failureCopyForReport } from '../failureCopyForReport';
-import { useSubmitReport } from '../hooks/useSubmitReport';
-import { SettingsModal } from './SettingsModal';
-import { ReportFormView } from './ReportFormView';
-import { ReportSentView } from './ReportSentView';
-import { reportDiagnostics } from '../reportDiagnostics';
-import { isReportReady } from '../reportRules';
+import { failureCopyForReport } from '@features/settings/failureCopyForReport';
+import { useSubmitReport } from '@features/settings/hooks/useSubmitReport';
+import { SettingsModal } from '@features/settings/ui/SettingsModal';
+import { ReportFormView } from '@features/settings/ui/ReportFormView';
+import { ReportSentView } from '@features/settings/ui/ReportSentView';
+import { reportDiagnostics } from '@features/settings/reportDiagnostics';
+import { isReportReady } from '@features/settings/reportRules';
 
 type ReportIssueModalProps = {
   visible: boolean;

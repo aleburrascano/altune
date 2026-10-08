@@ -1,5 +1,5 @@
 import { ApiError, ContractError, NetworkError } from '@shared/api-client';
-import { failureCopyForReport } from '../failureCopyForReport';
+import { failureCopyForReport } from '@features/settings/failureCopyForReport';
 
 const REJECTED = 'That report was rejected — try describing it in a bit more detail.';
 const SIGNED_OUT = 'You need to be signed in to send a report — sign in again and retry.';

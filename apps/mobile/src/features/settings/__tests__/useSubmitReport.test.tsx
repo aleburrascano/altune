@@ -4,8 +4,8 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ApiError } from '@shared/api-client';
 import { submitReport } from '@shared/api-client/feedback';
 
-import { makeWrapper } from '../../../../jest/makeWrapper';
-import { useSubmitReport } from '../hooks/useSubmitReport';
+import { makeWrapper } from '@testing/makeWrapper';
+import { useSubmitReport } from '@features/settings/hooks/useSubmitReport';
 
 jest.mock('@shared/api-client/feedback', () => ({
   ...jest.requireActual('@shared/api-client/feedback'),

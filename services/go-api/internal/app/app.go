@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -60,8 +61,7 @@ type App struct {
 	election         electionController
 	backgroundStarts []backgroundJob
 
-	jobsMu sync.Mutex
-	jobs   map[jobName]*jobControl
+	jobs runloop.JobRegistry
 }
 
 type electionController interface {
@@ -214,7 +214,7 @@ func (a *App) applyDisabledJobs() error {
 		if !isKnownJobName(name) {
 			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
 		}
-		if a.job(name).disabled.CompareAndSwap(false, true) {
+		if a.job(name).DisableIfEnabled() {
 			slog.Info("job disabled at startup", "job", raw)
 		}
 	}

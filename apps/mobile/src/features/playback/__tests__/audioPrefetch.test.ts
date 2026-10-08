@@ -9,13 +9,24 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import * as audioCache from '../native/audioCache';
-import { MAX_PREFETCH_FILE_BYTES, cacheDir, findCached } from '../native/audioCache';
-import { PREFETCH_STALL_TIMEOUT_MS, evictCached, prefetchNext } from '../native/audioPrefetch';
-import { forgetAllSwaps, wasSwappedToLocal } from '../native/nativeTrackSwap';
-import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
+import * as audioCache from '@features/playback/native/audioCache';
+import {
+  MAX_PREFETCH_FILE_BYTES,
+  cacheDir,
+  findCached,
+} from '@features/playback/native/audioCache';
+import {
+  PREFETCH_STALL_TIMEOUT_MS,
+  evictCached,
+  prefetchNext,
+} from '@features/playback/native/audioPrefetch';
+import { forgetAllSwaps, wasSwappedToLocal } from '@features/playback/native/nativeTrackSwap';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+} from '@features/playback/playbackHealth';
 
-import { libraryTrack } from './fixtures';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
@@ -679,7 +690,7 @@ describe('failure trace', () => {
 });
 
 describe('cache path containment', () => {
-  const { __http } = require('../../../../jest/doubles/fetch.js');
+  const { __http } = require('@testing/doubles/fetch.js');
   const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
   function track(trackId: string): PlaybackTrack {
@@ -751,7 +762,7 @@ describe('cache path containment', () => {
 });
 
 describe('remote kill switch', () => {
-  const { __http } = require('../../../../jest/doubles/fetch.js');
+  const { __http } = require('@testing/doubles/fetch.js');
   const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
   function track(trackId: string): PlaybackTrack {

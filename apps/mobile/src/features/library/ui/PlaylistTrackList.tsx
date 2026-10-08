@@ -6,16 +6,19 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Text, spacing, useWideWebLayout } from '@shared/ui';
 import type { TrackResponse } from '@shared/api-client/types';
 
-import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
-import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { usePlaylistTrackRemoval } from '../hooks/usePlaylistTrackRemoval';
-import type { TrackSelectionController } from '../hooks/useTrackSelection';
-import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
-import { listContent } from './listContentStyles';
-import type { DetailActions, DetailProps } from './playlistDetailTypes';
-import { PlaylistHero } from './PlaylistHero';
-import { PlaylistTrackRow, type PlaylistTrackRowProps } from './PlaylistTrackRow';
-import { TrackSelectionOverlay } from './TrackSelectionOverlay';
+import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
+import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';
+import type { TrackSelectionController } from '@features/library/hooks/useTrackSelection';
+import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import { listContent } from '@features/library/ui/listContentStyles';
+import type { DetailActions, DetailProps } from '@features/library/ui/playlistDetailTypes';
+import { PlaylistHero } from '@features/library/ui/PlaylistHero';
+import {
+  PlaylistTrackRow,
+  type PlaylistTrackRowProps,
+} from '@features/library/ui/PlaylistTrackRow';
+import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
 
 type HeroProps = ComponentProps<typeof PlaylistHero>;
 type RenameHeroProps = Pick<

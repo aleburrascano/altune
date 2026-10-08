@@ -3,16 +3,16 @@ import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { useAlbumsView } from './useAlbumsView';
-import { useArtistsView } from './useArtistsView';
-import type { useLibraryNavigation } from './useLibraryNavigation';
-import type { PlaylistActionsState } from './usePlaylistActions';
-import { usePlaylistsView } from './usePlaylistsView';
-import type { useRetryAcquisition } from './useRetryAcquisition';
-import type { Selection } from './useSelection';
-import { useTracksView } from './useTracksView';
-import type { ActiveView, LibraryChip } from '../activeView';
-import type { SortKey } from '../domain/sort';
+import { useAlbumsView } from '@features/library/hooks/useAlbumsView';
+import { useArtistsView } from '@features/library/hooks/useArtistsView';
+import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
+import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
+import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import type { Selection } from '@features/library/hooks/useSelection';
+import { useTracksView } from '@features/library/hooks/useTracksView';
+import type { ActiveView, LibraryChip } from '@features/library/activeView';
+import type { SortKey } from '@features/library/domain/sort';
 
 type ActiveLibraryViewDeps = {
   pl: PlaylistActionsState;

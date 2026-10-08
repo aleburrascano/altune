@@ -5,10 +5,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { ApiError } from '@shared/api-client';
 import { submitReport } from '@shared/api-client/feedback';
 import { supabase } from '@shared/auth/supabaseClient';
-import { ReportIssueModal } from '../ui/ReportIssueModal';
-import { reportDiagnostics } from '../reportDiagnostics';
+import { ReportIssueModal } from '@features/settings/ui/ReportIssueModal';
+import { reportDiagnostics } from '@features/settings/reportDiagnostics';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/api-client/feedback', () => ({
   ...jest.requireActual('@shared/api-client/feedback'),

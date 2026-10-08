@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-import type { SortKey } from './domain/sort';
+import type { SortKey } from '@features/library/domain/sort';
 
 export type LibraryChip = 'playlists' | 'tracks' | 'albums' | 'artists';
 

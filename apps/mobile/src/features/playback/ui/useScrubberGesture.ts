@@ -7,7 +7,7 @@ import {
   type View,
 } from 'react-native';
 
-import { clamp } from '../clamp';
+import { clamp } from '@features/playback/clamp';
 
 const A11Y_SEEK_STEP_MS = 15000;
 

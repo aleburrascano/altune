@@ -4,11 +4,14 @@ import { countLabel } from '@shared/lib/format';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
-import { useDeleteTrack } from './useDeleteTrack';
-import { useDeleteTracks } from './useDeleteTracks';
-import type { useLibraryNavigation } from './useLibraryNavigation';
-import type { PlaylistActionsState } from './usePlaylistActions';
-import { useTrackSelection, type TrackSelectionController } from './useTrackSelection';
+import { useDeleteTrack } from '@features/library/hooks/useDeleteTrack';
+import { useDeleteTracks } from '@features/library/hooks/useDeleteTracks';
+import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
+import {
+  useTrackSelection,
+  type TrackSelectionController,
+} from '@features/library/hooks/useTrackSelection';
 
 type Deps = {
   queue: ReturnType<typeof useQueuePlayback>;

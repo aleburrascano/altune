@@ -11,6 +11,7 @@ module.exports = function (api) {
             '@features': './src/features',
             '@shared': './src/shared',
             '@testing': './jest',
+            '@assets': './assets',
           },
         },
       ],

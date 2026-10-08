@@ -4,6 +4,7 @@ import (
 	observeAlert "altune/go-api/internal/observe/alert"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared/leader"
+	"altune/go-api/internal/shared/runloop"
 	"bytes"
 	"context"
 	"errors"
@@ -301,7 +302,7 @@ func TestRunTicker_RecoversFromPanickingJob(t *testing.T) {
 		t.Errorf("panic log did not include the panic value, got: %q", logged)
 	}
 
-	if failures := a.job("explode").failures.Load(); failures == 0 {
+	if failures := findJobHealth(t, a.JobHealth(), "explode").Failures; failures == 0 {
 		t.Error("a recovered panic did not count toward the job's failure signal")
 	}
 }
@@ -318,7 +319,7 @@ func TestWhenLeaderJobs_RecoverOnAcquire(t *testing.T) {
 	a.whenLeader("survivor", func(context.Context) { secondRan.Store(true) })
 
 	for _, job := range a.backgroundStarts {
-		guard(job.name, func() { job.start(context.Background()) })
+		runloop.Recover(string(job.name), func() { job.start(context.Background()) })
 	}
 
 	if !secondRan.Load() {
@@ -349,8 +350,8 @@ func TestRunTicker_WedgedRunIsCanceledAndTickerRecovers(t *testing.T) {
 
 	waitForAtLeast(t, &successes, 1)
 
-	if cause := <-wedgedErr; !errors.Is(cause, errJobRunBudgetExceeded) {
-		t.Fatalf("wedged run canceled with cause %v, want errJobRunBudgetExceeded", cause)
+	if cause := <-wedgedErr; !errors.Is(cause, runloop.ErrRunBudgetExceeded) {
+		t.Fatalf("wedged run canceled with cause %v, want runloop.ErrRunBudgetExceeded", cause)
 	}
 	h := findJobHealth(t, a.JobHealth(), "wedged")
 	if h.Failures < 1 || h.LastFailure.IsZero() {
@@ -358,14 +359,6 @@ func TestRunTicker_WedgedRunIsCanceledAndTickerRecovers(t *testing.T) {
 	}
 	if h.LastSuccess.IsZero() {
 		t.Fatalf("ticker did not recover after the wedged run: %+v", h)
-	}
-}
-
-func TestJobRunBudget_IsFractionOfInterval(t *testing.T) {
-	for _, interval := range []time.Duration{10 * time.Minute, 6 * time.Hour, 24 * time.Hour} {
-		if got := jobRunBudget(interval); got <= 0 || got >= interval {
-			t.Errorf("jobRunBudget(%v) = %v, want within (0, interval)", interval, got)
-		}
 	}
 }
 
@@ -427,7 +420,7 @@ func TestRunTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T
 	}
 
 	h := findJobHealth(t, a.JobHealth(), "interrupted")
-	if h.Failures != 0 || run.control.consecutive.Load() != 0 || !h.LastFailure.IsZero() {
+	if h.Failures != 0 || run.control.ConsecutiveFailures() != 0 || !h.LastFailure.IsZero() {
 		t.Fatalf("leadership-lost runs counted as failures: %+v", h)
 	}
 }

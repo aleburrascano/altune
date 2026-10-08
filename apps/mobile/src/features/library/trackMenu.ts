@@ -4,9 +4,9 @@ import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
-import { reportStorageFull } from './pinBatchSummary';
-import type { LibraryOffline } from './hooks/useLibraryOffline';
-import { pinnedStatusDisplay } from './pinnedStatusDisplay';
+import { reportStorageFull } from '@features/library/pinBatchSummary';
+import type { LibraryOffline } from '@features/library/hooks/useLibraryOffline';
+import { pinnedStatusDisplay } from '@features/library/pinnedStatusDisplay';
 
 type QueueActions = {
   playNext: (track: PlaybackTrack) => void;

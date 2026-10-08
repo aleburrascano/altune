@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -150,12 +151,12 @@ func (a *App) jobConditions(names []jobName) []observeAlert.Condition {
 	return conditions
 }
 
-func buildJobCondition(name jobName, jc *jobControl) observeAlert.Condition {
+func buildJobCondition(name jobName, jc *runloop.JobControl) observeAlert.Condition {
 	return observeAlert.Condition{
 		Key: "job_failing:" + string(name),
 		Eval: func(context.Context) *observeAlert.Alert {
-			streak := jc.consecutive.Load()
-			if jc.disabled.Load() || streak < jobFailureEscalation {
+			streak := jc.ConsecutiveFailures()
+			if jc.Disabled() || streak < jobFailureEscalation {
 				return nil
 			}
 			return &observeAlert.Alert{

@@ -19,12 +19,12 @@ import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
-import { canRetryPlaybackError } from '../retryPolicy';
-import { endedLabel, isPreviewTrack, libraryTrackId } from './playerStatus';
-import { PlayerOptionsSheets } from './PlayerOptionsSheets';
-import { Scrubber } from './Scrubber';
-import { TransportControls } from './TransportControls';
-import { usePlaybackTransport } from './usePlaybackTransport';
+import { canRetryPlaybackError } from '@features/playback/retryPolicy';
+import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/ui/playerStatus';
+import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
+import { Scrubber } from '@features/playback/ui/Scrubber';
+import { TransportControls } from '@features/playback/ui/TransportControls';
+import { usePlaybackTransport } from '@features/playback/ui/usePlaybackTransport';
 
 type Transport = ReturnType<typeof usePlaybackTransport>;
 type Theme = ReturnType<typeof useTheme>;

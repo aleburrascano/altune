@@ -14,10 +14,10 @@ import { libraryKeys } from '@shared/lib/query-keys';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { failureLogFields } from '../domain/failureLogFields';
-import { classifyLibraryError, type LibraryFailure } from '../domain/state';
-import { pagedListControls } from './pagedListControls';
-import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
+import { failureLogFields } from '@features/library/domain/failureLogFields';
+import { classifyLibraryError, type LibraryFailure } from '@features/library/domain/state';
+import { pagedListControls } from '@features/library/hooks/pagedListControls';
+import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
 
 export const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;

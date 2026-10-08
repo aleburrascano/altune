@@ -11,9 +11,9 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
-import { makeWrapper } from '../../../../jest/makeWrapper';
-import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
-import { useSettingsClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { makeWrapper } from '@testing/makeWrapper';
+import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
+import { useSettingsClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
 
 jest.mock('@shared/api-client/discovery', () => ({
   ...jest.requireActual('@shared/api-client/discovery'),

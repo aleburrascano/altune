@@ -12,12 +12,12 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 
-import { prefetchNext } from '../native/audioPrefetch';
-import { TrackPlayerPlaybackProvider } from '../native/trackPlayerProvider';
-import { registerPlaybackService } from '../native/registerPlaybackService';
-import { playbackService } from '../native/service';
+import { prefetchNext } from '@features/playback/native/audioPrefetch';
+import { TrackPlayerPlaybackProvider } from '@features/playback/native/trackPlayerProvider';
+import { registerPlaybackService } from '@features/playback/native/registerPlaybackService';
+import { playbackService } from '@features/playback/native/service';
 
-import { libraryTrack } from './fixtures';
+import { libraryTrack } from '@features/playback/__tests__/fixtures';
 
 jest.mock('@shared/api-client/audio', () => ({
   ...jest.requireActual('@shared/api-client/audio'),

@@ -1,4 +1,4 @@
-import { minutesRemaining, useSleepTimerStore } from '../sleepTimerStore';
+import { minutesRemaining, useSleepTimerStore } from '@features/playback/sleepTimerStore';
 
 const T0 = 1_700_000_000_000;
 const THIRTY_MIN_MS = 30 * 60_000;

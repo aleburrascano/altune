@@ -11,9 +11,9 @@ import {
   evictCached,
   extFromUrl,
   findCached,
-} from '../native/audioCache';
+} from '@features/playback/native/audioCache';
 
-import { libraryTrack, previewTrack } from './fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 
 const { __fs } = FileSystem as unknown as {
   __fs: {

@@ -11,14 +11,14 @@ import { orderedQueueTracks } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import { libraryTrack, previewTrack } from '../../__tests__/fixtures';
-import { recordPlaybackFailure } from '../../playbackHealth';
-import { WebPlaybackProvider } from '../../web/webPlaybackProvider';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { recordPlaybackFailure } from '@features/playback/playbackHealth';
+import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
-jest.mock('../../playbackHealth', () => ({
-  ...jest.requireActual('../../playbackHealth'),
+jest.mock('@features/playback/playbackHealth', () => ({
+  ...jest.requireActual('@features/playback/playbackHealth'),
   recordPlaybackFailure: jest.fn(),
 }));
 

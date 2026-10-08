@@ -5,7 +5,9 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 state=${E2E_STACK_DIR:-${TMPDIR:-/tmp}/altune-e2e-stack}
 health_attempts=${E2E_HEALTH_ATTEMPTS:-60}
 ready_attempts=${E2E_READY_ATTEMPTS:-60}
-metro_cache=${E2E_METRO_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/altune-e2e-metro}
+audio_bucket=altune-e2e
+s3_key=e2e
+s3_secret=e2e-secret
 stub_rsa_modulus=0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw
 
 usage() {
@@ -51,6 +53,34 @@ postgres_ready() {
   docker exec "$(cat "$state/postgres.cid")" pg_isready -q -h 127.0.0.1 -p 5432 -U altune -d altune
 }
 
+audio_bucket_ready() {
+  python3 - "http://127.0.0.1:$(host_port_of s3 9000)" "$audio_bucket" "$s3_key" "$s3_secret" <<'PY'
+import datetime, hashlib, hmac, sys, urllib.request
+endpoint, bucket, key, secret = sys.argv[1:5]
+host = endpoint.split("://", 1)[1]
+now = datetime.datetime.now(datetime.timezone.utc)
+amz_date, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
+payload = hashlib.sha256(b"").hexdigest()
+headers = f"host:{host}\nx-amz-content-sha256:{payload}\nx-amz-date:{amz_date}\n"
+signed = "host;x-amz-content-sha256;x-amz-date"
+request = f"PUT\n/{bucket}\n\n{headers}\n{signed}\n{payload}"
+scope = f"{day}/us-east-1/s3/aws4_request"
+to_sign = f"AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{hashlib.sha256(request.encode()).hexdigest()}"
+k = ("AWS4" + secret).encode()
+for part in (day, "us-east-1", "s3", "aws4_request"):
+    k = hmac.new(k, part.encode(), hashlib.sha256).digest()
+signature = hmac.new(k, to_sign.encode(), hashlib.sha256).hexdigest()
+req = urllib.request.Request(f"{endpoint}/{bucket}", method="PUT", headers={
+    "x-amz-content-sha256": payload, "x-amz-date": amz_date,
+    "Authorization": f"AWS4-HMAC-SHA256 Credential={key}/{scope}, SignedHeaders={signed}, Signature={signature}"})
+try:
+    urllib.request.urlopen(req, timeout=5)
+except urllib.error.HTTPError as e:
+    if b"BucketAlreadyOwnedByYou" not in e.read():
+        sys.exit(1)
+PY
+}
+
 redis_ready() {
   docker exec "$(cat "$state/redis.cid")" redis-cli ping >/dev/null
 }
@@ -75,11 +105,15 @@ bring_up_services() {
   start_container postgres -e POSTGRES_USER=altune -e POSTGRES_PASSWORD=altune_dev -e POSTGRES_DB=altune \
     -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql/data:rw,size=2g postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off
   start_container redis -p 127.0.0.1::6379 redis:7-alpine
+  start_container s3 -p 127.0.0.1::9000 -e RUSTFS_ACCESS_KEY="$s3_key" -e RUSTFS_SECRET_KEY="$s3_secret" \
+    --tmpfs /data:rw,size=1g,uid=10001 --tmpfs /logs:rw,uid=10001 rustfs/rustfs:1.0.1
   wait_until "$ready_attempts" postgres_ready
   wait_until "$ready_attempts" redis_ready
+  wait_until "$ready_attempts" audio_bucket_ready
   apply_migrations
   database_url="postgres://altune:altune_dev@127.0.0.1:$(host_port_of postgres 5432)/altune?sslmode=disable"
   redis_url="redis://127.0.0.1:$(host_port_of redis 6379)"
+  s3_endpoint="http://127.0.0.1:$(host_port_of s3 9000)"
 }
 
 start_jwks_stub() {
@@ -98,6 +132,8 @@ start_api() {
     PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR="$root/apps/mobile/e2e/fixtures/providers" \
     SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
     AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
+    OCI_S3_ENDPOINT="$s3_endpoint" OCI_S3_ACCESS_KEY="$s3_key" OCI_S3_SECRET_KEY="$s3_secret" \
+    OCI_S3_BUCKET="$audio_bucket" OCI_S3_REGION=us-east-1 \
     MUSIC_DIR="$state/music" DATABASE_URL="$database_url" REDIS_URL="$redis_url" \
     SUPABASE_PROJECT_URL="http://127.0.0.1:$jwks_port" \
     SUPABASE_JWT_JWKS_URL="http://127.0.0.1:$jwks_port/jwks.json" \
@@ -106,10 +142,9 @@ start_api() {
 }
 
 export_and_serve_web() {
-  mkdir -p "$metro_cache"
-  find "$metro_cache" -type f -mtime +7 -delete 2>/dev/null || true
+  mkdir -p "$state/metro-tmp"
   (cd "$root/apps/mobile" && rm -rf dist \
-    && TMPDIR="$metro_cache" flock "$metro_cache/.lock" env EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
+    && TMPDIR="$state/metro-tmp" EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
       EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:1 EXPO_PUBLIC_SUPABASE_ANON_KEY=e2e-anon-key \
       npx expo export -p web --dev)
   start_detached web python3 -m http.server "$web_port" --bind 127.0.0.1 --directory "$root/apps/mobile/dist"

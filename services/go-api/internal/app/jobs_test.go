@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	catalogService "altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"reflect"
@@ -59,7 +60,7 @@ func TestJobHealth_ReflectsKillSwitch(t *testing.T) {
 	}
 }
 
-func findJobHealth(t *testing.T, snapshot []JobHealth, name string) JobHealth {
+func findJobHealth(t fataler, snapshot []runloop.JobHealth, name string) runloop.JobHealth {
 	t.Helper()
 	for _, h := range snapshot {
 		if h.Name == name {
@@ -67,7 +68,7 @@ func findJobHealth(t *testing.T, snapshot []JobHealth, name string) JobHealth {
 		}
 	}
 	t.Fatalf("job %q not found in health snapshot", name)
-	return JobHealth{}
+	return runloop.JobHealth{}
 }
 
 func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
@@ -177,21 +178,5 @@ func TestKnownJobNames_PinnedToEveryConst(t *testing.T) {
 	}
 	if isKnownJobName("no such job") {
 		t.Fatal("unregistered name reported known")
-	}
-}
-
-func TestJobControlAdmit_CountsSkipOnlyWhenDisabled(t *testing.T) {
-	jc := &jobControl{}
-	if !jc.admit() || jc.skipped.Load() != 0 {
-		t.Fatalf("enabled job: admit must pass without counting a skip, skipped=%d", jc.skipped.Load())
-	}
-	jc.disabled.Store(true)
-	for range 2 {
-		if jc.admit() {
-			t.Fatal("disabled job must not be admitted")
-		}
-	}
-	if got := jc.skipped.Load(); got != 2 {
-		t.Fatalf("skipped = %d, want 2", got)
 	}
 }

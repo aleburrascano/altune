@@ -3,13 +3,16 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import type { PlaybackSource, PlaybackTrack } from '@shared/playback/types';
 
-import { redactedPlaybackFailure, type RedactedPlaybackFailure } from '../redactPlaybackError';
+import {
+  redactedPlaybackFailure,
+  type RedactedPlaybackFailure,
+} from '@features/playback/redactPlaybackError';
 import {
   isPresignStale,
   type PendingPresign,
   type SourceOutcome,
   type WebAudioPlayer,
-} from './webPlayer';
+} from '@features/playback/web/webPlayer';
 
 const NO_AUDIO_URL: RedactedPlaybackFailure = {
   kind: 'not_found',

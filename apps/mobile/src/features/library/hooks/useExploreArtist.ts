@@ -6,10 +6,10 @@ import { useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
-import { failureLogFields } from '../domain/failureLogFields';
-import type { FeaturingDetailRoute } from '../domain/featuringDetailRoute';
-import { alertLibraryFailure } from '../libraryFailureAlert';
-import { classifyLibraryError } from '../domain/state';
+import { failureLogFields } from '@features/library/domain/failureLogFields';
+import type { FeaturingDetailRoute } from '@features/library/domain/featuringDetailRoute';
+import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { classifyLibraryError } from '@features/library/domain/state';
 
 type DetailPath = FeaturingDetailRoute;
 

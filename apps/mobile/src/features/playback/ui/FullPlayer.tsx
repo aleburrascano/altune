@@ -7,13 +7,18 @@ import { withFeaturing } from '@shared/lib/featured';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
-import { canRetryPlaybackError } from '../retryPolicy';
-import { endedLabel, isPreviewTrack, libraryTrackId } from './playerStatus';
-import { PlayerOptionsSheets } from './PlayerOptionsSheets';
-import { Scrubber } from './Scrubber';
-import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
-import { TransportControls } from './TransportControls';
-import { usePlaybackTransport } from './usePlaybackTransport';
+import { canRetryPlaybackError } from '@features/playback/retryPolicy';
+import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/ui/playerStatus';
+import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
+import { Scrubber } from '@features/playback/ui/Scrubber';
+import {
+  SheetHeader,
+  SheetHeaderCenter,
+  SheetHeaderTrailing,
+  SheetScreen,
+} from '@features/playback/ui/SheetHeader';
+import { TransportControls } from '@features/playback/ui/TransportControls';
+import { usePlaybackTransport } from '@features/playback/ui/usePlaybackTransport';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { Button } from '@shared/ui/primitives/Button';

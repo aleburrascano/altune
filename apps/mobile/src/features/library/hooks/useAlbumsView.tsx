@@ -1,10 +1,10 @@
 import type { AlbumGroup } from '@shared/api-client/library';
 
-import { useLibraryAlbums } from './useLibraryAlbums';
-import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
-import { ALBUM_SORT_OPTIONS, type SortKey } from '../domain/sort';
-import { AlbumsGrid } from '../ui/AlbumsGrid';
+import { useLibraryAlbums } from '@features/library/hooks/useLibraryAlbums';
+import type { ActiveView } from '@features/library/activeView';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
+import { ALBUM_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
+import { AlbumsGrid } from '@features/library/ui/AlbumsGrid';
 
 type AlbumsViewDeps = {
   query: string;

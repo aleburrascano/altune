@@ -7,19 +7,19 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { prefetchNext } from '../native/audioPrefetch';
-import { reportQueueFailure } from '../native/queueFailureReport';
-import { loadNativeQueue } from '../native/loadNativeTrack';
-import { forgetAllSwaps } from '../native/nativeTrackSwap';
+import { prefetchNext } from '@features/playback/native/audioPrefetch';
+import { reportQueueFailure } from '@features/playback/native/queueFailureReport';
+import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
+import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
 import {
   PLAYBACK_HEALTH_BATCH,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
   recordPresignOutcome,
-} from '../playbackHealth';
-import { playbackService } from '../native/service';
+} from '@features/playback/playbackHealth';
+import { playbackService } from '@features/playback/native/service';
 
-import { libraryTrack, previewTrack } from './fixtures';
+import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 
 type AppStateChangeHandler = (state: string) => void;
 
@@ -235,7 +235,7 @@ describe('playback health metric — user-visible failures', () => {
   });
 
   it('counts a native error whose audio recovery request fails', async () => {
-    const { __http } = jest.requireActual('../../../../jest/doubles/fetch.js');
+    const { __http } = jest.requireActual('@testing/doubles/fetch.js');
     __http.replyAll({ status: 500 });
     useQueueStore.getState().loadQueue([track('trk-1')], 0, null);
 

@@ -3,11 +3,15 @@ import { useCallback, useState } from 'react';
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 
-import { useSelection, type Selection } from './useSelection';
-import type { SelectionAction } from '../selectionActions';
-import { buildSelectionActions } from '../selectionActions';
-import { useLibraryOffline } from './useLibraryOffline';
-import { useTrackMenu, type TrackMenuController, type TrackMenuOptions } from './useTrackMenu';
+import { useSelection, type Selection } from '@features/library/hooks/useSelection';
+import type { SelectionAction } from '@features/library/selectionActions';
+import { buildSelectionActions } from '@features/library/selectionActions';
+import { useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
+import {
+  useTrackMenu,
+  type TrackMenuController,
+  type TrackMenuOptions,
+} from '@features/library/hooks/useTrackMenu';
 
 export type TrackSelectionOptions = TrackMenuOptions & {
   selectionDanger: {

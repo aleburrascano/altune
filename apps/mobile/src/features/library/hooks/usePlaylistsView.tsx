@@ -1,10 +1,10 @@
 import type { PlaylistResponse } from '@shared/api-client/types';
 
-import type { PlaylistActionsState } from './usePlaylistActions';
-import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
-import { PLAYLIST_SORT_OPTIONS, type SortKey } from '../domain/sort';
-import { PlaylistsGrid } from '../ui/PlaylistsGrid';
+import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
+import type { ActiveView } from '@features/library/activeView';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
+import { PLAYLIST_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
+import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
 
 type PlaylistsViewDeps = {
   pl: PlaylistActionsState;

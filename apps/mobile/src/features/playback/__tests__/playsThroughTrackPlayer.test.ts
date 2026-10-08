@@ -1,7 +1,7 @@
 import { isExpoGo } from '@shared/playback/isExpoGo';
 
-import { playsThroughTrackPlayer } from '../playsThroughTrackPlayer';
-import { playsThroughTrackPlayer as playsThroughTrackPlayerWeb } from '../playsThroughTrackPlayer.web';
+import { playsThroughTrackPlayer } from '@features/playback/playsThroughTrackPlayer';
+import { playsThroughTrackPlayer as playsThroughTrackPlayerWeb } from '@features/playback/playsThroughTrackPlayer.web';
 
 describe('playsThroughTrackPlayer', () => {
   it('holds natively exactly when the app is not running in Expo Go', () => {

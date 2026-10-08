@@ -7,13 +7,17 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { Text, spacing, useTheme, type Theme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
-import type { Selection } from '../hooks/useSelection';
-import { AddTracksHeader } from './AddTracksHeader';
-import { AlreadyAddedRow } from './AlreadyAddedRow';
-import { ConfirmButton } from './ConfirmButton';
-import { LibraryRow } from './LibraryRow';
-import { SelectAllButton } from './SelectAllButton';
-import { useAddableTracks, type AddableTracksState, type SearchApi } from './useAddableTracks';
+import type { Selection } from '@features/library/hooks/useSelection';
+import { AddTracksHeader } from '@features/library/ui/AddTracksHeader';
+import { AlreadyAddedRow } from '@features/library/ui/AlreadyAddedRow';
+import { ConfirmButton } from '@features/library/ui/ConfirmButton';
+import { LibraryRow } from '@features/library/ui/LibraryRow';
+import { SelectAllButton } from '@features/library/ui/SelectAllButton';
+import {
+  useAddableTracks,
+  type AddableTracksState,
+  type SearchApi,
+} from '@features/library/ui/useAddableTracks';
 
 type AddTracksToPlaylistModalProps = {
   visible: boolean;

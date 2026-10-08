@@ -6,7 +6,7 @@ import {
   RECOVERY_COOLDOWN_BASE_MS,
   claimRecoveryAttempt,
   resetRecoveryBudget,
-} from '../native/recoveryBudget';
+} from '@features/playback/native/recoveryBudget';
 
 const KEY = 'library:trk-1' as TrackKey;
 const OTHER_KEY = 'library:trk-2' as TrackKey;

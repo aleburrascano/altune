@@ -185,16 +185,18 @@ func TestFavoritesAdd_RejectsOversizeOrUnsafeFieldsWithoutWriting(t *testing.T) 
 	longText := strings.Repeat("é", maxFavoriteTextRunes+1)
 	longURL := "https://img.example/" + strings.Repeat("a", maxFavoriteImageURLBytes)
 	cases := map[string]domain.Favorite{
-		"title over cap":       {Kind: domain.ResultKindAlbum, Title: longText, Subtitle: "Kendrick Lamar"},
-		"subtitle over cap":    {Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: longText},
-		"image_url over cap":   {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: longURL},
-		"image_url http":       {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "http://img.example/a.jpg"},
-		"image_url script":     {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "javascript:alert(1)"},
-		"image_url no host":    {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "https:///a.jpg"},
-		"title with NUL":       {Kind: domain.ResultKindAlbum, Title: "a\x00", Subtitle: "Kendrick Lamar"},
-		"subtitle with NUL":    {Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "a\x00b"},
-		"title invalid UTF-8":  {Kind: domain.ResultKindAlbum, Title: "a\xffb"},
-		"empty normalized key": {Kind: domain.ResultKindArtist, Title: "!!!"},
+		"title over cap":            {Kind: domain.ResultKindAlbum, Title: longText, Subtitle: "Kendrick Lamar"},
+		"subtitle over cap":         {Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: longText},
+		"image_url over cap":        {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: longURL},
+		"image_url http":            {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "http://img.example/a.jpg"},
+		"image_url script":          {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "javascript:alert(1)"},
+		"image_url no host":         {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "https:///a.jpg"},
+		"image_url data":            {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "data:image/png;base64,AAAA"},
+		"image_url scheme-relative": {Kind: domain.ResultKindAlbum, Title: "DAMN.", ImageURL: "//img.example/a.jpg"},
+		"title with NUL":            {Kind: domain.ResultKindAlbum, Title: "a\x00", Subtitle: "Kendrick Lamar"},
+		"subtitle with NUL":         {Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "a\x00b"},
+		"title invalid UTF-8":       {Kind: domain.ResultKindAlbum, Title: "a\xffb"},
+		"empty normalized key":      {Kind: domain.ResultKindArtist, Title: "!!!"},
 	}
 	for name, fav := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -249,4 +251,28 @@ func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 		domain.Favorite{Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
 	assertTypedError(t, err, http.StatusConflict, "discovery.favorites_full")
+}
+
+func TestValidateFavoriteImageURL_AgreesWithSafeImageURL(t *testing.T) {
+	urls := []string{
+		"https://img.example/a.jpg",
+		"https://img.example/a.jpg?w=300#x",
+		"HTTPS://img.example/a.jpg",
+		"https://img.example:8443/a.jpg",
+		"https://",
+		"//img.example/a.jpg",
+		"https:img.example/a.jpg",
+		"ftp://img.example/a.jpg",
+		"httpss://img.example/a.jpg",
+		" https://img.example/a.jpg",
+		"http://img.example/a.jpg",
+	}
+	for _, raw := range urls {
+		t.Run(raw, func(t *testing.T) {
+			err := validateFavoriteImageURL(raw)
+			if rejected := domain.SafeImageURL(raw) == ""; (err != nil) != rejected {
+				t.Errorf("validateFavoriteImageURL(%q) err = %v, but SafeImageURL rejected = %v", raw, err, rejected)
+			}
+		})
+	}
 }
