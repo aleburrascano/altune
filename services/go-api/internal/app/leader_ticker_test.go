@@ -301,7 +301,7 @@ func TestRunTicker_RecoversFromPanickingJob(t *testing.T) {
 		t.Errorf("panic log did not include the panic value, got: %q", logged)
 	}
 
-	if failures := a.job("explode").failures.Load(); failures == 0 {
+	if failures := findJobHealth(t, a.JobHealth(), "explode").Failures; failures == 0 {
 		t.Error("a recovered panic did not count toward the job's failure signal")
 	}
 }
@@ -427,7 +427,7 @@ func TestRunTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T
 	}
 
 	h := findJobHealth(t, a.JobHealth(), "interrupted")
-	if h.Failures != 0 || run.control.consecutive.Load() != 0 || !h.LastFailure.IsZero() {
+	if h.Failures != 0 || run.control.ConsecutiveFailures() != 0 || !h.LastFailure.IsZero() {
 		t.Fatalf("leadership-lost runs counted as failures: %+v", h)
 	}
 }

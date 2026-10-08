@@ -4,6 +4,7 @@ import (
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/runloop"
 	"bytes"
 	"context"
 	"errors"
@@ -175,7 +176,7 @@ func TestStartSimpleJob_CountsAFailedRunAsAFailure(t *testing.T) {
 	a := &App{}
 	runFailingSimpleJobOn(t, a, simpleJobLogCase{name: jobOrphanedAudioReconcile})
 
-	if failures := a.job(jobOrphanedAudioReconcile).failures.Load(); failures == 0 {
+	if failures := findJobHealth(t, a.JobHealth(), string(jobOrphanedAudioReconcile)).Failures; failures == 0 {
 		t.Error("a failing simple job did not count toward its failure signal")
 	}
 }
@@ -238,8 +239,11 @@ func awaitJobOutcomes(t fataler, a *App, deadline time.Duration) {
 	t.Helper()
 	giveUp := time.Now().Add(deadline)
 	for _, job := range a.backgroundStarts {
-		jc := a.job(job.name)
-		for jc.lastSuccess.Load() == 0 && jc.lastFailure.Load() == 0 {
+		for {
+			h := findJobHealth(t, a.JobHealth(), string(job.name))
+			if !h.LastSuccess.IsZero() || !h.LastFailure.IsZero() {
+				break
+			}
 			if time.Now().After(giveUp) {
 				t.Fatalf("job %q ran but recorded no outcome within %s", job.name, deadline)
 				return
@@ -292,7 +296,7 @@ func flipNamedJob(t *testing.T, a *App, name jobName, action string) {
 	}
 }
 
-func waitForHealth(t *testing.T, a *App, name jobName, cond func(JobHealth) bool) JobHealth {
+func waitForHealth(t *testing.T, a *App, name jobName, cond func(runloop.JobHealth) bool) runloop.JobHealth {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -373,7 +377,7 @@ func TestStartCorpusRefresh_LogsTheOldTextAndCountsAFailure(t *testing.T) {
 			t.Errorf("want %q in\n%s", want, logged)
 		}
 	}
-	if a.job(jobBehavioralCorpusRefresh).failures.Load() == 0 {
+	if findJobHealth(t, a.JobHealth(), string(jobBehavioralCorpusRefresh)).Failures == 0 {
 		t.Error("a failing corpus refresh did not count toward its failure signal")
 	}
 }
@@ -420,7 +424,7 @@ func TestStartDiscographyPrune_LogsTheOldTextOnEachFailurePath(t *testing.T) {
 			if strings.Contains(logged, tc.notWant) {
 				t.Errorf("unexpected %q in\n%s", tc.notWant, logged)
 			}
-			if a.job(jobDiscographyEventPrune).failures.Load() == 0 {
+			if findJobHealth(t, a.JobHealth(), string(jobDiscographyEventPrune)).Failures == 0 {
 				t.Error("a failing prune did not count toward its failure signal")
 			}
 		})
@@ -479,7 +483,7 @@ func TestStartAcquisitionPrune_FailingPruneCountsTowardItsFailureSignal(t *testi
 	if !strings.Contains(logged, want) {
 		t.Errorf("want %q in\n%s", want, logged)
 	}
-	if a.job(jobAcquisitionPrune).failures.Load() == 0 {
+	if findJobHealth(t, a.JobHealth(), string(jobAcquisitionPrune)).Failures == 0 {
 		t.Error("a failing prune did not count toward its failure signal")
 	}
 }
