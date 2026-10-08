@@ -6,10 +6,10 @@ import {
   getLastFmEnrichment,
   getDeezerEnrichment,
   type ContentFetchResponse,
-} from '../enrichment';
+} from '@shared/api-client/enrichment';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

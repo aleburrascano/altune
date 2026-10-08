@@ -3,17 +3,17 @@ import {
   getLibraryArtists,
   parseListAlbumsResponse,
   parseListArtistsResponse,
-} from '../library';
+} from '@shared/api-client/library';
 import type {
   LibraryQuery,
   LibrarySort,
   ListAlbumsResponse,
   ListArtistsResponse,
-} from '../library';
-import { apiBase } from '../index';
+} from '@shared/api-client/library';
+import { apiBase } from '@shared/api-client/index';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

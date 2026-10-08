@@ -1,4 +1,4 @@
-import { apiFetch, apiSend } from './index';
+import { apiFetch, apiSend } from '@shared/api-client/index';
 
 export interface QueueStateCurrentTrack {
   id: string;

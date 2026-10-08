@@ -1,12 +1,12 @@
 import fc from 'fast-check';
 
-import { getLibraryAlbums } from '../library';
-import type { LibrarySort } from '../library';
-import { searchDiscovery, suggestDiscovery, listSearchHistory } from '../discovery';
-import type { DiscoveryKind, DiscoverySearchResponse } from '../discovery';
+import { getLibraryAlbums } from '@shared/api-client/library';
+import type { LibrarySort } from '@shared/api-client/library';
+import { searchDiscovery, suggestDiscovery, listSearchHistory } from '@shared/api-client/discovery';
+import type { DiscoveryKind, DiscoverySearchResponse } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

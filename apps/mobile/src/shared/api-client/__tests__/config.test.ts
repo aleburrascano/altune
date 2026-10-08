@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as config from '../config';
-import { apiBase } from '../index';
+import * as config from '@shared/api-client/config';
+import { apiBase } from '@shared/api-client/index';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

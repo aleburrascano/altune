@@ -6,7 +6,7 @@ import {
   NO_PLAYLIST_ID,
   type PlaylistId,
   type TrackId,
-} from '../ids';
+} from '@shared/api-client/ids';
 
 const UUID = '0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a';
 const HOSTILE = ['', '.', '..', '../x', 'a/b', 'a?b=1', 'a#frag', 'a%2Fb', 'a b', 'x'.repeat(129)];

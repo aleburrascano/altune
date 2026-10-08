@@ -3,13 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isSessionFetchFailure } from '@shared/errors';
-import { registerIdentityListeners } from './registerIdentityListeners';
+import { registerIdentityListeners } from '@shared/auth/registerIdentityListeners';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 
-import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
-import { renewSessionCredentials } from './sessionExpired';
-import { supabase } from './supabaseClient';
-import { isTestAuthEnabled, testAuthBootSettled } from './testAuthBoot';
+import { forgetPreviousUsersLocalData } from '@shared/auth/forgetPreviousUsersLocalData';
+import { renewSessionCredentials } from '@shared/auth/sessionExpired';
+import { supabase } from '@shared/auth/supabaseClient';
+import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';
 
 export type SessionState =
   { status: 'loading' } | { status: 'signed-in'; session: Session } | { status: 'signed-out' };

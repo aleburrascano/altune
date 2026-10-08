@@ -8,7 +8,7 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { showAlert } from '@shared/ui/dialog/dialog';
 import * as webDialog from '@shared/ui/dialog/dialog.web';
 
-import { useOptimisticMutation } from '../useOptimisticMutation';
+import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({
   ...jest.requireActual('@shared/telemetry/userTelemetry'),

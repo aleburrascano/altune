@@ -1,7 +1,7 @@
-import { PROVIDER_STATUSES, parseDiscoveryResult } from './discovery';
-import { discoveryEntityPath } from './ids';
-import { apiFetch, signalInit } from './index';
-import { withQuery } from './queryString';
+import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/api-client/discovery';
+import { discoveryEntityPath } from '@shared/api-client/ids';
+import { apiFetch, signalInit } from '@shared/api-client/index';
+import { withQuery } from '@shared/api-client/queryString';
 import {
   asArray,
   parseArray,
@@ -10,9 +10,13 @@ import {
   asRecord,
   asString,
   member,
-} from './wireDecoders';
+} from '@shared/api-client/wireDecoders';
 
-import type { DiscoveryKind, DiscoveryProviderStatus, DiscoveryResult } from './discovery';
+import type {
+  DiscoveryKind,
+  DiscoveryProviderStatus,
+  DiscoveryResult,
+} from '@shared/api-client/discovery';
 
 export type ContentFetchResponse = {
   items: DiscoveryResult[];

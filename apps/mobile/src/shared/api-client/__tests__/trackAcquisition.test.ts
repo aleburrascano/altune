@@ -1,4 +1,4 @@
-import { expectType, type IsExactlyAssignable, type Not } from '../../../../jest/typeAssertions';
+import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
 import {
   acquisitionOf,
   toFailed,
@@ -6,7 +6,7 @@ import {
   toReady,
   toTrackStatus,
   type TrackStatus,
-} from '../trackAcquisition';
+} from '@shared/api-client/trackAcquisition';
 
 describe('track acquisition transitions (#933)', () => {
   it('builds each state as the whole triple, with failure text only on failed', () => {

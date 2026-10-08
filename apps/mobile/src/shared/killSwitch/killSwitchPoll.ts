@@ -2,7 +2,7 @@ import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { startDeadline } from '@shared/deadline/deadline';
 
-import { applyKillSwitches } from './killSwitch';
+import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
 export const DEFAULT_KILL_SWITCH_URL =
   'https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json';

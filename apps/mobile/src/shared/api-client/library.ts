@@ -1,5 +1,5 @@
-import { apiFetch, signalInit } from './index';
-import { withQuery } from './queryString';
+import { apiFetch, signalInit } from '@shared/api-client/index';
+import { withQuery } from '@shared/api-client/queryString';
 import {
   parseListEnvelope,
   asNumber,
@@ -7,7 +7,7 @@ import {
   asString,
   nullableNumber,
   nullableString,
-} from './wireDecoders';
+} from '@shared/api-client/wireDecoders';
 
 export type LibrarySort = 'recent' | 'az' | 'year';
 

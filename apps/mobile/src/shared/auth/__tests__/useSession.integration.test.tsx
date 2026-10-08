@@ -27,11 +27,11 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { clearDetailHandoffs, detailHref, readDetailHandoff } from '@shared/lib/detail-handoff';
 import type * as PinnedStoreModule from '@shared/offline/pinnedStore';
 
-import { useSession } from '../useSession';
-import { useSignOut } from '../useSignOut';
-import { supabase } from '../supabaseClient';
-import type * as SupabaseClientModule from '../supabaseClient';
-import type * as UseSessionModule from '../useSession';
+import { useSession } from '@shared/auth/useSession';
+import { useSignOut } from '@shared/auth/useSignOut';
+import { supabase } from '@shared/auth/supabaseClient';
+import type * as SupabaseClientModule from '@shared/auth/supabaseClient';
+import type * as UseSessionModule from '@shared/auth/useSession';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
@@ -44,7 +44,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
 
 type AuthCallback = (event: string, session: Session | null) => void;
@@ -236,14 +236,14 @@ describe('session restore across process death', () => {
     });
 
     it('restores the previously written session after the app "restarts" — no re-authentication is asked of the user', async () => {
-      const first = require('../supabaseClient');
+      const first = require('@shared/auth/supabaseClient');
       await first.supabase.auth.getSession();
       await first.supabase.auth._saveSession(seedSession());
       await first.supabase.auth.stopAutoRefresh();
 
       delete require.cache[require.resolve('../supabaseClient')];
 
-      const { useSession } = require('../useSession');
+      const { useSession } = require('@shared/auth/useSession');
       const queryClient = new QueryClient();
       const { result, unmount } = renderHook(() => useSession(), {
         wrapper: makeWrapper(queryClient),
@@ -261,12 +261,12 @@ describe('session restore across process death', () => {
       });
 
       unmount();
-      const second = require('../supabaseClient');
+      const second = require('@shared/auth/supabaseClient');
       await second.supabase.auth.stopAutoRefresh();
     });
 
     it('a device with no previously written session comes back signed-out, not stuck loading', async () => {
-      const { useSession } = require('../useSession');
+      const { useSession } = require('@shared/auth/useSession');
       const queryClient = new QueryClient();
       const { result, unmount } = renderHook(() => useSession(), {
         wrapper: makeWrapper(queryClient),
@@ -277,7 +277,7 @@ describe('session restore across process death', () => {
       });
 
       unmount();
-      const client = require('../supabaseClient');
+      const client = require('@shared/auth/supabaseClient');
       await client.supabase.auth.stopAutoRefresh();
     });
   });
@@ -783,8 +783,8 @@ describe('pinned downloads across a killed sign-out', () => {
     jest.doMock('react', () => React);
     jest.doMock('@tanstack/react-query', () => ReactQuery);
     return {
-      session: require('../useSession'),
-      supabase: (require('../supabaseClient') as typeof SupabaseClientModule).supabase,
+      session: require('@shared/auth/useSession'),
+      supabase: (require('@shared/auth/supabaseClient') as typeof SupabaseClientModule).supabase,
       pinned: require('@shared/offline/pinnedStore'),
       audio: require('@shared/api-client/audio'),
     };

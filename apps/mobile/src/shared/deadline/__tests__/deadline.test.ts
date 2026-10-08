@@ -1,4 +1,4 @@
-import { startDeadline } from '../deadline';
+import { startDeadline } from '@shared/deadline/deadline';
 
 describe('startDeadline', () => {
   beforeEach(() => {

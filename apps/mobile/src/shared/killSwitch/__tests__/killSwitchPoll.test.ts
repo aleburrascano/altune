@@ -1,15 +1,15 @@
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 
-import { isLoopEnabled, setKillSwitchFileStore } from '../killSwitch';
+import { isLoopEnabled, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import {
   DEFAULT_KILL_SWITCH_URL,
   KILL_SWITCH_POLL_MS,
   KILL_SWITCH_TIMEOUT_MS,
   refreshKillSwitches,
   startKillSwitchPolling,
-} from '../killSwitchPoll';
+} from '@shared/killSwitch/killSwitchPoll';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 type AppStateChangeHandler = (state: string) => void;
 

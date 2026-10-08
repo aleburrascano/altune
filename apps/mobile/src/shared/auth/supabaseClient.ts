@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
-import { fetchWithinAuthDeadline } from './authDeadline';
+import { fetchWithinAuthDeadline } from '@shared/auth/authDeadline';
 
 function requiredEnv(value: string | undefined, name: string): string {
   if (value == null || value === '') {

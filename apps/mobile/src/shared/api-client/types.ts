@@ -1,4 +1,4 @@
-import type { PlaylistId, TrackId } from './ids';
+import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 
 export type ApiErrorBody = {
   detail?: string;

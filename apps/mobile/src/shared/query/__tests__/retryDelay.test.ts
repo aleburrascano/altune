@@ -3,7 +3,11 @@ import * as path from 'path';
 
 import fc from 'fast-check';
 
-import { RETRY_BACKOFF_BASE_MS, RETRY_BACKOFF_CAP_MS, retryDelayMs } from '../retryDelay';
+import {
+  RETRY_BACKOFF_BASE_MS,
+  RETRY_BACKOFF_CAP_MS,
+  retryDelayMs,
+} from '@shared/query/retryDelay';
 
 const ATTEMPTS_IN_A_SESSION = [0, 1, 2, 3, 4];
 

@@ -4,17 +4,17 @@ import { renderHook, act } from '@testing-library/react-native';
 
 import { ApiError, NetworkError } from '@shared/errors';
 
-import { useSignOut } from '../useSignOut';
-import { supabase } from '../supabaseClient';
+import { useSignOut } from '@shared/auth/useSignOut';
+import { supabase } from '@shared/auth/supabaseClient';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-jest.mock('../supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },
   clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
-const mockClearPersistedAuthSession = jest.requireMock('../supabaseClient')
+const mockClearPersistedAuthSession = jest.requireMock('@shared/auth/supabaseClient')
   .clearPersistedAuthSession as jest.Mock;
 
 function createWrapper(queryClient: QueryClient) {

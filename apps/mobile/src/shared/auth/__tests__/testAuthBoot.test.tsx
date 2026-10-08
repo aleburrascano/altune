@@ -3,16 +3,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act } from '@testing-library/react-native';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-import { useSession } from '../useSession';
-import { supabase } from '../supabaseClient';
-import { isTestAuthEnabled, testAuthBootSettled } from '../testAuthBoot';
-import type * as TestAuthBootModule from '../testAuthBoot';
+import { useSession } from '@shared/auth/useSession';
+import { supabase } from '@shared/auth/supabaseClient';
+import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';
+import type * as TestAuthBootModule from '@shared/auth/testAuthBoot';
 
-jest.mock('../supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
 }));
 
-jest.mock('../testAuthBoot', () => ({
+jest.mock('@shared/auth/testAuthBoot', () => ({
   isTestAuthEnabled: jest.fn(),
   testAuthBootSettled: jest.fn(),
 }));

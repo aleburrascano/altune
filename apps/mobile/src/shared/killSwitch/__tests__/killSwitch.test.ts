@@ -9,7 +9,7 @@ import {
   isLoopEnabled,
   onKillSwitchChange,
   setKillSwitchFileStore,
-} from '../killSwitch';
+} from '@shared/killSwitch/killSwitch';
 
 const SWITCH_URI = 'memory://document/kill-switch/switches.json';
 

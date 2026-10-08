@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
-import { apiSend } from './index';
-import { asNumber, asRecord, asString } from './wireDecoders';
+import { apiSend } from '@shared/api-client/index';
+import { asNumber, asRecord, asString } from '@shared/api-client/wireDecoders';
 
 export type ReportKind = 'bug' | 'idea' | 'confusing';
 

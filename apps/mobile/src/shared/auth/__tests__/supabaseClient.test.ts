@@ -78,7 +78,7 @@ function freshModules(): {
     return originalDelete(...args);
   };
 
-  require('../supabaseClient');
+  require('@shared/auth/supabaseClient');
   const options = capturedOptions as CapturedAuthOptions | undefined;
   if (!options) throw new Error('createClient was never called — construction did not happen');
 
@@ -275,7 +275,7 @@ function webStorageUnder(
       const globalWithWindow = global as unknown as { window?: unknown };
       const originalWindow = globalWithWindow.window;
       delete globalWithWindow.window;
-      require('../supabaseClient');
+      require('@shared/auth/supabaseClient');
       globalWithWindow.window = originalWindow;
       backing = installWorkingLocalStorage();
       return;
@@ -287,12 +287,12 @@ function webStorageUnder(
         configurable: true,
         enumerable: true,
       });
-      require('../supabaseClient');
+      require('@shared/auth/supabaseClient');
       backing = installWorkingLocalStorage();
       return;
     }
     backing = installWorkingLocalStorage(existingBacking);
-    require('../supabaseClient');
+    require('@shared/auth/supabaseClient');
   });
 
   const options = capturedOptions as CapturedAuthOptions | undefined;
@@ -462,7 +462,7 @@ describe('clearPersistedAuthSession() — the sign-out guarantee independent of 
       const RN = require('react-native') as { Platform: { OS: string } };
       RN.Platform.OS = 'web';
       installWorkingLocalStorage(sameBrowserProfile);
-      ({ clearPersistedAuthSession } = require('../supabaseClient') as {
+      ({ clearPersistedAuthSession } = require('@shared/auth/supabaseClient') as {
         clearPersistedAuthSession: () => Promise<void>;
       });
     });
@@ -476,7 +476,7 @@ describe('clearPersistedAuthSession() — the sign-out guarantee independent of 
     const { SecureStore, calls } = freshModules();
     await SecureStore.__secureStore.seed('sb-fixture-auth-token', TOKEN_SHAPED_SESSION);
 
-    const { clearPersistedAuthSession } = require('../supabaseClient') as {
+    const { clearPersistedAuthSession } = require('@shared/auth/supabaseClient') as {
       clearPersistedAuthSession: () => Promise<void>;
     };
     await clearPersistedAuthSession();
@@ -509,10 +509,10 @@ describe('the wired real client — a session written by sign-in is readable aft
       RN.Platform.OS = 'web';
       installWorkingLocalStorage(sameBrowserProfile);
       ({ supabase: realSupabase } =
-        require('../supabaseClient') as typeof realSupabase extends never
+        require('@shared/auth/supabaseClient') as typeof realSupabase extends never
           ? never
           : { supabase: typeof realSupabase });
-      ({ useSession: useRealSession } = require('../useSession') as {
+      ({ useSession: useRealSession } = require('@shared/auth/useSession') as {
         useSession: typeof useRealSession;
       });
     });
@@ -644,7 +644,7 @@ describe('required configuration', () => {
       jest.resetModules();
       unset();
 
-      expect(() => require('../supabaseClient')).toThrow(name);
+      expect(() => require('@shared/auth/supabaseClient')).toThrow(name);
     });
 
     it.each([
@@ -657,7 +657,7 @@ describe('required configuration', () => {
       jest.resetModules();
       blank();
 
-      expect(() => require('../supabaseClient')).toThrow(name);
+      expect(() => require('@shared/auth/supabaseClient')).toThrow(name);
     });
 
     it('constructs without throwing when both variables are present', () => {
@@ -665,8 +665,8 @@ describe('required configuration', () => {
       process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://fixture.supabase.co';
       process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'fixture-anon-key';
 
-      expect(() => require('../supabaseClient')).not.toThrow();
-      const { supabase } = require('../supabaseClient') as { supabase: unknown };
+      expect(() => require('@shared/auth/supabaseClient')).not.toThrow();
+      const { supabase } = require('@shared/auth/supabaseClient') as { supabase: unknown };
       expect(supabase).toBeDefined();
     });
   });

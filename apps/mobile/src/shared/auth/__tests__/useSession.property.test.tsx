@@ -6,10 +6,10 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
-import { useSession } from '../useSession';
-import { supabase } from '../supabaseClient';
+import { useSession } from '@shared/auth/useSession';
+import { supabase } from '@shared/auth/supabaseClient';
 
-jest.mock('../supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
 }));
 

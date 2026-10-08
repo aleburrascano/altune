@@ -7,15 +7,19 @@ import {
   removeTracksFromPlaylist,
   renamePlaylist,
   type PlaylistPage,
-} from '../playlists';
-import { apiBase } from '../index';
+} from '@shared/api-client/playlists';
+import { apiBase } from '@shared/api-client/index';
 import { ApiError, ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/api-client/ids';
-import type { PlaylistId } from '../ids';
-import type { PlaylistDetailResponse, PlaylistResponse, TrackResponse } from '../types';
+import type { PlaylistId } from '@shared/api-client/ids';
+import type {
+  PlaylistDetailResponse,
+  PlaylistResponse,
+  TrackResponse,
+} from '@shared/api-client/types';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

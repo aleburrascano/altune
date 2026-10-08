@@ -1,8 +1,12 @@
 import { Platform } from 'react-native';
-import { supabase } from '../auth/supabaseClient';
-import { withinAuthDeadline } from '../auth/authDeadline';
-import { markSessionExpired, stampCredentials, type CredentialStamp } from '../auth/sessionExpired';
-import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
+import { supabase } from '@shared/auth/supabaseClient';
+import { withinAuthDeadline } from '@shared/auth/authDeadline';
+import {
+  markSessionExpired,
+  stampCredentials,
+  type CredentialStamp,
+} from '@shared/auth/sessionExpired';
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
 import { startDeadline } from '@shared/deadline/deadline';
 import type { Deadline } from '@shared/deadline/deadline';
 import {
@@ -13,13 +17,13 @@ import {
   isAbort,
   isSessionFetchFailure,
 } from '@shared/errors';
-import { parseErrorBody } from './wireDecoders';
-import { apiBase, REQUEST_TIMEOUT_MS } from './config';
+import { parseErrorBody } from '@shared/api-client/wireDecoders';
+import { apiBase, REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 
 export { ApiError, NetworkError, ContractError } from '@shared/errors';
 export type { NetworkFailure } from '@shared/errors';
 
-export { apiBase, REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from './config';
+export { apiBase, REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 
 declare global {
   interface RequestInit {

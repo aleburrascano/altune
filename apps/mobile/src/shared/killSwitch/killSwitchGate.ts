@@ -1,6 +1,10 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
-import { isLoopEnabled, onKillSwitchChange, type KillSwitchLoop } from './killSwitch';
+import {
+  isLoopEnabled,
+  onKillSwitchChange,
+  type KillSwitchLoop,
+} from '@shared/killSwitch/killSwitch';
 
 export function useLoopEnabled(loop: KillSwitchLoop): boolean {
   const subscribe = useCallback(

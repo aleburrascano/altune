@@ -6,16 +6,16 @@ import {
   recoverAudio,
   fetchAudioUrls,
   isAudioPrefetchEnabled,
-} from '../audio';
-import { apiBase, ApiError, NetworkError } from '../index';
-import { CORRELATION_HEADER } from '../correlationId';
+} from '@shared/api-client/audio';
+import { apiBase, ApiError, NetworkError } from '@shared/api-client/index';
+import { CORRELATION_HEADER } from '@shared/api-client/correlationId';
 import { ContractError } from '@shared/errors';
-import { asTrackId, type TrackId } from '../ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { supabase } from '@shared/auth/supabaseClient';
 import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -196,7 +196,7 @@ describe('recoverAudio', () => {
 describe('fetchAudioUrls', () => {
   it('starts with the prefetch switch on before any server reply', () => {
     jest.isolateModules(() => {
-      expect(require('../audio').isAudioPrefetchEnabled()).toBe(true);
+      expect(require('@shared/api-client/audio').isAudioPrefetchEnabled()).toBe(true);
     });
   });
 
@@ -533,7 +533,7 @@ describe('token lookup deadline', () => {
 });
 
 describe('stale session', () => {
-  const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
+  const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
   function switchAccounts(): void {
     runSignOutCleanups();

@@ -1,4 +1,4 @@
-import type * as ApiClient from '../index';
+import type * as ApiClient from '@shared/api-client/index';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -15,7 +15,7 @@ function loadApiBase(value: string | undefined, dev: boolean): string {
   (globalThis as unknown as DevGlobal).__DEV__ = dev;
   let apiBase = '';
   jest.isolateModules(() => {
-    apiBase = (require('../index') as typeof ApiClient).apiBase;
+    apiBase = (require('@shared/api-client/index') as typeof ApiClient).apiBase;
   });
   return apiBase;
 }
