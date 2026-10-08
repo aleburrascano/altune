@@ -2,7 +2,6 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
-import { setSearchState } from '@features/discover/searchState';
 import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
 import { isSearchableQuery } from '@features/discover/searchLimits';
@@ -107,10 +106,6 @@ export function useDiscoverLogic(): DiscoverLogic {
   const trimmedInput = search.inputValue.trim();
   const isSearchPending = isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
-
-  useEffect(() => {
-    setSearchState(search.committedQuery, search.inputValue);
-  }, [search.committedQuery, search.inputValue]);
 
   const searchId =
     searchData === undefined ? undefined : (searchData.search_id ?? searchData.query);
