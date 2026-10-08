@@ -13,7 +13,7 @@ import type { TextTone } from '@shared/ui/primitives/Text';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
 export type ButtonProps = {
-  action?: string;
+  action: string;
   trackId?: string;
   label: string;
   onPress: () => void;

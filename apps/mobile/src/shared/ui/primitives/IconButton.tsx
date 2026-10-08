@@ -5,7 +5,7 @@ import { useTheme } from '@shared/ui/theme/useTheme';
 import { recordTap } from '@shared/ui/primitives/recordTap';
 
 export type IconButtonProps = {
-  action?: string;
+  action: string;
   trackId?: string | undefined;
   icon: ComponentType<{ size?: number; color?: string }>;
   onPress: () => void;

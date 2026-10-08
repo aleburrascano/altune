@@ -18,9 +18,9 @@ type ChipBase = {
 
 export type ChipProps =
   | (ChipBase & { onPress?: undefined; action?: undefined; trackId?: undefined })
-  | (ChipBase & { onPress: () => void; action?: string; trackId?: string });
+  | (ChipBase & { onPress: () => void; action: string; trackId?: string });
 
-type PressableChipProps = ChipBase & { onPress: () => void; action?: string; trackId?: string };
+type PressableChipProps = ChipBase & { onPress: () => void; action: string; trackId?: string };
 
 const bodyStyle = {
   flexDirection: 'row',

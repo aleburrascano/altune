@@ -1,9 +1,6 @@
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
-export function recordTap(action: string | undefined, trackId: string | undefined): void {
-  if (action === undefined) {
-    return;
-  }
+export function recordTap(action: string, trackId: string | undefined): void {
   recordUserAction({
     action,
     outcome: 'tapped',
