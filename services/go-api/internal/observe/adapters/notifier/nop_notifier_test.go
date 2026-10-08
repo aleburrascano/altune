@@ -1,13 +1,12 @@
 package notifier
 
 import (
+	"altune/go-api/internal/observe/domain"
 	"bytes"
 	"context"
 	"log/slog"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/observe/domain"
 )
 
 func TestNopNotifier(t *testing.T) {

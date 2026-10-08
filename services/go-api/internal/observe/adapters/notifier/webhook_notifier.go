@@ -30,16 +30,24 @@ type webhookPayload struct {
 	Severity int    `json:"severity"`
 }
 
-func (n *WebhookNotifier) Notify(ctx context.Context, a domain.Alert) error {
+func (n *WebhookNotifier) buildRequest(ctx context.Context, a domain.Alert) (*http.Request, error) {
 	body, err := json.Marshal(webhookPayload{Title: a.Title, Message: a.Message, Severity: int(a.Severity)})
 	if err != nil {
-		return fmt.Errorf("encode alert: %w", err)
+		return nil, fmt.Errorf("encode alert: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build alert request: %w", withoutURL(err))
+		return nil, fmt.Errorf("build alert request: %w", withoutURL(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
+	return req, nil
+}
+
+func (n *WebhookNotifier) Notify(ctx context.Context, a domain.Alert) error {
+	req, err := n.buildRequest(ctx, a)
+	if err != nil {
+		return err
+	}
 	resp, err := n.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("post alert: %w", withoutURL(err))

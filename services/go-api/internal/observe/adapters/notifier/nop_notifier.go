@@ -1,10 +1,9 @@
 package notifier
 
 import (
+	"altune/go-api/internal/observe/domain"
 	"context"
 	"log/slog"
-
-	"altune/go-api/internal/observe/domain"
 )
 
 type NopNotifier struct{}
