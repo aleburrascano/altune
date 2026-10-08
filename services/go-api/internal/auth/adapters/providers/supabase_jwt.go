@@ -152,6 +152,10 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (auth
 		return authdomain.VerifiedToken{}, err
 	}
 
+	return v.verifyClaims(ctx, token)
+}
+
+func (v *SupabaseJWTVerifier) verifyClaims(ctx context.Context, token jwt.Token) (authdomain.VerifiedToken, error) {
 	if err := checkLifetime(token); err != nil {
 		return authdomain.VerifiedToken{}, err
 	}

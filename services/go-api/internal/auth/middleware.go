@@ -39,37 +39,17 @@ func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
 }
 
 func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {
-	rej := rejecter{metrics: metrics}
+	a := authenticator{verifier: verifier, throttle: throttle, rej: rejecter{metrics: metrics}}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				rej.rejectToken(w, r, domain.ReasonMissing, "missing authorization header", nil)
-				return
-			}
-
-			token, ok := bearerToken(authHeader)
+			token, ok := a.bearer(w, r)
 			if !ok {
-				rej.rejectToken(w, r, domain.ReasonMalformed, "malformed authorization header", nil)
 				return
 			}
-
-			attempt, retryAfter, admitted := throttle.admit(clientKey(r))
-			if !admitted {
-				rej.rejectThrottled(w, r, retryAfter)
+			verified, ok := a.verify(w, r, token)
+			if !ok {
 				return
 			}
-
-			verified, err := verifier.Verify(r.Context(), token)
-			if err != nil {
-				rej.rejectFailedVerification(w, r, err)
-				return
-			}
-			if verified.ExpiresAt.IsZero() {
-				rej.rejectToken(w, r, domain.ReasonClaimMissingEXP, "invalid token", nil)
-				return
-			}
-			attempt.succeeded()
 
 			slog.DebugContext(r.Context(), "auth.verified",
 				"user_id", verified.UserID.String(),
@@ -79,6 +59,45 @@ func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics
 			next.ServeHTTP(w, r.WithContext(contextFor(r.Context(), verified)))
 		})
 	}
+}
+
+type authenticator struct {
+	verifier ports.TokenVerifier
+	throttle *failureThrottle
+	rej      rejecter
+}
+
+func (a authenticator) bearer(w http.ResponseWriter, r *http.Request) (string, bool) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		a.rej.rejectToken(w, r, domain.ReasonMissing, "missing authorization header", nil)
+		return "", false
+	}
+	token, ok := bearerToken(authHeader)
+	if !ok {
+		a.rej.rejectToken(w, r, domain.ReasonMalformed, "malformed authorization header", nil)
+		return "", false
+	}
+	return token, true
+}
+
+func (a authenticator) verify(w http.ResponseWriter, r *http.Request, token string) (domain.VerifiedToken, bool) {
+	attempt, retryAfter, admitted := a.throttle.admit(clientKey(r))
+	if !admitted {
+		a.rej.rejectThrottled(w, r, retryAfter)
+		return domain.VerifiedToken{}, false
+	}
+	verified, err := a.verifier.Verify(r.Context(), token)
+	if err != nil {
+		a.rej.rejectFailedVerification(w, r, err)
+		return domain.VerifiedToken{}, false
+	}
+	if verified.ExpiresAt.IsZero() {
+		a.rej.rejectToken(w, r, domain.ReasonClaimMissingEXP, "invalid token", nil)
+		return domain.VerifiedToken{}, false
+	}
+	attempt.succeeded()
+	return verified, true
 }
 
 func contextFor(ctx context.Context, t domain.VerifiedToken) context.Context {
