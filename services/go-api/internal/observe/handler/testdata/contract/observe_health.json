@@ -9,7 +9,7 @@
     "redis_error": "redis refused",
     "auth_latency_ms": 0,
     "auth_error": "jwks refused",
-    "checked_at": "2026-10-08T14:03:57.198781479Z"
+    "checked_at": "2026-10-08T15:06:17.476098428Z"
   },
   "goroutines": 2,
   "heap_mb": 0

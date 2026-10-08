@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "paused": false,
+  "state": "ok",
+  "score": 0.9,
+  "baseline": 0.8,
+  "last_run": "2026-10-08T15:06:17.476503337Z",
+  "queries": [
+    {
+      "query": "q",
+      "expect": "e",
+      "passed": true,
+      "position": 1
+    }
+  ]
+}
+
