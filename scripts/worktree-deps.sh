@@ -38,6 +38,8 @@ find_node22_bin() {
 
 node_modules_matches_lockfile() { (cd "$1" && npm ls --depth=0) >/dev/null 2>&1; }
 
+lockfile_same_as_main() { cmp -s "$1/package-lock.json" "$main_tree/$1/package-lock.json"; }
+
 symlink_shared_node_modules() {
   rm -rf "$1/node_modules"
   ln -s "$main_tree/$1/node_modules" "$1/node_modules"
@@ -60,11 +62,13 @@ for dir in "$@"; do
     log "$dir: node_modules already complete"
     continue
   fi
-  if [ -n "$main_tree" ] && [ -d "$main_tree/$dir/node_modules" ] && node_modules_matches_lockfile "$main_tree/$dir"; then
+  if [ -n "$main_tree" ] && [ -d "$main_tree/$dir/node_modules" ] && lockfile_same_as_main "$dir" \
+    && node_modules_matches_lockfile "$main_tree/$dir"; then
     log "$dir: borrowing node_modules from $main_tree/$dir"
     symlink_shared_node_modules "$dir"
     continue
   fi
+  [ -L "$dir/node_modules" ] && rm "$dir/node_modules"
   log "$dir: running npm ci --ignore-scripts"
   if ! (cd "$dir" && npm ci --ignore-scripts) 1>&2; then
     log "$dir: npm ci failed"

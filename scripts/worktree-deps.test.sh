@@ -82,6 +82,27 @@ check 0 "runs npm ci when the main checkout's node_modules is present but stale"
 unset STUB_NPM_CI_EXIT
 rm -rf "$main/node_modules"
 
+rm -rf "$wt/node_modules" "$main/node_modules"
+mkdir -p "$main/node_modules" && : >"$main/node_modules/.complete"
+echo '{"added":"dep"}' >"$wt/package-lock.json"
+export STUB_NPM_CI_EXIT=0
+run .
+check 0 "runs npm ci when the worktree's lockfile differs from the main checkout's"
+[ -f "$wt/node_modules/.complete" ] && [ ! -L "$wt/node_modules" ] \
+  || { echo "FAIL a lockfile that differs from main should trigger npm ci, not a symlink"; fail=1; }
+
+rm -rf "$wt/node_modules"
+ln -s "$main/node_modules" "$wt/node_modules"
+rm -f "$main/node_modules/.complete"
+run .
+check 0 "replaces a stale borrowed symlink when the lockfile differs"
+[ -f "$wt/node_modules/.complete" ] && [ ! -L "$wt/node_modules" ] \
+  || { echo "FAIL a stale borrowed symlink should be replaced by a real node_modules"; fail=1; }
+[ -d "$main/node_modules" ] || { echo "FAIL replacing the symlink must leave the main checkout's node_modules"; fail=1; }
+unset STUB_NPM_CI_EXIT
+git -C "$wt" checkout -q -- package-lock.json
+rm -rf "$main/node_modules"
+
 rm -rf "$wt/node_modules"
 export STUB_NPM_CI_EXIT=0
 run .
