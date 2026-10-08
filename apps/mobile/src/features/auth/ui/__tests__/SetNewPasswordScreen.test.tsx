@@ -11,7 +11,7 @@ let mockState: unknown = { kind: 'idle' };
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
-jest.mock('@features/auth/recoveryUnlock', () => ({ clearRecoveryUnlock: jest.fn() }));
+jest.mock('@features/auth/domain/recoveryUnlock', () => ({ clearRecoveryUnlock: jest.fn() }));
 jest.mock('@features/auth/hooks/useUpdatePassword', () => ({
   useUpdatePassword: () => ({ state: mockState, updatePassword: mockUpdatePassword }),
 }));

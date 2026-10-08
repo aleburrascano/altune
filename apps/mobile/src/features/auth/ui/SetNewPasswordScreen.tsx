@@ -8,8 +8,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '@features/auth/hooks/useUpdatePassword';
-import { clearRecoveryUnlock } from '@features/auth/recoveryUnlock';
-import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/auth/validation';
+import { clearRecoveryUnlock } from '@features/auth/domain/recoveryUnlock';
+import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/auth/domain/validation';
 import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
 import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
 import { FieldError } from '@features/auth/ui/FieldError';

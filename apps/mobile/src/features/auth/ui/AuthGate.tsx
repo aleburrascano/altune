@@ -6,7 +6,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 
 import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
-import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/resetPasswordRoute';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/domain/resetPasswordRouteSegment';
 
 import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 import { InvalidRecoveryLinkNotice } from '@features/auth/ui/InvalidRecoveryLinkNotice';

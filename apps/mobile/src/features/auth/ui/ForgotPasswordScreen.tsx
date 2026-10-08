@@ -8,7 +8,7 @@ import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
 import { useResetPassword } from '@features/auth/hooks/useResetPassword';
-import { isValidEmail } from '@features/auth/validation';
+import { isValidEmail } from '@features/auth/domain/validation';
 import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
 import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
 import { FieldError } from '@features/auth/ui/FieldError';

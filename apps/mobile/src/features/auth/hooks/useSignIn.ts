@@ -1,14 +1,14 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { lockoutOnRepeatedFailure } from '@features/auth/attemptLockout';
-import type { SignInFailureReason } from '@features/auth/errorReason';
+import { lockoutOnRepeatedFailure } from '@features/auth/domain/attemptLockout';
+import type { SignInFailureReason } from '@features/auth/domain/errorReason';
 import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
 import {
   isInvalidCredentialsError,
   classifyAuthError,
   isUnconfirmedEmailError,
   type SupabaseAuthErrorLike,
-} from '@features/auth/supabaseAuthError';
+} from '@features/auth/domain/supabaseAuthError';
 
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 

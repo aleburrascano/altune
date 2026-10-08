@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { OAuthOutcome, OAuthProvider, OAuthResult } from '@features/auth/oauthResult';
+import type { OAuthOutcome, OAuthProvider, OAuthResult } from '@features/auth/domain/oauthResult';
 
 type Run = (provider: OAuthProvider) => Promise<OAuthOutcome | null>;
 

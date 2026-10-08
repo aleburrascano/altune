@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useOAuth } from '@features/auth/hooks/useOAuth';
 import { useSignUp } from '@features/auth/hooks/useSignUp';
 import { SignUpScreen } from '@features/auth/ui/SignUpScreen';
-import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/validation';
+import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/domain/validation';
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');

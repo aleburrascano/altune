@@ -1,4 +1,4 @@
-import { LOCKOUT_AFTER_FAILURES } from '@features/auth/attemptLockout';
+import { LOCKOUT_AFTER_FAILURES } from '@features/auth/domain/attemptLockout';
 import { useSignIn } from '@features/auth/hooks/useSignIn';
 
 import {

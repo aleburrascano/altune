@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 
 import { TextField } from '@shared/ui/primitives/TextField';
 
-import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/validation';
+import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/domain/validation';
 import { FieldError } from '@features/auth/ui/FieldError';
 import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
 

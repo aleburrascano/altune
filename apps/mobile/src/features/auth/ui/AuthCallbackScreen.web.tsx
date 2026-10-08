@@ -9,9 +9,9 @@ import {
   type AuthIntentResult,
   type AuthRouter,
   completeAuthIntent,
-} from '@features/auth/completeAuthIntent';
-import { thrownErrorDetail } from '@features/auth/errorDetail';
-import { type AuthLinkIntent, parseAuthLink } from '@features/auth/parseAuthLink';
+} from '@features/auth/domain/completeAuthIntent';
+import { thrownErrorDetail } from '@features/auth/domain/errorDetail';
+import { type AuthLinkIntent, parseAuthLink } from '@features/auth/domain/parseAuthLink';
 
 import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
 import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';

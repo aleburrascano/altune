@@ -4,11 +4,11 @@ import { join } from 'path';
 import { Platform } from 'react-native';
 
 import appJson from '@/../app.json';
-import { completeAuthIntent } from '@features/auth/completeAuthIntent';
-import type * as AuthRedirectModule from '@features/auth/authRedirect';
-import { authRedirectUrl } from '@features/auth/authRedirect';
-import type * as ParseAuthLinkModule from '@features/auth/parseAuthLink';
-import { parseAuthLink } from '@features/auth/parseAuthLink';
+import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
+import type * as AuthRedirectModule from '@features/auth/domain/authRedirect';
+import { authRedirectUrl } from '@features/auth/domain/authRedirect';
+import type * as ParseAuthLinkModule from '@features/auth/domain/parseAuthLink';
+import { parseAuthLink } from '@features/auth/domain/parseAuthLink';
 
 jest.mock('@shared/device/webOrigin', () => ({
   webOrigin: (): string | null =>
@@ -26,8 +26,8 @@ function loadWithExpoScheme(scheme: unknown): LoadedModules {
     default: { expoConfig: scheme === undefined ? {} : { scheme } },
   }));
   return {
-    ...(require('@features/auth/authRedirect') as typeof AuthRedirectModule),
-    ...(require('@features/auth/parseAuthLink') as typeof ParseAuthLinkModule),
+    ...(require('@features/auth/domain/authRedirect') as typeof AuthRedirectModule),
+    ...(require('@features/auth/domain/parseAuthLink') as typeof ParseAuthLinkModule),
   };
 }
 
@@ -391,8 +391,8 @@ describe('parseAuthLink reads its scheme and web origin through the device port'
       webOrigin: () => 'https://port.example',
     }));
     const loaded = {
-      ...(require('@features/auth/authRedirect') as typeof AuthRedirectModule),
-      ...(require('@features/auth/parseAuthLink') as typeof ParseAuthLinkModule),
+      ...(require('@features/auth/domain/authRedirect') as typeof AuthRedirectModule),
+      ...(require('@features/auth/domain/parseAuthLink') as typeof ParseAuthLinkModule),
     };
 
     expect(loaded.authRedirectUrl('callback')).toBe('https://port.example/auth/callback');
@@ -406,7 +406,7 @@ describe('parseAuthLink reads its scheme and web origin through the device port'
 
 describe.each(['parseAuthLink.ts', 'completeAuthIntent.ts'])('%s is platform-free', (file) => {
   it('imports no expo or react-native module', () => {
-    const source = readFileSync(join(__dirname, '..', file), 'utf8');
+    const source = readFileSync(join(__dirname, '..', 'domain', file), 'utf8');
     const specifiers = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1] ?? '');
 
     expect(specifiers.filter((s) => /^(expo|react-native)/.test(s))).toEqual([]);

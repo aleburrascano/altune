@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import { NETWORK_ERROR_COPY } from '@features/auth/errorReason';
+import { NETWORK_ERROR_COPY } from '@features/auth/domain/errorReason';
 import { useOAuth } from '@features/auth/hooks/useOAuth';
 import { OAuthButtons } from '@features/auth/ui/OAuthButtons';
 
