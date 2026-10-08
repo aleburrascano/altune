@@ -1,4 +1,4 @@
-import { resultKey } from '@features/discover/resultKey';
+import { resultKey } from '@features/discover/domain/resultKey';
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 describe('resultKey builds a stable key with source-aware fallbacks', () => {

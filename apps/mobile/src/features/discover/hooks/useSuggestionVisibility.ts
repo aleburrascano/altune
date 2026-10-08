@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 
-import { isSearchableQuery } from '@features/discover/searchLimits';
+import { isSearchableQuery } from '@features/discover/domain/searchLimits';
 
 type SearchInput = {
   inputValue: string;

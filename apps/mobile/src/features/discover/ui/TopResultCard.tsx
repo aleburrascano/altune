@@ -5,7 +5,7 @@ import { Card, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
 import { SectionLabel } from '@features/discover/ui/SectionLabel';
-import { kindLabel } from '@features/discover/kindLabel';
+import { kindLabel } from '@features/discover/domain/kindLabel';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 

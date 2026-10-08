@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
-import { isSearchableQuery } from '@features/discover/searchLimits';
+import { isSearchableQuery } from '@features/discover/domain/searchLimits';
 import {
   SEARCH_DEBOUNCE_MS,
   useAutocompleteSuggestions,
@@ -23,13 +23,13 @@ import {
   correctionForResponse,
   resultsIncompleteForState,
   viewForState,
-} from '@features/discover/discoverView';
+} from '@features/discover/domain/discoverView';
 import type {
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, SearchCorrection } from '@features/discover/discoverView';
+import type { DiscoverView, SearchCorrection } from '@features/discover/domain/discoverView';
 import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
 
 export type ResultsSlice = {

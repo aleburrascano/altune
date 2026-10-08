@@ -15,7 +15,7 @@ import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
-} from '@features/discover/searchLimits';
+} from '@features/discover/domain/searchLimits';
 import type { SearchPageParam, SearchPages } from '@features/discover/hooks/searchPages';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';

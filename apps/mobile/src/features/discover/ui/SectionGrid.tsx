@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } f
 import { Card, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
-import { kindLabel } from '@features/discover/kindLabel';
-import { resultKey } from '@features/discover/resultKey';
+import { kindLabel } from '@features/discover/domain/kindLabel';
+import { resultKey } from '@features/discover/domain/resultKey';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';

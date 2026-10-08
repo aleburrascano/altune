@@ -7,10 +7,12 @@ const IMPORT_STATEMENT = /^\s*(import|export)\s+(type\s+)?([^;]*?\s+from\s+)?['"
 const FORBIDDEN_VALUE_SOURCE =
   /^(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
 
+const DISCOVER_DOMAIN_FILE_COUNT = 8;
+
 const ROOT_FILE_CEILING: Record<string, number> = {
   auth: 12,
   detail: 13,
-  discover: 8,
+  discover: 0,
   library: 7,
   playback: 21,
   settings: 7,
@@ -75,6 +77,12 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     },
   );
 
+  it('covers all 8 discover domain files', () => {
+    expect(files.filter(({ feature }) => feature === 'discover')).toHaveLength(
+      DISCOVER_DOMAIN_FILE_COUNT,
+    );
+  });
+
   it('adds no cases and does not throw for a feature with no domain/ folder', () => {
     const root = mkdtempSync(join(tmpdir(), 'features-'));
     mkdirSync(join(root, 'bare'));
@@ -106,8 +114,8 @@ describe('feature root-file ratchet — loose root files may only go down', () =
     expect(ratchetProblem(feature, rootFileCount(feature), ceiling)).toBeNull();
   });
 
-  it("reports discover at 8 on today's tree", () => {
-    expect(rootFileCount('discover')).toBe(8);
+  it("reports discover at 0 on today's tree", () => {
+    expect(rootFileCount('discover')).toBe(0);
   });
 
   it('fails a count of ceiling+1 and asks to lower the ceiling when the count drops', () => {

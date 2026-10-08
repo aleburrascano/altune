@@ -4,7 +4,7 @@ import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
-import { sliceCodePoints } from '@features/discover/searchLimits';
+import { sliceCodePoints } from '@features/discover/domain/searchLimits';
 import { SectionLabel } from '@features/discover/ui/SectionLabel';
 import type { SearchHistoryItem } from '@shared/api-client/discovery';
 

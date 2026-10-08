@@ -6,8 +6,8 @@ import { Text, spacing } from '@shared/ui';
 import { CorrectionBanner } from '@features/discover/ui/CorrectionBanner';
 import { DiscoverRow } from '@features/discover/ui/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discover/ui/ResultsList';
-import { kindLabel } from '@features/discover/kindLabel';
-import { resultKey } from '@features/discover/resultKey';
+import { kindLabel } from '@features/discover/domain/kindLabel';
+import { resultKey } from '@features/discover/domain/resultKey';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
 

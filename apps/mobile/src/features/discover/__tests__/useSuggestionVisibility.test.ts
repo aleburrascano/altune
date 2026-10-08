@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { MIN_QUERY_LENGTH } from '@features/discover/searchLimits';
+import { MIN_QUERY_LENGTH } from '@features/discover/domain/searchLimits';
 import { useSuggestionVisibility } from '@features/discover/hooks/useSuggestionVisibility';
 
 describe('useSuggestionVisibility shows suggestions only while the user is typing', () => {

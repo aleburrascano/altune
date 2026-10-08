@@ -3,7 +3,7 @@ import { useCallback, useRef } from 'react';
 import { useNavigator, useScreenFocusEffect } from '@shared/navigation';
 import { dismissKeyboard } from '@shared/ui/keyboard/keyboard';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
-import { stashHandoffForDetail } from '@features/discover/handoff';
+import { stashHandoffForDetail } from '@features/discover/domain/handoff';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 export type ResultTapHandler = (tapped: DiscoveryResult, position: number) => void;

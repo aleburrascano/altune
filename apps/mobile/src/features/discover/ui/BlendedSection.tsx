@@ -9,8 +9,8 @@ import { SectionLabel } from '@features/discover/ui/SectionLabel';
 import { SectionGrid, useGridColumns } from '@features/discover/ui/SectionGrid';
 import { SeeAllLink } from '@features/discover/ui/SeeAllLink';
 import { TopResultCard } from '@features/discover/ui/TopResultCard';
-import { kindLabel } from '@features/discover/kindLabel';
-import { resultKey } from '@features/discover/resultKey';
+import { kindLabel } from '@features/discover/domain/kindLabel';
+import { resultKey } from '@features/discover/domain/resultKey';
 
 import type { ResultTapHandler } from '@features/discover/hooks/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
