@@ -51,19 +51,28 @@ interface DiscoverBodyProps {
   history: HistoryProps;
 }
 
-function commonFor({ results, pagination }: DiscoverBodyProps): ResultsCommonProps {
+function paginationCommon(pagination: PaginationProps) {
+  return {
+    onEndReached: pagination.onEndReached,
+    isFetchingNextPage: pagination.isFetchingNextPage,
+    nextPageFailed: pagination.nextPageFailed,
+    onRetryNextPage: pagination.onRetryNextPage,
+  };
+}
+
+function resultsCommon(results: ResultsProps) {
   return {
     onResultTap: results.onResultTap,
     impression: results.impression,
     onRefresh: results.onRefresh,
     isRefreshing: results.isRefreshing,
-    onEndReached: pagination.onEndReached,
-    isFetchingNextPage: pagination.isFetchingNextPage,
-    nextPageFailed: pagination.nextPageFailed,
-    onRetryNextPage: pagination.onRetryNextPage,
     correction: results.correction,
     onSearchOriginal: results.onSearchOriginal,
   };
+}
+
+function commonFor({ results, pagination }: DiscoverBodyProps): ResultsCommonProps {
+  return { ...resultsCommon(results), ...paginationCommon(pagination) };
 }
 
 function slotsFor(props: DiscoverBodyProps): SlotBuilders {
