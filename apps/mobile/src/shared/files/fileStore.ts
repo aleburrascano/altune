@@ -33,6 +33,12 @@ export type FileStoreSlot = {
   ensureDir(name: string): StoredDirectory;
 };
 
+function ensureDirectory(store: FileStore, name: string): StoredDirectory {
+  const dir = store.openDirectory(name);
+  if (!dir.exists) dir.create();
+  return dir;
+}
+
 export function createFileStoreSlot(defaultStore: FileStore): FileStoreSlot {
   let store = defaultStore;
   return {
@@ -40,10 +46,6 @@ export function createFileStoreSlot(defaultStore: FileStore): FileStoreSlot {
     set: (next = defaultStore) => {
       store = next;
     },
-    ensureDir: (name) => {
-      const dir = store.openDirectory(name);
-      if (!dir.exists) dir.create();
-      return dir;
-    },
+    ensureDir: (name) => ensureDirectory(store, name),
   };
 }
