@@ -43,9 +43,9 @@ func (a *App) drainServer(timeout time.Duration) {
 	if err == nil {
 		return
 	}
-	slog.Error("server shutdown error", "error", err)
+	slog.ErrorContext(ctx, "server shutdown error", "error", err)
 	if closeErr := a.server.Close(); closeErr != nil {
-		slog.Error("server close error", "error", closeErr)
+		slog.ErrorContext(ctx, "server close error", "error", closeErr)
 	}
 }
 
@@ -93,7 +93,7 @@ func (a *App) shutdownComponent(name componentName, timeout time.Duration, fn fu
 	case <-done:
 		return shutdownOutcome{name: name, status: shutdownCompleted}
 	case <-ctx.Done():
-		slog.Warn("component shutdown exceeded its budget",
+		slog.WarnContext(ctx, "component shutdown exceeded its budget",
 			"component", string(name), "timeout", timeout.String())
 		return shutdownOutcome{name: name, status: shutdownTimedOut}
 	}
@@ -151,19 +151,20 @@ func (a *App) runShutdownSequence() []shutdownOutcome {
 }
 
 func (a *App) runShutdownPlan(plan []componentShutdown) []shutdownOutcome {
+	ctx := context.Background()
 	outcomes := make([]shutdownOutcome, 0, len(plan))
 	completed := make(map[componentName]bool, len(plan))
 	for _, c := range plan {
-		o := a.runPlannedShutdown(c, completed)
+		o := a.runPlannedShutdown(ctx, c, completed)
 		completed[o.name] = o.status == shutdownCompleted
 		outcomes = append(outcomes, o)
 	}
 	return outcomes
 }
 
-func (a *App) runPlannedShutdown(c componentShutdown, completed map[componentName]bool) shutdownOutcome {
+func (a *App) runPlannedShutdown(ctx context.Context, c componentShutdown, completed map[componentName]bool) shutdownOutcome {
 	if c.requires != "" && !completed[c.requires] {
-		slog.Error(c.blockedMsg, "component", string(c.name), "requires", string(c.requires))
+		slog.ErrorContext(ctx, c.blockedMsg, "component", string(c.name), "requires", string(c.requires))
 		return shutdownOutcome{name: c.name, status: shutdownSkipped}
 	}
 	return a.shutdownComponent(c.name, c.timeout, c.shutdown)

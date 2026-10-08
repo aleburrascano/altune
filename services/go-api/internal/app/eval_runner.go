@@ -52,11 +52,11 @@ const (
 	evalLimit    = 10
 )
 
-func (a *App) buildEvalRunner() EvalRunner {
+func (a *App) buildEvalRunner(ctx context.Context) EvalRunner {
 	if !a.cfg.EvalMeterEnabled {
 		return nil
 	}
-	evalSvc := BuildRankingOnlySearchService(a.cfg, a.pool, a.redisClient, nil)
+	evalSvc := BuildRankingOnlySearchService(ctx, a.cfg, a.pool, a.redisClient, nil)
 
 	return func(ctx context.Context) (EvalResult, error) {
 		return runSmokeEval(ctx, evalSvc, evalUserId())

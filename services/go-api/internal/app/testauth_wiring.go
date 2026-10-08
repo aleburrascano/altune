@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/testauth"
 	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared/httputil"
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -25,8 +26,8 @@ type testAuthConfig interface {
 	TestAuthEnabled() bool
 }
 
-func mountTestLogin(r chi.Router, ta *testauth.TestAuth) {
-	slog.Warn("test auth enabled: unauthenticated /test/login is mounted")
+func mountTestLogin(ctx context.Context, r chi.Router, ta *testauth.TestAuth) {
+	slog.WarnContext(ctx, "test auth enabled: unauthenticated /test/login is mounted")
 	r.Post("/test/login", testLoginHandler(ta))
 }
 

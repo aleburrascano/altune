@@ -62,7 +62,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(nil, discoveryWiring{})
+	cat, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("NewQueueState: %v", err)
 	}
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playbackHandler.DefaultQueueStateRateLimit)
+	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playbackHandler.DefaultQueueStateRateLimit)
 
 	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
 		if token == operatorToken {
@@ -138,7 +138,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir(), NowPlayingEnrichmentEnabled: false}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(nil, discoveryWiring{})
+	cat, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	}
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
 	queue := newQueueHandler(
-		newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
+		newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
 		metrics, playbackHandler.DefaultQueueStateRateLimit)
 
 	verifier := authports.VerifierFunc(func(_ context.Context, token string) (authdomain.VerifiedToken, error) {
@@ -195,7 +195,7 @@ func TestWirePlayback_SweepReapsErasedQueueStates(t *testing.T) {
 	pool.Close()
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
 
-	_, err = a.wirePlayback(nil).forgetDeletedIdentities.Execute(context.Background())
+	_, err = a.wirePlayback(t.Context(), nil).forgetDeletedIdentities.Execute(context.Background())
 
 	if err == nil || !strings.Contains(err.Error(), "reap erased queue states") {
 		t.Fatalf("Execute error = %v, want it to carry the reap failure, proving the reaper is wired", err)
@@ -213,7 +213,7 @@ func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
 	}
 	user := shared.NewUserId(uuid.New())
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(&storedQueue{}, nil, metrics, false), metrics, queueRateLimit(cfg))
+	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{}, nil, metrics, false), metrics, queueRateLimit(cfg))
 	routes := queue.Routes()
 
 	var codes []int

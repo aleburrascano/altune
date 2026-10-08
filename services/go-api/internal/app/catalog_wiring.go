@@ -83,12 +83,13 @@ type catalogServicesStaging struct {
 }
 
 func (a *App) wireCatalog(
+	ctx context.Context,
 	tap *eventtap.Tap,
 	disc discoveryWiring,
 ) (catalogWiring, error) {
 	acqService.SweepStaleTempDirs(tempfs.New())
 
-	audio, err := a.wireAudioSources(tap, disc)
+	audio, err := a.wireAudioSources(ctx, tap, disc)
 	if err != nil {
 		return catalogWiring{}, err
 	}
@@ -97,10 +98,11 @@ func (a *App) wireCatalog(
 }
 
 func (a *App) wireAudioSources(
+	ctx context.Context,
 	tap *eventtap.Tap,
 	disc discoveryWiring,
 ) (audioSourcesStaging, error) {
-	audioStore, err := a.buildAudioStore()
+	audioStore, err := a.buildAudioStore(ctx)
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
@@ -109,7 +111,7 @@ func (a *App) wireAudioSources(
 	var audioSources []acqPorts.AudioSource
 	var tools acqPorts.AcquisitionVerification
 	if audioStore != nil {
-		audioSources, tools = a.acquisitionSources()
+		audioSources, tools = a.acquisitionSources(ctx)
 	}
 
 	staging := audioSourcesStaging{
@@ -119,7 +121,7 @@ func (a *App) wireAudioSources(
 		ytDlpAvailable: tools.YtDlp,
 	}
 	if len(audioSources) > 0 && audioStore != nil {
-		bgScheduler := a.buildAcquisitionScheduler(tap, disc, trackRepo, audioStore, audioSources, tools)
+		bgScheduler := a.buildAcquisitionScheduler(ctx, tap, disc, trackRepo, audioStore, audioSources, tools)
 		staging.background = bgScheduler
 		staging.scheduler = bgScheduler
 	}
@@ -127,6 +129,7 @@ func (a *App) wireAudioSources(
 }
 
 func (a *App) buildAcquisitionScheduler(
+	ctx context.Context,
 	tap *eventtap.Tap,
 	disc discoveryWiring,
 	trackRepo *persistence.PgxTrackRepository,
@@ -161,9 +164,9 @@ func (a *App) buildAcquisitionScheduler(
 		verification.Fpcalc = identifier.Available()
 		lookups.AudioIdentifier = identifier
 		acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(lookups))
-		slog.Info("acquisition: fingerprint verification wired", "fpcalc", verification.Fpcalc)
+		slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", verification.Fpcalc)
 	} else {
-		slog.Warn("acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
+		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
 	}
 	acquireOpts = append(acquireOpts,
 		acqService.WithDownloadLimiter(acqService.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)),
@@ -267,14 +270,14 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	}
 }
 
-func (a *App) acquisitionSources() ([]acqPorts.AudioSource, acqPorts.AcquisitionVerification) {
+func (a *App) acquisitionSources(ctx context.Context) ([]acqPorts.AudioSource, acqPorts.AcquisitionVerification) {
 	if a.cfg.AcquisitionFixtureEnabled() {
-		slog.Warn("acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
+		slog.WarnContext(ctx, "acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
 		return []acqPorts.AudioSource{fixture.NewSource()}, acqPorts.AcquisitionVerification{}
 	}
 	searcher := a.newYtDlpSearcher()
 	tools := acqPorts.AcquisitionVerification{YtDlp: searcher.Available()}
-	sources, streamripOK := a.audioSourcesFor(searcher)
+	sources, streamripOK := a.audioSourcesFor(ctx, searcher)
 	tools.Streamrip = streamripOK
 	return sources, tools
 }
@@ -291,38 +294,38 @@ func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 		WithRemoteComponents(a.cfg.YtDLPRemoteComponents)
 }
 
-func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {
+func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {
 	var sources []acqPorts.AudioSource
 	if a.cfg.YtMusicEnabled {
 		sources = append(sources, ytmusic.NewSource(searcher))
 	} else {
-		slog.Info("acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
+		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
-	streamripSources, streamripOK := a.buildStreamripSources()
+	streamripSources, streamripOK := a.buildStreamripSources(ctx)
 	sources = append(sources, streamripSources...)
 	if a.cfg.YtDLPEnabled {
 		sources = append(sources, ytdlp.NewSource(searcher))
 	} else {
-		slog.Info("acquisition: yt-dlp source disabled via YTDLP_ENABLED")
+		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	return sources, streamripOK
 }
 
-func (a *App) buildStreamripSources() ([]acqPorts.AudioSource, bool) {
-	sources := a.streamripSourcesFor(a.cfg.StreamripServices)
+func (a *App) buildStreamripSources(ctx context.Context) ([]acqPorts.AudioSource, bool) {
+	sources := a.streamripSourcesFor(ctx, a.cfg.StreamripServices)
 	if len(sources) == 0 {
 		return sources, true
 	}
 	probe := streamrip.NewSource("").WithBinary(a.cfg.StreamripBin)
 	if !probe.Available() {
-		slog.Warn("acquisition: streamrip binary not runnable, streamrip sources degraded",
+		slog.WarnContext(ctx, "acquisition: streamrip binary not runnable, streamrip sources degraded",
 			"bin", probe.Binary(), "sources", len(sources))
 		return sources, false
 	}
 	return sources, true
 }
 
-func (a *App) streamripSourcesFor(services []string) []acqPorts.AudioSource {
+func (a *App) streamripSourcesFor(ctx context.Context, services []string) []acqPorts.AudioSource {
 	var sources []acqPorts.AudioSource
 	for _, service := range services {
 		service = strings.ToLower(strings.TrimSpace(service))
@@ -330,16 +333,16 @@ func (a *App) streamripSourcesFor(services []string) []acqPorts.AudioSource {
 			continue
 		}
 		if !streamrip.Supported(service) {
-			slog.Warn("acquisition: unsupported streamrip service ignored", "service", service)
+			slog.WarnContext(ctx, "acquisition: unsupported streamrip service ignored", "service", service)
 			continue
 		}
 		sources = append(sources, streamrip.NewSource(service).WithBinary(a.cfg.StreamripBin))
-		slog.Info("acquisition: streamrip source enabled", "service", service)
+		slog.InfoContext(ctx, "acquisition: streamrip source enabled", "service", service)
 	}
 	return sources
 }
 
-func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
+func (a *App) buildAudioStore(ctx context.Context) (catalogPorts.AudioStore, error) {
 	if missing := len(missingOCIS3Keys(a.cfg)); missing > 0 && missing < ociS3ConfigKeys {
 		return nil, missingAudioStoreError(a.cfg)
 	}
@@ -352,28 +355,28 @@ func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 			Region:    a.cfg.OCIS3Region,
 		})
 		if err == nil {
-			slog.Info("audio store: OCI Object Storage")
-			return a.scopeAudioStore(store), nil
+			slog.InfoContext(ctx, "audio store: OCI Object Storage")
+			return a.scopeAudioStore(ctx, store), nil
 		}
 		if a.cfg.MusicDir == "" {
 			return nil, fmt.Errorf("audio store: OCI S3 is configured but failed to initialize and no MUSIC_DIR fallback is set: %w", err)
 		}
-		slog.Warn("OCI S3 store failed to initialize, falling back to filesystem", "error", err)
+		slog.WarnContext(ctx, "OCI S3 store failed to initialize, falling back to filesystem", "error", err)
 	}
 
 	if a.cfg.MusicDir != "" {
-		slog.Info("audio store: filesystem", "dir", a.cfg.MusicDir)
-		return a.scopeAudioStore(storage.NewFilesystemAudioStore(a.cfg.MusicDir)), nil
+		slog.InfoContext(ctx, "audio store: filesystem", "dir", a.cfg.MusicDir)
+		return a.scopeAudioStore(ctx, storage.NewFilesystemAudioStore(a.cfg.MusicDir)), nil
 	}
 
 	return nil, missingAudioStoreError(a.cfg)
 }
 
-func (a *App) scopeAudioStore(store catalogPorts.AudioStore) catalogPorts.AudioStore {
+func (a *App) scopeAudioStore(ctx context.Context, store catalogPorts.AudioStore) catalogPorts.AudioStore {
 	if a.cfg.AudioKeyPrefix == "" {
 		return store
 	}
-	slog.Info("audio store: scoped to key prefix", "prefix", a.cfg.AudioKeyPrefix)
+	slog.InfoContext(ctx, "audio store: scoped to key prefix", "prefix", a.cfg.AudioKeyPrefix)
 	return storage.NewScopedAudioStore(store, a.cfg.AudioKeyPrefix)
 }
 

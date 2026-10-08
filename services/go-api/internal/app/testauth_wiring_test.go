@@ -49,7 +49,7 @@ func buildRouter(t *testing.T, cfg testAuthConfig) chi.Router {
 	}
 	r := chi.NewRouter()
 	if testAuth != nil {
-		mountTestLogin(r, testAuth)
+		mountTestLogin(t.Context(), r, testAuth)
 	}
 	r.Group(func(gr chi.Router) {
 		gr.Use(authMiddleware(verifier))

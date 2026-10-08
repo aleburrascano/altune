@@ -53,7 +53,7 @@ func TestWireCatalogSchedulerGating(t *testing.T) {
 				sem: make(chan struct{}, 1),
 			}
 
-			got, err := a.wireCatalog(nil, discoveryWiring{})
+			got, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 			if err != nil {
 				t.Fatalf("wireCatalog: %v", err)
 			}
@@ -75,7 +75,7 @@ func TestWireCatalogSchedulerGating(t *testing.T) {
 func TestWireCatalogFailsWithoutAudioStore(t *testing.T) {
 	a := &App{cfg: &config.Config{YtMusicEnabled: true}}
 
-	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err == nil {
 		t.Fatal("wireCatalog with no audio store config: want error, got nil")
 	}
@@ -98,7 +98,7 @@ func TestWireCatalogPrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) 
 		a.sem <- struct{}{}
 	}
 
-	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestWireCatalogDoesNotCapPerPrincipalQueue(t *testing.T) {
 		a.sem <- struct{}{}
 	}
 
-	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 		{Env: "test", AcquisitionFixtureOptIn: false, YtDLPEnabled: true},
 	}
 	for _, c := range cases {
-		sources, _ := (&App{cfg: &c}).acquisitionSources()
+		sources, _ := (&App{cfg: &c}).acquisitionSources(t.Context())
 		names := sourceNames(sources)
 		if containsSource(names, fixture.SourceName) || !containsSource(names, ytdlp.SourceName) {
 			t.Fatalf("cfg env=%q optIn=%v: sources %v, want live sources and no fixture", c.Env, c.AcquisitionFixtureOptIn, names)
@@ -200,7 +200,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 
 func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixture(t *testing.T) {
 	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true, StreamripServices: []string{"qobuz"}}
-	sources, _ := (&App{cfg: cfg}).acquisitionSources()
+	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
 	if names := sourceNames(sources); len(names) != 1 || names[0] != fixture.SourceName {
 		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
 	}
@@ -224,7 +224,7 @@ func TestAcquisitionFixture_FetchedAudioPassesProbeAndDecodeGates(t *testing.T) 
 
 func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acqService.AcquireTrackAudioService)) *domain.Track {
 	t.Helper()
-	sources, _ := (&App{cfg: &config.Config{Env: "test", AcquisitionFixtureOptIn: true}}).acquisitionSources()
+	sources, _ := (&App{cfg: &config.Config{Env: "test", AcquisitionFixtureOptIn: true}}).acquisitionSources(t.Context())
 	userID := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userID, "Fixture Song", "Fixture Artist", "")
 	if err != nil || track.SetDuration(212) != nil {
@@ -270,7 +270,7 @@ func TestAudioSourcesToggle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp}}
 
-			sources, _ := a.audioSourcesFor(searcher)
+			sources, _ := a.audioSourcesFor(t.Context(), searcher)
 			names := sourceNames(sources)
 
 			if got := containsSource(names, ytmusic.SourceName); got != tt.wantYtMusic {
@@ -326,7 +326,7 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: tt.cfg}
 
-			store, err := a.buildAudioStore()
+			store, err := a.buildAudioStore(t.Context())
 			if err == nil {
 				t.Fatalf("expected startup error for misconfigured audio store, got store=%v", store)
 			}
@@ -345,7 +345,7 @@ func TestBuildAudioStoreFailsFastWhenMisconfigured(t *testing.T) {
 func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
 	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}}
 
-	store, err := a.buildAudioStore()
+	store, err := a.buildAudioStore(t.Context())
 	if err != nil {
 		t.Fatalf("filesystem audio store should resolve, got error: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
 	dir := t.TempDir()
 	a := &App{cfg: &config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}}
 
-	store, err := a.buildAudioStore()
+	store, err := a.buildAudioStore(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
 	dir := t.TempDir()
 	a := &App{cfg: &config.Config{MusicDir: dir}}
 
-	store, err := a.buildAudioStore()
+	store, err := a.buildAudioStore(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestWireCatalogProbesStreamripBinary(t *testing.T) {
 				sem: make(chan struct{}, 1),
 			}
 
-			wired, err := a.wireCatalog(nil, discoveryWiring{})
+			wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 			if err != nil {
 				t.Fatalf("wireCatalog: %v", err)
 			}
@@ -494,7 +494,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		sem:  make(chan struct{}, 1),
 		pool: pool,
 	}
-	cat, err := a.wireCatalog(nil, discoveryWiring{})
+	cat, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -579,7 +579,7 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 		pool: pool,
 	}
 	tap := eventtap.New(events.NewInProcessBus())
-	wired, err := a.wireCatalog(tap, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), tap, discoveryWiring{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
 	}
@@ -636,7 +636,7 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 		OCIS3Bucket:    "audio",
 	}}
 
-	wired, err := a.wireCatalog(nil, discoveryWiring{})
+	wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
 	if err == nil {
 		t.Fatal("wireCatalog with 2 of 4 OCI keys and MUSIC_DIR: want error, got nil")
 	}
@@ -652,7 +652,7 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 
 func TestAcquisitionSources_ProviderReplayUsesOnlyFixture(t *testing.T) {
 	cfg := &config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: t.TempDir(), YtDLPEnabled: true}
-	sources, _ := (&App{cfg: cfg}).acquisitionSources()
+	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
 	if names := sourceNames(sources); len(names) != 1 || names[0] != fixture.SourceName {
 		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
 	}

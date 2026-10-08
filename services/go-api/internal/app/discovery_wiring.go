@@ -251,6 +251,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
 	searchSvc := BuildSearchServiceWithTransport(
+		ctx,
 		a.cfg,
 		a.pool,
 		a.redisClient,

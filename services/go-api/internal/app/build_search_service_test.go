@@ -5,6 +5,7 @@ import (
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
+	"context"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -30,7 +31,7 @@ func TestSearchServiceOptionSets(t *testing.T) {
 	redisClient := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1"})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	eventStore := discoveryPersistence.NewPgxEventStore(pool)
-	w := newSearchWiring(cfg, nil)
+	w := newSearchWiring(t.Context(), cfg, nil)
 
 	tests := []struct {
 		name string
@@ -175,7 +176,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			assertEqual(t, "artist content providers", artist, tt.artist)
 
 			var search []string
-			for _, p := range BuildDiscoveryProviders(cfg, nil) {
+			for _, p := range BuildDiscoveryProviders(t.Context(), cfg, nil) {
 				search = append(search, typeName(reflect.ValueOf(p)))
 				if typeName(reflect.ValueOf(p)) == "*providers.SoundCloudAPIAdapter" && soundCloudFallbackIsNil(t, p) {
 					t.Error("search SoundCloud adapter lost its yt-dlp fallback")
@@ -289,7 +290,7 @@ func TestScrapedProviderKillSwitch(t *testing.T) {
 }
 
 func hasSearchProvider(cfg *config.Config, want discoveryDomain.ProviderName) bool {
-	for _, p := range buildSearchProviderList(newClientFactory(nil), cfg, nil) {
+	for _, p := range buildSearchProviderList(context.Background(), newClientFactory(nil), cfg, nil) {
 		if p.Name() == want {
 			return true
 		}
