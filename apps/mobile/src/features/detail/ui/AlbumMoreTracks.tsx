@@ -7,14 +7,14 @@ import { spacing } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { type ContentFailure } from '../content-status';
-import { type LastBatch } from '../hooks/useAlbumSaveAll';
-import { type AlbumDetailState } from '../hooks/useAlbumDetailState';
+import { type ContentFailure } from '@features/detail/content-status';
+import { type LastBatch } from '@features/detail/hooks/useAlbumSaveAll';
+import { type AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 
-import { trackSubtitleWithFeaturing } from './formatters';
-import { AlbumTrackRow } from './AlbumTrackRow';
-import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
-import { SectionError } from './SectionError';
+import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
+import { AlbumTrackRow } from '@features/detail/ui/AlbumTrackRow';
+import { CollapsibleSectionHeader } from '@features/detail/ui/CollapsibleSectionHeader';
+import { SectionError } from '@features/detail/ui/SectionError';
 
 type AlbumMoreTracksRowActions = Pick<
   AlbumDetailState,

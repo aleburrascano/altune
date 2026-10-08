@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { DISCOGRAPHY_SKELETON_CARD_SIZE } from './layout';
+import { DISCOGRAPHY_SKELETON_CARD_SIZE } from '@features/detail/ui/layout';
 
 export function TrackRowsSkeleton({
   count = 6,

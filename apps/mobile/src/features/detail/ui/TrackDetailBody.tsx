@@ -7,18 +7,25 @@ import { AddToPlaylistSheet } from '@shared/playlists';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import { useTrackDetailActions, type TrackDetailActions } from '../hooks/useTrackDetailActions';
-import type { LateralNavHandle } from '../hooks/useLateralNav';
-import { type DetailRoute } from '../navigation';
+import {
+  useTrackDetailActions,
+  type TrackDetailActions,
+} from '@features/detail/hooks/useTrackDetailActions';
+import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
+import { type DetailRoute } from '@features/detail/navigation';
 
-import { DetailActions, SecondaryAction, type PrimaryAction } from './DetailActions';
-import { DetailFacts } from './DetailFacts';
-import { DetailScaffold, type DetailChrome } from './DetailScaffold';
-import { RelatedTracksSection } from './RelatedTracksSection';
-import { TrackInfoSection } from './TrackInfoSection';
-import { TrackSavePill } from './TrackSavePill';
-import { TrackStatusBanners } from './TrackStatusBanners';
-import { buildTrackFacts } from './trackDetailFacts';
+import {
+  DetailActions,
+  SecondaryAction,
+  type PrimaryAction,
+} from '@features/detail/ui/DetailActions';
+import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
+import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
+import { TrackInfoSection } from '@features/detail/ui/TrackInfoSection';
+import { TrackSavePill } from '@features/detail/ui/TrackSavePill';
+import { TrackStatusBanners } from '@features/detail/ui/TrackStatusBanners';
+import { buildTrackFacts } from '@features/detail/ui/trackDetailFacts';
 
 function wrongAlbumMenu(actions: TrackDetailActions): { label: string; onPress: () => void }[] {
   if (actions.albumName === null) return [];

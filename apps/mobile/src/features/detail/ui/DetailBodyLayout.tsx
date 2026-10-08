@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { useWideWebLayout } from '@shared/ui/layout';
 import { spacing } from '@shared/ui/theme/tokens';
 
-import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH } from './layout';
+import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH } from '@features/detail/ui/layout';
 
 export type DetailBodyLayoutProps = {
   hero?: ReactNode;

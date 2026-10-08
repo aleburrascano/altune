@@ -8,11 +8,15 @@ import {
   saveControlLabel,
   saveControlState,
   type SaveControlState,
-} from '../save-control-state';
-import { useResolvedOwnedTrack, type OwnedTrack, type TrackIdentity } from '../hooks/useOwnedTrack';
+} from '@features/detail/save-control-state';
+import {
+  useResolvedOwnedTrack,
+  type OwnedTrack,
+  type TrackIdentity,
+} from '@features/detail/hooks/useOwnedTrack';
 
-import { sharedStyles } from './styles';
-import { SaveGlyph } from './SaveGlyph';
+import { sharedStyles } from '@features/detail/ui/styles';
+import { SaveGlyph } from '@features/detail/ui/SaveGlyph';
 
 const SIZE = 40;
 

@@ -7,10 +7,10 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { useRelatedTracks } from '../hooks/useRelatedTracks';
-import { useOpenDetail, type DetailRoute } from '../navigation';
-import { RELATED_CARD_WIDTH } from './layout';
-import { sharedStyles } from './styles';
+import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
+import { useOpenDetail, type DetailRoute } from '@features/detail/navigation';
+import { RELATED_CARD_WIDTH } from '@features/detail/ui/layout';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 export function RelatedTracksSection({
   result: parent,

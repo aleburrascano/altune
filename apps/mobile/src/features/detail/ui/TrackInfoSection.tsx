@@ -6,11 +6,11 @@ import { radius } from '@shared/ui/theme';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import type { LateralNavHandle } from '../hooks/useLateralNav';
-import type { TrackDetailActions } from '../hooks/useTrackDetailActions';
+import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
+import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
 
-import { Section } from './Section';
-import { TrackNavRow } from './TrackNavRow';
+import { Section } from '@features/detail/ui/Section';
+import { TrackNavRow } from '@features/detail/ui/TrackNavRow';
 
 type AlbumRowProps = {
   albumName: string;

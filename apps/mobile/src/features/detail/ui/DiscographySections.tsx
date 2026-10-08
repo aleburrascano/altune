@@ -3,9 +3,9 @@ import { View } from 'react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { useDiscographyFilter } from '../hooks/useDiscographyFilter';
-import { AlbumRail } from './AlbumRail';
-import { RecordTypeChips } from './RecordTypeChips';
+import { useDiscographyFilter } from '@features/detail/hooks/useDiscographyFilter';
+import { AlbumRail } from '@features/detail/ui/AlbumRail';
+import { RecordTypeChips } from '@features/detail/ui/RecordTypeChips';
 
 export function DiscographySections({
   albums,

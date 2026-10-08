@@ -11,11 +11,16 @@ import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { albumExtras } from '../extras-accessors';
-import { SECTION_CAP } from '../hooks/useDiscographyFilter';
-import { albumYear } from './formatters';
-import { DETAIL_GUTTER, DISCOGRAPHY_CARD_SIZE, gridCellWidthFor, gridColumnsFor } from './layout';
-import { sharedStyles } from './styles';
+import { albumExtras } from '@features/detail/extras-accessors';
+import { SECTION_CAP } from '@features/detail/hooks/useDiscographyFilter';
+import { albumYear } from '@features/detail/ui/formatters';
+import {
+  DETAIL_GUTTER,
+  DISCOGRAPHY_CARD_SIZE,
+  gridCellWidthFor,
+  gridColumnsFor,
+} from '@features/detail/ui/layout';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 

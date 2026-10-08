@@ -5,9 +5,9 @@ import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import type { ContentFailure } from '../content-status';
+import type { ContentFailure } from '@features/detail/content-status';
 
-import { sharedStyles } from './styles';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 export interface SectionErrorProps {
   testIDPrefix: string;

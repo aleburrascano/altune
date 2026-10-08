@@ -7,7 +7,7 @@ import { spacing, type TypographyVariant } from '@shared/ui/theme';
 import { asyncView } from '@shared/lib/async-view';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 
-import { SectionError, type SectionErrorProps } from './SectionError';
+import { SectionError, type SectionErrorProps } from '@features/detail/ui/SectionError';
 
 export interface AsyncEmptyConfig {
   message: string;

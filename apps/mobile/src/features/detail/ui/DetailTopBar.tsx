@@ -6,8 +6,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { withAlpha } from './color';
-import { sharedStyles } from './styles';
+import { withAlpha } from '@features/detail/ui/color';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 type GlassButtonProps = {
   testID: string;

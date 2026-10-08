@@ -1,9 +1,9 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { trackExtras } from '../extras-accessors';
+import { trackExtras } from '@features/detail/extras-accessors';
 
-import type { DetailFact } from './DetailFacts';
-import { formatRuntime } from './formatters';
+import type { DetailFact } from '@features/detail/ui/DetailFacts';
+import { formatRuntime } from '@features/detail/ui/formatters';
 
 function tracksFact(tracks: readonly DiscoveryResult[]): DetailFact | null {
   return tracks.length > 0 ? { label: 'Tracks', value: String(tracks.length) } : null;

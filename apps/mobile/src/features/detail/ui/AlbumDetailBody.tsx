@@ -8,16 +8,19 @@ import { Text } from '@shared/ui/primitives/Text';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { useAlbumDetailState, type AlbumDetailState } from '../hooks/useAlbumDetailState';
-import type { DetailRoute } from '../navigation';
+import {
+  useAlbumDetailState,
+  type AlbumDetailState,
+} from '@features/detail/hooks/useAlbumDetailState';
+import type { DetailRoute } from '@features/detail/navigation';
 
-import { albumYear } from './formatters';
-import { buildAlbumFacts } from './albumDetailFacts';
-import { AlbumTrackList } from './AlbumTrackList';
-import { DetailActions } from './DetailActions';
-import { DetailFacts } from './DetailFacts';
-import { DetailScaffold, type DetailChrome } from './DetailScaffold';
-import { SaveAllPill } from './SaveAllPill';
+import { albumYear } from '@features/detail/ui/formatters';
+import { buildAlbumFacts } from '@features/detail/ui/albumDetailFacts';
+import { AlbumTrackList } from '@features/detail/ui/AlbumTrackList';
+import { DetailActions } from '@features/detail/ui/DetailActions';
+import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
+import { SaveAllPill } from '@features/detail/ui/SaveAllPill';
 
 type AlbumDetailBodyProps = {
   chrome: DetailChrome;

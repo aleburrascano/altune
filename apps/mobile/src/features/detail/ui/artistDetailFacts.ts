@@ -1,4 +1,4 @@
-import type { DetailFact } from './DetailFacts';
+import type { DetailFact } from '@features/detail/ui/DetailFacts';
 
 export type ArtistFactsInput = {
   releases: number;

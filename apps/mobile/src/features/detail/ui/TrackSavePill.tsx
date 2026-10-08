@@ -2,16 +2,16 @@ import { type ReactElement } from 'react';
 
 import { Text } from '@shared/ui/primitives/Text';
 
-import type { SaveState } from '../save-control-state';
+import type { SaveState } from '@features/detail/save-control-state';
 import {
   saveControlInteractive,
   saveControlLabel,
   saveControlText,
   saveDisplayState,
-} from '../save-control-state';
+} from '@features/detail/save-control-state';
 
-import { SaveGlyph } from './SaveGlyph';
-import { SavePillShell } from './SavePillShell';
+import { SaveGlyph } from '@features/detail/ui/SaveGlyph';
+import { SavePillShell } from '@features/detail/ui/SavePillShell';
 
 type TrackSavePillProps = { save: SaveState; onSave: () => void; title: string };
 

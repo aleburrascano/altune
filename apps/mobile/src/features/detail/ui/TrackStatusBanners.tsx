@@ -6,9 +6,9 @@ import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 
-import type { LateralNavHandle } from '../hooks/useLateralNav';
-import type { SaveFailure } from '../hooks/useSaveTrack';
-import { saveFailureBanner } from '../save-control-state';
+import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
+import type { SaveFailure } from '@features/detail/hooks/useSaveTrack';
+import { saveFailureBanner } from '@features/detail/save-control-state';
 
 const styles = StyleSheet.create({
   banner: { marginTop: spacing.lg },

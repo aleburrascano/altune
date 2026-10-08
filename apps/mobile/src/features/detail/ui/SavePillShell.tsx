@@ -3,7 +3,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { minInteractiveHeight, radius, spacing, useTheme, type Theme } from '@shared/ui/theme';
 
-import { sharedStyles } from './styles';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 export type SavePillShellProps = {
   onPress: () => void;

@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
-import type { RecordTypeGroup } from '../hooks/useDiscographyFilter';
-import { sharedStyles } from './styles';
+import type { RecordTypeGroup } from '@features/detail/hooks/useDiscographyFilter';
+import { sharedStyles } from '@features/detail/ui/styles';
 
 type ChipProps = { group: RecordTypeGroup; on: boolean; onSelect: (type: string) => void };
 

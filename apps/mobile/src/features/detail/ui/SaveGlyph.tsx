@@ -5,7 +5,7 @@ import { Ban, Check, Plus, RotateCw } from 'lucide-react-native';
 
 import { useTheme } from '@shared/ui/theme';
 
-import type { SaveControlState } from '../save-control-state';
+import type { SaveControlState } from '@features/detail/save-control-state';
 
 export function SaveGlyph({
   state,

@@ -7,14 +7,14 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import type { AlbumDetailState } from '../hooks/useAlbumDetailState';
+import type { AlbumDetailState } from '@features/detail/hooks/useAlbumDetailState';
 
-import { trackSubtitleWithFeaturing } from './formatters';
-import { AlbumMoreTracks } from './AlbumMoreTracks';
-import { AlbumTrackRow } from './AlbumTrackRow';
-import { TrackRowsSkeleton } from './DetailSkeleton';
-import { Section } from './Section';
-import { SectionError } from './SectionError';
+import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
+import { AlbumMoreTracks } from '@features/detail/ui/AlbumMoreTracks';
+import { AlbumTrackRow } from '@features/detail/ui/AlbumTrackRow';
+import { TrackRowsSkeleton } from '@features/detail/ui/DetailSkeleton';
+import { Section } from '@features/detail/ui/Section';
+import { SectionError } from '@features/detail/ui/SectionError';
 
 function TracksSection({ children }: { children: ReactNode }): ReactElement {
   return <Section label="Tracks">{children}</Section>;
