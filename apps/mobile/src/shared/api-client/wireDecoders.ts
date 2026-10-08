@@ -1,5 +1,9 @@
 import { ContractError } from '@shared/errors';
-import type { ApiErrorBody } from '@shared/api-client/types';
+
+export type ApiErrorBody = {
+  detail?: string;
+  code?: string;
+};
 
 export function asRecord(value: unknown, at: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
