@@ -5,21 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 )
-
-func jsonKeys(t reflect.Type) []string {
-	keys := make([]string, 0, t.NumField())
-	for i := range t.NumField() {
-		keys = append(keys, strings.Split(t.Field(i).Tag.Get("json"), ",")[0])
-	}
-	return keys
-}
 
 func everyDependencyDown(context.Context) DependencyHealth {
 	return DependencyHealth{

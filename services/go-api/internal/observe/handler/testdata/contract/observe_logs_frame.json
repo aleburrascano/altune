@@ -1,0 +1,9 @@
+{
+  "time": "2026-10-08T15:34:08.723553335Z",
+  "level": "INFO",
+  "msg": "contract-fda75312-1bb6-4809-8061-968e2e6262a9",
+  "attrs": {
+    "corr_id": "contract-corr",
+    "stage": "resolve"
+  }
+}
