@@ -30,6 +30,8 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 		{"enrichment failures", EnrichmentFailuresVar, m.EnrichmentFailed},
 		{"corrupt stored state", CorruptStoredStateVar, m.CorruptStoredState},
 		{"queue-state op timeouts", QueueStateOpTimeoutsVar, m.QueueStateOpTimedOut},
+		{"queue-state transient failures", QueueStateTransientFailuresVar, m.QueueStateOpFailedTransient},
+		{"queue-state stale writes", QueueStateStaleWritesVar, m.QueueStateStaleWrite},
 		{"now-playing lookup timeouts", NowPlayingLookupTimeoutsVar, m.NowPlayingLookupTimedOut},
 		{"queue-state rate-limit rejections", QueueStateRateLimitedVar, m.QueueStateRateLimited},
 		{"enrichment breaker rejections", EnrichmentBreakerRejectionsVar, m.EnrichmentBreakerRejected},
@@ -83,5 +85,21 @@ func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
 	}
 	if after.QueueStateErased != before.QueueStateErased+3 {
 		t.Errorf("queue_state_erased_total = %d, want %d", after.QueueStateErased, before.QueueStateErased+3)
+	}
+}
+
+func TestReadSnapshot_ReportsQueueStateFailures(t *testing.T) {
+	before := ReadSnapshot()
+
+	m := NewExpvarPlaybackMetrics()
+	m.QueueStateOpFailedTransient()
+	m.QueueStateStaleWrite()
+
+	after := ReadSnapshot()
+	if after.QueueStateTransientFailures != before.QueueStateTransientFailures+1 {
+		t.Errorf("queue_state_op_transient_failures_total = %d, want %d", after.QueueStateTransientFailures, before.QueueStateTransientFailures+1)
+	}
+	if after.QueueStateStaleWrites != before.QueueStateStaleWrites+1 {
+		t.Errorf("queue_state_stale_writes_total = %d, want %d", after.QueueStateStaleWrites, before.QueueStateStaleWrites+1)
 	}
 }

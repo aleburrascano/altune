@@ -104,10 +104,15 @@ func assertServerFault(t *testing.T, err error) {
 type recordingMetrics struct {
 	corruptStoredState   int
 	queueStateOpTimedOut int
+	transientFailures    int
+	staleWrites          int
 }
 
 func (m *recordingMetrics) CorruptStoredState()   { m.corruptStoredState++ }
 func (m *recordingMetrics) QueueStateOpTimedOut() { m.queueStateOpTimedOut++ }
+
+func (m *recordingMetrics) QueueStateOpFailedTransient() { m.transientFailures++ }
+func (m *recordingMetrics) QueueStateStaleWrite()        { m.staleWrites++ }
 
 func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
@@ -301,7 +306,7 @@ func (tagQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 }
 
 func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 0"}}
+	repo := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 0"}, metrics: ports.NoopQueueStateMetrics()}
 
 	err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
 
@@ -912,5 +917,58 @@ func TestSQLStateConstants_NamedOnce(t *testing.T) {
 		if got != want {
 			t.Fatalf("constant = %q, want %q", got, want)
 		}
+	}
+}
+
+type failingStore struct{ err error }
+
+func (f failingStore) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, f.err
+}
+
+func (f failingStore) QueryRow(context.Context, string, ...any) pgx.Row { return errRow(f) }
+
+func TestRunOp_TransientFault_CountsTransientNotTimeout(t *testing.T) {
+	m := &recordingMetrics{}
+	repo := &PgxQueueStateRepository{pool: failingStore{err: &pgconn.PgError{Code: "57P01"}}, metrics: m}
+
+	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); !errors.Is(err, ports.ErrQueueStateUnavailable) {
+		t.Fatalf("Upsert = %v, want ErrQueueStateUnavailable", err)
+	}
+	if _, err := repo.GetForUser(context.Background(), testUser()); !errors.Is(err, ports.ErrQueueStateUnavailable) {
+		t.Fatalf("GetForUser = %v, want ErrQueueStateUnavailable", err)
+	}
+	if m.transientFailures != 2 || m.queueStateOpTimedOut != 0 {
+		t.Fatalf("transient = %d, timeouts = %d; want 2 and 0", m.transientFailures, m.queueStateOpTimedOut)
+	}
+}
+
+func TestRunOp_ClientCancelAndNoRows_MoveNoFailureCounter(t *testing.T) {
+	for name, cause := range map[string]error{"client cancel": context.Canceled, "no rows": pgx.ErrNoRows} {
+		t.Run(name, func(t *testing.T) {
+			m := &recordingMetrics{}
+			repo := &PgxQueueStateRepository{pool: failingStore{err: cause}, metrics: m}
+
+			_, _ = repo.GetForUser(context.Background(), testUser())
+
+			if m.transientFailures != 0 || m.staleWrites != 0 {
+				t.Fatalf("transient = %d, stale = %d; want 0 and 0", m.transientFailures, m.staleWrites)
+			}
+		})
+	}
+}
+
+func TestStaleAndMismatchedSaves_CountStaleWrites(t *testing.T) {
+	m := &recordingMetrics{}
+	stale := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 0"}, metrics: m}
+	if err := stale.Upsert(context.Background(), domain.EmptyQueueState(testUser())); !errors.Is(err, domain.ErrStaleQueueWrite) {
+		t.Fatalf("Upsert = %v, want ErrStaleQueueWrite", err)
+	}
+	mismatch := &PgxQueueStateRepository{pool: &positionQuerier{}, metrics: m}
+	if err := mismatch.UpdatePosition(context.Background(), testPosition(t)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+		t.Fatalf("UpdatePosition = %v, want ErrQueuePositionMismatch", err)
+	}
+	if m.staleWrites != 2 {
+		t.Fatalf("stale writes = %d, want 2", m.staleWrites)
 	}
 }
