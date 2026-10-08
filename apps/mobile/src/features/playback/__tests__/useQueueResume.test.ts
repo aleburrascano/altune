@@ -17,8 +17,8 @@ import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
 import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-} from '@features/playback/playbackHealth';
-import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
+} from '@features/playback/domain/playbackHealth';
+import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';

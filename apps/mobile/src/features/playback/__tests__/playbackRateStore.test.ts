@@ -2,7 +2,7 @@ import {
   PLAYBACK_RATES,
   rateLabel,
   usePlaybackRateStore,
-} from '@features/playback/playbackRateStore';
+} from '@features/playback/hooks/usePlaybackRateStore';
 
 afterEach(() => {
   usePlaybackRateStore.setState({ rate: 1 });

@@ -4,13 +4,13 @@ import { create } from 'zustand';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback/types';
 
-import { classifyPlaybackFailure } from '@features/playback/classifyPlaybackError';
-import { recordPlaybackFailure } from '@features/playback/playbackHealth';
+import { classifyPlaybackFailure } from '@features/playback/domain/classifyPlaybackError';
+import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
 import {
   redactPlaybackErrorMessage,
   type RedactedPlaybackFailure,
   warnPlayback,
-} from '@features/playback/redactPlaybackError';
+} from '@features/playback/domain/redactPlaybackError';
 
 interface PlaybackErrorState {
   key: TrackKey | null;

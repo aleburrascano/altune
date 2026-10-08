@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback/types';
 
-import { usePlaybackRateStore } from '../playbackRateStore';
+import { usePlaybackRateStore } from '@features/playback/hooks/usePlaybackRateStore';
 
 const SEEK_STEP_SECONDS = 10;
 const POSITION_STATE_THROTTLE_MS = 1000;

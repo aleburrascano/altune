@@ -3,10 +3,10 @@ import type { AddTrack } from 'react-native-track-player';
 
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
-import { classifyPlaybackFailure } from '@features/playback/classifyPlaybackError';
-import { warnPlayback } from '@features/playback/redactPlaybackError';
-import { recordPresignOutcome } from '@features/playback/playbackHealth';
-import { MAX_PRESIGN } from '@features/playback/presignWindow';
+import { classifyPlaybackFailure } from '@features/playback/domain/classifyPlaybackError';
+import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
+import { recordPresignOutcome } from '@features/playback/domain/playbackHealth';
+import { MAX_PRESIGN } from '@features/playback/domain/presignWindow';
 import { toNativeTrack } from '@features/playback/native/nativeTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 

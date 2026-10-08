@@ -6,7 +6,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { useIsForeground } from '@shared/lifecycle';
 
-import { progressSecondsToMs } from '@features/playback/time';
+import { progressSecondsToMs } from '@features/playback/domain/time';
 
 export interface PlaybackPosition {
   positionMs: number;

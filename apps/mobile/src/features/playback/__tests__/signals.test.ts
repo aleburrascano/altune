@@ -6,7 +6,7 @@ import {
   hasCrossedListenThreshold,
   LISTEN_THRESHOLD_MS,
   listenThresholdMs,
-} from '@features/playback/signals';
+} from '@features/playback/domain/signals';
 
 import {
   libraryTrack as buildLibraryTrack,

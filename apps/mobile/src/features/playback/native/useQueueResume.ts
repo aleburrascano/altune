@@ -13,26 +13,26 @@ import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
 import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
-import { reportLoadFailure } from '@features/playback/playbackErrorStore';
+import { reportLoadFailure } from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
   type RungOutcome,
-} from '@features/playback/queueRebuildStrategies';
+} from '@features/playback/domain/queueRebuildStrategies';
 import {
   asRepeatMode,
   fromWireSource,
   parseQueueState,
   toWireSource,
-} from '@features/playback/queueStateWire';
+} from '@features/playback/domain/queueStateWire';
 import {
   recordQueueRestoreFailure,
   recordQueueSaveFailure,
   recordQueueStateRejected,
   type QueueRestoreStage,
-} from '@features/playback/playbackHealth';
-import { warnPlayback } from '@features/playback/redactPlaybackError';
-import { progressSecondsToRoundedMs } from '@features/playback/time';
+} from '@features/playback/domain/playbackHealth';
+import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
+import { progressSecondsToRoundedMs } from '@features/playback/domain/time';
 
 import { useAppStateChange } from '@shared/lifecycle';
 

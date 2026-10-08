@@ -8,15 +8,15 @@ import type { QueueSource } from '@shared/playback/types';
 import {
   recordQueueRebuildOutcome,
   type QueueRebuildRung,
-} from '@features/playback/playbackHealth';
-import { fromWireSource } from '@features/playback/queueStateWire';
+} from '@features/playback/domain/playbackHealth';
+import { fromWireSource } from '@features/playback/domain/queueStateWire';
 import {
   currentOccurrence,
   currentTrackId,
   isSavedCurrentResumable,
   reconstructPlayOrder,
   resolveResumeStartIndex,
-} from '@features/playback/resumeQueue';
+} from '@features/playback/domain/resumeQueue';
 
 export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): number | null {
   if (!saved.current_track || !canPlay(saved.current_track.acquisition_status)) return null;

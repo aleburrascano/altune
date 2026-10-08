@@ -12,7 +12,7 @@ import type { Theme } from '@shared/ui/theme';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { formatSeconds, type QueueItem } from '@features/playback/queueItem';
+import { formatSeconds, type QueueItem } from '@features/playback/domain/queueItem';
 
 function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>, theme: Theme) {
   const style = useAnimatedStyle(() => ({

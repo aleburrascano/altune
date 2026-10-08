@@ -15,14 +15,14 @@ import {
   refreshUpcomingPresign,
 } from '@features/playback/native/loadNativeTrack';
 import { reorderUpcomingNative } from '@features/playback/native/rebuildNativeTail';
-import { claimLoad } from '@features/playback/loadToken';
+import { claimLoad } from '@features/playback/domain/loadToken';
 import {
   NATIVE_QUEUE_OP_TIMEOUT_MS,
   withNativeQueue,
 } from '@features/playback/native/nativeQueueLock';
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
-import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
-import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '@features/playback/presignWindow';
+import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
+import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
 import { playbackService, resetPlaybackForSignOut } from '@features/playback/native/service';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';

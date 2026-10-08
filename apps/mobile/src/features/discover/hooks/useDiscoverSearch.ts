@@ -8,7 +8,7 @@ import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
-} from '@features/discover/hooks/discoverFetchGate';
+} from '@features/discover/hooks/useDiscoverFetchGate';
 import { useRefreshFromFirstPage } from '@features/discover/hooks/useRefreshFromFirstPage';
 import { useRestartOnExpiredSlate } from '@features/discover/hooks/useRestartOnExpiredSlate';
 import {
@@ -16,7 +16,7 @@ import {
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
 } from '@features/discover/domain/searchLimits';
-import type { SearchPageParam, SearchPages } from '@features/discover/hooks/searchPages';
+import type { SearchPageParam, SearchPages } from '@features/discover/domain/searchPages';
 import type { DiscoverPort } from '@features/discover/ports/discoverPort';
 import { useDiscoverPort } from '@features/discover/ports/DiscoverPortProvider';
 

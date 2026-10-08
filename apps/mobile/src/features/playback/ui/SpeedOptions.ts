@@ -5,7 +5,7 @@ import {
   PLAYBACK_RATES,
   rateLabel,
   usePlaybackRateStore,
-} from '@features/playback/playbackRateStore';
+} from '@features/playback/hooks/usePlaybackRateStore';
 
 export type SpeedOptions = {
   valueLabel: string;

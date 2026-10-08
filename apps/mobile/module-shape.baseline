@@ -37,29 +37,9 @@ M1 src/features/library/pinBatchSummary.ts loose root file
 M1 src/features/library/pinnedStatusDisplay.ts loose root file
 M1 src/features/library/selectionActions.ts loose root file
 M1 src/features/library/trackMenu.ts loose root file
-M1 src/features/playback missing domain/
 M1 src/features/playback missing index.ts
-M1 src/features/playback/clamp.ts loose root file
-M1 src/features/playback/classifyPlaybackError.ts loose root file
-M1 src/features/playback/derivePlaybackState.ts loose root file
-M1 src/features/playback/loadToken.ts loose root file
-M1 src/features/playback/lyrics-sync.ts loose root file
-M1 src/features/playback/playbackErrorStore.ts loose root file
-M1 src/features/playback/playbackHealth.ts loose root file
-M1 src/features/playback/playbackRateStore.ts loose root file
 M1 src/features/playback/playsThroughTrackPlayer.ts loose root file
 M1 src/features/playback/playsThroughTrackPlayer.web.ts loose root file
-M1 src/features/playback/presignWindow.ts loose root file
-M1 src/features/playback/queueItem.ts loose root file
-M1 src/features/playback/queueMenuOptions.ts loose root file
-M1 src/features/playback/queueRebuildStrategies.ts loose root file
-M1 src/features/playback/queueStateWire.ts loose root file
-M1 src/features/playback/redactPlaybackError.ts loose root file
-M1 src/features/playback/resumeQueue.ts loose root file
-M1 src/features/playback/retryPolicy.ts loose root file
-M1 src/features/playback/signals.ts loose root file
-M1 src/features/playback/sleepTimerStore.ts loose root file
-M1 src/features/playback/time.ts loose root file
 M1 src/features/settings missing index.ts
 M2 src/app/(auth)/_layout.tsx deep import @features/auth/ui/hero/ArtworkBackground
 M2 src/app/(auth)/forgot-password.tsx deep import @features/auth/ui/ForgotPasswordScreen
@@ -90,8 +70,6 @@ M2 src/app/player/queue.tsx deep import @features/playback/ui/QueueSheet
 M2 src/app/reset-password.tsx deep import @features/auth/ui/SetNewPasswordScreen
 M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
 M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/
-M4 src/features/discover/hooks/discoverFetchGate.ts non-use* file in hooks/
-M4 src/features/discover/hooks/searchPages.ts non-use* file in hooks/
 M4 src/features/library/hooks/dropVanishedTrack.ts non-use* file in hooks/
 M4 src/features/library/hooks/logTrackMutationFailure.ts non-use* file in hooks/
 M4 src/features/library/hooks/pagedListControls.ts non-use* file in hooks/
@@ -118,15 +96,11 @@ N3 src/features/detail/ui/albumDetailFacts.ts only export is buildAlbumFacts
 N3 src/features/detail/ui/color.ts only export is withAlpha
 N3 src/features/detail/ui/styles.ts only export is sharedStyles
 N3 src/features/detail/ui/trackDetailFacts.ts only export is buildTrackFacts
-N3 src/features/discover/domain/handoff.ts only export is stashHandoffForDetail
-N3 src/features/discover/domain/impressions.ts only export is buildImpressionRows
-N3 src/features/discover/hooks/useClearSearchHistory.ts only export is useDiscoverClearSearchHistory
 N3 src/features/library/libraryFailureAlert.ts only export is alertLibraryFailure
 N3 src/features/library/trackMenu.ts only export is buildTrackMenuItems
 N3 src/features/library/ui/libraryRowSurface.ts only export is rowSurfaceStyle
 N3 src/features/library/ui/listContentStyles.ts only export is listContent
 N3 src/features/playback/native/trackPlayerProvider.tsx only export is TrackPlayerPlaybackProvider
-N3 src/features/playback/retryPolicy.ts only export is canRetryPlaybackError
 N3 src/features/playback/web/webControls.ts only export is createWebControls
 N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
 N3 src/shared/api-client/queryString.ts only export is withQuery

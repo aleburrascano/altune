@@ -14,12 +14,12 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
-import { recordPlaybackFailure } from '@features/playback/playbackHealth';
+import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
 
-jest.mock('@features/playback/playbackHealth', () => ({
-  ...jest.requireActual('@features/playback/playbackHealth'),
+jest.mock('@features/playback/domain/playbackHealth', () => ({
+  ...jest.requireActual('@features/playback/domain/playbackHealth'),
   recordPlaybackFailure: jest.fn(),
 }));
 

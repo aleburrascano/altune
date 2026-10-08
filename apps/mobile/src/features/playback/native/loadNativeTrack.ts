@@ -1,6 +1,6 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { clamp } from '@features/playback/clamp';
+import { clamp } from '@features/playback/domain/clamp';
 import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
 import {
   onNativeQueueTimeout,
@@ -14,13 +14,18 @@ import {
   reorderUpcomingApplied,
 } from '@features/playback/native/rebuildNativeTail';
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
-import { claimLoad, currentLoadToken, isStale, type LoadToken } from '@features/playback/loadToken';
+import {
+  claimLoad,
+  currentLoadToken,
+  isStale,
+  type LoadToken,
+} from '@features/playback/domain/loadToken';
 import { beginNativeLoad, endNativeLoad } from '@features/playback/native/nativeSyncGuard';
 import {
   NATIVE_QUEUE_WINDOW,
   markPresignedFrom,
   extendPresignWindow,
-} from '@features/playback/presignWindow';
+} from '@features/playback/domain/presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';

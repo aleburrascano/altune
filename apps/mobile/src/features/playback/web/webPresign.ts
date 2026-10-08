@@ -7,7 +7,7 @@ import type { PlaybackSource, PlaybackTrack } from '@shared/playback/types';
 import {
   redactedPlaybackFailure,
   type RedactedPlaybackFailure,
-} from '@features/playback/redactPlaybackError';
+} from '@features/playback/domain/redactPlaybackError';
 import {
   isPresignStale,
   type PendingPresign,

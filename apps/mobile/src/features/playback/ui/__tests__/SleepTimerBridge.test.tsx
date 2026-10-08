@@ -5,7 +5,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-import { useSleepTimerStore } from '@features/playback/sleepTimerStore';
+import { useSleepTimerStore } from '@features/playback/hooks/useSleepTimerStore';
 import { SleepTimerBridge } from '@features/playback/ui/SleepTimerBridge';
 
 const T0 = 1_700_000_000_000;

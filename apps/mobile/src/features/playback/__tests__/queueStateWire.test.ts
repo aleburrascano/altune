@@ -8,7 +8,7 @@ import {
   fromWireSource,
   parseQueueState,
   toWireSource,
-} from '@features/playback/queueStateWire';
+} from '@features/playback/domain/queueStateWire';
 
 describe('toWireSource — store source to snake_case wire shape', () => {
   it('maps null to null', () => {

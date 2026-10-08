@@ -22,11 +22,11 @@ import {
   swapUpcomingToLocal,
   type SwapOutcome,
 } from '@features/playback/native/nativeTrackSwap';
-import { warnPlayback } from '@features/playback/redactPlaybackError';
+import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
-} from '@features/playback/playbackHealth';
+} from '@features/playback/domain/playbackHealth';
 
 const inflight = new Map<string, AbortController>();
 const invalidatedInflight = new Set<string>();

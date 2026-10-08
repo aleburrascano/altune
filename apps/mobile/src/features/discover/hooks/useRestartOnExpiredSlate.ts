@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo } from 'react';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-import { useDiscoverFetchEnabled } from '@features/discover/hooks/discoverFetchGate';
-import type { SearchPageParam, SearchPages } from '@features/discover/hooks/searchPages';
+import { useDiscoverFetchEnabled } from '@features/discover/hooks/useDiscoverFetchGate';
+import type { SearchPageParam, SearchPages } from '@features/discover/domain/searchPages';
 
 function slateMismatch(
   page: DiscoverySearchResponse,

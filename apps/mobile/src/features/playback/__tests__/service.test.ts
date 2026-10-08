@@ -16,8 +16,8 @@ import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
 } from '@features/playback/native/queueFailureReport';
-import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
-import { redactPlaybackErrorMessage } from '@features/playback/redactPlaybackError';
+import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
+import { redactPlaybackErrorMessage } from '@features/playback/domain/redactPlaybackError';
 import {
   MAX_TRACKED_RECOVERIES,
   RECOVERY_ATTEMPTS_PER_TRACK,

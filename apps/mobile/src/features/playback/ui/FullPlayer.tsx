@@ -7,7 +7,7 @@ import { withFeaturing } from '@shared/lib/featured';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
-import { canRetryPlaybackError } from '@features/playback/retryPolicy';
+import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';
 import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/ui/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 import { Scrubber } from '@features/playback/ui/Scrubber';

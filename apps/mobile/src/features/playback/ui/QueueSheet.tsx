@@ -14,13 +14,13 @@ import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
-import { queueMenuOptions } from '@features/playback/queueMenuOptions';
+import { queueMenuOptions } from '@features/playback/domain/queueMenuOptions';
 import {
   buildUpNextItems,
   formatSeconds,
   queueSourceLabel,
   type QueueItem,
-} from '@features/playback/queueItem';
+} from '@features/playback/domain/queueItem';
 import { QueueRow } from '@features/playback/ui/QueueRow';
 import {
   SheetHeader,

@@ -11,7 +11,7 @@ import {
   NativeQueueTimeoutError,
   withNativeQueue,
 } from '@features/playback/native/nativeQueueLock';
-import { usePlaybackErrorStore } from '@features/playback/playbackErrorStore';
+import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import {
   classifyNativeQueueFailure,
   isIndexOutOfBounds,

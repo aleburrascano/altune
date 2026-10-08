@@ -17,7 +17,7 @@ import {
   recordQueueSaveFailure,
   recordQueueStateRejected,
   type QueueRestoreStage,
-} from '@features/playback/playbackHealth';
+} from '@features/playback/domain/playbackHealth';
 import { playbackService } from '@features/playback/native/service';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
