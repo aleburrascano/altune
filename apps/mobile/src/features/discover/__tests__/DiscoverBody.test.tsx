@@ -877,3 +877,33 @@ describe('wide layout grid cards name their kind for assistive tech', () => {
     );
   });
 });
+
+describe('recent search label', () => {
+  it('cuts a long query by code point before the ellipsis', () => {
+    const query = `${'a'.repeat(39)}😀😀`;
+    render(
+      <DiscoverBody
+        view="empty-no-query"
+        searchData={undefined}
+        historyItems={[{ query, query_norm: query } as never]}
+        filter="all"
+        onFilterChange={jest.fn()}
+        onHistoryTap={jest.fn()}
+        onResultTap={jest.fn()}
+        impression={{
+          viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+          onViewableItemsChanged: jest.fn(),
+        }}
+        onRetry={jest.fn()}
+        onEndReached={jest.fn()}
+        isFetchingNextPage={false}
+        onRefresh={jest.fn()}
+        isRefreshing={false}
+        correction={null}
+        onSearchOriginal={jest.fn()}
+        onClearHistory={jest.fn()}
+      />,
+    );
+    expect(screen.getByText(`${'a'.repeat(39)}😀…`)).toBeTruthy();
+  });
+});

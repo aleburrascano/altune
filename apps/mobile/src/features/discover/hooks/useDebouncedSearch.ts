@@ -7,6 +7,7 @@ import {
   MAX_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
+  sliceCodePoints,
 } from '@features/discover/searchLimits';
 
 type UseDebouncedSearchOptions = {
@@ -81,7 +82,7 @@ export function useDebouncedSearch({
   };
 
   const onChangeText = (rawText: string): void => {
-    const text = clampQueryWords(rawText.slice(0, MAX_QUERY_LENGTH));
+    const text = clampQueryWords(sliceCodePoints(rawText, MAX_QUERY_LENGTH));
     setInputValue(text);
     clearDebounce();
     const trimmed = text.trim();
@@ -97,7 +98,7 @@ export function useDebouncedSearch({
 
   const setQuery = (query: string): void => {
     clearDebounce();
-    const trimmed = clampQueryWords(query.slice(0, MAX_QUERY_LENGTH)).trim();
+    const trimmed = clampQueryWords(sliceCodePoints(query, MAX_QUERY_LENGTH)).trim();
     setInputValue(trimmed);
     if (!isSearchableQuery(trimmed)) {
       dropCommittedQuery();

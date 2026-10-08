@@ -4,6 +4,7 @@ import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
+import { sliceCodePoints } from '@features/discover/searchLimits';
 import { SectionLabel } from '@features/discover/ui/SectionLabel';
 import type { SearchHistoryItem } from '@shared/api-client/discovery';
 
@@ -27,8 +28,8 @@ interface ChipProps {
 }
 
 function historyLabel(query: string): string {
-  if (query.length <= HISTORY_LABEL_MAX_CHARS) return query;
-  return `${query.slice(0, HISTORY_LABEL_MAX_CHARS)}…`;
+  const label = sliceCodePoints(query, HISTORY_LABEL_MAX_CHARS);
+  return label === query ? query : `${label}…`;
 }
 
 function SearchGlyph(): ReactElement {

@@ -24,3 +24,8 @@ export function clampQueryWords(text: string): string {
   const allowedEnd = Math.max(...allowedWords.map((word) => word.index + word[0].length));
   return text.slice(0, allowedEnd);
 }
+
+export function sliceCodePoints(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return Array.from(text).slice(0, max).join('');
+}

@@ -3,6 +3,7 @@ import {
   MIN_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
+  sliceCodePoints,
 } from '@features/discover/searchLimits';
 
 describe('isSearchableQuery', () => {
@@ -55,5 +56,28 @@ describe('clampQueryWords', () => {
 describe('MAX_SEARCH_OFFSET', () => {
   it('matches the server MaxSearchOffset', () => {
     expect(MAX_SEARCH_OFFSET).toBe(200);
+  });
+});
+
+describe('sliceCodePoints', () => {
+  it('cuts BMP-only text at max characters', () => {
+    expect(sliceCodePoints('abcdef', 3)).toBe('abc');
+  });
+
+  it('keeps an astral character whole when it ends exactly at the boundary', () => {
+    expect(sliceCodePoints('ab😀cd', 3)).toBe('ab😀');
+  });
+
+  it('drops an astral character that would straddle the boundary', () => {
+    expect(sliceCodePoints('ab😀😀', 3)).toBe('ab😀');
+    expect(sliceCodePoints('😀😀', 1)).toBe('😀');
+  });
+
+  it('returns text shorter than max unchanged', () => {
+    expect(sliceCodePoints('a😀', 10)).toBe('a😀');
+  });
+
+  it('returns an empty string for empty text', () => {
+    expect(sliceCodePoints('', 5)).toBe('');
   });
 });
