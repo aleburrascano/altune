@@ -5,8 +5,8 @@ import { useDownloadPhase } from '@shared/acquisition/downloadStore';
 import { withFeaturing } from '@shared/lib/featured';
 import { Text } from '@shared/ui';
 
-import { LibraryRowFailure } from './LibraryRowFailure';
-import { acquisitionProgressLabel, albumSuffix } from './libraryRowLabels';
+import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
+import { acquisitionProgressLabel, albumSuffix } from '@features/library/ui/libraryRowLabels';
 
 import type { TrackResponse } from '@shared/api-client/types';
 

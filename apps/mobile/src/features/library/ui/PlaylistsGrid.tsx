@@ -5,10 +5,10 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 
-import { LibraryGrid } from './LibraryGrid';
-import { PlaylistCover } from './PlaylistCover';
-import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
+import { LibraryGrid } from '@features/library/ui/LibraryGrid';
+import { PlaylistCover } from '@features/library/ui/PlaylistCover';
+import { useLibraryGridLayout } from '@features/library/ui/useLibraryGridLayout';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 

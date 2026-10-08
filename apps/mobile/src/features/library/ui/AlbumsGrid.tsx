@@ -5,9 +5,9 @@ import { Image as ExpoImage } from 'expo-image';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup } from '@shared/api-client/library';
-import { LibraryGrid } from './LibraryGrid';
-import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
+import { LibraryGrid } from '@features/library/ui/LibraryGrid';
+import { useLibraryGridLayout } from '@features/library/ui/useLibraryGridLayout';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
 type AlbumsGridProps = {
   albums: AlbumGroup[];

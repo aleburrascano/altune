@@ -6,7 +6,7 @@ import { countLabel } from '@shared/lib/format';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { fontFamily } from '@shared/ui/theme/tokens';
 
-import { PlaylistCover } from './PlaylistCover';
+import { PlaylistCover } from '@features/library/ui/PlaylistCover';
 
 interface PlaylistData {
   name: string;

@@ -3,7 +3,13 @@ import { useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 
 import { CONTENT_MAX_WIDTH, SCREEN_HORIZONTAL_PADDING, useWideWebLayout } from '@shared/ui';
 
-import { GRID_GAP, avatarColumns, cellSize, coverColumns, wideCoverColumns } from '../gridColumns';
+import {
+  GRID_GAP,
+  avatarColumns,
+  cellSize,
+  coverColumns,
+  wideCoverColumns,
+} from '@features/library/gridColumns';
 
 type LibraryGridKind = 'cover' | 'avatar';
 type LibraryGridLayout = {

@@ -7,14 +7,14 @@ import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { alertLibraryFailure } from '../libraryFailureAlert';
-import { useLibraryTracks } from './useLibraryTracks';
-import type { useRetryAcquisition } from './useRetryAcquisition';
-import type { Selection } from './useSelection';
-import type { ActiveView } from '../activeView';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
-import { TRACK_SORT_OPTIONS, type SortKey } from '../domain/sort';
-import { TracksList } from '../ui/TracksList';
+import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import type { Selection } from '@features/library/hooks/useSelection';
+import type { ActiveView } from '@features/library/activeView';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
+import { TRACK_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
+import { TracksList } from '@features/library/ui/TracksList';
 
 type TracksViewDeps = {
   query: string;

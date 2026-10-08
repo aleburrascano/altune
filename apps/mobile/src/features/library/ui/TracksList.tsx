@@ -7,13 +7,13 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import type { Selection } from '../hooks/useSelection';
-import { LibraryEmptyMessage } from './LibraryEmptyMessage';
-import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
-import { LibraryRow } from './LibraryRow';
-import { listContent } from './listContentStyles';
-import { WideTrackHeader } from './WideTrackHeader';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
+import type { Selection } from '@features/library/hooks/useSelection';
+import { LibraryEmptyMessage } from '@features/library/ui/LibraryEmptyMessage';
+import { ListLoadingMoreFooter } from '@features/library/ui/ListLoadingMoreFooter';
+import { LibraryRow } from '@features/library/ui/LibraryRow';
+import { listContent } from '@features/library/ui/listContentStyles';
+import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
 type TracksListHeaderProps = {
   isWide: boolean;

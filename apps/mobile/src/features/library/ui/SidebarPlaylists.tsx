@@ -6,7 +6,7 @@ import { asyncView } from '@shared/lib/async-view';
 import { Text, type Theme, useTheme } from '@shared/ui';
 import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
 
-import { usePlaylistActions } from '../hooks/usePlaylistActions';
+import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 
 function sidebarPlaylistRowProps(playlist: PlaylistResponse, onPress: () => void, theme: Theme) {
   return {

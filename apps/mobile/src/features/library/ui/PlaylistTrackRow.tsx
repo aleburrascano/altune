@@ -7,9 +7,9 @@ import type { usePlayback } from '@shared/playback/usePlayback';
 import { spacing } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import type { Selection } from '../hooks/useSelection';
-import type { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { LibraryRow } from './LibraryRow';
+import type { Selection } from '@features/library/hooks/useSelection';
+import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { LibraryRow } from '@features/library/ui/LibraryRow';
 
 export type PlaylistTrackRowProps = {
   track: TrackResponse;

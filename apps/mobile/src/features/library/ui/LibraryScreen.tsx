@@ -12,26 +12,26 @@ import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 
-import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
-import { useLibraryIsEmpty } from '../hooks/useLibraryIsEmpty';
-import { useLibrarySearch } from '../hooks/useLibrarySearch';
-import { useLibraryTrackSelection } from '../hooks/useLibraryTrackSelection';
-import { usePlaylistActions } from '../hooks/usePlaylistActions';
-import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { librarySection } from '../domain/state';
-import { LibraryChips } from './LibraryChips';
-import { LibraryHeader } from './LibraryHeader';
-import { LibraryNoResults } from './LibraryNoResults';
+import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
+import { useLibraryIsEmpty } from '@features/library/hooks/useLibraryIsEmpty';
+import { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
+import { useLibraryTrackSelection } from '@features/library/hooks/useLibraryTrackSelection';
+import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
+import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { librarySection } from '@features/library/domain/state';
+import { LibraryChips } from '@features/library/ui/LibraryChips';
+import { LibraryHeader } from '@features/library/ui/LibraryHeader';
+import { LibraryNoResults } from '@features/library/ui/LibraryNoResults';
 import {
   LibraryEmptyScreen,
   LibraryErrorScreen,
   LibrarySkeletonScreen,
-} from './LibraryStateScreens';
-import { SortControl } from './SortControl';
-import { TrackSelectionOverlay } from './TrackSelectionOverlay';
-import type { LibraryChip } from '../activeView';
-import { type SortKey } from '../domain/sort';
-import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
+} from '@features/library/ui/LibraryStateScreens';
+import { SortControl } from '@features/library/ui/SortControl';
+import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
+import type { LibraryChip } from '@features/library/activeView';
+import { type SortKey } from '@features/library/domain/sort';
+import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   playlists: 'recent',

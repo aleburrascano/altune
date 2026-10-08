@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 
-import type { Selection } from './useSelection';
+import type { Selection } from '@features/library/hooks/useSelection';
 
 type Actions = Pick<Selection, 'clear' | 'selectAll'>;
 

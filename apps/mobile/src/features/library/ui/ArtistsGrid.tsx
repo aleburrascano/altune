@@ -5,10 +5,10 @@ import { Image as ExpoImage } from 'expo-image';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { ArtistGroup } from '@shared/api-client/library';
-import { GRID_GAP } from '../gridColumns';
-import { LibraryGrid } from './LibraryGrid';
-import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '../domain/refresh';
+import { GRID_GAP } from '@features/library/gridColumns';
+import { LibraryGrid } from '@features/library/ui/LibraryGrid';
+import { useLibraryGridLayout } from '@features/library/ui/useLibraryGridLayout';
+import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
 type ArtistsGridProps = {
   artists: ArtistGroup[];

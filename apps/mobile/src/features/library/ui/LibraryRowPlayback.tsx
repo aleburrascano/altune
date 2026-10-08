@@ -7,9 +7,9 @@ import { Row, Text, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { LibraryRowMoreButton } from './LibraryRowMoreButton';
-import { LibraryRowPinnedIcon } from './LibraryRowPinnedIcon';
-import { rowSurfaceStyle } from './libraryRowSurface';
+import { LibraryRowMoreButton } from '@features/library/ui/LibraryRowMoreButton';
+import { LibraryRowPinnedIcon } from '@features/library/ui/LibraryRowPinnedIcon';
+import { rowSurfaceStyle } from '@features/library/ui/libraryRowSurface';
 
 import type { TrackResponse } from '@shared/api-client/types';
 

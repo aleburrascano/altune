@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 
 import type { LibrarySort } from '@shared/api-client/library';
 
-import { failureLogFields } from '../domain/failureLogFields';
-import type { LibraryChip } from '../activeView';
-import type { SortKey } from '../domain/sort';
+import { failureLogFields } from '@features/library/domain/failureLogFields';
+import type { LibraryChip } from '@features/library/activeView';
+import type { SortKey } from '@features/library/domain/sort';
 
 type LibraryQueryChip = LibraryChip;
 

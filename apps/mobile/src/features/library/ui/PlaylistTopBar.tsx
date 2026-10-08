@@ -8,12 +8,12 @@ import { spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 
-import { goBackOrToLibrary } from '../domain/goBackOrToLibrary';
-import { useLibraryOffline } from '../hooks/useLibraryOffline';
-import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
-import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
-import { BackHeader } from './BackHeader';
-import type { DetailProps } from './playlistDetailTypes';
+import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
+import { useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
+import { usePlaylistDelete } from '@features/library/hooks/usePlaylistDelete';
+import { usePlaylistOfflineAction } from '@features/library/hooks/usePlaylistOfflineAction';
+import { BackHeader } from '@features/library/ui/BackHeader';
+import type { DetailProps } from '@features/library/ui/playlistDetailTypes';
 
 type MenuItems = ComponentProps<typeof ContextMenu>['items'];
 
