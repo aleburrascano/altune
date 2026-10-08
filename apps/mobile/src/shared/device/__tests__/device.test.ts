@@ -1,15 +1,28 @@
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
-import { appVersion, declaredAppScheme, deviceInfo, webOrigin } from '@shared/device/device';
+import {
+  appVersion,
+  declaredAppScheme,
+  deviceInfo,
+  isExpoGoRuntime,
+  isWebPlatform,
+  webOrigin,
+} from '@shared/device/device';
 
 let mockExpoConfig: Record<string, unknown> | null = null;
+let mockExecutionEnvironment = 'bare';
 jest.mock('expo-constants', () => ({
   __esModule: true,
   default: {
     get expoConfig() {
       return mockExpoConfig;
     },
+    get executionEnvironment() {
+      return mockExecutionEnvironment;
+    },
   },
+  ExecutionEnvironment: { Bare: 'bare', Standalone: 'standalone', StoreClient: 'storeClient' },
 }));
 
 const originalOS = Platform.OS;
@@ -24,6 +37,7 @@ function setOS(os: typeof Platform.OS): void {
 
 afterEach(() => {
   mockExpoConfig = null;
+  mockExecutionEnvironment = 'bare';
   setOS(originalOS);
   Reflect.deleteProperty(globalThis, 'window');
 });
@@ -93,5 +107,48 @@ describe('webOrigin', () => {
     setOS('web');
     Object.defineProperty(globalThis, 'window', { value: {}, configurable: true });
     expect(webOrigin()).toBeNull();
+  });
+});
+
+describe('isWebPlatform', () => {
+  it('returns true on web', () => {
+    setOS('web');
+    expect(isWebPlatform()).toBe(true);
+  });
+
+  it.each(['ios', 'android'] as const)('returns false on %s', (os) => {
+    setOS(os);
+    expect(isWebPlatform()).toBe(false);
+  });
+
+  it('reads the platform at call time', () => {
+    setOS('ios');
+    expect(isWebPlatform()).toBe(false);
+    setOS('web');
+    expect(isWebPlatform()).toBe(true);
+  });
+});
+
+describe('isExpoGoRuntime', () => {
+  it('returns true in the store client', () => {
+    mockExecutionEnvironment = 'storeClient';
+    expect(isExpoGoRuntime()).toBe(true);
+  });
+
+  it.each(['standalone', 'bare'])('returns false in %s', (env) => {
+    mockExecutionEnvironment = env;
+    expect(isExpoGoRuntime()).toBe(false);
+  });
+
+  it('reads the environment at call time', () => {
+    expect(isExpoGoRuntime()).toBe(false);
+    mockExecutionEnvironment = 'storeClient';
+    expect(isExpoGoRuntime()).toBe(true);
+  });
+
+  it.each(['bare', 'standalone', 'storeClient'])('matches the isExpoGo rule in %s', (env) => {
+    mockExecutionEnvironment = env;
+    const live = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+    expect(isExpoGoRuntime()).toBe(live);
   });
 });
