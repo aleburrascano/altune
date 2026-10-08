@@ -48,7 +48,7 @@ function EmptyTracks({ onAdd }: { onAdd: () => void }): ReactElement {
       <Text variant="label" tone="secondary">
         No tracks yet
       </Text>
-      <Button label="Add Tracks" onPress={onAdd} />
+      <Button action="library.playlist.add_tracks" label="Add Tracks" onPress={onAdd} />
     </View>
   );
 }
