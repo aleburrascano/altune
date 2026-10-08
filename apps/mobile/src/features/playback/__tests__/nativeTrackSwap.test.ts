@@ -28,7 +28,12 @@ import {
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 
-import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import {
+  libraryTrack,
+  previewTrack,
+  libraryTrackWithId,
+  cdnAudioUrls,
+} from '@features/playback/__tests__/fixtures';
 import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
@@ -48,12 +53,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 let restorePort: (() => void) | null = null;
-
-function cdnUrls(ids: readonly string[]): NonNullable<MemoryPlaybackSeed['audioUrls']> {
-  return Object.fromEntries(
-    ids.map((id) => [id, { url: `https://cdn.example/${id}.mp3`, version: 'v1' }]),
-  );
-}
 
 function installMemoryPort(
   seed: MemoryPlaybackSeed = {},
@@ -314,16 +313,12 @@ describe('swapping an upcoming slot to a cached file', () => {
 describe('presign failure trace', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
 
-  function track(trackId: string): PlaybackTrack {
-    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-  }
-
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
     forgetAllSwaps();
     useQueueStore.getState().clearQueue();
-    installMemoryPort({ audioUrls: cdnUrls(['t1']) });
+    installMemoryPort({ audioUrls: cdnAudioUrls(['t1']) });
     player.getQueue.mockResolvedValue([]);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -343,7 +338,7 @@ describe('presign failure trace', () => {
         },
       );
 
-      await repairActiveToStreaming(track('t1'));
+      await repairActiveToStreaming(libraryTrackWithId('t1'));
 
       expect(warn).toHaveBeenCalledWith('[playback] presign failed', {
         trackIds: ['t1'],
@@ -359,7 +354,7 @@ describe('presign failure trace', () => {
 describe('sign-out racing a streaming repair', () => {
   const { __player } = jest.requireMock('react-native-track-player');
 
-  const A_TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-of-a') } });
+  const A_TRACK = libraryTrackWithId('trk-of-a');
 
   function heldPresign() {
     let release: (v: ResolvedAudioUrl[]) => void = () => undefined;
@@ -406,9 +401,7 @@ describe('swap-path presign health tally', () => {
 
   it('counts a swap-path presign failure', async () => {
     installMemoryPort({}, { fetchAudioUrls: () => Promise.reject(new Error('presign 503')) });
-    await repairActiveToStreaming(
-      libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } }),
-    );
+    await repairActiveToStreaming(libraryTrackWithId('t1'));
     flushPlaybackHealth();
     expect((recordEvent as jest.Mock).mock.calls[0]![0].payload).toMatchObject({
       presign_failed: 1,

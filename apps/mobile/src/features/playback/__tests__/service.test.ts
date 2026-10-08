@@ -26,7 +26,7 @@ import {
 import * as nativeTrackSwap from '@features/playback/native/nativeTrackSwap';
 import { playbackService, resetPlaybackForSignOut } from '@features/playback/native/service';
 
-import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { previewTrack, libraryTrackWithId } from '@features/playback/__tests__/fixtures';
 
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');
@@ -204,10 +204,6 @@ describe('native PlaybackError handling', () => {
     const MANY_ERRORS = RECOVERY_ATTEMPTS_PER_TRACK + 6;
 
     let now = 0;
-
-    function libraryTrackWithId(trackId: string): PlaybackTrack {
-      return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-    }
 
     async function failPlaybackOnce(onError: PlaybackErrorHandler): Promise<void> {
       onError({ code: 'android-io-bad-http-status', message: 'Response code: 403' });
@@ -539,13 +535,7 @@ describe('playbackService — handler rejections are reported, not left unhandle
     unhandled.length = 0;
     process.on('unhandledRejection', onUnhandled);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    useQueueStore
-      .getState()
-      .loadQueue(
-        [libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-1') } })],
-        0,
-        null,
-      );
+    useQueueStore.getState().loadQueue([libraryTrackWithId('trk-1')], 0, null);
   });
 
   afterEach(async () => {

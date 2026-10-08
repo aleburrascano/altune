@@ -1,9 +1,7 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { prefetchNext } from '@features/playback/native/audioPrefetch';
@@ -25,7 +23,11 @@ import { playbackService } from '@features/playback/native/service';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 
-import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import {
+  previewTrack,
+  libraryTrackWithId,
+  cdnAudioUrls,
+} from '@features/playback/__tests__/fixtures';
 import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
@@ -66,12 +68,6 @@ const { __player } = jest.requireMock('react-native-track-player') as {
 };
 let restorePort: (() => void) | null = null;
 
-function cdnUrls(ids: readonly string[]): NonNullable<MemoryPlaybackSeed['audioUrls']> {
-  return Object.fromEntries(
-    ids.map((id) => [id, { url: `https://cdn.example/${id}.mp3`, version: 'v1' }]),
-  );
-}
-
 function installMemoryPort(
   seed: MemoryPlaybackSeed = {},
   override: Partial<PlaybackPort> = {},
@@ -96,10 +92,6 @@ function appStateListeners(): AppStateChangeHandler[] {
   ).__listeners;
 }
 
-function track(trackId: string): PlaybackTrack {
-  return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
-}
-
 function sentPayloads(): Record<string, unknown>[] {
   return recordEventMock.mock.calls.map(([event]) => {
     expect(event.type).toBe('playback_health');
@@ -112,7 +104,7 @@ beforeEach(() => {
   forgetAllSwaps();
   useQueueStore.getState().clearQueue();
   recordEventMock.mockReset().mockResolvedValue(undefined);
-  installMemoryPort({ audioUrls: cdnUrls(['t0', 't1', 't2', 't3']) });
+  installMemoryPort({ audioUrls: cdnAudioUrls(['t0', 't1', 't2', 't3']) });
   player.getQueue.mockResolvedValue([]);
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
@@ -124,7 +116,9 @@ afterEach(() => {
 describe('playback health metric', () => {
   it('records a failed prefetch by stage', async () => {
     installMemoryPort({}, { fetchAudioUrls: () => Promise.reject(new Error('network down')) });
-    useQueueStore.getState().loadQueue([track('t0'), track('t1')], 0, null);
+    useQueueStore
+      .getState()
+      .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
 
     await prefetchNext(0);
     flushPlaybackHealth();
@@ -134,7 +128,7 @@ describe('playback health metric', () => {
   });
 
   it('records a successful prefetch', async () => {
-    const [active, next] = [track('t0'), track('t1')];
+    const [active, next] = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
     useQueueStore.getState().loadQueue([active, next], 0, null);
     player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
@@ -172,7 +166,7 @@ describe('playback health metric', () => {
   });
 
   it('records presign success and failure from queue loads', async () => {
-    const tracks = [track('t0'), track('t1')];
+    const tracks = [libraryTrackWithId('t0'), libraryTrackWithId('t1')];
     useQueueStore.getState().loadQueue(tracks, 0, null);
 
     await loadNativeQueue(tracks, 0, { autoplay: false });
@@ -265,7 +259,7 @@ describe('playback health metric — user-visible failures', () => {
   it('counts a native error whose audio recovery request fails', async () => {
     const { __http } = jest.requireActual('@testing/doubles/fetch.js');
     __http.replyAll({ status: 500 });
-    useQueueStore.getState().loadQueue([track('trk-1')], 0, null);
+    useQueueStore.getState().loadQueue([libraryTrackWithId('trk-1')], 0, null);
 
     await firePlaybackError('android-io-bad-http-status', 'Response code: 403');
     flushPlaybackHealth();
