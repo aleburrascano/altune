@@ -1,6 +1,7 @@
 import { ApiError, ContractError } from '@shared/errors';
 
-import { RETRY_TAIL, describeError } from '@shared/lib/describeError';
+import { RETRY_TAIL, describeError } from '@shared/failure/describeError';
+import * as libShim from '@shared/lib/describeError';
 
 describe('describeError — network vs 5xx vs generic', () => {
   it('maps a transport failure to the offline copy', () => {
@@ -94,5 +95,20 @@ describe('describeError — a response this build can no longer decode', () => {
 describe('RETRY_TAIL', () => {
   it('is the single source of the retry sentence', () => {
     expect(RETRY_TAIL).toBe('Please try again.');
+  });
+});
+
+describe('describeError — lib shim', () => {
+  const HTTP_BAD_REQUEST = 400;
+
+  it('re-exports the same objects as the failure path', () => {
+    expect(libShim.describeError).toBe(describeError);
+    expect(libShim.RETRY_TAIL).toBe(RETRY_TAIL);
+  });
+
+  it('refuses an ApiError whose message looks like a network failure, through both paths', () => {
+    const err = new ApiError(HTTP_BAD_REQUEST, 'network down');
+    expect(describeError(err).title).not.toBe('No connection');
+    expect(libShim.describeError(err).title).not.toBe('No connection');
   });
 });

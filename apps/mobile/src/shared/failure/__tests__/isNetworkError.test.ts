@@ -1,9 +1,10 @@
-import { isNetworkError } from '@shared/lib/isNetworkError';
+import { isNetworkError } from '@shared/failure/isNetworkError';
+import { isNetworkError as libShimIsNetworkError } from '@shared/lib/isNetworkError';
 import { apiFetch } from '@shared/api-client';
 import { ApiError } from '@shared/errors';
 import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { describeError } from '@shared/lib/describeError';
+import { describeError } from '@shared/failure/describeError';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
@@ -155,5 +156,35 @@ describe('isNetworkError — an ApiError is a server response, never transport',
     expect(isNetworkError(apiError)).toBe(false);
     expect(isNetworkError(new NetworkError('transport', 'dropped'))).toBe(true);
     expect(isNetworkError(new Error('fetch failed'))).toBe(true);
+  });
+});
+
+describe('isNetworkError — lib shim', () => {
+  const HTTP_BAD_REQUEST = 400;
+
+  it('re-exports the same function as the failure path', () => {
+    expect(libShimIsNetworkError).toBe(isNetworkError);
+  });
+
+  it('agrees through both paths on undefined and on a timeout', () => {
+    for (const check of [isNetworkError, libShimIsNetworkError]) {
+      expect(check(undefined)).toBe(false);
+      expect(check(new Error('timeout'))).toBe(true);
+    }
+  });
+
+  it('refuses an ApiError whose message looks like a network failure, through both paths', () => {
+    const err = new ApiError(HTTP_BAD_REQUEST, 'network down');
+    expect(isNetworkError(err)).toBe(false);
+    expect(libShimIsNetworkError(err)).toBe(false);
+  });
+
+  it('agrees through both paths when one Error changes its message', () => {
+    const err = new Error('boom');
+    expect(isNetworkError(err)).toBe(false);
+    expect(libShimIsNetworkError(err)).toBe(false);
+    err.message = 'fetch failed';
+    expect(isNetworkError(err)).toBe(true);
+    expect(libShimIsNetworkError(err)).toBe(true);
   });
 });
