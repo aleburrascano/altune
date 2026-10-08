@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/reqmetrics"
 	"net/http"
@@ -83,7 +84,7 @@ func (a *App) mountRoutes(
 			r.Mount("/playback", queueHandler.Routes())
 			r.Mount("/discovery", discoveryH.Routes())
 			mountFeedback(r, feedbackH)
-			r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns).withShutdown(a.lifecycleDone))
+			r.Handle("/events", eventstream.NewHandler(a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		})
 	})
 
