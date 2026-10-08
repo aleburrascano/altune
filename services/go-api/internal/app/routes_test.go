@@ -407,3 +407,40 @@ func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
 	t.Fatal("timed out waiting for expected line")
 	return ""
 }
+
+func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
+	r := productionRouter(t)
+
+	for _, tc := range []struct {
+		name, method, path, body string
+		want                     int
+	}{
+		{"authed route rejected", http.MethodGet, "/v1/library", "", http.StatusUnauthorized},
+		{"public route", http.MethodPost, "/v1/public/auth-failures", `{"reason":"invalid_credentials","app_version":"1.2.3"}`, http.StatusNoContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body)))
+			if rec.Code != tc.want {
+				t.Fatalf("%s %s = %d, want %d", tc.method, tc.path, rec.Code, tc.want)
+			}
+			if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+			}
+			if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+				t.Errorf("Cache-Control = %q, want no-store", got)
+			}
+		})
+	}
+}
+
+func TestV1ResponseHeaders_HandlerCacheControlOverridesDefault(t *testing.T) {
+	h := v1ResponseHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/discovery/search", nil))
+	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Errorf("Cache-Control = %q, want handler value private, no-store", got)
+	}
+}

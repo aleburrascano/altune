@@ -51,6 +51,15 @@ func v1RequestTimeout(d time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
+func v1ResponseHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
@@ -63,6 +72,7 @@ func (a *App) mountRoutes(
 	r.Get("/health", a.handleHealth)
 
 	r.Route("/v1", func(r chi.Router) {
+		r.Use(v1ResponseHeaders)
 		discoveryH.PublicRoutes(r, discoveryHandler.DefaultAuthFailureLimit)
 
 		r.Group(func(r chi.Router) {
