@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { Factory } from 'fishery';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 const REFERENCE_DATE = new Date('2026-01-01T00:00:00Z');
 

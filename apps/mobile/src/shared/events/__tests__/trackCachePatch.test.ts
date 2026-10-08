@@ -10,11 +10,8 @@ import fc from 'fast-check';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
-import type {
-  ListTracksResponse,
-  PlaylistDetailResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
+import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import {

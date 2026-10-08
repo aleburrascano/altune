@@ -15,7 +15,7 @@ import {
 } from '@shared/playback/queueOrder';
 import type { QueueState } from '@shared/playback/queueOrder';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 function track(id: string): PlaybackTrack {
   return {

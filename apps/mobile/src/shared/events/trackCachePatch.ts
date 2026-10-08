@@ -4,10 +4,10 @@ import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionTransition } from '@shared/api-client/trackAcquisition';
 import type {
   ListTracksResponse,
-  PlaylistDetailResponse,
   TrackFields,
   TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/trackResponse';
+import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 type TrackPages = InfiniteData<ListTracksResponse>;

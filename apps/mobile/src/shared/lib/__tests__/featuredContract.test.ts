@@ -107,7 +107,7 @@ describe('cross-surface contract: FeaturedArtist (TS write side) <-> FeaturedArt
     const goDtoKeys = deriveGoFeaturedArtistDTOKeys(goDtoSource);
     expect(goDtoKeys.size).toBeGreaterThan(0);
 
-    const tsTypeSource = readTsSource(path.join('src', 'shared', 'api-client', 'types.ts'));
+    const tsTypeSource = readTsSource(path.join('src', 'shared', 'api-client', 'trackResponse.ts'));
     const tsTypeKeys = deriveTsFeaturedArtistTypeKeys(tsTypeSource);
     expect(tsTypeKeys.size).toBeGreaterThan(0);
 

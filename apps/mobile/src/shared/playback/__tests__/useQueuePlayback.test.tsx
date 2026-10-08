@@ -7,7 +7,8 @@ import { asTrackId } from '@shared/api-client/ids';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 const INITIAL_STATE = useQueueStore.getState();
 

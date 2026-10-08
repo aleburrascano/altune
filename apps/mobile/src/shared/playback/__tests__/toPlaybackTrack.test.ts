@@ -1,5 +1,5 @@
 import type { QueueStateCurrentTrack } from '@shared/api-client/playback';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { asTrackId } from '@shared/api-client/ids';
 
 import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';

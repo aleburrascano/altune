@@ -9,11 +9,10 @@ import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/track
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
-  ListTracksResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/playlistResponse';
+import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 

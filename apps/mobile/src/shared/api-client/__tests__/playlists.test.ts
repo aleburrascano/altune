@@ -13,11 +13,8 @@ import { ApiError, ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/api-client/ids';
 import type { PlaylistId } from '@shared/api-client/ids';
-import type {
-  PlaylistDetailResponse,
-  PlaylistResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

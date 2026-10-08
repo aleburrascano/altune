@@ -1,5 +1,6 @@
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack, QueueSource, RepeatMode } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { QueueSource, RepeatMode } from '@shared/playback/queueSource';
 
 type TrackList = readonly PlaybackTrack[];
 

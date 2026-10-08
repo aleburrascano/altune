@@ -1,8 +1,8 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/types';
-import { RETRY_TAIL } from '@shared/lib/describeError';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import { RETRY_TAIL } from '@shared/failure/describeError';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { useAppMutation } from '@shared/query/useAppMutation';

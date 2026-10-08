@@ -1,4 +1,4 @@
-import type { FeaturedArtist } from '@shared/api-client/types';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
 
 export function featuredArtistsFromExtras(raw: unknown): FeaturedArtist[] {
   if (!Array.isArray(raw)) return [];

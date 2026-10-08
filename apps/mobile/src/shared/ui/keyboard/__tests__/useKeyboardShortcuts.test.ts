@@ -3,7 +3,7 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 
 import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import {
   FOCUS_REQUEST_TTL_MS,

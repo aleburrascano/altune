@@ -11,7 +11,7 @@ import type {
   PlaylistResponse,
   RemoveTracksFromPlaylistRequest,
   RemoveTracksFromPlaylistResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/playlistResponse';
 import {
   asCount,
   asNumber,

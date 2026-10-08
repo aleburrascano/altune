@@ -2,7 +2,7 @@ import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 
 import { asTrackId } from '@shared/api-client/ids';
 import { toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
-import type { ListTracksResponse } from '@shared/api-client/types';
+import type { ListTracksResponse } from '@shared/api-client/trackResponse';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys } from '@shared/lib/query-keys';
 

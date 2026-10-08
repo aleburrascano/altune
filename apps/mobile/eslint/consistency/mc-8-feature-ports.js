@@ -42,7 +42,7 @@ module.exports = {
       "import { type TrackResponse, getTracks } from '@shared/api-client';\nexport const g = getTracks;\n",
     ],
     valid: [
-      "import type { TrackResponse } from '@shared/api-client/types';\nexport type T = TrackResponse;\n",
+      "import type { TrackResponse } from '@shared/api-client/trackResponse';\nexport type T = TrackResponse;\n",
       "import type { TrackResponse } from '@shared/api-client';\nexport type T = TrackResponse;\n",
       "import { type TrackResponse } from '@shared/api-client';\nexport type T = TrackResponse;\n",
       "import { trackIdOf } from '@shared/api-client/ids';\nexport const t = trackIdOf;\n",
