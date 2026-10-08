@@ -30,7 +30,6 @@ func (c *Config) ProviderReplayEnabled() bool {
 }
 
 func (c *Config) AcquisitionFixtureEnabled() bool {
-	// Replaying recorded provider traffic is hermetic test mode: it must not download real audio.
 	if !c.AcquisitionFixtureOptIn && !c.ProviderReplayEnabled() {
 		return false
 	}
