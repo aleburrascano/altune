@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/observe/domain"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -21,44 +22,18 @@ var (
 
 const keepaliveFrame = ": keepalive\n\n"
 
-var (
-	errEventFeedUnavailable = &codedError{
-		msg:    "event feed unavailable",
-		status: http.StatusServiceUnavailable,
-		code:   "observe.event_feed_unavailable",
-	}
-	errStreamSubscriberLimit = &codedError{
-		msg:    "too many observe streams open",
-		status: http.StatusTooManyRequests,
-		code:   "observe.stream_subscriber_limit",
-	}
-	errStreamingUnsupported = &codedError{
-		msg:    "streaming unsupported",
-		status: http.StatusInternalServerError,
-		code:   "observe.streaming_unsupported",
-	}
-)
-
-func streamUnavailable(stream string) *codedError {
-	return &codedError{
-		msg:    stream + " stream unavailable",
-		status: http.StatusServiceUnavailable,
-		code:   "observe.stream_unavailable",
-	}
-}
-
 func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, err, limitErr error) {
 	if !errors.Is(err, limitErr) {
-		httputil.HandleServiceError(w, r, streamUnavailable(stream))
+		httputil.HandleServiceError(w, r, domain.StreamUnavailable(stream))
 		return
 	}
 	slog.WarnContext(r.Context(), "observe.stream_subscriber_limit", slog.String("stream", stream))
-	httputil.HandleServiceError(w, r, errStreamSubscriberLimit)
+	httputil.HandleServiceError(w, r, domain.ErrStreamSubscriberLimit)
 }
 
 func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	if _, canFlush := w.(http.Flusher); !canFlush {
-		httputil.HandleServiceError(w, r, errStreamingUnsupported)
+		httputil.HandleServiceError(w, r, domain.ErrStreamingUnsupported)
 		return
 	}
 	w = httputil.ExtendWriteDeadlineOnWrite(w, streamWriteIdle)

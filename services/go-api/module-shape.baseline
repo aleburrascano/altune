@@ -81,11 +81,7 @@ G3 internal/discovery/adapters/handler/ownership_stamp.go:6 imports auth outside
 G3 internal/discovery/adapters/handler/search_endpoints.go:4 imports auth outside adapters/authbridge
 G3 internal/discovery/adapters/handler/search_rate_limit.go:4 imports auth outside adapters/authbridge
 G3 internal/eventstream/handler.go:4 imports auth outside adapters/authbridge
-G3 internal/observe/handler/acquisition.go:4 imports acquisition outside adapters/acquisitionbridge
 G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
-G3 internal/observe/handler/handler.go:11 imports acquisition outside adapters/acquisitionbridge
-G3 internal/observe/handler/handler.go:4 imports discovery outside adapters/discoverybridge
-G3 internal/observe/handler/quality.go:4 imports discovery outside adapters/discoverybridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
 G3 internal/playback/adapters/handler/queue_handler.go:4 imports auth outside adapters/authbridge
@@ -97,7 +93,6 @@ G4 internal/discovery/service/favorites.go invalidFavoriteError coded error decl
 G4 internal/discovery/service/record_event.go invalidEventError coded error declared outside domain
 G4 internal/eventstream/handler.go:acquireSlot http.Error outside shared/httputil
 G4 internal/eventstream/handler.go:setup http.Error outside shared/httputil
-G4 internal/observe/handler/errors.go codedError coded error declared outside domain
 G4 internal/playback/adapters/handler/queue_rate_limit.go queueRateLimitedError coded error declared outside domain
 G4 internal/playback/ports/queue_state_repo.go UnavailableError coded error declared outside domain
 G4 internal/shared/validation_error.go ValidationError coded error declared outside domain
@@ -411,7 +406,6 @@ N3 internal/discovery/service/suggest.go matches no exported identifier
 N3 internal/discovery/service/telemetry.go matches no exported identifier
 N3 internal/discovery/service/vocab.go matches no exported identifier
 N3 internal/discovery/service/vocabulary_refresh.go matches no exported identifier
-N3 internal/observe/handler/health.go matches no exported identifier
 N3 internal/playback/adapters/handler/queue_rate_limit.go matches no exported identifier
 N3 internal/playback/adapters/metrics/expvar_metrics.go matches no exported identifier
 N3 internal/playback/adapters/persistence/deleted_identity_repo.go matches no exported identifier

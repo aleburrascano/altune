@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/observe/domain"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
@@ -41,7 +42,7 @@ func streamActor(ctx context.Context) string {
 
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	if !h.hasLiveEventFeed() {
-		httputil.HandleServiceError(w, r, errEventFeedUnavailable)
+		httputil.HandleServiceError(w, r, domain.ErrEventFeedUnavailable)
 		return
 	}
 	ch, cancel, err := h.deps.Events.Subscribe()
@@ -61,7 +62,7 @@ func (h *Handler) hasLiveEventFeed() bool {
 
 func (h *Handler) streamLogs(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Logs == nil {
-		httputil.HandleServiceError(w, r, streamUnavailable("logs"))
+		httputil.HandleServiceError(w, r, domain.StreamUnavailable("logs"))
 		return
 	}
 	ch, cancel, err := h.deps.Logs.Subscribe()
