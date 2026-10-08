@@ -5,7 +5,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 
-import { audioStreamUrl } from '@shared/api-client/audio';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { ContractError } from '@shared/errors';
 
 const artworkPlaceholder = (): string =>
@@ -30,7 +30,11 @@ export function toNativeTrack(
   if (track.source.kind === 'preview') {
     return { ...base, url: playablePreviewUrl(track.source.previewUrl) };
   }
-  return { ...base, url: audioStreamUrl(track.source.trackId), headers: opts.headers ?? {} };
+  return {
+    ...base,
+    url: playbackPort().audioStreamUrl(track.source.trackId),
+    headers: opts.headers ?? {},
+  };
 }
 
 export function activeNativeTrackId(): Promise<TrackKey | undefined> {

@@ -1,11 +1,8 @@
 import { resolvePinnedUri } from '@shared/offline/pinnedStore';
 import type { AddTrack } from 'react-native-track-player';
 
-import {
-  audioRequestHeaders,
-  fetchAudioUrls,
-  type ResolvedAudioUrl,
-} from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/api-client/audio';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { classifyPlaybackFailure } from '@features/playback/classifyPlaybackError';
 import { warnPlayback } from '@features/playback/redactPlaybackError';
 import { recordPresignOutcome } from '@features/playback/playbackHealth';
@@ -15,7 +12,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 function headersFor(tracks: readonly PlaybackTrack[]): Promise<Record<string, string>> {
   const needsAuth = tracks.some((t) => t.source.kind === 'library');
-  return needsAuth ? audioRequestHeaders() : Promise.resolve({});
+  return needsAuth ? playbackPort().audioRequestHeaders() : Promise.resolve({});
 }
 
 interface ResolvedUrls {
@@ -40,7 +37,7 @@ function presignFailed(ids: string[], err: unknown): ResolvedUrls {
 
 async function fetchResolvedUrls(ids: string[]): Promise<ResolvedUrls> {
   try {
-    const resolved = await fetchAudioUrls(ids);
+    const resolved = await playbackPort().fetchAudioUrls(ids);
     recordPresignOutcome(true);
     return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false };
   } catch (err) {

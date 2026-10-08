@@ -3,9 +3,8 @@ import { File } from 'expo-file-system';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { fetchAudioUrls, isAudioPrefetchEnabled } from '@shared/api-client/audio';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 import { deviceFileStore, fileHandle } from '@shared/files/fileStore';
 import {
   MAX_PREFETCH_FILE_BYTES,
@@ -49,7 +48,7 @@ function evictAgainstLiveQueue(): void {
   evict(orderedQueueTracks(s), s.currentIndex);
 }
 
-export const PREFETCH_STALL_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
+export const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 
 function deleteQuietly(file: File): void {
   try {
@@ -149,9 +148,10 @@ async function resolveAudio(
   trackId: TrackId,
   controller: AbortController,
 ): Promise<ResolvedAudio | null> {
-  const [resolved] = await inStage('resolve', fetchAudioUrls([trackId]));
+  const port = playbackPort();
+  const [resolved] = await inStage('resolve', port.fetchAudioUrls([trackId]));
   if (!resolved || !VERSION_FORMAT.test(resolved.version)) return null;
-  if (!isAudioPrefetchEnabled() || isCancelled(trackId, controller)) return null;
+  if (!port.isAudioPrefetchEnabled() || isCancelled(trackId, controller)) return null;
   return resolved;
 }
 
@@ -244,7 +244,9 @@ async function runPrefetch(claimed: ClaimedPrefetch): Promise<void> {
 }
 
 function wantedUpcoming(activeIndex: number) {
-  const upcoming = isAudioPrefetchEnabled() ? upcomingLibraryTrack(activeIndex) : null;
+  const upcoming = playbackPort().isAudioPrefetchEnabled()
+    ? upcomingLibraryTrack(activeIndex)
+    : null;
   supersedeAllBut(upcoming?.trackId ?? null);
   return upcoming && !inflight.has(upcoming.trackId) ? upcoming : null;
 }

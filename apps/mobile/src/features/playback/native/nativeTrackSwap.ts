@@ -3,7 +3,7 @@ import TrackPlayer, { type AddTrack, type Track } from 'react-native-track-playe
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
+import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import type { TrackId } from '@shared/api-client/ids';
 import { currentLoadToken, isStale } from '@features/playback/loadToken';
 import {
@@ -34,7 +34,7 @@ export function forgetSwap(trackId: TrackId): void {
 
 async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
   try {
-    const [resolved] = await fetchAudioUrls([trackId]);
+    const [resolved] = await playbackPort().fetchAudioUrls([trackId]);
     recordPresignOutcome(true);
     return resolved?.url ?? null;
   } catch (err) {
@@ -48,7 +48,7 @@ async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
   if (track.source.kind === 'preview') return toNativeTrack(track);
   const presignedUrl = await presignedUrlOrNull(track.source.trackId);
   if (presignedUrl) return toNativeTrack(track, { streamUrl: presignedUrl });
-  return toNativeTrack(track, { headers: await audioRequestHeaders() });
+  return toNativeTrack(track, { headers: await playbackPort().audioRequestHeaders() });
 }
 
 async function loadAndPlay(native: AddTrack, fence: Fence): Promise<void> {
