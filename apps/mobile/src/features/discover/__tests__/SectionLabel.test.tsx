@@ -4,14 +4,14 @@ import { render, screen } from '@testing-library/react-native';
 
 import { darkTheme, spacing } from '@shared/ui/theme';
 
-import { BlendedSection } from '../ui/BlendedSection';
-import { DiscoverBody } from '../ui/DiscoverBody';
-import { TopResultCard } from '../ui/TopResultCard';
-import { resultFixture } from './fixtures';
+import { BlendedSection } from '@features/discover/ui/BlendedSection';
+import { DiscoverBody } from '@features/discover/ui/DiscoverBody';
+import { TopResultCard } from '@features/discover/ui/TopResultCard';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
-import type { ResultsCommonProps } from '../ui/ResultsList';
+import type { ResultsCommonProps } from '@features/discover/ui/ResultsList';
 
-jest.mock('../hooks/usePreviewPlayback', () => ({
+jest.mock('@features/discover/hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
 }));
 

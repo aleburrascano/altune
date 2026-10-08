@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, Text, spacing } from '@shared/ui';
 
 import { describeError } from '@shared/lib/describeError';
-import { SEARCH_UNAVAILABLE_TITLE } from '../discoverView';
+import { SEARCH_UNAVAILABLE_TITLE } from '@features/discover/discoverView';
 
 export function DiscoverUnavailable(): ReactElement {
   return (

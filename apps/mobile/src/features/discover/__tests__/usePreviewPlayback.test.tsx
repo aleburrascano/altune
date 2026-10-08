@@ -8,7 +8,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-import { usePreviewPlayback } from '../hooks/usePreviewPlayback';
+import { usePreviewPlayback } from '@features/discover/hooks/usePreviewPlayback';
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn().mockResolvedValue(undefined),

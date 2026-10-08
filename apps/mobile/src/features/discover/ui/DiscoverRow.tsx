@@ -9,8 +9,8 @@ import { FavoriteButton } from '@shared/favorites';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { resultSecondaryLine } from '../resultSecondaryLine';
-import { usePreviewPlayback } from '../hooks/usePreviewPlayback';
+import { resultSecondaryLine } from '@features/discover/resultSecondaryLine';
+import { usePreviewPlayback } from '@features/discover/hooks/usePreviewPlayback';
 
 type DiscoverRowProps = {
   result: DiscoveryResult;

@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Skeleton, radius, spacing } from '@shared/ui';
 
-import { ART_SIZE } from './DiscoverRow';
+import { ART_SIZE } from '@features/discover/ui/DiscoverRow';
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 

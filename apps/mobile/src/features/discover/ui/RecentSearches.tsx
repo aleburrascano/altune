@@ -4,7 +4,7 @@ import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
-import { SectionLabel } from './SectionLabel';
+import { SectionLabel } from '@features/discover/ui/SectionLabel';
 import type { SearchHistoryItem } from '@shared/api-client/discovery';
 
 const HISTORY_LABEL_MAX_CHARS = 40;

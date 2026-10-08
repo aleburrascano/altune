@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
 
-import { FilterChips } from './FilterChips';
-import { IncompleteResultsBanner } from './IncompleteResultsBanner';
-import type { ResultsFilter } from '../hooks/useResultsFilter';
+import { FilterChips } from '@features/discover/ui/FilterChips';
+import { IncompleteResultsBanner } from '@features/discover/ui/IncompleteResultsBanner';
+import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
 
 interface ZeroResultsProps {
   filter: ResultsFilter;

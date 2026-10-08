@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { setSearchState } from '../searchState';
-import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
-import { MAX_QUERY_LENGTH } from '../searchLimits';
+import { setSearchState } from '@features/discover/searchState';
+import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
+import { MAX_QUERY_LENGTH } from '@features/discover/searchLimits';
 
 const OPTIONS = { debounceMs: 300 };
 

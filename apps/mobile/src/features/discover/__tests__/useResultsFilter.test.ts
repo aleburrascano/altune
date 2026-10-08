@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useResultsFilter } from '../hooks/useResultsFilter';
+import { useResultsFilter } from '@features/discover/hooks/useResultsFilter';
 
 describe('useResultsFilter resets to "all" only when a new query is committed', () => {
   it('keeps the chosen filter while the query is unchanged and resets it on a new query', () => {

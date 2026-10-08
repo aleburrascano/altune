@@ -2,24 +2,24 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { AsyncSection, type AsyncSectionProps } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
-import { BlendedSection } from './BlendedSection';
-import { DiscoverFullError, DiscoverUnavailable } from './DiscoverFullError';
-import { DiscoverSkeleton } from './DiscoverSkeleton';
-import { DiscoverZeroResults } from './DiscoverZeroResults';
-import { FilterChips } from './FilterChips';
-import { FilteredResults } from './FilteredResults';
-import { IncompleteResultsBanner } from './IncompleteResultsBanner';
-import { RefreshFailedNotice } from './RefreshFailedNotice';
-import { RecentSearches } from './RecentSearches';
-import { searchAnnouncement, asyncViewForDiscoverView } from '../discoverView';
+import { BlendedSection } from '@features/discover/ui/BlendedSection';
+import { DiscoverFullError, DiscoverUnavailable } from '@features/discover/ui/DiscoverFullError';
+import { DiscoverSkeleton } from '@features/discover/ui/DiscoverSkeleton';
+import { DiscoverZeroResults } from '@features/discover/ui/DiscoverZeroResults';
+import { FilterChips } from '@features/discover/ui/FilterChips';
+import { FilteredResults } from '@features/discover/ui/FilteredResults';
+import { IncompleteResultsBanner } from '@features/discover/ui/IncompleteResultsBanner';
+import { RefreshFailedNotice } from '@features/discover/ui/RefreshFailedNotice';
+import { RecentSearches } from '@features/discover/ui/RecentSearches';
+import { searchAnnouncement, asyncViewForDiscoverView } from '@features/discover/discoverView';
 import type {
   DiscoveryResult,
   ResultSection,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, SearchCorrection } from '../discoverView';
-import type { ResultsFilter } from '../hooks/useResultsFilter';
-import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
+import type { DiscoverView, SearchCorrection } from '@features/discover/discoverView';
+import type { ResultsFilter } from '@features/discover/hooks/useResultsFilter';
+import type { ImpressionHandlers } from '@features/discover/hooks/useImpressionLogger';
 
 type SlotBuilders = Pick<AsyncSectionProps, 'skeleton' | 'error' | 'empty'>;
 

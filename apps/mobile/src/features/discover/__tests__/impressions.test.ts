@@ -1,5 +1,5 @@
-import { buildImpressionRows } from '../impressions';
-import { resultFixture } from './fixtures';
+import { buildImpressionRows } from '@features/discover/impressions';
+import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 describe('buildImpressionRows projects results into impression rows', () => {
   it('returns an empty array for an empty result set', () => {
