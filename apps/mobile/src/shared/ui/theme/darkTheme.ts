@@ -1,5 +1,5 @@
-import { palette } from './palette';
-import type { Theme } from './theme';
+import { palette } from '@shared/ui/theme/palette';
+import type { Theme } from '@shared/ui/theme/theme';
 
 export const darkTheme: Theme = {
   scheme: 'dark',

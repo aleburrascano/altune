@@ -1,8 +1,8 @@
 import { View } from 'react-native';
 import type { ViewProps } from 'react-native';
 
-import { radius, spacing } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
+import { radius, spacing } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
 
 export type CardProps = ViewProps;
 

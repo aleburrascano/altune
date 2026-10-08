@@ -1,8 +1,8 @@
 import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 import { showAlert } from '@shared/ui/dialog/dialog';
 
-import { showFailureAlert } from '../showFailure';
-import { showFailureAlert as showFailureAlertFromUi } from '../..';
+import { showFailureAlert } from '@shared/ui/failure/showFailure';
+import { showFailureAlert as showFailureAlertFromUi } from '@shared/ui';
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));

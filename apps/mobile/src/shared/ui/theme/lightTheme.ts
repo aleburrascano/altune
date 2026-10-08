@@ -1,4 +1,4 @@
-import type { Theme } from './theme';
+import type { Theme } from '@shared/ui/theme/theme';
 
 export const lightTheme: Theme = {
   scheme: 'light',

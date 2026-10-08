@@ -1,6 +1,6 @@
 import type * as Haptics from 'expo-haptics';
 
-import type { tapFeedback as tapFeedbackType } from '../haptics';
+import type { tapFeedback as tapFeedbackType } from '@shared/ui/haptics';
 
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn().mockResolvedValue(undefined),
@@ -15,7 +15,7 @@ function runOn(
   jest.isolateModules(() => {
     require('react-native').Platform.OS = os;
     const loadedHaptics: typeof Haptics = require('expo-haptics');
-    const { tapFeedback }: { tapFeedback: typeof tapFeedbackType } = require('../haptics');
+    const { tapFeedback }: { tapFeedback: typeof tapFeedbackType } = require('@shared/ui/haptics');
     run(tapFeedback, loadedHaptics);
   });
 }

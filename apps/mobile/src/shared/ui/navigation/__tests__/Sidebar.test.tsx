@@ -1,8 +1,8 @@
 import { Text } from 'react-native';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 
-import { Sidebar } from '../Sidebar';
-import type { TabRoute } from '../tabRoutes';
+import { Sidebar } from '@shared/ui/navigation/Sidebar';
+import type { TabRoute } from '@shared/ui/navigation/tabRoutes';
 
 describe('Sidebar', () => {
   it('lists Discover, Library and Settings, in that order', () => {

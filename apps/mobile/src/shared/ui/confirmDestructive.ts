@@ -1,4 +1,4 @@
-import { confirm } from './dialog/dialog';
+import { confirm } from '@shared/ui/dialog/dialog';
 
 export interface ConfirmDestructiveOptions {
   title: string;

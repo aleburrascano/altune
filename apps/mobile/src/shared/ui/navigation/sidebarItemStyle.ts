@@ -1,8 +1,8 @@
 import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native';
 
-import { spacing } from '../theme/tokens';
-import type { Theme } from '../theme/theme';
+import { spacing } from '@shared/ui/theme/tokens';
+import type { Theme } from '@shared/ui/theme/theme';
 
 export type PressableWebState = PressableStateCallbackType & {
   hovered?: boolean;

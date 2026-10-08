@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { defaultFileStore } from '@shared/files/defaultFileStore';
 import type { FileStore, StoredFile } from '@shared/files/fileStore';
 
-import type { ColorScheme } from './theme';
+import type { ColorScheme } from '@shared/ui/theme/theme';
 
 const PREF_DIR = 'preferences';
 const PREF_FILE = 'theme.json';

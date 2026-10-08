@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { tapFeedback } from '../haptics';
-import { radius, spacing } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
-import { pressedStyle } from './pressedStyle';
-import { Text } from './Text';
-import type { TextTone } from './Text';
-import { recordTap } from './recordTap';
+import { tapFeedback } from '@shared/ui/haptics';
+import { radius, spacing } from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
+import { Text } from '@shared/ui/primitives/Text';
+import type { TextTone } from '@shared/ui/primitives/Text';
+import { recordTap } from '@shared/ui/primitives/recordTap';
 
 type ChipBase = {
   label: string;

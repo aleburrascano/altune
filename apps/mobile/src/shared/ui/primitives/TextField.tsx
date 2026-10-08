@@ -2,8 +2,14 @@ import { Eye, EyeOff } from 'lucide-react-native';
 import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
-import { fontFamily, minInteractiveHeight, radius, spacing, typography } from '../theme/tokens';
-import { useTheme } from '../theme/useTheme';
+import {
+  fontFamily,
+  minInteractiveHeight,
+  radius,
+  spacing,
+  typography,
+} from '@shared/ui/theme/tokens';
+import { useTheme } from '@shared/ui/theme/useTheme';
 
 export interface TextFieldProps extends Omit<
   TextInputProps,

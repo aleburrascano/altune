@@ -2,18 +2,18 @@ import type { ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Text } from '../primitives/Text';
-import { spacing } from '../theme/tokens';
-import type { Theme } from '../theme/theme';
-import { useTheme } from '../theme/useTheme';
-import { sidebarItemStyle } from './sidebarItemStyle';
+import { Text } from '@shared/ui/primitives/Text';
+import { spacing } from '@shared/ui/theme/tokens';
+import type { Theme } from '@shared/ui/theme/theme';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
 import {
   TAB_ROUTE_INFO_BY_ROUTE,
   TAB_ROUTES,
   type TabIcon,
   type TabRoute,
   type TabRouteInfo,
-} from './tabRoutes';
+} from '@shared/ui/navigation/tabRoutes';
 
 export type SidebarProps = {
   activeRoute: string;

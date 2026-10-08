@@ -1,4 +1,4 @@
-import { pageTitleFor } from '../pageTitle';
+import { pageTitleFor } from '@shared/ui/navigation/pageTitle';
 
 describe('pageTitleFor', () => {
   it('titles the Library tab', () => {

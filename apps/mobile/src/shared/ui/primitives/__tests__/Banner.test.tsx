@@ -1,9 +1,9 @@
 import { render } from '@testing-library/react-native';
 
-import { recordFailureShown } from '../../../telemetry/userTelemetry';
-import { Banner } from '../Banner';
+import { recordFailureShown } from '@shared/telemetry/userTelemetry';
+import { Banner } from '@shared/ui/primitives/Banner';
 
-jest.mock('../../../telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
+jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
 
 const record = jest.mocked(recordFailureShown);
 

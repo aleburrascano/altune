@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Animated } from 'react-native';
 
-import { useReduceMotion } from './useReduceMotion';
+import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
 
 const SPRING = { stiffness: 280, damping: 18, mass: 0.6, useNativeDriver: true };
 

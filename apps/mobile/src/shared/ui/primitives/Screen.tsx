@@ -3,9 +3,9 @@ import { View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useTheme } from '../theme/useTheme';
-import { CONTENT_MAX_WIDTH, useLayoutMode } from '../layout/useLayoutMode';
-import { SCREEN_HORIZONTAL_PADDING } from './screenLayout';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { CONTENT_MAX_WIDTH, useLayoutMode } from '@shared/ui/layout/useLayoutMode';
+import { SCREEN_HORIZONTAL_PADDING } from '@shared/ui/primitives/screenLayout';
 
 export type ScreenProps = {
   children: ReactNode;

@@ -6,7 +6,7 @@ import {
   adjustsKeyboardInsets,
   dismissKeyboard,
   keyboardAvoidingBehavior,
-} from '../keyboard.web';
+} from '@shared/ui/keyboard/keyboard.web';
 
 describe('keyboard (web)', () => {
   let dismiss: jest.SpyInstance;

@@ -1,6 +1,6 @@
 import { Keyboard, Text } from 'react-native';
 import type * as ReactNative from 'react-native';
-import type * as KeyboardExports from '../keyboard';
+import type * as KeyboardExports from '@shared/ui/keyboard/keyboard';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 type KeyboardModule = typeof KeyboardExports;
@@ -10,7 +10,7 @@ function loadWithOS(os: 'ios' | 'android'): KeyboardModule {
   jest.isolateModules(() => {
     const { Platform: isolatedPlatform } = jest.requireActual<typeof ReactNative>('react-native');
     isolatedPlatform.OS = os;
-    loaded = jest.requireActual<KeyboardModule>('../keyboard');
+    loaded = jest.requireActual<KeyboardModule>('@shared/ui/keyboard/keyboard');
   });
   return loaded;
 }

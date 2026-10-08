@@ -2,10 +2,10 @@ import { useCallback, type ReactElement } from 'react';
 import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Text } from './Text';
-import { resolveMenuPlacement, type MenuAnchor } from './menuPlacement';
-import { useTheme } from '../theme/useTheme';
-import { radius, spacing } from '../theme/tokens';
+import { Text } from '@shared/ui/primitives/Text';
+import { resolveMenuPlacement, type MenuAnchor } from '@shared/ui/primitives/menuPlacement';
+import { useTheme } from '@shared/ui/theme/useTheme';
+import { radius, spacing } from '@shared/ui/theme/tokens';
 
 export type ContextMenuItem = {
   label: string;

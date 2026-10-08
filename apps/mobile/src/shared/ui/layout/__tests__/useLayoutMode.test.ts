@@ -5,7 +5,7 @@ import {
   WIDE_LAYOUT_MIN_WIDTH,
   layoutModeFor,
   useLayoutMode,
-} from '../useLayoutMode';
+} from '@shared/ui/layout/useLayoutMode';
 
 let mockWindowWidth = 390;
 

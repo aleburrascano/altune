@@ -3,7 +3,7 @@ import {
   type MemoryFileStore,
 } from '@shared/files/__tests__/memoryFileStore';
 
-import { setThemePreferenceFileStore, useThemePreference } from '../themePreference';
+import { setThemePreferenceFileStore, useThemePreference } from '@shared/ui/theme/themePreference';
 
 const PREF_URI = 'memory://document/preferences/theme.json';
 const LIGHT_ON_DISK = '"light"';
