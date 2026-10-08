@@ -107,7 +107,6 @@ type Config struct {
 	DisabledJobs      []string `env:"DISABLED_JOBS" envSeparator:","`
 }
 
-// defaultYtDLPRemoteComponents applies only when the variable is unset; an empty value turns the fetch off.
 const defaultYtDLPRemoteComponents = "ejs:github"
 
 func Load() (*Config, error) {

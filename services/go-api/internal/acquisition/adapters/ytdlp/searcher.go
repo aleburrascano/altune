@@ -54,7 +54,6 @@ type YtDlpAudioSearcher struct {
 
 const defaultRemoteComponents = "ejs:github"
 
-// WithRemoteComponents sets the yt-dlp --remote-components spec; empty turns the fetch off.
 func (s *YtDlpAudioSearcher) WithRemoteComponents(spec string) *YtDlpAudioSearcher {
 	s.remoteComponents = spec
 	return s

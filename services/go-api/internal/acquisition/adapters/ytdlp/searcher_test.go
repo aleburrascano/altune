@@ -730,7 +730,6 @@ func recordedArgv(t *testing.T, s *YtDlpAudioSearcher, call func(ctx context.Con
 	outDir := t.TempDir()
 	var argvFile string
 	s.binary, argvFile = argvRecordingDownloaderAt(t, outDir)
-	// Search resolves yt-dlp from PATH rather than s.binary, so expose the recorder there too.
 	pathDir := t.TempDir()
 	if err := os.Symlink(s.binary, filepath.Join(pathDir, "yt-dlp")); err != nil {
 		t.Fatal(err)
@@ -765,12 +764,18 @@ func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
 		with func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher
 		want []string
 	}{
-		{"default fetches ejs:github", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s },
-			[]string{"--js-runtimes", "node", "--remote-components", "ejs:github"}},
-		{"configured spec", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("ejs:npm") },
-			[]string{"--js-runtimes", "node", "--remote-components", "ejs:npm"}},
-		{"empty spec drops the fetch", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("") },
-			[]string{"--js-runtimes", "node"}},
+		{
+			"default fetches ejs:github", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s },
+			[]string{"--js-runtimes", "node", "--remote-components", "ejs:github"},
+		},
+		{
+			"configured spec", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("ejs:npm") },
+			[]string{"--js-runtimes", "node", "--remote-components", "ejs:npm"},
+		},
+		{
+			"empty spec drops the fetch", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("") },
+			[]string{"--js-runtimes", "node"},
+		},
 	}
 	for caller, call := range ytDlpCallers {
 		for _, tc := range cases {
