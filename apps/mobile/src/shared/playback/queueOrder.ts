@@ -71,6 +71,60 @@ export function withoutTrack(indices: readonly number[], removed: number): numbe
   return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
 }
 
+export function currentAfterMove(
+  currentIndex: number,
+  fromIndex: number,
+  toIndex: number,
+): number {
+  if (fromIndex === currentIndex) return toIndex;
+  if (fromIndex < currentIndex && toIndex >= currentIndex) return currentIndex - 1;
+  if (fromIndex > currentIndex && toIndex <= currentIndex) return currentIndex + 1;
+  return currentIndex;
+}
+
+export function movedOrder(
+  playOrder: readonly number[],
+  fromIndex: number,
+  toIndex: number,
+): number[] {
+  const order = [...playOrder];
+  const [moved] = order.splice(fromIndex, 1);
+  order.splice(toIndex, 0, moved!);
+  return order;
+}
+
+export function currentAfterRemoval(
+  currentIndex: number,
+  removedPosition: number,
+  newLength: number,
+): number {
+  if (removedPosition < currentIndex) return currentIndex - 1;
+  if (removedPosition === currentIndex) return Math.min(currentIndex, newLength - 1);
+  return currentIndex;
+}
+
+interface FreshQueueOptions {
+  tracks: readonly PlaybackTrack[];
+  playOrder: readonly number[];
+  currentIndex: number;
+  shuffled: boolean;
+  source: QueueSource | null;
+  generation: number;
+}
+
+export function freshQueue({
+  generation,
+  ...loaded
+}: FreshQueueOptions): Omit<QueueState, 'repeatMode'> {
+  return {
+    ...loaded,
+    upNext: [],
+    appended: [],
+    resumePositionMs: 0,
+    generation: generation + 1,
+  };
+}
+
 export function survivingPositions(
   indices: readonly number[],
   renumbered: ReadonlyMap<number, number>,

@@ -2,6 +2,10 @@ import { asTrackId } from '@shared/api-client/ids';
 
 import {
   ascending,
+  currentAfterMove,
+  currentAfterRemoval,
+  freshQueue,
+  movedOrder,
   identityOrder,
   isPositionIn,
   reorderTail,
@@ -114,5 +118,81 @@ describe('withAppended', () => {
     const second = withAppended(grown, [track('d'), track('e')]);
     expect(second.appended).toEqual([...first.appended!, start, start + 1]);
     expect(second.playOrder).toEqual([0, ...first.appended!, start, start + 1]);
+  });
+});
+
+describe('currentAfterMove', () => {
+  it('follows the current track when it is moved', () => {
+    expect(currentAfterMove(2, 2, 0)).toBe(0);
+  });
+
+  it('shifts down when a track before current moves to or past it', () => {
+    expect(currentAfterMove(2, 0, 3)).toBe(1);
+  });
+
+  it('shifts up when a track after current moves to or before it', () => {
+    expect(currentAfterMove(2, 4, 1)).toBe(3);
+  });
+
+  it('stays put when the move is entirely after current', () => {
+    expect(currentAfterMove(2, 3, 4)).toBe(2);
+  });
+});
+
+describe('movedOrder', () => {
+  it('moves the first entry to the end', () => {
+    expect(movedOrder([0, 1, 2], 0, 2)).toEqual([1, 2, 0]);
+  });
+
+  it('returns a single-entry order unchanged', () => {
+    expect(movedOrder([0], 0, 0)).toEqual([0]);
+  });
+
+  it('does not mutate its input', () => {
+    const order = [0, 1, 2];
+    movedOrder(order, 0, 2);
+    expect(order).toEqual([0, 1, 2]);
+  });
+});
+
+describe('currentAfterRemoval', () => {
+  it('is -1 when the only track is removed', () => {
+    expect(currentAfterRemoval(0, 0, 0)).toBe(-1);
+  });
+
+  it('clamps when the last track, which is current, is removed', () => {
+    expect(currentAfterRemoval(3, 3, 3)).toBe(2);
+  });
+
+  it('shifts down when a track before current is removed', () => {
+    expect(currentAfterRemoval(3, 1, 4)).toBe(2);
+  });
+
+  it('stays put when a track after current is removed', () => {
+    expect(currentAfterRemoval(1, 2, 4)).toBe(1);
+  });
+});
+
+describe('freshQueue', () => {
+  const base = {
+    tracks: [],
+    playOrder: [],
+    currentIndex: -1,
+    shuffled: false,
+    source: null,
+  };
+
+  it('bumps the generation and clears user-queued state', () => {
+    const fresh = freshQueue({ ...base, generation: 4 });
+    expect(fresh.generation).toBe(5);
+    expect(fresh.upNext).toEqual([]);
+    expect(fresh.appended).toEqual([]);
+    expect(fresh.resumePositionMs).toBe(0);
+  });
+
+  it('increments from the generation passed in each time', () => {
+    expect(freshQueue({ ...base, generation: 4 }).generation).toBe(5);
+    expect(freshQueue({ ...base, generation: 4 }).generation).toBe(5);
+    expect(freshQueue({ ...base, generation: 5 }).generation).toBe(6);
   });
 });
