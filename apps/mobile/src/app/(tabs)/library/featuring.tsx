@@ -1,3 +1,3 @@
-import { FeaturingScreen } from '../../../features/library/ui/FeaturingScreen';
+import { FeaturingScreen } from '@features/library/ui/FeaturingScreen';
 
 export default FeaturingScreen;

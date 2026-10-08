@@ -1,9 +1,9 @@
 import { render } from '@testing-library/react-native';
 
-import { pageTitleFor } from '../../shared/ui/navigation/pageTitle';
-import * as base from '../platformExtras';
-import * as android from '../platformExtras.android';
-import * as web from '../platformExtras.web';
+import { pageTitleFor } from '@shared/ui/navigation/pageTitle';
+import * as base from '@/app-shell/platformExtras';
+import * as android from '@/app-shell/platformExtras.android';
+import * as web from '@/app-shell/platformExtras.web';
 
 const mockUseKeyboardShortcuts = jest.fn();
 const mockPlayback = { marker: 'playback' };
@@ -24,11 +24,11 @@ jest.mock('expo-router/head', () => {
   };
 });
 
-jest.mock('../../shared/playback/usePlayback', () => ({ usePlayback: () => mockPlayback }));
-jest.mock('../../shared/ui/keyboard/useKeyboardShortcuts', () => ({
+jest.mock('@shared/playback/usePlayback', () => ({ usePlayback: () => mockPlayback }));
+jest.mock('@shared/ui/keyboard/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: (...args: unknown[]) => mockUseKeyboardShortcuts(...args),
 }));
-jest.mock('../../features/library/hooks/usePlaylistActions', () => ({
+jest.mock('@features/library/hooks/usePlaylistActions', () => ({
   usePlaylistActions: () => ({ playlists: [{ id: 'p1', name: 'Road Trip' }] }),
 }));
 

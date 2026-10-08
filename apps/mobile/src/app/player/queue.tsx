@@ -1,1 +1,1 @@
-export { QueueSheet as default } from '../../features/playback/ui/QueueSheet';
+export { QueueSheet as default } from '@features/playback/ui/QueueSheet';
