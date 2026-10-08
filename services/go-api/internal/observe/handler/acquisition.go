@@ -32,27 +32,31 @@ type jobRecordDTO struct {
 }
 
 type acquisitionStatusDTO struct {
-	InFlight      int                        `json:"in_flight"`
-	Succeeded     uint64                     `json:"succeeded"`
-	Failed        uint64                     `json:"failed"`
-	Rejected      uint64                     `json:"rejected"`
-	Paused        bool                       `json:"paused"`
-	QueueDepth    int                        `json:"queue_depth"`
-	QueueCapacity int                        `json:"queue_capacity"`
-	Verification  acquisitionVerificationDTO `json:"verification"`
-	ActiveJobs    []jobRecordDTO             `json:"jobs"`
-	Recent        []jobRecordDTO             `json:"recent"`
+	InFlight           int                        `json:"in_flight"`
+	Succeeded          uint64                     `json:"succeeded"`
+	Failed             uint64                     `json:"failed"`
+	Rejected           uint64                     `json:"rejected"`
+	Paused             bool                       `json:"paused"`
+	QueueDepth         int                        `json:"queue_depth"`
+	QueueCapacity      int                        `json:"queue_capacity"`
+	OldestPendingAgeMs int64                      `json:"oldest_pending_age_ms"`
+	QueueDepthKnown    bool                       `json:"queue_depth_known"`
+	Verification       acquisitionVerificationDTO `json:"verification"`
+	ActiveJobs         []jobRecordDTO             `json:"jobs"`
+	Recent             []jobRecordDTO             `json:"recent"`
 }
 
 func newAcquisitionStatusDTO(s acqPorts.AcquisitionStatus) acquisitionStatusDTO {
 	return acquisitionStatusDTO{
-		InFlight:      s.InFlight,
-		Succeeded:     s.Succeeded,
-		Failed:        s.Failed,
-		Rejected:      s.Rejected,
-		Paused:        s.Paused,
-		QueueDepth:    s.QueueDepth,
-		QueueCapacity: s.QueueCapacity,
+		InFlight:           s.InFlight,
+		Succeeded:          s.Succeeded,
+		Failed:             s.Failed,
+		Rejected:           s.Rejected,
+		Paused:             s.Paused,
+		QueueDepth:         s.QueueDepth,
+		QueueCapacity:      s.QueueCapacity,
+		OldestPendingAgeMs: s.OldestPendingAge.Milliseconds(),
+		QueueDepthKnown:    s.QueueDepthKnown,
 		Verification: acquisitionVerificationDTO{
 			Ffprobe:   s.Verification.Ffprobe,
 			Ffmpeg:    s.Verification.Ffmpeg,

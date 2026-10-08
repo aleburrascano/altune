@@ -61,6 +61,9 @@ type overseerAcquisitionStatus struct {
 	Rejected      uint64 `json:"rejected"`
 	QueueDepth    int    `json:"queue_depth"`
 	QueueCapacity int    `json:"queue_capacity"`
+
+	OldestPendingAgeMs int64 `json:"oldest_pending_age_ms"`
+	QueueDepthKnown    bool  `json:"queue_depth_known"`
 }
 
 type overseerDiscographyQuality struct {
