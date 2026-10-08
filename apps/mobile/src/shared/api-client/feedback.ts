@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import { randomUuid } from '@shared/id/uuid';
 
 import { apiSend } from '@shared/api-client/index';
 import { asNumber, asRecord, asString } from '@shared/api-client/wireDecoders';
@@ -20,7 +20,7 @@ export type SubmitReportResponse = {
 };
 
 export function makeReportIdempotencyKey(): string {
-  return Crypto.randomUUID();
+  return randomUuid();
 }
 
 function parseSubmitReportResponse(

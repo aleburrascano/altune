@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import { randomUuid } from '@shared/id/uuid';
 
 import { ContractError } from '@shared/errors';
 import { apiFetch, apiSend, LONG_REQUEST_TIMEOUT_MS, signalInit } from '@shared/api-client/index';
@@ -169,7 +169,7 @@ export async function getAllTracks(params: {
 }
 
 export function makeIdempotencyKey(): string {
-  return Crypto.randomUUID();
+  return randomUuid();
 }
 
 export async function createTrack(
