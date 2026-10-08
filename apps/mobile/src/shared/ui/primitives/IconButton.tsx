@@ -2,8 +2,11 @@ import type { ComponentType } from 'react';
 import { Pressable } from 'react-native';
 
 import { useTheme } from '../theme/useTheme';
+import { recordTap } from './recordTap';
 
 export type IconButtonProps = {
+  action?: string;
+  trackId?: string;
   icon: ComponentType<{ size?: number; color?: string }>;
   onPress: () => void;
   accessibilityLabel: string;
@@ -14,6 +17,8 @@ export type IconButtonProps = {
 };
 
 export function IconButton({
+  action,
+  trackId,
   icon: Icon,
   onPress,
   accessibilityLabel,
@@ -23,10 +28,17 @@ export function IconButton({
   testID,
 }: IconButtonProps) {
   const theme = useTheme();
+  const handlePress = () => {
+    if (disabled) {
+      return;
+    }
+    recordTap(action, trackId);
+    onPress();
+  };
   return (
     <Pressable
       testID={testID}
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
