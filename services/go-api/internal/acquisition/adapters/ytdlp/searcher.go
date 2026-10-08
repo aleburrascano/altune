@@ -72,8 +72,6 @@ const maxEmbeddedStderrBytes = 2048
 
 const stderrTruncatedSuffix = "...(truncated)"
 
-// embeddedStderr is the only form of yt-dlp stderr allowed into an error
-// string; classification keeps reading the raw text.
 func embeddedStderr(stderr string) string {
 	text := redact.LogText(stderr)
 	if len(text) <= maxEmbeddedStderrBytes {

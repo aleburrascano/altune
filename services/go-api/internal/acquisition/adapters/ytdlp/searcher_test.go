@@ -703,8 +703,6 @@ func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
 	assertStderrEmbeddedSafely(t, err)
 }
 
-// MarkUnplayable swallows the inspect error, so the error text is only
-// observable through the runner it wraps.
 func TestYtDlpAudioSearcher_InspectRedactsAndCapsStderr(t *testing.T) {
 	s := NewYtDlpAudioSearcher("", "", "")
 	s.binary = withLeakyYtDlp(t)
