@@ -13,7 +13,13 @@ type BackHeaderProps = {
 export function BackHeader({ onBack, children }: BackHeaderProps): ReactElement {
   return (
     <View style={styles.header}>
-      <IconButton icon={ChevronLeft} size={24} onPress={onBack} accessibilityLabel="Back" />
+      <IconButton
+        action="library.back"
+        icon={ChevronLeft}
+        size={24}
+        onPress={onBack}
+        accessibilityLabel="Back"
+      />
       {children}
     </View>
   );

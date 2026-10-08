@@ -31,6 +31,7 @@ function PlaylistGradient(): ReactElement {
 function OptionsButton(props: { onPress: () => void }): ReactElement {
   return (
     <IconButton
+      action="library.playlist.options"
       icon={EllipsisVertical}
       size={20}
       onPress={props.onPress}

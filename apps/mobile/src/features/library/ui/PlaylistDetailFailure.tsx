@@ -21,7 +21,7 @@ export function PlaylistDetailFailure({
     return (
       <View testID="playlist-detail-not-found" style={styles.center}>
         <Text variant="title">Playlist not found</Text>
-        <Button label="Go back" onPress={onGoToLibrary} />
+        <Button action="library.playlist.error.go_back" label="Go back" onPress={onGoToLibrary} />
       </View>
     );
   }
@@ -33,7 +33,12 @@ export function PlaylistDetailFailure({
       <Text variant="label" tone="secondary" style={styles.sub}>
         {body}
       </Text>
-      <Button testID="playlist-detail-retry" label="Retry" onPress={onRetry} />
+      <Button
+        action="library.playlist.error.retry"
+        testID="playlist-detail-retry"
+        label="Retry"
+        onPress={onRetry}
+      />
     </View>
   );
 }
