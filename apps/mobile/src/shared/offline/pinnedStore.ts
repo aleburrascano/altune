@@ -107,6 +107,8 @@ export type UnpinBatchResult = { requested: number; failed: number };
 
 export type UnpinAllOutcome = 'all-removed' | 'partial';
 
+type UnpinRun = { deleteFailed: TrackId[]; untried: number };
+
 type UnpinSetter = (updater: (s: PinnedState) => Partial<PinnedState>) => void;
 
 function withoutRemoved(
@@ -122,13 +124,17 @@ function withoutRemoved(
   return kept;
 }
 
-function removeChunk(set: UnpinSetter, get: () => PinnedState, chunk: readonly TrackId[]): number {
+function removeChunk(
+  set: UnpinSetter,
+  get: () => PinnedState,
+  chunk: readonly TrackId[],
+): TrackId[] {
   const stillOnDisk = deletePinnedMany(chunk);
   const entries = withoutRemoved(get().entries, chunk, stillOnDisk);
   scheduleSaveIndex(entries);
   tagChangedEntries(entries, chunk);
   set((s) => ({ entries, queue: s.queue.filter((trackId) => entries[trackId] !== undefined) }));
-  return chunk.filter((trackId) => entries[trackId] === undefined).length;
+  return chunk.filter((trackId) => entries[trackId] !== undefined);
 }
 
 function yieldToThread(): Promise<void> {
@@ -139,16 +145,36 @@ async function removeInChunks(
   set: UnpinSetter,
   get: () => PinnedState,
   trackIds: readonly TrackId[],
-): Promise<number> {
+): Promise<UnpinRun> {
   const startedAt = performance.now();
-  let removed = 0;
+  const deleteFailed: TrackId[] = [];
+  let tried = 0;
   for (let from = 0; from < trackIds.length; from += UNPIN_CHUNK) {
     if (performance.now() - startedAt >= UNPIN_DEADLINE_MS) break;
-    removed += removeChunk(set, get, trackIds.slice(from, from + UNPIN_CHUNK));
+    const chunk = trackIds.slice(from, from + UNPIN_CHUNK);
+    deleteFailed.push(...removeChunk(set, get, chunk));
+    tried += chunk.length;
     await yieldToThread();
   }
   flushIndex();
-  return removed;
+  return { deleteFailed, untried: trackIds.length - tried };
+}
+
+const LOGGED_TRACK_IDS = 20;
+
+function warnUnpinIncomplete(requested: number, run: UnpinRun): void {
+  if (run.deleteFailed.length > 0) {
+    console.warn(
+      `[offline] ${run.deleteFailed.length} of ${requested} download(s) could not be removed: file delete failed`,
+      { trackIds: run.deleteFailed.slice(0, LOGGED_TRACK_IDS) },
+    );
+  }
+  if (run.untried > 0) {
+    console.warn(
+      `[offline] unpin stopped by the ${UNPIN_DEADLINE_MS}ms deadline; ${run.untried} of ${requested} download(s) not tried`,
+      { untried: run.untried },
+    );
+  }
 }
 
 export type PinnedState = {
@@ -219,11 +245,9 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
 
   unpinMany: async (trackIds) => {
     const ids = [...new Set(trackIds)];
-    const removed = await removeInChunks(set, get, ids);
-    const failed = ids.length - removed;
-    if (failed > 0) {
-      console.warn(`[offline] ${failed} of ${ids.length} download(s) could not be removed`);
-    }
+    const run = await removeInChunks(set, get, ids);
+    const failed = run.deleteFailed.length + run.untried;
+    warnUnpinIncomplete(ids.length, run);
     return { requested: ids.length, failed };
   },
 
