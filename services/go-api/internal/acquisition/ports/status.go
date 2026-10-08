@@ -62,6 +62,7 @@ type AcquisitionStatus struct {
 	Paused           bool
 	QueueDepth       int
 	OldestPendingAge time.Duration
+	QueueDepthKnown  bool
 	QueueCapacity    int
 	Verification     AcquisitionVerification
 	ActiveJobs       []JobRecord

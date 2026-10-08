@@ -144,6 +144,27 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 	}
 }
 
+func TestReadsAcquisition_ServesOldestPendingAgeAndDepthKnown(t *testing.T) {
+	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
+		QueueDepth:       5,
+		OldestPendingAge: 90 * time.Second,
+		QueueDepthKnown:  true,
+	}}
+
+	rec := serveRead(t, Deps{Acquisition: reader}, "/acquisition")
+
+	body := decodeObject(t, rec.Body.Bytes())
+	if got := string(body["oldest_pending_age_ms"]); got != "90000" {
+		t.Errorf("oldest_pending_age_ms = %s, want 90000", got)
+	}
+	if got := string(body["queue_depth_known"]); got != "true" {
+		t.Errorf("queue_depth_known = %s, want true", got)
+	}
+	if got := string(body["queue_depth"]); got != "5" {
+		t.Errorf("queue_depth = %s, want 5", got)
+	}
+}
+
 func TestReadsAcquisition_NilReaderAnswers200WithEmptyStatus(t *testing.T) {
 	rec := serveRead(t, Deps{}, "/acquisition")
 
