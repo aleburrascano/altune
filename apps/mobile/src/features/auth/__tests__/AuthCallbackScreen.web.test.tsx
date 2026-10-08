@@ -2,7 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
 import { NetworkError } from '@shared/errors';
-import { type AuthIntentResult, completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
+import {
+  type AuthIntentResult,
+  completeAuthIntent,
+} from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
 
 jest.mock('@shared/device/webOrigin', () => ({
