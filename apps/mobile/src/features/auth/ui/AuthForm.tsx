@@ -47,6 +47,7 @@ export function AuthForm({
         {children}
         <AuthErrorBanner state={state} generic={generic} />
         <Button
+          action={linkHref === '/sign-up' ? 'auth.sign_in' : 'auth.sign_up'}
           testID="submit-button"
           label={submitLabel}
           onPress={onSubmit}

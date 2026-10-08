@@ -67,6 +67,7 @@ export function SetNewPasswordScreen(): ReactElement {
           <FieldError testID="confirm-error">Passwords don&apos;t match.</FieldError>
         ) : null}
         <Button
+          action="auth.set_new_password.submit"
           testID="submit-button"
           label="Update password"
           onPress={() => void updatePassword(password)}

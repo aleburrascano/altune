@@ -18,6 +18,7 @@ export function InvalidRecoveryLinkNotice() {
         screen to choose a new password.
       </Text>
       <Button
+        action="auth.invalid_recovery_link.back_to_sign_in"
         testID="invalid-recovery-link-signin"
         label="Back to sign in"
         onPress={() => {
