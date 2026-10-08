@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -178,23 +177,21 @@ func newDeezerJWTResolver(client *http.Client) *deezerJWTResolver {
 const deezerJWTResolveTimeout = 10 * time.Second
 
 func (r *deezerJWTResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.authURL, http.NoBody)
+	status, body, err := getBytesCapped(ctx, r.client, r.authURL, deezerLyricsMaxBody)
 	if err != nil {
+		if status != 0 && status != http.StatusOK {
+			return "", time.Time{}, fmt.Errorf("deezer anonymous auth returned %d", status)
+		}
+		if status == http.StatusOK {
+			return "", time.Time{}, fmt.Errorf("decode deezer anonymous jwt: %w", err)
+		}
 		return "", time.Time{}, err
-	}
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", time.Time{}, fmt.Errorf("deezer anonymous auth returned %d", resp.StatusCode)
 	}
 
 	var out struct {
 		JWT string `json:"jwt"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, deezerLyricsMaxBody)).Decode(&out); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&out); err != nil {
 		return "", time.Time{}, fmt.Errorf("decode deezer anonymous jwt: %w", err)
 	}
 	jwt := strings.TrimSpace(out.JWT)

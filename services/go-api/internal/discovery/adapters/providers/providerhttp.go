@@ -63,6 +63,17 @@ func newGetRequest(ctx context.Context, rawURL string, opts ...reqOption) (*http
 	return req, nil
 }
 
+func newHeadRequest(ctx context.Context, rawURL string, opts ...reqOption) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	for _, opt := range opts {
+		opt(req)
+	}
+	return req, nil
+}
+
 func newPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...reqOption) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, body)
 	if err != nil {
@@ -143,6 +154,17 @@ func getBytesCapped(ctx context.Context, client *http.Client, rawURL string, lim
 		return resp.StatusCode, nil, readErr
 	}
 	return resp.StatusCode, body, nil
+}
+
+func getText(ctx context.Context, client *http.Client, rawURL string, limit int64, userAgent string) (string, error) {
+	status, body, err := getBytesCapped(ctx, client, rawURL, limit, withHeader("User-Agent", userAgent))
+	if err != nil {
+		if status != 0 {
+			return "", fmt.Errorf("GET %s: status %d", rawURL, status)
+		}
+		return "", err
+	}
+	return string(body), nil
 }
 
 func postJSON(ctx context.Context, client *http.Client, rawURL string, body []byte, dst any, opts ...reqOption) (int, error) {

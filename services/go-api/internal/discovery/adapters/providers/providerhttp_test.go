@@ -448,3 +448,68 @@ func TestGetJSON_bare403IsNotMarkedPersistent(t *testing.T) {
 		t.Fatalf("err = %v, want a plain 403 without the persistent marker", err)
 	}
 }
+
+func TestGetText_200ReturnsBodyAndSendsUserAgent(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		_, _ = w.Write([]byte("hello"))
+	}))
+	defer srv.Close()
+
+	got, err := getText(context.Background(), srv.Client(), srv.URL, 1024, "test-agent/1")
+	if err != nil || got != "hello" {
+		t.Fatalf("got %q, %v; want hello, nil", got, err)
+	}
+	if gotUA != "test-agent/1" {
+		t.Fatalf("User-Agent = %q, want test-agent/1", gotUA)
+	}
+}
+
+func TestGetText_503ReturnsStatusError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, err := getText(context.Background(), srv.Client(), srv.URL, 1024, "ua")
+	want := "GET " + srv.URL + ": status 503"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+}
+
+func TestGetText_truncatesAtLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("a", 11)))
+	}))
+	defer srv.Close()
+
+	got, err := getText(context.Background(), srv.Client(), srv.URL, 10, "ua")
+	if err != nil || len(got) != 10 {
+		t.Fatalf("len = %d, err = %v; want 10, nil", len(got), err)
+	}
+}
+
+func TestGetText_emptyBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+
+	got, err := getText(context.Background(), srv.Client(), srv.URL, 1024, "ua")
+	if err != nil || got != "" {
+		t.Fatalf("got %q, %v; want empty, nil", got, err)
+	}
+}
+
+func TestNewHeadRequest_setsMethodAndOptions(t *testing.T) {
+	req, err := newHeadRequest(context.Background(), "https://example.test/x", withHeader("Accept", "image/*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Method != http.MethodHead {
+		t.Fatalf("method = %s, want HEAD", req.Method)
+	}
+	if got := req.Header.Get("Accept"); got != "image/*" {
+		t.Fatalf("Accept = %q, want image/*", got)
+	}
+}
