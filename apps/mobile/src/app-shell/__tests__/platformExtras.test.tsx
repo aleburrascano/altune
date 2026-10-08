@@ -77,7 +77,7 @@ describe('platformExtras.android', () => {
 describe('platformExtras.web', () => {
   it('wires useKeyboardShortcuts to usePlayback', () => {
     render(<web.PlaybackShortcuts />);
-    expect(mockUseKeyboardShortcuts).toHaveBeenCalledWith(mockPlayback);
+    expect(mockUseKeyboardShortcuts).toHaveBeenCalledWith(mockPlayback, window);
   });
 
   it('renders the page title for the pathname', () => {

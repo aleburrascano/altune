@@ -122,10 +122,8 @@ function hasAddEventListener(win: Window): boolean {
   return typeof win.addEventListener === 'function';
 }
 
-function resolveTarget(target: Window | undefined): Window | null {
-  const candidate = target ?? (typeof window === 'undefined' ? null : window);
-  if (candidate === null) return null;
-  return hasAddEventListener(candidate) ? candidate : null;
+function resolveTarget(target: Window): Window | null {
+  return hasAddEventListener(target) ? target : null;
 }
 
 function attachKeyboardListener(
@@ -139,7 +137,7 @@ function attachKeyboardListener(
   return () => win.removeEventListener('keydown', onKeyDown);
 }
 
-export function useKeyboardShortcuts(playback: ShortcutPlayback, target?: Window): void {
+export function useKeyboardShortcuts(playback: ShortcutPlayback, target: Window): void {
   const router = useRouter();
   useEffect(() => {
     const win = resolveTarget(target);
