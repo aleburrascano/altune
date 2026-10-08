@@ -2,7 +2,13 @@ import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanst
 
 import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
-import { acquisitionOf, toFailed, toReady, toTrackStatus, type TrackStatus } from '@shared/api-client/trackAcquisition';
+import {
+  acquisitionOf,
+  toFailed,
+  toReady,
+  toTrackStatus,
+  type TrackStatus,
+} from '@shared/api-client/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
 import {

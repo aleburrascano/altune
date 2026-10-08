@@ -120,11 +120,6 @@ export function patchTrackStatus(
     recordStatusChanged(trackId, prior, status.acquisitionStatus, source);
 }
 
-/**
- * Records a status read from a request response. A response is a snapshot taken when the server
- * answered, so a terminal status the event stream already delivered for the track is newer and
- * wins over a response that still says pending. Returns the status now held for the track.
- */
 export function adoptResponseStatus(trackId: TrackId, status: TrackStatus): TrackStatus {
   const held = useTrackStatusStore.getState().statuses[trackId];
   if (status.acquisitionStatus === 'pending' && held !== undefined) {
