@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
@@ -16,5 +16,5 @@ export function SettingsPortProvider({ port, children }: SettingsPortProviderPro
 }
 
 export function useSettingsPort(): SettingsPort {
-  return useContext(SettingsPortContext);
+  return use(SettingsPortContext);
 }

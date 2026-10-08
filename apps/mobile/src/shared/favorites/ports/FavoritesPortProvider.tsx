@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpFavoritesPort } from '@shared/favorites/adapters/http/httpFavoritesPort';
@@ -19,5 +19,5 @@ export function FavoritesPortProvider({
 }
 
 export function useFavoritesPort(): FavoritesPort {
-  return useContext(FavoritesPortContext);
+  return use(FavoritesPortContext);
 }

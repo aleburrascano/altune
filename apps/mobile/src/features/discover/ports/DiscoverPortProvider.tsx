@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpDiscoverPort } from '@features/discover/adapters/http/httpDiscoverPort';
@@ -16,5 +16,5 @@ export function DiscoverPortProvider({ port, children }: DiscoverPortProviderPro
 }
 
 export function useDiscoverPort(): DiscoverPort {
-  return useContext(DiscoverPortContext);
+  return use(DiscoverPortContext);
 }

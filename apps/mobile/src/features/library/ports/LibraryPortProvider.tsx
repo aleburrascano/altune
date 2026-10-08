@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
@@ -16,5 +16,5 @@ export function LibraryPortProvider({ port, children }: LibraryPortProviderProps
 }
 
 export function useLibraryPort(): LibraryPort {
-  return useContext(LibraryPortContext);
+  return use(LibraryPortContext);
 }
