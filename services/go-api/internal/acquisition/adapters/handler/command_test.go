@@ -45,6 +45,30 @@ func TestHandleReacquire_CooldownSendsRetryAfter(t *testing.T) {
 	assertCooldownRefusal(t, retryServe(t, router, http.MethodPost, path), service.ReacquireCooldown)
 }
 
+func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
+	repo := newRetryFakeTrackRepo()
+	track := newTrackOrFatal(t, retryTestUserId)
+	_ = track.MarkFailed("download error")
+	repo.seed(track)
+	store := newMemCooldownStore()
+	clock := time.Now()
+	store.now = func() time.Time { return clock }
+	h := NewRetryHandler(repo, &retryFakeScheduler{}, service.NewRetryAdmission(store))
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(retryVerifyAsTestUser))
+	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
+	path := "/tracks/" + track.ID.UUID().String() + "/retry"
+
+	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
+	clock = clock.Add(45*time.Second + 500*time.Millisecond)
+
+	rec := retryServe(t, router, http.MethodPost, path)
+	assertCooldownActive(t, rec)
+	if got := retryAfterSeconds(t, rec.Header().Get("Retry-After")); got != 15 {
+		t.Errorf("Retry-After = %d, want 15 (time left, rounded up)", got)
+	}
+}
+
 func assertCooldownRefusal(t *testing.T, rec *httptest.ResponseRecorder, window time.Duration) {
 	t.Helper()
 	assertCooldownActive(t, rec)
@@ -186,22 +210,23 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 
 type memCooldownStore struct {
 	mu     sync.Mutex
+	now    func() time.Time
 	lastAt map[string]time.Time
 }
 
 func newMemCooldownStore() *memCooldownStore {
-	return &memCooldownStore{lastAt: make(map[string]time.Time)}
+	return &memCooldownStore{now: time.Now, lastAt: make(map[string]time.Time)}
 }
 
-func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, error) {
+func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	now, key := time.Now(), string(kind)+"/"+trackID.String()
+	now, key := s.now(), string(kind)+"/"+trackID.String()
 	if last, ok := s.lastAt[key]; ok && now.Sub(last) < cooldown {
-		return time.Time{}, false, nil
+		return time.Time{}, false, cooldown - now.Sub(last), nil
 	}
 	s.lastAt[key] = now
-	return now, true, nil
+	return now, true, 0, nil
 }
 
 func (s *memCooldownStore) Release(_ context.Context, trackID catdomain.TrackId, kind ports.CooldownKind, at time.Time) error {

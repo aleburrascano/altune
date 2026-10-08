@@ -72,7 +72,7 @@ web_serving() {
 
 bring_up_services() {
   start_container postgres -e POSTGRES_USER=altune -e POSTGRES_PASSWORD=altune_dev -e POSTGRES_DB=altune \
-    -p 127.0.0.1::5432 postgres:16-alpine
+    -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql/data:rw,size=2g postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off
   start_container redis -p 127.0.0.1::6379 redis:7-alpine
   wait_until "$ready_attempts" postgres_ready
   wait_until "$ready_attempts" redis_ready
@@ -96,7 +96,7 @@ start_api() {
   ENV=test TEST_AUTH_ENABLED=true HOST=127.0.0.1 PORT="$api_port" \
     PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR="$root/apps/mobile/e2e/fixtures/providers" \
     SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
-    AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
+    AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false ACQUISITION_PAUSED=true \
     MUSIC_DIR="$state/music" DATABASE_URL="$database_url" REDIS_URL="$redis_url" \
     SUPABASE_PROJECT_URL="http://127.0.0.1:$jwks_port" \
     SUPABASE_JWT_JWKS_URL="http://127.0.0.1:$jwks_port/jwks.json" \

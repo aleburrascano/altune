@@ -15,12 +15,12 @@ const (
 )
 
 type cooldownRefusal struct {
-	window time.Duration
+	wait time.Duration
 }
 
 func (e cooldownRefusal) Error() string             { return ErrCooldownActive.Error() }
 func (e cooldownRefusal) Unwrap() error             { return ErrCooldownActive }
-func (e cooldownRefusal) RetryAfter() time.Duration { return e.window }
+func (e cooldownRefusal) RetryAfter() time.Duration { return max(e.wait, time.Second) }
 
 const releaseTimeout = 5 * time.Second
 
@@ -31,12 +31,12 @@ type cooldownGate struct {
 }
 
 func (g cooldownGate) run(ctx context.Context, trackID domain.TrackId, schedule func() error) error {
-	at, ok, err := g.store.Reserve(ctx, trackID, g.kind, g.cooldown)
+	at, ok, wait, err := g.store.Reserve(ctx, trackID, g.kind, g.cooldown)
 	if err != nil {
 		return fmt.Errorf("%s admission: %w", g.kind, err)
 	}
 	if !ok {
-		return cooldownRefusal{window: g.cooldown}
+		return cooldownRefusal{wait: wait}
 	}
 	if err := schedule(); err != nil {
 		g.release(ctx, trackID, at)

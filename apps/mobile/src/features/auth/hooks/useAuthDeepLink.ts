@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
-import { showAlert } from '@shared/ui/dialog/dialog';
+import { showFailureAlert } from '@shared/ui/failure/showFailure';
 import { type AuthIntentResult, completeAuthIntent } from '../completeAuthIntent';
 import { thrownErrorDetail } from '../errorDetail';
 import { initialUrl, subscribeUrl } from '../native/linkEvents';
@@ -19,10 +19,11 @@ function reportRefusedLink(kind: LinkKind, outcome: AuthIntentResult): void {
     cause: outcome.cause,
     error: outcome.error,
   });
-  showAlert(
-    "This link didn't work",
-    'It may have expired or already been used. Request a new one from the sign-in screen.',
-  );
+  showFailureAlert({
+    surface: 'auth.deep_link.refused',
+    title: "This link didn't work",
+    message: 'It may have expired or already been used. Request a new one from the sign-in screen.',
+  });
 }
 
 async function reportFailedExchange(
@@ -33,7 +34,11 @@ async function reportFailedExchange(
     reportRefusedLink(kind, await exchange);
   } catch (err) {
     console.warn('[auth] deep link exchange threw', { intent: kind, ...thrownErrorDetail(err) });
-    showAlert("Couldn't open that link", 'Check your connection and try opening the link again.');
+    showFailureAlert({
+      surface: 'auth.deep_link.threw',
+      title: "Couldn't open that link",
+      message: 'Check your connection and try opening the link again.',
+    });
   }
 }
 

@@ -78,28 +78,30 @@ func TestPgxCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
 	track := insertFailedTrack(t, pool)
 	ctx := context.Background()
 
-	old, ok, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute)
+	old, ok, _, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute)
 	if err != nil || !ok {
 		t.Fatalf("first Reserve = %v, %v; want ok", ok, err)
 	}
-	if _, ok, _ := store.Reserve(ctx, track.ID, ports.CooldownReacquire, time.Minute); !ok {
+	if _, ok, _, _ := store.Reserve(ctx, track.ID, ports.CooldownReacquire, time.Minute); !ok {
 		t.Error("reacquire Reserve blocked by a retry admission; kinds must be independent")
 	}
 	time.Sleep(20 * time.Millisecond)
-	newer, ok, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, 10*time.Millisecond)
+	newer, ok, _, err := store.Reserve(ctx, track.ID, ports.CooldownRetry, 10*time.Millisecond)
 	if err != nil || !ok {
 		t.Fatalf("Reserve after window = %v, %v; want ok", ok, err)
 	}
 	if err := store.Release(ctx, track.ID, ports.CooldownRetry, old); err != nil {
 		t.Fatalf("Release stale: %v", err)
 	}
-	if _, ok, _ := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); ok {
+	if _, ok, wait, _ := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); ok {
 		t.Error("releasing an older reservation removed the newer one")
+	} else if wait <= 0 || wait > time.Minute {
+		t.Errorf("refused Reserve wait = %v, want 0 < wait <= %v", wait, time.Minute)
 	}
 	if err := store.Release(ctx, track.ID, ports.CooldownRetry, newer); err != nil {
 		t.Fatalf("Release newer: %v", err)
 	}
-	if _, ok, _ := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); !ok {
+	if _, ok, _, _ := store.Reserve(ctx, track.ID, ports.CooldownRetry, time.Minute); !ok {
 		t.Error("Reserve after releasing the current reservation was refused")
 	}
 }
@@ -118,7 +120,7 @@ func TestPgxCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
 			defer wg.Done()
 			<-start
 			store := NewPgxCooldownStore(pool)
-			_, ok, err := store.Reserve(context.Background(), track.ID, ports.CooldownRetry, time.Minute)
+			_, ok, _, err := store.Reserve(context.Background(), track.ID, ports.CooldownRetry, time.Minute)
 			if err != nil {
 				t.Errorf("Reserve: %v", err)
 			}

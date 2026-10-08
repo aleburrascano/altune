@@ -359,3 +359,37 @@ func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *t
 		})
 	}
 }
+
+func TestRouter_CORSPreflightAllowsIdempotencyKeyOnlyForAllowedOrigin(t *testing.T) {
+	const allowed = "http://127.0.0.1:8081"
+	a := &App{cfg: &config.Config{Env: "test", CORSOrigins: []string{allowed}}}
+	r := a.newRouter(apiWriteTimeout)
+	r.Post("/v1/tracks", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
+	preflight := func(origin, headers string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodOptions, "/v1/tracks", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", headers)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := preflight(allowed, "authorization,content-type,idempotency-key")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != allowed {
+		t.Errorf("Allow-Origin = %q, want %q", got, allowed)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), "idempotency-key") {
+		t.Errorf("Allow-Headers = %q, want it to contain Idempotency-Key", got)
+	}
+
+	rec = preflight("http://evil.example", "authorization,content-type,idempotency-key")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("look-alike origin got Allow-Origin %q, want none", got)
+	}
+
+	rec = preflight(allowed, "authorization,x-not-allowed")
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "" {
+		t.Errorf("disallowed header got Allow-Headers %q, want none", got)
+	}
+}

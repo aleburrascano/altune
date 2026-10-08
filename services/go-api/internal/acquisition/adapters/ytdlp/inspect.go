@@ -202,7 +202,7 @@ func (s *YtDlpAudioSearcher) runYtDlpInspect(ctx context.Context, trackURL strin
 	args := s.authFlags([]string{"-J", "--no-download", "--no-warnings", "--", trackURL}, cookieFile)
 	stdout, stderr, err := execcmd.Run(inspectCtx, s.binary, args...)
 	if err != nil {
-		return inspection{}, fmt.Errorf("yt-dlp inspect: %w (stderr: %s)", err, stderr)
+		return inspection{}, fmt.Errorf("yt-dlp inspect: %w (stderr: %s)", err, embeddedStderr(stderr))
 	}
 	var info inspectedInfo
 	if err := json.Unmarshal([]byte(stdout), &info); err != nil {

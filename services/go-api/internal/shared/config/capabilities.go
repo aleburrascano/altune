@@ -30,7 +30,7 @@ func (c *Config) ProviderReplayEnabled() bool {
 }
 
 func (c *Config) AcquisitionFixtureEnabled() bool {
-	if !c.AcquisitionFixtureOptIn {
+	if !c.AcquisitionFixtureOptIn && !c.ProviderReplayEnabled() {
 		return false
 	}
 	return nonProdHookEnvs[c.normalizedEnv()]
