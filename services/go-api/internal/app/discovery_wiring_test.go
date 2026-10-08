@@ -10,6 +10,7 @@ import (
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/runloop"
 	"bytes"
 	"context"
 	"errors"
@@ -231,7 +232,7 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 
 	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
 
-	h := waitForHealth(t, a, jobBehavioralRankingRefresh, func(h JobHealth) bool { return h.Failures >= 1 })
+	h := waitForHealth(t, a, jobBehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Failures >= 1 })
 
 	if h.LastFailure.IsZero() {
 		t.Error("a failed run must still update LastFailure through jc.record")

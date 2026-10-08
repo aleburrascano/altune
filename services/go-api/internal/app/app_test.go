@@ -7,6 +7,7 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -188,7 +189,7 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 		t.Fatalf("applyDisabledJobs: %v", err)
 	}
 	a.startDiscoveryBackgroundJobs(ctx, newClientFactory(nil), searchSvc, nil, nil)
-	waitForHealth(t, a, jobBehavioralRankingRefresh, func(h JobHealth) bool { return h.Skipped >= 1 })
+	waitForHealth(t, a, jobBehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Skipped >= 1 })
 
 	if got := store.calls.Load(); got != 0 {
 		t.Fatalf("RefreshBehavioralScores ran %d times, want 0 while disabled", got)
