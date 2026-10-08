@@ -6,7 +6,7 @@ import { recordTap } from './recordTap';
 
 export type IconButtonProps = {
   action?: string;
-  trackId?: string;
+  trackId?: string | undefined;
   icon: ComponentType<{ size?: number; color?: string }>;
   onPress: () => void;
   accessibilityLabel: string;

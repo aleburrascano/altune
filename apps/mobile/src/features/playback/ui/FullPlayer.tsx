@@ -8,7 +8,7 @@ import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
 import { canRetryPlaybackError } from '../retryPolicy';
-import { endedLabel, isPreviewTrack } from './playerStatus';
+import { endedLabel, isPreviewTrack, libraryTrackId } from './playerStatus';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
@@ -39,15 +39,19 @@ function PlayButton({
   isPlaying,
   isEnded,
   onPress,
+  trackId,
 }: {
   isPlaying: boolean;
   isEnded: boolean;
   onPress: () => void;
+  trackId?: string | undefined;
 }) {
   const theme = useTheme();
   return (
     <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
       <IconButton
+        action="playback.full.play_pause"
+        trackId={trackId}
         icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
         size={32}
         color={theme.color.onAccent}
@@ -69,9 +73,10 @@ function ErrorAction({
   onRetry: () => void;
   onSkip: () => void;
 }) {
-  if (canRetryPlaybackError(errorKind)) return <Button label="Retry" onPress={onRetry} haptic />;
+  if (canRetryPlaybackError(errorKind))
+    return <Button action="playback.full.retry" label="Retry" onPress={onRetry} haptic />;
   if (!hasNext) return null;
-  return <Button label="Skip track" onPress={onSkip} haptic />;
+  return <Button action="playback.full.skip" label="Skip track" onPress={onSkip} haptic />;
 }
 
 export function FullPlayer() {
@@ -128,6 +133,7 @@ export function FullPlayer() {
         </SheetHeaderCenter>
         <SheetHeaderTrailing>
           <IconButton
+            action="playback.full.lyrics"
             icon={Mic2}
             size={20}
             onPress={() => router.push('/player/lyrics')}
@@ -135,6 +141,7 @@ export function FullPlayer() {
           />
           {queueLength > 1 ? (
             <IconButton
+              action="playback.full.queue"
               icon={ListMusic}
               size={22}
               onPress={() => router.push('/player/queue')}
@@ -142,6 +149,7 @@ export function FullPlayer() {
             />
           ) : null}
           <IconButton
+            action="playback.full.options"
             icon={MoreHorizontal}
             size={22}
             onPress={() => setOptionsOpen(true)}
@@ -179,7 +187,12 @@ export function FullPlayer() {
       ) : isPreview ? (
         <View style={styles.controls}>
           <View style={styles.controlSpacer} />
-          <PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={onPlayPause} />
+          <PlayButton
+            isPlaying={isPlaying}
+            isEnded={isEnded}
+            onPress={onPlayPause}
+            trackId={libraryTrackId(track)}
+          />
           <View style={styles.controlSpacer} />
         </View>
       ) : (
@@ -199,7 +212,14 @@ export function FullPlayer() {
             onPrevious={onPrevious}
             onNext={skipToNext}
             onCycleRepeat={cycleRepeatMode}
-            center={<PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={onPlayPause} />}
+            center={
+              <PlayButton
+                isPlaying={isPlaying}
+                isEnded={isEnded}
+                onPress={onPlayPause}
+                trackId={libraryTrackId(track)}
+              />
+            }
           />
         </View>
       )}

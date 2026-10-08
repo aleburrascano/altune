@@ -4,6 +4,10 @@ export function isPreviewTrack(track: PlaybackTrack) {
   return track.source.kind === 'preview';
 }
 
+export function libraryTrackId(track: PlaybackTrack): string | undefined {
+  return track.source.kind === 'library' ? track.source.trackId : undefined;
+}
+
 export function endedLabel(isPreview: boolean) {
   return isPreview ? 'Preview ended' : 'Finished';
 }

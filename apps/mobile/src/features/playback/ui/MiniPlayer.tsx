@@ -14,7 +14,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 import { canRetryPlaybackError } from '../retryPolicy';
-import { endedLabel, isPreviewTrack, statusFlagsOf } from './playerStatus';
+import { endedLabel, isPreviewTrack, libraryTrackId, statusFlagsOf } from './playerStatus';
 
 export function MiniPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage, errorKind } =
@@ -53,12 +53,12 @@ export function MiniPlayer() {
   const mustSkipToRecover = isError && !canRetryPlaybackError(errorKind);
 
   const control = mustSkipToRecover
-    ? { icon: SkipForward, label: 'Skip track', onPress: skipToNext }
+    ? { action: 'playback.mini.skip', icon: SkipForward, label: 'Skip track', onPress: skipToNext }
     : isError
-      ? { icon: RotateCcw, label: 'Retry', onPress: retry }
+      ? { action: 'playback.mini.retry', icon: RotateCcw, label: 'Retry', onPress: retry }
       : isPlaying
-        ? { icon: Pause, label: 'Pause', onPress: pause }
-        : { icon: Play, label: 'Play', onPress: resume };
+        ? { action: 'playback.mini.play_pause', icon: Pause, label: 'Pause', onPress: pause }
+        : { action: 'playback.mini.play_pause', icon: Play, label: 'Play', onPress: resume };
 
   return (
     <Pressable
@@ -100,6 +100,8 @@ export function MiniPlayer() {
           </Text>
         </View>
         <IconButton
+          action={control.action}
+          trackId={libraryTrackId(track)}
           icon={control.icon}
           size={22}
           onPress={control.onPress}
@@ -107,6 +109,7 @@ export function MiniPlayer() {
         />
         {showSkipNext && !isPreview && !mustSkipToRecover ? (
           <IconButton
+            action="playback.mini.next"
             icon={SkipForward}
             size={18}
             onPress={skipToNext}
