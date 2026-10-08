@@ -19,53 +19,37 @@ const DANGER_ZONE_ICONS: Record<DangerZoneActionKey, LucideIcon> = {
 type DangerZoneCardProps = Parameters<typeof buildDangerZoneActions>[0];
 type Action = ReturnType<typeof buildDangerZoneActions>[number];
 
-function DangerZoneRow(props: {
-  action: Action;
-  first: boolean;
-  onPress: () => void;
-}): ReactElement {
-  const { action, first, onPress } = props;
-  const { key, row } = action;
+type DangerZoneRowProps = { action: Action; first: boolean; onPress: () => void };
+type DangerZoneConfirmProps = { action: Action; visible: boolean; onClose: () => void };
+
+function statusLabel({ status }: Action['row']): ReactElement | null {
+  if (!status) return null;
   return (
-    <SettingsRow
-      testID={row.testID}
-      first={first}
-      icon={DANGER_ZONE_ICONS[key]}
-      tone="danger"
-      label={row.label}
-      detail={row.detail}
-      onPress={onPress}
-      disabled={row.disabled ?? false}
-      right={
-        row.status ? (
-          <Text variant="label" tone={row.status.tone}>
-            {row.status.label}
-          </Text>
-        ) : null
-      }
-    />
+    <Text variant="label" tone={status.tone}>
+      {status.label}
+    </Text>
   );
 }
 
-function DangerZoneConfirm(props: {
-  action: Action;
-  visible: boolean;
-  onClose: () => void;
-}): ReactElement {
-  const { action, visible, onClose } = props;
-  const { key, confirm } = action;
-  return (
-    <ConfirmModal
-      testID={confirm.testID}
-      visible={visible}
-      icon={DANGER_ZONE_ICONS[key]}
-      title={confirm.title}
-      body={confirm.body}
-      confirmLabel={confirm.confirmLabel}
-      onConfirm={confirm.onConfirm}
-      onClose={onClose}
-    />
-  );
+function rowProps(row: Action['row']) {
+  return {
+    testID: row.testID,
+    label: row.label,
+    detail: row.detail,
+    disabled: row.disabled ?? false,
+    tone: 'danger' as const,
+    right: statusLabel(row),
+  };
+}
+
+function DangerZoneRow({ action, first, onPress }: DangerZoneRowProps): ReactElement {
+  const icon = DANGER_ZONE_ICONS[action.key];
+  return <SettingsRow {...rowProps(action.row)} first={first} icon={icon} onPress={onPress} />;
+}
+
+function DangerZoneConfirm({ action, visible, onClose }: DangerZoneConfirmProps): ReactElement {
+  const icon = DANGER_ZONE_ICONS[action.key];
+  return <ConfirmModal {...action.confirm} visible={visible} icon={icon} onClose={onClose} />;
 }
 
 export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
