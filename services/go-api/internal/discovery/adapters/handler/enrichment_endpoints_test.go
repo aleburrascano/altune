@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
@@ -313,7 +313,7 @@ func (f *fakeLyricsProvider) Lookup(context.Context, string) (discdomain.DeezerL
 func buildEnrichersRouter(e DetailEnrichers) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{}).WithDetailEnrichers(e)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

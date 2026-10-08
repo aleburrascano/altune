@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
@@ -1103,7 +1103,7 @@ func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
-	auth.Middleware(verifier)(next).ServeHTTP(rec, req)
+	middleware.Middleware(verifier)(next).ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("middleware status with a stale key set: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}

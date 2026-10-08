@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
@@ -58,7 +58,7 @@ func makeStreamableReacquireTrack(userId shared.UserId, title, artist, album, au
 func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFakeScheduler) chi.Router {
 	h := NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(reacquireVerifyAsTestUser))
+	r.Use(middleware.Middleware(reacquireVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
 	return r
 }

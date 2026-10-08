@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
@@ -335,7 +335,7 @@ func (s *recordingEventStore) Append(_ context.Context, e discdomain.Interaction
 func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Suggest: service.NewSuggestService(vocab)})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -343,7 +343,7 @@ func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
 func buildEventRouter(store *recordingEventStore) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Event: service.NewRecordEventService(store)})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Use(httputil.MaxBodySize(1 << 20))
 	r.Mount("/discovery", h.Routes())
 	return r
@@ -1005,7 +1005,7 @@ func buildQueryCapRouter(p ports.SearchProvider, vocab ports.VocabularyStore) ch
 	svc := service.NewService([]ports.SearchProvider{p}, service.NewCircuitBreaker(), service.WithVocabularyStore(vocab))
 	h := NewDiscoveryHandler(DiscoveryServices{Search: svc})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -1095,7 +1095,7 @@ func buildQueryNormRouter(history *fakeSearchHistoryRepo) chi.Router {
 		service.WithHistoryRepository(history))
 	h := NewDiscoveryHandler(DiscoveryServices{Search: svc})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -1491,7 +1491,7 @@ func pagingRouter(provider ports.SearchProvider) chi.Router {
 	)
 	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
@@ -1644,7 +1644,7 @@ func TestHandleSearch_CacheHitReflectsTheResultCache(t *testing.T) {
 	)
 	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
 	router.Mount("/discovery", h.Routes())
 
 	first := searchPageOverHTTP(t, router, "/discovery/search?q=humble")

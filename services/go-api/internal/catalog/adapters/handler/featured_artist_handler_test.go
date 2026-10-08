@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
@@ -150,7 +150,7 @@ func backfillRouter(repo *listFailsAfterFirstPage) chi.Router {
 		service.NewListFeaturingService(repo),
 	)
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(verifyAsTestUser))
+	router.Use(middleware.Middleware(verifyAsTestUser))
 	router.Route("/tracks", featured.Routes)
 	return router
 }
@@ -196,7 +196,7 @@ func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(
 		service.NewListFeaturingService(trackRepo),
 	)
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(verifyAsTestUser))
+	router.Use(middleware.Middleware(verifyAsTestUser))
 	router.Route("/tracks", featured.Routes)
 
 	start := time.Now()

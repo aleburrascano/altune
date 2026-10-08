@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
@@ -82,7 +82,7 @@ func goldenTracks() []discdomain.SearchResult {
 func goldenRouter(svcs DiscoveryServices, filler ports.TrackNumberFiller) chi.Router {
 	h := wireGoldenOwnership(NewDiscoveryHandler(svcs), goldenOwned(), filler)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

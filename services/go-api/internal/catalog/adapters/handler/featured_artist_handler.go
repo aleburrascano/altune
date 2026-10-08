@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
@@ -34,7 +34,7 @@ func (h *FeaturedArtistHandler) Routes(r chi.Router) {
 }
 
 func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
+	userId, ok := middleware.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -61,7 +61,7 @@ func logPartialBackfill(r *http.Request, result *service.BackfillFeaturedResult)
 }
 
 func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
+	userId, ok := middleware.RequireUserID(w, r)
 	if !ok {
 		return
 	}

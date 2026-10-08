@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
@@ -39,7 +39,7 @@ func paramValidationRouter(t *testing.T) chi.Router {
 		Enrich:       enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil),
 	})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

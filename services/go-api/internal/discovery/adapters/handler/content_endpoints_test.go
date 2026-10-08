@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"context"
@@ -147,7 +147,7 @@ func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	})
 	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
 	router.Mount("/discovery", h.Routes())
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/1/related?limit=2", nil)
@@ -219,7 +219,7 @@ func identityContentRouter(down map[discdomain.ProviderName]bool) chi.Router {
 		service.WithContentIdentityStore(stubIdentityStore{xref: xref}))
 	h := NewDiscoveryHandler(DiscoveryServices{Artist: svc})
 	router := chi.NewRouter()
-	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
 	router.Mount("/discovery", h.Routes())
 	return router
 }
