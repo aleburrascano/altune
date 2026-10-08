@@ -85,7 +85,10 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
 
   it('covers the 3 settings domain files', () => {
     expect(
-      files.filter(({ feature }) => feature === 'settings').map(({ file }) => file).sort(),
+      files
+        .filter(({ feature }) => feature === 'settings')
+        .map(({ file }) => file)
+        .sort(),
     ).toEqual(['backfillStatus.ts', 'downloadStatsModel.ts', 'failureCopyForAction.ts']);
   });
 
