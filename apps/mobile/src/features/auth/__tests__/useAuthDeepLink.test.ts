@@ -12,6 +12,7 @@ jest.mock('expo-linking', () => ({
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
+jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
 jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
