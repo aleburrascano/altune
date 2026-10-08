@@ -680,3 +680,49 @@ func TestPgxJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 		t.Errorf("Claim after a zero delay = %v, want a job", err)
 	}
 }
+
+func TestPgxJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+
+	if dbCallTimeout != 5*time.Second {
+		t.Errorf("dbCallTimeout = %s, want 5s", dbCallTimeout)
+	}
+
+	missing := domain.TrackIdFromUUID(uuid.New())
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cases := []struct {
+		op  string
+		run func(ctx context.Context) error
+	}{
+		{"heartbeat", func(ctx context.Context) error { return queue.Heartbeat(ctx, missing, 1, time.Minute) }},
+		{"release", func(ctx context.Context) error { return queue.Release(ctx, missing, 1, time.Minute) }},
+		{"settle", func(ctx context.Context) error { return queue.Settle(ctx, missing, 1) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.op, func(t *testing.T) {
+			err := tc.run(context.Background())
+			if !errors.Is(err, ports.ErrLeaseLost) {
+				t.Fatalf("zero rows = %v, want ErrLeaseLost", err)
+			}
+			want := tc.op + " acquisition job for track " + missing.String() + ": " + ports.ErrLeaseLost.Error()
+			if err.Error() != want {
+				t.Errorf("zero-rows error = %q, want %q", err.Error(), want)
+			}
+
+			err = tc.run(cancelled)
+			if err == nil || errors.Is(err, ports.ErrLeaseLost) {
+				t.Fatalf("cancelled context = %v, want a database error", err)
+			}
+			if prefix := tc.op + " acquisition job: "; !strings.HasPrefix(err.Error(), prefix) {
+				t.Errorf("database error = %q, want prefix %q", err.Error(), prefix)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("database error = %v, want it to wrap context.Canceled", err)
+			}
+		})
+	}
+}
