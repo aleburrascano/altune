@@ -90,73 +90,92 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 
 var detailFanOutTimeout = consensusTimeout
 
+type identityJob struct {
+	provider domain.ProviderName
+	p        ports.ArtistContentProvider
+	id       string
+	call     breakerCall
+}
+
+func (s *GetArtistContentService) admitIdentityJobs(identity ResolvedArtistIdentity) (jobs []identityJob, partial bool) {
+	for _, name := range orderedProviderNames(s.providers) {
+		call, ok := admitProviderCall(s.breaker, name)
+		id := providerContentID(identity, name)
+		if !ok {
+			if id != "" {
+				partial = true
+			}
+			continue
+		}
+		if id == "" {
+			call.release()
+			continue
+		}
+		jobs = append(jobs, identityJob{provider: name, p: s.providers[name], id: id, call: call})
+	}
+	return jobs, partial
+}
+
 func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) (groups [][]domain.SearchResult, partial bool) {
 	callerCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, detailFanOutTimeout)
 	defer cancel()
 
-	type job struct {
-		provider domain.ProviderName
-		p        ports.ArtistContentProvider
-		id       string
-		call     breakerCall
-	}
-	var jobs []job
-	for _, name := range orderedProviderNames(s.providers) {
-		call, ok := admitProviderCall(s.breaker, name)
-		if !ok {
-			if providerContentID(identity, name) != "" {
-				partial = true
-			}
-			continue
-		}
-		p := s.providers[name]
-		id := providerContentID(identity, name)
-		if id == "" {
-			call.release()
-			continue
-		}
-		jobs = append(jobs, job{provider: name, p: p, id: id, call: call})
-	}
+	jobs, partial := s.admitIdentityJobs(identity)
 
-	results := make([][]domain.SearchResult, len(jobs))
-	failed := make([]bool, len(jobs))
-	truncated := make([]bool, len(jobs))
-	errs := make([]error, len(jobs))
+	outcomes := runIdentityJobs(ctx, callerCtx, jobs, fetch)
+	groups, jobsPartial := collectIdentityOutcomes(callerCtx, jobs, outcomes)
+	return groups, partial || jobsPartial
+}
+
+type identityOutcome struct {
+	results   []domain.SearchResult
+	failed    bool
+	truncated bool
+	err       error
+}
+
+func runIdentityJobs(ctx, callerCtx context.Context, jobs []identityJob, fetch identityContentFetch) []identityOutcome {
+	outcomes := make([]identityOutcome, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
 		wg.Add(1)
-		go func(i int, j job) {
+		go func(i int, j identityJob) {
 			defer wg.Done()
 			defer RecoverGoroutine(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
-			failed[i] = true
-			res, err := runAdmitted(callerCtx, j.call, breakerOutcome,
-				func() ([]domain.SearchResult, error) { return fetch(ctx, j.p, j.provider, j.id) })
-			if isPartialResult(err) {
-				truncated[i] = true
-				err = nil
-			}
-			if err != nil {
-				errs[i] = err
-				return
-			}
-			failed[i] = false
-			results[i] = res
+			outcomes[i].failed = true
+			outcomes[i] = runIdentityJob(ctx, callerCtx, j, fetch)
 		}(i, j)
 	}
 	wg.Wait()
+	return outcomes
+}
 
-	groups = make([][]domain.SearchResult, 0, len(results))
+func runIdentityJob(ctx, callerCtx context.Context, j identityJob, fetch identityContentFetch) identityOutcome {
+	res, err := runAdmitted(callerCtx, j.call, breakerOutcome,
+		func() ([]domain.SearchResult, error) { return fetch(ctx, j.p, j.provider, j.id) })
+	o := identityOutcome{results: res, err: err}
+	if isPartialResult(err) {
+		o.truncated = true
+		o.err = nil
+	}
+	o.failed = o.err != nil
+	return o
+}
+
+func collectIdentityOutcomes(callerCtx context.Context, jobs []identityJob, outcomes []identityOutcome) (groups [][]domain.SearchResult, partial bool) {
+	groups = make([][]domain.SearchResult, 0, len(outcomes))
 	var failures []any
 	for i, j := range jobs {
-		if failed[i] || truncated[i] {
+		o := outcomes[i]
+		if o.failed || o.truncated {
 			partial = true
 		}
-		if attr, ok := fanOutFailureAttr(callerCtx, j.provider, j.id, errs[i]); ok {
+		if attr, ok := fanOutFailureAttr(callerCtx, j.provider, j.id, o.err); ok {
 			failures = append(failures, attr)
 		}
-		if g := results[i]; len(g) > 0 {
-			groups = append(groups, g)
+		if len(o.results) > 0 {
+			groups = append(groups, o.results)
 		}
 	}
 	if len(failures) > 0 {
