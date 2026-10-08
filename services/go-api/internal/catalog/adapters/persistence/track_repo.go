@@ -383,6 +383,12 @@ func (r *PgxTrackRepository) listOwnedTrackRefsPage(
 	return scanOwnedTrackRefs(rows)
 }
 
+const readyAudioTracksPageSQL = `SELECT id, user_id, title, artist, audio_ref
+	FROM tracks
+	WHERE acquisition_status = 'ready' AND audio_ref IS NOT NULL AND id > $1
+	ORDER BY id
+	LIMIT $2`
+
 var maxReadyAudioTracks = 50_000
 
 var readyAudioTracksPageSize = domain.MaxLibraryPageSize
@@ -414,19 +420,16 @@ func (r *PgxTrackRepository) listReadyAudioTracksPage(
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, title, artist, audio_ref
-		FROM tracks
-		WHERE acquisition_status = 'ready' AND audio_ref IS NOT NULL AND id > $1
-		ORDER BY id
-		LIMIT $2`,
-		after, limit,
-	)
+	rows, err := r.pool.Query(ctx, readyAudioTracksPageSQL, after, limit)
 	if err != nil {
 		return nil, classifyDBError(fmt.Errorf("list ready audio tracks: %w", err))
 	}
 	defer rows.Close()
 
+	return scanReadyAudioTracks(rows)
+}
+
+func scanReadyAudioTracks(rows pgx.Rows) ([]ports.ReadyAudioTrack, error) {
 	page := []ports.ReadyAudioTrack{}
 	for rows.Next() {
 		var id, userId uuid.UUID
@@ -456,7 +459,10 @@ func (r *PgxTrackRepository) AudioRefsUnderPrefix(ctx context.Context, prefix st
 		return nil, classifyDBError(fmt.Errorf("list audio refs under prefix: %w", err))
 	}
 	defer rows.Close()
+	return scanAudioRefSet(rows)
+}
 
+func scanAudioRefSet(rows pgx.Rows) (map[string]bool, error) {
 	refs := map[string]bool{}
 	for rows.Next() {
 		var ref string
