@@ -336,12 +336,12 @@ func (s *Service) resolveRanked(
 	}
 
 	detached := context.WithoutCancel(ctx)
-	call := s.resolveGroup.DoChan(s.cache.key(queryNorm, query.Kinds), func() (val any, _ error) {
+	call := s.resolveGroup.DoChan(s.cache.key(queryNorm, query.Kinds), func() (answer any, _ error) {
 		defer func() {
 			if r := recover(); r != nil {
 				slog.ErrorContext(detached, "search.v2.resolve_panic",
 					"panic", r, "stack", string(debug.Stack()))
-				val = rankedResolution{partial: true}
+				answer = rankedResolution{partial: true}
 			}
 		}()
 		return s.resolveCold(detached, query, searchQuery, queryNorm), nil
