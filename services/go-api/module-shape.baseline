@@ -61,13 +61,6 @@ G3 internal/catalog/adapters/handler/playlist_handler.go:4 imports auth outside 
 G3 internal/catalog/adapters/handler/stream_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/track_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/discovery/adapters/catalogbridge imports nothing from catalog ports or service
-G3 internal/discovery/adapters/handler/auth_failure_endpoint.go:4 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/handler/content_endpoints.go:4 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/handler/discovery_handler.go:4 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/handler/favorites_endpoints.go:4 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/handler/ownership_stamp.go:6 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/handler/search_endpoints.go:4 imports auth outside adapters/authbridge
-G3 internal/discovery/adapters/handler/search_rate_limit.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge

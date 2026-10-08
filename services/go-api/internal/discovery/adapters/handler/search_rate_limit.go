@@ -1,7 +1,7 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"sync"
@@ -94,7 +94,7 @@ func inWindow(times []time.Time, now time.Time, window time.Duration) []time.Tim
 
 func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authservice.UserIDFromContext(r.Context())
+		userID, ok := authbridge.UserIDFromContext(r.Context())
 		if !ok {
 			next.ServeHTTP(w, r)
 			return

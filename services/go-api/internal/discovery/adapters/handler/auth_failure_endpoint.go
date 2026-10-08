@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"errors"
@@ -38,7 +38,7 @@ type authFailureRequest struct {
 
 func (l *userRateLimiter) clientMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if wait, admitted := l.admit(auth.ClientKey(r)); !admitted {
+		if wait, admitted := l.admit(authbridge.ClientKey(r)); !admitted {
 			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
 			httputil.HandleServiceError(w, r, rateLimitedError{})
 			return

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
@@ -144,7 +144,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 			}
 
 			dto := contentFetchToDTO(resp)
-			if userId, hasUser := authservice.UserIDFromContext(r.Context()); hasUser {
+			if userId, hasUser := authbridge.UserIDFromContext(r.Context()); hasUser {
 				h.ownership.EnrichAlbumTracks(r.Context(), userId, ownableItems(dto.Items))
 			}
 			status, _ := contentFetchOutcome(resp)
@@ -309,7 +309,7 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				TopTracks: contentFetchToDTO(tracksResp),
 				Albums:    contentFetchToDTO(albumsResp),
 			}
-			if userId, hasUser := authservice.UserIDFromContext(r.Context()); hasUser {
+			if userId, hasUser := authbridge.UserIDFromContext(r.Context()); hasUser {
 				h.ownership.StampOwnership(r.Context(), userId, ownableItems(dto.TopTracks.Items))
 			}
 			httputil.WriteJSON(w, status, dto)
