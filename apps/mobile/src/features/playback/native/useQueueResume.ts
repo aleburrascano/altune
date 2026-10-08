@@ -38,6 +38,7 @@ import { progressSecondsToRoundedMs } from '@features/playback/time';
 import { useAppStateChange } from '@shared/lifecycle';
 
 const SAVE_INTERVAL_MS = 15_000;
+const MAX_SAVED_QUEUE_IDS = 10_000;
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -77,7 +78,72 @@ function savedCurrentIndex(s: QueueStore): number {
   return libraryIds(orderedQueueTracks({ tracks: s.tracks, playOrder: before })).length;
 }
 
-async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
+interface SavedLists {
+  track_ids: string[];
+  natural_order: string[];
+  current_index: number;
+}
+
+function cappedSavedLists(s: QueueStore): SavedLists {
+  const ordered = libraryIds(orderedQueueTracks(s));
+  const natural = libraryIds(s.tracks);
+  const currentIndex = savedCurrentIndex(s);
+  if (ordered.length <= MAX_SAVED_QUEUE_IDS) {
+    return { track_ids: ordered, natural_order: natural, current_index: currentIndex };
+  }
+  const half = Math.floor(MAX_SAVED_QUEUE_IDS / 2);
+  const start = Math.min(Math.max(currentIndex - half, 0), ordered.length - MAX_SAVED_QUEUE_IDS);
+  const window = ordered.slice(start, start + MAX_SAVED_QUEUE_IDS);
+  const idsLeftInWindow = new Map<string, number>();
+  for (const id of window) idsLeftInWindow.set(id, (idsLeftInWindow.get(id) ?? 0) + 1);
+  const keptNatural = natural.filter((id) => {
+    const left = idsLeftInWindow.get(id) ?? 0;
+    if (left === 0) return false;
+    idsLeftInWindow.set(id, left - 1);
+    return true;
+  });
+  return { track_ids: window, natural_order: keptNatural, current_index: currentIndex - start };
+}
+
+interface SaveFingerprint {
+  tracks: QueueStore['tracks'];
+  playOrder: QueueStore['playOrder'];
+  source: QueueStore['source'];
+  currentIndex: number;
+  shuffled: boolean;
+  repeatMode: QueueStore['repeatMode'];
+  positionMs: number;
+}
+
+function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
+  return {
+    tracks: s.tracks,
+    playOrder: s.playOrder,
+    source: s.source,
+    currentIndex: s.currentIndex,
+    shuffled: s.shuffled,
+    repeatMode: s.repeatMode,
+    positionMs,
+  };
+}
+
+function sameFingerprint(a: SaveFingerprint | null, b: SaveFingerprint): boolean {
+  return (
+    a !== null &&
+    a.tracks === b.tracks &&
+    a.playOrder === b.playOrder &&
+    a.source === b.source &&
+    a.currentIndex === b.currentIndex &&
+    a.shuffled === b.shuffled &&
+    a.repeatMode === b.repeatMode &&
+    a.positionMs === b.positionMs
+  );
+}
+
+async function saveOnce(
+  isSkippable: (state: QueueStore) => boolean,
+  lastSaved: { current: SaveFingerprint | null },
+): Promise<void> {
   if (isSkippable(useQueueStore.getState())) return;
 
   const epoch = currentSessionEpoch();
@@ -85,16 +151,18 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
   if (!snapshot || isSkippable(snapshot.state) || !isSameSession(epoch)) return;
   const { state: s, positionMs } = snapshot;
 
+  const fingerprint = fingerprintOf(s, positionMs);
+  if (sameFingerprint(lastSaved.current, fingerprint)) return;
+
   try {
     await saveQueueState({
-      track_ids: libraryIds(orderedQueueTracks(s)),
-      current_index: savedCurrentIndex(s),
+      ...cappedSavedLists(s),
       position_ms: positionMs,
       shuffled: s.shuffled,
       repeat_mode: s.repeatMode,
       source: toWireSource(s.source),
-      natural_order: libraryIds(s.tracks),
     });
+    lastSaved.current = fingerprint;
   } catch (err) {
     warnPlayback('failed to save queue state', {}, err);
     recordQueueSaveFailure();
@@ -262,12 +330,13 @@ export function useQueueResume() {
   const restoredRef = useRef(false);
   const placeholderGenerationRef = useRef<number | null>(null);
   const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
+  const lastSavedRef = useRef<SaveFingerprint | null>(null);
   const save = useCallback((): Promise<void> => {
     const isSkippable = (state: QueueStore): boolean =>
       state.tracks.length === 0 ||
       placeholderGenerationRef.current === state.generation ||
       state.currentTrack()?.source.kind !== 'library';
-    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable));
+    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable, lastSavedRef));
     return singleFlightRef.current();
   }, []);
 
