@@ -1,7 +1,11 @@
 import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 import { showAlert } from '@shared/ui/dialog/dialog';
 
-import { reportPinBatch, reportStorageFull, reportUnpinBatch } from '../pinBatchSummary';
+import {
+  reportPinBatch,
+  reportStorageFull,
+  reportUnpinBatch,
+} from '@features/library/hooks/useLibraryOffline';
 
 jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
