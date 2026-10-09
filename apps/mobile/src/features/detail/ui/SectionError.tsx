@@ -7,7 +7,7 @@ import { spacing } from '@shared/ui/theme';
 
 import type { ContentFailure } from '@features/detail/domain/content-status';
 
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 
 export interface SectionErrorProps {
   testIDPrefix: string;

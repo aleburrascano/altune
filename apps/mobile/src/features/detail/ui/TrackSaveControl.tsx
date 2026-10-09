@@ -12,7 +12,7 @@ import {
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
 
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 import { SaveGlyph } from '@features/detail/ui/SaveGlyph';
 
 const SIZE = 40;

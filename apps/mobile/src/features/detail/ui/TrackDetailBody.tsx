@@ -25,7 +25,7 @@ import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
 import { TrackInfoSection } from '@features/detail/ui/TrackInfoSection';
 import { TrackSavePill } from '@features/detail/ui/TrackSavePill';
 import { TrackStatusBanners } from '@features/detail/ui/TrackStatusBanners';
-import { buildTrackFacts } from '@features/detail/ui/trackDetailFacts';
+import { buildTrackFacts } from '@features/detail/ui/buildTrackFacts';
 
 function wrongAlbumMenu(actions: TrackDetailActions): { label: string; onPress: () => void }[] {
   if (actions.albumName === null) return [];

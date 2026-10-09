@@ -7,7 +7,7 @@ import { Text } from '@shared/ui/primitives/Text';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
 
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 
 const MAX_GENRES = 2;
 
