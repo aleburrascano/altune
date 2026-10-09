@@ -2,48 +2,70 @@ import type { Session } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/api-client';
-import { backfillFeaturedArtists, type BackfillFeaturedResult } from '@shared/api-client/tracks';
+import { ContractError, LONG_REQUEST_TIMEOUT_MS, NetworkError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { detailKeys, libraryKeys } from '@shared/query/queryKeys';
-import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
+import { RETRY_BACKOFF_BASE_MS, RETRY_BACKOFF_CAP_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '@testing/makeWrapper';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
 
-jest.mock('@shared/api-client/tracks', () => ({
-  ...jest.requireActual('@shared/api-client/tracks'),
-  backfillFeaturedArtists: jest.fn(),
-}));
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
+
+const BACKFILL = 'POST /v1/tracks/featured-backfill';
+const ATTEMPT_AND_ONE_RETRY = 2;
+const BAD_GATEWAY = {
+  status: 502,
+  json: { error: { code: 'bad_gateway', message: 'bad gateway' } },
+};
+
+type WireRequest = { method: string; path: string; query: string };
+
+function page(over: object) {
+  return { scanned: 0, updated: 0, truncated: false, next_offset: 0, ...over };
+}
+
+function backfillQueries(): string[] {
+  return __http.requests
+    .filter((r: WireRequest) => `${r.method} ${r.path}` === BACKFILL)
+    .map((r: WireRequest) => r.query);
+}
+
+function signedIn() {
+  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  } as never);
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function holdResponses(when: (url: string) => boolean) {
+  const gate = deferred();
+  global.fetch = ((url: string, init: RequestInit) => {
+    const response = fakeFetch(url, init);
+    return when(String(url)) ? gate.promise.then(() => response) : response;
+  }) as typeof fetch;
+  return gate.resolve;
+}
+
+afterEach(() => {
+  global.fetch = fakeFetch;
+  jest.restoreAllMocks();
+});
 
 describe('settings mutations retry transient failures', () => {
-  function makeClient() {
-    return new QueryClient();
-  }
-
-  const FIRST_RETRY_CEILING_MS = RETRY_BACKOFF_BASE_MS;
-
-  async function elapsePastTheFirstRetry() {
-    await act(async () => {
-      await jest.advanceTimersByTimeAsync(FIRST_RETRY_CEILING_MS);
-    });
-  }
-
-  function renderMutation<T extends { mutate: (v?: never) => void }>(useHook: () => T) {
-    const hook = renderHook(useHook, { wrapper: makeWrapper(makeClient()) });
-    act(() => {
-      hook.result.current.mutate();
-    });
-    return hook;
-  }
-
-  const badGateway = () => new ApiError(502, 'bad gateway');
-
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.mocked(backfillFeaturedArtists).mockReset();
+    signedIn();
   });
 
   afterEach(() => {
@@ -51,45 +73,29 @@ describe('settings mutations retry transient failures', () => {
   });
 
   it('retries a 502 on backfill and settles as success', async () => {
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockRejectedValueOnce(badGateway())
-      .mockResolvedValueOnce({ updated: 0 } as never);
+    __http.replyOnce(BACKFILL, BAD_GATEWAY);
+    __http.replyOnce(BACKFILL, { json: page({ scanned: 2, updated: 1 }) });
 
-    const hook = renderMutation(useBackfillFeatured);
-    await elapsePastTheFirstRetry();
+    const hook = renderHook(useBackfillFeatured, { wrapper: makeWrapper(new QueryClient()) });
+    act(() => {
+      hook.result.current.mutate();
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(RETRY_BACKOFF_BASE_MS);
+    });
 
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
-    expect(backfillFeaturedArtists).toHaveBeenCalledTimes(2);
+    expect(hook.result.current.data).toMatchObject({ scanned: 2, updated: 1 });
+    expect(__http.countFor(BACKFILL)).toBe(ATTEMPT_AND_ONE_RETRY);
     hook.unmount();
   });
 });
 
 describe('the jittered retry backoff', () => {
-  const retryingMutations = [
-    {
-      name: 'backfill',
-      useMutationHook: useBackfillFeatured,
-      api: () => backfillFeaturedArtists as jest.Mock,
-    },
-  ];
-
   const jitterSamples = [
     { sample: 0, dueMs: RETRY_BACKOFF_BASE_MS / 2 },
     { sample: 0.5, dueMs: (RETRY_BACKOFF_BASE_MS * 3) / 4 },
   ];
-
-  function startMutation(useMutationHook: () => { mutate: (v?: never) => void }) {
-    const queryClient = new QueryClient();
-    const hook = renderHook(useMutationHook, { wrapper: makeWrapper(queryClient) });
-    act(() => {
-      hook.result.current.mutate();
-    });
-    return () => {
-      hook.unmount();
-      queryClient.clear();
-    };
-  }
 
   async function elapse(ms: number) {
     await act(async () => {
@@ -99,36 +105,36 @@ describe('the jittered retry backoff', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    (backfillFeaturedArtists as jest.Mock)
-      .mockReset()
-      .mockRejectedValue(new ApiError(502, 'bad gateway'));
+    signedIn();
+    __http.reply(BACKFILL, BAD_GATEWAY);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    jest.restoreAllMocks();
   });
 
-  describe.each(retryingMutations)(
-    '$name spreads its retry over the jittered backoff',
-    ({ useMutationHook, api }) => {
-      it.each(jitterSamples)(
-        'reattempts at $dueMs ms when the jitter sample is $sample',
-        async ({ sample, dueMs }) => {
-          jest.spyOn(Math, 'random').mockReturnValue(sample);
-          const stop = startMutation(useMutationHook);
+  describe('backfill spreads its retry over the jittered backoff', () => {
+    it.each(jitterSamples)(
+      'reattempts at $dueMs ms when the jitter sample is $sample',
+      async ({ sample, dueMs }) => {
+        jest.spyOn(Math, 'random').mockReturnValue(sample);
+        const queryClient = new QueryClient();
+        const hook = renderHook(useBackfillFeatured, { wrapper: makeWrapper(queryClient) });
+        act(() => {
+          hook.result.current.mutate();
+        });
 
-          await elapse(dueMs - 1);
-          expect(api()).toHaveBeenCalledTimes(1);
+        await elapse(dueMs - 1);
+        expect(__http.countFor(BACKFILL)).toBe(1);
 
-          await elapse(1);
-          expect(api()).toHaveBeenCalledTimes(2);
+        await elapse(1);
+        expect(__http.countFor(BACKFILL)).toBe(ATTEMPT_AND_ONE_RETRY);
 
-          stop();
-        },
-      );
-    },
-  );
+        hook.unmount();
+        queryClient.clear();
+      },
+    );
+  });
 });
 
 describe('settings mutations racing a sign-out', () => {
@@ -146,16 +152,6 @@ describe('settings mutations racing a sign-out', () => {
       token_type: 'bearer',
       user,
     } as Session;
-  }
-
-  function deferred<T>() {
-    let resolve!: (value: T) => void;
-    let reject!: (reason: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
   }
 
   let authCallbacks: AuthCallback[] = [];
@@ -199,19 +195,13 @@ describe('settings mutations racing a sign-out', () => {
 
   beforeEach(() => {
     authCallbacks = [];
-    jest.restoreAllMocks();
-    jest.mocked(backfillFeaturedArtists).mockReset();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
   });
 
   it("a backfill A started does not invalidate B's library cache when it resolves after the switch", async () => {
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    const pending = deferred<BackfillFeaturedResult>();
-    jest.mocked(backfillFeaturedArtists).mockReturnValue(pending.promise);
+    __http.replyOnce(BACKFILL, { json: page({ scanned: 10, updated: 3, next_offset: 10 }) });
+    const release = holdResponses(() => true);
 
     const backfill = renderHook(() => useBackfillFeatured(), {
       wrapper: makeWrapper(queryClient),
@@ -219,7 +209,7 @@ describe('settings mutations racing a sign-out', () => {
     act(() => {
       backfill.result.current.mutate();
     });
-    await waitFor(() => expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(__http.countFor(BACKFILL)).toBe(1));
     backfill.unmount();
 
     await signOutThenSignInAsUserB(queryClient);
@@ -232,8 +222,8 @@ describe('settings mutations racing a sign-out', () => {
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
 
     await act(async () => {
-      pending.resolve({ scanned: 10, updated: 3, truncated: false, nextOffset: 10 });
-      await pending.promise;
+      release();
+      await new Promise((r) => setTimeout(r, 0));
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -250,30 +240,16 @@ describe('settings mutations racing a sign-out', () => {
 });
 
 describe('backfill over a library larger than one server call', () => {
-  const page = (over: object) => ({
-    scanned: 0,
-    updated: 0,
-    truncated: false,
-    nextOffset: 0,
-    ...over,
-  });
-
   beforeEach(() => {
-    jest.mocked(backfillFeaturedArtists).mockReset();
+    signedIn();
   });
 
   it('follows next_offset until the server stops truncating and sums the counts', async () => {
-    let releaseSecond!: (value: ReturnType<typeof page>) => void;
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockResolvedValueOnce(
-        page({ scanned: 10000, updated: 3, truncated: true, nextOffset: 10000 }),
-      )
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          releaseSecond = resolve;
-        }),
-      );
+    __http.replyOnce(BACKFILL, {
+      json: page({ scanned: 10000, updated: 3, truncated: true, next_offset: 10000 }),
+    });
+    __http.replyOnce(BACKFILL, { json: page({ scanned: 40, updated: 1 }) });
+    const releaseSecond = holdResponses((url) => url.includes('offset='));
 
     const hook = renderHook(() => useBackfillFeatured(), {
       wrapper: makeWrapper(new QueryClient()),
@@ -282,13 +258,11 @@ describe('backfill over a library larger than one server call', () => {
       hook.result.current.mutate();
     });
 
-    await waitFor(() => expect(backfillFeaturedArtists).toHaveBeenCalledTimes(2));
-    expect(backfillFeaturedArtists).toHaveBeenNthCalledWith(1, undefined);
-    expect(backfillFeaturedArtists).toHaveBeenNthCalledWith(2, 10000);
+    await waitFor(() => expect(backfillQueries()).toEqual(['', 'offset=10000']));
     expect(hook.result.current.status).toBe('pending');
 
     await act(async () => {
-      releaseSecond(page({ scanned: 40, updated: 1 }));
+      releaseSecond();
     });
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
     expect(hook.result.current.data).toMatchObject({ scanned: 10040, updated: 4 });
@@ -296,9 +270,7 @@ describe('backfill over a library larger than one server call', () => {
   });
 
   it('fails instead of looping when next_offset does not advance', async () => {
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockResolvedValue(page({ scanned: 5, truncated: true, nextOffset: 0 }));
+    __http.reply(BACKFILL, { json: page({ scanned: 5, truncated: true, next_offset: 0 }) });
 
     const hook = renderHook(() => useBackfillFeatured(), {
       wrapper: makeWrapper(new QueryClient()),
@@ -308,13 +280,14 @@ describe('backfill over a library larger than one server call', () => {
     });
 
     await waitFor(() => expect(hook.result.current.isError).toBe(true));
-    expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.error).toBeInstanceOf(ContractError);
+    expect(__http.countFor(BACKFILL)).toBe(1);
     hook.unmount();
   });
 
   it('does not re-POST after a client timeout', async () => {
     jest.useFakeTimers();
-    jest.mocked(backfillFeaturedArtists).mockRejectedValue(new NetworkError('timeout', 'slow'));
+    __http.hang(BACKFILL);
 
     const hook = renderHook(() => useBackfillFeatured(), {
       wrapper: makeWrapper(new QueryClient()),
@@ -323,11 +296,13 @@ describe('backfill over a library larger than one server call', () => {
       hook.result.current.mutate();
     });
     await act(async () => {
-      await jest.advanceTimersByTimeAsync(60_000);
+      await jest.advanceTimersByTimeAsync(LONG_REQUEST_TIMEOUT_MS + RETRY_BACKOFF_CAP_MS);
     });
 
     expect(hook.result.current.isError).toBe(true);
-    expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.error).toBeInstanceOf(NetworkError);
+    expect((hook.result.current.error as NetworkError).failure).toBe('timeout');
+    expect(__http.countFor(BACKFILL)).toBe(1);
     hook.unmount();
     jest.useRealTimers();
   });

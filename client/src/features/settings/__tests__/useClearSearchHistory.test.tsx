@@ -2,9 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError, authorization } from '@shared/api-client';
-import { clearSearchHistory } from '@shared/api-client/discovery';
-import { backfillFeaturedArtists } from '@shared/api-client/tracks';
+import { ApiError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
@@ -15,14 +13,30 @@ import { makeWrapper } from '@testing/makeWrapper';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
 import { useSettingsClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
 
-jest.mock('@shared/api-client/discovery', () => ({
-  ...jest.requireActual('@shared/api-client/discovery'),
-  clearSearchHistory: jest.fn(),
-}));
-jest.mock('@shared/api-client/tracks', () => ({
-  ...jest.requireActual('@shared/api-client/tracks'),
-  backfillFeaturedArtists: jest.fn(),
-}));
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
+
+const CLEAR = 'DELETE /v1/discovery/search-history';
+const BACKFILL = 'POST /v1/tracks/featured-backfill';
+const CLEARED = { status: 204 };
+const ATTEMPT_AND_ONE_RETRY = 2;
+const BAD_GATEWAY = {
+  status: 502,
+  json: { error: { code: 'bad_gateway', message: 'bad gateway' } },
+};
+const BAD_REQUEST = { status: 400, json: { error: { code: 'bad_request', message: 'boom' } } };
+
+type WireRequest = { method: string; path: string; headers: Record<string, string> };
+
+function clearRequests(): WireRequest[] {
+  return __http.requests.filter((r: WireRequest) => `${r.method} ${r.path}` === CLEAR);
+}
+
+function signedIn() {
+  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  } as never);
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -34,7 +48,25 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function holdResponses() {
+  const gate = deferred<void>();
+  global.fetch = ((url: string, init: RequestInit) => {
+    const response = fakeFetch(url, init);
+    return gate.promise.then(() => response);
+  }) as typeof fetch;
+  return gate.resolve;
+}
+
+afterEach(() => {
+  global.fetch = fakeFetch;
+  jest.restoreAllMocks();
+});
+
 describe('useClearSearchHistory racing an in-flight history fetch', () => {
+  beforeEach(() => {
+    signedIn();
+  });
+
   it('keeps the cleared list when a pre-clear fetch resolves after the optimistic clear', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const beforeClear = { items: [{ query: 'old search' }] };
@@ -43,7 +75,7 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
     void queryClient
       .fetchQuery({ queryKey: discoveryKeys.history, queryFn: () => staleFetch.promise })
       .catch(() => undefined);
-    jest.mocked(clearSearchHistory).mockResolvedValue(undefined);
+    __http.replyOnce(CLEAR, CLEARED);
 
     const hook = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
@@ -59,12 +91,17 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
+    expect(clearRequests()).toHaveLength(1);
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
     hook.unmount();
   });
 });
 
 describe('useClearSearchHistory when the clear fails', () => {
+  beforeEach(() => {
+    signedIn();
+  });
+
   it('keeps the history items when the delete and the refetch both fail', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const items = [{ query: 'first' }, { query: 'second' }];
@@ -72,8 +109,7 @@ describe('useClearSearchHistory when the clear fails', () => {
     queryClient.setQueryDefaults(discoveryKeys.history, {
       queryFn: () => Promise.reject(new Error('refetch failed')),
     });
-    jest.mocked(clearSearchHistory).mockReset();
-    jest.mocked(clearSearchHistory).mockRejectedValue(new Error('boom'));
+    __http.reply(CLEAR, BAD_REQUEST);
 
     const hook = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
@@ -86,37 +122,26 @@ describe('useClearSearchHistory when the clear fails', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
+    expect(clearRequests()).toHaveLength(1);
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items });
     hook.unmount();
   });
 });
 
 describe('settings mutations retry transient failures', () => {
-  function makeClient() {
-    return new QueryClient();
-  }
-
-  const FIRST_RETRY_CEILING_MS = RETRY_BACKOFF_BASE_MS;
-
-  async function elapsePastTheFirstRetry() {
-    await act(async () => {
-      await jest.advanceTimersByTimeAsync(FIRST_RETRY_CEILING_MS);
+  function renderClear() {
+    const hook = renderHook(useSettingsClearSearchHistory, {
+      wrapper: makeWrapper(new QueryClient()),
     });
-  }
-
-  function renderMutation<T extends { mutate: (v?: never) => void }>(useHook: () => T) {
-    const hook = renderHook(useHook, { wrapper: makeWrapper(makeClient()) });
     act(() => {
       hook.result.current.mutate();
     });
     return hook;
   }
 
-  const badGateway = () => new ApiError(502, 'bad gateway');
-
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.mocked(clearSearchHistory).mockReset();
+    signedIn();
   });
 
   afterEach(() => {
@@ -124,55 +149,37 @@ describe('settings mutations retry transient failures', () => {
   });
 
   it('retries a 502 on clear-history and settles as success', async () => {
-    jest
-      .mocked(clearSearchHistory)
-      .mockRejectedValueOnce(badGateway())
-      .mockResolvedValueOnce(undefined);
+    __http.replyOnce(CLEAR, BAD_GATEWAY);
+    __http.replyOnce(CLEAR, CLEARED);
 
-    const hook = renderMutation(useSettingsClearSearchHistory);
-    await elapsePastTheFirstRetry();
+    const hook = renderClear();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(RETRY_BACKOFF_BASE_MS);
+    });
 
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
-    expect(clearSearchHistory).toHaveBeenCalledTimes(2);
+    expect(clearRequests()).toHaveLength(ATTEMPT_AND_ONE_RETRY);
     hook.unmount();
   });
 
   it('does not retry a permanent 4xx on clear-history', async () => {
-    jest.mocked(clearSearchHistory).mockRejectedValue(new ApiError(400, 'bad request'));
+    __http.reply(CLEAR, BAD_REQUEST);
 
-    const hook = renderMutation(useSettingsClearSearchHistory);
+    const hook = renderClear();
 
     await waitFor(() => expect(hook.result.current.isError).toBe(true));
-    expect(clearSearchHistory).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.error).toBeInstanceOf(ApiError);
+    expect((hook.result.current.error as ApiError).status).toBe(BAD_REQUEST.status);
+    expect(clearRequests()).toHaveLength(1);
     hook.unmount();
   });
 });
 
 describe('the jittered retry backoff', () => {
-  const retryingMutations = [
-    {
-      name: 'clear-history',
-      useMutationHook: useSettingsClearSearchHistory,
-      api: () => clearSearchHistory as jest.Mock,
-    },
-  ];
-
   const jitterSamples = [
     { sample: 0, dueMs: RETRY_BACKOFF_BASE_MS / 2 },
     { sample: 0.5, dueMs: (RETRY_BACKOFF_BASE_MS * 3) / 4 },
   ];
-
-  function startMutation(useMutationHook: () => { mutate: (v?: never) => void }) {
-    const queryClient = new QueryClient();
-    const hook = renderHook(useMutationHook, { wrapper: makeWrapper(queryClient) });
-    act(() => {
-      hook.result.current.mutate();
-    });
-    return () => {
-      hook.unmount();
-      queryClient.clear();
-    };
-  }
 
   async function elapse(ms: number) {
     await act(async () => {
@@ -182,36 +189,38 @@ describe('the jittered retry backoff', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    (clearSearchHistory as jest.Mock)
-      .mockReset()
-      .mockRejectedValue(new ApiError(502, 'bad gateway'));
+    signedIn();
+    __http.reply(CLEAR, BAD_GATEWAY);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    jest.restoreAllMocks();
   });
 
-  describe.each(retryingMutations)(
-    '$name spreads its retry over the jittered backoff',
-    ({ useMutationHook, api }) => {
-      it.each(jitterSamples)(
-        'reattempts at $dueMs ms when the jitter sample is $sample',
-        async ({ sample, dueMs }) => {
-          jest.spyOn(Math, 'random').mockReturnValue(sample);
-          const stop = startMutation(useMutationHook);
+  describe('clear-history spreads its retry over the jittered backoff', () => {
+    it.each(jitterSamples)(
+      'reattempts at $dueMs ms when the jitter sample is $sample',
+      async ({ sample, dueMs }) => {
+        jest.spyOn(Math, 'random').mockReturnValue(sample);
+        const queryClient = new QueryClient();
+        const hook = renderHook(useSettingsClearSearchHistory, {
+          wrapper: makeWrapper(queryClient),
+        });
+        act(() => {
+          hook.result.current.mutate();
+        });
 
-          await elapse(dueMs - 1);
-          expect(api()).toHaveBeenCalledTimes(1);
+        await elapse(dueMs - 1);
+        expect(clearRequests()).toHaveLength(1);
 
-          await elapse(1);
-          expect(api()).toHaveBeenCalledTimes(2);
+        await elapse(1);
+        expect(clearRequests()).toHaveLength(ATTEMPT_AND_ONE_RETRY);
 
-          stop();
-        },
-      );
-    },
-  );
+        hook.unmount();
+        queryClient.clear();
+      },
+    );
+  });
 });
 
 describe('settings mutations racing a sign-out', () => {
@@ -272,9 +281,6 @@ describe('settings mutations racing a sign-out', () => {
 
   beforeEach(() => {
     authCallbacks = [];
-    jest.restoreAllMocks();
-    jest.mocked(backfillFeaturedArtists).mockReset();
-    jest.mocked(clearSearchHistory).mockReset();
   });
 
   afterEach(() => {
@@ -284,8 +290,8 @@ describe('settings mutations racing a sign-out', () => {
   it("a failed clear-history A started does not invalidate B's search history", async () => {
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    const pending = deferred<void>();
-    jest.mocked(clearSearchHistory).mockReturnValue(pending.promise);
+    __http.replyOnce(CLEAR, BAD_REQUEST);
+    const release = holdResponses();
 
     const clear = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
@@ -293,7 +299,7 @@ describe('settings mutations racing a sign-out', () => {
     act(() => {
       clear.result.current.mutate();
     });
-    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toHaveLength(1));
     clear.unmount();
 
     await signOutThenSignInAsUserB(queryClient);
@@ -302,8 +308,8 @@ describe('settings mutations racing a sign-out', () => {
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
 
     await act(async () => {
-      pending.reject(new Error('network request failed'));
-      await pending.promise.catch(() => undefined);
+      release();
+      await new Promise((r) => setTimeout(r, 0));
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -320,11 +326,7 @@ describe('settings mutations racing a sign-out', () => {
     jest.useFakeTimers();
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    const authorizationPerAttempt: string[] = [];
-    jest.mocked(clearSearchHistory).mockImplementation(async () => {
-      authorizationPerAttempt.push(await authorization('/discovery/search-history', undefined));
-      throw new ApiError(502, 'bad gateway');
-    });
+    __http.reply(CLEAR, BAD_GATEWAY);
 
     const clear = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
@@ -332,7 +334,7 @@ describe('settings mutations racing a sign-out', () => {
     act(() => {
       clear.result.current.mutate();
     });
-    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toHaveLength(1));
     clear.unmount();
 
     await signOutThenSignInAsUserB(queryClient);
@@ -340,7 +342,7 @@ describe('settings mutations racing a sign-out', () => {
       await jest.advanceTimersByTimeAsync(RETRY_BACKOFF_BASE_MS);
     });
 
-    expect(authorizationPerAttempt).toEqual(['Bearer token-a']);
+    expect(clearRequests().map((r) => r.headers.Authorization)).toEqual(['Bearer token-a']);
 
     session.unmount();
   });
@@ -348,10 +350,10 @@ describe('settings mutations racing a sign-out', () => {
   it('within one session the backfill and clear-history cache effects still apply', async () => {
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockResolvedValue({ scanned: 1, updated: 1, truncated: false, nextOffset: 1 });
-    jest.mocked(clearSearchHistory).mockRejectedValue(new Error('boom'));
+    __http.reply(BACKFILL, {
+      json: { scanned: 1, updated: 1, truncated: false, next_offset: 1 },
+    });
+    __http.reply(CLEAR, BAD_REQUEST);
     const tracksKey = [...libraryKeys.tracksPrefix, 'a'];
     queryClient.setQueryData(tracksKey, ['track-of-a']);
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'a' }] });
