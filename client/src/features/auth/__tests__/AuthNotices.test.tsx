@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import type { SignOutResult } from '@shared/auth/useSignOut';
+import { supabase } from '@shared/auth/supabaseClient';
 import { darkTheme, spacing } from '@shared/ui/theme';
 
 import { AuthGate } from '@features/auth/ui/AuthGate';
@@ -20,25 +20,42 @@ jest.mock('@shared/auth/useSession', () => ({
 
 jest.mock('@shared/auth/sessionExpired', () => ({
   useSessionExpired: () => false,
+  clearSessionExpired: () => undefined,
 }));
 
 jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signOut: jest.fn().mockResolvedValue({ error: null }) } },
+  supabase: { auth: { signOut: jest.fn() } },
+  clearPersistedAuthSession: jest.fn(),
 }));
 
-const mockSignOut = jest.fn();
-let mockState: SignOutResult = { status: 'idle' };
-
-jest.mock('@shared/auth/useSignOut', () => ({
-  useSignOut: () => ({ state: mockState, signOut: mockSignOut }),
-}));
+const { clearPersistedAuthSession } = jest.requireMock('@shared/auth/supabaseClient');
+const supabaseSignOut = supabase.auth.signOut as jest.Mock;
 
 const ERROR_COPY = "Couldn't reach the server. You've been signed out on this device.";
 
 beforeEach(() => {
-  mockSignOut.mockReset();
-  mockState = { status: 'idle' };
+  supabaseSignOut.mockReset().mockResolvedValue({ error: null });
+  clearPersistedAuthSession.mockReset().mockResolvedValue(undefined);
 });
+
+type SignOutReply = { error: null };
+
+function holdSignOut(): () => void {
+  let release: ((reply: SignOutReply) => void) | null = null;
+  supabaseSignOut.mockReturnValue(new Promise<SignOutReply>((resolve) => (release = resolve)));
+  return () => release?.({ error: null });
+}
+
+function renderSessionExpired(): QueryClient {
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(['library'], ['previous user track']);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <SessionExpiredNotice />
+    </QueryClientProvider>,
+  );
+  return queryClient;
+}
 
 const centered = {
   flex: 1,
@@ -81,35 +98,42 @@ describe('the auth notice screens share one full-screen centered layout', () => 
 });
 
 describe('SessionExpiredNotice', () => {
-  it('shows the error copy under the button when sign-out failed', () => {
-    mockState = { status: 'error', error: new Error('offline') };
+  it('shows the error copy under the button when sign-out failed', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    supabaseSignOut.mockResolvedValue({ error: { name: 'AuthApiError', status: 500 } });
+    renderSessionExpired();
 
-    render(<SessionExpiredNotice />);
+    fireEvent.press(screen.getByTestId('session-expired-signin'));
 
-    expect(screen.getByText(ERROR_COPY)).toBeTruthy();
+    expect(await screen.findByText(ERROR_COPY)).toBeTruthy();
   });
 
   it('shows no error copy before a sign-out fails', () => {
-    render(<SessionExpiredNotice />);
+    renderSessionExpired();
 
     expect(screen.queryByText(ERROR_COPY)).toBeNull();
   });
 
-  it('disables the button while signing out', () => {
-    mockState = { status: 'loading' };
+  it('disables the button while signing out', async () => {
+    const finishSignOut = holdSignOut();
+    renderSessionExpired();
 
-    render(<SessionExpiredNotice />);
+    fireEvent.press(screen.getByTestId('session-expired-signin'));
+    expect(await screen.findByText('Signing out…')).toBeTruthy();
     fireEvent.press(screen.getByTestId('session-expired-signin'));
 
-    expect(screen.getByText('Signing out…')).toBeTruthy();
-    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(supabaseSignOut).toHaveBeenCalledTimes(1);
+    finishSignOut();
+    expect(await screen.findByText('Sign in again')).toBeTruthy();
   });
 
-  it('signs out when the enabled button is pressed', () => {
-    render(<SessionExpiredNotice />);
+  it('signs out and forgets the previous user cache when the enabled button is pressed', async () => {
+    const queryClient = renderSessionExpired();
 
     fireEvent.press(screen.getByTestId('session-expired-signin'));
 
-    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(queryClient.getQueryData(['library'])).toBeUndefined());
+    expect(supabaseSignOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(ERROR_COPY)).toBeNull();
   });
 });

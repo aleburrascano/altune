@@ -1,10 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { useOAuth } from '@features/auth/hooks/useOAuth';
-import { useSignUp } from '@features/auth/hooks/useSignUp';
+import { CheckEmailNotice } from '@features/auth/ui/CheckEmailNotice';
 import { SignUpScreen } from '@features/auth/ui/SignUpScreen';
 import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/domain/validation';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
@@ -16,21 +19,35 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@features/auth/hooks/useSignUp', () => ({ useSignUp: jest.fn() }));
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
 
-const signUp = jest.fn();
+const { signUp } = createSupabaseAuthMock('signUp');
+
+warmUpFirstRender(async () => {
+  (useOAuth as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signInWith: jest.fn() });
+  render(<SignUpScreen />);
+  render(<CheckEmailNotice />);
+});
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  (useSignUp as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signUp });
   (useOAuth as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signInWith: jest.fn() });
 });
 
-function renderSignUp(state: unknown = { kind: 'idle' }): void {
-  (useSignUp as jest.Mock).mockReturnValue({ state, signUp });
+function renderSignUp(): void {
   render(<SignUpScreen />);
+}
+
+function rejectedWith(code: string) {
+  return { data: null, error: { name: 'AuthApiError', status: 400, code, message: 'rejected' } };
+}
+
+function submitValidForm(): void {
+  type('email-input', 'ada@altune.app');
+  type('password-input', 'Hunter2!pass');
+  type('confirm-input', 'Hunter2!pass');
+  fireEvent.press(screen.getByTestId('submit-button'));
 }
 
 function type(testID: string, text: string): void {
@@ -92,35 +109,54 @@ describe('the sign-up screen', () => {
     expect(submitIsEnabled()).toBe(false);
   });
 
-  it('submits once the email parses and the two strong passwords agree', () => {
+  it('submits once the email parses and the two strong passwords agree', async () => {
+    signUp.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
     renderSignUp();
 
-    type('email-input', 'ada@altune.app');
-    type('password-input', 'Hunter2!pass');
-    type('confirm-input', 'Hunter2!pass');
-    fireEvent.press(screen.getByTestId('submit-button'));
+    submitValidForm();
 
-    expect(signUp).toHaveBeenCalledWith('ada@altune.app', 'Hunter2!pass');
+    await waitFor(() =>
+      expect(signUp).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'ada@altune.app', password: 'Hunter2!pass' }),
+      ),
+    );
+    expect(signUp).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the sign-up copy in the shared banner when the attempt failed', () => {
-    renderSignUp({ kind: 'error', reason: 'unknown' });
+  it('shows the sign-up copy in the shared banner when the attempt failed', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    signUp.mockResolvedValue(rejectedWith('some_future_code'));
+    renderSignUp();
 
-    expect(screen.getByTestId('auth-error')).toHaveTextContent(
+    submitValidForm();
+
+    expect(await screen.findByTestId('auth-error')).toHaveTextContent(
       "Couldn't create your account. Please try again.",
     );
   });
 
-  it('tells the person sign-ups are closed when the server refused the sign-up', () => {
-    renderSignUp({ kind: 'error', reason: 'signup_disabled' });
+  it('tells the person sign-ups are closed when the server refused the sign-up', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    signUp.mockResolvedValue(rejectedWith('signup_disabled'));
+    renderSignUp();
 
-    expect(screen.getByTestId('auth-error')).toHaveTextContent('Sign-ups are closed on staging.');
+    submitValidForm();
+
+    expect(await screen.findByTestId('auth-error')).toHaveTextContent(
+      'Sign-ups are closed on staging.',
+    );
   });
 
-  it('replaces the form with the check-email notice once the account is pending', () => {
-    renderSignUp({ kind: 'awaiting-confirmation' });
+  it('replaces the form with the check-email notice once the account is pending', async () => {
+    signUp.mockResolvedValue({
+      data: { user: { id: 'new-user', identities: [{ id: 'identity-1' }] }, session: null },
+      error: null,
+    });
+    renderSignUp();
 
-    expect(screen.getByTestId('check-email-screen')).toBeTruthy();
+    submitValidForm();
+
+    expect(await screen.findByTestId('check-email-screen')).toBeTruthy();
     expect(screen.queryByTestId('sign-up-screen')).toBeNull();
   });
 });
