@@ -1,3 +1,4 @@
+import { showFailureAlert } from '@shared/ui';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { useAppMutation } from '@shared/query/useAppMutation';
@@ -22,8 +23,8 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
 import { deleteOne } from '@features/library/hooks/useDeleteTracks';
-import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
-import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { logTrackMutationFailure } from '@features/library/domain/logTrackMutationFailure';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
 import { classifyLibraryError } from '@features/library/domain/state';
 
 type RemovedTrack = { placements: TrackCachePlacement[]; status: TrackStatus | undefined };
@@ -61,11 +62,13 @@ function undoFailedRemoval(queryClient: QueryClient) {
     if (failure === 'not-found') return unpin(trackId);
     logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
     putTrackBack(queryClient, trackId, removed);
-    alertLibraryFailure(
-      'library.delete_track',
-      'Delete failed',
-      'Could not remove the track.',
-      failure,
+    showFailureAlert(
+      libraryFailureAlert(
+        'library.delete_track',
+        'Delete failed',
+        'Could not remove the track.',
+        failure,
+      ),
     );
   };
 }

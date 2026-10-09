@@ -1,3 +1,4 @@
+import { showFailureAlert } from '@shared/ui';
 import { useRef, useState } from 'react';
 
 import type { TrackResponse } from '@shared/api-client/types';
@@ -7,7 +8,7 @@ import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import type { Selection } from '@features/library/hooks/useSelection';
@@ -71,11 +72,13 @@ export function useTracksView({
 
   const loadAllOrWarn = () =>
     tracksState.loadAll((failure, loaded) =>
-      alertLibraryFailure(
-        'library.load_all',
-        'Playing loaded tracks only',
-        `Could not load your whole library. Playing the ${loaded} tracks loaded so far.`,
-        failure,
+      showFailureAlert(
+        libraryFailureAlert(
+          'library.load_all',
+          'Playing loaded tracks only',
+          `Could not load your whole library. Playing the ${loaded} tracks loaded so far.`,
+          failure,
+        ),
       ),
     );
 

@@ -1,5 +1,7 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { forgetTrack } from '@shared/events/forgetTrack';
+import { showFailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/api-client/ids';
 import { isSafeId } from '@shared/api-client/ids';
 import {
@@ -16,14 +18,14 @@ import {
 import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCachePatch';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
-import { dropVanishedTrack } from '@features/library/hooks/dropVanishedTrack';
-import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import { trackNotFoundAlert } from '@features/library/domain/trackNotFoundAlert';
+import { logTrackMutationFailure } from '@features/library/domain/logTrackMutationFailure';
 import {
   trackMutationKeys,
   useOneRunPerTrack,
   type TrackMutation,
 } from '@features/library/hooks/useOneRunPerTrack';
-import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
 import { classifyLibraryError } from '@features/library/domain/state';
 
 type PriorAcquisition = { prior: AcquisitionTransition | undefined };
@@ -55,10 +57,20 @@ function restorePrior(queryClient: QueryClient, trackId: TrackId, { prior }: Pri
 function recoverFailedRetry(queryClient: QueryClient) {
   return (error: Error, trackId: TrackId, context: PriorAcquisition): void => {
     const failure = classifyLibraryError(error);
-    if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
+    if (failure === 'not-found') {
+      forgetTrack(queryClient, trackId);
+      return showFailureAlert(trackNotFoundAlert(trackId));
+    }
     logTrackMutationFailure('retry acquisition', retryEndpoint, trackId, error);
     restorePrior(queryClient, trackId, context);
-    alertLibraryFailure('library.retry', 'Retry failed', 'Could not restart acquisition.', failure);
+    showFailureAlert(
+      libraryFailureAlert(
+        'library.retry',
+        'Retry failed',
+        'Could not restart acquisition.',
+        failure,
+      ),
+    );
   };
 }
 

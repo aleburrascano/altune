@@ -18,9 +18,9 @@ import {
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import { logTrackMutationFailure } from '@features/library/domain/logTrackMutationFailure';
 import { failureLogFields } from '@features/library/domain/failureLogFields';
-import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
 import {
   classifyLibraryError,
   failureTail,
@@ -247,11 +247,13 @@ function recoverFailedBulkRun(queryClient: QueryClient) {
     invalidateLibraryDerived(queryClient);
     void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
     logBulkRunFailure(error, trackIds);
-    alertLibraryFailure(
-      'library.delete_tracks',
-      'Delete failed',
-      'Could not remove these tracks.',
-      classifyLibraryError(error),
+    showFailureAlert(
+      libraryFailureAlert(
+        'library.delete_tracks',
+        'Delete failed',
+        'Could not remove these tracks.',
+        classifyLibraryError(error),
+      ),
     );
   };
 }
