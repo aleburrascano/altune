@@ -11,7 +11,7 @@ import { useResetPassword } from '@features/auth/hooks/useResetPassword';
 import { isValidEmail } from '@features/auth/domain/validation';
 import { AuthErrorBanner } from '@features/auth/ui/AuthErrorBanner';
 import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
-import { FieldError } from '@features/auth/ui/FieldError';
+import { FieldError } from '@features/auth/ui/AuthFields';
 import { AuthHeroLayout } from '@features/auth/ui/hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";

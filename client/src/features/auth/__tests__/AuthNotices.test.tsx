@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
+import type { SignOutResult } from '@shared/auth/useSignOut';
 import { darkTheme, spacing } from '@shared/ui/theme';
 
 import { AuthGate } from '@features/auth/ui/AuthGate';
-import { InvalidRecoveryLinkNotice } from '@features/auth/ui/InvalidRecoveryLinkNotice';
-import { SessionExpiredNotice } from '@features/auth/ui/SessionExpiredNotice';
+import { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/auth/ui/AuthNotices';
 
 jest.mock('expo-router', () => ({
   useSegments: () => [],
@@ -25,6 +25,20 @@ jest.mock('@shared/auth/sessionExpired', () => ({
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn().mockResolvedValue({ error: null }) } },
 }));
+
+const mockSignOut = jest.fn();
+let mockState: SignOutResult = { status: 'idle' };
+
+jest.mock('@shared/auth/useSignOut', () => ({
+  useSignOut: () => ({ state: mockState, signOut: mockSignOut }),
+}));
+
+const ERROR_COPY = "Couldn't reach the server. You've been signed out on this device.";
+
+beforeEach(() => {
+  mockSignOut.mockReset();
+  mockState = { status: 'idle' };
+});
 
 const centered = {
   flex: 1,
@@ -63,5 +77,39 @@ describe('the auth notice screens share one full-screen centered layout', () => 
     );
 
     expect(noticeStyle('session-expired')).toEqual({ ...centered, padding: spacing.lg });
+  });
+});
+
+describe('SessionExpiredNotice', () => {
+  it('shows the error copy under the button when sign-out failed', () => {
+    mockState = { status: 'error', error: new Error('offline') };
+
+    render(<SessionExpiredNotice />);
+
+    expect(screen.getByText(ERROR_COPY)).toBeTruthy();
+  });
+
+  it('shows no error copy before a sign-out fails', () => {
+    render(<SessionExpiredNotice />);
+
+    expect(screen.queryByText(ERROR_COPY)).toBeNull();
+  });
+
+  it('disables the button while signing out', () => {
+    mockState = { status: 'loading' };
+
+    render(<SessionExpiredNotice />);
+    fireEvent.press(screen.getByTestId('session-expired-signin'));
+
+    expect(screen.getByText('Signing out…')).toBeTruthy();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('signs out when the enabled button is pressed', () => {
+    render(<SessionExpiredNotice />);
+
+    fireEvent.press(screen.getByTestId('session-expired-signin'));
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 });

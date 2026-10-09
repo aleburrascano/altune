@@ -7,7 +7,7 @@ import {
   type AuthIntentResult,
   completeAuthIntent,
 } from '@features/auth/domain/completeAuthIntent';
-import { thrownErrorDetail } from '@features/auth/domain/errorDetail';
+import { thrownErrorDetail } from '@features/auth/domain/authError';
 import { initialUrl, subscribeUrl } from '@features/auth/native/linkEvents';
 import { type AuthLinkIntent, parseAuthLink } from '@features/auth/domain/parseAuthLink';
 

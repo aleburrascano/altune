@@ -5,9 +5,7 @@ import { useSignUp } from '@features/auth/hooks/useSignUp';
 import { newPasswordFormState } from '@features/auth/domain/validation';
 import { AuthForm } from '@features/auth/ui/AuthForm';
 import { CheckEmailNotice } from '@features/auth/ui/CheckEmailNotice';
-import { EmailPasswordFields } from '@features/auth/ui/EmailPasswordFields';
-import { FieldError } from '@features/auth/ui/FieldError';
-import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
+import { EmailPasswordFields, FieldError, NewPasswordField } from '@features/auth/ui/AuthFields';
 
 const GENERIC_SIGN_UP_ERROR = "Couldn't create your account. Please try again.";
 

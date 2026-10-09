@@ -6,11 +6,13 @@ import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 
 import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
-import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/domain/resetPasswordRouteSegment';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/domain/passwordRecovery';
 
-import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
-import { InvalidRecoveryLinkNotice } from '@features/auth/ui/InvalidRecoveryLinkNotice';
-import { SessionExpiredNotice } from '@features/auth/ui/SessionExpiredNotice';
+import {
+  AuthFullScreenNotice,
+  InvalidRecoveryLinkNotice,
+  SessionExpiredNotice,
+} from '@features/auth/ui/AuthNotices';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useSession();

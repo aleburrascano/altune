@@ -1,13 +1,13 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '@features/auth/domain/attemptLockout';
-import { supabaseErrorDetail } from '@features/auth/domain/errorDetail';
-import type { TransientAuthReason } from '@features/auth/domain/errorReason';
-import { authRedirectUrl } from '@features/auth/domain/authRedirect';
 import {
   classifyAuthError,
   type SupabaseAuthErrorLike,
-} from '@features/auth/domain/supabaseAuthError';
+  supabaseErrorDetail,
+  type TransientAuthReason,
+} from '@features/auth/domain/authError';
+import { authRedirectUrl } from '@features/auth/domain/authRedirect';
 
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 

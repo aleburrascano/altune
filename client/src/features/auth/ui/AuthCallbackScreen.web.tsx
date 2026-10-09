@@ -10,10 +10,10 @@ import {
   type AuthRouter,
   completeAuthIntent,
 } from '@features/auth/domain/completeAuthIntent';
-import { thrownErrorDetail } from '@features/auth/domain/errorDetail';
+import { thrownErrorDetail } from '@features/auth/domain/authError';
 import { type AuthLinkIntent, parseAuthLink } from '@features/auth/domain/parseAuthLink';
 
-import { AuthFullScreenNotice } from '@features/auth/ui/AuthFullScreenNotice';
+import { AuthFullScreenNotice } from '@features/auth/ui/AuthNotices';
 import { BackToSignInLink } from '@features/auth/ui/BackToSignInLink';
 
 type FailureState = 'refused' | 'unreachable';

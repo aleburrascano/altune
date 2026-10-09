@@ -1,10 +1,10 @@
 import { isNetworkError } from '@shared/failure/isNetworkError';
 
-import type { TransientAuthReason } from '@features/auth/domain/errorReason';
 import {
   classifyAuthError,
   type SupabaseAuthErrorLike,
-} from '@features/auth/domain/supabaseAuthError';
+  type TransientAuthReason,
+} from '@features/auth/domain/authError';
 
 export type OAuthProvider = 'google';
 
