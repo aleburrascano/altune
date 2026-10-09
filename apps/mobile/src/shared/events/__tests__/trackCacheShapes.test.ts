@@ -12,7 +12,6 @@ import {
   TRACK_CACHE_FAMILY_LIST,
   TRACK_SHAPES,
   writeFamily,
-  type MapItems,
   type TrackCacheShape,
 } from '@shared/events/trackCacheShapes';
 
@@ -38,8 +37,12 @@ function makePlaylist(tracks: TrackResponse[]): PlaylistDetailResponse {
   } as PlaylistDetailResponse;
 }
 
-const dropAll: MapItems = () => [];
-const retitle: MapItems = (items) => items.map((t) => ({ ...t, title: 'patched' }));
+function dropAll(): TrackResponse[] {
+  return [];
+}
+function retitle(items: TrackResponse[]): TrackResponse[] {
+  return items.map((t) => ({ ...t, title: 'patched' }));
+}
 
 describe('TRACK_SHAPES', () => {
   it.each(['paged', 'flat', 'playlistDetails'] as const)(

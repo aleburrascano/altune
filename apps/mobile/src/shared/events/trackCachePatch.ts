@@ -157,6 +157,11 @@ function reinsert(items: TrackResponse[], placement: TrackCachePlacement): Track
   return next;
 }
 
+function reinsertOnPage(placement: TrackCachePlacement): MapItems {
+  return (items, pageIndex) =>
+    pageIndex === placement.pageIndex ? reinsert(items, placement) : items;
+}
+
 export function restoreTrackPlacements(
   queryClient: QueryClient,
   placements: readonly TrackCachePlacement[],
@@ -165,8 +170,6 @@ export function restoreTrackPlacements(
   for (const placement of placements) {
     const id = placement.track.id;
     const accessor = TRACK_SHAPES[placement.shape];
-    const reinsertHere: MapItems = (items, pageIndex) =>
-      pageIndex === placement.pageIndex ? reinsert(items, placement) : items;
     queryClient.setQueryData<unknown>(placement.queryKey, (prev: unknown) => {
       if (accessor.items(prev).some((t) => t.id === id)) return prev;
       if (
@@ -175,7 +178,7 @@ export function restoreTrackPlacements(
       ) {
         return prev;
       }
-      return accessor.write(prev, reinsertHere, RESIZE_POLICY);
+      return accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY);
     });
   }
 }
