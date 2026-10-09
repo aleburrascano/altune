@@ -1,4 +1,4 @@
-import { describe, expect, onTestFinished, test } from "vitest";
+import { afterAll, describe, expect, test } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,9 +21,12 @@ function write(root, files) {
   }
 }
 
+const roots = [];
+afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
+
 function repo(baseFiles, changedFiles) {
   const root = mkdtempSync(join(tmpdir(), "lint-changed-comments-"));
-  onTestFinished(() => rmSync(root, { recursive: true, force: true }));
+  roots.push(root);
   git(root, "init", "-q");
   git(root, "config", "user.email", "probe@example.com");
   git(root, "config", "user.name", "probe");
