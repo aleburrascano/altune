@@ -55,6 +55,15 @@ case "\$query" in
 esac
 exit 0
 EOF
+    cat >"$WORK/bin/pg_dump" <<'EOF'
+#!/usr/bin/env bash
+prev=""
+for a in "$@"; do
+    [ "$prev" = "--file" ] && : >"$a"
+    prev="$a"
+done
+exit 0
+EOF
     cat >"$WORK/bin/docker" <<EOF
 #!/usr/bin/env bash
 echo "docker \$*" >> "$WORK/actions.log"
@@ -82,7 +91,7 @@ EOF
     : >"$WORK/applies.log"
     for tag in ${STUB_IMAGES-}; do printf 'altune-staging-go-api:%s\n' "$tag"; done >"$WORK/images"
 
-    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" STAGING_HEALTH_TIMEOUT=1 \
+    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" STAGING_HEALTH_TIMEOUT=1 \
         env --default-signal=INT bash deploy/staging.sh >"$WORK/out.log" 2>&1)
     RC=$?
     unset STUB_TRACKS STUB_HEALTHY
@@ -287,7 +296,7 @@ EOF
 : >"$WORK/actions.log"
 : >"$WORK/applied"
 printf 'altune-staging-go-api:blue\n' >"$WORK/images"
-(cd "$WORK/api" && PATH="$WORK/bin:$PATH" STAGING_HEALTH_TIMEOUT=1 \
+(cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" STAGING_HEALTH_TIMEOUT=1 \
     bash deploy/staging.sh >"$WORK/out.log" 2>&1)
 RC=$?
 expect_rc 0
