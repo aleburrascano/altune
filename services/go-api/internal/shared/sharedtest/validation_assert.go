@@ -1,16 +1,16 @@
 package sharedtest
 
 import (
-	"altune/go-api/internal/shared"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"errors"
 	"testing"
 )
 
-func AssertValidationError(t testing.TB, err error) *shared.ValidationError {
+func AssertValidationError(t testing.TB, err error) *shareddomain.ValidationError {
 	t.Helper()
-	var ve *shared.ValidationError
+	var ve *shareddomain.ValidationError
 	if !errors.As(err, &ve) {
-		t.Fatalf("error = %T (%v), want *shared.ValidationError", err, err)
+		t.Fatalf("error = %T (%v), want *shareddomain.ValidationError", err, err)
 	}
 	return ve
 }

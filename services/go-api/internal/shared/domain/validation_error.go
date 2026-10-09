@@ -1,4 +1,4 @@
-package shared
+package domain
 
 type ValidationError struct {
 	codePrefix string

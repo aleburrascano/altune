@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"context"
 	"errors"
 	"io"
@@ -59,7 +60,7 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 	}{
 		{
 			name:       "validation",
-			err:        shared.NewValidationError("discovery", "favorite is invalid"),
+			err:        shareddomain.NewValidationError("discovery", "favorite is invalid"),
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "discovery.validation_error",
 		},

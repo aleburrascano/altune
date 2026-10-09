@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -56,7 +57,7 @@ func (f *idFloor) trustedCeiling(want uint64) uint64 {
 	if !isImplausiblyAhead(ceiling, want) {
 		return ceiling
 	}
-	slog.Warn("events.id_floor_implausible", "path", f.path, "ceiling", ceiling, "want", want)
+	slog.WarnContext(context.Background(), "events.id_floor_implausible", "path", f.path, "ceiling", ceiling, "want", want)
 	return 0
 }
 
@@ -66,12 +67,12 @@ func (f *idFloor) readCeiling() uint64 {
 		return 0
 	}
 	if err != nil {
-		slog.Warn("events.id_floor_unreadable", "path", f.path, "error", err)
+		slog.WarnContext(context.Background(), "events.id_floor_unreadable", "path", f.path, "error", err)
 		return 0
 	}
 	ceiling, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
 	if err != nil {
-		slog.Warn("events.id_floor_corrupt", "path", f.path, "error", err)
+		slog.WarnContext(context.Background(), "events.id_floor_corrupt", "path", f.path, "error", err)
 		return 0
 	}
 	return ceiling
@@ -83,7 +84,7 @@ func isImplausiblyAhead(ceiling, want uint64) bool {
 
 func (f *idFloor) persistOrWarn(ceiling uint64) {
 	if err := f.persist(ceiling); err != nil {
-		slog.Warn("events.id_floor_unwritable", "path", f.path, "error", err)
+		slog.WarnContext(context.Background(), "events.id_floor_unwritable", "path", f.path, "error", err)
 	}
 }
 

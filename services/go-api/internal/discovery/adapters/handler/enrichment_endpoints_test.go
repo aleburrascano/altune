@@ -3,7 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/discovery/service/enrich"
-	"altune/go-api/internal/shared"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
@@ -529,7 +529,7 @@ func TestWithEnricher_HardErrorsUseTypedContract(t *testing.T) {
 	}{
 		{
 			name:       "validation",
-			err:        shared.NewValidationError("discovery", "bad enrichment request"),
+			err:        shareddomain.NewValidationError("discovery", "bad enrichment request"),
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "discovery.validation_error",
 		},

@@ -14,13 +14,13 @@ const defaultPoolSize = 50
 
 func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Client {
 	if redisURL == "" {
-		slog.Info("redis not configured, caches will degrade gracefully")
+		slog.InfoContext(ctx, "redis not configured, caches will degrade gracefully")
 		return nil
 	}
 
 	opts, err := clientOptions(redisURL, poolSize)
 	if err != nil {
-		slog.Warn("invalid redis URL, caches will degrade gracefully", "error", redactURLError(err))
+		slog.WarnContext(ctx, "invalid redis URL, caches will degrade gracefully", "error", redactURLError(err))
 		return nil
 	}
 
@@ -30,11 +30,11 @@ func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Clie
 	defer cancel()
 
 	if err := client.Ping(pingCtx).Err(); err != nil {
-		slog.Warn("redis not reachable, caches will degrade gracefully", "error", err)
+		slog.WarnContext(ctx, "redis not reachable, caches will degrade gracefully", "error", err)
 		return client
 	}
 
-	slog.Info("redis connected")
+	slog.InfoContext(ctx, "redis connected")
 	return client
 }
 
