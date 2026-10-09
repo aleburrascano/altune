@@ -1,9 +1,9 @@
 package ports
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"context"
 	"errors"
-	"fmt"
 )
 
 type FindRequest struct {
@@ -15,10 +15,8 @@ type FindRequest struct {
 	Identity RecordingIdentity
 }
 
-type SourceName string
-
 type AudioSource interface {
-	Name() SourceName
+	Name() acqdomain.SourceName
 
 	Find(ctx context.Context, req FindRequest) ([]AudioCandidate, error)
 
@@ -27,22 +25,6 @@ type AudioSource interface {
 
 type PreviewFetcher interface {
 	FetchPreview(ctx context.Context, candidate AudioCandidate, outDir string, seconds int) (filePath string, err error)
-}
-
-type SourceUnavailableError struct {
-	Source SourceName
-	Err    error
-}
-
-func (e *SourceUnavailableError) Error() string {
-	return fmt.Sprintf("source %s unavailable: %v", e.Source, e.Err)
-}
-
-func (e *SourceUnavailableError) Unwrap() error { return e.Err }
-
-func IsSourceUnavailable(err error) bool {
-	var unavailable *SourceUnavailableError
-	return errors.As(err, &unavailable)
 }
 
 func RunTimedOut(parent, run context.Context) bool {

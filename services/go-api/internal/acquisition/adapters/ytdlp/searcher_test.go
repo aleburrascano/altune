@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
@@ -219,7 +220,7 @@ func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
 			if err == nil {
 				t.Fatal("a yt-dlp that exited 1 reported no error")
 			}
-			if got := ports.IsSourceUnavailable(err); got != tt.wantUnavailable {
+			if got := acqdomain.IsSourceUnavailable(err); got != tt.wantUnavailable {
 				t.Errorf("IsSourceUnavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
 			}
 		})
@@ -232,7 +233,7 @@ func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testi
 
 	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Errorf("Download error = %v, want a missing yt-dlp to read as an unavailable source", err)
 	}
 }
@@ -446,7 +447,7 @@ func TestDownload_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
 
 	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("Download err = %v, want a source-unavailable error", err)
 	}
 }
@@ -459,7 +460,7 @@ func TestDownload_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
 
 	_, err := s.Download(ctx, "https://youtube.com/watch?v=1", t.TempDir())
 
-	if err == nil || ports.IsSourceUnavailable(err) {
+	if err == nil || acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("Download err = %v, want a plain error", err)
 	}
 }
@@ -595,12 +596,12 @@ func TestYtDlpAudioSearcher_SearchQueries_MergesEveryQueryAndEngine(t *testing.T
 
 func TestYtDlpAudioSearcher_SearchQueries_AllQueriesUnavailableIsSourceUnavailable(t *testing.T) {
 	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, &ports.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
+		return nil, &acqdomain.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
 	})
 
 	_, err := s.SearchQueries(context.Background(), []string{"a", "b"})
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("SearchQueries error = %v, want a source-unavailable error when every query and engine is unavailable", err)
 	}
 }

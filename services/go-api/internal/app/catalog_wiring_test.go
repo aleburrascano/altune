@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	authdomain "altune/go-api/internal/auth/domain"
@@ -283,15 +284,15 @@ func TestAudioSourcesToggle(t *testing.T) {
 	}
 }
 
-func sourceNames(sources []acqPorts.AudioSource) []acqPorts.SourceName {
-	names := make([]acqPorts.SourceName, 0, len(sources))
+func sourceNames(sources []acqPorts.AudioSource) []acqdomain.SourceName {
+	names := make([]acqdomain.SourceName, 0, len(sources))
 	for _, s := range sources {
 		names = append(names, s.Name())
 	}
 	return names
 }
 
-func containsSource(list []acqPorts.SourceName, want acqPorts.SourceName) bool {
+func containsSource(list []acqdomain.SourceName, want acqdomain.SourceName) bool {
 	for _, s := range list {
 		if s == want {
 			return true

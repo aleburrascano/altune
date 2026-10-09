@@ -1,6 +1,7 @@
 package streamrip
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
@@ -293,7 +294,7 @@ func TestFetch_ClassifiesAProviderThatRefusedToServe(t *testing.T) {
 			if err == nil {
 				t.Fatal("a rip that exited 1 reported no error")
 			}
-			if got := ports.IsSourceUnavailable(err); got != tt.wantUnavailable {
+			if got := acqdomain.IsSourceUnavailable(err); got != tt.wantUnavailable {
 				t.Errorf("IsSourceUnavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
 			}
 		})
@@ -305,7 +306,7 @@ func TestFetch_MissingBinaryIsAnUnavailableSource(t *testing.T) {
 
 	_, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://tidal.com/browse/track/1"}, t.TempDir())
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Errorf("Fetch error = %v, want a missing rip to read as an unavailable source", err)
 	}
 }
@@ -460,7 +461,7 @@ func TestFetch_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
 
 	_, err := src.Fetch(ctx, ports.AudioCandidate{URL: "https://www.deezer.com/track/1"}, dir)
 
-	if err == nil || ports.IsSourceUnavailable(err) {
+	if err == nil || acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("Fetch err = %v, want a plain error", err)
 	}
 }
@@ -476,7 +477,7 @@ func TestFetch_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
 
 	_, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://www.deezer.com/track/1"}, dir)
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("Fetch err = %v, want a source-unavailable error", err)
 	}
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -86,7 +87,7 @@ func mergeSlotsReportingOutage(
 	)
 }
 
-func stampSource(name ports.SourceName, candidates []ports.AudioCandidate) []ports.AudioCandidate {
+func stampSource(name acqdomain.SourceName, candidates []ports.AudioCandidate) []ports.AudioCandidate {
 	out := make([]ports.AudioCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		c.Source = name

@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
@@ -229,12 +230,12 @@ func TestSource_Find_ThreeOfFourQueriesFailingStillMergesTheSurvivor(t *testing.
 
 func TestSource_Find_EveryQueryUnavailableIsSourceUnavailable(t *testing.T) {
 	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, &ports.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
+		return nil, &acqdomain.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
 	}))
 
 	_, err := src.Find(context.Background(), findRequest())
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("Find error = %v, want a source-unavailable error when every query and engine is unavailable", err)
 	}
 }

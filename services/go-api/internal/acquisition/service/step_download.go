@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -192,17 +193,17 @@ func (a attempt) beats(other attempt) bool {
 
 type downloadFailures struct {
 	last, unavailable error
-	deadSources       map[ports.SourceName]bool
+	deadSources       map[acqdomain.SourceName]bool
 }
 
 func (f *downloadFailures) noteAttempt(result attempt) {
 	err := result.err()
 	f.note(err)
-	if !ports.IsSourceUnavailable(err) || result.candidate.Source == "" {
+	if !acqdomain.IsSourceUnavailable(err) || result.candidate.Source == "" {
 		return
 	}
 	if f.deadSources == nil {
-		f.deadSources = map[ports.SourceName]bool{}
+		f.deadSources = map[acqdomain.SourceName]bool{}
 	}
 	f.deadSources[result.candidate.Source] = true
 }
@@ -221,7 +222,7 @@ func (f *downloadFailures) note(err error) {
 		return
 	}
 	f.last = err
-	if ports.IsSourceUnavailable(err) {
+	if acqdomain.IsSourceUnavailable(err) {
 		f.unavailable = err
 	}
 }
@@ -241,7 +242,7 @@ func (f *downloadFailures) result(ctx context.Context) error {
 		return fmt.Errorf("no candidate produced acceptable audio")
 	}
 	last := f.last
-	if f.unavailable != nil && !ports.IsSourceUnavailable(last) {
+	if f.unavailable != nil && !acqdomain.IsSourceUnavailable(last) {
 		last = fmt.Errorf("%w (last failure: %w)", f.unavailable, last)
 	}
 	return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", last))
@@ -402,7 +403,7 @@ func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCa
 	if !ports.RunTimedOut(jobCtx, fetchCtx) {
 		return err
 	}
-	return &ports.SourceUnavailableError{
+	return &acqdomain.SourceUnavailableError{
 		Source: candidate.Source,
 		Err:    fmt.Errorf("candidate timed out: %s", redact.LogError(err)),
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -546,7 +547,7 @@ func (r *committingTrackRepo) committed(id domain.TrackId, userId shared.UserId)
 
 type newAudioSource struct{}
 
-func (newAudioSource) Name() ports.SourceName { return "new-audio" }
+func (newAudioSource) Name() acqdomain.SourceName { return "new-audio" }
 
 func (newAudioSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return []ports.AudioCandidate{{
@@ -991,7 +992,7 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 }
 
 func transientSearchFailure() *fakeAudioSearcher {
-	return &fakeAudioSearcher{searchErr: &ports.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
+	return &fakeAudioSearcher{searchErr: &acqdomain.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
 }
 
 func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (*domain.Track, *recordingPublisher, error) {
@@ -1061,7 +1062,7 @@ func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *tes
 
 type unknownTopicSource struct{}
 
-func (unknownTopicSource) Name() ports.SourceName { return "unknown-topic" }
+func (unknownTopicSource) Name() acqdomain.SourceName { return "unknown-topic" }
 
 func (unknownTopicSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return []ports.AudioCandidate{{

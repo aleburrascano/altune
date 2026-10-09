@@ -140,7 +140,7 @@ func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (s
 	return s.downloadPath, s.downloadErr
 }
 
-func (s *fakeAudioSearcher) Name() acqports.SourceName { return "fake" }
+func (s *fakeAudioSearcher) Name() acqdomain.SourceName { return "fake" }
 
 func (s *fakeAudioSearcher) Find(ctx context.Context, _ acqports.FindRequest) ([]acqports.AudioCandidate, error) {
 	return s.Search(ctx, "")
@@ -2389,7 +2389,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := newPendingTrack(t, userId, repo)
-	searcher := &fakeAudioSearcher{searchErr: &acqports.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
+	searcher := &fakeAudioSearcher{searchErr: &acqdomain.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
 	pub := newRecordingPublisher()
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
 	wake := make(chan struct{}, 1)

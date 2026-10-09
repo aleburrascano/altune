@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
@@ -101,7 +102,7 @@ func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string, timedOu
 	if s.Available() && !timedOut && !sharedytdlp.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
-	return &ports.SourceUnavailableError{Source: SourceName, Err: err}
+	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
 }
 
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {

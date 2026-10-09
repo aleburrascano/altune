@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
@@ -19,7 +19,7 @@ func retryBackoff(attempts int) time.Duration {
 }
 
 func isTransientFailure(err error) bool {
-	return ports.IsSourceUnavailable(err)
+	return acqdomain.IsSourceUnavailable(err)
 }
 
 func failureReason(err error) string {
@@ -34,7 +34,7 @@ func failureCode(err error) domain.FailureCode {
 	if isCancellation(err) {
 		return domain.FailureAcquisitionCancelled
 	}
-	if ports.IsSourceUnavailable(err) {
+	if acqdomain.IsSourceUnavailable(err) {
 		return domain.FailureSourceUnavailable
 	}
 	if errors.Is(err, ErrNoConfidentMatch) {

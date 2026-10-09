@@ -18,7 +18,7 @@ type AudioCandidate struct {
 	Channel    string
 	Categories []string
 	ViewCount  int64
-	Source     SourceName
+	Source     acqdomain.SourceName
 	Resolved   bool
 	Unplayable string
 }
@@ -89,7 +89,7 @@ func CollectCandidatesReportingOutage(
 			if firstErr == nil {
 				firstErr = err
 			}
-			if firstUnavailable == nil && IsSourceUnavailable(err) {
+			if firstUnavailable == nil && acqdomain.IsSourceUnavailable(err) {
 				firstUnavailable = err
 			}
 			onFailure(i, err)
