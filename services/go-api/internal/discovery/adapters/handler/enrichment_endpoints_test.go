@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/service/enrich"
 	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
@@ -278,38 +279,6 @@ func TestEnrichmentEndpoints_NonDegradedErrorStillFails(t *testing.T) {
 	}
 }
 
-type fakeLastFmEnricher struct {
-	enrichment discdomain.LastFmEnrichment
-}
-
-func (f *fakeLastFmEnricher) Lookup(context.Context, discdomain.ResultKind, string, string) (discdomain.LastFmEnrichment, error) {
-	return f.enrichment, nil
-}
-
-type fakeDeezerEnricher struct {
-	enrichment discdomain.DeezerEnrichment
-}
-
-func (f *fakeDeezerEnricher) ResolveID(context.Context, discdomain.ResultKind, string, string) (string, error) {
-	return "dz-1", nil
-}
-
-func (f *fakeDeezerEnricher) Lookup(context.Context, discdomain.ResultKind, string) (discdomain.DeezerEnrichment, error) {
-	return f.enrichment, nil
-}
-
-type fakeLyricsProvider struct {
-	lyrics discdomain.DeezerLyrics
-}
-
-func (f *fakeLyricsProvider) ResolveTrackID(context.Context, string, string) (string, error) {
-	return "t-1", nil
-}
-
-func (f *fakeLyricsProvider) Lookup(context.Context, string) (discdomain.DeezerLyrics, error) {
-	return f.lyrics, nil
-}
-
 func buildEnrichersRouter(e DetailEnrichers) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{}).WithDetailEnrichers(e)
 	r := chi.NewRouter()
@@ -352,7 +321,7 @@ func TestHandleLastFmEnrichment(t *testing.T) {
 		e.Bio = "Queensbridge legend."
 		e.Similar = []string{"AZ", "Mobb Deep"}
 
-		svc := enrich.NewLastFmEnrichmentService(&fakeLastFmEnricher{enrichment: e}, nil)
+		svc := enrich.NewLastFmEnrichmentService(&discoverytest.LastFmEnricher{Enrichment: e}, nil)
 		router := buildEnrichersRouter(DetailEnrichers{LastFm: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist&title=Nas", nil)
@@ -399,7 +368,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("artist kind returns 200 empty (only track and album enrich)", func(t *testing.T) {
 		e := discdomain.EmptyDeezerEnrichment()
 		e.BPM = 90
-		svc := enrich.NewDeezerEnrichmentService(&fakeDeezerEnricher{enrichment: e}, nil)
+		svc := enrich.NewDeezerEnrichmentService(&discoverytest.DeezerEnricher{ResolvedID: "dz-1", Enrichment: e}, nil)
 		router := buildEnrichersRouter(DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=artist&title=Nas", nil)
@@ -422,7 +391,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 		e.UPC = "074645368429"
 		e.RecordType = "album"
 
-		svc := enrich.NewDeezerEnrichmentService(&fakeDeezerEnricher{enrichment: e}, nil)
+		svc := enrich.NewDeezerEnrichmentService(&discoverytest.DeezerEnricher{ResolvedID: "dz-1", Enrichment: e}, nil)
 		router := buildEnrichersRouter(DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet,
@@ -468,7 +437,7 @@ func TestHandleLyrics(t *testing.T) {
 		l.Writers = []string{"Nasir Jones"}
 		l.Copyright = "© 1994 Columbia"
 
-		svc := enrich.NewLyricsService(&fakeLyricsProvider{lyrics: l}, nil)
+		svc := enrich.NewLyricsService(&discoverytest.LyricsProvider{ResolvedID: "t-1", Lyrics: l}, nil)
 		router := buildEnrichersRouter(DetailEnrichers{Lyrics: svc})
 
 		rec := discServe(t, router, http.MethodGet,

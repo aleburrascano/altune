@@ -1,51 +1,12 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
-
-type fakeDeezerEnricher struct {
-	resolves   int
-	lookups    int
-	lastKind   domain.ResultKind
-	lastArtist string
-	lastTitle  string
-	resolveID  string
-	resolveErr error
-	lookupErr  error
-	enrichment domain.DeezerEnrichment
-}
-
-func (f *fakeDeezerEnricher) ResolveID(
-	_ context.Context,
-	kind domain.ResultKind,
-	artist, title string,
-) (string, error) {
-	f.resolves++
-	f.lastKind = kind
-	f.lastArtist = artist
-	f.lastTitle = title
-	if f.resolveErr != nil {
-		return "", f.resolveErr
-	}
-	return f.resolveID, nil
-}
-
-func (f *fakeDeezerEnricher) Lookup(
-	_ context.Context,
-	_ domain.ResultKind,
-	_ string,
-) (domain.DeezerEnrichment, error) {
-	f.lookups++
-	if f.lookupErr != nil {
-		return domain.EmptyDeezerEnrichment(), f.lookupErr
-	}
-	return f.enrichment, nil
-}
 
 type memDeezerCache struct {
 	pos  map[string]domain.DeezerEnrichment
@@ -57,18 +18,22 @@ type memDeezerCache struct {
 func newMemDeezerCache() *memDeezerCache {
 	return &memDeezerCache{pos: map[string]domain.DeezerEnrichment{}, neg: map[string]bool{}}
 }
+
 func (c *memDeezerCache) Get(_ context.Context, k string) (domain.DeezerEnrichment, bool, error) {
 	e, ok := c.pos[k]
 	return e, ok, nil
 }
+
 func (c *memDeezerCache) Set(_ context.Context, k string, e domain.DeezerEnrichment) error {
 	c.sets++
 	c.pos[k] = e
 	return nil
 }
+
 func (c *memDeezerCache) GetNegative(_ context.Context, k string) (bool, error) {
 	return c.neg[k], nil
 }
+
 func (c *memDeezerCache) SetNegative(_ context.Context, k string) error {
 	c.negs++
 	c.neg[k] = true
@@ -84,20 +49,20 @@ func sampleDeezerTrackEnrichment() domain.DeezerEnrichment {
 }
 
 func TestDeezerEnrichmentService_TrackTranslatesNames(t *testing.T) {
-	enricher := &fakeDeezerEnricher{resolveID: "1109731", enrichment: sampleDeezerTrackEnrichment()}
+	enricher := &discoverytest.DeezerEnricher{ResolvedID: "1109731", Enrichment: sampleDeezerTrackEnrichment()}
 	svc := NewDeezerEnrichmentService(enricher, newMemDeezerCache())
 
 	_, err := svc.Execute(context.Background(), domain.ResultKindTrack, "Lose Yourself", "Eminem")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if enricher.lastArtist != "Eminem" || enricher.lastTitle != "Lose Yourself" {
-		t.Errorf("names: got artist=%q title=%q", enricher.lastArtist, enricher.lastTitle)
+	if enricher.LastArtist != "Eminem" || enricher.LastTitle != "Lose Yourself" {
+		t.Errorf("names: got artist=%q title=%q", enricher.LastArtist, enricher.LastTitle)
 	}
 }
 
 func TestDeezerEnrichmentService_ArtistKindReturnsEmpty(t *testing.T) {
-	enricher := &fakeDeezerEnricher{resolveID: "27", enrichment: sampleDeezerTrackEnrichment()}
+	enricher := &discoverytest.DeezerEnricher{ResolvedID: "27", Enrichment: sampleDeezerTrackEnrichment()}
 	svc := NewDeezerEnrichmentService(enricher, newMemDeezerCache())
 
 	e, err := svc.Execute(context.Background(), domain.ResultKindArtist, "Daft Punk", "")
@@ -107,29 +72,29 @@ func TestDeezerEnrichmentService_ArtistKindReturnsEmpty(t *testing.T) {
 	if !e.IsZero() {
 		t.Errorf("artist kind should be empty, got %+v", e)
 	}
-	if enricher.resolves != 0 {
-		t.Errorf("artist kind should not resolve, got resolves=%d", enricher.resolves)
+	if enricher.Resolves != 0 {
+		t.Errorf("artist kind should not resolve, got resolves=%d", enricher.Resolves)
 	}
 }
 
 func TestDeezerEnrichmentService_CacheHitShortCircuits(t *testing.T) {
-	enricher := &fakeDeezerEnricher{resolveID: "1109731", enrichment: sampleDeezerTrackEnrichment()}
+	enricher := &discoverytest.DeezerEnricher{ResolvedID: "1109731", Enrichment: sampleDeezerTrackEnrichment()}
 	cache := newMemDeezerCache()
 	svc := NewDeezerEnrichmentService(enricher, cache)
 
 	_, _ = svc.Execute(context.Background(), domain.ResultKindTrack, "Lose Yourself", "Eminem")
-	if enricher.lookups != 1 || cache.sets != 1 {
-		t.Fatalf("setup: lookups=%d sets=%d", enricher.lookups, cache.sets)
+	if enricher.Lookups != 1 || cache.sets != 1 {
+		t.Fatalf("setup: lookups=%d sets=%d", enricher.Lookups, cache.sets)
 	}
 	_, _ = svc.Execute(context.Background(), domain.ResultKindTrack, "Lose Yourself", "Eminem")
-	if enricher.resolves != 1 || enricher.lookups != 1 {
+	if enricher.Resolves != 1 || enricher.Lookups != 1 {
 		t.Errorf("expected cache hit (no extra resolve/lookup), got resolves=%d lookups=%d",
-			enricher.resolves, enricher.lookups)
+			enricher.Resolves, enricher.Lookups)
 	}
 }
 
 func TestDeezerEnrichmentService_UnresolvedCachedNegative(t *testing.T) {
-	enricher := &fakeDeezerEnricher{resolveID: ""}
+	enricher := &discoverytest.DeezerEnricher{ResolvedID: ""}
 	cache := newMemDeezerCache()
 	svc := NewDeezerEnrichmentService(enricher, cache)
 
@@ -143,13 +108,13 @@ func TestDeezerEnrichmentService_UnresolvedCachedNegative(t *testing.T) {
 	if cache.negs != 1 {
 		t.Errorf("expected a negative cache write, got negs=%d", cache.negs)
 	}
-	if enricher.lookups != 0 {
-		t.Errorf("an unresolved id should not be looked up, got lookups=%d", enricher.lookups)
+	if enricher.Lookups != 0 {
+		t.Errorf("an unresolved id should not be looked up, got lookups=%d", enricher.Lookups)
 	}
 }
 
 func TestDeezerEnrichmentService_ResolveErrorDegradesToEmpty(t *testing.T) {
-	enricher := &fakeDeezerEnricher{resolveErr: errors.New("boom")}
+	enricher := &discoverytest.DeezerEnricher{ResolveErr: errors.New("boom")}
 	cache := newMemDeezerCache()
 	svc := NewDeezerEnrichmentService(enricher, cache)
 
