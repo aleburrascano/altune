@@ -1,6 +1,5 @@
 M1 src/features/settings missing index.ts
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-N2 src/features/discover go-api module is discovery
 N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
 N3 src/shared/api-client/queryString.ts only export is withQuery
 N3 src/shared/events/acquisitionEvents.ts only export is ACQUISITION_HANDLERS

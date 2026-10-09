@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
 const CWD = path.join(__dirname, '..', '..');
-const LOGIC_FILE = 'src/features/discover/domain/searchLimits.ts';
+const LOGIC_FILE = 'src/features/discovery/domain/searchLimits.ts';
 const RULE = 'no-restricted-imports';
 
 const eslint = new ESLint({

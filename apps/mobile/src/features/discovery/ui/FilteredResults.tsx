@@ -1,0 +1,61 @@
+import type { ReactElement } from 'react';
+import { StyleSheet, View } from 'react-native';
+
+import { Text, spacing } from '@shared/ui';
+
+import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
+import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
+import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import { kindLabel } from '@features/discovery/domain/kindLabel';
+import { resultKey } from '@features/discovery/domain/resultKey';
+
+import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
+
+export function FilteredResults({
+  kind,
+  results,
+  common,
+}: {
+  kind: DiscoveryKind;
+  results: DiscoveryResult[];
+  common: ResultsCommonProps;
+}): ReactElement {
+  const items = results.filter((r) => r.kind === kind);
+
+  if (items.length === 0) {
+    return (
+      <View testID="discover-filtered-empty" style={styles.filteredEmpty}>
+        {common.correction != null ? (
+          <CorrectionBanner
+            correctedQuery={common.correction.corrected}
+            originalQuery={common.correction.original}
+            onSearchOriginal={common.onSearchOriginal}
+          />
+        ) : null}
+        <Text variant="body" tone="tertiary">
+          No {kindLabel(kind, { plural: true }).toLowerCase()} found.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ResultsList
+      data={items}
+      keyExtractor={resultKey}
+      common={common}
+      renderItem={({ item, index }) => (
+        <DiscoverRow result={item} position={index} onPress={common.onResultTap} />
+      )}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  filteredEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing['2xl'],
+  },
+});

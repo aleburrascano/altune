@@ -22,7 +22,7 @@ import {
   type ServerEventsClientFactory,
 } from '@shared/events/useServerEvents';
 import { startDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
-import { getSearchState, setSearchState } from '@features/discover/domain/searchState';
+import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import {
   clearDetailHandoffs,

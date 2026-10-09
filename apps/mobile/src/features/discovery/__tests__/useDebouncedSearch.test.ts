@@ -1,0 +1,482 @@
+import { act, renderHook } from '@testing-library/react-native';
+
+import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
+import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
+import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchLimits';
+
+const OPTIONS = { debounceMs: 300 };
+
+beforeEach(() => {
+  setSearchState('', '');
+  jest.useFakeTimers();
+});
+
+afterEach(() => {
+  jest.runOnlyPendingTimers();
+  jest.useRealTimers();
+});
+
+describe('useDebouncedSearch commits typed queries only after the debounce window', () => {
+  it('starts as a non-explicit submit before any interaction', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('holds the committed query until the debounce window elapses', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('radiohead');
+    });
+
+    expect(result.current.inputValue).toBe('radiohead');
+    expect(result.current.committedQuery).toBe('');
+
+    act(() => {
+      jest.advanceTimersByTime(299);
+    });
+    expect(result.current.committedQuery).toBe('');
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(result.current.committedQuery).toBe('radiohead');
+  });
+
+  it('marks a debounced commit as not an explicit submit', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('radiohead');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('commits a query exactly at the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ab');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(result.current.committedQuery).toBe('ab');
+  });
+
+  it('commits the whitespace-trimmed query after a debounced change', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('  radiohead  ');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(result.current.committedQuery).toBe('radiohead');
+  });
+
+  it('cancels a superseded keystroke so the stale query never commits', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('aa');
+    });
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    act(() => {
+      result.current.onChangeText('bb');
+    });
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    expect(result.current.committedQuery).toBe('');
+
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(result.current.committedQuery).toBe('bb');
+  });
+
+  it('never commits a query shorter than the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('a');
+    });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.inputValue).toBe('a');
+    expect(result.current.committedQuery).toBe('');
+  });
+
+  it('commits only the final keystroke when typing faster than the window', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('rad');
+    });
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    act(() => {
+      result.current.onChangeText('radiohead');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(result.current.committedQuery).toBe('radiohead');
+  });
+
+  it('clears a committed query immediately when the input is emptied', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('radiohead');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    act(() => {
+      result.current.onChangeText('');
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('clears a stale committed query when backspacing below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ra');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current.committedQuery).toBe('ra');
+
+    act(() => {
+      result.current.onChangeText('r');
+    });
+
+    expect(result.current.inputValue).toBe('r');
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('clears a stale explicit submit when backspacing below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      result.current.onChangeText('r ');
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('cancels a pending debounce when backspacing below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ra');
+    });
+    act(() => {
+      result.current.onChangeText('r');
+    });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.committedQuery).toBe('');
+  });
+});
+
+describe('useDebouncedSearch releases its debounce timer on unmount', () => {
+  it('clears a pending debounce timer when the hook unmounts', () => {
+    const { result, unmount } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('radiohead');
+    });
+    expect(jest.getTimerCount()).toBe(1);
+
+    unmount();
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
+describe('useDebouncedSearch treats explicit actions as history-saving submits', () => {
+  it('commits a trimmed query immediately on submit and marks it explicit', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('  radiohead  ');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('radiohead');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
+  it('commits a submitted query exactly at the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ab');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('ab');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
+  it('never commits a submitted query shorter than the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('a');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.inputValue).toBe('a');
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('counts a submitted query by its trimmed length, not its padding', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('  a  ');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('drops a stale committed query when submitting below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      result.current.onChangeText('r');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('commits a chosen suggestion immediately and marks it explicit', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('the national');
+    });
+
+    expect(result.current.inputValue).toBe('the national');
+    expect(result.current.committedQuery).toBe('the national');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
+  it('keeps a chosen suggestion when a keystroke debounce was still pending', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('rad');
+    });
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.committedQuery).toBe('radiohead');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
+  it('resets to an empty, non-explicit state on clear', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      result.current.onClear();
+    });
+
+    expect(result.current.inputValue).toBe('');
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+});
+
+describe('useDebouncedSearch rehydrates the preserved search on mount', () => {
+  it('starts from the last saved query and input value', () => {
+    setSearchState('saved query', 'saved input');
+
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    expect(result.current.committedQuery).toBe('saved query');
+    expect(result.current.inputValue).toBe('saved input');
+  });
+});
+
+describe('useDebouncedSearch applies one trim and length rule to every commit path', () => {
+  it('setQuery trims the committed query and the input', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('  ab  ');
+    });
+
+    expect(result.current.committedQuery).toBe('ab');
+    expect(result.current.inputValue).toBe('ab');
+  });
+
+  it('setQuery commits nothing below the minimum length', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('x');
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('onChangeText never commits more than MAX_QUERY_LENGTH characters', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('a'.repeat(5000));
+      jest.advanceTimersByTime(300);
+    });
+
+    expect(result.current.committedQuery).toHaveLength(MAX_QUERY_LENGTH);
+    expect(result.current.inputValue).toHaveLength(MAX_QUERY_LENGTH);
+  });
+
+  it('setQuery never commits more than MAX_QUERY_LENGTH characters', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('a'.repeat(5000));
+    });
+
+    expect(result.current.committedQuery).toHaveLength(MAX_QUERY_LENGTH);
+  });
+
+  it('onChangeText and setQuery cut by code point, leaving no lone surrogate', () => {
+    const text = `${'a'.repeat(MAX_QUERY_LENGTH - 1)}😀😀`;
+    const expected = `${'a'.repeat(MAX_QUERY_LENGTH - 1)}😀`;
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText(text);
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current.inputValue).toBe(expected);
+    expect(result.current.committedQuery).toBe(expected);
+
+    act(() => {
+      result.current.setQuery(text);
+    });
+    expect(result.current.inputValue).toBe(expected);
+    expect(result.current.committedQuery).toBe(expected);
+  });
+});
+
+const SERVER_WORD_CAP = 32;
+
+const numberedWords = (count: number): string[] =>
+  Array.from({ length: count }, (_, index) => `w${index}`);
+
+describe('useDebouncedSearch never commits more words than the server accepts', () => {
+  it('onChangeText and onSubmit commit only the first SERVER_WORD_CAP words of a longer input', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+    const allowed = numberedWords(SERVER_WORD_CAP).join(' ');
+
+    act(() => {
+      result.current.onChangeText(numberedWords(40).join(' '));
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current.committedQuery).toBe(allowed);
+
+    act(() => {
+      result.current.onSubmit();
+    });
+    expect(result.current.committedQuery).toBe(allowed);
+  });
+
+  it('setQuery commits only the first SERVER_WORD_CAP words of a longer query', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery(numberedWords(40).join(' '));
+    });
+
+    expect(result.current.committedQuery).toBe(numberedWords(SERVER_WORD_CAP).join(' '));
+  });
+
+  it('commits a query of exactly SERVER_WORD_CAP words unchanged', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+    const exact = numberedWords(SERVER_WORD_CAP).join(' ');
+
+    act(() => {
+      result.current.setQuery(exact);
+    });
+
+    expect(result.current.committedQuery).toBe(exact);
+  });
+});
+
+describe('useDebouncedSearch preserves the search it owns', () => {
+  it('writes the committed query and input value so a remount restores them', () => {
+    const first = renderHook(() => useDebouncedSearch(OPTIONS));
+    act(() => first.result.current.onChangeText('radiohead'));
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    first.unmount();
+
+    expect(getSearchState()).toEqual({ query: 'radiohead', inputValue: 'radiohead' });
+    const second = renderHook(() => useDebouncedSearch(OPTIONS));
+    expect(second.result.current.committedQuery).toBe('radiohead');
+    expect(second.result.current.inputValue).toBe('radiohead');
+  });
+});

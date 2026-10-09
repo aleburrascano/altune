@@ -22,7 +22,7 @@ const typedLinting = [
   },
 ];
 
-const FEATURES = ['auth', 'detail', 'discover', 'library', 'playback', 'settings'];
+const FEATURES = ['auth', 'detail', 'discovery', 'library', 'playback', 'settings'];
 
 const TEST_FILES = ['**/__tests__/**'];
 
@@ -213,7 +213,7 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
-const QUERY_ADAPTER_HOOKS = ['src/features/discover/hooks/useDiscoverSearch.ts'];
+const QUERY_ADAPTER_HOOKS = ['src/features/discovery/hooks/useDiscoverSearch.ts'];
 
 const mechanicalStyleEnforcedOnChangedCodeOnly =
   process.env.ESLINT_DIFF_SCOPED === '1'
