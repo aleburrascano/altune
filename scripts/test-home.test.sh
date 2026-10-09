@@ -82,5 +82,9 @@ git checkout -q -B moved-edited origin/main && git clean -qfd
 git mv svc server && printf 'package sched\n' > server/sched/drain_edge_test.go && git commit -qam move-edit
 node "$th" origin/main >/dev/null 2>&1 && { echo "FAIL a moved scenario test file that was also edited is still judged"; fail=1; }
 
+git checkout -q -B moved-unit-edited origin/main && git clean -qfd
+git mv app client && printf 'it("x")\n' > client/lib/__tests__/pinnedStore.test.ts && git commit -qam move-edit
+node "$th" origin/main >/dev/null 2>&1 || { echo "FAIL an edited test file finds its unit that moved with it"; fail=1; }
+
 [ $fail = 0 ] && echo "test-home.test.sh: all cases pass"
 exit $fail
