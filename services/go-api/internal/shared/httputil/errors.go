@@ -142,3 +142,7 @@ func InternalError(w http.ResponseWriter, msgs ...string) {
 	}
 	WriteError(w, http.StatusInternalServerError, msg)
 }
+
+func WritePlainError(w http.ResponseWriter, status int, msg string) {
+	http.Error(w, msg, status)
+}
