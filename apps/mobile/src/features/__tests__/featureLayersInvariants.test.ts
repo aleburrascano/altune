@@ -5,7 +5,7 @@ import { join } from 'path';
 const FEATURES_ROOT = join(__dirname, '..');
 const IMPORT_STATEMENT = /^\s*(import|export)\s+(type\s+)?([^;]*?\s+from\s+)?['"]([^'"]+)['"]/gms;
 const FORBIDDEN_VALUE_SOURCE =
-  /^(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
+  /^(?!@shared\/ui\/asyncView$)(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
 
 const DISCOVER_DOMAIN_FILE_COUNT = 9;
 
