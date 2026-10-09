@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/events"
+	"context"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -68,11 +69,11 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
 		if !v.FullyArmed() {
-			slog.Warn("acquisition.verification_degraded",
+			slog.WarnContext(context.Background(), "acquisition.verification_degraded",
 				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp, "streamrip", v.Streamrip)
 			return
 		}
-		slog.Info("acquisition.verification_armed")
+		slog.InfoContext(context.Background(), "acquisition.verification_armed")
 	}
 }
 

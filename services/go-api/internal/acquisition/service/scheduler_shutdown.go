@@ -28,7 +28,7 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 
 	s.waitRunners(ctx)
 	if !drained {
-		slog.Warn("acquisition scheduler shutdown ended with jobs still in flight, skipping the outcome wait")
+		slog.WarnContext(ctx, "acquisition scheduler shutdown ended with jobs still in flight, skipping the outcome wait")
 		return
 	}
 	s.waitOutcomes(ctx)
@@ -37,9 +37,9 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 func (s *BackgroundAcquisitionScheduler) awaitDrainBudget(done <-chan struct{}, ctx context.Context) bool {
 	drained := s.awaitJobsWG(done, s.drainBudget, ctx)
 	if drained {
-		slog.Info("acquisition scheduler drained")
+		slog.InfoContext(ctx, "acquisition scheduler drained")
 	} else {
-		slog.Warn("acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
+		slog.WarnContext(ctx, "acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
 	}
 	return drained
 }
@@ -57,7 +57,7 @@ func (s *BackgroundAcquisitionScheduler) awaitCancelledJobs(done <-chan struct{}
 	if s.awaitJobsWG(done, 0, ctx) {
 		return true
 	}
-	slog.Warn("acquisition scheduler drain timed out waiting for cancelled jobs to release")
+	slog.WarnContext(ctx, "acquisition scheduler drain timed out waiting for cancelled jobs to release")
 	return false
 }
 
@@ -87,7 +87,7 @@ func (s *BackgroundAcquisitionScheduler) waitRunners(ctx context.Context) {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		slog.Warn("acquisition scheduler shutdown context ended before every worker goroutine exited")
+		slog.WarnContext(ctx, "acquisition scheduler shutdown context ended before every worker goroutine exited")
 	}
 }
 
@@ -100,6 +100,6 @@ func (s *BackgroundAcquisitionScheduler) waitOutcomes(ctx context.Context) {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		slog.Warn("acquisition scheduler shutdown context ended before every outcome was recorded")
+		slog.WarnContext(ctx, "acquisition scheduler shutdown context ended before every outcome was recorded")
 	}
 }

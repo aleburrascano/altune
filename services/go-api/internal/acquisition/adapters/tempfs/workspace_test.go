@@ -2,6 +2,9 @@ package tempfs
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"bytes"
+	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +129,47 @@ func TestSweepAbandonedBetweenTicks(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("backdated dir: Stat err = %v, want not-exist", err)
+	}
+}
+
+func captureJSONLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
+}
+
+func TestSweepAbandonedLogsNothingWithoutStaleDirs(t *testing.T) {
+	root := useTempRoot(t)
+	agedDir(t, root, ports.TempDirPrefix+"live", testMaxAge-time.Minute)
+	logs := captureJSONLogs(t)
+
+	newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge))
+
+	if logs.Len() != 0 {
+		t.Errorf("sweep with no stale dirs logged:\n%s", logs.String())
+	}
+}
+
+func TestSweepAbandonedLogsTheSweptCount(t *testing.T) {
+	root := useTempRoot(t)
+	agedDir(t, root, ports.TempDirPrefix+"old", testMaxAge+time.Hour)
+	logs := captureJSONLogs(t)
+
+	newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge))
+
+	var record struct {
+		Level   string `json:"level"`
+		Msg     string `json:"msg"`
+		Removed int    `json:"removed"`
+	}
+	if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
+		t.Fatalf("expected exactly one JSON log line, got %q: %v", logs.String(), err)
+	}
+	if record.Level != "INFO" || record.Msg != "acquisition.stale_temp_dirs_swept" || record.Removed != 1 {
+		t.Errorf("log = %+v, want INFO acquisition.stale_temp_dirs_swept removed=1", record)
 	}
 }
 

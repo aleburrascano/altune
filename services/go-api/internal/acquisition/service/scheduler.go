@@ -182,7 +182,7 @@ func (s *BackgroundAcquisitionScheduler) claimNext() (ports.Job, bool) {
 		return ports.Job{}, false
 	}
 	if err != nil {
-		slog.Error("acquisition.claim_failed", "error", err)
+		slog.ErrorContext(s.baseCtx, "acquisition.claim_failed", "error", err)
 		return ports.Job{}, false
 	}
 	return job, true
@@ -339,7 +339,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
 func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("acquisition_panic_fail_track", "track_id", job.TrackID.String(), "panic", r)
+			slog.ErrorContext(s.baseCtx, "acquisition_panic_fail_track", "track_id", job.TrackID.String(), "panic", r)
 		}
 	}()
 	s.svc.RefuseQueued(context.Background(), job.UserID, job.TrackID)
@@ -350,10 +350,10 @@ func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID doma
 		return
 	}
 	if errors.Is(err, ports.ErrLeaseLost) {
-		slog.Warn("acquisition."+op+"_lease_lost", "track_id", trackID.String())
+		slog.WarnContext(s.baseCtx, "acquisition."+op+"_lease_lost", "track_id", trackID.String())
 		return
 	}
-	slog.Error("acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
+	slog.ErrorContext(s.baseCtx, "acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {

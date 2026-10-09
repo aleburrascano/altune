@@ -33,13 +33,13 @@ func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSucces
 		return true
 	}
 	if errors.Is(err, ports.ErrLeaseLost) {
-		slog.Warn("acquisition.lease_lost", "track_id", job.TrackID.String())
+		slog.WarnContext(s.baseCtx, "acquisition.lease_lost", "track_id", job.TrackID.String())
 		return false
 	}
 	if s.now().Sub(*lastSuccess) >= s.leaseDuration {
-		slog.Error("acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
+		slog.ErrorContext(s.baseCtx, "acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
 		return false
 	}
-	slog.Error("acquisition.heartbeat_failed", "track_id", job.TrackID.String(), "error", err)
+	slog.ErrorContext(s.baseCtx, "acquisition.heartbeat_failed", "track_id", job.TrackID.String(), "error", err)
 	return true
 }

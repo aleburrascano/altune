@@ -1,7 +1,10 @@
 package chromaprint
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,8 +19,6 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 func TestBestMatch_PicksHighestScoreAboveThreshold(t *testing.T) {
@@ -214,6 +215,49 @@ func TestNewIdentifier_ValidKeyDoesNotWarn(t *testing.T) {
 
 	if logs.warned {
 		t.Errorf("a valid API key must not warn, got %v", logs.msgs)
+	}
+}
+
+func captureJSONLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
+}
+
+func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
+	logs := captureJSONLogs(t)
+
+	NewIdentifier(t.TempDir(), "   ")
+
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("blank key logged %d lines, want exactly 1:\n%s", len(lines), logs.String())
+	}
+	var record struct {
+		Level string `json:"level"`
+		Msg   string `json:"msg"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &record); err != nil {
+		t.Fatalf("log line is not JSON: %v", err)
+	}
+	if record.Level != "WARN" {
+		t.Errorf("level = %q, want WARN", record.Level)
+	}
+	if !strings.HasPrefix(record.Msg, "chromaprint: AcoustID API key is empty or blank") {
+		t.Errorf("msg = %q, want the empty-or-blank AcoustID key warning", record.Msg)
+	}
+}
+
+func TestNewIdentifier_NonBlankKeyLogsNothing(t *testing.T) {
+	logs := captureJSONLogs(t)
+
+	NewIdentifier(t.TempDir(), "key")
+
+	if logs.Len() != 0 {
+		t.Errorf("a non-blank key logged:\n%s", logs.String())
 	}
 }
 

@@ -225,7 +225,7 @@ func TestLargestAudioFile_PicksBiggestAndIgnoresNonAudio(t *testing.T) {
 	write("small.mp3", 20_000)
 	want := write("full.flac", 900_000)
 
-	got, err := largestAudioFile(dir)
+	got, err := largestAudioFile(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("largestAudioFile: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestLargestAudioFile_RejectsTinyFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := largestAudioFile(dir); err == nil {
+	if _, err := largestAudioFile(context.Background(), dir); err == nil {
 		t.Error("expected a too-small file to be rejected")
 	}
 }
@@ -323,7 +323,7 @@ func writeSparseFile(t *testing.T, path string, size int64) {
 }
 
 func TestLargestAudioFile_NoAudioIsAnError(t *testing.T) {
-	if _, err := largestAudioFile(t.TempDir()); err == nil {
+	if _, err := largestAudioFile(context.Background(), t.TempDir()); err == nil {
 		t.Error("expected an error when streamrip produced no audio")
 	}
 }
@@ -548,7 +548,7 @@ func TestLargestAudioFile_SkipsAnUnreadableDirectoryAndKeepsScanning(t *testing.
 		t.Fatal("chmod 000 did not make the directory unreadable; test needs a non-root user")
 	}
 
-	got, err := largestAudioFile(dir)
+	got, err := largestAudioFile(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("largestAudioFile with an unreadable subdirectory: %v, want %q", err, want)
 	}
@@ -579,7 +579,7 @@ func TestLargestAudioFile_SkipsAnUnreadableDirectoryAndKeepsScanning(t *testing.
 func TestLargestAudioFile_MissingDirectoryIsAnError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "gone")
 
-	got, err := largestAudioFile(missing)
+	got, err := largestAudioFile(context.Background(), missing)
 	if err == nil {
 		t.Fatalf("largestAudioFile(%q) = %q, nil; want an error", missing, got)
 	}
