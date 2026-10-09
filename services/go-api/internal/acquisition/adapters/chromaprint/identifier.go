@@ -1,6 +1,9 @@
 package chromaprint
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,10 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 
 	"golang.org/x/time/rate"
 )
@@ -51,7 +50,7 @@ type Identifier struct {
 func NewIdentifier(binDir, apiKey string) *Identifier {
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
-		slog.Warn("chromaprint: AcoustID API key is empty or blank; " +
+		slog.WarnContext(context.Background(), "chromaprint: AcoustID API key is empty or blank; "+
 			"audio fingerprint identification is disabled and every lookup will fail")
 	}
 	return &Identifier{

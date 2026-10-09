@@ -38,7 +38,7 @@ func (s *BackgroundAcquisitionScheduler) pendingDepth() (int, time.Duration, boo
 	}
 	pending, oldestAge, err := reader.PendingDepth(s.baseCtx)
 	if err != nil {
-		slog.Error("acquisition.pending_depth_failed", "error", err)
+		slog.ErrorContext(s.baseCtx, "acquisition.pending_depth_failed", "error", err)
 		return 0, 0, false
 	}
 	return pending, oldestAge, true

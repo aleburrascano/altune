@@ -162,7 +162,7 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 		return "", s.classifiedFailure(fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
-	return largestAudioFile(outDir)
+	return largestAudioFile(ctx, outDir)
 }
 
 func (s *Source) classifiedFailure(err error, stderr string, timedOut bool) error {
@@ -214,40 +214,56 @@ func truncate(s string) string {
 	return s[:cut]
 }
 
-func largestAudioFile(dir string) (string, error) {
-	best, bestSize := "", int64(-1)
-
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			slog.Debug("streamrip.scan_entry_skipped", "path", path, "error", err)
-			return nil
-		}
-		if d.IsDir() || !isAudio(path) {
-			return nil
-		}
-		info, statErr := d.Info()
-		if statErr != nil {
-			slog.Debug("streamrip.scan_entry_skipped", "path", path, "error", statErr)
-			return nil
-		}
-		if info.Size() > bestSize {
-			best, bestSize = path, info.Size()
-		}
-		return nil
-	})
+func largestAudioFile(ctx context.Context, dir string) (string, error) {
+	best, bestSize, err := largestAudioEntry(ctx, dir)
 	if err != nil {
 		return "", fmt.Errorf("scan %s: %w", dir, err)
 	}
 	if best == "" {
 		return "", fmt.Errorf("no audio file produced in %s", dir)
 	}
-	if bestSize < minFileSize {
-		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
-	}
-	if bestSize > maxFileSize {
-		return "", fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", bestSize, maxFileSize)
+	if err := checkAudioSize(bestSize); err != nil {
+		return "", err
 	}
 	return best, nil
+}
+
+func largestAudioEntry(ctx context.Context, dir string) (string, int64, error) {
+	best, bestSize := "", int64(-1)
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		size, ok := audioEntrySize(ctx, path, d, err)
+		if ok && size > bestSize {
+			best, bestSize = path, size
+		}
+		return nil
+	})
+	return best, bestSize, err
+}
+
+func audioEntrySize(ctx context.Context, path string, d os.DirEntry, walkErr error) (int64, bool) {
+	if walkErr != nil {
+		slog.DebugContext(ctx, "streamrip.scan_entry_skipped", "path", path, "error", walkErr)
+		return 0, false
+	}
+	if d.IsDir() || !isAudio(path) {
+		return 0, false
+	}
+	info, statErr := d.Info()
+	if statErr != nil {
+		slog.DebugContext(ctx, "streamrip.scan_entry_skipped", "path", path, "error", statErr)
+		return 0, false
+	}
+	return info.Size(), true
+}
+
+func checkAudioSize(size int64) error {
+	if size < minFileSize {
+		return fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", size)
+	}
+	if size > maxFileSize {
+		return fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", size, maxFileSize)
+	}
+	return nil
 }
 
 func isAudio(path string) bool {

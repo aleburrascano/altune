@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -1878,6 +1879,36 @@ func captureJSONLogSync(t *testing.T) *syncLogBuffer {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return buf
+}
+
+func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
+	cases := []struct {
+		name         string
+		verification acqports.AcquisitionVerification
+		wantLevel    string
+		wantMsg      string
+	}{
+		{"not fully armed warns", acqports.AcquisitionVerification{Ffprobe: true}, "WARN", "acquisition.verification_degraded"},
+		{"fully armed informs", acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true, Streamrip: true}, "INFO", "acquisition.verification_armed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := captureJSONLogSync(t)
+
+			WithVerificationStatus(tc.verification)(&BackgroundAcquisitionScheduler{})
+
+			var record struct {
+				Level string `json:"level"`
+				Msg   string `json:"msg"`
+			}
+			if err := json.Unmarshal([]byte(logs.String()), &record); err != nil {
+				t.Fatalf("expected exactly one JSON log line, got %q: %v", logs.String(), err)
+			}
+			if record.Level != tc.wantLevel || record.Msg != tc.wantMsg {
+				t.Errorf("log = %s %s, want %s %s", record.Level, record.Msg, tc.wantLevel, tc.wantMsg)
+			}
+		})
+	}
 }
 
 func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testing.T) {
