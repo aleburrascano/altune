@@ -1,12 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { NetworkError } from '@shared/failure/errors';
-import {
-  type AuthIntentResult,
-  completeAuthIntent,
-} from '@features/auth/domain/completeAuthIntent';
+import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
+import { _resetConsumedCredentialForTest } from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('@shared/device/webOrigin', () => ({
   webOrigin: (): string | null =>
@@ -27,9 +26,34 @@ jest.mock('expo-router', () => {
   };
 });
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
-const mockComplete = completeAuthIntent as jest.Mock;
+const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
+  'exchangeCodeForSession',
+  'verifyOtp',
+  'getSession',
+);
+
+const BAD_REQUEST = 400;
+const FORBIDDEN = 403;
+
+const SIGNED_IN = { data: { session: {}, user: { id: 'user-1' } }, error: null };
+
+function rejectedBy(code: string, status: number) {
+  return {
+    data: { session: null, user: null },
+    error: { name: 'AuthApiError', message: 'rejected', status, code },
+  };
+}
+
+type ExchangeReply = typeof SIGNED_IN | ReturnType<typeof rejectedBy>;
+
+function holdExchange(): (reply: ExchangeReply) => void {
+  let release: ((reply: ExchangeReply) => void) | null = null;
+  exchangeCodeForSession.mockImplementation(
+    () => new Promise<ExchangeReply>((resolve) => (release = resolve)),
+  );
+  return (reply) => release?.(reply);
+}
 
 function setWebUrl(url: string): { replaceState: jest.Mock } {
   const parsed = new URL(url);
@@ -46,60 +70,65 @@ function setWebUrl(url: string): { replaceState: jest.Mock } {
 beforeEach(() => {
   Platform.OS = 'web';
   mockRouter.replace.mockReset();
-  mockComplete.mockReset();
+  _resetConsumedCredentialForTest();
+  exchangeCodeForSession.mockResolvedValue(SIGNED_IN);
+  verifyOtp.mockResolvedValue(SIGNED_IN);
+  getSession.mockResolvedValue({ data: { session: null }, error: null });
 });
 
 afterEach(() => {
+  jest.useRealTimers();
   Platform.OS = 'ios';
   Reflect.deleteProperty(globalThis, 'window');
 });
 
 describe('AuthCallbackScreen: web auth completion (#2924)', () => {
-  it('completes a recovery link and leaves the /reset-password landing to completeAuthIntent', async () => {
+  it('verifies a recovery link and lands on /reset-password', async () => {
     setWebUrl('https://app.altune.example/auth/recovery?token_hash=ok-1&type=recovery');
-    mockComplete.mockImplementation(async (_intent, router) => {
-      router.replace('/reset-password');
-      return { kind: 'success' };
-    });
 
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/reset-password'));
+    expect(verifyOtp).toHaveBeenCalledWith({ type: 'recovery', token_hash: 'ok-1' });
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
     expect(mockRouter.replace).toHaveBeenCalledTimes(1);
   });
 
   it('completes a confirm link and lands signed in on the library', async () => {
     setWebUrl('https://app.altune.example/auth/confirm?token_hash=ok-2&type=signup');
-    mockComplete.mockResolvedValue({ kind: 'success' });
 
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
+    expect(verifyOtp).toHaveBeenCalledWith({ type: 'signup', token_hash: 'ok-2' });
   });
 
   it('completes an OAuth callback and lands on the library', async () => {
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
-    mockComplete.mockResolvedValue({ kind: 'success' });
 
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
+    expect(exchangeCodeForSession).toHaveBeenCalledWith('abc123');
   });
 
-  it('lands on the library for a deduped OAuth exchange, same as a fresh success', async () => {
+  it('lands on the library for a second delivery of an already spent OAuth code, same as a fresh success', async () => {
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
-    mockComplete.mockResolvedValue({ kind: 'deduped' });
+    const first = render(<AuthCallbackScreen />);
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
+    first.unmount();
+    mockRouter.replace.mockReset();
+    setWebUrl('https://app.altune.example/auth/callback?code=abc123');
 
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
   });
 
   it('strips the code and tokens from window.location before completing', async () => {
     const { replaceState } = setWebUrl('https://app.altune.example/auth/callback?code=abc123');
-    mockComplete.mockResolvedValue({ kind: 'success' });
 
     render(<AuthCallbackScreen />);
 
@@ -108,12 +137,9 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
   });
 
   it('shows an error with a way back to sign-in for a failed exchange, and does not navigate to the library', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     setWebUrl('https://app.altune.example/auth/recovery?token_hash=expired&type=recovery');
-    mockComplete.mockResolvedValue({
-      kind: 'failure',
-      cause: 'gotrue_rejected',
-      error: { name: 'AuthApiError', code: 'otp_expired', status: 403 },
-    });
+    verifyOtp.mockResolvedValue(rejectedBy('otp_expired', FORBIDDEN));
 
     render(<AuthCallbackScreen />);
 
@@ -124,9 +150,10 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
     expect(screen.getByTestId('auth-callback-signin')).toBeTruthy();
   });
 
-  it('shows the error notice rather than an unhandled rejection when completeAuthIntent throws', async () => {
+  it('shows the error notice rather than an unhandled rejection when the exchange throws', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     setWebUrl('https://app.altune.example/auth/callback?code=bad');
-    mockComplete.mockRejectedValue(new Error('transport blew up'));
+    exchangeCodeForSession.mockRejectedValue(new Error('transport blew up'));
 
     render(<AuthCallbackScreen />);
 
@@ -134,37 +161,40 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
   });
 
   it('fails closed when there is no window to read a URL from', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     Reflect.deleteProperty(globalThis, 'window');
 
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
-    expect(mockComplete).not.toHaveBeenCalled();
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(verifyOtp).not.toHaveBeenCalled();
   });
 
   it('shows the pending state, not the error notice, while the exchange is still in flight', async () => {
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
-    let resolveComplete: (outcome: AuthIntentResult) => void = () => {};
-    mockComplete.mockImplementation(() => new Promise((resolve) => (resolveComplete = resolve)));
+    const release = holdExchange();
 
     render(<AuthCallbackScreen />);
 
     expect(screen.getByTestId('auth-callback-pending')).toHaveTextContent(/Signing you in/);
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
+    await waitFor(() => expect(exchangeCodeForSession).toHaveBeenCalledWith('abc123'));
 
-    resolveComplete({ kind: 'success' });
+    release(SIGNED_IN);
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
   });
 
   it('drops a resolution that arrives after unmount instead of updating unmounted state', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
-    let resolveComplete: (outcome: AuthIntentResult) => void = () => {};
-    mockComplete.mockImplementation(() => new Promise((resolve) => (resolveComplete = resolve)));
+    const release = holdExchange();
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const { unmount } = render(<AuthCallbackScreen />);
+    await waitFor(() => expect(exchangeCodeForSession).toHaveBeenCalled());
     unmount();
-    resolveComplete({ kind: 'failure', cause: 'gotrue_rejected' });
+    release(rejectedBy('flow_state_expired', BAD_REQUEST));
     await Promise.resolve();
     await Promise.resolve();
 
@@ -174,14 +204,6 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
 });
 
 describe('AuthCallbackScreen: what a caller can hand the page beyond the happy path (#2924 probe)', () => {
-  const actual = jest.requireActual<{
-    completeAuthIntent: typeof completeAuthIntent;
-    _resetConsumedCredentialForTest: () => void;
-  }>('@features/auth/domain/completeAuthIntent');
-  const auth = (
-    require('@shared/auth/supabaseClient') as { supabase: { auth: Record<string, unknown> } }
-  ).supabase.auth;
-
   function openPage(url: string): jest.Mock {
     const parsed = new URL(url);
     const replaceState = jest.fn();
@@ -206,31 +228,13 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
     return replaceState.mock.calls.map((call) => String(call[2])).join(' ');
   }
 
-  beforeEach(() => {
-    actual._resetConsumedCredentialForTest();
-    mockComplete.mockImplementation(actual.completeAuthIntent);
-    auth.exchangeCodeForSession = jest
-      .fn()
-      .mockResolvedValue({ data: { session: {}, user: { id: 'user-1' } }, error: null });
-    auth.verifyOtp = jest
-      .fn()
-      .mockResolvedValue({ data: { session: {}, user: { id: 'user-1' } }, error: null });
-    auth.getSession = jest.fn().mockResolvedValue({ data: { session: null }, error: null });
-  });
-
-  afterEach(() => {
-    Reflect.deleteProperty(auth, 'getSession');
-    Reflect.deleteProperty(auth, 'exchangeCodeForSession');
-    Reflect.deleteProperty(auth, 'verifyOtp');
-  });
-
   it('strips the OAuth code from the address bar before landing on the library', async () => {
     const replaceState = openPage('https://app.altune.example/auth/callback?code=code-secret-1');
 
     render(<AuthCallbackScreen />);
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
-    expect(auth.exchangeCodeForSession).toHaveBeenCalledWith('code-secret-1');
+    expect(exchangeCodeForSession).toHaveBeenCalledWith('code-secret-1');
     expect(replaceState).toHaveBeenCalled();
     expect(addressBarWrites(replaceState)).not.toContain('code-secret-1');
     expect(replaceState.mock.invocationCallOrder[0]).toBeLessThan(
@@ -254,15 +258,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
   it('strips the code from the address bar even when the exchange is rejected', async () => {
     const replaceState = openPage('https://app.altune.example/auth/callback?code=code-secret-3');
-    auth.exchangeCodeForSession = jest.fn().mockResolvedValue({
-      data: { session: null, user: null },
-      error: {
-        name: 'AuthApiError',
-        message: 'invalid flow state',
-        status: 400,
-        code: 'flow_state_expired',
-      },
-    });
+    exchangeCodeForSession.mockResolvedValue(rejectedBy('flow_state_expired', BAD_REQUEST));
 
     render(<AuthCallbackScreen />);
 
@@ -303,8 +299,8 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
     expect(screen.getByTestId('auth-callback-signin')).toBeTruthy();
-    expect(auth.verifyOtp).not.toHaveBeenCalled();
-    expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
@@ -335,8 +331,8 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
       await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
       expect(screen.getByTestId('auth-callback-signin')).toBeTruthy();
-      expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
-      expect(auth.verifyOtp).not.toHaveBeenCalled();
+      expect(exchangeCodeForSession).not.toHaveBeenCalled();
+      expect(verifyOtp).not.toHaveBeenCalled();
       expect(mockRouter.replace).not.toHaveBeenCalled();
     },
   );
@@ -363,7 +359,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
     );
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
-    expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
   });
 
@@ -375,7 +371,7 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
     rerender(<AuthCallbackScreen />);
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
-    expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -390,7 +386,7 @@ describe('AuthCallbackScreen: web failures are reported with their cause', () =>
 
   it('warns with the cause of a refused exchange, without the url or code', async () => {
     setWebUrl(url);
-    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'gotrue_rejected' });
+    exchangeCodeForSession.mockResolvedValue(rejectedBy('flow_state_expired', BAD_REQUEST));
 
     render(<AuthCallbackScreen />);
 
@@ -403,10 +399,15 @@ describe('AuthCallbackScreen: web failures are reported with their cause', () =>
   });
 
   it('warns and shows connection copy when the exchange times out', async () => {
+    jest.useFakeTimers();
     setWebUrl(url);
-    mockComplete.mockRejectedValue(new NetworkError('timeout', 'auth deadline'));
+    holdExchange();
 
     render(<AuthCallbackScreen />);
+    await act(async () => {
+      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
+    });
+    jest.useRealTimers();
 
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
     expect(warnSpy).toHaveBeenCalledTimes(1);

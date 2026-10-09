@@ -1,20 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 const mockRouter = { replace: jest.fn() };
 
-jest.mock('expo-router', () => {
-  const { View } = require('react-native');
-  return {
-    useRouter: () => mockRouter,
-    Link: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
-      <View testID={testID}>{children}</View>
-    ),
-  };
-});
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
   return {
@@ -26,9 +18,18 @@ jest.mock('expo-router', () => {
   };
 });
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
-const mockComplete = completeAuthIntent as jest.Mock;
+const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
+  'exchangeCodeForSession',
+  'verifyOtp',
+  'getSession',
+);
+
+function expectNothingSpent(): void {
+  expect(exchangeCodeForSession).not.toHaveBeenCalled();
+  expect(verifyOtp).not.toHaveBeenCalled();
+  expect(getSession).not.toHaveBeenCalled();
+}
 
 function setWebUrl(url: string): { replaceState: jest.Mock } {
   const parsed = new URL(url);
@@ -44,7 +45,6 @@ function setWebUrl(url: string): { replaceState: jest.Mock } {
 
 beforeEach(() => {
   mockRouter.replace.mockReset();
-  mockComplete.mockReset();
 });
 
 afterEach(() => {
@@ -61,7 +61,7 @@ describe('AuthCallbackScreen: native redirects home without a page URL (#2924)',
 
     await waitFor(() => expect(screen.getByTestId('redirect-/')).toBeTruthy());
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
-    expect(mockComplete).not.toHaveBeenCalled();
+    expectNothingSpent();
   });
 
   it('never reads window.location as the page URL off the web platform, redirecting home instead even if a window exists', async () => {
@@ -72,20 +72,20 @@ describe('AuthCallbackScreen: native redirects home without a page URL (#2924)',
 
     await waitFor(() => expect(screen.getByTestId('redirect-/')).toBeTruthy());
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
-    expect(mockComplete).not.toHaveBeenCalled();
+    expectNothingSpent();
     expect(replaceState).not.toHaveBeenCalled();
   });
 });
 
 describe('AuthCallbackScreen: native never attempts the exchange (#2991)', () => {
-  it('does not call completeAuthIntent on native, unlike on web', async () => {
+  it('does not spend the code with Supabase on native, unlike on web', async () => {
     setWebUrl('https://app.altune.example/auth/callback?code=abc123');
     Platform.OS = 'ios';
-    mockComplete.mockResolvedValue({ kind: 'success' });
+    exchangeCodeForSession.mockResolvedValue({ data: { session: {} }, error: null });
 
     render(<AuthCallbackScreen />);
     await Promise.resolve();
 
-    expect(mockComplete).not.toHaveBeenCalled();
+    expectNothingSpent();
   });
 });

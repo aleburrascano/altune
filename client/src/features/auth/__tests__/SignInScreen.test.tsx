@@ -1,9 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { useOAuth } from '@features/auth/hooks/useOAuth';
-import { useSignIn } from '@features/auth/hooks/useSignIn';
 import { SignInScreen } from '@features/auth/ui/SignInScreen';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
@@ -15,21 +18,32 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@features/auth/hooks/useSignIn', () => ({ useSignIn: jest.fn() }));
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
 
-const signIn = jest.fn();
+const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  (useSignIn as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signIn });
   (useOAuth as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signInWith: jest.fn() });
+  __http.reply('POST /v1/public/auth-failures', { status: 204 });
 });
 
-function renderSignIn(state: unknown = { kind: 'idle' }): void {
-  (useSignIn as jest.Mock).mockReturnValue({ state, signIn });
+function renderSignIn(): void {
   render(<SignInScreen />);
+}
+
+function rejectedWith(code: string) {
+  return {
+    data: { user: null, session: null },
+    error: { name: 'AuthApiError', status: 400, code, message: 'rejected' },
+  };
+}
+
+function submitAs(email: string, password: string): void {
+  type('email-input', email);
+  type('password-input', password);
+  fireEvent.press(screen.getByTestId('submit-button'));
 }
 
 function type(testID: string, text: string): void {
@@ -89,26 +103,39 @@ describe('the sign-in screen', () => {
     expect(submitIsEnabled()).toBe(false);
   });
 
-  it('submits the email without the whitespace around it', () => {
+  it('submits the email without the whitespace around it', async () => {
+    signInWithPassword.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
     renderSignIn();
 
-    type('email-input', '  ada@altune.app  ');
-    type('password-input', 'hunter2!');
-    fireEvent.press(screen.getByTestId('submit-button'));
+    submitAs('  ada@altune.app  ', 'hunter2!');
 
-    expect(signIn).toHaveBeenCalledWith('ada@altune.app', 'hunter2!');
+    await waitFor(() =>
+      expect(signInWithPassword).toHaveBeenCalledWith({
+        email: 'ada@altune.app',
+        password: 'hunter2!',
+      }),
+    );
+    expect(signInWithPassword).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the sign-in copy in the shared banner when the attempt failed', () => {
-    renderSignIn({ kind: 'error', reason: 'invalid_credentials' });
+  it('shows the sign-in copy in the shared banner when the attempt failed', async () => {
+    signInWithPassword.mockResolvedValue(rejectedWith('invalid_credentials'));
+    renderSignIn();
 
-    expect(screen.getByTestId('auth-error')).toHaveTextContent('Email or password is incorrect.');
+    submitAs('ada@altune.app', 'hunter2!');
+
+    expect(await screen.findByTestId('auth-error')).toHaveTextContent(
+      'Email or password is incorrect.',
+    );
   });
 
-  it('blames nothing in particular when the failure has no known reason', () => {
-    renderSignIn({ kind: 'error', reason: 'unknown' });
+  it('blames nothing in particular when the failure has no known reason', async () => {
+    signInWithPassword.mockResolvedValue(rejectedWith('some_future_code'));
+    renderSignIn();
 
-    expect(screen.getByTestId('auth-error')).toHaveTextContent(
+    submitAs('ada@altune.app', 'hunter2!');
+
+    expect(await screen.findByTestId('auth-error')).toHaveTextContent(
       "Couldn't sign you in. Please try again.",
     );
   });

@@ -1,52 +1,68 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-
-import { showAlert } from '@shared/ui/dialog/dialog';
+import { Alert } from 'react-native';
 
 import { SetNewPasswordScreen } from '@features/auth/ui/SetNewPasswordScreen';
 
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+
 const mockReplace = jest.fn();
-const mockUpdatePassword = jest.fn();
-let mockState: unknown = { kind: 'idle' };
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
-jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
-jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
-jest.mock('@features/auth/domain/passwordRecovery', () => ({ clearRecoveryUnlock: jest.fn() }));
-jest.mock('@features/auth/hooks/useUpdatePassword', () => ({
-  useUpdatePassword: () => ({ state: mockState, updatePassword: mockUpdatePassword }),
+jest.mock('@shared/telemetry/userTelemetry', () => ({
+  recordFailureShown: jest.fn(),
+  recordUserAction: jest.fn(),
 }));
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
+
+const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
+
+let alertSpy: jest.SpyInstance;
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  mockState = { kind: 'idle' };
+  mockReplace.mockReset();
+  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+  signOut.mockResolvedValue({ error: null });
 });
+
+function submitNewPassword(): void {
+  fireEvent.changeText(screen.getByTestId('password-input'), 'Hunter2!pass');
+  fireEvent.changeText(screen.getByTestId('confirm-input'), 'Hunter2!pass');
+  fireEvent.press(screen.getByTestId('submit-button'));
+}
 
 describe('SetNewPasswordScreen', () => {
   it('warns that other devices may still be signed in, then routes to the library', async () => {
-    mockState = { kind: 'ok', othersRevoked: false };
-
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    signOut.mockResolvedValue({ error: { name: 'AuthApiError', status: 500, message: 'down' } });
     render(<SetNewPasswordScreen />);
 
+    submitNewPassword();
+
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/library'));
-    expect(showAlert).toHaveBeenCalledWith(
+    expect(alertSpy).toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining('may still be signed in'),
     );
   });
 
   it('routes without a warning when the other sessions were revoked', async () => {
-    mockState = { kind: 'ok', othersRevoked: true };
-
     render(<SetNewPasswordScreen />);
+
+    submitNewPassword();
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/library'));
-    expect(showAlert).not.toHaveBeenCalled();
+    expect(updateUser).toHaveBeenCalledWith({ password: 'Hunter2!pass' });
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 
-  it('does not route before the update finishes', () => {
+  it('does not route before the update finishes', async () => {
+    updateUser.mockReturnValue(new Promise(() => undefined));
     render(<SetNewPasswordScreen />);
-    fireEvent.press(screen.getByTestId('submit-button'));
 
+    submitNewPassword();
+
+    await waitFor(() => expect(updateUser).toHaveBeenCalledTimes(1));
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });
