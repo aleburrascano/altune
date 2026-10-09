@@ -1,8 +1,8 @@
 package domain
 
-import "altune/go-api/internal/shared"
+import shareddomain "altune/go-api/internal/shared/domain"
 
-type ValidationError = shared.ValidationError
+type ValidationError = shareddomain.ValidationError
 
 const (
 	codePositionMsNegative    = "playback.position_ms_negative"
@@ -27,7 +27,7 @@ func (e *QueueValidationError) HTTPStatus() int   { return e.cause.HTTPStatus() 
 func (e *QueueValidationError) ErrorCode() string { return e.code }
 
 func newValidationError(code, msg string) *QueueValidationError {
-	return &QueueValidationError{code: code, cause: shared.NewValidationError("playback", msg)}
+	return &QueueValidationError{code: code, cause: shareddomain.NewValidationError("playback", msg)}
 }
 
 type StaleWriteError struct {

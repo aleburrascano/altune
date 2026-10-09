@@ -23,7 +23,7 @@ func Recover(name string, fn func()) (recovered any) {
 	defer func() {
 		if r := recover(); r != nil {
 			recovered = r
-			slog.Error("background job panicked; recovered",
+			slog.ErrorContext(context.Background(), "background job panicked; recovered",
 				"job", name, "panic", r, "stack", string(debug.Stack()))
 		}
 	}()
@@ -44,11 +44,11 @@ func RunJob(parent context.Context, control *JobControl, name string, budget tim
 	}
 	overBudget := err != nil && errors.Is(context.Cause(jobCtx), ErrRunBudgetExceeded)
 	if overBudget {
-		slog.Warn("background job run exceeded its budget; canceled",
+		slog.WarnContext(jobCtx, "background job run exceeded its budget; canceled",
 			"job", name, "budget", budget.String(), "error", err)
 	}
 	if err != nil && !overBudget && parent.Err() != nil {
-		slog.Info("background job run interrupted; not counted as a failure",
+		slog.InfoContext(parent, "background job run interrupted; not counted as a failure",
 			"job", name, "cause", context.Cause(parent))
 		return
 	}

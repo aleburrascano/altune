@@ -1,6 +1,6 @@
 package domain
 
-import "altune/go-api/internal/shared"
+import shareddomain "altune/go-api/internal/shared/domain"
 
 type CodedError struct {
 	Msg    string
@@ -23,8 +23,8 @@ var (
 	ErrInvalidDeezerID           = &CodedError{Msg: "deezer_id must be a positive integer", Status: 400, Code: "catalog.invalid_deezer_id"}
 )
 
-type ValidationError = shared.ValidationError
+type ValidationError = shareddomain.ValidationError
 
 func NewValidationError(msg string) *ValidationError {
-	return shared.NewValidationError("catalog", msg)
+	return shareddomain.NewValidationError("catalog", msg)
 }

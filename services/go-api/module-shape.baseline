@@ -52,7 +52,6 @@ G3 internal/playback/adapters/handler/queue_handler.go:4 imports auth outside ad
 G3 internal/playback/adapters/handler/queue_rate_limit.go:4 imports auth outside adapters/authbridge
 G4 internal/playback/adapters/handler/queue_rate_limit.go queueRateLimitedError coded error declared outside domain
 G4 internal/playback/ports/queue_state_repo.go UnavailableError coded error declared outside domain
-G4 internal/shared/validation_error.go ValidationError coded error declared outside domain
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
 G6 internal/discovery/adapters/handler/discovery_handler_test.go fakeAlbumContentProvider declared in several test files
 G6 internal/discovery/adapters/handler/discovery_handler_test.go fakeArtistContentProvider declared in several test files
@@ -99,17 +98,6 @@ G7 internal/discovery/service/vocabulary_refresh.go:trim slog.Warn without conte
 G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:allow slog.Warn without context
 G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:recordFailure slog.Warn without context
 G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:recordSuccess slog.Info without context
-G7 internal/shared/events/bus.go:recordDropForFullSubscriber slog.Warn without context
-G7 internal/shared/events/bus.go:warnIfEventsWereEvictedBeforeResume slog.Warn without context
-G7 internal/shared/events/idfloor.go:persistOrWarn slog.Warn without context
-G7 internal/shared/events/idfloor.go:readCeiling slog.Warn without context
-G7 internal/shared/events/idfloor.go:trustedCeiling slog.Warn without context
-G7 internal/shared/httputil/errors.go:WriteJSON slog.Error without context
-G7 internal/shared/redis/redis.go:NewClient slog.Info without context
-G7 internal/shared/redis/redis.go:NewClient slog.Warn without context
-G7 internal/shared/runloop/ticker.go:Recover slog.Error without context
-G7 internal/shared/runloop/ticker.go:RunJob slog.Info without context
-G7 internal/shared/runloop/ticker.go:RunJob slog.Warn without context
 N1 deploy/lib.sh banned name lib
 N1 internal/discovery/adapters/cache/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers

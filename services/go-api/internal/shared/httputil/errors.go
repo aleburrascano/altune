@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -111,7 +112,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Error("response.write_failed", "status", status, "error", err)
+		slog.ErrorContext(context.Background(), "response.write_failed", "status", status, "error", err)
 	}
 }
 

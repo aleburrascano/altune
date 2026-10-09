@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"altune/go-api/internal/shared"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"errors"
 	"strings"
 	"testing"
@@ -56,7 +56,7 @@ func TestValidateSourceURL_RejectsNonPublicHosts(t *testing.T) {
 	for _, raw := range internal {
 		t.Run(raw, func(t *testing.T) {
 			err := ValidateSourceURL(raw)
-			var verr *shared.ValidationError
+			var verr *shareddomain.ValidationError
 			if !errors.As(err, &verr) {
 				t.Fatalf("ValidateSourceURL(%q) = %v, want a validation error", raw, err)
 			}
@@ -74,7 +74,7 @@ func TestValidateSourceURL_RejectsSmuggledHosts(t *testing.T) {
 		"http://127.0.0.1%09.example.com/",
 	} {
 		t.Run(raw, func(t *testing.T) {
-			var verr *shared.ValidationError
+			var verr *shareddomain.ValidationError
 			if err := ValidateSourceURL(raw); !errors.As(err, &verr) {
 				t.Fatalf("ValidateSourceURL(%q) = %v, want a validation error", raw, err)
 			}
