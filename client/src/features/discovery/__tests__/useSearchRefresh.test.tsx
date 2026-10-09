@@ -2,15 +2,36 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import { supabase } from '@shared/auth/supabaseClient';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { useRefreshFromFirstPage } from '@features/discovery/hooks/useSearchRefresh';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-jest.mock('@shared/api-client/discovery', () => ({ searchDiscovery: jest.fn() }));
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
+}));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
-const mockSearch = searchDiscovery as jest.Mock;
+const SEARCH = 'GET /v1/discovery/search';
+
+type SentRequest = { path: string; query: string };
+
+const SECOND_PAGE_OFFSET = 3;
+const TWO_PAGES_AND_A_RESTART = 3;
+const RESTART_AND_ITS_RETRY = 4;
+
+function searchRequests(): SentRequest[] {
+  return (__http.requests as SentRequest[]).filter(
+    (request) => request.path === '/v1/discovery/search',
+  );
+}
+
+function servePages(...pages: DiscoverySearchResponse[]): void {
+  for (const page of pages) __http.replyOnce(SEARCH, { json: page });
+}
 let queryClient: QueryClient;
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -35,17 +56,25 @@ function pageOf(offset: number, searchId: string, titles: string[]): DiscoverySe
 
 beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockSearch.mockReset();
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
 });
 
-afterEach(() => queryClient.clear());
+afterEach(() => {
+  queryClient.clear();
+  jest.restoreAllMocks();
+});
 
 describe('held-slate expiry', () => {
   it('restarts from page 1 instead of stitching a fresh ranking onto old pages', async () => {
-    mockSearch
-      .mockResolvedValueOnce(pageOf(0, 'search-1', ['A1', 'A2', 'A3']))
-      .mockResolvedValueOnce(pageOf(3, 'search-2', ['B1', 'B2', 'B3']))
-      .mockResolvedValueOnce(pageOf(0, 'search-3', ['C1', 'C2', 'C3']));
+    servePages(
+      pageOf(0, 'search-1', ['A1', 'A2', 'A3']),
+      pageOf(SECOND_PAGE_OFFSET, 'search-2', ['B1', 'B2', 'B3']),
+      pageOf(0, 'search-3', ['C1', 'C2', 'C3']),
+    );
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
@@ -53,7 +82,7 @@ describe('held-slate expiry', () => {
       await result.current.fetchNextPage();
     });
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(searchRequests()).toHaveLength(TWO_PAGES_AND_A_RESTART));
     await waitFor(() =>
       expect(result.current.data?.results.map((r) => r.title)).toEqual(['C1', 'C2', 'C3']),
     );
@@ -61,16 +90,19 @@ describe('held-slate expiry', () => {
     const titles = result.current.data?.results.map((r) => r.title) ?? [];
     expect(new Set(titles).size).toBe(titles.length);
     expect(titles).not.toEqual(expect.arrayContaining(['A1', 'B1']));
-    expect(mockSearch.mock.calls[2]?.[0]).not.toHaveProperty('searchId');
+    expect(new URLSearchParams(searchRequests()[1]?.query).get('search_id')).toBe('search-1');
+    expect(new URLSearchParams(searchRequests()[2]?.query).has('search_id')).toBe(false);
+    expect(new URLSearchParams(searchRequests()[2]?.query).has('offset')).toBe(false);
   });
 });
 
 describe('held-slate expiry when the restart fails', () => {
   it('restarts once and keeps showing only the pages from the original search', async () => {
-    mockSearch
-      .mockResolvedValueOnce(pageOf(0, 'search-1', ['A1', 'A2', 'A3']))
-      .mockResolvedValueOnce(pageOf(3, 'search-2', ['B1', 'B2', 'B3']))
-      .mockRejectedValue(new Error('search unavailable'));
+    servePages(
+      pageOf(0, 'search-1', ['A1', 'A2', 'A3']),
+      pageOf(SECOND_PAGE_OFFSET, 'search-2', ['B1', 'B2', 'B3']),
+    );
+    __http.reply(SEARCH, { status: 503, json: { detail: 'search unavailable' } });
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
@@ -82,7 +114,7 @@ describe('held-slate expiry when the restart fails', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
     });
 
-    expect(mockSearch).toHaveBeenCalledTimes(4);
+    expect(searchRequests()).toHaveLength(RESTART_AND_ITS_RETRY);
     expect(result.current.data?.results.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']);
   });
 });

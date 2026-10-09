@@ -2,8 +2,9 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
 import { NetworkError } from '@shared/api-client';
+import { supabase } from '@shared/auth/supabaseClient';
+import { CORRELATION_HEADER } from '@shared/api-client/correlationId';
 import { transientRetryOptions } from '@shared/query/retryDelay';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { MIN_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
@@ -13,17 +14,35 @@ import {
   useSuggestionVisibility,
 } from '@features/discovery/hooks/useSuggestions';
 
-jest.mock('@shared/api-client/discovery', () => ({
-  searchDiscovery: jest.fn(),
-  suggestDiscovery: jest.fn(),
-  listSearchHistory: jest.fn(),
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
-const mockSearch = searchDiscovery as jest.Mock;
-const mockSuggest = suggestDiscovery as jest.Mock;
-const mockHistory = listSearchHistory as jest.Mock;
 const mockRecordEvent = recordEvent as jest.Mock;
+
+const SUGGEST = 'GET /v1/discovery/suggest';
+
+type SentRequest = {
+  path: string;
+  query: string;
+  headers: Record<string, string>;
+  signal?: AbortSignal;
+};
+
+function suggestRequests(): SentRequest[] {
+  return (__http.requests as SentRequest[]).filter(
+    (request) => request.path === '/v1/discovery/suggest',
+  );
+}
+
+function serveSuggestions(texts: string[]): void {
+  __http.reply(SUGGEST, {
+    json: { suggestions: texts.map((text) => ({ text, kind: 'query', popularity: 0 })) },
+  });
+}
 
 let queryClient: QueryClient;
 
@@ -55,8 +74,8 @@ function settle(): void {
   });
 }
 
-function signalOfCall(index: number): AbortSignal | undefined {
-  return mockSuggest.mock.calls[index]?.[1] as AbortSignal | undefined;
+function signalOfRequest(index: number): AbortSignal | undefined {
+  return suggestRequests()[index]?.signal;
 }
 
 beforeEach(() => {
@@ -64,24 +83,32 @@ beforeEach(() => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  mockSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
+  serveSuggestions(['radiohead']);
 });
 
 afterEach(() => {
   queryClient.clear();
   jest.runOnlyPendingTimers();
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('useAutocompleteSuggestions asks for suggestions once the typing settles', () => {
-  it('sends one request for a burst of keystrokes typed inside the debounce window', () => {
+  it('sends one request for a burst of keystrokes typed inside the debounce window', async () => {
     const rendered = renderSuggestions();
 
     typeBurst(rendered, 'radiohead');
     settle();
 
-    expect(mockSuggest).toHaveBeenCalledTimes(1);
-    expect(mockSuggest).toHaveBeenCalledWith({ q: 'radiohead', limit: 5 }, expect.anything());
+    await waitFor(() =>
+      expect(rendered.result.current.data?.suggestions.map((s) => s.text)).toEqual(['radiohead']),
+    );
+    expect(suggestRequests().map((request) => request.query)).toEqual(['q=radiohead&limit=5']);
   });
 
   it('holds the request back until the typing has paused for the debounce window', () => {
@@ -89,23 +116,30 @@ describe('useAutocompleteSuggestions asks for suggestions once the typing settle
 
     typeBurst(rendered, 'rad');
 
-    expect(mockSuggest).not.toHaveBeenCalled();
+    expect(suggestRequests()).toHaveLength(0);
+    expect(rendered.result.current.data).toBeUndefined();
   });
 });
 
 describe('useAutocompleteSuggestions cancels a suggest request its successor supersedes', () => {
-  it('aborts the in-flight request when a later query starts', () => {
-    mockSuggest.mockImplementation(() => new Promise(() => {}));
+  it('aborts the in-flight request when a later query starts', async () => {
+    __http.reset();
+    __http.hang(SUGGEST);
     const rendered = renderSuggestions();
 
     typeBurst(rendered, 'rad');
     settle();
+    await waitFor(() => expect(suggestRequests()).toHaveLength(1));
     typeBurst(rendered, 'radiohead');
     settle();
+    await waitFor(() => expect(suggestRequests()).toHaveLength(['rad', 'radiohead'].length));
 
-    expect(mockSuggest).toHaveBeenCalledTimes(2);
-    expect(signalOfCall(0)?.aborted).toBe(true);
-    expect(signalOfCall(1)?.aborted).toBe(false);
+    expect(suggestRequests().map((request) => request.query)).toEqual([
+      'q=rad&limit=5',
+      'q=radiohead&limit=5',
+    ]);
+    expect(signalOfRequest(0)?.aborted).toBe(true);
+    expect(signalOfRequest(1)?.aborted).toBe(false);
   });
 });
 
@@ -124,9 +158,7 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
-    mockSearch.mockReset();
-    mockSuggest.mockReset();
-    mockHistory.mockReset();
+    __http.reset();
     mockRecordEvent.mockReset().mockResolvedValue(undefined);
   });
 
@@ -139,13 +171,17 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
   });
 
   it('a failed suggest fires search_failed with source suggest, omitting status for non-HTTP errors', async () => {
-    mockSuggest.mockRejectedValue(new TypeError('Network request failed'));
+    __http.fail(SUGGEST);
     const { result } = renderHook(() => useAutocompleteSuggestions('rad'), { wrapper });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
 
-    expect(failureEvents()[0]).toEqual({ type: 'search_failed', payload: { source: 'suggest' } });
+    const [sent] = suggestRequests();
+    expect(failureEvents()[0]).toEqual({
+      type: 'search_failed',
+      payload: { source: 'suggest', correlationId: sent?.headers[CORRELATION_HEADER] },
+    });
   });
 });
 
@@ -157,7 +193,8 @@ describe('useAutocompleteSuggestions does not retry a failed suggest request', (
   });
 
   it('makes one attempt when the request fails with a NetworkError', async () => {
-    mockSuggest.mockRejectedValue(new NetworkError('timeout', 'API /discovery/suggest timed out'));
+    __http.reset();
+    __http.fail(SUGGEST);
     const rendered = renderSuggestions();
 
     typeBurst(rendered, 'rad');
@@ -167,7 +204,7 @@ describe('useAutocompleteSuggestions does not retry a failed suggest request', (
     });
 
     expect(rendered.result.current.error).toBeInstanceOf(NetworkError);
-    expect(mockSuggest).toHaveBeenCalledTimes(1);
+    expect(suggestRequests()).toHaveLength(1);
   });
 });
 
