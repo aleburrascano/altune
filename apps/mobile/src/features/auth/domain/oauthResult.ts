@@ -1,4 +1,4 @@
-import { isNetworkError } from '@shared/lib/isNetworkError';
+import { isNetworkError } from '@shared/failure/isNetworkError';
 
 import type { TransientAuthReason } from '@features/auth/domain/errorReason';
 import {

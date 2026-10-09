@@ -1,4 +1,4 @@
-import type { CreateTrackRequest } from '@shared/api-client/types';
+import type { CreateTrackRequest } from '@shared/api-client/trackResponse';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import {

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { TrackResponse } from '@shared/api-client/types';
-import { libraryKeys } from '@shared/lib/query-keys';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';

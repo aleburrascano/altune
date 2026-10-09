@@ -1,5 +1,5 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import { ownedFromExtras, type OwnedTrack } from '@/features/detail/domain/ownedTrack';

@@ -1,7 +1,7 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 import { useDebouncedSearch } from '@features/discover/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discover/hooks/useDiscoverSearch';
 import { isSearchableQuery } from '@features/discover/domain/searchLimits';

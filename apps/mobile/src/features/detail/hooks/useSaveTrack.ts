@@ -9,7 +9,7 @@ import {
   toTrackStatus,
   type TrackStatus,
 } from '@shared/api-client/trackAcquisition';
-import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
+import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/trackResponse';
 import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
 import {
   adoptResponseStatus,

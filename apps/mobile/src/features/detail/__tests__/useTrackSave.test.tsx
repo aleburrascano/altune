@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { ApiError } from '@shared/errors';
 

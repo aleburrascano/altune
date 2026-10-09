@@ -6,7 +6,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { ArtistDetailBody } from '../ui/ArtistDetailBody';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
-import { readDetailHandoff } from '@shared/lib/detail-handoff';
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import { createTestQueryClient, createWrapper } from './support/queryHarness';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 

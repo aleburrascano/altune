@@ -1,5 +1,5 @@
 import type { TrackId } from '@shared/api-client/ids';
-import type { AcquisitionStatus } from '@shared/api-client/types';
+import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
 
 import type { TrackExtras } from '@/features/detail/domain/extras-accessors';
 

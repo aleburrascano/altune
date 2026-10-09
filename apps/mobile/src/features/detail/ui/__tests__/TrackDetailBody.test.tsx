@@ -14,7 +14,7 @@ import {
 import { optimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/save-cache';
 import type { LateralNavHandle } from '@/features/detail/hooks/useTrackDetailActions';
 import { TrackDetailBody } from '@/features/detail/ui/TrackDetailBody';
-import { readDetailHandoff } from '@shared/lib/detail-handoff';
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import {
   createTestQueryClient,
   createWrapper,
@@ -362,7 +362,7 @@ describe('TrackDetailBody pins its router calls', () => {
     expect(push).toHaveBeenCalledTimes(1);
     const [href] = push.mock.calls[0]!;
     expect(href.pathname).toBe('/discover/detail');
-    const { readDetailHandoff } = jest.requireActual('@shared/lib/detail-handoff');
+    const { readDetailHandoff } = jest.requireActual('@shared/navigation/detailHandoff');
     expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Related One');
     expect(resultCarriedBy(href.params.handoff)).toBe('Related One');
   });

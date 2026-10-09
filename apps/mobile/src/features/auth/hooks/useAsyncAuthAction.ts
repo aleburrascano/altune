@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-import { isNetworkError } from '@shared/lib/isNetworkError';
+import { isNetworkError } from '@shared/failure/isNetworkError';
 
 import { withAuthDeadline } from '@features/auth/domain/authDeadline';
 import { thrownErrorDetail } from '@features/auth/domain/errorDetail';

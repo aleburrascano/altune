@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-import type { DetailHandoff } from '@shared/lib/detail-handoff';
+import type { DetailHandoff } from '@shared/navigation/detailHandoff';
 
 const DetailHandoffContext = createContext<DetailHandoff | null>(null);
 

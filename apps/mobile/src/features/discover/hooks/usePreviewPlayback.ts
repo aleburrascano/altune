@@ -1,7 +1,7 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { getPreviewUrl } from '@shared/playback/previewUrl';
-import type { PlaybackState } from '@shared/playback/types';
+import type { PlaybackState } from '@shared/playback/playbackContextValue';
 import { tapFeedback } from '@shared/ui/haptics';
 
 type PreviewPlayback =

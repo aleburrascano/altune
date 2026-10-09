@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { radius } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { FeaturedArtist } from '@shared/api-client/types';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
 import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';

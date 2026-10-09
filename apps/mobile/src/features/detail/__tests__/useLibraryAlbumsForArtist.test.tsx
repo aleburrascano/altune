@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import { useLibraryAlbumsForArtist } from '../hooks/useLibraryAlbumsForArtist';
 import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';

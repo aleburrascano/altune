@@ -1,5 +1,5 @@
 import { asTrackId } from '@shared/api-client/ids';
-import type { AcquisitionStatus } from '@shared/api-client/types';
+import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { canPlay } from '@shared/playback/canPlay';
 

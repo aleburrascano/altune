@@ -1,5 +1,6 @@
 import { asTrackId } from '@shared/api-client/ids';
-import type { PlaybackContextValue, PlaybackSource, PlaybackStatus } from '@shared/playback/types';
+import type { PlaybackContextValue, PlaybackStatus } from '@shared/playback/playbackContextValue';
+import type { PlaybackSource } from '@shared/playback/playbackTrack';
 
 import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';

@@ -4,7 +4,7 @@ import { Keyboard, Platform } from 'react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import type { DiscoverLogic } from '@features/discover/hooks/useDiscoverLogic';
 import { DiscoverScreen } from '@features/discover/ui/DiscoverScreen';

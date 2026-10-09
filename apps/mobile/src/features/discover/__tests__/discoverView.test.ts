@@ -10,7 +10,7 @@ import {
 import { resultFixture } from '@features/discover/__tests__/fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
-import type { AsyncView } from '@shared/lib/async-view';
+import type { AsyncView } from '@shared/ui/asyncView';
 
 function responseFixture(results: DiscoveryResult[], partial = false): DiscoverySearchResponse {
   return {

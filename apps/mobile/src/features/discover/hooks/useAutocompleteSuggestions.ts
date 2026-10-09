@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from '@features/discover/hooks/useDiscoverFetchGate';
 import { isSearchableQuery } from '@features/discover/domain/searchLimits';

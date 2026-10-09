@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 
-import type { CreateTrackRequest } from '@shared/api-client/types';
+import type { CreateTrackRequest } from '@shared/api-client/trackResponse';
 import type { TrackId } from '@shared/api-client/ids';
 import { supabase } from '@shared/auth/supabaseClient';
 import {

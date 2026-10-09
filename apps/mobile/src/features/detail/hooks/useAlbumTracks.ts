@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
-import { detailKeys } from '@shared/lib/query-keys';
+import { detailKeys } from '@shared/query/queryKeys';
 
 import {
   contentFailure,

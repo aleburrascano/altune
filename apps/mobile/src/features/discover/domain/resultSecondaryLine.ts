@@ -1,4 +1,4 @@
-import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/api-client/featuredArtists';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { kindLabel } from '@features/discover/domain/kindLabel';

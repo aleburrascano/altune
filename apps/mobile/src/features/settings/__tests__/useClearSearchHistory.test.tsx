@@ -8,7 +8,7 @@ import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys, libraryKeys } from '@shared/query/queryKeys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '@testing/makeWrapper';

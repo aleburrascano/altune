@@ -6,7 +6,7 @@ import { spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { formatDuration } from '@shared/lib/format';
+import { formatDuration } from '@shared/ui/displayFormat';
 
 import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';

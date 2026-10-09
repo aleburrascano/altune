@@ -1,4 +1,4 @@
-import { formatDuration } from '@shared/lib/format';
+import { formatDuration } from '@shared/ui/displayFormat';
 
 import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
 

@@ -7,7 +7,7 @@ import { backfillFeaturedArtists, type BackfillFeaturedResult } from '@shared/ap
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { detailKeys, libraryKeys } from '@shared/lib/query-keys';
+import { detailKeys, libraryKeys } from '@shared/query/queryKeys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '@testing/makeWrapper';

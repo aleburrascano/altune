@@ -1,4 +1,4 @@
-import { detailHref, type DetailHref } from '@shared/lib/detail-handoff';
+import { detailHref, type DetailHref } from '@shared/navigation/detailHandoff';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 

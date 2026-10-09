@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react-native';
 import type { ImperativeRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { clearDetailHandoffs, readDetailHandoff } from '@shared/lib/detail-handoff';
+import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
 
 import {
   detailRouteFor,

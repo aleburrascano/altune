@@ -1,6 +1,6 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { FeaturedArtist } from '@shared/api-client/types';
-import { detailHref } from '@shared/lib/detail-handoff';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import { detailHref } from '@shared/navigation/detailHandoff';
 import type { Href, Navigator, TabRoot } from '@shared/navigation';
 
 export type DetailRoute = `/${TabRoot}/detail`;

@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useLateralNav } from '@/features/detail/hooks/useLateralNav';
-import { readDetailHandoff } from '@shared/lib/detail-handoff';
+import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import {
   createTestQueryClient,
   createWrapper,

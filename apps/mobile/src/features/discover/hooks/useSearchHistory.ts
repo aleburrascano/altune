@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discovery';
 
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,

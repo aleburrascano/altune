@@ -1,4 +1,4 @@
-import type { FeaturedArtist } from '@shared/api-client/types';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
 
 import {
   extractFeaturedFromText,
