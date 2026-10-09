@@ -2,13 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import {
-  clearSearchHistory,
-  listSearchHistory,
-  searchDiscovery,
-  suggestDiscovery,
-  type DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import { supabase } from '@shared/auth/supabaseClient';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { discoveryKeys } from '@shared/query/queryKeys';
@@ -22,11 +17,10 @@ import {
 } from '@features/discovery/hooks/useSearchHistory';
 import { setSearchState } from '@features/discovery/domain/searchState';
 
-jest.mock('@shared/api-client/discovery', () => ({
-  searchDiscovery: jest.fn(),
-  suggestDiscovery: jest.fn(),
-  listSearchHistory: jest.fn(),
-  clearSearchHistory: jest.fn(),
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 jest.mock('@shared/telemetry/useRecordEvent', () => ({
   useRecordEvent: () => ({ mutate: jest.fn() }),
@@ -36,13 +30,22 @@ jest.mock('expo-router', () => ({
   useFocusEffect: jest.fn(),
 }));
 
-const mockSearch = searchDiscovery as jest.Mock;
-const mockSuggest = suggestDiscovery as jest.Mock;
-const mockHistory = listSearchHistory as jest.Mock;
-const mockClearHistory = clearSearchHistory as jest.Mock;
+const SEARCH = 'GET /v1/discovery/search';
+const SUGGEST = 'GET /v1/discovery/suggest';
+const HISTORY_LIST = 'GET /v1/discovery/search-history';
+const HISTORY_CLEAR = 'DELETE /v1/discovery/search-history';
 
 const QUERY = 'radiohead';
-const HISTORY = { items: [{ query: QUERY, query_norm: QUERY }] };
+const HISTORY = {
+  items: [{ query: QUERY, query_norm: QUERY, executed_at: '2026-01-01T00:00:00Z' }],
+  total: 1,
+};
+
+const SEARCH_AND_ONE_REFETCH = 2;
+
+function sent(spec: string): number {
+  return __http.countFor(spec);
+}
 
 function searchResponseFixture(): DiscoverySearchResponse {
   return {
@@ -81,10 +84,14 @@ beforeEach(() => {
   });
   setKillSwitchFileStore(createMemoryFileStore());
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  mockSearch.mockReset().mockResolvedValue(searchResponseFixture());
-  mockSuggest.mockReset().mockResolvedValue({ suggestions: [] });
-  mockHistory.mockReset().mockResolvedValue(HISTORY);
-  mockClearHistory.mockReset().mockResolvedValue(undefined);
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
+  __http.reply(SEARCH, { json: searchResponseFixture() });
+  __http.reply(SUGGEST, { json: { suggestions: [] } });
+  __http.reply(HISTORY_LIST, { json: HISTORY });
+  __http.reply(HISTORY_CLEAR, { status: 204 });
   setSearchState('', QUERY);
 });
 
@@ -95,14 +102,22 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-const gatedHooks: { hook: string; useGatedHook: () => unknown; request: jest.Mock }[] = [
-  { hook: 'useDiscoverSearch', useGatedHook: () => useDiscoverSearch(QUERY), request: mockSearch },
+type GatedHookState = { data: unknown };
+
+type GatedHookCase = {
+  hook: string;
+  useGatedHook: () => GatedHookState;
+  request: string;
+};
+
+const gatedHooks: GatedHookCase[] = [
+  { hook: 'useDiscoverSearch', useGatedHook: () => useDiscoverSearch(QUERY), request: SEARCH },
   {
     hook: 'useAutocompleteSuggestions',
     useGatedHook: () => useAutocompleteSuggestions(QUERY),
-    request: mockSuggest,
+    request: SUGGEST,
   },
-  { hook: 'useSearchHistory', useGatedHook: () => useSearchHistory(), request: mockHistory },
+  { hook: 'useSearchHistory', useGatedHook: () => useSearchHistory(), request: HISTORY_LIST },
 ];
 
 type SearchHook = ReturnType<typeof useDiscoverSearch>;
@@ -123,10 +138,11 @@ describe('discover fetches — remote kill switch', () => {
     async ({ useGatedHook, request }) => {
       switchDiscoveryFetches(false);
 
-      renderHook(useGatedHook, { wrapper });
+      const { result } = renderHook(useGatedHook, { wrapper });
       await settle();
 
-      expect(request).not.toHaveBeenCalled();
+      expect(sent(request)).toBe(0);
+      expect(result.current.data).toBeUndefined();
     },
   );
 
@@ -142,7 +158,8 @@ describe('discover fetches — remote kill switch', () => {
         await Promise.resolve();
       });
 
-      expect(mockSearch).not.toHaveBeenCalled();
+      expect(sent(SEARCH)).toBe(0);
+      expect(result.current.isUnavailable).toBe(true);
     },
   );
 
@@ -154,7 +171,7 @@ describe('discover fetches — remote kill switch', () => {
     act(() => result.current.clear());
     await settle();
 
-    expect(mockClearHistory).not.toHaveBeenCalled();
+    expect(sent(HISTORY_CLEAR)).toBe(0);
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual(HISTORY);
   });
 
@@ -171,37 +188,44 @@ describe('discover fetches — remote kill switch', () => {
 
   it('searches again when the switch is turned back on, without a remount', async () => {
     switchDiscoveryFetches(false);
-    renderHook(() => useDiscoverSearch(QUERY), { wrapper });
+    const { result } = renderHook(() => useDiscoverSearch(QUERY), { wrapper });
     await settle();
-    expect(mockSearch).not.toHaveBeenCalled();
+    expect(sent(SEARCH)).toBe(0);
 
     switchDiscoveryFetches(true);
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.data?.query).toBe(QUERY));
+    expect(sent(SEARCH)).toBe(1);
   });
 
   it('leaves discover searching while another loop is switched off', async () => {
     act(() => applyKillSwitches({ sse_enabled: false, offline_downloads_enabled: false }));
 
-    renderHook(() => useDiscoverSearch(QUERY), { wrapper });
+    const { result } = renderHook(() => useDiscoverSearch(QUERY), { wrapper });
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.data?.query).toBe(QUERY));
+    expect(sent(SEARCH)).toBe(1);
   });
 
   it('keeps searching after another loop is switched off with the screen mounted', async () => {
     const { result } = renderHook(() => useDiscoverSearch(QUERY), { wrapper });
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.data?.query).toBe(QUERY));
+    expect(sent(SEARCH)).toBe(1);
 
     act(() => applyKillSwitches({ sse_enabled: false }));
     act(() => result.current.refetch());
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(sent(SEARCH)).toBe(SEARCH_AND_ONE_REFETCH));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
   describe('history retry', () => {
     async function failHistoryLoad() {
-      mockHistory.mockRejectedValue(new Error('history down'));
+      __http.reset();
+      __http.reply(SEARCH, { json: searchResponseFixture() });
+      __http.reply(SUGGEST, { json: { suggestions: [] } });
+      __http.replyOnce(HISTORY_LIST, { status: 503, json: { detail: 'history down' } });
+      __http.reply(HISTORY_LIST, { json: HISTORY });
       const hook = renderHook(() => useDiscoverLogic(), { wrapper });
       await waitFor(() => expect(hook.result.current.history.failed).toBe(true));
       return hook;
@@ -209,7 +233,7 @@ describe('discover fetches — remote kill switch', () => {
 
     it('sends no request when tapped while the switch is off', async () => {
       const { result } = await failHistoryLoad();
-      mockHistory.mockClear();
+      const sentBefore = sent(HISTORY_LIST);
       switchDiscoveryFetches(false);
 
       await act(async () => {
@@ -217,19 +241,22 @@ describe('discover fetches — remote kill switch', () => {
         await Promise.resolve();
       });
 
-      expect(mockHistory).not.toHaveBeenCalled();
+      expect(sent(HISTORY_LIST)).toBe(sentBefore);
+      expect(result.current.history.items).toEqual([]);
     });
 
     it('refetches when tapped while the switch is on', async () => {
       const { result } = await failHistoryLoad();
-      mockHistory.mockClear().mockResolvedValue(HISTORY);
+      const sentBefore = sent(HISTORY_LIST);
 
       await act(async () => {
         result.current.history.onRetry();
         await Promise.resolve();
       });
 
-      await waitFor(() => expect(mockHistory).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(result.current.history.failed).toBe(false));
+      expect(sent(HISTORY_LIST)).toBe(sentBefore + 1);
+      expect(result.current.history.items.map((item) => item.query)).toEqual([QUERY]);
     });
   });
 });

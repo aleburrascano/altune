@@ -2,14 +2,11 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError, NetworkError, REQUEST_TIMEOUT_MS } from '@shared/api-client';
+import { NetworkError } from '@shared/api-client';
+import { CORRELATION_HEADER } from '@shared/api-client/correlationId';
+import { supabase } from '@shared/auth/supabaseClient';
 import { transientRetryOptions } from '@shared/query/retryDelay';
-import {
-  listSearchHistory,
-  searchDiscovery,
-  suggestDiscovery,
-  type DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   MAX_SEARCH_OFFSET,
@@ -19,17 +16,56 @@ import {
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-jest.mock('@shared/api-client/discovery', () => ({
-  searchDiscovery: jest.fn(),
-  suggestDiscovery: jest.fn(),
-  listSearchHistory: jest.fn(),
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
-const mockSearch = searchDiscovery as jest.Mock;
-const mockSuggest = suggestDiscovery as jest.Mock;
-const mockHistory = listSearchHistory as jest.Mock;
 const mockRecordEvent = recordEvent as jest.Mock;
+
+const SEARCH = 'GET /v1/discovery/search';
+const TWO_REQUESTS = 2;
+const THIRD_PAGE_OFFSET = SEARCH_PAGE_SIZE + SEARCH_PAGE_SIZE;
+
+type SentRequest = { path: string; query: string; headers: Record<string, string> };
+
+function searchRequests(): SentRequest[] {
+  return (__http.requests as SentRequest[]).filter(
+    (request) => request.path === '/v1/discovery/search',
+  );
+}
+
+function paramsOf(request: SentRequest | undefined): URLSearchParams {
+  return new URLSearchParams(request?.query);
+}
+
+function offsetOf(request: SentRequest | undefined): number {
+  return Number(paramsOf(request).get('offset') ?? 0);
+}
+
+function savedFlags(): boolean[] {
+  return searchRequests().map((request) => paramsOf(request).get('save_history') !== 'false');
+}
+
+function servePages(...pages: DiscoverySearchResponse[]): void {
+  for (const page of pages) __http.replyOnce(SEARCH, { json: page });
+}
+
+function serveEndlessPages(count: number): void {
+  servePages(...Array.from({ length: count }, (_, index) => endlessPage(index * SEARCH_PAGE_SIZE)));
+}
+
+function holdSearchesUntilReleased(): () => void {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  global.fetch = ((...args: Parameters<typeof fetch>) =>
+    gate.then(() => fakeFetch(...args))) as typeof fetch;
+  return release;
+}
 
 let queryClient: QueryClient;
 
@@ -84,13 +120,18 @@ beforeEach(() => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  mockSearch
-    .mockReset()
-    .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(endlessPage(offset)));
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
+  serveEndlessPages(MAX_SEARCH_PAGES + 1);
 });
 
 afterEach(() => {
   queryClient.clear();
+  global.fetch = fakeFetch;
+  jest.restoreAllMocks();
 });
 
 describe('useDiscoverSearch merges its pages once and retains a bounded number of them', () => {
@@ -122,10 +163,8 @@ describe('useDiscoverSearch merges its pages once and retains a bounded number o
 
     expect(result.current.hasNextPage).toBe(false);
     expect(result.current.isFetchNextPageError).toBe(false);
-    expect(mockSearch).toHaveBeenCalledTimes(lastAllowedPage);
-    const offsets = mockSearch.mock.calls.map(
-      ([request]) => (request as { offset: number }).offset,
-    );
+    expect(searchRequests()).toHaveLength(lastAllowedPage);
+    const offsets = searchRequests().map(offsetOf);
     expect(Math.max(...offsets)).toBe(MAX_SEARCH_OFFSET);
     expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE * lastAllowedPage);
   });
@@ -161,11 +200,8 @@ describe('an explicit submit of a query the debounce just fetched', () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
     });
-    mockSearch.mockReset().mockImplementation(() => Promise.resolve(singlePage()));
-  });
-
-  afterEach(() => {
-    queryClient.clear();
+    __http.reset();
+    __http.reply(SEARCH, { json: singlePage() });
   });
 
   it('still sends a request with saveHistory true', async () => {
@@ -177,12 +213,11 @@ describe('an explicit submit of a query the debounce just fetched', () => {
 
     rerender({ saveHistory: true });
 
-    await waitFor(() =>
-      expect(mockSearch).toHaveBeenCalledWith(
-        expect.objectContaining({ q: 'radiohead', saveHistory: true }),
-        expect.anything(),
-      ),
-    );
+    await waitFor(() => expect(savedFlags()).toEqual([false, true]));
+    expect(searchRequests().map((request) => paramsOf(request).get('q'))).toEqual([
+      'radiohead',
+      'radiohead',
+    ]);
   });
 });
 
@@ -208,16 +243,8 @@ describe('useDiscoverSearch refresh', () => {
   }
 
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    mockSearch
-      .mockReset()
-      .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(page(offset)));
-  });
-
-  afterEach(() => {
-    queryClient.clear();
+    __http.reset();
+    servePages(page(0), page(SEARCH_PAGE_SIZE), page(THIRD_PAGE_OFFSET));
   });
 
   it('reports isRefreshing during a refetch of loaded data and refetches only page 1', async () => {
@@ -235,14 +262,9 @@ describe('useDiscoverSearch refresh', () => {
     }
     expect(result.current.isRefreshing).toBe(false);
 
-    mockSearch.mockClear();
-    let release: () => void = () => undefined;
-    mockSearch.mockImplementation(
-      ({ offset }: { offset: number }) =>
-        new Promise((resolve) => {
-          release = () => resolve(page(offset));
-        }),
-    );
+    const sentBefore = searchRequests().length;
+    __http.reply(SEARCH, { json: page(0) });
+    const release = holdSearchesUntilReleased();
     act(() => {
       result.current.refetch();
     });
@@ -252,8 +274,10 @@ describe('useDiscoverSearch refresh', () => {
     });
     await waitFor(() => expect(result.current.isRefreshing).toBe(false));
 
-    expect(mockSearch).toHaveBeenCalledTimes(1);
-    expect(mockSearch.mock.calls[0][0].offset).toBe(0);
+    const refreshRequests = searchRequests().slice(sentBefore);
+    expect(refreshRequests).toHaveLength(1);
+    expect(offsetOf(refreshRequests[0])).toBe(0);
+    expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE);
   });
 });
 
@@ -275,16 +299,11 @@ describe('held-slate paging', () => {
   }
 
   beforeEach(() => {
-    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockSearch.mockReset();
+    __http.reset();
   });
 
-  afterEach(() => queryClient.clear());
-
   it('sends page 1 search_id on the page 2 request, not a fresh search', async () => {
-    mockSearch
-      .mockResolvedValueOnce(page(0, 'search-1'))
-      .mockResolvedValueOnce(page(SEARCH_PAGE_SIZE, 'search-1'));
+    servePages(page(0, 'search-1'), page(SEARCH_PAGE_SIZE, 'search-1'));
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
@@ -292,19 +311,21 @@ describe('held-slate paging', () => {
       await result.current.fetchNextPage();
     });
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(2));
-    expect(mockSearch.mock.calls[1]?.[0]).toMatchObject({
-      offset: SEARCH_PAGE_SIZE,
-      searchId: 'search-1',
-    });
+    await waitFor(() => expect(searchRequests()).toHaveLength(TWO_REQUESTS));
+    expect(offsetOf(searchRequests()[1])).toBe(SEARCH_PAGE_SIZE);
+    expect(paramsOf(searchRequests()[1]).get('search_id')).toBe('search-1');
+    await waitFor(() =>
+      expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE + SEARCH_PAGE_SIZE),
+    );
   });
 
   it('sends no search_id on the first page', async () => {
-    mockSearch.mockResolvedValueOnce(page(0, 'search-1'));
+    servePages(page(0, 'search-1'));
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
-    expect(mockSearch.mock.calls[0]?.[0]).not.toHaveProperty('searchId');
+    expect(searchRequests()).toHaveLength(1);
+    expect(paramsOf(searchRequests()[0]).has('search_id')).toBe(false);
   });
 });
 
@@ -319,19 +340,15 @@ describe('held slate belongs to its query', () => {
   }
 
   async function startSlowRefresh() {
-    mockSearch.mockResolvedValue(pageFor('old-row', 'old-search'));
+    __http.reset();
+    servePages(pageFor('old-row', 'old-search'));
     const rendered = renderHook(({ q }: { q: string }) => useDiscoverSearch(q), {
       wrapper,
       initialProps: { q: 'old' },
     });
     await waitFor(() => expect(resultCount(rendered.result)).toBe(1));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    mockSearch.mockImplementation(
-      ({ query }: { query: string }) =>
-        new Promise((resolve) => {
-          if (query === 'old') setTimeout(() => resolve(pageFor('old-row', 'old-search')), 50);
-        }),
-    );
+    __http.hang(SEARCH);
     act(() => {
       rendered.result.current.refetch();
     });
@@ -367,14 +384,12 @@ describe('next page failure', () => {
   }
 
   beforeEach(() => {
-    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockSearch.mockReset();
+    __http.reset();
   });
 
-  afterEach(() => queryClient.clear());
-
   it('flags a rejected page 2 while keeping page 1', async () => {
-    mockSearch.mockResolvedValueOnce(page(0)).mockRejectedValue(new ApiError(502, 'bad gateway'));
+    servePages(page(0));
+    __http.reply(SEARCH, { status: 502, json: { detail: 'bad gateway' } });
     const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
     await act(async () => {
@@ -393,21 +408,12 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
   }
 
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    mockSearch.mockReset();
-    mockSuggest.mockReset();
-    mockHistory.mockReset();
+    __http.reset();
+    __http.reply(SEARCH, { status: 503, json: { detail: 'unavailable' } });
     mockRecordEvent.mockReset().mockResolvedValue(undefined);
   });
 
-  afterEach(() => {
-    queryClient.clear();
-  });
-
   it('a failed search fires search_failed with source search and the HTTP status', async () => {
-    mockSearch.mockRejectedValue(new ApiError(503, 'unavailable'));
     const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
@@ -415,23 +421,22 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
 
     expect(failureEvents()[0]).toEqual({
       type: 'search_failed',
-      payload: { source: 'search', status: 503 },
+      payload: { source: 'search', status: 503, correlationId: expect.any(String) },
     });
   });
 
   it("a failed search reports the request's correlation id, so the event matches the server log", async () => {
-    mockSearch.mockRejectedValue(
-      new ApiError(503, 'unavailable', 'unavailable', 'a1b2c3d4e5f60718'),
-    );
     const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
 
+    const failedRequest = searchRequests().at(-1);
+    expect(failedRequest?.headers[CORRELATION_HEADER]).toEqual(expect.any(String));
     expect(failureEvents()[0]?.payload).toEqual({
       source: 'search',
       status: 503,
-      correlationId: 'a1b2c3d4e5f60718',
+      correlationId: failedRequest?.headers[CORRELATION_HEADER],
     });
   });
 });
@@ -444,10 +449,8 @@ describe('a search backend that never answers reaches the error state quickly', 
     queryClient = new QueryClient({
       defaultOptions: { queries: { ...transientRetryOptions }, mutations: { retry: false } },
     });
-    mockSearch.mockReset().mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, REQUEST_TIMEOUT_MS));
-      throw new NetworkError('timeout', 'API /discovery/search timed out');
-    });
+    __http.reset();
+    __http.hang(SEARCH);
   });
 
   afterEach(() => {
@@ -463,7 +466,8 @@ describe('a search backend that never answers reaches the error state quickly', 
     });
 
     expect(result.current.error).toBeInstanceOf(NetworkError);
-    expect(mockSearch).toHaveBeenCalledTimes(2);
+    expect((result.current.error as NetworkError).failure).toBe('timeout');
+    expect(searchRequests()).toHaveLength(TWO_REQUESTS);
   });
 });
 
@@ -484,22 +488,12 @@ describe('useDiscoverSearch history saving', () => {
     };
   }
 
-  function savedFlags() {
-    return mockSearch.mock.calls.map(([request]) => request.saveHistory);
-  }
-
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    mockSearch.mockReset().mockImplementation(() => Promise.resolve(singlePage()));
-  });
-
-  afterEach(() => {
-    queryClient.clear();
+    __http.reset();
   });
 
   it('saves history on the first request of an explicit submit only, not on a refresh', async () => {
+    __http.reply(SEARCH, { json: singlePage() });
     const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
@@ -514,10 +508,8 @@ describe('useDiscoverSearch history saving', () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } },
     });
-    mockSearch
-      .mockReset()
-      .mockRejectedValueOnce(new NetworkError('timeout', 'lost response'))
-      .mockImplementation(() => Promise.resolve(singlePage()));
+    __http.replyOnce(SEARCH, { status: 503, json: { detail: 'lost response' } });
+    __http.reply(SEARCH, { json: singlePage() });
     const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
 
     await waitFor(() => expect(result.current.data).toBeDefined());
@@ -526,6 +518,7 @@ describe('useDiscoverSearch history saving', () => {
   });
 
   it('never saves history for a non-explicit search', async () => {
+    __http.reply(SEARCH, { json: singlePage() });
     const { result } = renderHook(() => useDiscoverSearch('radiohead', false), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
