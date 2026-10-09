@@ -56,8 +56,6 @@ G4 internal/playback/adapters/handler/queue_rate_limit.go queueRateLimitedError 
 G4 internal/playback/ports/queue_state_repo.go UnavailableError coded error declared outside domain
 G4 internal/shared/validation_error.go ValidationError coded error declared outside domain
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
-G6 internal/catalog/adapters/handler/helpers_test.go fakeResolver declared in several test files
-G6 internal/catalog/service/backfill_featured_test.go fakeResolver declared in several test files
 G6 internal/discovery/adapters/handler/discovery_handler_test.go fakeAlbumContentProvider declared in several test files
 G6 internal/discovery/adapters/handler/discovery_handler_test.go fakeArtistContentProvider declared in several test files
 G6 internal/discovery/adapters/handler/enrichment_endpoints_test.go fakeDeezerEnricher declared in several test files
@@ -92,10 +90,6 @@ G7 internal/acquisition/service/scheduler_shutdown.go:waitRunners slog.Warn with
 G7 internal/acquisition/service/scheduler_status.go:pendingDepth slog.Error without context
 G7 internal/auth/adapters/providers/supabase_jwt.go:newSupabaseJWTVerifier slog.Warn without context
 G7 internal/auth/adapters/providers/supabase_jwt.go:onBackgroundRefreshError slog.Warn without context
-G7 internal/catalog/adapters/persistence/track_repo.go:ListOwnedTrackRefs slog.Warn without context
-G7 internal/catalog/adapters/persistence/track_repo.go:ListReadyAudioTracks slog.Warn without context
-G7 internal/catalog/adapters/storage/filesystem.go:closeLateAudio slog.Warn without context
-G7 internal/catalog/adapters/storage/filesystem.go:copyThenRemoveAcrossFilesystems slog.Warn without context
 G7 internal/discovery/service/circuit_breaker.go:AllowRequest slog.Warn without context
 G7 internal/discovery/service/circuit_breaker.go:RecordFailure slog.Warn without context
 G7 internal/discovery/service/circuit_breaker.go:RecordSuccess slog.Info without context
@@ -119,7 +113,6 @@ G7 internal/shared/runloop/ticker.go:Recover slog.Error without context
 G7 internal/shared/runloop/ticker.go:RunJob slog.Info without context
 G7 internal/shared/runloop/ticker.go:RunJob slog.Warn without context
 N1 deploy/lib.sh banned name lib
-N1 internal/catalog/adapters/handler/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/cache/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/providers/helpers_test.go banned name helpers

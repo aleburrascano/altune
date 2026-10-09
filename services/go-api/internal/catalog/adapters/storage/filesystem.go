@@ -51,12 +51,12 @@ func (s *FilesystemAudioStore) Store(ctx context.Context, sourcePath, audioRef s
 	}
 
 	_, err = boundedFSCall(ctx, "store", func() (struct{}, error) {
-		return struct{}{}, moveIntoPlace(sourcePath, destPath)
+		return struct{}{}, moveIntoPlace(ctx, sourcePath, destPath)
 	}, nil)
 	return err
 }
 
-func moveIntoPlace(sourcePath, destPath string) error {
+func moveIntoPlace(ctx context.Context, sourcePath, destPath string) error {
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
@@ -68,15 +68,15 @@ func moveIntoPlace(sourcePath, destPath string) error {
 	if !errors.Is(err, syscall.EXDEV) {
 		return fmt.Errorf("move audio into place: %w", err)
 	}
-	return copyThenRemoveAcrossFilesystems(sourcePath, destPath)
+	return copyThenRemoveAcrossFilesystems(ctx, sourcePath, destPath)
 }
 
-func copyThenRemoveAcrossFilesystems(sourcePath, destPath string) error {
+func copyThenRemoveAcrossFilesystems(ctx context.Context, sourcePath, destPath string) error {
 	if err := copyFile(sourcePath, destPath); err != nil {
 		return fmt.Errorf("copy audio into place: %w", err)
 	}
 	if err := os.Remove(sourcePath); err != nil {
-		slog.Warn("audio_temp_source_remove_failed", "path", sourcePath, "error", err)
+		slog.WarnContext(ctx, "audio_temp_source_remove_failed", "path", sourcePath, "error", err)
 	}
 	return nil
 }
@@ -115,7 +115,7 @@ func (s *FilesystemAudioStore) Stream(ctx context.Context, audioRef string) (por
 
 	opened, err := boundedFSCall(ctx, "stream open", func() (openedAudio, error) {
 		return openAudio(path)
-	}, closeLateAudio)
+	}, func(late openedAudio) { closeLateAudio(ctx, late) })
 	if err != nil {
 		return nil, 0, err
 	}
@@ -135,12 +135,12 @@ func openAudio(path string) (openedAudio, error) {
 	return openedAudio{file: file, size: stat.Size()}, nil
 }
 
-func closeLateAudio(late openedAudio) {
+func closeLateAudio(ctx context.Context, late openedAudio) {
 	if late.file == nil {
 		return
 	}
 	if err := late.file.Close(); err != nil {
-		slog.Warn("audio_late_open_close_failed", "path", late.file.Name(), "error", err)
+		slog.WarnContext(ctx, "audio_late_open_close_failed", "path", late.file.Name(), "error", err)
 	}
 }
 

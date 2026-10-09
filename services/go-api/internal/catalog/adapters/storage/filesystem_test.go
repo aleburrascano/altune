@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -374,5 +375,62 @@ func TestFilesystemAudioStore_Stream_StalledOpenCappedWithoutCallerDeadline(t *t
 	err := streamWithHangGuard(t, context.Background(), store, "stalled.opus")
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected opTimeout to cap the open with context.DeadlineExceeded, got %v", err)
+	}
+}
+
+type contextRecordingHandler struct {
+	slog.Handler
+	records chan contextRecord
+}
+
+type contextRecord struct {
+	message string
+	ctx     context.Context
+}
+
+func (h contextRecordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h contextRecordingHandler) Handle(ctx context.Context, r slog.Record) error {
+	h.records <- contextRecord{message: r.Message, ctx: ctx}
+	return nil
+}
+
+type recordedContextKey struct{}
+
+func TestCopyThenRemoveAcrossFilesystems_RemoveFailureStillSucceedsAndLogsWithContext(t *testing.T) {
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "src")
+	if err := os.Mkdir(sourceDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	sourcePath := filepath.Join(sourceDir, "source.opus")
+	if err := os.WriteFile(sourcePath, []byte("audio"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	if err := os.Chmod(sourceDir, 0o555); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(sourceDir, 0o755) })
+
+	records := make(chan contextRecord, 4)
+	previous := slog.Default()
+	slog.SetDefault(slog.New(contextRecordingHandler{records: records}))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	ctx := context.WithValue(context.Background(), recordedContextKey{}, "marker")
+
+	err := copyThenRemoveAcrossFilesystems(ctx, sourcePath, filepath.Join(dir, "dest.opus"))
+	if err != nil {
+		t.Fatalf("copyThenRemoveAcrossFilesystems = %v, want nil", err)
+	}
+	select {
+	case record := <-records:
+		if record.message != "audio_temp_source_remove_failed" {
+			t.Fatalf("logged %q, want audio_temp_source_remove_failed", record.message)
+		}
+		if record.ctx.Value(recordedContextKey{}) != "marker" {
+			t.Fatal("log record did not carry the caller's context")
+		}
+	default:
+		t.Fatal("no remove-failure log recorded")
 	}
 }
