@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/ytdlp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -166,7 +167,7 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 }
 
 func (s *Source) classifiedFailure(err error, stderr string, timedOut bool) error {
-	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
+	if s.Available() && !timedOut && !ytdlp.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &ports.SourceUnavailableError{Source: s.Name(), Err: err}

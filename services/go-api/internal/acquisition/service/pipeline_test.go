@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/textnorm"
 	"bytes"
 	"context"
 	"errors"
@@ -376,71 +375,6 @@ func TestRunPipeline_StepPanic_RollsBackAndReturnsStepError(t *testing.T) {
 	}
 }
 
-func TestAcqStage_BuildSearchQueries(t *testing.T) {
-	tests := []struct {
-		name        string
-		track       TrackRef
-		wantQueries []string
-		wantMin     int
-	}{
-		{
-			name:  "basic track produces title+artist queries",
-			track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd"},
-			wantQueries: []string{
-				"Blinding Lights The Weeknd",
-				"Blinding Lights The Weeknd audio",
-			},
-			wantMin: 2,
-		},
-		{
-			name:  "track with album adds album query",
-			track: TrackRef{Title: "Circles", Artist: "Post Malone", Album: "Hollywood's Bleeding"},
-			wantQueries: []string{
-				"Circles Post Malone",
-				"Circles Post Malone Hollywood's Bleeding",
-				"Circles Post Malone audio",
-			},
-			wantMin: 3,
-		},
-		{
-			name:  "track with ISRC includes ISRC as first query",
-			track: TrackRef{Title: "HUMBLE.", Artist: "Kendrick Lamar", ISRC: "USUM71700626"},
-			wantQueries: []string{
-				"USUM71700626",
-				"HUMBLE. Kendrick Lamar",
-			},
-			wantMin: 3,
-		},
-		{
-			name:    "empty album skips album query",
-			track:   TrackRef{Title: "Song", Artist: "Artist", Album: ""},
-			wantMin: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			queries := queriesFor(tt.track)
-			if len(queries) < tt.wantMin {
-				t.Errorf("expected at least %d queries, got %d: %v", tt.wantMin, len(queries), queries)
-			}
-			for _, want := range tt.wantQueries {
-				found := false
-				for _, got := range queries {
-					if got == want {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected query %q in %v", want, queries)
-				}
-			}
-			t.Logf("queries: %v", queries)
-		})
-	}
-}
-
 func TestAcqStage_IdentityScore(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -665,19 +599,11 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 		},
 	}
 
-	queries := queriesFor(track)
-	t.Logf("Stage 1 — Search queries: %v", queries)
-
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		artMatch := artistMatchesChannel(track.Artist, c.Channel)
 		t.Logf("Stage 2 — Identity: %q (ch: %q) → score=%.1f, artistMatch=%v, gate=%v",
 			c.Title, c.Channel, ident, artMatch, ident >= identityMin)
-	}
-
-	for _, q := range queries {
-		norm := textnorm.NormalizeForMatch(q)
-		t.Logf("Stage 3 — Normalize query: %q → %q", q, norm)
 	}
 
 	selected := selectBest(track, candidates)
@@ -689,15 +615,6 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 	if !strings.Contains(selected.Channel, "Topic") {
 		t.Errorf("expected Topic channel selected, got %q", selected.Channel)
 	}
-}
-
-func queriesFor(track TrackRef) []string {
-	return ports.SearchQueries(ports.FindRequest{
-		Title:  track.Title,
-		Artist: track.Artist,
-		Album:  track.Album,
-		ISRC:   track.ISRC,
-	})
 }
 
 func TestProvenance(t *testing.T) {

@@ -98,7 +98,7 @@ func (s *YtDlpAudioSearcher) Available() bool {
 }
 
 func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string, timedOut bool) error {
-	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
+	if s.Available() && !timedOut && !sharedytdlp.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &ports.SourceUnavailableError{Source: SourceName, Err: err}
