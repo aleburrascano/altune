@@ -169,6 +169,13 @@ grep -qF "before-016_constraint.dump" "$WORK/dumps.log" || fail "snapshot not na
 grep -qF "postgres://u:p@h:5432/db" "$WORK/dumps.log" || fail "pg_dump was not given the database url"
 [ "$(cat "$WORK/dump-applies-seen.log")" = 0 ] || fail "snapshot was taken after a migration was applied"
 
+CASE="the snapshot dir is mode 700 and the dump mode 600, even when the dir pre-existed wider"
+chmod 755 "$WORK/snapshots" 2>/dev/null
+STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
+expect_rc 0
+[ "$(stat -c %a "$WORK/snapshots")" = 700 ] || fail "snapshot dir is not mode 700"
+for f in "$WORK"/snapshots/*.dump; do [ "$(stat -c %a "$f")" = 600 ] || fail "$f is not mode 600"; done
+
 CASE="a failing pg_dump exits 1 with FAILED and applies nothing"
 STUB_DUMP_RC=1 STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
 expect_rc 1
