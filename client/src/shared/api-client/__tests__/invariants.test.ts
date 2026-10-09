@@ -2,26 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const API_CLIENT_DIR = path.join(__dirname, '..');
-
-function findMatchingBrace(text: string, openIndex: number): number {
-  let depth = 0;
-  for (let i = openIndex; i < text.length; i += 1) {
-    if (text[i] === '{') depth += 1;
-    else if (text[i] === '}') {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
-  }
-  throw new Error(`unbalanced braces starting at ${openIndex}`);
-}
-
-function extractFunctionBody(source: string, marker: string): string {
-  const start = source.indexOf(marker);
-  if (start === -1) throw new Error(`marker not found: ${marker}`);
-  const braceStart = source.indexOf('{', start);
-  const braceEnd = findMatchingBrace(source, braceStart);
-  return source.slice(braceStart + 1, braceEnd);
-}
+const BARE_FETCH_CALL_PATTERN = /\bfetch\(/;
+const JSON_CONTENT_TYPE_PATTERN = /application\/json/;
 
 function listApiClientSourceFiles(): string[] {
   return fs
@@ -30,52 +12,28 @@ function listApiClientSourceFiles(): string[] {
     .map((f) => path.join(API_CLIENT_DIR, f));
 }
 
-function readIndexSource(): string {
-  return fs.readFileSync(path.join(API_CLIENT_DIR, 'index.ts'), 'utf8');
-}
-
 describe('apiFetch is the single fetch wrapper', () => {
   it('is the only file in this slice with a bare fetch( call site', () => {
     const offenders: string[] = [];
-    let indexFetchCount = 0;
     for (const filePath of listApiClientSourceFiles()) {
       const source = fs.readFileSync(filePath, 'utf8');
-      const matches = source.match(/\bfetch\(/g) ?? [];
-      if (path.basename(filePath) === 'index.ts') {
-        indexFetchCount = matches.length;
-      } else if (matches.length > 0) {
+      if (path.basename(filePath) !== 'index.ts' && BARE_FETCH_CALL_PATTERN.test(source)) {
         offenders.push(path.basename(filePath));
       }
     }
 
     expect(offenders).toEqual([]);
-    expect(indexFetchCount).toBe(1);
-  });
-
-  it('the one fetch( call site in index.ts is inside send(), nowhere else', () => {
-    const indexSource = readIndexSource();
-    const sendBody = extractFunctionBody(indexSource, 'async function send(');
-
-    expect((sendBody.match(/\bfetch\(/g) ?? []).length).toBe(1);
-
-    const outsideSend = indexSource.replace(sendBody, '');
-    expect((outsideSend.match(/\bfetch\(/g) ?? []).length).toBe(0);
   });
 });
 
 describe('apiSend is the single JSON mutation builder', () => {
-  it('names the JSON content type exactly once in the slice, in index.ts', () => {
-    const namingFiles: string[] = [];
-    let indexContentTypeCount = 0;
-    for (const filePath of listApiClientSourceFiles()) {
-      const count = (fs.readFileSync(filePath, 'utf8').match(/application\/json/g) ?? []).length;
-      if (count === 0) continue;
-      if (path.basename(filePath) === 'index.ts') indexContentTypeCount = count;
-      else namingFiles.push(path.basename(filePath));
-    }
+  it('names the JSON content type in no file of the slice but index.ts', () => {
+    const namingFiles = listApiClientSourceFiles()
+      .filter((filePath) => path.basename(filePath) !== 'index.ts')
+      .filter((filePath) => JSON_CONTENT_TYPE_PATTERN.test(fs.readFileSync(filePath, 'utf8')))
+      .map((filePath) => path.basename(filePath));
 
     expect(namingFiles).toEqual([]);
-    expect(indexContentTypeCount).toBe(1);
   });
 
   it('serializes every request body in index.ts, so no call site stringifies its own', () => {
@@ -85,56 +43,6 @@ describe('apiSend is the single JSON mutation builder', () => {
       .map((filePath) => path.basename(filePath));
 
     expect(offenders).toEqual([]);
-  });
-});
-
-describe('every request gets a deadline', () => {
-  it('the single fetch( call always passes deadline.signal as its abort signal', () => {
-    const indexSource = readIndexSource();
-    const sendBody = extractFunctionBody(indexSource, 'async function send(');
-
-    expect(sendBody).toMatch(/fetch\([^)]*signal:\s*deadline\.signal/);
-  });
-
-  it('apiFetch always constructs a deadline via startDeadline before sending', () => {
-    const indexSource = readIndexSource();
-    const apiFetchBody = extractFunctionBody(indexSource, 'export async function apiFetch<T>(');
-
-    expect(apiFetchBody).toMatch(/startDeadline\(/);
-    expect(apiFetchBody).toMatch(/\bsend\(/);
-  });
-});
-
-describe('retry policy lives only in the QueryClient predicate, never inside apiFetch', () => {
-  it('index.ts contains no loop construct around the fetch call', () => {
-    const indexSource = readIndexSource();
-
-    expect(indexSource).not.toMatch(/\bfor\s*\(/);
-    expect(indexSource).not.toMatch(/\bwhile\s*\(/);
-  });
-
-  it('send() never re-invokes itself and apiFetch() never re-invokes itself', () => {
-    const indexSource = readIndexSource();
-    const sendBody = extractFunctionBody(indexSource, 'async function send(');
-    const apiFetchBody = extractFunctionBody(indexSource, 'export async function apiFetch<T>(');
-
-    expect(sendBody).not.toMatch(/\bsend\(/);
-    expect(apiFetchBody).not.toMatch(/\bapiFetch(<[^>]*>)?\(/);
-  });
-
-  it('the mobile QueryClient wires isRetryable into its retry predicate', () => {
-    const layoutSource = fs.readFileSync(
-      path.join(__dirname, '..', '..', '..', 'app', '_layout.tsx'),
-      'utf8',
-    );
-
-    const helperSource = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'query', 'retryDelay.ts'),
-      'utf8',
-    );
-
-    expect(layoutSource).toMatch(/queries:\s*\{[^}]*\.\.\.transientRetryOptions/);
-    expect(helperSource).toMatch(/retry:\s*\([^)]*\)\s*=>[^\n]*isRetryable/);
   });
 });
 

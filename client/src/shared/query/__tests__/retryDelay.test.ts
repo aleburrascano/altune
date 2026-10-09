@@ -1,15 +1,16 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
 import fc from 'fast-check';
 
 import {
   RETRY_BACKOFF_BASE_MS,
   RETRY_BACKOFF_CAP_MS,
   retryDelayMs,
+  transientRetryOptions,
 } from '@shared/query/retryDelay';
 
 const ATTEMPTS_IN_A_SESSION = [0, 1, 2, 3, 4];
+const DOUBLING = 2;
+const ATTEMPTS_PAST_THE_CAP = 10;
+const SAMPLES_PER_ATTEMPT = 20;
 
 function scheduleForOneClient(): number[] {
   return ATTEMPTS_IN_A_SESSION.map((failureCount) => retryDelayMs(failureCount, Math.random()));
@@ -53,15 +54,19 @@ describe('law: retryDelayMs is exponential, jittered into [ceiling/2, ceiling], 
         fc.integer({ min: -5, max: 60 }),
         fc.double({ min: 0, max: 1, maxExcluded: true, noNaN: true }),
         (failureCount, random) => {
-          const ceiling = Math.min(
-            RETRY_BACKOFF_CAP_MS,
-            RETRY_BACKOFF_BASE_MS * 2 ** Math.max(failureCount, 0),
-          );
+          const ceiling = retryDelayMs(failureCount, 1);
+          const nextCeiling = retryDelayMs(failureCount + 1, 1);
 
           const delay = retryDelayMs(failureCount, random);
 
           expect(delay).toBeGreaterThanOrEqual(ceiling / 2);
           expect(delay).toBeLessThanOrEqual(ceiling);
+          expect(delay).toBeLessThanOrEqual(RETRY_BACKOFF_CAP_MS);
+          if (failureCount >= 0) {
+            expect(nextCeiling).toBe(Math.min(ceiling * DOUBLING, RETRY_BACKOFF_CAP_MS));
+          } else {
+            expect(ceiling).toBe(RETRY_BACKOFF_BASE_MS);
+          }
         },
       ),
     );
@@ -69,16 +74,14 @@ describe('law: retryDelayMs is exponential, jittered into [ceiling/2, ceiling], 
 });
 
 describe('the app-wide QueryClient retries on the jittered schedule', () => {
-  it('_layout.tsx spreads transientRetryOptions, which derives retryDelay from retryDelayMs and a fresh sample', () => {
-    const layoutSource = fs.readFileSync(
-      path.join(__dirname, '..', '..', '..', 'app', '_layout.tsx'),
-      'utf8',
-    );
-    const helperSource = fs.readFileSync(path.join(__dirname, '..', 'retryDelay.ts'), 'utf8');
+  it('waits within the jitter band of retryDelayMs for each failed attempt', () => {
+    for (const failureCount of [...ATTEMPTS_IN_A_SESSION, ATTEMPTS_PAST_THE_CAP]) {
+      for (let sample = 0; sample < SAMPLES_PER_ATTEMPT; sample += 1) {
+        const delay = transientRetryOptions.retryDelay(failureCount);
 
-    expect(layoutSource).toMatch(/queries:\s*\{[^}]*\.\.\.transientRetryOptions/);
-    expect(helperSource).toMatch(
-      /retryDelay:\s*\([^)]*\)\s*=>\s*retryDelayMs\([^)]*Math\.random\(\)\)/,
-    );
+        expect(delay).toBeGreaterThanOrEqual(retryDelayMs(failureCount, 0));
+        expect(delay).toBeLessThanOrEqual(retryDelayMs(failureCount, 1));
+      }
+    }
   });
 });
