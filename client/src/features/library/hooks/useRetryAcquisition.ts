@@ -1,14 +1,32 @@
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-
+import { useMemo } from 'react';
+import {
+  useMutationState,
+  useQueryClient,
+  type Mutation,
+  type MutationCache,
+  type MutationFilters,
+  type UseMutationResult,
+  type QueryClient,
+} from '@tanstack/react-query';
+import { type TrackId, isSafeId } from '@shared/api-client/ids';
+import { useAppMutation } from '@shared/query/useAppMutation';
 import { forgetTrack } from '@shared/events/forgetTrack';
 import { showFailureAlert } from '@shared/ui';
-import type { TrackId } from '@shared/api-client/ids';
-import { isSafeId } from '@shared/api-client/ids';
 import {
-  acquisitionOf,
   toPending,
+  acquisitionOf,
   type AcquisitionTransition,
 } from '@shared/api-client/trackAcquisition';
+import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
+import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+import {
+  trackNotFoundAlert,
+  logTrackMutationFailure,
+  libraryFailureAlert,
+  classifyLibraryError,
+} from '@features/library/domain/libraryFailure';
 import {
   recordRetryRequest,
   recordRetryTapped,
@@ -16,18 +34,101 @@ import {
   type RetrySkipReason,
 } from '@shared/acquisition/acquisitionTelemetry';
 import { getTrackFromCaches } from '@shared/events/trackCachePatch';
-import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
-import { trackNotFoundAlert } from '@features/library/domain/trackNotFoundAlert';
-import { logTrackMutationFailure } from '@features/library/domain/logTrackMutationFailure';
-import {
-  trackMutationKeys,
-  useOneRunPerTrack,
-  type TrackMutation,
-} from '@features/library/hooks/useOneRunPerTrack';
-import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
-import { classifyLibraryError } from '@features/library/domain/state';
+export const trackMutationKeys = {
+  retryAcquisition: ['track', 'retry-acquisition'] as const,
+  reacquire: ['track', 'reacquire'] as const,
+};
+
+type TrackMutationKey = (typeof trackMutationKeys)[keyof typeof trackMutationKeys];
+
+export type TrackMutation<TData, TContext> = Omit<
+  UseMutationResult<TData, Error, TrackId, TContext>,
+  'mutate' | 'mutateAsync'
+> & {
+  mutate: (trackId: TrackId) => void;
+  isInFlight: (trackId: TrackId) => boolean;
+};
+
+const pendingRunsOf = (mutationKey: TrackMutationKey): MutationFilters => ({
+  mutationKey,
+  status: 'pending',
+});
+
+const trackIdOf = (run: Mutation<unknown, Error, unknown, unknown>): TrackId =>
+  run.state.variables as TrackId;
+
+function hasPendingRun(
+  cache: MutationCache,
+  mutationKey: TrackMutationKey,
+  trackId: TrackId,
+): boolean {
+  return cache.findAll(pendingRunsOf(mutationKey)).some((run) => trackIdOf(run) === trackId);
+}
+
+export function useOneRunPerTrack<TData, TContext>(
+  mutation: UseMutationResult<TData, Error, TrackId, TContext>,
+  mutationKey: TrackMutationKey,
+): TrackMutation<TData, TContext> {
+  const mutationCache = useQueryClient().getMutationCache();
+  const pendingIds = useMutationState({ filters: pendingRunsOf(mutationKey), select: trackIdOf });
+  const inFlight = useMemo(() => new Set<TrackId>(pendingIds), [pendingIds]);
+  const { mutate, ...run } = mutation;
+
+  return {
+    ...run,
+    mutate: (trackId: TrackId) => {
+      if (hasPendingRun(mutationCache, mutationKey, trackId)) return;
+      mutate(trackId);
+    },
+    isInFlight: (trackId: TrackId) => inFlight.has(trackId),
+  };
+}
+
+const reacquireEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/reacquire`;
+
+const REACQUIRE_FAILED = 'Could not start a re-acquisition. Your current audio is unchanged.';
+
+function markReacquirePending(queryClient: QueryClient) {
+  return (_started: void, trackId: TrackId): void => {
+    patchTrackInCaches(queryClient, trackId, toPending());
+  };
+}
+
+function reportFailedReacquire(queryClient: QueryClient) {
+  return (error: Error, trackId: TrackId): void => {
+    const failure = classifyLibraryError(error);
+    if (failure === 'not-found') {
+      forgetTrack(queryClient, trackId);
+      return showFailureAlert(trackNotFoundAlert(trackId));
+    }
+    logTrackMutationFailure('re-acquire track', reacquireEndpoint, trackId, error);
+    showFailureAlert(
+      libraryFailureAlert('library.reacquire', 'Re-acquire failed', REACQUIRE_FAILED, failure),
+    );
+  };
+}
+
+function reacquireOptions(queryClient: QueryClient, port: LibraryPort) {
+  return guardedMutationOptions({
+    mutationFn: (trackId: TrackId) => port.reacquireTrack(trackId),
+    onSuccess: markReacquirePending(queryClient),
+    onError: reportFailedReacquire(queryClient),
+  });
+}
+
+export function useReacquireTrack(): TrackMutation<void, unknown> {
+  const queryClient = useQueryClient();
+  const port = useLibraryPort();
+  const mutation = useAppMutation({
+    action: 'library.reacquire',
+    trackIdOf: (trackId: TrackId) => trackId,
+    mutationKey: trackMutationKeys.reacquire,
+    ...reacquireOptions(queryClient, port),
+  });
+  return useOneRunPerTrack(mutation, trackMutationKeys.reacquire);
+}
 
 type PriorAcquisition = { prior: AcquisitionTransition | undefined };
 type RetryContext = PriorAcquisition & { epoch: number };

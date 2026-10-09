@@ -1,20 +1,21 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-
 import { NO_PLAYLIST_ID, parsePlaylistId, type PlaylistId } from '@shared/api-client/ids';
-import { Screen, Skeleton, spacing } from '@shared/ui';
+import { Screen, Skeleton, spacing, Button, Text } from '@shared/ui';
 import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
-
-import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
-import { useLoggedPlaylistDetailFailure } from '@features/library/hooks/useLoggedPlaylistDetailFailure';
-import { usePlaylistDetail } from '@features/library/hooks/usePlaylistDetail';
+import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+import {
+  useLoggedPlaylistDetailFailure,
+  usePlaylistDetail,
+} from '@features/library/hooks/usePlaylistDetail';
 import { BackHeader } from '@features/library/ui/BackHeader';
 import {
   PlaylistDetailContent,
   type ContentProps,
 } from '@features/library/ui/PlaylistDetailContent';
-import { PlaylistDetailFailure } from '@features/library/ui/PlaylistDetailFailure';
+import { describeError } from '@shared/failure/describeError';
+import { classifyLibraryError } from '@features/library/domain/libraryFailure';
 
 type Router = ReturnType<typeof useRouter>;
 
@@ -110,4 +111,46 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xl,
   },
+});
+
+interface PlaylistDetailFailureProps {
+  error: unknown;
+  onRetry: () => void;
+  onGoToLibrary: () => void;
+}
+
+export function PlaylistDetailFailure({
+  error,
+  onRetry,
+  onGoToLibrary,
+}: PlaylistDetailFailureProps): ReactElement {
+  if (classifyLibraryError(error) === 'not-found') {
+    return (
+      <View testID="playlist-detail-not-found" style={failureStyles.center}>
+        <Text variant="title">Playlist not found</Text>
+        <Button action="library.playlist.error.go_back" label="Go back" onPress={onGoToLibrary} />
+      </View>
+    );
+  }
+
+  const { title, body } = describeError(error);
+  return (
+    <View testID="playlist-detail-error" style={failureStyles.center}>
+      <Text variant="title">{title}</Text>
+      <Text variant="label" tone="secondary" style={failureStyles.sub}>
+        {body}
+      </Text>
+      <Button
+        action="library.playlist.error.retry"
+        testID="playlist-detail-retry"
+        label="Retry"
+        onPress={onRetry}
+      />
+    </View>
+  );
+}
+
+const failureStyles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
+  sub: { textAlign: 'center', paddingHorizontal: spacing['2xl'] },
 });

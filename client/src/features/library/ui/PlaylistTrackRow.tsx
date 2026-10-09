@@ -1,12 +1,10 @@
 import type { ComponentProps, ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import type { usePlayback } from '@shared/playback/usePlayback';
 import { spacing } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-
 import type { Selection } from '@features/library/hooks/useSelection';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import { LibraryRow } from '@features/library/ui/LibraryRow';

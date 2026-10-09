@@ -3,9 +3,7 @@ import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
-
-import { useDeleteTrack } from '@features/library/hooks/useDeleteTrack';
-import { useDeleteTracks } from '@features/library/hooks/useDeleteTracks';
+import { useDeleteTrack, useDeleteTracks } from '@features/library/hooks/useDeleteTracks';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
 import {

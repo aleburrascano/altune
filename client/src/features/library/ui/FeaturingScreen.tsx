@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useMemo, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
-
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/trackResponse';
 import { detailHref } from '@shared/navigation/detailHandoff';
 import { trackToDiscoveryResult } from '@shared/api-client/trackToDiscoveryResult';
@@ -15,19 +14,17 @@ import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-
-import { featuringDetailRoute } from '@features/library/domain/featuringDetailRoute';
-import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
-import { useDeleteTrack } from '@features/library/hooks/useDeleteTrack';
-import { useExploreArtist } from '@features/library/hooks/useExploreArtist';
-import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
-import { useTrackMenu } from '@features/library/hooks/useTrackMenu';
+import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+import { useDeleteTrack } from '@features/library/hooks/useDeleteTracks';
 import {
+  useExploreArtist,
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
-} from '@features/library/hooks/useTracksFeaturing';
-import { classifyLibraryError, failureTail } from '@features/library/domain/state';
+} from '@features/library/hooks/useFeaturing';
+import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
+import { useTrackMenu } from '@features/library/hooks/useTrackMenu';
+import { classifyLibraryError, failureTail } from '@features/library/domain/libraryFailure';
 import { TracksList } from '@features/library/ui/TracksList';
 
 export function FeaturingScreen(): ReactElement {

@@ -3,15 +3,15 @@ import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { EllipsisVertical } from 'lucide-react-native';
-
 import { spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
-
-import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
+import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import { useLibraryOffline } from '@features/library/hooks/useLibraryOffline';
-import { usePlaylistDelete } from '@features/library/hooks/usePlaylistDelete';
-import { usePlaylistOfflineAction } from '@features/library/hooks/usePlaylistOfflineAction';
+import {
+  usePlaylistDelete,
+  usePlaylistOfflineAction,
+} from '@features/library/hooks/usePlaylistMenu';
 import { BackHeader } from '@features/library/ui/BackHeader';
 import type { DetailProps } from '@features/library/ui/playlistDetailTypes';
 

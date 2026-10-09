@@ -1,12 +1,9 @@
 import { useEffect, type ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
-
-import { Text, spacing } from '@shared/ui';
+import { StyleSheet, View, ActivityIndicator, Pressable } from 'react-native';
+import { Text, spacing, useTheme } from '@shared/ui';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
-
-import { LibraryRowRetryAction } from '@features/library/ui/LibraryRowRetryAction';
-
 import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
+import type { TrackId } from '@shared/api-client/ids';
 
 type FailedTrack = TrackFields & FailedAcquisition;
 
@@ -50,3 +47,42 @@ const styles = StyleSheet.create({
   failedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
   failed: { flexShrink: 1 },
 });
+
+export function LibraryRowRetryAction({
+  trackId,
+  title,
+  retrying,
+  onRetry,
+}: {
+  trackId: TrackId;
+  title: string;
+  retrying: boolean;
+  onRetry: () => void;
+}): ReactElement {
+  const theme = useTheme();
+  if (retrying) {
+    return (
+      <ActivityIndicator
+        testID={`library-row-retrying-${trackId}`}
+        size="small"
+        color={theme.color.accent}
+      />
+    );
+  }
+  return (
+    <Pressable
+      testID={`library-row-retry-${trackId}`}
+      onPress={(e) => {
+        e?.stopPropagation?.();
+        onRetry();
+      }}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={`Retry acquisition for ${title}`}
+    >
+      <Text variant="caption" tone="accent">
+        Retry
+      </Text>
+    </Pressable>
+  );
+}

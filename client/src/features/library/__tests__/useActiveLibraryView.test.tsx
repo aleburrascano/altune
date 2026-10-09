@@ -1,23 +1,20 @@
 import { act, renderHook } from '@testing-library/react-native';
-
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
-
-import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
+import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
-} from '@features/library/domain/sort';
-import { AlbumsGrid } from '../ui/AlbumsGrid';
-import { ArtistsGrid } from '../ui/ArtistsGrid';
-import type { LibraryChip } from '@features/library/domain/activeView';
+  type LibraryChip,
+} from '@features/library/domain/libraryView';
+import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
 import { trackResponseFactory } from '@testing/factories';
-import { PlaylistsGrid } from '../ui/PlaylistsGrid';
-import { TracksList } from '../ui/TracksList';
-import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
+import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
+import { TracksList } from '@features/library/ui/TracksList';
+import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 
 let mockUseLibraryTracks: () => unknown;
 let mockUseLibraryAlbums: () => unknown;
@@ -27,11 +24,8 @@ jest.mock('../hooks/useLibraryTracks', () => ({
   useLibraryTracks: () => mockUseLibraryTracks(),
 }));
 
-jest.mock('../hooks/useLibraryAlbums', () => ({
+jest.mock('../hooks/useLibraryGroups', () => ({
   useLibraryAlbums: () => mockUseLibraryAlbums(),
-}));
-
-jest.mock('../hooks/useLibraryArtists', () => ({
   useLibraryArtists: () => mockUseLibraryArtists(),
 }));
 

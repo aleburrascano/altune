@@ -1,14 +1,12 @@
 import { useCallback, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
-
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';
 import { PlaylistCover } from '@features/library/ui/PlaylistCover';
 import { useLibraryGridLayout } from '@features/library/hooks/useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
+import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 

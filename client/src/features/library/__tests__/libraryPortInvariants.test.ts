@@ -80,7 +80,7 @@ test.each(files)(
 describe('each library mutation has one calling hook', () => {
   test.each([
     ['port.deleteTrack(', 'hooks/useDeleteTracks.ts'],
-    ['port.reacquireTrack(', 'hooks/useReacquireTrack.ts'],
+    ['port.reacquireTrack(', 'hooks/useRetryAcquisition.ts'],
   ])('%s appears only in %s', (call, owner) => {
     const callers = files.filter(({ text }) => text.includes(call)).map(({ name }) => name);
 

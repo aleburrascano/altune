@@ -1,24 +1,20 @@
 import { memo, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import type { StyleProp, TextStyle } from 'react-native';
-
+import { Pressable, StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
 import { formatDuration } from '@shared/ui/displayFormat';
-import { Text, useWideWebLayout, useTheme } from '@shared/ui';
-import type { Theme } from '@shared/ui';
+import { Text, useWideWebLayout, useTheme, type Theme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-
 import { usePinnedStatus } from '@features/library/hooks/useLibraryOffline';
 import { LibraryRowDetails } from '@features/library/ui/LibraryRowDetails';
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
-import { LibraryRowMoreButton } from '@features/library/ui/LibraryRowMoreButton';
-import { LibraryRowPinnedIcon } from '@features/library/ui/LibraryRowPinnedIcon';
+import {
+  LibraryRowMoreButton,
+  LibraryRowPinnedIcon,
+} from '@features/library/ui/libraryRowAccessories';
 import { LibraryRowPlayback } from '@features/library/ui/LibraryRowPlayback';
 import { LibraryRowSelection } from '@features/library/ui/LibraryRowSelection';
 import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';
-import { libraryRowWideStyle } from '@features/library/ui/libraryRowWideStyle';
-import { WIDE_TRACK_COLUMNS } from '@features/library/ui/wideTrackColumns';
-
+import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/ui/libraryRowStyle';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 type WideRowProps = {

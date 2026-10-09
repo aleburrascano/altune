@@ -1,17 +1,13 @@
 import { render, screen } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
-
 import { spacing } from '@shared/ui';
-
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
-
 import { avatarColumns, cellSize, coverColumns } from '@features/library/domain/gridColumns';
-import type { ListRefresh } from '../domain/refresh';
-import { AlbumsGrid } from '../ui/AlbumsGrid';
-import { ArtistsGrid } from '../ui/ArtistsGrid';
-import { PlaylistCover } from '../ui/PlaylistCover';
-import { PlaylistsGrid } from '../ui/PlaylistsGrid';
+import type { ListRefresh } from '@features/library/domain/libraryView';
+import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
+import { PlaylistCover } from '@features/library/ui/PlaylistCover';
+import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
 
 let mockWindowWidth = 390;
 

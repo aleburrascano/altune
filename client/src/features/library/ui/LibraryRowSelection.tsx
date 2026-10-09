@@ -1,13 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-
 import { Check } from 'lucide-react-native';
-
 import { Row, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
-
-import { rowSurfaceStyle } from '@features/library/ui/rowSurfaceStyle';
-
+import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 export function LibraryRowSelection({

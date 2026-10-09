@@ -1,20 +1,22 @@
 import { showFailureAlert } from '@shared/ui';
 import { useRef, useState } from 'react';
-
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-
-import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailure';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import type { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import type { Selection } from '@features/library/hooks/useSelection';
-import type { ActiveView } from '@features/library/domain/activeView';
-import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
-import { TRACK_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
+import {
+  type ActiveView,
+  type ListPaging,
+  type ListRefresh,
+  TRACK_SORT_OPTIONS,
+  type SortKey,
+} from '@features/library/domain/libraryView';
 import { TracksList } from '@features/library/ui/TracksList';
 
 type TracksViewDeps = {

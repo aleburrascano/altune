@@ -6,17 +6,17 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
-
 import type { LibrarySort } from '@shared/api-client/library';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
 import { libraryKeys } from '@shared/query/queryKeys';
-
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
-
-import { failureLogFields } from '@features/library/domain/failureLogFields';
-import { classifyLibraryError, type LibraryFailure } from '@features/library/domain/state';
-import { pagedListControls } from '@features/library/domain/pagedListControls';
+import {
+  failureLogFields,
+  classifyLibraryError,
+  type LibraryFailure,
+} from '@features/library/domain/libraryFailure';
+import { pagedListControls } from '@features/library/domain/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
 
 export const TRACKS_PAGE_SIZE = 200;

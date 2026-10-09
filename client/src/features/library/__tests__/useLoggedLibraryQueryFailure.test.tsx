@@ -1,18 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-
 import { ApiError, NetworkError } from '@shared/errors';
-
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-
-import { useLibraryAlbums } from '../hooks/useLibraryAlbums';
-import { useLibraryArtists } from '../hooks/useLibraryArtists';
-import { useLibraryTracks } from '../hooks/useLibraryTracks';
-import { usePlaylistActions } from '../hooks/usePlaylistActions';
-import { usePlaylistsView } from '../hooks/usePlaylistsView';
+import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
+import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
+import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
 
 const SECRET = 'daft punk discovery bootleg';
 

@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
-
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
-
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';
-import type { ActiveView } from '@features/library/domain/activeView';
-import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
-import { PLAYLIST_SORT_OPTIONS, type SortKey } from '@features/library/domain/sort';
+import {
+  type ActiveView,
+  type ListPaging,
+  type ListRefresh,
+  PLAYLIST_SORT_OPTIONS,
+  type SortKey,
+} from '@features/library/domain/libraryView';
 import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
 
 type PlaylistsViewDeps = {

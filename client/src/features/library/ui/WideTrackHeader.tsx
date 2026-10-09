@@ -1,10 +1,7 @@
 import type { ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
-import type { StyleProp, TextStyle } from 'react-native';
-
+import { StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
 import { Text, spacing, useTheme } from '@shared/ui';
-
-import { WIDE_TRACK_COLUMNS } from '@features/library/ui/wideTrackColumns';
+import { WIDE_TRACK_COLUMNS } from '@features/library/ui/libraryRowStyle';
 
 const styles = StyleSheet.create({
   row: {

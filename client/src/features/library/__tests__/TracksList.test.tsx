@@ -1,9 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-
 import { trackResponseFactory } from '@testing/factories';
-
-import type { ListRefresh } from '../domain/refresh';
-import { TracksList } from '../ui/TracksList';
+import type { ListRefresh } from '@features/library/domain/libraryView';
+import { TracksList } from '@features/library/ui/TracksList';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
