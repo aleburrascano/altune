@@ -17,7 +17,7 @@ type PlaylistHandler struct {
 	membership   *service.PlaylistMembershipService
 	writeLimit   AudioRateLimit
 	now          func() time.Time
-	writeLimiter *audioRateLimiter
+	writeLimiter rateLimitMiddleware
 }
 
 func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService, opts ...func(*PlaylistHandler)) *PlaylistHandler {
@@ -45,7 +45,7 @@ func withPlaylistWriteClock(now func() time.Time) func(*PlaylistHandler) {
 func (h *PlaylistHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {
-		r.Use(h.writeLimiter.middleware)
+		r.Use(h.writeLimiter)
 		r.Post("/", h.handleCreate)
 		r.Post("/{playlistId}/tracks", h.handleAddTrack)
 		r.Post("/{playlistId}/tracks/batch", h.handleAddTracks)

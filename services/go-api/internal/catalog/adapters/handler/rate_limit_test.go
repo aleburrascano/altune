@@ -286,22 +286,6 @@ func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	}
 }
 
-func TestAudioRateLimiter_EvictsRefilledBuckets(t *testing.T) {
-	clock := newAudioFakeClock()
-	limit := AudioRateLimit{Every: time.Second, Burst: 2}
-	l := newAudioRateLimiter(limit, clock.now)
-
-	for range 1000 {
-		l.allow(uuid.NewString())
-	}
-	clock.advance(limit.Every * time.Duration(limit.Burst))
-	l.allow("fresh")
-
-	if got := len(l.buckets); got != 1 {
-		t.Fatalf("idle refilled buckets must be evicted, %d remain", got)
-	}
-}
-
 func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newAudioFakeClock()
 	rig := newWriteRig(

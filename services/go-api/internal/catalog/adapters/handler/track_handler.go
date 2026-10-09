@@ -23,7 +23,7 @@ type TrackHandler struct {
 	featuredArtist *FeaturedArtistHandler
 	writeLimit     AudioRateLimit
 	now            func() time.Time
-	writeLimiter   *audioRateLimiter
+	writeLimiter   rateLimitMiddleware
 }
 
 func NewTrackHandler(
@@ -63,7 +63,7 @@ func withTrackWriteClock(now func() time.Time) func(*TrackHandler) {
 func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
-	r.With(h.writeLimiter.middleware).Post("/", h.handleCreateTrack)
+	r.With(h.writeLimiter).Post("/", h.handleCreateTrack)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)

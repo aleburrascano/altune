@@ -14,7 +14,7 @@ import (
 
 type QueueHandler struct {
 	svc     *service.QueueService
-	limiter *userRateLimiter
+	limiter func(http.Handler) http.Handler
 }
 
 type queueHandlerConfig struct {
@@ -47,9 +47,9 @@ func NewQueueHandler(svc *service.QueueService, opts ...QueueHandlerOption) *Que
 
 func (h *QueueHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.With(h.limiter.middleware).Put("/queue-state", h.handleSave)
-	r.With(h.limiter.middleware).Put("/queue-state/position", h.handleSavePosition)
-	r.With(h.limiter.middleware).Get("/queue-state", h.handleGet)
+	r.With(h.limiter).Put("/queue-state", h.handleSave)
+	r.With(h.limiter).Put("/queue-state/position", h.handleSavePosition)
+	r.With(h.limiter).Get("/queue-state", h.handleGet)
 	r.Delete("/queue-state", h.handleForget)
 	return r
 }
