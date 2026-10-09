@@ -1,9 +1,8 @@
 package ports
 
 import (
-	"context"
-
 	"altune/go-api/internal/shared"
+	"context"
 )
 
 type NowPlayingTrack struct {

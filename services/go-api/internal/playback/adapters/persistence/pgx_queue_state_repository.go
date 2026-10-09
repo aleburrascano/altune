@@ -111,7 +111,7 @@ func (r *PgxQueueStateRepository) runOp(
 		if !errors.Is(err, context.DeadlineExceeded) {
 			r.metrics.QueueStateOpFailedTransient()
 		}
-		return fmt.Errorf("%w: %w", ports.ErrQueueStateUnavailable, err)
+		return fmt.Errorf("%w: %w", domain.ErrQueueStateUnavailable, err)
 	}
 	return err
 }

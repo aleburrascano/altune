@@ -2,6 +2,7 @@ package catalogbridge
 
 import (
 	"altune/go-api/internal/playback/ports"
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -40,7 +41,7 @@ type admission struct {
 	probe      bool
 }
 
-func (b *enrichmentBreaker) allow() (bool, admission) {
+func (b *enrichmentBreaker) allow(ctx context.Context) (bool, admission) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -50,7 +51,7 @@ func (b *enrichmentBreaker) allow() (bool, admission) {
 			return false, admission{}
 		}
 		b.state = breakerHalfOpen
-		slog.Warn("now-playing enrichment breaker half-open (probing catalog recovery)")
+		slog.WarnContext(ctx, "now-playing enrichment breaker half-open (probing catalog recovery)")
 		return true, b.admitProbe()
 	case breakerHalfOpen:
 		if b.probing {
@@ -81,11 +82,11 @@ func (b *enrichmentBreaker) release(adm admission) {
 	b.probing = false
 }
 
-func (b *enrichmentBreaker) recordSuccess(adm admission) {
+func (b *enrichmentBreaker) recordSuccess(ctx context.Context, adm admission) {
 	if !b.closeCircuit(adm) {
 		return
 	}
-	slog.Info("now-playing enrichment breaker closed (catalog recovered)")
+	slog.InfoContext(ctx, "now-playing enrichment breaker closed (catalog recovered)")
 }
 
 func (b *enrichmentBreaker) closeCircuit(adm admission) bool {
@@ -111,12 +112,12 @@ func (b *enrichmentBreaker) closeAfterProbe() bool {
 	return true
 }
 
-func (b *enrichmentBreaker) recordFailure() {
+func (b *enrichmentBreaker) recordFailure(ctx context.Context) {
 	failures, tripped := b.countFailure()
 	if !tripped {
 		return
 	}
-	slog.Warn("now-playing enrichment breaker opened (catalog failing)", "failures", failures)
+	slog.WarnContext(ctx, "now-playing enrichment breaker opened (catalog failing)", "failures", failures)
 }
 
 func (b *enrichmentBreaker) countFailure() (failures int, tripped bool) {

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/playback/adapters/authbridge"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service"
@@ -101,7 +101,7 @@ type currentTrackResponse struct {
 }
 
 func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -135,7 +135,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request) {
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -159,7 +159,7 @@ func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request
 }
 
 func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -176,7 +176,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) handleForget(w http.ResponseWriter, r *http.Request) {
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
