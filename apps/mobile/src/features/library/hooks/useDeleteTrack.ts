@@ -5,12 +5,12 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { forgetTrack } from '@shared/events/forgetTrack';
+import { invalidateLibraryDerived } from '@shared/events/trackCachePatch';
 import {
   captureTrackPlacements,
-  invalidateLibraryDerived,
   restoreTrackPlacements,
   type TrackCachePlacement,
-} from '@shared/events/trackCachePatch';
+} from '@shared/events/trackPlacements';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import {
   patchTrackStatus,

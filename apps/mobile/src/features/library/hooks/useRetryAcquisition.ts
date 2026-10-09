@@ -15,7 +15,8 @@ import {
   type RetryEntryPoint,
   type RetrySkipReason,
 } from '@shared/acquisition/acquisitionTelemetry';
-import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCachePatch';
+import { getTrackFromCaches } from '@shared/events/trackCachePatch';
+import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
 import { trackNotFoundAlert } from '@features/library/domain/trackNotFoundAlert';

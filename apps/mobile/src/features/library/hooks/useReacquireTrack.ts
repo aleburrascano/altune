@@ -6,7 +6,7 @@ import { forgetTrack } from '@shared/events/forgetTrack';
 import { showFailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/api-client/ids';
 import { toPending } from '@shared/api-client/trackAcquisition';
-import { patchTrackInCaches } from '@shared/events/trackCachePatch';
+import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
