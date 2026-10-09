@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+} from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, View } from 'react-native';
 import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
@@ -219,7 +225,7 @@ describe('useAlbumsView', () => {
 
         fireEvent.press(screen.getByTestId(RETRY));
 
-        await waitFor(() => expect(screen.queryByTestId(RETRY)).toBeNull());
+        await waitForElementToBeRemoved(() => screen.queryByTestId(RETRY));
         expect(screen.queryByTestId('library-error')).toBeNull();
       },
     );
@@ -410,7 +416,7 @@ describe('useArtistsView', () => {
 
         fireEvent.press(screen.getByTestId(RETRY));
 
-        await waitFor(() => expect(screen.queryByTestId(RETRY)).toBeNull());
+        await waitForElementToBeRemoved(() => screen.queryByTestId(RETRY));
         expect(screen.queryByTestId('library-error')).toBeNull();
       },
     );

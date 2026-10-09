@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+} from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
 import { asTrackId } from '@shared/api-client/ids';
@@ -142,7 +148,7 @@ describe('a library list whose next page fails to load', () => {
 
     fireEvent.press(screen.getByTestId(RETRY));
 
-    await waitFor(() => expect(screen.queryByTestId(RETRY)).toBeNull());
+    await waitForElementToBeRemoved(() => screen.queryByTestId(RETRY));
     expect(screen.queryByTestId('library-error')).toBeNull();
   });
 });
