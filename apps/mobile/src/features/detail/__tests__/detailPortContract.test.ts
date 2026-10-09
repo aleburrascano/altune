@@ -3,7 +3,7 @@ import type {
   CreateTrackRequest,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/trackResponse';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';

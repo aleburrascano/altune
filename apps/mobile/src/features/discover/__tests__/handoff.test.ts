@@ -1,4 +1,4 @@
-import { clearDetailHandoffs, readDetailHandoff } from '@shared/lib/detail-handoff';
+import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
 
 import { stashHandoffForDetail } from '@features/discover/domain/stashHandoffForDetail';
 import { resultFixture } from '@features/discover/__tests__/fixtures';

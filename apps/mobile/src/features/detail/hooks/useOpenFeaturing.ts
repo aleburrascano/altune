@@ -1,4 +1,4 @@
-import type { FeaturedArtist } from '@shared/api-client/types';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
 import { useNavigator } from '@shared/navigation';
 
 import { featuringHref, type DetailRoute } from '@/features/detail/domain/detailNavigation';

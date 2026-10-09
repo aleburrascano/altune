@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 import { Text, type TextTone } from '@shared/ui/primitives/Text';
 import { spacing, type TypographyVariant } from '@shared/ui/theme';
 
-import { asyncView } from '@shared/lib/async-view';
+import { asyncView } from '@shared/ui/asyncView';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 
 import { SectionError, type SectionErrorProps } from '@features/detail/ui/SectionError';

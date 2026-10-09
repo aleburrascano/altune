@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { AlbumGroup } from '@shared/api-client/library';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import { DETAIL_LIST_CAP } from '@/features/detail/domain/content-status';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';

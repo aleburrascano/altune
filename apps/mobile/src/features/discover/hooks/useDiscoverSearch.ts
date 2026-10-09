@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
+import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,

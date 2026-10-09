@@ -4,7 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
 import { ApiError, NetworkError } from '@shared/errors';
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';
 

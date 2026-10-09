@@ -2,7 +2,7 @@ import { Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { clearDetailHandoffs, detailHref } from '@shared/lib/detail-handoff';
+import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
 
 import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
 import { DetailScreen } from '@/features/detail/ui/DetailScreen';
@@ -107,7 +107,7 @@ describe('DetailScreen back button', () => {
           Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
         };
       });
-      freshDetailHref = require('@shared/lib/detail-handoff').detailHref;
+      freshDetailHref = require('@shared/navigation/detailHandoff').detailHref;
       FreshDetailScreen = require('@/features/detail/ui/DetailScreen').DetailScreen;
     });
 

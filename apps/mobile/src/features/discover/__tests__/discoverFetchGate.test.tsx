@@ -11,7 +11,7 @@ import {
 } from '@shared/api-client/discovery';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 
 import { useAutocompleteSuggestions } from '@features/discover/hooks/useAutocompleteSuggestions';
 import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useDiscoverClearSearchHistory';

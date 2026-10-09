@@ -9,7 +9,7 @@ import {
   type DiscoverySearchHistoryResponse,
 } from '@shared/api-client/discovery';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 
 import { useDiscoverClearSearchHistory } from '@features/discover/hooks/useDiscoverClearSearchHistory';
 import { useSearchHistory } from '@features/discover/hooks/useSearchHistory';

@@ -12,7 +12,7 @@ import type {
   CreateTrackRequest,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/trackResponse';
 
 import type { DetailPort } from '@features/detail/ports/detailPort';
 

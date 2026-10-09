@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { clearDetailHandoffs, detailHref } from '@shared/lib/detail-handoff';
+import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
 
 import { DetailScreen } from '../ui/DetailScreen';
 
