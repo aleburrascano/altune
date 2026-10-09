@@ -7,7 +7,8 @@ import {
   type ServerEventsClient,
   type ServerEventsClientFactory,
 } from '@shared/events/useServerEvents';
-import { SSEClient, type ServerEvent } from '@shared/events/sse-client';
+import { SSEClient } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 import { applyServerEvent } from '@shared/events/applyServerEvent';
 import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';

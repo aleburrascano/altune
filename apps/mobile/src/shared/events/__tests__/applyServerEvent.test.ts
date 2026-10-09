@@ -17,7 +17,7 @@ import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '@shared/events/applyServerEvent';
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));

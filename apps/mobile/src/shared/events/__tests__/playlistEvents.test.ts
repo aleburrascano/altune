@@ -8,7 +8,7 @@ import type {
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 
 const PATCHED_CACHES = 3;
 

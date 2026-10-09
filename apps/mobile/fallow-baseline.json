@@ -112,7 +112,6 @@
     "src/shared/events/eventTypes.ts:SERVER_EVENT_TYPES",
     "src/shared/events/sse-client.ts:HEARTBEAT_WATCHDOG_MS",
     "src/shared/events/sse-client.ts:MAX_RESPONSE_BYTES",
-    "src/shared/events/sse-client.ts:MalformedSSEEventError",
     "src/shared/events/sse-client.ts:ServerEventHandlerError",
     "src/shared/events/sse-client.ts:SSEConnectionError",
     "src/shared/events/sse-client.ts:SSEHttpError",

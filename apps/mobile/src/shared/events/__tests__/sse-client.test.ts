@@ -3,11 +3,11 @@ import {
   SSEClient,
   HEARTBEAT_WATCHDOG_MS,
   MAX_RESPONSE_BYTES,
-  MalformedSSEEventError,
   ServerEventHandlerError,
   SSEHttpError,
 } from '@shared/events/sse-client';
-import type { ServerEvent } from '@shared/events/sse-client';
+import { MalformedSSEEventError } from '@shared/events/sseFrames';
+import type { ServerEvent } from '@shared/events/sseFrames';
 import {
   clearSessionExpired,
   getSessionExpired,

@@ -1,6 +1,8 @@
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
 import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
 import { HTTP_UNAUTHORIZED } from '@shared/errors';
+import { isServerEvent, parseChunk } from '@shared/events/sseFrames';
+import type { ServerEvent } from '@shared/events/sseFrames';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 export const HEARTBEAT_WATCHDOG_MS = 60_000;
@@ -10,31 +12,9 @@ const BASE_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 const MAX_RETRY_AFTER_MS = 5 * 60_000;
 
-export interface ServerEvent {
-  id: string;
-  type: string;
-  data: Record<string, unknown>;
-}
-
 function reconnectDelayMs(attempt: number, minimumDelayMs: number): number {
   const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
   return Math.max(base + Math.random() * base, minimumDelayMs);
-}
-
-export class MalformedSSEEventError extends Error {
-  readonly eventId: string;
-  readonly eventType: string;
-  readonly payloadLength: number;
-
-  constructor(eventId: string, eventType: string, payloadLength: number) {
-    super(
-      `malformed SSE event payload (type=${eventType}, id=${eventId || '<none>'}, length=${payloadLength})`,
-    );
-    this.name = 'MalformedSSEEventError';
-    this.eventId = eventId;
-    this.eventType = eventType;
-    this.payloadLength = payloadLength;
-  }
 }
 
 export class ServerEventHandlerError extends Error {
@@ -94,74 +74,6 @@ function retryAfterMs(header: string | null, now: number): number {
 type EventHandler = (event: ServerEvent) => void;
 type ErrorHandler = (error: unknown) => void;
 
-type WireField = { name: string; value: string };
-
-function fieldOf(line: string): WireField | null {
-  if (line.startsWith(':')) return null;
-  const colon = line.indexOf(':');
-  if (colon === -1) return null;
-  const name = line.substring(0, colon);
-  const raw = line.substring(colon + 1);
-  return { name, value: raw.startsWith(' ') ? raw.substring(1) : raw };
-}
-
-type ParsedBlock = ServerEvent | MalformedSSEEventError;
-
-interface ParsedChunk {
-  blocks: ParsedBlock[];
-  remainder: string;
-  lastEventId: string;
-}
-
-function isServerEvent(block: ParsedBlock): block is ServerEvent {
-  return !(block instanceof MalformedSSEEventError);
-}
-
-function withUnixLineEndings(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
-function parseBlock(block: string): ParsedBlock | null {
-  let id = '';
-  let type = 'message';
-  const dataLines: string[] = [];
-
-  for (const line of block.split('\n')) {
-    const field = fieldOf(line);
-    if (field === null) continue;
-    if (field.name === 'id') id = field.value;
-    else if (field.name === 'event') type = field.value;
-    else if (field.name === 'data') dataLines.push(field.value);
-  }
-
-  if (dataLines.length === 0) return null;
-
-  const payload = dataLines.join('\n');
-  try {
-    return { id, type, data: JSON.parse(payload) as Record<string, unknown> };
-  } catch {
-    return new MalformedSSEEventError(id, type, payload.length);
-  }
-}
-
-function latestEventId(blocks: ParsedBlock[], fallback: string): string {
-  let latest = fallback;
-  for (const block of blocks) {
-    if (isServerEvent(block) && block.id) latest = block.id;
-  }
-  return latest;
-}
-
-function parseChunk(buffer: string, chunk: string, lastEventId: string): ParsedChunk {
-  const rawBlocks = (buffer + withUnixLineEndings(chunk)).split('\n\n');
-  const remainder = rawBlocks.pop() ?? '';
-  const blocks: ParsedBlock[] = [];
-  for (const raw of rawBlocks) {
-    const block = parseBlock(raw);
-    if (block !== null) blocks.push(block);
-  }
-  return { blocks, remainder, lastEventId: latestEventId(blocks, lastEventId) };
-}
 
 export class SSEClient {
   private xhr: XMLHttpRequest | null = null;

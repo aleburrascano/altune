@@ -16,7 +16,7 @@ import {
   removeTracksFromPlaylistCache,
   reorderPlaylistCache,
 } from '@shared/events/playlistCachePatch';
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 
 type PlaylistEventType =
   | 'track_added_to_playlist'

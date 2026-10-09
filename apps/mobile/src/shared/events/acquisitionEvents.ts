@@ -40,7 +40,7 @@ import {
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
 import { scheduleTrackPatch } from '@shared/events/trackPatchBatch';
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 
 type AcquisitionEventType =
   | 'track_added_to_library'

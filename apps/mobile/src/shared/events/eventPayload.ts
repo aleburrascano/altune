@@ -7,7 +7,7 @@ import {
   type TrackId,
 } from '@shared/api-client/ids';
 
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 import type { ServerEventType } from '@shared/events/eventTypes';
 
 export type ServerEventHandler = (queryClient: QueryClient, event: ServerEvent) => void;
