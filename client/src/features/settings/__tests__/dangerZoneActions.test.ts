@@ -8,7 +8,7 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
-import type { RemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
+import type { RemoveDownloads } from '@features/settings/hooks/useDownloads';
 import {
   buildDangerZoneActions,
   type ClearHistoryState,

@@ -2,7 +2,7 @@ import type { SignOutResult } from '@shared/auth/useSignOut';
 import type { TextTone } from '@shared/ui/primitives/Text';
 import { tracksLabel, LEFTOVER_FILES_LABEL } from '@features/settings/domain/downloadStatsModel';
 import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
-import type { RemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
+import type { RemoveDownloads } from '@features/settings/hooks/useDownloads';
 
 export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
 

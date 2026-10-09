@@ -8,14 +8,12 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
-import { useDownloadStats } from '@features/settings/hooks/useDownloadStats';
-import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
+import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
 import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
 import { LibraryCard } from '@features/settings/ui/LibraryCard';
 import { OfflineDownloadsCard } from '@features/settings/ui/OfflineDownloadsCard';
-import { SettingsCard } from '@features/settings/ui/SettingsCard';
-import { SettingsRow } from '@features/settings/ui/SettingsRow';
+import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
 export function SettingsScreen(): ReactElement {
   const theme = useTheme();

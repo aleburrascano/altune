@@ -8,8 +8,7 @@ import {
   backfillDetail,
 } from '@features/settings/domain/backfillStatus';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
-import { SettingsCard } from '@features/settings/ui/SettingsCard';
-import { SettingsRow } from '@features/settings/ui/SettingsRow';
+import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
 type Backfill = ReturnType<typeof useBackfillFeatured>;
 

@@ -2,8 +2,7 @@ import { DownloadCloud } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 
 import type { DownloadStats } from '@features/settings/domain/downloadStatsModel';
-import { SettingsCard } from '@features/settings/ui/SettingsCard';
-import { SettingsRow } from '@features/settings/ui/SettingsRow';
+import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
 type OfflineDownloadsCardProps = {
   stats: DownloadStats;

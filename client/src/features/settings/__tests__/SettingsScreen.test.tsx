@@ -31,8 +31,8 @@ jest.mock('@shared/auth/useSignOut', () => ({
 jest.mock('@features/settings/hooks/useAccountEmail', () => ({
   useAccountEmail: () => 'me@example.com',
 }));
-jest.mock('@features/settings/hooks/useDownloadStats', () => ({
-  ...jest.requireActual('@features/settings/hooks/useDownloadStats'),
+jest.mock('@features/settings/hooks/useDownloads', () => ({
+  ...jest.requireActual('@features/settings/hooks/useDownloads'),
   useDownloadStats: () => ({
     downloadCount: 0,
     downloadBytes: 0,

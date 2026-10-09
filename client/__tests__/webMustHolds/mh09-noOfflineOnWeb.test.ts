@@ -23,7 +23,7 @@ const MODULES_MOCKED_PER_TEST = [
   '@shared/auth/supabaseClient',
   '@shared/auth/useSignOut',
   '@features/settings/hooks/useAccountEmail',
-  '@features/settings/hooks/useDownloadStats',
+  '@features/settings/hooks/useDownloads',
   '@shared/api-client/tracks',
   '@shared/api-client/discovery',
 ];
@@ -208,8 +208,8 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
     jest.doMock('@features/settings/hooks/useAccountEmail', () => ({
       useAccountEmail: () => 'me@example.com',
     }));
-    jest.doMock('@features/settings/hooks/useDownloadStats', () => ({
-      ...jest.requireActual('@features/settings/hooks/useDownloadStats'),
+    jest.doMock('@features/settings/hooks/useDownloads', () => ({
+      ...jest.requireActual('@features/settings/hooks/useDownloads'),
       useDownloadStats: () => ({
         downloadCount: 0,
         downloadBytes: 0,
