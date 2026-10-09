@@ -2,6 +2,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { trackResponseFactory } from '@testing/factories';
 
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
@@ -17,7 +18,7 @@ const ports = {
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 function failedTrack(id: string): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Track ${id}`,
     artist: 'An Artist',
@@ -34,7 +35,7 @@ function failedTrack(id: string): TrackResponse {
     album_artist: null,
     isrc: null,
     audio_ref: null,
-  } as TrackResponse;
+  });
 }
 
 function FailedTracksList({ tracks }: { tracks: TrackResponse[] }) {

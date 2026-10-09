@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
+import { asTrackId } from '@shared/api-client/ids';
 import { supabase } from '@shared/auth/supabaseClient';
+import { sessionFactory, trackResponseFactory } from '@testing/factories';
 
 import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
@@ -51,7 +53,7 @@ function wrapper({ children }: { children: ReactNode }) {
 warmUpFirstRender(async () => {
   mockParams = { id: 'p1' };
   (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
+    data: { session: sessionFactory.build({ access_token: 'tok' }) },
     error: null,
   });
 
@@ -71,7 +73,7 @@ describe('PlaylistDetailScreen route param', () => {
   beforeEach(() => {
     mockReplace.mockClear();
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
+      data: { session: sessionFactory.build({ access_token: 'tok' }) },
       error: null,
     });
   });
@@ -134,7 +136,7 @@ describe('PlaylistDetailScreen — a failed load', () => {
   beforeEach(() => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
+      data: { session: sessionFactory.build({ access_token: 'tok' }) },
       error: null,
     });
   });
@@ -232,8 +234,8 @@ const oneReadyTrackPlaylist = {
   track_count: 1,
   total_duration_seconds: 212,
   tracks: [
-    {
-      id: 't1',
+    trackResponseFactory.build({
+      id: asTrackId('t1'),
       title: 'Aerodynamic',
       artist: 'Daft Punk',
       album: 'Discovery',
@@ -248,7 +250,7 @@ const oneReadyTrackPlaylist = {
       audio_ref: 'ref-1',
       acquisition_status: 'ready',
       failure_reason: null,
-    },
+    }),
   ],
 };
 
@@ -256,7 +258,7 @@ describe('PlaylistDetailScreen — offline download controls follow platform sup
   beforeEach(() => {
     mockParams = { id: 'p1' };
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
+      data: { session: sessionFactory.build({ access_token: 'tok' }) },
       error: null,
     });
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
@@ -315,7 +317,7 @@ describe('PlaylistDetailScreen — wide web layout', () => {
   beforeEach(() => {
     mockParams = { id: 'p1' };
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
+      data: { session: sessionFactory.build({ access_token: 'tok' }) },
       error: null,
     });
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
@@ -353,7 +355,7 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   beforeEach(() => {
     mockParams = { id: 'p1' };
     (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
+      data: { session: sessionFactory.build({ access_token: 'tok' }) },
       error: null,
     });
     RNPlatform.OS = 'web';

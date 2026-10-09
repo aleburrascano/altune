@@ -3,6 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
+import { sessionFactory } from '@testing/factories';
 
 import { useLibraryAlbums } from '../hooks/useLibraryAlbums';
 import { useLibraryArtists } from '../hooks/useLibraryArtists';
@@ -21,7 +22,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
+    data: { session: sessionFactory.build({ access_token: 'tok' }) },
     error: null,
   });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

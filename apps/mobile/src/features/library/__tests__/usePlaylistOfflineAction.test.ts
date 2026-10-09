@@ -5,11 +5,12 @@ import { act, renderHook } from '@testing-library/react-native';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { trackResponseFactory } from '@testing/factories';
 
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
 
 function track(id: string, status: TrackResponse['acquisition_status'] = 'ready'): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Track ${id}`,
     artist: 'An Artist',
@@ -25,7 +26,7 @@ function track(id: string, status: TrackResponse['acquisition_status'] = 'ready'
     album_artist: null,
     isrc: null,
     audio_ref: null,
-  };
+  });
 }
 
 beforeEach(() => {

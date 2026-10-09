@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
+import { trackResponseFactory } from '@testing/factories';
 
 import { LibraryRow } from '../ui/LibraryRow';
 
@@ -32,22 +33,22 @@ const fields = {
   audio_ref: null,
 };
 
-const readyTrack = {
+const readyTrack = trackResponseFactory.build({
   ...fields,
   acquisition_status: 'ready',
   failure_reason: null,
-} as TrackResponse;
-const pendingTrack = {
+});
+const pendingTrack = trackResponseFactory.build({
   ...fields,
   acquisition_status: 'pending',
   failure_reason: null,
-} as TrackResponse;
-const failedTrack = {
+});
+const failedTrack = trackResponseFactory.build({
   ...fields,
   acquisition_status: 'failed',
   failure_reason: 'no_source',
   failure_message: 'No source found',
-} as TrackResponse;
+});
 const albumlessTrack = { ...readyTrack, album: null } as TrackResponse;
 
 const rowLabel = () => screen.getByTestId(`library-row-${ID}`).props.accessibilityLabel as string;
@@ -263,7 +264,7 @@ describe('LibraryRow — accessibility label', () => {
   });
 });
 
-const track = {
+const track = trackResponseFactory.build({
   id: ID,
   title: 'Aerodynamic',
   artist: 'Daft Punk',
@@ -279,7 +280,7 @@ const track = {
   album_artist: null,
   isrc: null,
   audio_ref: null,
-} as TrackResponse;
+});
 
 function renderWithPin(entry: PinnedEntry | undefined) {
   usePinnedStore.setState({ entries: entry ? { [ID]: entry } : {} });

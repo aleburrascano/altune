@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
+import { trackResponseFactory } from '@testing/factories';
 
 import { buildTrackMenuItems } from '../trackMenu';
 
@@ -15,7 +16,7 @@ function readyPin(trackId: string): PinnedEntry {
 }
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId('track-1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
@@ -32,7 +33,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  } as TrackResponse;
+  } as TrackResponse);
 }
 
 type Opts = Parameters<typeof buildTrackMenuItems>[1];

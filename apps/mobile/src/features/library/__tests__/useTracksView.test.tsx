@@ -7,6 +7,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 import type { ActiveView } from '@features/library/domain/activeView';
+import { trackResponseFactory } from '@testing/factories';
 import { useSelection } from '../hooks/useSelection';
 import { useTracksView } from '../hooks/useTracksView';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
@@ -59,7 +60,7 @@ describe('a library list whose next page fails to load', () => {
   const RETRY = 'library-load-more-retry';
 
   const track = (i: number) =>
-    ({
+    trackResponseFactory.build({
       id: asTrackId(`t${i}`),
       title: `Track ${i}`,
       artist: 'An Artist',
@@ -68,7 +69,7 @@ describe('a library list whose next page fails to load', () => {
       added_at: '2026-01-01T00:00:00Z',
       acquisition_status: 'ready',
       artwork_url: null,
-    }) as unknown as TrackResponse;
+    });
 
   const rows = <T,>(make: (i: number) => T): T[] => Array.from({ length: PAGE }, (_, i) => make(i));
 
@@ -150,17 +151,17 @@ describe('a library list whose next page fails to load', () => {
 
 describe('playing a row from a library larger than the whole-library cap', () => {
   const CAP = 10_000;
-  const track = (id: string) =>
-    ({
-      id: asTrackId(id),
-      title: `Title ${id}`,
-      artist: 'An Artist',
-      album: null,
-      duration_seconds: 180,
-      added_at: '2026-01-01T00:00:00Z',
-      acquisition_status: 'ready',
-      artwork_url: null,
-    }) as unknown as TrackResponse;
+  const base = trackResponseFactory.build({
+    artist: 'An Artist',
+    album: null,
+    duration_seconds: 180,
+    added_at: '2026-01-01T00:00:00Z',
+    acquisition_status: 'ready',
+    artwork_url: null,
+  });
+  function track(id: string): TrackResponse {
+    return { ...base, id: asTrackId(id), title: `Title ${id}` };
+  }
 
   it('starts the tapped track when the capped whole-library fetch omits it', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -213,7 +214,7 @@ describe('playing a row from a library larger than the whole-library cap', () =>
 
 describe('whole-library play and shuffle', () => {
   const track = (id: string) =>
-    ({
+    trackResponseFactory.build({
       id: asTrackId(id),
       title: `Title ${id}`,
       artist: 'An Artist',
@@ -222,7 +223,7 @@ describe('whole-library play and shuffle', () => {
       added_at: '2026-01-01T00:00:00Z',
       acquisition_status: 'ready',
       artwork_url: null,
-    }) as unknown as TrackResponse;
+    });
 
   function renderLibrary(queue: unknown) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

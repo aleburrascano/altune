@@ -5,6 +5,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition/acquisitionTelemetry';
 import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
+import { trackResponseFactory } from '@testing/factories';
 
 import { LibraryRowFailure } from '../LibraryRowFailure';
 
@@ -15,7 +16,7 @@ const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueu
 type FailedTrack = TrackFields & FailedAcquisition;
 
 function failedTrack(overrides: Partial<FailedTrack> = {}): FailedTrack {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId('t-1'),
     title: 'Idioteque',
     artist: 'Radiohead',
@@ -33,7 +34,7 @@ function failedTrack(overrides: Partial<FailedTrack> = {}): FailedTrack {
     failure_reason: 'no_source',
     failure_message: 'No source found',
     ...overrides,
-  } as FailedTrack;
+  }) as FailedTrack;
 }
 
 function lastPayload(): Record<string, unknown> {

@@ -10,8 +10,6 @@ M2 src/app/(tabs)/library/playlist/[id].tsx deep import @features/library/ui/Pla
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
 M4 src/features/library/ui/useAddableTracks.ts use* file outside hooks/
 M4 src/features/library/ui/useLibraryGridLayout.ts use* file outside hooks/
-M7 jest/factories.ts sessionFactory has no importer under src/
-M7 jest/factories.ts trackResponseFactory has no importer under src/
 N1 src/shared/api-client/types.ts generic name
 N1 src/shared/lib generic name
 N1 src/shared/playback/constants.ts generic name

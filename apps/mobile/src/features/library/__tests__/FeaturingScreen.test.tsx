@@ -11,6 +11,7 @@ import { LibraryPortProvider } from '../ports/LibraryPortProvider';
 import type { LibraryPort } from '../ports/libraryPort';
 import { FeaturingScreen } from '../ui/FeaturingScreen';
 import * as detailHandoff from '@shared/navigation/detailHandoff';
+import { trackResponseFactory } from '@testing/factories';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
@@ -185,7 +186,7 @@ describe('a failed featuring load', () => {
 });
 
 describe('the detail route under the library tab', () => {
-  const pendingTrack = {
+  const pendingTrack = trackResponseFactory.build({
     id: asTrackId('t1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
@@ -201,7 +202,7 @@ describe('the detail route under the library tab', () => {
     audio_ref: null,
     acquisition_status: 'pending',
     failure_reason: null,
-  };
+  });
 
   afterEach(() => {
     jest.restoreAllMocks();
@@ -241,7 +242,7 @@ describe('the featuring screen opened from the discover tab', () => {
   const original = { ...router };
   let push: jest.Mock;
 
-  const oddTrack = {
+  const oddTrack = trackResponseFactory.build({
     id: asTrackId('t2'),
     title: 'Around the World / Harder, Better? #1 & "more"',
     artist: 'Daft Punk',
@@ -257,7 +258,7 @@ describe('the featuring screen opened from the discover tab', () => {
     audio_ref: null,
     acquisition_status: 'pending',
     failure_reason: null,
-  };
+  });
 
   beforeEach(() => {
     push = jest.fn();
