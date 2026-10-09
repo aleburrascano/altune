@@ -291,3 +291,21 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchRateLimit_AdmitsAgainAfterWindowResets(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	h := NewDiscoveryHandler(DiscoveryServices{
+		Search: service.NewService(nil, service.NewCircuitBreaker()),
+	}).WithRateLimits(DiscoveryRateLimits{Search: RequestLimit{Max: 1, Window: time.Minute}})
+	h.searchLimiter.now = func() time.Time { return now }
+	r := chi.NewRouter()
+	r.Use(middleware.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	const path = "/discovery/search?q=a&save_history=false"
+
+	discAssertStatus(t, discServe(t, r, http.MethodGet, path, nil), http.StatusOK)
+	assertRateLimited(t, discServe(t, r, http.MethodGet, path, nil))
+
+	now = now.Add(time.Minute)
+	discAssertStatus(t, discServe(t, r, http.MethodGet, path, nil), http.StatusOK)
+}

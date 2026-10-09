@@ -19,29 +19,15 @@ const (
 	maxFavoriteImageURLBytes = 2048
 )
 
-type invalidFavoriteError struct{ msg string }
-
-func (e *invalidFavoriteError) Error() string     { return e.msg }
-func (e *invalidFavoriteError) HTTPStatus() int   { return 400 }
-func (e *invalidFavoriteError) ErrorCode() string { return "discovery.invalid_favorite" }
-
-type favoritesFullError struct{}
-
-func (favoritesFullError) Error() string {
-	return fmt.Sprintf("favorites are full: at most %d per account", ports.MaxFavoritesPerUser)
-}
-func (favoritesFullError) HTTPStatus() int   { return 409 }
-func (favoritesFullError) ErrorCode() string { return "discovery.favorites_full" }
-
 func validateFavoriteText(title, subtitle string) error {
 	if !isStorableText(title) || !isStorableText(subtitle) {
-		return &invalidFavoriteError{msg: "title and subtitle must be valid UTF-8 without NUL"}
+		return domain.NewInvalidFavoriteError("title and subtitle must be valid UTF-8 without NUL")
 	}
 	if utf8.RuneCountInString(title) > maxFavoriteTextRunes {
-		return &invalidFavoriteError{msg: fmt.Sprintf("title must be at most %d characters", maxFavoriteTextRunes)}
+		return domain.NewInvalidFavoriteError(fmt.Sprintf("title must be at most %d characters", maxFavoriteTextRunes))
 	}
 	if utf8.RuneCountInString(subtitle) > maxFavoriteTextRunes {
-		return &invalidFavoriteError{msg: fmt.Sprintf("subtitle must be at most %d characters", maxFavoriteTextRunes)}
+		return domain.NewInvalidFavoriteError(fmt.Sprintf("subtitle must be at most %d characters", maxFavoriteTextRunes))
 	}
 	return nil
 }
@@ -51,10 +37,10 @@ func validateFavoriteImageURL(imageURL string) error {
 		return nil
 	}
 	if len(imageURL) > maxFavoriteImageURLBytes {
-		return &invalidFavoriteError{msg: fmt.Sprintf("image_url must be at most %d bytes", maxFavoriteImageURLBytes)}
+		return domain.NewInvalidFavoriteError(fmt.Sprintf("image_url must be at most %d bytes", maxFavoriteImageURLBytes))
 	}
 	if domain.SafeImageURL(imageURL) == "" {
-		return &invalidFavoriteError{msg: "image_url must be an https URL"}
+		return domain.NewInvalidFavoriteError("image_url must be an https URL")
 	}
 	return nil
 }
@@ -83,11 +69,11 @@ func (s *FavoritesService) Add(ctx context.Context, userId shared.UserId, fav do
 	}
 	fav.Key = domain.FavoriteKey(fav.Kind, fav.Title, fav.Subtitle)
 	if !hasTitleKey(fav.Kind, fav.Key) {
-		return &invalidFavoriteError{msg: "favorite needs a title"}
+		return domain.NewInvalidFavoriteError("favorite needs a title")
 	}
 	err := s.repo.Add(ctx, userId, fav)
 	if errors.Is(err, ports.ErrFavoritesFull) {
-		return favoritesFullError{}
+		return domain.NewFavoritesFullError(ports.MaxFavoritesPerUser)
 	}
 	if err != nil {
 		return fmt.Errorf("add favorite: %w", err)

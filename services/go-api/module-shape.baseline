@@ -52,10 +52,6 @@ G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
 G3 internal/playback/adapters/handler/queue_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/playback/adapters/handler/queue_rate_limit.go:4 imports auth outside adapters/authbridge
-G4 internal/discovery/adapters/handler/search_rate_limit.go rateLimitedError coded error declared outside domain
-G4 internal/discovery/service/favorites.go favoritesFullError coded error declared outside domain
-G4 internal/discovery/service/favorites.go invalidFavoriteError coded error declared outside domain
-G4 internal/discovery/service/record_event.go invalidEventError coded error declared outside domain
 G4 internal/playback/adapters/handler/queue_rate_limit.go queueRateLimitedError coded error declared outside domain
 G4 internal/playback/ports/queue_state_repo.go UnavailableError coded error declared outside domain
 G4 internal/shared/validation_error.go ValidationError coded error declared outside domain

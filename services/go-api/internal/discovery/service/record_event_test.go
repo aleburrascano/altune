@@ -89,8 +89,8 @@ func assertRejected400(t *testing.T, store *fakeEventStore, err error) {
 	if err == nil {
 		t.Fatal("expected a validation error")
 	}
-	var se interface{ HTTPStatus() int }
-	if !errors.As(err, &se) || se.HTTPStatus() != 400 {
+	var coded *domain.CodedError
+	if !errors.As(err, &coded) || coded.HTTPStatus() != 400 {
 		t.Errorf("error should carry HTTP 400, got %v", err)
 	}
 	if len(store.recorded()) != 0 {
@@ -238,9 +238,13 @@ func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
 	}
 }
 
-func TestInvalidEventErrorCode(t *testing.T) {
-	if got := (&invalidEventError{msg: "x"}).ErrorCode(); got != "discovery.invalid_event" {
-		t.Errorf("code: got %q, want %q", got, "discovery.invalid_event")
+func TestInvalidEventLookAlikeIsNotCoded(t *testing.T) {
+	var coded *domain.CodedError
+	if errors.As(errors.New("discovery.invalid_event"), &coded) {
+		t.Error("a plain error whose text is the code must not match *domain.CodedError")
+	}
+	if !errors.As(domain.NewInvalidEventError("x"), &coded) || coded.ErrorCode() != "discovery.invalid_event" {
+		t.Errorf("NewInvalidEventError should match *domain.CodedError with code discovery.invalid_event, got %v", coded)
 	}
 }
 
@@ -307,8 +311,8 @@ func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a validation error")
 	}
-	var se interface{ HTTPStatus() int }
-	if !errors.As(err, &se) || se.HTTPStatus() != 400 {
+	var coded *domain.CodedError
+	if !errors.As(err, &coded) || coded.HTTPStatus() != 400 {
 		t.Fatalf("error = %v, want an HTTP 400 StatusError", err)
 	}
 	if !strings.Contains(err.Error(), "not client-submittable") {
