@@ -2,13 +2,13 @@ import { type ReactElement } from 'react';
 
 import { Text } from '@shared/ui/primitives/Text';
 
-import type { SaveState } from '@features/detail/save-control-state';
+import type { SaveState } from '@/features/detail/domain/save-control-state';
 import {
   saveControlInteractive,
   saveControlLabel,
   saveControlText,
   saveDisplayState,
-} from '@features/detail/save-control-state';
+} from '@/features/detail/domain/save-control-state';
 
 import { SaveGlyph } from '@features/detail/ui/SaveGlyph';
 import { SavePillShell } from '@features/detail/ui/SavePillShell';

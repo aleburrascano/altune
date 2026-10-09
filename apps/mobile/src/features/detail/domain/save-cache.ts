@@ -3,7 +3,7 @@ import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { trackExtras } from './extras-accessors';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
 
 export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackRequest {
   const te = trackExtras(result.extras);

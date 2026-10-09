@@ -8,7 +8,7 @@ import type { PlaybackSource } from '@shared/playback/types';
 import { usePlayback } from '@shared/playback/usePlayback';
 
 import { resolveFeatured } from '@/features/detail/domain/featured-artists';
-import { trackExtras } from '@/features/detail/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
 import { type LateralNavHandle } from '@/features/detail/hooks/useLateralNav';
 import { useOwnedTrack } from '@/features/detail/hooks/useOwnedTrack';
@@ -17,8 +17,8 @@ import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
 import { useTrackSave, type TrackSave } from '@/features/detail/hooks/useTrackSave';
 import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
 import { useOpenFeaturing } from '@/features/detail/hooks/useOpenFeaturing';
-import { isResultPlaying, resolvePlaySource } from '@/features/detail/play-source';
-import { isOptimisticTrackId, toCreateTrackRequest } from '@/features/detail/save-cache';
+import { isResultPlaying, resolvePlaySource } from '@/features/detail/domain/play-source';
+import { isOptimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/save-cache';
 
 export type { LateralNavHandle };
 

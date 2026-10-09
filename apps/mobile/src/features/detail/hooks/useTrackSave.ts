@@ -6,13 +6,14 @@ import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveControlState,
+  type SaveFailure,
   type SaveState,
-} from '../save-control-state';
-import { toCreateTrackRequest } from '../save-cache';
+} from '@/features/detail/domain/save-control-state';
+import { toCreateTrackRequest } from '@/features/detail/domain/save-cache';
 
-import type { OwnedTrack } from './useOwnedTrack';
-import { useRetryTrack, type RetryTrack } from './useRetryTrack';
-import { useSaveTrack, type SaveFailure, type SaveTrack } from './useSaveTrack';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+import { useRetryTrack, type RetryTrack } from '@/features/detail/hooks/useRetryTrack';
+import { useSaveTrack, type SaveTrack } from '@/features/detail/hooks/useSaveTrack';
 
 export type TrackSave = {
   state: SaveState;

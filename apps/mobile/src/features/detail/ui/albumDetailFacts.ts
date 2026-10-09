@@ -1,6 +1,6 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { trackExtras } from '@features/detail/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
 
 import type { DetailFact } from '@features/detail/ui/DetailFacts';
 import { formatRuntime } from '@features/detail/ui/formatters';

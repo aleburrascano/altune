@@ -6,7 +6,7 @@ import type {
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import type { EnrichmentProvider } from '@/features/detail/domain/detailHealth';
-import { trackExtras } from '@/features/detail/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import { useDeezerEnrichment } from '@/features/detail/hooks/useDeezerEnrichment';
 import { useEnrichment } from '@/features/detail/hooks/useEnrichment';
 import { useLastFmEnrichment } from '@/features/detail/hooks/useLastFmEnrichment';

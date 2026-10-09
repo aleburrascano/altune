@@ -9,9 +9,9 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { formatDuration } from '@shared/lib/format';
 
-import { trackExtras } from '@features/detail/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
-import type { OwnedTrack } from '@features/detail/hooks/useOwnedTrack';
+import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 
 import { sharedStyles } from '@features/detail/ui/styles';
 import { AsyncListSection } from '@features/detail/ui/AsyncListSection';

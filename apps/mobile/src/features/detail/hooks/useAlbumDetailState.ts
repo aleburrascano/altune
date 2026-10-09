@@ -3,7 +3,7 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
-import { type OwnedSplit } from '@/features/detail/owned-playback';
+import { type OwnedSplit } from '@/features/detail/domain/owned-playback';
 import { type ContentFailure } from '@/features/detail/domain/content-status';
 
 import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
@@ -18,9 +18,9 @@ import {
   type LastBatch,
 } from '@/features/detail/hooks/useAlbumSaveAll';
 import { useOwnedPlayback } from '@/features/detail/hooks/useOwnedPlayback';
-import { trackExtras } from '@/features/detail/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
-import type { OwnedTrack } from '@/features/detail/hooks/useOwnedTrack';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
 
 function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
   return ownedTitles.has(normalizeForCompare(title));

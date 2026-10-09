@@ -1,8 +1,13 @@
 import type { TrackId } from '@shared/api-client/ids';
 
-import type { OwnedTrack } from './hooks/useOwnedTrack';
-import type { SaveFailure } from './hooks/useSaveTrack';
-import { isOptimisticTrackId } from './save-cache';
+import { isOptimisticTrackId } from '@/features/detail/domain/save-cache';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+
+export type SaveFailure = {
+  message: string;
+  isRetryable: boolean;
+  trackId?: TrackId;
+};
 
 export type SaveControlState = 'add' | 'saving' | 'ready' | 'failed' | 'rejected';
 

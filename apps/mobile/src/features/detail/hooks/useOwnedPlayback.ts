@@ -2,13 +2,23 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { RetryEntryPoint } from '@shared/acquisition/acquisitionTelemetry';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-import { trackExtras } from '../extras-accessors';
-import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
-import { ownedRetryTrackId, saveControlInteractive, saveControlState } from '../save-control-state';
-import { toCreateTrackRequest } from '../save-cache';
-import { ownedFromExtras, resolveOwnedTrackAtActionTime, type OwnedTrack } from './useOwnedTrack';
-import { useRetryTrack } from './useRetryTrack';
-import type { SaveTrack } from './useSaveTrack';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import {
+  playButtonState,
+  splitOwned,
+  toPlaybackQueue,
+  type OwnedSplit,
+} from '@/features/detail/domain/owned-playback';
+import {
+  ownedRetryTrackId,
+  saveControlInteractive,
+  saveControlState,
+} from '@/features/detail/domain/save-control-state';
+import { toCreateTrackRequest } from '@/features/detail/domain/save-cache';
+import { ownedFromExtras, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
+import { resolveOwnedTrackAtActionTime } from '@/features/detail/hooks/useOwnedTrack';
+import { useRetryTrack } from '@/features/detail/hooks/useRetryTrack';
+import type { SaveTrack } from '@/features/detail/hooks/useSaveTrack';
 
 export type OwnedPlaybackContext = {
   title: string | null;

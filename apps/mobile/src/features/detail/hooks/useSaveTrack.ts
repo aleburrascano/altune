@@ -29,6 +29,7 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
+import type { SaveFailure } from '@/features/detail/domain/save-control-state';
 import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
@@ -36,17 +37,11 @@ import {
   optimisticTrack,
   optimisticTrackId,
   saveIdempotencyKey,
-} from '@/features/detail/save-cache';
+} from '@/features/detail/domain/save-cache';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 
 type SaveMutation = UseMutationResult<TrackResponse, Error, CreateTrackRequest, SaveContext>;
-
-export type SaveFailure = {
-  message: string;
-  isRetryable: boolean;
-  trackId?: TrackId;
-};
 
 export type SaveTrack = {
   mutate: SaveMutation['mutate'];

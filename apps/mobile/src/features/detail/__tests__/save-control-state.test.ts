@@ -2,16 +2,19 @@ import { asTrackId } from '@shared/api-client/ids';
 
 import type { AcquisitionStatus } from '@shared/api-client/types';
 
-import { ownedTrack, type OwnedTrack } from '../hooks/useOwnedTrack';
+import { ownedTrack, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
 import {
   saveControlLabel,
   saveControlState,
   saveControlText,
   type SaveControlState,
-} from '../save-control-state';
-import { ownedRetryTrackId } from '../save-control-state';
-import { saveControlInteractive, saveDisplayState } from '../save-control-state';
-import { optimisticTrack, toCreateTrackRequest } from '../save-cache';
+} from '@/features/detail/domain/save-control-state';
+import {
+  ownedRetryTrackId,
+  saveControlInteractive,
+  saveDisplayState,
+} from '@/features/detail/domain/save-control-state';
+import { optimisticTrack, toCreateTrackRequest } from '@/features/detail/domain/save-cache';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 function owned(acquisitionStatus: AcquisitionStatus): OwnedTrack {

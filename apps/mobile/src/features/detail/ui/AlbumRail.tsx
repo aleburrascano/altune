@@ -11,7 +11,7 @@ import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { albumExtras } from '@features/detail/extras-accessors';
+import { albumExtras } from '@/features/detail/domain/extras-accessors';
 import { SECTION_CAP } from '@features/detail/hooks/useDiscographyFilter';
 import { albumYear } from '@features/detail/ui/formatters';
 import {
