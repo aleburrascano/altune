@@ -2,7 +2,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const featuresRoot = path.join(__dirname, '..');
-const PURE_MODULES = new Set(['ids', 'trackAcquisition', 'types', 'wireDecoders']);
+const PURE_MODULES = new Set([
+  'featuredArtists',
+  'ids',
+  'trackAcquisition',
+  'trackToDiscoveryResult',
+  'types',
+  'wireDecoders',
+]);
 
 function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
