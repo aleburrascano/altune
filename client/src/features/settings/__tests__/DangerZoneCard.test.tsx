@@ -11,7 +11,7 @@ import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 import { asTrackId } from '@shared/api-client/ids';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
-import { useRemoveDownloads } from '@features/settings/hooks/useRemoveDownloads';
+import { useRemoveDownloads } from '@features/settings/hooks/useDownloads';
 import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
 import type { ClearHistoryState } from '@features/settings/domain/dangerZoneActions';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';

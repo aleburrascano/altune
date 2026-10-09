@@ -7,8 +7,7 @@ import {
   buildDangerZoneActions,
   type DangerZoneActionKey,
 } from '@features/settings/domain/dangerZoneActions';
-import { SettingsCard } from '@features/settings/ui/SettingsCard';
-import { SettingsRow } from '@features/settings/ui/SettingsRow';
+import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
 const DANGER_ZONE_ICONS: Record<DangerZoneActionKey, LucideIcon> = {
   downloads: Trash2,

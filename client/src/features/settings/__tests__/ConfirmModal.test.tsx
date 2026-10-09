@@ -1,6 +1,6 @@
 import { KeyboardAvoidingView } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
-import type * as SettingsModalExports from '@features/settings/ui/SettingsModal';
+import type * as SettingsModalExports from '@features/settings/ui/ConfirmModal';
 
 const sharedReact = jest.requireActual('react');
 const sharedReactNative = jest.requireActual('react-native');
@@ -11,7 +11,7 @@ function keyboardAvoidingBehaviorOn(os: 'ios' | 'android'): unknown {
     jest.doMock('react', () => sharedReact);
     jest.doMock('react-native', () => sharedReactNative);
     sharedReactNative.Platform.OS = os;
-    loaded = jest.requireActual<typeof SettingsModalExports>('@features/settings/ui/SettingsModal');
+    loaded = jest.requireActual<typeof SettingsModalExports>('@features/settings/ui/ConfirmModal');
   });
   render(
     <loaded.SettingsModal visible onClose={() => undefined}>
