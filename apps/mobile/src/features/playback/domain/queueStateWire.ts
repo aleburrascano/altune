@@ -14,8 +14,8 @@ import type {
   QueueStateCurrentTrack,
   QueueStateResponse,
 } from '@shared/api-client/playback';
-import type { AcquisitionStatus } from '@shared/api-client/types';
-import type { QueueSource, RepeatMode } from '@shared/playback/types';
+import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
+import type { QueueSource, RepeatMode } from '@shared/playback/queueSource';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
 

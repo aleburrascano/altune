@@ -2,7 +2,7 @@ import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
-import type { PlaybackSource, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackSource, PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import {
   redactedPlaybackFailure,

@@ -3,8 +3,8 @@ import { FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from '
 import { useRouter } from 'expo-router';
 import { Play } from 'lucide-react-native';
 
-import { countLabel } from '@shared/lib/format';
-import { withFeaturing } from '@shared/lib/featured';
+import { countLabel } from '@shared/ui/displayFormat';
+import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';

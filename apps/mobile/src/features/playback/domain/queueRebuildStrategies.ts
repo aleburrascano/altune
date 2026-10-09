@@ -1,9 +1,9 @@
 import type { QueueStateResponse } from '@shared/api-client/playback';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { canPlay } from '@shared/playback/canPlay';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
-import type { QueueSource } from '@shared/playback/types';
+import type { QueueSource } from '@shared/playback/queueSource';
 
 import {
   recordQueueRebuildOutcome,

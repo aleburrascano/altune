@@ -5,12 +5,9 @@ import { onSignOut } from '@shared/session/signOutCleanup';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type {
-  PlaybackContextValue,
-  PlaybackState,
-  PlaybackTrack,
-  RepeatMode as QueueRepeatMode,
-} from '@shared/playback/types';
+import type { PlaybackContextValue, PlaybackState } from '@shared/playback/playbackContextValue';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { RepeatMode as QueueRepeatMode } from '@shared/playback/queueSource';
 
 import {
   createNativePlaybackActions,

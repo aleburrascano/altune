@@ -1,4 +1,4 @@
-import type { PlaybackErrorKind } from '@shared/playback/types';
+import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 
 const UNPLAYABLE_KINDS: ReadonlySet<PlaybackErrorKind> = new Set<PlaybackErrorKind>([
   'not_found',

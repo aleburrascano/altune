@@ -1,5 +1,5 @@
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { QueueSource } from '@shared/playback/types';
+import type { QueueSource } from '@shared/playback/queueSource';
 
 import {
   buildTrackPayload,

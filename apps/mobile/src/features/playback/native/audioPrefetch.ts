@@ -1,7 +1,7 @@
 import { File } from 'expo-file-system';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';

@@ -3,7 +3,7 @@ import { act, render } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import { useSleepTimerStore } from '@features/playback/hooks/useSleepTimerStore';
 import { SleepTimerBridge } from '@features/playback/ui/SleepTimerBridge';

@@ -3,7 +3,7 @@ import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import type { LyricsResponse } from '@shared/api-client/lyrics';
 import type { QueueStateResponse } from '@shared/api-client/playback';
 import { MAX_ALL_TRACKS } from '@shared/api-client/tracks';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 

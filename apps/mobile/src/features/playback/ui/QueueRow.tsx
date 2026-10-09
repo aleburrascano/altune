@@ -4,7 +4,7 @@ import { EllipsisVertical } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-import { withFeaturing } from '@shared/lib/featured';
+import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Text } from '@shared/ui/primitives/Text';

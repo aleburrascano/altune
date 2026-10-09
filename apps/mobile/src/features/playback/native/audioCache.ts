@@ -1,7 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 import type { TrackId } from '@shared/api-client/ids';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 const CACHE_SUBDIR = 'audio-prefetch';
 const KEEP_WINDOW = 4;

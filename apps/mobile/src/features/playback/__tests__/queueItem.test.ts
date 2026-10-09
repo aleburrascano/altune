@@ -1,5 +1,5 @@
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { QueueSource } from '@shared/playback/types';
+import type { QueueSource } from '@shared/playback/queueSource';
 
 import { buildUpNextItems, queueSourceLabel } from '@features/playback/domain/queueItem';
 import { libraryTrack } from '@features/playback/__tests__/fixtures';

@@ -1,4 +1,5 @@
-import type { PlaybackStatus, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackStatus } from '@shared/playback/playbackContextValue';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 export function isPreviewTrack(track: PlaybackTrack) {
   return track.source.kind === 'preview';

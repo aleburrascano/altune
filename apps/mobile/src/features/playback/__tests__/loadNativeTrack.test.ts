@@ -5,7 +5,7 @@ import { ApiError } from '@shared/errors';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import {
   appendNativeTrack,

@@ -1,7 +1,7 @@
 import TrackPlayer, { type AddTrack, type Track } from 'react-native-track-player';
 
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import type { TrackId } from '@shared/api-client/ids';

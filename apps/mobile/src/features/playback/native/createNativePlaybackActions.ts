@@ -2,7 +2,8 @@ import TrackPlayer from 'react-native-track-player';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
-import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackControls } from '@shared/playback/playbackContextValue';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import {
   appendNativeTrack,

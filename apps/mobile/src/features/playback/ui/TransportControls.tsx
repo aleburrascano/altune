@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
 
-import type { RepeatMode } from '@shared/playback/types';
+import type { RepeatMode } from '@shared/playback/queueSource';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 
 export type TransportControlsProps = {

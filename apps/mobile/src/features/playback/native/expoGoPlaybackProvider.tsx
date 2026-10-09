@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 function warnControlSkipped(control: string): void {
   if (!__DEV__) return;

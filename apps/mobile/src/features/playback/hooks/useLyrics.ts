@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 
 const LYRICS_STALE_MS = 24 * 60 * 60 * 1000;
 

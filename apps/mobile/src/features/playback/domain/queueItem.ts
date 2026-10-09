@@ -1,5 +1,6 @@
-import type { FeaturedArtist } from '@shared/api-client/types';
-import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { QueueSource } from '@shared/playback/queueSource';
 
 export type QueueItem = {
   trackIndex: number;

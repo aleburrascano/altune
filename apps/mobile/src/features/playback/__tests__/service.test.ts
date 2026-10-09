@@ -9,7 +9,7 @@ import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { setSignedInUser } from '@shared/session/signOutCleanup';
 
 import {
