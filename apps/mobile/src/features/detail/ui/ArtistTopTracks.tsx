@@ -13,7 +13,7 @@ import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 import { AsyncListSection } from '@features/detail/ui/AsyncListSection';
 import { TrackRowsSkeleton } from '@features/detail/ui/DetailSkeleton';
 import { Section } from '@features/detail/ui/Section';

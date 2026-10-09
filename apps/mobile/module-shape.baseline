@@ -22,10 +22,6 @@ N1 src/shared/lib generic name
 N1 src/shared/playback/constants.ts generic name
 N1 src/shared/playback/types.ts generic name
 N2 src/features/discover go-api module is discovery
-N3 src/features/detail/ui/albumDetailFacts.ts only export is buildAlbumFacts
-N3 src/features/detail/ui/color.ts only export is withAlpha
-N3 src/features/detail/ui/styles.ts only export is sharedStyles
-N3 src/features/detail/ui/trackDetailFacts.ts only export is buildTrackFacts
 N3 src/features/library/trackMenu.ts only export is buildTrackMenuItems
 N3 src/features/library/ui/libraryRowSurface.ts only export is rowSurfaceStyle
 N3 src/features/library/ui/listContentStyles.ts only export is listContent

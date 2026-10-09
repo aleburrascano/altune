@@ -10,7 +10,7 @@ import { formatDuration } from '@shared/ui/displayFormat';
 
 import { trackExtras } from '@/features/detail/domain/extras-accessors';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 import { TrackSaveControl } from '@features/detail/ui/TrackSaveControl';
 
 type AlbumTrackRowProps = {

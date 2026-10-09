@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { withAlpha } from '@features/detail/ui/color';
+import { withAlpha } from '@features/detail/ui/withAlpha';
 import { DETAIL_GUTTER } from '@features/detail/ui/layout';
 
 const GRADIENT_LOCATIONS = [0, 0.24, 0.54, 0.86, 1] as const;

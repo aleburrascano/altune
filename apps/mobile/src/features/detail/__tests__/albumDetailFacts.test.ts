@@ -1,6 +1,6 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { buildAlbumFacts } from '../ui/albumDetailFacts';
+import { buildAlbumFacts } from '@features/detail/ui/buildAlbumFacts';
 
 function track(title: string, durationSeconds?: number): DiscoveryResult {
   return {

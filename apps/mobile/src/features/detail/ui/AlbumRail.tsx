@@ -20,7 +20,7 @@ import {
   gridCellWidthFor,
   gridColumnsFor,
 } from '@features/detail/ui/layout';
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 
 type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 

@@ -5,7 +5,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { RecordTypeGroup } from '@features/detail/hooks/useDiscographyFilter';
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 
 type ChipProps = { group: RecordTypeGroup; on: boolean; onSelect: (type: string) => void };
 

@@ -11,7 +11,7 @@ import { useRelatedTracks } from '@features/detail/hooks/useRelatedTracks';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 import { useOpenDetail } from '@features/detail/hooks/useOpenDetail';
 import { RELATED_CARD_WIDTH } from '@features/detail/ui/layout';
-import { sharedStyles } from '@features/detail/ui/styles';
+import { sharedStyles } from '@features/detail/ui/sharedStyles';
 
 export function RelatedTracksSection({
   result: parent,
