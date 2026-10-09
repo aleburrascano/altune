@@ -8,10 +8,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 )
+
+type NopNotifier struct{}
+
+func (NopNotifier) Silent() bool { return true }
+
+func (NopNotifier) Notify(ctx context.Context, a domain.Alert) error {
+	slog.ErrorContext(ctx, "alert.signal", "title", a.Title, "message", a.Message)
+	return nil
+}
 
 const webhookTimeout = 5 * time.Second
 
