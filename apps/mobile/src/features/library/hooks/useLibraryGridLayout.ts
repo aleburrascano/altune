@@ -1,15 +1,21 @@
 import { useCallback, useState } from 'react';
 import { useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 
-import { CONTENT_MAX_WIDTH, SCREEN_HORIZONTAL_PADDING, useWideWebLayout } from '@shared/ui';
+import {
+  CONTENT_MAX_WIDTH,
+  SCREEN_HORIZONTAL_PADDING,
+  spacing,
+  useWideWebLayout,
+} from '@shared/ui';
 
 import {
-  GRID_GAP,
   avatarColumns,
   cellSize,
   coverColumns,
   wideCoverColumns,
-} from '@features/library/gridColumns';
+} from '@features/library/domain/gridColumns';
+
+export const GRID_GAP = spacing.md;
 
 type LibraryGridKind = 'cover' | 'avatar';
 type LibraryGridLayout = {

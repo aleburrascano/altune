@@ -5,9 +5,8 @@ import { Image as ExpoImage } from 'expo-image';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { ArtistGroup } from '@shared/api-client/library';
-import { GRID_GAP } from '@features/library/gridColumns';
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';
-import { useLibraryGridLayout } from '@features/library/ui/useLibraryGridLayout';
+import { GRID_GAP, useLibraryGridLayout } from '@features/library/hooks/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
 type ArtistsGridProps = {

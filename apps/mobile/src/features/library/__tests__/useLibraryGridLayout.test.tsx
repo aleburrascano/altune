@@ -6,7 +6,7 @@ import { spacing } from '@shared/ui';
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 
-import { avatarColumns, cellSize, coverColumns } from '../gridColumns';
+import { avatarColumns, cellSize, coverColumns } from '@features/library/domain/gridColumns';
 import type { ListRefresh } from '../domain/refresh';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';

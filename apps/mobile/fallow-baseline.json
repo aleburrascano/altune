@@ -209,7 +209,7 @@
     "src/features/auth/hooks/useSignIn.ts:SignInResult",
     "src/features/auth/hooks/useSignUp.ts:SignUpResult",
     "src/features/auth/hooks/useUpdatePassword.ts:UpdatePasswordResult",
-    "src/features/library/ui/useAddableTracks.ts:TracksQuery",
+    "src/features/library/hooks/useAddableTracks.ts:TracksQuery",
     "src/features/playback/hooks/usePlaybackRateStore.ts:PlaybackRateState",
     "src/features/playback/hooks/useSleepTimerStore.ts:SleepTimerState",
     "src/shared/api-client/index.ts:NetworkFailure",

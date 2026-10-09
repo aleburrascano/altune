@@ -6,7 +6,7 @@ import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup } from '@shared/api-client/library';
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';
-import { useLibraryGridLayout } from '@features/library/ui/useLibraryGridLayout';
+import { useLibraryGridLayout } from '@features/library/hooks/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
 type AlbumsGridProps = {
