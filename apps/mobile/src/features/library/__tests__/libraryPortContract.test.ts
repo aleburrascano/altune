@@ -7,6 +7,7 @@ import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { track } from '@features/library/__tests__/trackMutationFixtures';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { sessionFactory } from '@testing/factories';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
 
@@ -71,7 +72,7 @@ function abortedSignal(): AbortSignal {
 
 beforeEach(() => {
   (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
+    data: { session: sessionFactory.build({ access_token: 'tok' }) },
     error: null,
   });
 });

@@ -3,11 +3,12 @@ import { renderHook } from '@testing-library/react-native';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { trackResponseFactory } from '@testing/factories';
 
 import { offlineEligibility, useLibraryOffline, usePinnedStatus } from '../hooks/useLibraryOffline';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId('track-1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
@@ -24,7 +25,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  } as TrackResponse;
+  } as TrackResponse);
 }
 
 beforeEach(() => {

@@ -4,6 +4,7 @@ import { useEffect, type ReactElement } from 'react';
 
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { trackResponseFactory } from '@testing/factories';
 
 import {
   useTrackSelection,
@@ -22,7 +23,7 @@ jest.mock('@shared/playlists', () => ({
 }));
 
 function track(id: string): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Track ${id}`,
     artist: 'An Artist',
@@ -38,7 +39,7 @@ function track(id: string): TrackResponse {
     album_artist: null,
     isrc: null,
     audio_ref: null,
-  };
+  });
 }
 
 const onRemove = jest.fn();

@@ -6,11 +6,12 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import type { PinnedEntry, UnpinBatchResult } from '@shared/offline/pinnedStore';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackResponseFactory } from '@testing/factories';
 
 import { buildSelectionActions } from '../selectionActions';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId('track-1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
@@ -27,7 +28,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  } as TrackResponse;
+  } as TrackResponse);
 }
 
 const PINNED_BY_STATUS: Record<PinnedEntry['status'], PinnedEntry> = {

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { trackResponseFactory } from '@testing/factories';
+
 import type { ListRefresh } from '../domain/refresh';
 import { TracksList } from '../ui/TracksList';
 
@@ -56,7 +58,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 }));
 
 const oneTrack = [
-  {
+  trackResponseFactory.build({
     id: asTrackId('t1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
@@ -72,7 +74,7 @@ const oneTrack = [
     audio_ref: null,
     acquisition_status: 'ready',
     failure_reason: null,
-  },
+  }),
 ];
 
 function renderTracksList(refresh: ListRefresh, tracks: unknown[]) {
@@ -132,7 +134,7 @@ describe('library list shells — wide web header', () => {
 });
 
 function probeTrack(id: string, overrides: Record<string, unknown> = {}) {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Title ${id}`,
     artist: `Artist ${id}`,
@@ -149,7 +151,7 @@ function probeTrack(id: string, overrides: Record<string, unknown> = {}) {
     acquisition_status: 'ready',
     failure_reason: null,
     ...overrides,
-  };
+  });
 }
 
 type ProbeListOverrides = {

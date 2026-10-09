@@ -13,11 +13,12 @@ import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort'
 import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { trackResponseFactory } from '@testing/factories';
 
 import { createMemoryLibraryPort } from './memoryLibraryPort';
 
 export function track(id: string, overrides: Partial<TrackResponse> = {}): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Track ${id}`,
     artist: 'An Artist',
@@ -34,7 +35,7 @@ export function track(id: string, overrides: Partial<TrackResponse> = {}): Track
     isrc: null,
     audio_ref: null,
     ...overrides,
-  } as TrackResponse;
+  } as TrackResponse);
 }
 
 export function page(items: TrackResponse[], total = items.length): ListTracksResponse {

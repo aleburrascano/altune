@@ -14,6 +14,7 @@ import {
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 import type { LibraryChip } from '@features/library/domain/activeView';
+import { trackResponseFactory } from '@testing/factories';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 import { TracksList } from '../ui/TracksList';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
@@ -235,7 +236,7 @@ describe('useActiveLibraryView — playlist sort', () => {
 });
 
 function trackResponse(id: string): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Track ${id}`,
     artist: 'An Artist',
@@ -251,7 +252,7 @@ function trackResponse(id: string): TrackResponse {
     album_artist: null,
     isrc: null,
     audio_ref: null,
-  };
+  });
 }
 
 const mockFullLibrary = Array.from({ length: 250 }, (_, i) => trackResponse(`t${i}`));

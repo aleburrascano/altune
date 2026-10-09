@@ -3,13 +3,14 @@ import { renderHook } from '@testing-library/react-native';
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { trackResponseFactory } from '@testing/factories';
 
 import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 
 function track(id: string, status: TrackResponse['acquisition_status'] = 'ready'): TrackResponse {
-  return {
+  return trackResponseFactory.build({
     id: asTrackId(id),
     title: `Track ${id}`,
     artist: 'An Artist',
@@ -25,7 +26,7 @@ function track(id: string, status: TrackResponse['acquisition_status'] = 'ready'
     album_artist: null,
     isrc: null,
     audio_ref: null,
-  };
+  });
 }
 
 function playlist(tracks: TrackResponse[]): PlaylistDetailResponse {
