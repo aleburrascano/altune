@@ -52,7 +52,7 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     );
   });
 
-  it('covers the 16 playback domain files', () => {
+  it('covers the 18 playback domain files', () => {
     expect(
       files
         .filter(({ feature }) => feature === 'playback')
@@ -67,6 +67,8 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
         'loadToken.ts',
         'lyrics-sync.ts',
         'playbackHealth.ts',
+        'playsThroughTrackPlayer.ts',
+        'playsThroughTrackPlayer.web.ts',
         'presignWindow.ts',
         'queueItem.ts',
         'queueMenuOptions.ts',
