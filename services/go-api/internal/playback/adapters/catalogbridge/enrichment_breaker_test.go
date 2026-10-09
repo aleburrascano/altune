@@ -2,6 +2,7 @@ package catalogbridge
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"runtime"
 	"strings"
@@ -38,7 +39,7 @@ func (g *breakerGauge) readsDegraded() bool {
 
 func failEnoughToTrip(b *enrichmentBreaker) {
 	for i := 0; i < enrichmentFailureThreshold; i++ {
-		b.recordFailure()
+		b.recordFailure(context.Background())
 	}
 }
 
@@ -80,7 +81,7 @@ func TestBreaker_GaugeMatchesStateWhenASuccessRacesTheTrippingFailure(t *testing
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			breaker.recordSuccess(admission{})
+			breaker.recordSuccess(context.Background(), admission{})
 		}()
 		go func() {
 			defer wg.Done()
@@ -111,12 +112,12 @@ func TestBreaker_GaugeMatchesStateWhenARecoverySuccessFollowsTheTrip(t *testing.
 			defer wg.Done()
 			awaitDegraded(t, breaker)
 			skew.Store(int64(enrichmentOpenDuration + time.Second))
-			admitted, probe := breaker.allow()
+			admitted, probe := breaker.allow(context.Background())
 			if !admitted || !probe.probe {
 				t.Errorf("attempt %d: expected a half-open probe admission, got admitted=%v probe=%v", attempt, admitted, probe.probe)
 				return
 			}
-			breaker.recordSuccess(probe)
+			breaker.recordSuccess(context.Background(), probe)
 			breaker.release(probe)
 		}()
 		wg.Wait()
@@ -163,30 +164,30 @@ func TestEnrichmentBreaker_LogsTransitions(t *testing.T) {
 	b.now = func() time.Time { return now }
 
 	for range enrichmentFailureThreshold - 1 {
-		b.recordFailure()
+		b.recordFailure(context.Background())
 	}
 	if lines := logLines(buf); len(lines) != 0 {
 		t.Fatalf("failures below the threshold must log nothing, got %q", lines)
 	}
 
-	b.recordFailure()
+	b.recordFailure(context.Background())
 	if !strings.Contains(buf.String(), "failures=5") {
 		t.Fatalf("open record must carry failures=5, got %q", buf.String())
 	}
 	assertSingleLog(t, buf, "WARN", "now-playing enrichment breaker opened (catalog failing)")
 
-	b.recordFailure()
+	b.recordFailure(context.Background())
 	if lines := logLines(buf); len(lines) != 0 {
 		t.Fatalf("a failure while open must log nothing, got %q", lines)
 	}
 
 	now = now.Add(enrichmentOpenDuration + time.Second)
-	ok, adm := b.allow()
+	ok, adm := b.allow(context.Background())
 	if !ok || !adm.probe {
 		t.Fatalf("allow after the open window must admit a probe, got ok=%v probe=%v", ok, adm.probe)
 	}
 	assertSingleLog(t, buf, "WARN", "now-playing enrichment breaker half-open (probing catalog recovery)")
 
-	b.recordSuccess(adm)
+	b.recordSuccess(context.Background(), adm)
 	assertSingleLog(t, buf, "INFO", "now-playing enrichment breaker closed (catalog recovered)")
 }

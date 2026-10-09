@@ -73,7 +73,7 @@ func (r *NowPlayingReader) Lookup(
 		return trackAbsent()
 	}
 
-	admitted, admission := r.breaker.allow()
+	admitted, admission := r.breaker.allow(ctx)
 	if !admitted {
 		r.metrics.EnrichmentBreakerRejected()
 		return nil, errEnrichmentUnavailable
@@ -87,7 +87,7 @@ func (r *NowPlayingReader) Lookup(
 	if err != nil {
 		if ctx.Err() == nil {
 			if isDependencyFailure(err) {
-				r.breaker.recordFailure()
+				r.breaker.recordFailure(ctx)
 			}
 			r.metrics.EnrichmentFailed()
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -96,7 +96,7 @@ func (r *NowPlayingReader) Lookup(
 		}
 		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
-	r.breaker.recordSuccess(admission)
+	r.breaker.recordSuccess(ctx, admission)
 	if track == nil {
 		return trackAbsent()
 	}

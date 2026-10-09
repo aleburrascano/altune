@@ -1,6 +1,4 @@
 G1 internal/observe/handler unexpected root entry
-G1 internal/playback missing ARCHITECTURE.md
-G1 internal/playback/doc.go unexpected root entry
 G2 internal/discovery/domain/records.go:7 domain imports github.com/google/uuid
 G2 internal/discovery/service/artwork_fill.go:15 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/eval/coverage_signal_b.go:10 service imports golang.org/x/sync/errgroup
@@ -48,10 +46,6 @@ G3 internal/catalog/adapters/handler/track_handler.go:4 imports auth outside ada
 G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
-G3 internal/playback/adapters/handler/queue_handler.go:4 imports auth outside adapters/authbridge
-G3 internal/playback/adapters/handler/queue_rate_limit.go:4 imports auth outside adapters/authbridge
-G4 internal/playback/adapters/handler/queue_rate_limit.go queueRateLimitedError coded error declared outside domain
-G4 internal/playback/ports/queue_state_repo.go UnavailableError coded error declared outside domain
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
 G6 internal/discovery/adapters/handler/enrichment_endpoints_test.go fakeDeezerEnricher declared in several test files
 G6 internal/discovery/adapters/handler/enrichment_endpoints_test.go fakeLastFmEnricher declared in several test files
@@ -67,9 +61,6 @@ G7 internal/discovery/service/correction.go:pickBestCorrection slog.Debug withou
 G7 internal/discovery/service/suggest.go:supplementWithFuzzy slog.Debug without context
 G7 internal/discovery/service/vocabulary_refresh.go:normalizeAndStore slog.Info without context
 G7 internal/discovery/service/vocabulary_refresh.go:trim slog.Warn without context
-G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:allow slog.Warn without context
-G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:recordFailure slog.Warn without context
-G7 internal/playback/adapters/catalogbridge/enrichment_breaker.go:recordSuccess slog.Info without context
 N1 deploy/lib.sh banned name lib
 N1 internal/discovery/adapters/cache/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers
@@ -78,4 +69,3 @@ N1 internal/discovery/service/helpers_test.go banned name helpers
 N1 internal/shared/events/types.go banned name types
 N2 internal/discovery differs from mobile feature discover
 N2 internal/discovery is not a term in docs/ubiquitous-language.md
-N2 internal/playback is not a term in docs/ubiquitous-language.md

@@ -828,7 +828,7 @@ func failingRepo(err error) *PgxQueueStateRepository {
 func TestDeleteForUser_DeadlineExceeded_IsRetryable503(t *testing.T) {
 	err := failingRepo(context.DeadlineExceeded).DeleteForUser(context.Background(), testUser())
 
-	if !errors.Is(err, ports.ErrQueueStateUnavailable) {
+	if !errors.Is(err, domain.ErrQueueStateUnavailable) {
 		t.Fatalf("err = %v, want ErrQueueStateUnavailable", err)
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -862,7 +862,7 @@ func TestQueueStateOp_TransientClassification(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := failingRepo(tc.err).DeleteForUser(context.Background(), testUser())
-			if got := errors.Is(err, ports.ErrQueueStateUnavailable); got != tc.want {
+			if got := errors.Is(err, domain.ErrQueueStateUnavailable); got != tc.want {
 				t.Fatalf("unavailable = %v, want %v (err %v)", got, tc.want, err)
 			}
 		})
@@ -872,7 +872,7 @@ func TestQueueStateOp_TransientClassification(t *testing.T) {
 func TestGetForUser_TransientFailureIsNotCorruptState(t *testing.T) {
 	_, err := failingRepo(context.DeadlineExceeded).GetForUser(context.Background(), testUser())
 
-	if errors.Is(err, ports.ErrCorruptStoredState) || !errors.Is(err, ports.ErrQueueStateUnavailable) {
+	if errors.Is(err, ports.ErrCorruptStoredState) || !errors.Is(err, domain.ErrQueueStateUnavailable) {
 		t.Fatalf("err = %v, want unavailable and not corrupt", err)
 	}
 }
@@ -932,10 +932,10 @@ func TestRunOp_TransientFault_CountsTransientNotTimeout(t *testing.T) {
 	m := &recordingMetrics{}
 	repo := &PgxQueueStateRepository{pool: failingStore{err: &pgconn.PgError{Code: "57P01"}}, metrics: m}
 
-	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); !errors.Is(err, ports.ErrQueueStateUnavailable) {
+	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); !errors.Is(err, domain.ErrQueueStateUnavailable) {
 		t.Fatalf("Upsert = %v, want ErrQueueStateUnavailable", err)
 	}
-	if _, err := repo.GetForUser(context.Background(), testUser()); !errors.Is(err, ports.ErrQueueStateUnavailable) {
+	if _, err := repo.GetForUser(context.Background(), testUser()); !errors.Is(err, domain.ErrQueueStateUnavailable) {
 		t.Fatalf("GetForUser = %v, want ErrQueueStateUnavailable", err)
 	}
 	if m.transientFailures != 2 || m.queueStateOpTimedOut != 0 {

@@ -330,7 +330,7 @@ func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
 		}
 	}
 
-	if admitted, _ := reader.breaker.allow(); !admitted {
+	if admitted, _ := reader.breaker.allow(context.Background()); !admitted {
 		t.Fatal("client cancellations must not trip the enrichment breaker")
 	}
 }
@@ -352,7 +352,7 @@ func TestLookup_PermanentRowErrorsLeaveBreakerClosed(t *testing.T) {
 		}
 	}
 
-	if admitted, _ := reader.breaker.allow(); !admitted {
+	if admitted, _ := reader.breaker.allow(context.Background()); !admitted {
 		t.Fatal("permanent per-row errors must not open the breaker for every user")
 	}
 	if m.enrichmentFailed != enrichmentFailureThreshold {

@@ -1,7 +1,8 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/playback/adapters/authbridge"
+	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
@@ -28,12 +29,6 @@ func WithQueueStateRateLimitMetrics(m ports.RateLimitMetrics) QueueHandlerOption
 		}
 	}
 }
-
-type queueRateLimitedError struct{}
-
-func (queueRateLimitedError) Error() string     { return "too many queue state requests, try again later" }
-func (queueRateLimitedError) HTTPStatus() int   { return http.StatusTooManyRequests }
-func (queueRateLimitedError) ErrorCode() string { return "playback.rate_limited" }
 
 type userRateLimiter struct {
 	mu        sync.Mutex
@@ -101,7 +96,7 @@ func (l *userRateLimiter) rotate(now time.Time) {
 
 func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userId, ok := authservice.UserIDFromContext(r.Context())
+		userId, ok := authbridge.UserIDFromContext(r.Context())
 		if !ok {
 			next.ServeHTTP(w, r)
 			return
@@ -110,7 +105,7 @@ func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 		if !allowed {
 			l.metrics.QueueStateRateLimited()
 			w.Header().Set("Retry-After", httputil.RetryAfterSeconds(wait))
-			httputil.HandleServiceError(w, r, queueRateLimitedError{})
+			httputil.HandleServiceError(w, r, domain.QueueRateLimitedError{})
 			return
 		}
 		next.ServeHTTP(w, r)

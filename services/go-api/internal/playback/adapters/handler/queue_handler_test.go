@@ -454,7 +454,7 @@ type unavailableRepo struct {
 }
 
 func (unavailableRepo) Upsert(_ context.Context, _ *domain.QueueState) error {
-	return fmt.Errorf("upsert: %w", ports.ErrQueueStateUnavailable)
+	return fmt.Errorf("upsert: %w", domain.ErrQueueStateUnavailable)
 }
 
 func TestHandleSave_TransientFailureIsRetryable503(t *testing.T) {
