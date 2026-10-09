@@ -1,0 +1,45 @@
+import { useCallback, useEffect, useMemo } from 'react';
+
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+
+import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
+import type { SearchPageParam, SearchPages } from '@features/discovery/domain/searchPages';
+
+function slateMismatch(
+  page: DiscoverySearchResponse,
+  pageParam: SearchPageParam | undefined,
+): boolean {
+  const sentId = pageParam?.searchId;
+  return sentId !== undefined && page.search_id !== sentId;
+}
+
+function firstSlateMismatch(source: SearchPages | undefined): number | undefined {
+  if (source === undefined) return undefined;
+  const index = source.pages.findIndex((page, i) => slateMismatch(page, source.pageParams[i]));
+  return index === -1 ? undefined : index;
+}
+
+function useStableGatedRestart(restart: () => unknown): () => void {
+  const isEnabled = useDiscoverFetchEnabled();
+  return useCallback(() => {
+    if (isEnabled) void restart();
+  }, [isEnabled, restart]);
+}
+
+function useRestartWhenExpired(expiredAt: number | undefined, restart: () => void): void {
+  useEffect(() => {
+    if (expiredAt !== undefined) restart();
+  }, [expiredAt, restart]);
+}
+
+export function useRestartOnExpiredSlate(
+  source: SearchPages | undefined,
+  restart: () => unknown,
+): DiscoverySearchResponse[] | undefined {
+  const expiredAt = firstSlateMismatch(source);
+  useRestartWhenExpired(expiredAt, useStableGatedRestart(restart));
+  return useMemo(
+    () => source?.pages.slice(0, expiredAt ?? source.pages.length),
+    [source, expiredAt],
+  );
+}

@@ -18,7 +18,7 @@ const RATCHET_RAISE_ONLY = {
   'src/shared/playlists/**': { statements: 100, branches: 92, functions: 100, lines: 100 },
   'src/features/auth/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/detail/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
-  'src/features/discover/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
+  'src/features/discovery/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/library/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/playback/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/features/settings/**': { statements: 0, branches: 0, functions: 0, lines: 0 },

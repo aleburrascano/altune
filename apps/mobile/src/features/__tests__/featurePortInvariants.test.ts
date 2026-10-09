@@ -54,7 +54,7 @@ function apiClientValueImports(text: string): string[] {
   return offenders;
 }
 
-const PORTED_FEATURES = ['library', 'discover', 'auth', 'settings', 'detail', 'playback'];
+const PORTED_FEATURES = ['library', 'discovery', 'auth', 'settings', 'detail', 'playback'];
 const files = PORTED_FEATURES.flatMap(featureFiles);
 
 test.each(PORTED_FEATURES)('%s has source files to check', (feature) => {

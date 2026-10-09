@@ -1,1 +1,1 @@
-export { DiscoverScreen as default } from '@features/discover';
+export { DiscoverScreen as default } from '@features/discovery';

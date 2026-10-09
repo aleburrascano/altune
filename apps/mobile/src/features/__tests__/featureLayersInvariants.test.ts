@@ -46,8 +46,8 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     },
   );
 
-  it('covers all 9 discover domain files', () => {
-    expect(files.filter(({ feature }) => feature === 'discover')).toHaveLength(
+  it('covers all 9 discovery domain files', () => {
+    expect(files.filter(({ feature }) => feature === 'discovery')).toHaveLength(
       DISCOVER_DOMAIN_FILE_COUNT,
     );
   });
@@ -116,10 +116,10 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
 
   it('tells a look-alike path from an outer-layer import', () => {
     expect(
-      forbiddenValueImports("import type { X } from '@features/discover/hooks/useX';"),
+      forbiddenValueImports("import type { X } from '@features/discovery/hooks/useX';"),
     ).toEqual([]);
-    expect(forbiddenValueImports("import { X } from '@features/discover/hooks/useX';")).toEqual([
-      '@features/discover/hooks/useX',
+    expect(forbiddenValueImports("import { X } from '@features/discovery/hooks/useX';")).toEqual([
+      '@features/discovery/hooks/useX',
     ]);
     expect(forbiddenValueImports("import { x } from './uiText';")).toEqual([]);
   });

@@ -1,0 +1,43 @@
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+
+import { discoveryKeys } from '@shared/query/queryKeys';
+import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
+import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
+import { isSearchableQuery } from '@features/discovery/domain/searchLimits';
+import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
+
+export const SUGGEST_DEBOUNCE_MS = 150;
+export const SEARCH_DEBOUNCE_MS = 300;
+
+const SUGGESTION_LIMIT = 5;
+
+export function useAutocompleteSuggestions(inputValue: string) {
+  const debouncedQuery = useSettledValue(inputValue.trim().toLowerCase(), SUGGEST_DEBOUNCE_MS);
+  const port = useDiscoverPort();
+  const isSuggestEnabled = useDiscoverFetchEnabled();
+
+  const { data, error } = useQuery({
+    queryKey: discoveryKeys.suggest(debouncedQuery),
+    queryFn: ({ signal }) =>
+      port.suggestDiscovery({ q: debouncedQuery, limit: SUGGESTION_LIMIT }, signal),
+    enabled: isSearchableQuery(debouncedQuery) && isSuggestEnabled,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+
+  useReportQueryFailure(error, 'suggest');
+
+  return { data, error };
+}
+
+function useSettledValue(value: string, delayMs: number): string {
+  const [settled, setSettled] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+
+  return settled;
+}

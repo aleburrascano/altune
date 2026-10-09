@@ -5,7 +5,7 @@ services/go-api/internal/auth/	2	wiring: a login defect that stops playback is f
 services/go-api/internal/app/	2	wiring: a defect that breaks playback is filed as playback	app
 services/go-api/internal/shared/	2	shared code: a defect that breaks playback is filed as playback	shared
 apps/mobile/src/features/playback/	1	streaming is the app	playback
-apps/mobile/src/features/discover/	1	finding music is part of the core loop	discover
+apps/mobile/src/features/discovery/	1	finding music is part of the core loop	discover
 apps/mobile/src/features/auth/	2	wiring: a login defect that stops playback is filed as playback	auth
 apps/mobile/src/shared/	2	shared code: a defect that breaks playback is filed as playback	shared
 services/go-api/internal/catalog/	2	track records: a defect that breaks streaming is filed as playback	catalog

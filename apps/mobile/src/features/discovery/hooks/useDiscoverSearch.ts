@@ -1,0 +1,190 @@
+import { useMemo, useRef } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+
+import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api-client/discovery';
+
+import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
+import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
+import {
+  useDiscoverFetchEnabled,
+  useGatedDiscoverCall,
+} from '@features/discovery/hooks/useDiscoverFetchGate';
+import { useRefreshFromFirstPage } from '@features/discovery/hooks/useRefreshFromFirstPage';
+import { useRestartOnExpiredSlate } from '@features/discovery/hooks/useRestartOnExpiredSlate';
+import {
+  MAX_SEARCH_OFFSET,
+  MAX_SEARCH_PAGES,
+  SEARCH_PAGE_SIZE,
+} from '@features/discovery/domain/searchLimits';
+import type { SearchPageParam, SearchPages } from '@features/discovery/domain/searchPages';
+import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
+import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
+
+const noPageToFetch = (): Promise<void> => Promise.resolve();
+
+const firstPageParam: SearchPageParam = { offset: 0, searchId: undefined };
+
+function searchPageRequest(trimmed: string, saveHistory: boolean, pageParam: SearchPageParam) {
+  return {
+    q: trimmed,
+    limit: SEARCH_PAGE_SIZE,
+    offset: pageParam.offset,
+    saveHistory,
+    ...(pageParam.searchId !== undefined ? { searchId: pageParam.searchId } : {}),
+  };
+}
+
+function cancelStaleSearches(queryClient: ReturnType<typeof useQueryClient>, trimmed: string) {
+  void queryClient.cancelQueries({
+    queryKey: discoveryKeys.searchPrefix,
+    predicate: (q) => !isSearchKeyFor(q.queryKey, trimmed),
+  });
+}
+
+function searchQueryFn(
+  port: DiscoverPort,
+  queryClient: ReturnType<typeof useQueryClient>,
+  trimmed: string,
+  claimHistorySave: () => boolean,
+) {
+  return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
+    cancelStaleSearches(queryClient, trimmed);
+    const saveHistory = pageParam.offset === 0 && claimHistorySave();
+    return port.searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
+  };
+}
+
+function nextSearchPageParam(
+  lastPage: DiscoverySearchResponse,
+  pages: DiscoverySearchResponse[],
+): SearchPageParam | undefined {
+  if (pages.length >= MAX_SEARCH_PAGES) return undefined;
+  if (!lastPage.has_more) return undefined;
+  const offset = lastPage.offset + lastPage.results.length;
+  if (offset > MAX_SEARCH_OFFSET) return undefined;
+  return { offset, searchId: pages[0]?.search_id };
+}
+
+const SEARCH_RETRY_COUNT = 1;
+
+type SearchQueryArgs = {
+  port: DiscoverPort;
+  queryKey: readonly unknown[];
+  queryClient: ReturnType<typeof useQueryClient>;
+  trimmed: string;
+  claimHistorySave: () => boolean;
+  isSearchEnabled: boolean;
+};
+
+function useSearchInfiniteQuery(args: SearchQueryArgs) {
+  return useInfiniteQuery<
+    DiscoverySearchResponse,
+    Error,
+    SearchPages,
+    readonly unknown[],
+    SearchPageParam
+  >({
+    queryKey: args.queryKey,
+    initialPageParam: firstPageParam,
+    queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed, args.claimHistorySave),
+    getNextPageParam: nextSearchPageParam,
+    enabled: args.trimmed.length > 0 && args.isSearchEnabled,
+    retry: SEARCH_RETRY_COUNT,
+  });
+}
+
+function useHistorySaveOnce(queryKey: readonly unknown[], saveHistory: boolean) {
+  const savedKey = useRef<string | undefined>(undefined);
+  const serialized = JSON.stringify(queryKey);
+  return () => {
+    if (!saveHistory || savedKey.current === serialized) return false;
+    savedKey.current = serialized;
+    return true;
+  };
+}
+
+export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
+  const trimmed = query.trim();
+  const port = useDiscoverPort();
+  const queryClient = useQueryClient();
+  const isSearchEnabled = useDiscoverFetchEnabled();
+
+  const queryKey = useMemo(
+    () => [...discoveryKeys.search(trimmed), saveHistory],
+    [trimmed, saveHistory],
+  );
+  const claimHistorySave = useHistorySaveOnce(queryKey, saveHistory);
+  const {
+    data: infiniteData,
+    isLoading,
+    isRefetching,
+    error,
+    isFetchNextPageError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useSearchInfiniteQuery({
+    port,
+    queryKey,
+    queryClient,
+    trimmed,
+    claimHistorySave,
+    isSearchEnabled,
+  });
+
+  useReportQueryFailure(error, 'search');
+
+  const { refresh, held, refreshFailed } = useRefreshFromFirstPage(queryKey, refetch);
+  const pages = useRestartOnExpiredSlate(held ?? infiniteData, refresh);
+  const data = useMemo(() => mergePages(pages), [pages]);
+  const retrySearch = useGatedDiscoverCall(refresh);
+
+  return {
+    data,
+    isLoading,
+    isRefreshing: isRefetching && !isFetchingNextPage,
+    error,
+    isUnavailable: !isSearchEnabled,
+    refetch: retrySearch,
+    fetchNextPage: isSearchEnabled ? fetchNextPage : noPageToFetch,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    refreshFailed,
+  };
+}
+
+function mergePages(pages: DiscoverySearchResponse[] = []): DiscoverySearchResponse | undefined {
+  const [first] = pages;
+  if (first === undefined) return undefined;
+  return {
+    ...first,
+    results: pages.flatMap((page) => page.results),
+    partial: pages.some((page) => page.partial),
+    providers: mergeProviders(pages),
+  };
+}
+
+function mergeProviders(pages: DiscoverySearchResponse[]): DiscoveryProviderInfo[] {
+  const byProvider = new Map<string, DiscoveryProviderInfo>();
+  for (const page of pages) {
+    for (const info of page.providers) {
+      const earlier = byProvider.get(info.provider);
+      byProvider.set(info.provider, earlier === undefined ? info : acrossPages(earlier, info));
+    }
+  }
+  return [...byProvider.values()];
+}
+
+function acrossPages(
+  earlier: DiscoveryProviderInfo,
+  later: DiscoveryProviderInfo,
+): DiscoveryProviderInfo {
+  return {
+    provider: earlier.provider,
+    status: earlier.status === 'ok' ? later.status : earlier.status,
+    result_count: earlier.result_count + later.result_count,
+    latency_ms: Math.max(earlier.latency_ms, later.latency_ms),
+  };
+}

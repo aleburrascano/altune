@@ -67,7 +67,7 @@ describe('mobile diff-scoped style rules', () => {
   it('exempts useDiscoverSearch from the function line cap only', () => {
     const body = Array.from({ length: 12 }, (_, i) => `  const v${i} = ${i};`).join('\n');
     const code = `export function f() {\n${body}\n  return v0;\n}\n`;
-    const hook = 'src/features/discover/hooks/useDiscoverSearch.ts';
+    const hook = 'src/features/discovery/hooks/useDiscoverSearch.ts';
     assert.ok(!diffScopedRuleIds(hook, code).includes('max-lines-per-function'));
     assert.ok(diffScopedRuleIds(path, code).includes('max-lines-per-function'));
   });
