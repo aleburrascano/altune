@@ -1,7 +1,6 @@
 M1 src/features/detail missing index.ts
 M1 src/features/library missing index.ts
 M1 src/features/library/gridColumns.ts loose root file
-M1 src/features/library/libraryFailureAlert.ts loose root file
 M1 src/features/library/pinBatchSummary.ts loose root file
 M1 src/features/library/pinnedStatusDisplay.ts loose root file
 M1 src/features/library/selectionActions.ts loose root file
@@ -16,8 +15,6 @@ M2 src/app/(tabs)/library/playlist/[id].tsx deep import @features/library/ui/Pla
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
 M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
 M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/
-M4 src/features/library/hooks/dropVanishedTrack.ts non-use* file in hooks/
-M4 src/features/library/hooks/logTrackMutationFailure.ts non-use* file in hooks/
 M4 src/features/library/ui/useAddableTracks.ts use* file outside hooks/
 M4 src/features/library/ui/useLibraryGridLayout.ts use* file outside hooks/
 M7 jest/factories.ts sessionFactory has no importer under src/
@@ -31,7 +28,6 @@ N3 src/features/detail/ui/albumDetailFacts.ts only export is buildAlbumFacts
 N3 src/features/detail/ui/color.ts only export is withAlpha
 N3 src/features/detail/ui/styles.ts only export is sharedStyles
 N3 src/features/detail/ui/trackDetailFacts.ts only export is buildTrackFacts
-N3 src/features/library/libraryFailureAlert.ts only export is alertLibraryFailure
 N3 src/features/library/trackMenu.ts only export is buildTrackMenuItems
 N3 src/features/library/ui/libraryRowSurface.ts only export is rowSurfaceStyle
 N3 src/features/library/ui/listContentStyles.ts only export is listContent

@@ -1,3 +1,4 @@
+import { showFailureAlert } from '@shared/ui';
 import { useState } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { detailHref } from '@shared/lib/detail-handoff';
@@ -8,7 +9,7 @@ import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 import { failureLogFields } from '@features/library/domain/failureLogFields';
 import type { FeaturingDetailRoute } from '@features/library/domain/featuringDetailRoute';
-import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
 import { classifyLibraryError } from '@features/library/domain/state';
 
 type DetailPath = FeaturingDetailRoute;
@@ -24,11 +25,13 @@ function reportExploreFailure(artist: string, error: unknown): void {
   console.warn('[library] featuring explore search failed', {
     ...failureLogFields(error),
   });
-  alertLibraryFailure(
-    'library.explore_artist',
-    'Search failed',
-    `Could not search for ${artist}.`,
-    classifyLibraryError(error),
+  showFailureAlert(
+    libraryFailureAlert(
+      'library.explore_artist',
+      'Search failed',
+      `Could not search for ${artist}.`,
+      classifyLibraryError(error),
+    ),
   );
 }
 

@@ -1,7 +1,7 @@
 import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 
-import { logTrackMutationFailure } from '../hooks/logTrackMutationFailure';
+import { logTrackMutationFailure } from '@features/library/domain/logTrackMutationFailure';
 
 const SECRET = 'bearer-eyJ-private-search-term';
 const trackId = asTrackId('t1');

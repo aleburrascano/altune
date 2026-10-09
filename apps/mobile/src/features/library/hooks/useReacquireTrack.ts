@@ -2,6 +2,8 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { useAppMutation } from '@shared/query/useAppMutation';
 
+import { forgetTrack } from '@shared/events/forgetTrack';
+import { showFailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/api-client/ids';
 import { toPending } from '@shared/api-client/trackAcquisition';
 import { patchTrackInCaches } from '@shared/events/trackCachePatch';
@@ -10,14 +12,14 @@ import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-import { dropVanishedTrack } from '@features/library/hooks/dropVanishedTrack';
-import { logTrackMutationFailure } from '@features/library/hooks/logTrackMutationFailure';
+import { trackNotFoundAlert } from '@features/library/domain/trackNotFoundAlert';
+import { logTrackMutationFailure } from '@features/library/domain/logTrackMutationFailure';
 import {
   trackMutationKeys,
   useOneRunPerTrack,
   type TrackMutation,
 } from '@features/library/hooks/useOneRunPerTrack';
-import { alertLibraryFailure } from '@features/library/libraryFailureAlert';
+import { libraryFailureAlert } from '@features/library/domain/libraryFailureAlert';
 import { classifyLibraryError } from '@features/library/domain/state';
 
 const reacquireEndpoint = (trackId: TrackId) => `POST /v1/tracks/${trackId}/reacquire`;
@@ -33,9 +35,14 @@ function markPending(queryClient: QueryClient) {
 function reportFailedReacquire(queryClient: QueryClient) {
   return (error: Error, trackId: TrackId): void => {
     const failure = classifyLibraryError(error);
-    if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
+    if (failure === 'not-found') {
+      forgetTrack(queryClient, trackId);
+      return showFailureAlert(trackNotFoundAlert(trackId));
+    }
     logTrackMutationFailure('re-acquire track', reacquireEndpoint, trackId, error);
-    alertLibraryFailure('library.reacquire', 'Re-acquire failed', REACQUIRE_FAILED, failure);
+    showFailureAlert(
+      libraryFailureAlert('library.reacquire', 'Re-acquire failed', REACQUIRE_FAILED, failure),
+    );
   };
 }
 
