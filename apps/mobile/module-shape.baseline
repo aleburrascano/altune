@@ -1,9 +1,5 @@
 M1 src/features/settings missing index.ts
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-N1 src/shared/api-client/types.ts generic name
-N1 src/shared/lib generic name
-N1 src/shared/playback/constants.ts generic name
-N1 src/shared/playback/types.ts generic name
 N2 src/features/discover go-api module is discovery
 N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
 N3 src/shared/api-client/queryString.ts only export is withQuery

@@ -7,7 +7,7 @@ import type {
   PlaylistResponse,
 } from '@shared/api-client/playlistResponse';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
-import { playlistKeys } from '@shared/lib/query-keys';
+import { playlistKeys } from '@shared/query/queryKeys';
 
 function revisePlaylistEverywhere(
   queryClient: QueryClient,

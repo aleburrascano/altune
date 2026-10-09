@@ -5,7 +5,7 @@ import TrackPlayer, {
   type RemoteSeekEvent,
 } from 'react-native-track-player';
 
-import { shouldRestartOnPrevious } from '@shared/playback/constants';
+import { shouldRestartOnPrevious } from '@shared/playback/restartOnPrevious';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';

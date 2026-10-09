@@ -24,7 +24,11 @@ import {
 import { startDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
 import { getSearchState, setSearchState } from '@features/discover/domain/searchState';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { clearDetailHandoffs, detailHref, readDetailHandoff } from '@shared/lib/detail-handoff';
+import {
+  clearDetailHandoffs,
+  detailHref,
+  readDetailHandoff,
+} from '@shared/navigation/detailHandoff';
 import type * as PinnedStoreModule from '@shared/offline/pinnedStore';
 
 import { useSession } from '@shared/auth/useSession';

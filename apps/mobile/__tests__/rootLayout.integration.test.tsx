@@ -6,7 +6,7 @@ import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-rout
 
 import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 

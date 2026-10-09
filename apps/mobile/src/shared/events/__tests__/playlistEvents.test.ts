@@ -6,7 +6,7 @@ import type {
   PlaylistDetailResponse,
 } from '@shared/api-client/playlistResponse';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
-import { playlistKeys } from '@shared/lib/query-keys';
+import { playlistKeys } from '@shared/query/queryKeys';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
 import type { ServerEvent } from '@shared/events/sse-client';
 

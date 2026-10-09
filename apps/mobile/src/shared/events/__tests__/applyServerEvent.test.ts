@@ -13,7 +13,7 @@ import type {
   PlaylistResponse,
 } from '@shared/api-client/playlistResponse';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
-import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
+import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '@shared/events/applyServerEvent';

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import PlayerLayout from '../src/app/player/_layout';
 

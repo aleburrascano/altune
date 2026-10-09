@@ -98,7 +98,7 @@ describe('apiClientValueImports', () => {
 
   it.each([
     ['empty source', ''],
-    ['import type', "import type { PlaylistResponse } from '@shared/api-client/types';"],
+    ['import type', "import type { PlaylistResponse } from '@shared/api-client/playlistResponse';"],
     ['import type namespace', "import type * as tracks from '@shared/api-client/tracks';"],
     ['all inline type', "import { type A, type B } from '@shared/api-client/types';"],
     ['export type', "export type { X } from '@shared/api-client/types';"],
