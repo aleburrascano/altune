@@ -13,8 +13,6 @@ M2 src/app/(tabs)/library/featuring.tsx deep import @features/library/ui/Featuri
 M2 src/app/(tabs)/library/index.tsx deep import @features/library/ui/LibraryScreen
 M2 src/app/(tabs)/library/playlist/[id].tsx deep import @features/library/ui/PlaylistDetailScreen
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
-M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/
 M4 src/features/library/ui/useAddableTracks.ts use* file outside hooks/
 M4 src/features/library/ui/useLibraryGridLayout.ts use* file outside hooks/
 M7 jest/factories.ts sessionFactory has no importer under src/

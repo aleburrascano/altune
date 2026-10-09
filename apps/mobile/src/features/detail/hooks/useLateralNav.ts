@@ -8,7 +8,7 @@ import { useOpenDetail } from '@/features/detail/hooks/useOpenDetail';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/detailFetchGate';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchEnabled';
 
 type LateralNavState = 'idle' | 'searching';
 

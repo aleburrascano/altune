@@ -10,7 +10,7 @@ import {
 import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/detailFetchGate';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchEnabled';
 import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
 
 type UseRelatedTracksParams = {

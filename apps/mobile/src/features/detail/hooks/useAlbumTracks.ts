@@ -11,7 +11,8 @@ import {
 } from '@/features/detail/domain/content-status';
 import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled, useGatedRefetch } from '@/features/detail/hooks/detailFetchGate';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchEnabled';
+import { useGatedRefetch } from '@/features/detail/hooks/useGatedRefetch';
 import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
 
 type UseAlbumTracksParams = {

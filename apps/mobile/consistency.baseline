@@ -7,7 +7,7 @@ MC-1 src/features/auth/hooks/useSignIn.ts '@shared/auth/supabaseClient' import i
 MC-1 src/features/auth/hooks/useSignUp.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
 MC-1 src/features/auth/hooks/useUpdatePassword.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
 MC-1 src/features/auth/ui/AuthCallbackScreen.web.tsx '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
-MC-10 src/features/detail/hooks/createEnrichmentHook.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/hooks/useProviderEnrichment.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/hooks/useAlbumDiscovery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/hooks/useArtistContent.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/hooks/useRelatedTracks.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
