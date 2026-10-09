@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { useAlbumDetailState } from '@/features/detail/hooks/useAlbumDetailState';
-import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/save-all';
+import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/saveTrack';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 
 jest.mock('expo-router', () => ({
@@ -20,10 +20,10 @@ jest.mock('@/features/detail/hooks/useSaveTrack', () => ({
 jest.mock('@/features/detail/hooks/useAlbumTracks', () => ({
   useAlbumTracks: () => mockUseAlbumTracks(),
 }));
-jest.mock('@/features/detail/hooks/useLibraryTracks', () => ({
+jest.mock('@/features/detail/hooks/useLibraryMatches', () => ({
   useLibraryTracksForAlbum: () => mockUseLibraryTracksForAlbum(),
 }));
-jest.mock('@/features/detail/hooks/useAlbumDiscovery', () => ({
+jest.mock('@/features/detail/hooks/useEntityDiscovery', () => ({
   useAlbumDiscovery: () => ({
     tracks: [],
     isLoading: false,

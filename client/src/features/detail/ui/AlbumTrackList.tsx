@@ -13,8 +13,7 @@ import { trackSubtitleWithFeaturing } from '@features/detail/ui/formatters';
 import { AlbumMoreTracks } from '@features/detail/ui/AlbumMoreTracks';
 import { AlbumTrackRow } from '@features/detail/ui/AlbumTrackRow';
 import { TrackRowsSkeleton } from '@features/detail/ui/DetailSkeleton';
-import { Section } from '@features/detail/ui/Section';
-import { SectionError } from '@features/detail/ui/SectionError';
+import { Section, SectionError } from '@features/detail/ui/Section';
 
 function TracksSection({ children }: { children: ReactNode }): ReactElement {
   return <Section label="Tracks">{children}</Section>;

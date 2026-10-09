@@ -1,16 +1,17 @@
-import { type ReactElement } from 'react';
-import { View } from 'react-native';
+import type { ReactElement } from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 
-import { radius } from '@shared/ui/theme';
-
+import { radius, spacing, useTheme } from '@shared/ui/theme';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Text } from '@shared/ui/primitives/Text';
 
-import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
+import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
-
 import { Section } from '@features/detail/ui/Section';
-import { TrackNavRow } from '@features/detail/ui/TrackNavRow';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
 
 type AlbumRowProps = {
   albumName: string;
@@ -96,3 +97,65 @@ export function TrackInfoSection(props: TrackInfoSectionProps): ReactElement | n
     </Section>
   );
 }
+
+export type TrackNavRowNav = {
+  overline: string;
+  title: string;
+  imageUri: string | null;
+  imageRadius: number;
+};
+
+export type TrackNavRowInteraction = {
+  onPress: () => void;
+  disabled?: boolean;
+  testID?: string;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
+};
+
+export type TrackNavRowProps = {
+  nav: TrackNavRowNav;
+  interaction: TrackNavRowInteraction;
+};
+
+function pressableStyle(borderColor: string) {
+  return ({ pressed }: { pressed: boolean }) => [
+    styles.navRow,
+    { borderBottomColor: borderColor },
+    pressed ? sharedStyles.pressed : null,
+  ];
+}
+
+export function TrackNavRow({ nav, interaction }: TrackNavRowProps): ReactElement {
+  const theme = useTheme();
+  return (
+    <Pressable {...interaction} accessibilityRole="link" style={pressableStyle(theme.color.border)}>
+      <Artwork uri={nav.imageUri} size={36} radius={nav.imageRadius} />
+      <NavRowText overline={nav.overline} title={nav.title} />
+      <ChevronRight size={16} color={theme.color.textTertiary} />
+    </Pressable>
+  );
+}
+
+const overlineTextProps = { variant: 'overline', tone: 'tertiary' } as const;
+const titleTextProps = { variant: 'body', numberOfLines: 1 } as const;
+
+function NavRowText({ overline, title }: { overline: string; title: string }): ReactElement {
+  return (
+    <View style={styles.navText}>
+      <Text {...overlineTextProps}>{overline}</Text>
+      <Text {...titleTextProps}>{title}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 56,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  navText: { flex: 1 },
+});

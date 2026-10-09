@@ -11,7 +11,7 @@ import {
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
 
-import { optimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/save-cache';
+import { optimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/saveTrack';
 import type { LateralNavHandle } from '@/features/detail/hooks/useTrackDetailActions';
 import { TrackDetailBody } from '@/features/detail/ui/TrackDetailBody';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';

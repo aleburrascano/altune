@@ -11,7 +11,7 @@ import {
   useTrackDetailActions,
   type TrackDetailActions,
 } from '@features/detail/hooks/useTrackDetailActions';
-import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
+import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 import { type DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import {
@@ -19,13 +19,12 @@ import {
   SecondaryAction,
   type PrimaryAction,
 } from '@features/detail/ui/DetailActions';
-import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { DetailFacts, buildTrackFacts } from '@features/detail/ui/DetailFacts';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
 import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
 import { TrackInfoSection } from '@features/detail/ui/TrackInfoSection';
-import { TrackSavePill } from '@features/detail/ui/TrackSavePill';
+import { TrackSavePill } from '@features/detail/ui/SaveControls';
 import { TrackStatusBanners } from '@features/detail/ui/TrackStatusBanners';
-import { buildTrackFacts } from '@features/detail/ui/buildTrackFacts';
 
 function wrongAlbumMenu(actions: TrackDetailActions): { label: string; onPress: () => void }[] {
   if (actions.albumName === null) return [];

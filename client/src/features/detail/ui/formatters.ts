@@ -1,7 +1,10 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { extractFeaturedFromText } from '@features/detail/domain/featured-artists';
-import { albumExtras, trackExtras } from '@/features/detail/domain/extras-accessors';
+import {
+  albumExtras,
+  extractFeaturedFromText,
+  trackExtras,
+} from '@/features/detail/domain/trackExtras';
 
 export function trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';

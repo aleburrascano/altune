@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { albumExtras } from '@/features/detail/domain/extras-accessors';
+import { albumExtras } from '@/features/detail/domain/trackExtras';
 
 const SECTION_CAP = 10;
 

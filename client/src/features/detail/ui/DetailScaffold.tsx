@@ -1,14 +1,16 @@
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useWideWebLayout } from '@shared/ui/layout';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import { useTheme, type Theme } from '@shared/ui/theme';
+import { useTheme, type Theme, spacing } from '@shared/ui/theme';
+import { Text } from '@shared/ui/primitives/Text';
 
-import { DetailBodyLayout } from '@features/detail/ui/DetailBodyLayout';
-import { DetailHeroBanner } from '@features/detail/ui/DetailHeroBanner';
 import { DetailTopBar, type DetailTopBarProps } from '@features/detail/ui/DetailTopBar';
+import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH, withAlpha } from '@features/detail/ui/detailStyles';
 
 const BANNER_HEIGHT = 318;
 const BAR_HEIGHT = 52;
@@ -168,4 +170,154 @@ const styles = StyleSheet.create({
     right: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+});
+
+export type DetailBodyLayoutProps = {
+  hero?: ReactNode;
+  actions: ReactNode;
+  facts?: ReactNode;
+  children: ReactNode;
+};
+
+type CompactBodyProps = Omit<DetailBodyLayoutProps, 'hero'>;
+
+function CompactBody(props: CompactBodyProps): ReactElement {
+  return (
+    <View testID="detail-body" style={bodyLayoutStyles.body}>
+      {props.actions}
+      {props.facts}
+      {props.children}
+    </View>
+  );
+}
+
+type WideLeftColumnProps = Pick<DetailBodyLayoutProps, 'hero' | 'actions'>;
+
+function WideLeftColumn({ hero, actions }: WideLeftColumnProps): ReactElement {
+  return (
+    <View testID="detail-body-left" style={bodyLayoutStyles.left}>
+      {hero}
+      {actions}
+    </View>
+  );
+}
+
+type WideRightColumnProps = { facts: ReactNode; children: ReactNode };
+
+function WideRightColumn({ facts, children }: WideRightColumnProps): ReactElement {
+  return (
+    <View testID="detail-body-right" style={bodyLayoutStyles.right}>
+      {facts}
+      {children}
+    </View>
+  );
+}
+
+function WideBody(props: DetailBodyLayoutProps): ReactElement {
+  return (
+    <View testID="detail-body-wide" style={bodyLayoutStyles.wideBody}>
+      <WideLeftColumn hero={props.hero} actions={props.actions} />
+      <WideRightColumn facts={props.facts}>{props.children}</WideRightColumn>
+    </View>
+  );
+}
+
+export function DetailBodyLayout(props: DetailBodyLayoutProps): ReactElement {
+  const wide = useWideWebLayout();
+  if (wide && props.hero != null) return <WideBody {...props} />;
+  return (
+    <CompactBody actions={props.actions} facts={props.facts}>
+      {props.children}
+    </CompactBody>
+  );
+}
+
+const bodyLayoutStyles = StyleSheet.create({
+  body: { paddingHorizontal: DETAIL_GUTTER },
+  wideBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xl,
+    paddingHorizontal: DETAIL_GUTTER,
+  },
+  left: { width: WIDE_LEFT_COLUMN_WIDTH, flexShrink: 0 },
+  right: { flex: 1, minWidth: 0 },
+});
+
+const GRADIENT_LOCATIONS = [0, 0.24, 0.54, 0.86, 1] as const;
+
+function bannerGradientColors(canvas: string): readonly [string, string, ...string[]] {
+  return [
+    withAlpha(canvas, 0.55),
+    withAlpha(canvas, 0.1),
+    withAlpha(canvas, 0.34),
+    withAlpha(canvas, 0.9),
+    canvas,
+  ];
+}
+
+function gradientProps(canvas: string) {
+  return {
+    colors: bannerGradientColors(canvas),
+    locations: GRADIENT_LOCATIONS,
+    style: StyleSheet.absoluteFill,
+    pointerEvents: 'none' as const,
+  };
+}
+
+function BannerGradient({ canvas }: { canvas: string }): ReactElement {
+  return <LinearGradient {...gradientProps(canvas)} />;
+}
+
+type BannerImageProps = { title: string; artworkUrl: string | null };
+
+function imageProps(props: BannerImageProps) {
+  return {
+    source: props.artworkUrl != null ? { uri: props.artworkUrl } : null,
+    style: StyleSheet.absoluteFill,
+    contentFit: 'cover' as const,
+    transition: 200,
+    accessibilityLabel: props.title,
+  };
+}
+
+function BannerImage(props: BannerImageProps): ReactElement {
+  return <Image {...imageProps(props)} />;
+}
+
+type BannerTextProps = { title: string; secondary?: ReactNode };
+
+function BannerText({ title, secondary }: BannerTextProps): ReactElement {
+  return (
+    <View style={heroBannerStyles.bannerText}>
+      <Text testID="detail-banner-title" variant="editorial" numberOfLines={2}>
+        {title}
+      </Text>
+      {secondary != null ? <View style={heroBannerStyles.secondary}>{secondary}</View> : null}
+    </View>
+  );
+}
+
+export type DetailHeroBannerProps = {
+  title: string;
+  secondary?: ReactNode;
+  artworkUrl: string | null;
+  height: number;
+};
+
+export function DetailHeroBanner(props: DetailHeroBannerProps): ReactElement {
+  const canvas = useTheme().color.canvas;
+  return (
+    <View style={[heroBannerStyles.banner, { height: props.height }]}>
+      <BannerImage title={props.title} artworkUrl={props.artworkUrl} />
+      <BannerGradient canvas={canvas} />
+      <BannerText title={props.title} secondary={props.secondary} />
+    </View>
+  );
+}
+
+const heroBannerStyles = StyleSheet.create({
+  banner: { width: '100%', justifyContent: 'flex-end' },
+  bannerText: { paddingHorizontal: DETAIL_GUTTER, paddingBottom: DETAIL_GUTTER },
+  secondary: { marginTop: spacing.xs, alignSelf: 'flex-start' },
 });

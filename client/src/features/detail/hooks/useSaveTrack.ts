@@ -1,4 +1,5 @@
 import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanstack/react-query';
+import { useRef } from 'react';
 
 import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
@@ -28,16 +29,24 @@ import {
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import type { SaveFailure } from '@/features/detail/domain/save-control-state';
-import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
-import type { DetailPort } from '@/features/detail/ports/detailPort';
-import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
 import {
+  type SaveFailure,
   optimisticTrack,
   optimisticTrackId,
   saveIdempotencyKey,
-} from '@/features/detail/domain/save-cache';
+  ownedRetryTrackId,
+  saveControlInteractive,
+  saveControlState,
+  type SaveState,
+  toCreateTrackRequest,
+} from '@/features/detail/domain/saveTrack';
+import { useDetailHandoff } from '@/features/detail/hooks/useDetailHandoff';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+import { useRetryTrack, type RetryTrack } from '@/features/detail/hooks/useRetryTrack';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 
@@ -173,4 +182,81 @@ export function useSaveTrack(): SaveTrack {
     isPending: mutation.isPending,
     failure: saveFailure(mutation.error, mutation.variables),
   };
+}
+
+export type TrackSave = {
+  state: SaveState;
+  failure: SaveFailure | null;
+  onSave: () => void;
+};
+
+function failureState(failure: SaveFailure): Exclude<SaveState, 'disabled'> {
+  return failure.isRetryable ? 'failed' : 'rejected';
+}
+
+function rememberedFailure(owned: OwnedTrack | null): SaveFailure | null {
+  if (owned?.acquisitionStatus !== 'failed' || owned.failureMessage === null) {
+    return null;
+  }
+  return { message: owned.failureMessage, isRetryable: owned.retryable };
+}
+
+function deriveState(
+  canSave: boolean,
+  save: { failure: SaveFailure | null; isPending: boolean },
+  owned: OwnedTrack | null,
+): SaveState {
+  if (!canSave) return 'disabled';
+  if (save.failure !== null) return failureState(save.failure);
+  if (save.isPending) return 'saving';
+  const remembered = rememberedFailure(owned);
+  if (remembered !== null) return failureState(remembered);
+  return saveControlState(owned);
+}
+
+type SaveDeps = {
+  owned: OwnedTrack | null;
+  track: DiscoveryResult;
+  save: SaveTrack;
+  retry: RetryTrack;
+};
+
+type Release = { onSettled: () => void };
+type Guarded = (action: (release: Release) => void) => void;
+
+function useLatch(): Guarded {
+  const held = useRef(false);
+  return (action) => {
+    if (held.current) return;
+    held.current = true;
+    try {
+      action({ onSettled: () => void (held.current = false) });
+    } catch (error) {
+      held.current = false;
+      throw error;
+    }
+  };
+}
+
+function dispatchSave(deps: SaveDeps, release: Release): void {
+  const retryId = ownedRetryTrackId(deps.owned);
+  if (retryId !== null) deps.retry.mutate(retryId, release);
+  else deps.save.mutate(toCreateTrackRequest(deps.track), release);
+}
+
+function buildOnSave(state: SaveState, deps: SaveDeps, guarded: Guarded): () => void {
+  if (!saveControlInteractive(state)) return () => undefined;
+  return () => guarded((release) => dispatchSave(deps, release));
+}
+
+export function useTrackSave(track: DiscoveryResult, owned: OwnedTrack | null): TrackSave {
+  const guarded = useLatch();
+  const save = useSaveTrack();
+  const retry = useRetryTrack('detail');
+  const canSave = (track.subtitle ?? '').length > 0;
+  const state = deriveState(canSave, save, owned);
+  const failure =
+    save.failure ?? (state === 'failed' || state === 'rejected' ? rememberedFailure(owned) : null);
+  const onSave = buildOnSave(state, { owned, track, save, retry }, guarded);
+  return { state, failure, onSave };
 }

@@ -10,8 +10,7 @@ import {
   featuringRouteFor,
   openDetail,
 } from '@/features/detail/domain/detailNavigation';
-import { useOpenDetail } from '@/features/detail/hooks/useOpenDetail';
-import { useOpenFeaturing } from '@/features/detail/hooks/useOpenFeaturing';
+import { useOpenDetail, useOpenFeaturing } from '@/features/detail/hooks/useDetailNavigation';
 
 jest.mock('expo-router', () => ({ useRouter: jest.fn() }));
 

@@ -15,12 +15,11 @@ import {
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { albumYear } from '@features/detail/ui/formatters';
-import { buildAlbumFacts } from '@features/detail/ui/buildAlbumFacts';
+import { buildAlbumFacts, DetailFacts } from '@features/detail/ui/DetailFacts';
 import { AlbumTrackList } from '@features/detail/ui/AlbumTrackList';
 import { DetailActions } from '@features/detail/ui/DetailActions';
-import { DetailFacts } from '@features/detail/ui/DetailFacts';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
-import { SaveAllPill } from '@features/detail/ui/SaveAllPill';
+import { SaveAllPill } from '@features/detail/ui/SaveControls';
 
 type AlbumDetailBodyProps = {
   chrome: DetailChrome;

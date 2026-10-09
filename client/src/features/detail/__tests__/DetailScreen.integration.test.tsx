@@ -36,7 +36,10 @@ jest.mock('../hooks/useDetailEnrichments', () => ({
     errors: { musicbrainz: false, deezer: false, lastfm: false },
   }),
 }));
-jest.mock('../hooks/useLateralNav', () => ({ useLateralNav: () => ({}) }));
+jest.mock('../hooks/useDetailNavigation', () => ({
+  ...jest.requireActual('../hooks/useDetailNavigation'),
+  useLateralNav: () => ({}),
+}));
 jest.mock('../ui/secondaryLine', () => ({ secondaryLine: () => null }));
 jest.mock('../hooks/useSaveTrack', () => ({
   useSaveTrack: () => ({ mutate: jest.fn(), mutateAsync: jest.fn(), isPending: false }),
@@ -51,7 +54,7 @@ jest.mock('../hooks/useOwnedPlayback', () => ({
   }),
 }));
 
-jest.mock('../hooks/useArtistDiscovery', () => ({
+jest.mock('../hooks/useEntityDiscovery', () => ({
   useArtistDiscovery: () => ({
     imageUrl: null,
     sources: [],
@@ -59,8 +62,6 @@ jest.mock('../hooks/useArtistDiscovery', () => ({
     isError: false,
     refetch: jest.fn(),
   }),
-}));
-jest.mock('../hooks/useAlbumDiscovery', () => ({
   useAlbumDiscovery: () => ({
     tracks: [],
     isLoading: false,
@@ -69,8 +70,6 @@ jest.mock('../hooks/useAlbumDiscovery', () => ({
     refetch: jest.fn(),
   }),
 }));
-jest.mock('../hooks/useLibraryAlbumsForArtist', () => ({ useLibraryAlbumsForArtist: () => [] }));
-
 jest.mock('../hooks/useAlbumTracks', () => ({
   useAlbumTracks: () => ({
     tracks: [
@@ -116,7 +115,7 @@ jest.mock('../hooks/useArtistContent', () => ({
   }),
 }));
 
-jest.mock('../hooks/useLibraryTracks', () => {
+jest.mock('../hooks/useLibraryMatches', () => {
   const { asTrackId } = require('@shared/api-client/ids');
   const libraryTrack = (id: string, title: string, artist: string, album: string) => ({
     id: asTrackId(id),
@@ -136,6 +135,7 @@ jest.mock('../hooks/useLibraryTracks', () => {
     audio_ref: null,
   });
   return {
+    useLibraryAlbumsForArtist: () => [],
     useLibraryTracksForAlbum: () => [
       libraryTrack('trk-chain', 'The Chain', 'Fleetwood Mac', 'Rumours'),
     ],

@@ -9,15 +9,14 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { formatDuration } from '@shared/ui/displayFormat';
 
-import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/trackExtras';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 
-import { sharedStyles } from '@features/detail/ui/sharedStyles';
-import { AsyncListSection } from '@features/detail/ui/AsyncListSection';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
+import { AsyncListSection, Section } from '@features/detail/ui/Section';
 import { TrackRowsSkeleton } from '@features/detail/ui/DetailSkeleton';
-import { Section } from '@features/detail/ui/Section';
-import { TrackSaveControl } from '@features/detail/ui/TrackSaveControl';
+import { TrackSaveControl } from '@features/detail/ui/SaveControls';
 
 const TRACK_CAP = 5;
 
