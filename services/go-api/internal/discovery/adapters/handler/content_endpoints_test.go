@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"context"
@@ -48,7 +49,7 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-				discdomain.ProviderDeezer: &fakeAlbumContentProvider{results: seedTracks(3)},
+				discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -77,7 +78,7 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
-				discdomain.ProviderDeezer: &fakeArtistContentProvider{topTracks: seedTracks(7)},
+				discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{TopTracks: seedTracks(7)},
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -95,7 +96,7 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer: &fakeAlbumContentProvider{},
+		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{},
 	}
 	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -307,18 +308,18 @@ func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
 }
 
 type countingArtistContentProvider struct {
-	fakeArtistContentProvider
+	discoverytest.ArtistContentProvider
 	calls int
 }
 
 func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
 	p.calls++
-	return p.fakeArtistContentProvider.GetArtistTopTracks(ctx, name, id)
+	return p.ArtistContentProvider.GetArtistTopTracks(ctx, name, id)
 }
 
 func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
 	p.calls++
-	return p.fakeArtistContentProvider.GetArtistAlbums(ctx, name, id)
+	return p.ArtistContentProvider.GetArtistAlbums(ctx, name, id)
 }
 
 func unauthenticatedDiscoveryRouter(h *DiscoveryHandler) chi.Router {

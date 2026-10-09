@@ -53,18 +53,12 @@ G3 internal/playback/adapters/handler/queue_rate_limit.go:4 imports auth outside
 G4 internal/playback/adapters/handler/queue_rate_limit.go queueRateLimitedError coded error declared outside domain
 G4 internal/playback/ports/queue_state_repo.go UnavailableError coded error declared outside domain
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
-G6 internal/discovery/adapters/handler/discovery_handler_test.go fakeAlbumContentProvider declared in several test files
-G6 internal/discovery/adapters/handler/discovery_handler_test.go fakeArtistContentProvider declared in several test files
 G6 internal/discovery/adapters/handler/enrichment_endpoints_test.go fakeDeezerEnricher declared in several test files
 G6 internal/discovery/adapters/handler/enrichment_endpoints_test.go fakeLastFmEnricher declared in several test files
 G6 internal/discovery/adapters/handler/enrichment_endpoints_test.go fakeLyricsProvider declared in several test files
-G6 internal/discovery/adapters/providers/artwork_chain_test.go fakeArtworkResolver declared in several test files
-G6 internal/discovery/service/artwork_fill_test.go fakeArtworkResolver declared in several test files
 G6 internal/discovery/service/enrich/deezer_enrichment_test.go fakeDeezerEnricher declared in several test files
 G6 internal/discovery/service/enrich/lastfm_enrichment_test.go fakeLastFmEnricher declared in several test files
 G6 internal/discovery/service/enrich/lyrics_test.go fakeLyricsProvider declared in several test files
-G6 internal/discovery/service/helpers_test.go fakeAlbumContentProvider declared in several test files
-G6 internal/discovery/service/helpers_test.go fakeArtistContentProvider declared in several test files
 G7 internal/acquisition/adapters/chromaprint/identifier.go:NewIdentifier slog.Warn without context
 G7 internal/acquisition/adapters/streamrip/source.go:largestAudioFile slog.Debug without context
 G7 internal/acquisition/adapters/tempfs/workspace.go:SweepAbandoned slog.Info without context

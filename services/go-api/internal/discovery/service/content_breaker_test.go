@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -43,7 +44,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "top tracks",
 			provider: domain.ProviderDeezer,
 			run: func(cb *CircuitBreaker, calls *atomic.Int32) (*ContentFetchResponse, error) {
-				p := &fakeArtistContentProvider{getTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+				p := &discoverytest.ArtistContentProvider{GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					calls.Add(1)
 					return []domain.SearchResult{breakerTrack(domain.ProviderDeezer, "1")}, nil
 				}}
@@ -56,7 +57,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "albums",
 			provider: domain.ProviderDeezer,
 			run: func(cb *CircuitBreaker, calls *atomic.Int32) (*ContentFetchResponse, error) {
-				p := &fakeArtistContentProvider{getAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+				p := &discoverytest.ArtistContentProvider{GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					calls.Add(1)
 					return []domain.SearchResult{v2Album(domain.ProviderDeezer, "a", "DAMN.")}, nil
 				}}
@@ -69,7 +70,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "identity fan-out (v2) albums",
 			provider: domain.ProviderDeezer,
 			run: func(cb *CircuitBreaker, calls *atomic.Int32) (*ContentFetchResponse, error) {
-				p := &fakeArtistContentProvider{getAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+				p := &discoverytest.ArtistContentProvider{GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					calls.Add(1)
 					return []domain.SearchResult{v2Album(domain.ProviderDeezer, "a", "DAMN.")}, nil
 				}}
@@ -82,7 +83,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			name:     "album tracks with deezer search fallback",
 			provider: domain.ProviderDeezer,
 			run: func(cb *CircuitBreaker, calls *atomic.Int32) (*ContentFetchResponse, error) {
-				p := &fakeAlbumContentProvider{getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+				p := &discoverytest.AlbumContentProvider{GetAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					calls.Add(1)
 					return []domain.SearchResult{breakerTrack(domain.ProviderDeezer, "1")}, nil
 				}}
@@ -131,7 +132,7 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 	cb := NewCircuitBreaker()
 	tripViaSearch(t, cb, domain.ProviderDeezer)
 	svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
-		domain.ProviderDeezer: &fakeArtistContentProvider{},
+		domain.ProviderDeezer: &discoverytest.ArtistContentProvider{},
 	}, WithContentCircuitBreaker(cb))
 
 	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", "", 10)
@@ -146,7 +147,7 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 	cb := NewCircuitBreaker()
 	var contentCalls atomic.Int32
-	p := &fakeArtistContentProvider{getTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	p := &discoverytest.ArtistContentProvider{GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 		contentCalls.Add(1)
 		return nil, upstreamDown
 	}}
@@ -219,7 +220,7 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 			tripToHalfOpenWindow(cb, domain.ProviderDeezer)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			p := &fakeArtistContentProvider{getAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			p := &discoverytest.ArtistContentProvider{GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 				if tc.cancel {
 					cancel()
 				}
@@ -277,7 +278,7 @@ func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := NewCircuitBreaker()
-			p := &fakeArtistContentProvider{getTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			p := &discoverytest.ArtistContentProvider{GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 				return nil, tc.err
 			}}
 			content := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},

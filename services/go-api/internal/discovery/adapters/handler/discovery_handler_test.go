@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	authdomain "altune/go-api/internal/auth/domain"
 	authports "altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
@@ -91,38 +92,6 @@ func (r *fakeSearchHistoryRepo) EraseSearchTextForUser(_ context.Context, _ shar
 	}
 	r.entries = nil
 	return nil
-}
-
-type fakeAlbumContentProvider struct {
-	results []discdomain.SearchResult
-	err     error
-}
-
-func (p *fakeAlbumContentProvider) GetAlbumTracks(_ context.Context, _ discdomain.ProviderName, _ string) ([]discdomain.SearchResult, error) {
-	if p.err != nil {
-		return nil, p.err
-	}
-	return p.results, nil
-}
-
-type fakeArtistContentProvider struct {
-	topTracks []discdomain.SearchResult
-	albums    []discdomain.SearchResult
-	err       error
-}
-
-func (p *fakeArtistContentProvider) GetArtistTopTracks(_ context.Context, _ discdomain.ProviderName, _ string) ([]discdomain.SearchResult, error) {
-	if p.err != nil {
-		return nil, p.err
-	}
-	return p.topTracks, nil
-}
-
-func (p *fakeArtistContentProvider) GetArtistAlbums(_ context.Context, _ discdomain.ProviderName, _ string) ([]discdomain.SearchResult, error) {
-	if p.err != nil {
-		return nil, p.err
-	}
-	return p.albums, nil
 }
 
 func discServe(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
@@ -471,14 +440,14 @@ func TestHandleAlbumTracks(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		albumProv  *fakeAlbumContentProvider
+		albumProv  *discoverytest.AlbumContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK with items",
 			path: "/discovery/albums/deezer/12345/tracks",
-			albumProv: &fakeAlbumContentProvider{
-				results: []discdomain.SearchResult{
+			albumProv: &discoverytest.AlbumContentProvider{
+				Results: []discdomain.SearchResult{
 					{
 						Kind:       discdomain.ResultKindTrack,
 						Title:      "Album Track 1",
@@ -494,7 +463,7 @@ func TestHandleAlbumTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/albums/unknown_provider/12345/tracks",
-			albumProv:  &fakeAlbumContentProvider{results: []discdomain.SearchResult{}},
+			albumProv:  &discoverytest.AlbumContentProvider{Results: []discdomain.SearchResult{}},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -526,14 +495,14 @@ func TestHandleArtistTopTracks(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		artistProv *fakeArtistContentProvider
+		artistProv *discoverytest.ArtistContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/top-tracks",
-			artistProv: &fakeArtistContentProvider{
-				topTracks: []discdomain.SearchResult{
+			artistProv: &discoverytest.ArtistContentProvider{
+				TopTracks: []discdomain.SearchResult{
 					{
 						Kind:       discdomain.ResultKindTrack,
 						Title:      "Top Song",
@@ -549,7 +518,7 @@ func TestHandleArtistTopTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/top-tracks",
-			artistProv: &fakeArtistContentProvider{},
+			artistProv: &discoverytest.ArtistContentProvider{},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -573,14 +542,14 @@ func TestHandleArtistAlbums(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		artistProv *fakeArtistContentProvider
+		artistProv *discoverytest.ArtistContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/albums",
-			artistProv: &fakeArtistContentProvider{
-				albums: []discdomain.SearchResult{
+			artistProv: &discoverytest.ArtistContentProvider{
+				Albums: []discdomain.SearchResult{
 					{
 						Kind:       discdomain.ResultKindAlbum,
 						Title:      "Greatest Hits",
@@ -596,7 +565,7 @@ func TestHandleArtistAlbums(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/albums",
-			artistProv: &fakeArtistContentProvider{},
+			artistProv: &discoverytest.ArtistContentProvider{},
 			wantStatus: http.StatusBadRequest,
 		},
 	}

@@ -50,36 +50,6 @@ func (f *fakeHistoryEraser) EraseSearchTextForUser(ctx context.Context, userId s
 	return nil
 }
 
-type fakeAlbumContentProvider struct {
-	getAlbumTracksFn func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
-}
-
-func (f *fakeAlbumContentProvider) GetAlbumTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	if f.getAlbumTracksFn != nil {
-		return f.getAlbumTracksFn(ctx, provider, externalID)
-	}
-	return nil, nil
-}
-
-type fakeArtistContentProvider struct {
-	getTopTracksFn func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
-	getAlbumsFn    func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
-}
-
-func (f *fakeArtistContentProvider) GetArtistTopTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	if f.getTopTracksFn != nil {
-		return f.getTopTracksFn(ctx, provider, externalID)
-	}
-	return nil, nil
-}
-
-func (f *fakeArtistContentProvider) GetArtistAlbums(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	if f.getAlbumsFn != nil {
-		return f.getAlbumsFn(ctx, provider, externalID)
-	}
-	return nil, nil
-}
-
 func captureDetachedLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()

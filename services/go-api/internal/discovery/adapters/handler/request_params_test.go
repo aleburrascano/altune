@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
@@ -22,10 +23,10 @@ const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer: &fakeAlbumContentProvider{results: seedTracks(3)},
+		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
 	}
 	artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
-		discdomain.ProviderDeezer: &fakeArtistContentProvider{albums: seedTracks(3)},
+		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
 	h := NewDiscoveryHandler(DiscoveryServices{
@@ -146,7 +147,7 @@ func allProvidersArtistRouter(t *testing.T) chi.Router {
 	t.Helper()
 	artistProviders := make(map[discdomain.ProviderName]ports.ArtistContentProvider, len(realProviderIDs))
 	for _, c := range realProviderIDs {
-		artistProviders[c.provider] = &fakeArtistContentProvider{albums: seedTracks(1)}
+		artistProviders[c.provider] = &discoverytest.ArtistContentProvider{Albums: seedTracks(1)}
 	}
 	return buildDiscoveryRouter(
 		&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)

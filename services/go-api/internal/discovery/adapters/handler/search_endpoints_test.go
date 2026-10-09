@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
@@ -1136,7 +1137,7 @@ func TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue(t *testing.T) {
 func validationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer: &fakeAlbumContentProvider{results: seedTracks(3)},
+		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
 	}
 	return buildDiscoveryRouter(
 		&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, albumProviders, nil)
