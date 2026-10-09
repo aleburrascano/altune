@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError , NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
