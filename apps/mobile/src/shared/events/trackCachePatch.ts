@@ -1,32 +1,23 @@
-import type { InfiniteData, QueryClient, QueryFilters, QueryKey } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionTransition } from '@shared/api-client/trackAcquisition';
-import type {
-  ListTracksResponse,
-  TrackFields,
-  TrackResponse,
-} from '@shared/api-client/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
-import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
-
-type TrackPages = InfiniteData<ListTracksResponse>;
-
-type TrackCacheShape = 'paged' | 'flat' | 'playlistDetails';
-
-interface TrackCacheFamily {
-  readonly prefix: readonly string[];
-  readonly shape: TrackCacheShape;
-}
-
-export const TRACK_CACHE_FAMILIES = {
-  pagedLibrary: { prefix: libraryKeys.tracksPrefix, shape: 'paged' },
-  lookup: { prefix: libraryKeys.lookupPrefix, shape: 'flat' },
-  featuring: { prefix: libraryKeys.featuringPrefix, shape: 'flat' },
-  playlistDetails: { prefix: playlistKeys.details, shape: 'playlistDetails' },
-} as const satisfies Record<string, TrackCacheFamily>;
-
-const TRACK_CACHE_FAMILY_LIST: readonly TrackCacheFamily[] = Object.values(TRACK_CACHE_FAMILIES);
+import type { TrackFields, TrackResponse } from '@shared/api-client/trackResponse';
+import { libraryKeys } from '@shared/query/queryKeys';
+import {
+  pagedAccessor,
+  PATCH_POLICY,
+  reflowOffsets,
+  RESIZE_POLICY,
+  TRACK_CACHE_FAMILIES,
+  TRACK_CACHE_FAMILY_LIST,
+  TRACK_SHAPES,
+  writeFamily,
+  type MapItems,
+  type TrackCacheFamily,
+  type TrackCacheShape,
+  type TrackPages,
+} from '@shared/events/trackCacheShapes';
 
 const LIBRARY_DERIVED_KEYS: readonly (readonly string[])[] = [
   libraryKeys.albumsPrefix,
@@ -41,101 +32,6 @@ export function invalidateLibraryDerived(queryClient: QueryClient): void {
   }
 }
 
-type MapItems = (items: TrackResponse[]) => TrackResponse[];
-type AdjustTotal = (total: number, before: number, after: number) => number;
-
-interface WritePolicy {
-  readonly listTotal: AdjustTotal;
-  readonly playlistCount: AdjustTotal;
-}
-
-const keepTotal: AdjustTotal = (total) => total;
-
-const REMOVE_POLICY: WritePolicy = {
-  listTotal: (total, before, after) => total - (before - after),
-  playlistCount: (_count, _before, after) => after,
-};
-
-const PATCH_POLICY: WritePolicy = {
-  listTotal: keepTotal,
-  playlistCount: keepTotal,
-};
-
-function reflowOffsets(
-  before: readonly ListTracksResponse[],
-  after: readonly ListTracksResponse[],
-): ListTracksResponse[] {
-  let shift = 0;
-  return after.map((page, i) => {
-    const shifted = shift === 0 ? page : { ...page, offset: Math.max(0, page.offset + shift) };
-    shift += page.items.length - (before[i]?.items.length ?? page.items.length);
-    return shifted;
-  });
-}
-
-function mapPages(
-  prev: TrackPages | undefined,
-  mapItems: MapItems,
-  adjustTotal: AdjustTotal,
-): TrackPages | undefined {
-  if (!prev) return prev;
-  const pages = prev.pages.map((page) => {
-    const items = mapItems(page.items);
-    return { ...page, items, total: adjustTotal(page.total, page.items.length, items.length) };
-  });
-  return { ...prev, pages: reflowOffsets(prev.pages, pages) };
-}
-
-function familyItems(shape: TrackCacheShape, data: unknown): readonly TrackResponse[] {
-  if (!data) return [];
-  switch (shape) {
-    case 'paged':
-      return (data as TrackPages).pages.flatMap((page) => page.items);
-    case 'flat':
-      return (data as ListTracksResponse).items;
-    case 'playlistDetails':
-      return (data as PlaylistDetailResponse).tracks;
-  }
-}
-
-function writeFamily(
-  queryClient: QueryClient,
-  family: TrackCacheFamily,
-  filters: QueryFilters,
-  mapItems: MapItems,
-  policy: WritePolicy,
-): void {
-  switch (family.shape) {
-    case 'paged':
-      queryClient.setQueriesData<TrackPages>(filters, (prev) =>
-        mapPages(prev, mapItems, policy.listTotal),
-      );
-      return;
-    case 'flat':
-      queryClient.setQueriesData<ListTracksResponse>(filters, (prev) => {
-        if (!prev) return prev;
-        const items = mapItems(prev.items);
-        return {
-          ...prev,
-          items,
-          total: policy.listTotal(prev.total, prev.items.length, items.length),
-        };
-      });
-      return;
-    case 'playlistDetails':
-      queryClient.setQueriesData<PlaylistDetailResponse>(filters, (prev) => {
-        if (!prev) return prev;
-        const tracks = mapItems(prev.tracks);
-        return {
-          ...prev,
-          tracks,
-          track_count: policy.playlistCount(prev.track_count, prev.tracks.length, tracks.length),
-        };
-      });
-      return;
-  }
-}
-
 export function getTrackFromCaches(
   queryClient: QueryClient,
   trackId: TrackId,
@@ -143,7 +39,7 @@ export function getTrackFromCaches(
   for (const family of TRACK_CACHE_FAMILY_LIST) {
     const entries = queryClient.getQueriesData({ queryKey: family.prefix });
     for (const [, data] of entries) {
-      const found = familyItems(family.shape, data).find((t) => t.id === trackId);
+      const found = TRACK_SHAPES[family.shape].items(data).find((t) => t.id === trackId);
       if (found) return withPatch(found, pendingPatchFor(queryClient, trackId));
     }
   }
@@ -164,10 +60,10 @@ export function upsertTrackInCaches(queryClient: QueryClient, track: TrackRespon
       if (!prev) return prev;
       const known = prev.pages.some((page) => page.items.some((t) => t.id === track.id));
       if (known) {
-        return mapPages(
+        return pagedAccessor.write(
           prev,
           (items) => items.map((t) => (t.id === track.id ? mergeTrack(t, track) : t)),
-          keepTotal,
+          PATCH_POLICY,
         );
       }
       const [first, ...rest] = prev.pages;
@@ -187,10 +83,10 @@ export function replaceTrackInCaches(
   queryClient.setQueriesData<TrackPages>(
     { queryKey: TRACK_CACHE_FAMILIES.pagedLibrary.prefix },
     (prev) =>
-      mapPages(
+      pagedAccessor.write(
         prev,
         (items) => dedupById(items.map((t) => (t.id === optimisticId ? real : t))),
-        (total, before, after) => total - (before - after),
+        RESIZE_POLICY,
       ),
   );
 }
@@ -204,7 +100,7 @@ export function removeTrackFromCaches(queryClient: QueryClient, trackId: TrackId
   flushTrackCachePatches();
   const drop: MapItems = (items) => items.filter((t) => t.id !== trackId);
   for (const family of TRACK_CACHE_FAMILY_LIST) {
-    writeFamily(queryClient, family, { queryKey: family.prefix }, drop, REMOVE_POLICY);
+    writeFamily(queryClient, family, { queryKey: family.prefix }, drop, RESIZE_POLICY);
   }
 }
 
@@ -222,12 +118,6 @@ function indicesOf(items: readonly TrackResponse[], trackId: TrackId): number[] 
     if (t.id === trackId) out.push(i);
   });
   return out;
-}
-
-function unpagedItems(shape: TrackCacheShape, data: unknown): readonly TrackResponse[] {
-  return shape === 'flat'
-    ? (data as ListTracksResponse).items
-    : (data as PlaylistDetailResponse).tracks;
 }
 
 export function captureTrackPlacements(
@@ -252,7 +142,7 @@ export function captureTrackPlacements(
       if (family.shape === 'paged') {
         (data as TrackPages).pages.forEach((page, i) => record(queryKey, 'paged', i, page.items));
       } else {
-        record(queryKey, family.shape, 0, unpagedItems(family.shape, data));
+        record(queryKey, family.shape, 0, TRACK_SHAPES[family.shape].items(data));
       }
     }
   }
@@ -267,6 +157,11 @@ function reinsert(items: TrackResponse[], placement: TrackCachePlacement): Track
   return next;
 }
 
+function reinsertOnPage(placement: TrackCachePlacement): MapItems {
+  return (items, pageIndex) =>
+    pageIndex === placement.pageIndex ? reinsert(items, placement) : items;
+}
+
 export function restoreTrackPlacements(
   queryClient: QueryClient,
   placements: readonly TrackCachePlacement[],
@@ -274,34 +169,17 @@ export function restoreTrackPlacements(
   flushTrackCachePatches();
   for (const placement of placements) {
     const id = placement.track.id;
-    const added = placement.indices.length;
-    switch (placement.shape) {
-      case 'paged':
-        queryClient.setQueryData<TrackPages>(placement.queryKey, (prev) => {
-          if (!prev?.pages[placement.pageIndex]) return prev;
-          if (prev.pages.some((page) => page.items.some((t) => t.id === id))) return prev;
-          const pages = prev.pages.map((page, i) =>
-            i === placement.pageIndex
-              ? { ...page, items: reinsert(page.items, placement), total: page.total + added }
-              : page,
-          );
-          return { ...prev, pages: reflowOffsets(prev.pages, pages) };
-        });
-        break;
-      case 'flat':
-        queryClient.setQueryData<ListTracksResponse>(placement.queryKey, (prev) => {
-          if (!prev || prev.items.some((t) => t.id === id)) return prev;
-          return { ...prev, items: reinsert(prev.items, placement), total: prev.total + added };
-        });
-        break;
-      case 'playlistDetails':
-        queryClient.setQueryData<PlaylistDetailResponse>(placement.queryKey, (prev) => {
-          if (!prev || prev.tracks.some((t) => t.id === id)) return prev;
-          const tracks = reinsert(prev.tracks, placement);
-          return { ...prev, tracks, track_count: tracks.length };
-        });
-        break;
-    }
+    const accessor = TRACK_SHAPES[placement.shape];
+    queryClient.setQueryData<unknown>(placement.queryKey, (prev: unknown) => {
+      if (accessor.items(prev).some((t) => t.id === id)) return prev;
+      if (
+        placement.shape === 'paged' &&
+        !(prev as TrackPages | undefined)?.pages[placement.pageIndex]
+      ) {
+        return prev;
+      }
+      return accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY);
+    });
   }
 }
 

@@ -7,7 +7,7 @@ import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';
-import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
+import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
 import type * as ForgetTrackModule from '@shared/events/forgetTrack';
 import type { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
