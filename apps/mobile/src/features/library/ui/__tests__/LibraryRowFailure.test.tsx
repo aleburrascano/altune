@@ -4,7 +4,7 @@ import { render } from '@testing-library/react-native';
 import { asTrackId } from '@shared/api-client/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition/acquisitionTelemetry';
-import type { FailedAcquisition, TrackFields } from '@shared/api-client/types';
+import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
 
 import { LibraryRowFailure } from '../LibraryRowFailure';
 

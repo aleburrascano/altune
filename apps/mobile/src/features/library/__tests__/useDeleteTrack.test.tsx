@@ -4,11 +4,12 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { ListTracksResponse, PlaylistDetailResponse } from '@shared/api-client/types';
+import type { ListTracksResponse } from '@shared/api-client/trackResponse';
+import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { RETRY_TAIL } from '@shared/lib/describeError';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { RETRY_TAIL } from '@shared/failure/describeError';
+import { libraryKeys } from '@shared/query/queryKeys';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 import type { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';

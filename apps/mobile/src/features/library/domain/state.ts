@@ -1,6 +1,6 @@
 import { ApiError, ContractError, NetworkError, isSessionFetchFailure } from '@shared/errors';
-import { asyncView, type AsyncView } from '@shared/lib/async-view';
-import { RETRY_TAIL } from '@shared/lib/describeError';
+import { asyncView, type AsyncView } from '@shared/ui/asyncView';
+import { RETRY_TAIL } from '@shared/failure/describeError';
 
 export type LibraryFailure = 'network' | 'auth' | 'not-found' | 'server' | 'unknown';
 

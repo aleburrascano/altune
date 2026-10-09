@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
-import { countLabel } from '@shared/lib/format';
+import { countLabel } from '@shared/ui/displayFormat';
 import {
   Text,
   minInteractiveHeight,

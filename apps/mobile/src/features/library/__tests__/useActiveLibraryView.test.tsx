@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
-import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
 import {

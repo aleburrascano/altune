@@ -10,7 +10,7 @@ import { createMemoryLibraryPort } from './memoryLibraryPort';
 import { LibraryPortProvider } from '../ports/LibraryPortProvider';
 import type { LibraryPort } from '../ports/libraryPort';
 import { FeaturingScreen } from '../ui/FeaturingScreen';
-import * as detailHandoff from '@shared/lib/detail-handoff';
+import * as detailHandoff from '@shared/navigation/detailHandoff';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';

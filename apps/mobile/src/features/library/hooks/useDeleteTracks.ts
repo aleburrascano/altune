@@ -8,7 +8,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import { forgetTrack } from '@shared/events/forgetTrack';
 import { invalidateLibraryDerived, TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 import {
   currentSessionEpoch,
   guardedMutationOptions,

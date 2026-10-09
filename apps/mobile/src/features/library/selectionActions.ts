@@ -1,8 +1,8 @@
 import { Download, ListEnd, ListPlus, Trash2, XCircle, type LucideIcon } from 'lucide-react-native';
 
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { reportPinBatch, reportUnpinBatch } from '@features/library/pinBatchSummary';
 import { offlineEligibility, type LibraryOffline } from '@features/library/hooks/useLibraryOffline';

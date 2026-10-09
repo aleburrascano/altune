@@ -4,7 +4,7 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistPage } from '@shared/api-client/playlists';
-import type { ListPlaylistsResponse, PlaylistResponse } from '@shared/api-client/types';
+import type { ListPlaylistsResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
 
 import { GROUP_PAGE_SIZE } from '../domain/groupPaging';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';

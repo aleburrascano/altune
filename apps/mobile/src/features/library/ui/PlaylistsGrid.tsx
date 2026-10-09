@@ -1,8 +1,8 @@
 import { useCallback, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import type { PlaylistResponse } from '@shared/api-client/types';
-import { countLabel } from '@shared/lib/format';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import { countLabel } from '@shared/ui/displayFormat';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';

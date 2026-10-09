@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { describeError } from '@shared/lib/describeError';
+import { describeError } from '@shared/failure/describeError';
 import { Button, Text, spacing } from '@shared/ui';
 
 import { classifyLibraryError } from '@features/library/domain/state';

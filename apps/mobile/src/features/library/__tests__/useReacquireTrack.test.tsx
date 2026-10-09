@@ -1,13 +1,12 @@
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/errors';
-import { NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { PlaylistDetailResponse } from '@shared/api-client/types';
+import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { RETRY_TAIL } from '@shared/lib/describeError';
+import { RETRY_TAIL } from '@shared/failure/describeError';
 import type { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';

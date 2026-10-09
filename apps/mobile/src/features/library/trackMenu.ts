@@ -1,7 +1,7 @@
 import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
 import { reportStorageFull } from '@features/library/pinBatchSummary';

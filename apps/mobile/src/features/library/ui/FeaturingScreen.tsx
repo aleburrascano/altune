@@ -3,10 +3,10 @@ import { useMemo, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
-import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
-import { detailHref } from '@shared/lib/detail-handoff';
-import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
-import { asyncView } from '@shared/lib/async-view';
+import type { FeaturedArtist, TrackResponse } from '@shared/api-client/trackResponse';
+import { detailHref } from '@shared/navigation/detailHandoff';
+import { trackToDiscoveryResult } from '@shared/api-client/trackToDiscoveryResult';
+import { asyncView } from '@shared/ui/asyncView';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';

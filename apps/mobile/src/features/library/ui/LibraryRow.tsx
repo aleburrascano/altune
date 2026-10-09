@@ -2,7 +2,7 @@ import { memo, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
 
-import { formatDuration } from '@shared/lib/format';
+import { formatDuration } from '@shared/ui/displayFormat';
 import { Text, useWideWebLayout, useTheme } from '@shared/ui';
 import type { Theme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -19,7 +19,7 @@ import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLab
 import { libraryRowWideStyle } from '@features/library/ui/libraryRowWideStyle';
 import { WIDE_TRACK_COLUMNS } from '@features/library/ui/wideTrackColumns';
 
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 type WideRowProps = {
   track: TrackResponse;

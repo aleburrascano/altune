@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 
 import { LibraryRow } from '../ui/LibraryRow';

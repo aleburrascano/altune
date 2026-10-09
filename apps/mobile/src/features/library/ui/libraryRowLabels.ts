@@ -4,7 +4,7 @@ import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
 import { pinnedStatusDisplay } from '@features/library/pinnedStatusDisplay';
 
-import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
+import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/trackResponse';
 
 export function albumSuffix(album: string | null): string {
   return album != null ? ` · ${album}` : '';

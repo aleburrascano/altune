@@ -1,7 +1,7 @@
 import { showFailureAlert } from '@shared/ui';
 import { useState } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { detailHref } from '@shared/lib/detail-handoff';
+import { detailHref } from '@shared/navigation/detailHandoff';
 import { useNavigator, type Navigator } from '@shared/navigation';
 
 import type { LibraryPort } from '@features/library/ports/libraryPort';

@@ -4,7 +4,7 @@ import { FlatList } from 'react-native';
 import { spacing } from '@shared/ui';
 
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/types';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 
 import { avatarColumns, cellSize, coverColumns } from '../gridColumns';
 import type { ListRefresh } from '../domain/refresh';

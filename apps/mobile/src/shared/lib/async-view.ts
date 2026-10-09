@@ -1,20 +1,2 @@
-export type AsyncView = 'loading' | 'error' | 'empty' | 'ready';
-
-export type AsyncInputs = {
-  isLoading: boolean;
-  isError: boolean;
-  isEmpty: boolean;
-};
-
-export function asyncView({ isLoading, isError, isEmpty }: AsyncInputs): AsyncView {
-  if (isLoading) {
-    return 'loading';
-  }
-  if (isError) {
-    return 'error';
-  }
-  if (isEmpty) {
-    return 'empty';
-  }
-  return 'ready';
-}
+export { asyncView } from '@shared/ui/asyncView';
+export type { AsyncView, AsyncInputs } from '@shared/ui/asyncView';
