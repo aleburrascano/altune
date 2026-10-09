@@ -1370,8 +1370,8 @@ func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T
 		t.Fatalf("Execute error: %v", err)
 	}
 	root := ac.TempDir
-	if !strings.HasPrefix(filepath.Base(root), tempDirPrefix) || filepath.Dir(root) != os.TempDir() {
-		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, tempDirPrefix)
+	if !strings.HasPrefix(filepath.Base(root), ports.TempDirPrefix) || filepath.Dir(root) != os.TempDir() {
+		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, ports.TempDirPrefix)
 	}
 
 	if err := step.Rollback(context.Background(), ac); err != nil {
@@ -1829,8 +1829,8 @@ func TestDownloadStep_WorkspacePreviewDirCreatedAndRemovedAfterIdentify(t *testi
 		t.Fatalf("preview dirs = %v, want one", fetcher.previewDirs)
 	}
 	preview := fetcher.previewDirs[0]
-	if !strings.HasPrefix(filepath.Base(preview), tempDirPrefix+"preview-") {
-		t.Errorf("preview dir %q, want a %spreview-* dir", preview, tempDirPrefix)
+	if !strings.HasPrefix(filepath.Base(preview), ports.TempDirPrefix+"preview-") {
+		t.Errorf("preview dir %q, want a %spreview-* dir", preview, ports.TempDirPrefix)
 	}
 	if ws.removedCount(preview) != 1 {
 		t.Errorf("preview dir removed %d times, want 1", ws.removedCount(preview))
