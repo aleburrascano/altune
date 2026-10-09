@@ -95,7 +95,7 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **Queue** — the runtime playback sequence: ordered tracks, current index, shuffle state, repeat mode. Created on play-from-playlist/library/search. Client-managed; server persists a snapshot for resume-on-reopen. Defined in `client/src/shared/playback/queueStore.ts`.
 - **Playback** — the bounded context that persists a user's Queue snapshot for resume-on-reopen and enriches its current track. Code in services/go-api/internal/playback/.
 - **QueuePosition** — a position-only save of the persisted queue snapshot: `(CurrentIdx, CurrentTrackId, PositionMs)`, no track lists. Applies only when the stored queue holds `CurrentTrackId` at `CurrentIdx`; ordered against full saves by the same stale-write guard. Sent via `PUT /v1/playback/queue-state/position`. Defined in `services/go-api/internal/playback/domain/queue_position.go`.
-- **RepeatMode** — three-state enum: `off` (stop at end), `all` (loop queue), `one` (loop current track). Defined in `client/src/shared/playback/queueSource.ts`.
+- **RepeatMode** — three-state enum: `off` (stop at end), `all` (loop queue), `one` (loop current track). Defined in `client/src/shared/playback/queueOrder.ts`.
 
 
 ### Future (illustrative — to be added when the spec that introduces them ships)

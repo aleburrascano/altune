@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-query';
 import { type TrackId, isSafeId } from '@shared/api-client/ids';
 import { useAppMutation } from '@shared/query/useAppMutation';
-import { forgetTrack } from '@shared/events/forgetTrack';
+import { forgetTrack, getTrackFromCaches } from '@shared/events/trackCachePatch';
 import { showFailureAlert } from '@shared/ui';
 import {
   toPending,
@@ -18,7 +18,7 @@ import {
   type AcquisitionTransition,
 } from '@shared/api-client/trackAcquisition';
 import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
-import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
@@ -33,7 +33,6 @@ import {
   type RetryEntryPoint,
   type RetrySkipReason,
 } from '@shared/acquisition/acquisitionTelemetry';
-import { getTrackFromCaches } from '@shared/events/trackCachePatch';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
 export const trackMutationKeys = {

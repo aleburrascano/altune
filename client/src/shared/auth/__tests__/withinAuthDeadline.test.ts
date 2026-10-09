@@ -1,4 +1,4 @@
-import { NetworkError } from '@shared/errors';
+import { NetworkError } from '@shared/failure/errors';
 
 import { AUTH_CALL_TIMEOUT_MS, withinAuthDeadline } from '@shared/auth/authDeadline';
 

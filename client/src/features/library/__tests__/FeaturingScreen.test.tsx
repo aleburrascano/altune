@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 
 import { createMemoryLibraryPort } from './memoryLibraryPort';
 import { LibraryPortProvider } from '../ports/LibraryPortProvider';

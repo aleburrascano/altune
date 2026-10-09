@@ -1,7 +1,6 @@
 import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/api-client/discovery';
 import { discoveryEntityPath } from '@shared/api-client/ids';
-import { apiFetch, signalInit } from '@shared/api-client/index';
-import { withQuery } from '@shared/api-client/queryString';
+import { apiFetch, signalInit, withQuery } from '@shared/api-client/index';
 import {
   asArray,
   parseArray,

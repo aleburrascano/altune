@@ -1,4 +1,4 @@
-import { type TrackKey } from '@shared/playback/trackKey';
+import { type TrackKey } from '@shared/playback/playbackTrack';
 import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 
 import { NativeQueueTimeoutError } from '@features/playback/native/nativeQueueLock';

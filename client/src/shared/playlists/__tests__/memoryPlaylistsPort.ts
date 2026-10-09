@@ -1,7 +1,7 @@
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 

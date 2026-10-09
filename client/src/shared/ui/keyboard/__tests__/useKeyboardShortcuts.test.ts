@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react-native';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 
 import { asTrackId } from '@shared/api-client/ids';
-import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import {

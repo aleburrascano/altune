@@ -1,7 +1,7 @@
 import type { PlaylistId } from '@shared/api-client/ids';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
-import { confirmDestructive } from '@shared/ui/confirmDestructive';
+import { confirmDestructive } from '@shared/ui/dialog/dialog';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';

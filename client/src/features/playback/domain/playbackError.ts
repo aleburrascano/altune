@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 
 function httpStatusKind(status: number): PlaybackErrorKind {

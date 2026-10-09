@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/errors';
+import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/failure/errors';
 
 import { withinAuthDeadline } from '@shared/auth/authDeadline';
-import { forgetPreviousUsersLocalData } from '@shared/auth/forgetPreviousUsersLocalData';
+import { forgetPreviousUsersLocalData } from '@shared/auth/userLocalData';
 import { clearPersistedAuthSession, supabase } from '@shared/auth/supabaseClient';
 
 export type SignOutResult =

@@ -21,7 +21,7 @@ import {
   pagedIds,
 } from '@features/library/__tests__/trackMutationFixtures';
 import { Alert } from 'react-native';
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
@@ -671,7 +671,7 @@ describe('useRetryAcquisition', () => {
 
     it('records a failed retry_request with the status once the request rejects', async () => {
       const { wrapper } = setup(ports);
-      const { ApiError } = jest.requireActual('@shared/errors');
+      const { ApiError } = jest.requireActual('@shared/failure/errors');
       mockRetryAcquisition.mockRejectedValue(new ApiError(500, 'internal'));
       const { result } = renderHook(() => useRetryAcquisition('detail'), { wrapper });
 

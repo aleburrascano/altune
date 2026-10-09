@@ -1,8 +1,11 @@
 import { asTrackId } from '@shared/api-client/ids';
 
-import type { PlaybackContextValue, PlaybackStatus } from '@shared/playback/playbackContextValue';
+import {
+  type PlaybackContextValue,
+  type PlaybackStatus,
+  isCurrentlyPlaying,
+} from '@shared/playback/playbackContextValue';
 import type { PlaybackSource } from '@shared/playback/playbackTrack';
-import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 
 type Playback = Pick<PlaybackContextValue, 'status' | 'track'>;
 

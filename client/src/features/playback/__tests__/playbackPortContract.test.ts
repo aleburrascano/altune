@@ -1,7 +1,7 @@
 import { asTrackId } from '@shared/api-client/ids';
 import type { QueueStateResponse } from '@shared/api-client/playback';
 import { supabase } from '@shared/auth/supabaseClient';
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';

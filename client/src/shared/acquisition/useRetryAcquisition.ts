@@ -9,7 +9,7 @@ import {
 } from '@shared/acquisition/acquisitionTelemetry';
 import { useAcquisitionPort } from '@shared/acquisition/ports/AcquisitionPortProvider';
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
-import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 
 export type SharedRetryOptions<TContext extends object> = {
   action: string;

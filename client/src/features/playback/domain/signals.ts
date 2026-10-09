@@ -1,5 +1,5 @@
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueSource';
+import type { QueueSource } from '@shared/playback/queueOrder';
 
 export const LISTEN_THRESHOLD_MS = 30000;
 

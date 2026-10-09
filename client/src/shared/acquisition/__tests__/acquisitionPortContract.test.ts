@@ -1,6 +1,6 @@
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { supabase } from '@shared/auth/supabaseClient';
-import { ApiError, ContractError } from '@shared/errors';
+import { ApiError, ContractError } from '@shared/failure/errors';
 
 import { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
 import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';

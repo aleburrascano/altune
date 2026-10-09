@@ -4,7 +4,7 @@ import { Pressable, View } from 'react-native';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { asyncView } from '@shared/ui/asyncView';
 import { Text, type Theme, useTheme } from '@shared/ui';
-import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
+import { sidebarItemStyle } from '@shared/ui/navigation/Sidebar';
 
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 

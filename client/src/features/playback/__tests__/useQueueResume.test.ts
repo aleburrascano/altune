@@ -7,8 +7,7 @@ import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/api-client/playback';
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/trackResponse';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 

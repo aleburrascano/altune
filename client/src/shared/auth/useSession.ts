@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-import { isSessionFetchFailure } from '@shared/errors';
-import { registerIdentityListeners } from '@shared/auth/registerIdentityListeners';
+import { isSessionFetchFailure } from '@shared/failure/errors';
+import {
+  registerIdentityListeners,
+  forgetPreviousUsersLocalData,
+} from '@shared/auth/userLocalData';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 
-import { forgetPreviousUsersLocalData } from '@shared/auth/forgetPreviousUsersLocalData';
 import { renewSessionCredentials } from '@shared/auth/sessionExpired';
 import { supabase } from '@shared/auth/supabaseClient';
 import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';

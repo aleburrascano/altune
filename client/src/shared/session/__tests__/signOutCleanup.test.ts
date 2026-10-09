@@ -2,16 +2,15 @@ import { QueryClient } from '@tanstack/react-query';
 
 import {
   currentSessionEpoch,
-  guardedMutationOptions,
   hasSignedInUser,
   isSameSession,
   onSignOut,
   runSignOutCleanups,
-  SessionEndedError,
   setSignedInUser,
   notifyIdentityChange,
   onIdentityChange,
 } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions, SessionEndedError } from '@shared/session/guardedMutation';
 
 describe('signOutCleanup registry', () => {
   it('runs every registered cleanup, once per registration', () => {

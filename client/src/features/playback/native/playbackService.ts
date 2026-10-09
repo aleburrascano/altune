@@ -7,8 +7,7 @@ import TrackPlayer, {
 
 import { shouldRestartOnPrevious } from '@shared/playback/restartOnPrevious';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { type TrackKey, trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { parseTrackId } from '@shared/api-client/ids';

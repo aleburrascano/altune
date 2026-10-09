@@ -22,12 +22,12 @@ describe('mobile eslint config bans comments in every file', () => {
   }
 
   it('reports nothing for a string that only looks like a comment', async () => {
-    const errors = await noCommentsErrors('src/shared/errors.ts', "export const u = 'https://x.dev';\n");
+    const errors = await noCommentsErrors('src/shared/failure/errors.ts', "export const u = 'https://x.dev';\n");
     assert.strictEqual(errors.length, 0);
   });
 
   it('still reports a comment under a whole-file eslint-disable', async () => {
-    const errors = await noCommentsErrors('src/shared/errors.ts', '/* eslint-disable */\nexport const a = 1;\n');
+    const errors = await noCommentsErrors('src/shared/failure/errors.ts', '/* eslint-disable */\nexport const a = 1;\n');
     assert.strictEqual(errors.length, 1);
   });
 });
@@ -50,7 +50,7 @@ function diffScopedRuleIds(filePath, code) {
 }
 
 describe('mobile diff-scoped style rules', () => {
-  const path = 'src/shared/errors.ts';
+  const path = 'src/shared/failure/errors.ts';
 
   it('allows a data object key and destructured name', () => {
     const rules = diffScopedRuleIds(

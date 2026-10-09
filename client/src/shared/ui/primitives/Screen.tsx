@@ -5,7 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@shared/ui/theme/useTheme';
 import { CONTENT_MAX_WIDTH, useLayoutMode } from '@shared/ui/layout/useLayoutMode';
-import { SCREEN_HORIZONTAL_PADDING } from '@shared/ui/primitives/screenLayout';
+import { spacing } from '@shared/ui/theme/tokens';
+
+export const SCREEN_HORIZONTAL_PADDING = spacing.lg;
 
 export type ScreenProps = {
   children: ReactNode;

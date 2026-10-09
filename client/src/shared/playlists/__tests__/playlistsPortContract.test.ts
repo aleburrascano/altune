@@ -1,7 +1,7 @@
 import { asTrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { supabase } from '@shared/auth/supabaseClient';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 
 import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';

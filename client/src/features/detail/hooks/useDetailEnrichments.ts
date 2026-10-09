@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
-import { isAbort } from '@shared/errors';
+import { isAbort } from '@shared/failure/errors';
 import type {
   DeezerEnrichmentResponse,
   EnrichmentResponse,

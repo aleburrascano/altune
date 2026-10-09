@@ -65,7 +65,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
     const goFields = deriveGoFieldTypes(extractGoStruct(trackDtoSource, 'TrackDTO'));
 
     const toPlaybackTrackSource = fs.readFileSync(
-      path.join(__dirname, '..', 'toPlaybackTrack.ts'),
+      path.join(__dirname, '..', 'playbackTrack.ts'),
       'utf8',
     );
     const consumed = deriveConsumedFields(
@@ -98,7 +98,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
     );
 
     const toPlaybackTrackSource = fs.readFileSync(
-      path.join(__dirname, '..', 'toPlaybackTrack.ts'),
+      path.join(__dirname, '..', 'playbackTrack.ts'),
       'utf8',
     );
     const consumed = deriveConsumedFields(
@@ -133,7 +133,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
       goKinds.add(match[1]!);
     }
 
-    const typesSource = fs.readFileSync(path.join(__dirname, '..', 'queueSource.ts'), 'utf8');
+    const typesSource = fs.readFileSync(path.join(__dirname, '..', 'queueOrder.ts'), 'utf8');
     const queueSourceBlock = typesSource.slice(typesSource.indexOf('export type QueueSource ='));
     const tsKinds = new Set<string>();
     for (const match of queueSourceBlock.matchAll(/kind:\s*'(\w+)'/g)) {

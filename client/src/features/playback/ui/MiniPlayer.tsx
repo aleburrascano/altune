@@ -7,7 +7,7 @@ import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { usePlayback } from '@shared/playback/usePlayback';
-import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
+import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';

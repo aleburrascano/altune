@@ -1,14 +1,13 @@
 import { Alert } from 'react-native';
-
-import { confirm, showAlert } from '@shared/ui/dialog/dialog';
+import { confirmDestructive, showAlert } from '@shared/ui/dialog/dialog';
 import * as webDialog from '@shared/ui/dialog/dialog.web';
 
 describe('dialog (native)', () => {
-  it('confirm() shows a cancel button and a destructive button running onConfirm', () => {
+  it('confirmDestructive() shows a cancel button and a destructive button running onConfirm', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const onConfirm = jest.fn();
 
-    confirm({
+    confirmDestructive({
       title: 'Delete playlist',
       message: 'Are you sure?',
       confirmLabel: 'Delete',
@@ -44,11 +43,11 @@ describe('dialog.web', () => {
     window.alert = jest.fn();
   });
 
-  it('confirm() calls window.confirm with the title and message, and runs onConfirm only when it returns true', () => {
+  it('confirmDestructive() calls window.confirm with the title and message, and runs onConfirm only when it returns true', () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
     const onConfirm = jest.fn();
 
-    webDialog.confirm({
+    webDialog.confirmDestructive({
       title: 'Delete playlist',
       message: 'Are you sure?',
       confirmLabel: 'Delete',
@@ -59,11 +58,11 @@ describe('dialog.web', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it('confirm() never runs onConfirm when window.confirm returns false', () => {
+  it('confirmDestructive() never runs onConfirm when window.confirm returns false', () => {
     jest.spyOn(window, 'confirm').mockReturnValue(false);
     const onConfirm = jest.fn();
 
-    webDialog.confirm({
+    webDialog.confirmDestructive({
       title: 'Delete playlist',
       message: 'Are you sure?',
       confirmLabel: 'Delete',
@@ -83,11 +82,11 @@ describe('dialog.web', () => {
 });
 
 describe('dialog (native) edge cases', () => {
-  it('confirm() offers exactly two buttons and cancelling never runs onConfirm', () => {
+  it('confirmDestructive() offers exactly two buttons and cancelling never runs onConfirm', () => {
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const onConfirm = jest.fn();
 
-    confirm({
+    confirmDestructive({
       title: 'Remove track',
       message: 'Remove from playlist?',
       confirmLabel: 'Remove',
@@ -108,14 +107,14 @@ describe('dialog.web edge cases', () => {
     window.alert = jest.fn();
   });
 
-  it('confirm() asks the user once and waits for the answer before running onConfirm', () => {
+  it('confirmDestructive() asks the user once and waits for the answer before running onConfirm', () => {
     const onConfirm = jest.fn();
     const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => {
       expect(onConfirm).not.toHaveBeenCalled();
       return true;
     });
 
-    webDialog.confirm({
+    webDialog.confirmDestructive({
       title: 'Delete playlist',
       message: 'Are you sure?',
       confirmLabel: 'Delete',
@@ -126,7 +125,7 @@ describe('dialog.web edge cases', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it('confirm() runs onConfirm once per accepted prompt when called twice', () => {
+  it('confirmDestructive() runs onConfirm once per accepted prompt when called twice', () => {
     jest.spyOn(window, 'confirm').mockReturnValueOnce(true).mockReturnValueOnce(false);
     const onConfirm = jest.fn();
     const options = {
@@ -136,10 +135,35 @@ describe('dialog.web edge cases', () => {
       onConfirm,
     };
 
-    webDialog.confirm(options);
-    webDialog.confirm(options);
+    webDialog.confirmDestructive(options);
+    webDialog.confirmDestructive(options);
 
     expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('confirmDestructive (native)', () => {
+  it('shows a cancel and a destructive button whose press runs onConfirm', () => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const onConfirm = jest.fn();
+
+    confirmDestructive({
+      title: 'Delete playlist',
+      message: 'Are you sure?',
+      confirmLabel: 'Delete',
+      onConfirm,
+    });
+
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    const [title, message, buttons] = jest.mocked(Alert.alert).mock.calls[0]!;
+    expect(title).toBe('Delete playlist');
+    expect(message).toBe('Are you sure?');
+    expect(buttons?.find((button) => button.style === 'cancel')).toBeDefined();
+    const destructiveButton = buttons?.find((button) => button.style === 'destructive');
+    expect(destructiveButton?.text).toBe('Delete');
+    expect(onConfirm).not.toHaveBeenCalled();
+    destructiveButton?.onPress?.();
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });

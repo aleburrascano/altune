@@ -5,7 +5,7 @@ import * as Haptics from 'expo-haptics';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import { usePreviewPlayback } from '@features/discovery/hooks/usePreviewPlayback';

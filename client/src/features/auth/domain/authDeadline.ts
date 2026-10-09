@@ -1,6 +1,6 @@
 import { startDeadline } from '@shared/deadline/deadline';
 import type { Deadline } from '@shared/deadline/deadline';
-import { NetworkError } from '@shared/errors';
+import { NetworkError } from '@shared/failure/errors';
 
 export const AUTH_ACTION_TIMEOUT_MS = 20_000;
 

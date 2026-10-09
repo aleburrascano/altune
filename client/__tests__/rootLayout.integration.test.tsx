@@ -4,10 +4,9 @@ import { Text } from 'react-native';
 import type { ReactNode } from 'react';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
-import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
-import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
+import { PlaybackContext, usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
-import { usePlayback } from '@shared/playback/usePlayback';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 
 import { AppChrome } from '../src/chrome/AppChrome';

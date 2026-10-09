@@ -4,7 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 
 import * as discoveryApi from '@shared/api-client/discovery';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpDiscoverPort } from '@features/discovery/adapters/http/httpDiscoverPort';

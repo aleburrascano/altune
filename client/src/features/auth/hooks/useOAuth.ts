@@ -1,4 +1,4 @@
-import { NetworkError } from '@shared/errors';
+import { NetworkError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
 

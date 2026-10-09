@@ -12,7 +12,7 @@ import {
   useCreatePlaylist,
   useCreatePlaylistWithTracks,
 } from '@shared/playlists/mutations';
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 import { asPlaylistId, asTrackId, type TrackId, type PlaylistId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,

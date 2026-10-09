@@ -1,4 +1,4 @@
-import { ApiError, correlationIdOf } from '@shared/errors';
+import { ApiError, correlationIdOf } from '@shared/failure/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 

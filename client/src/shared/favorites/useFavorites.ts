@@ -5,7 +5,7 @@ import { useFavoritesPort } from '@shared/favorites/ports/FavoritesPortProvider'
 import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import { discoveryKeys } from '@shared/query/queryKeys';
-import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
+import { useOptimisticMutation } from '@shared/query/useAppMutation';
 
 type FavoritesApi = {
   isFavorite: (target: FavoriteTarget) => boolean;

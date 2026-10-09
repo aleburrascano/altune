@@ -6,7 +6,7 @@ import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { Text } from '@shared/ui/primitives/Text';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
-import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
+import { useReduceMotion } from '@shared/ui/motion/useMotion';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { useLyrics } from '@features/playback/hooks/useLyrics';

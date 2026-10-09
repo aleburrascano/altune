@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Animated } from 'react-native';
 import type { DimensionValue, StyleProp, ViewStyle } from 'react-native';
 
-import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
+import { useReduceMotion } from '@shared/ui/motion/useMotion';
 import { radius as radiusTokens } from '@shared/ui/theme/tokens';
 import { useTheme } from '@shared/ui/theme/useTheme';
 

@@ -9,7 +9,7 @@ import { countLabel } from '@shared/ui/displayFormat';
 import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { confirmDestructive } from '@shared/ui/confirmDestructive';
+import { confirmDestructive } from '@shared/ui/dialog/dialog';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';

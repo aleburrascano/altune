@@ -6,7 +6,7 @@ import type { FeaturedArtist, TrackResponse } from '@shared/api-client/trackResp
 import { detailHref } from '@shared/navigation/detailHandoff';
 import { trackToDiscoveryResult } from '@shared/api-client/trackToDiscoveryResult';
 import { asyncView } from '@shared/ui/asyncView';
-import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';

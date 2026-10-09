@@ -1,13 +1,13 @@
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { type QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
-import type * as ForgetTrackModule from '@shared/events/forgetTrack';
+import type * as ForgetTrackModule from '@shared/events/trackCachePatch';
 import type { ReactNode } from 'react';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
@@ -41,12 +41,13 @@ import { libraryKeys } from '@shared/query/queryKeys';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
 const actualForgetTrack = jest.requireActual<typeof ForgetTrackModule>(
-  '@shared/events/forgetTrack',
+  '@shared/events/trackCachePatch',
 ).forgetTrack;
 
 const mockForgetTrack = jest.fn<void, [QueryClient, TrackId]>(actualForgetTrack);
 
-jest.mock('@shared/events/forgetTrack', () => ({
+jest.mock('@shared/events/trackCachePatch', () => ({
+  ...jest.requireActual('@shared/events/trackCachePatch'),
   forgetTrack: (queryClient: QueryClient, trackId: TrackId) =>
     mockForgetTrack(queryClient, trackId),
 }));

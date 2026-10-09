@@ -60,7 +60,7 @@ describe('identity change wiring on the real modules', () => {
     const app = bootFreshApp();
     app.expired.markSessionExpired();
     expect(app.expired.getSessionExpired()).toBe(true);
-    const { forgetPreviousUsersLocalData } = require('@shared/auth/forgetPreviousUsersLocalData');
+    const { forgetPreviousUsersLocalData } = require('@shared/auth/userLocalData');
     forgetPreviousUsersLocalData(new ReactQuery.QueryClient());
     expect(app.expired.getSessionExpired()).toBe(false);
   });

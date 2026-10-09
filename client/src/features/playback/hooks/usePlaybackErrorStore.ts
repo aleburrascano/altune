@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
-import { type TrackKey, trackKey } from '@shared/playback/trackKey';
+import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { classifyPlaybackFailure } from '@features/playback/domain/playbackError';
 import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';

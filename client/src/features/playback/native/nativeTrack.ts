@@ -3,15 +3,14 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { resolvePinnedUri } from '@shared/offline/pinnedStore';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { type PlaybackTrack, trackKey, type TrackKey } from '@shared/playback/playbackTrack';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
-import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { classifyPlaybackFailure, warnPlayback } from '@features/playback/domain/playbackError';
 import { recordPresignOutcome } from '@features/playback/domain/playbackHealth';
 import { MAX_PRESIGN } from '@features/playback/domain/presignWindow';
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 
 const artworkPlaceholder = (): string =>
   Image.resolveAssetSource(require('@assets/artwork-placeholder.png')).uri;

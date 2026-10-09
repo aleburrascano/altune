@@ -6,7 +6,7 @@ import {
   clearSearchHistory,
   type DiscoverySearchHistoryResponse,
 } from '@shared/api-client/discovery';
-import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { discoveryKeys } from '@shared/query/queryKeys';
 
 type ClearSearchHistoryOptions = {

@@ -6,7 +6,7 @@ import {
   getSessionExpired,
   renewSessionCredentials,
 } from '@shared/auth/sessionExpired';
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 const { __http } = require('@testing/doubles/fetch.js');

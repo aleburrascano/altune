@@ -51,7 +51,7 @@
       { "name": "shared-api-client", "patterns": ["src/shared/api-client/**"] },
       { "name": "shared-auth", "patterns": ["src/shared/auth/**"] },
       { "name": "shared-deadline", "patterns": ["src/shared/deadline/**"] },
-      { "name": "shared-errors", "patterns": ["src/shared/errors.ts"] },
+      { "name": "shared-errors", "patterns": ["src/shared/failure/errors.ts"] },
       { "name": "shared-events", "patterns": ["src/shared/events/**"] },
       { "name": "shared-failure", "patterns": ["src/shared/failure/**"] },
       { "name": "shared-favorites", "patterns": ["src/shared/favorites/**"] },

@@ -1,6 +1,6 @@
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { equalJitterMs } from '@shared/backoff';
-import { isRetryable } from '@shared/errors';
+import { isRetryable } from '@shared/failure/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 import { recordEvent } from '@shared/telemetry/recordEvent';

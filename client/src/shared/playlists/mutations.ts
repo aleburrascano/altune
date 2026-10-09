@@ -5,13 +5,9 @@ import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import { countLabel } from '@shared/ui/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
-import { useAppMutation } from '@shared/query/useAppMutation';
-import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
-import {
-  currentSessionEpoch,
-  guardedMutationOptions,
-  isSameSession,
-} from '@shared/session/signOutCleanup';
+import { useAppMutation, useOptimisticMutation } from '@shared/query/useAppMutation';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { showFailureAlert } from '@shared/ui';
 
 import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';

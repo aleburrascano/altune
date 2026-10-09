@@ -8,7 +8,7 @@ const PURE_MODULES = [
   'api-client/featuredArtists',
   'api-client/trackToDiscoveryResult',
   'failure/describeError',
-  'failure/isNetworkError',
+  'failure/errors',
   'navigation/detailHandoff',
   'query/queryKeys',
   'ui/asyncView',

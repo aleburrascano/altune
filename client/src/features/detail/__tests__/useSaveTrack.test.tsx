@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';

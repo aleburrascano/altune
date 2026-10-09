@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import { pageTitleFor } from '@shared/ui/navigation/pageTitle';
+import { pageTitleFor } from '@shared/ui/navigation/tabRoutes';
 import * as base from '@/chrome/platformExtras';
 import * as android from '@/chrome/platformExtras.android';
 import * as web from '@/chrome/platformExtras.web';

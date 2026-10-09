@@ -9,7 +9,7 @@ import {
   type PlaylistPage,
 } from '@shared/api-client/playlists';
 import { apiBase } from '@shared/api-client/index';
-import { ApiError, ContractError, NetworkError } from '@shared/errors';
+import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/api-client/ids';
 import type { PlaylistId } from '@shared/api-client/ids';
