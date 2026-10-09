@@ -1,9 +1,9 @@
 import { render } from '@testing-library/react-native';
 
 import { pageTitleFor } from '@shared/ui/navigation/pageTitle';
-import * as base from '@/app-shell/platformExtras';
-import * as android from '@/app-shell/platformExtras.android';
-import * as web from '@/app-shell/platformExtras.web';
+import * as base from '@/chrome/platformExtras';
+import * as android from '@/chrome/platformExtras.android';
+import * as web from '@/chrome/platformExtras.web';
 
 const mockUseKeyboardShortcuts = jest.fn();
 const mockPlayback = { marker: 'playback' };

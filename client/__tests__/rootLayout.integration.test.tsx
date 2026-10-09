@@ -10,7 +10,7 @@ import type { PlaybackContextValue } from '@shared/playback/playbackContextValue
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 
-import { AppChrome } from '../src/app-shell/AppChrome';
+import { AppChrome } from '../src/chrome/AppChrome';
 import TabsLayout from '../src/app/(tabs)/_layout';
 import DiscoverLayout from '../src/app/(tabs)/discover/_layout';
 import LibraryLayout from '../src/app/(tabs)/library/_layout';

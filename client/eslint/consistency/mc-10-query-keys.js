@@ -5,7 +5,7 @@ module.exports = {
   description: 'Query keys come from the one query-key factory, never a literal array in a feature',
   config: [
     {
-      ignores: ['src/shared/**', 'src/app/**', 'src/app-shell/**', '**/__tests__/**'],
+      ignores: ['src/shared/**', 'src/app/**', 'src/chrome/**', '**/__tests__/**'],
       rules: {
         'no-restricted-syntax': [
           'error',

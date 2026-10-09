@@ -13,7 +13,7 @@ module.exports = {
       ignores: [
         'src/shared/**',
         'src/app/**',
-        'src/app-shell/**',
+        'src/chrome/**',
         'src/features/*/adapters/**',
         'src/features/*/index.ts',
         '**/__tests__/**',
