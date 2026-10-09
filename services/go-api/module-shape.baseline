@@ -48,10 +48,5 @@ G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
 N1 deploy/lib.sh banned name lib
-N1 internal/discovery/adapters/cache/helpers_test.go banned name helpers
-N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers
-N1 internal/discovery/adapters/providers/helpers_test.go banned name helpers
-N1 internal/discovery/service/helpers_test.go banned name helpers
 N1 internal/shared/events/types.go banned name types
 N2 internal/discovery differs from mobile feature discover
-N2 internal/discovery is not a term in docs/ubiquitous-language.md
