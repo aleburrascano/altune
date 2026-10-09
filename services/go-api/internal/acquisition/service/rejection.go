@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
@@ -105,7 +106,7 @@ func (s *AcquireTrackAudioService) recordRejections(ctx context.Context, ac *Acq
 	defer cancel()
 	if err := s.rejections.Record(settleCtx, recs); err != nil {
 		slog.WarnContext(ctx, "acquisition.rejection_record_failed",
-			"track_id", ac.Track.ID, "error", logSafeError(err))
+			"track_id", ac.Track.ID, "error", redact.LogError(err))
 	}
 }
 
@@ -116,7 +117,7 @@ func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, ac *
 	keys, err := s.rejections.ActiveKeys(ctx, ac.Track.ID, time.Now().Add(-priorRejectionWindow))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.rejection_load_failed",
-			"track_id", ac.Track.ID, "error", logSafeError(err))
+			"track_id", ac.Track.ID, "error", redact.LogError(err))
 		return
 	}
 	ac.PriorRejectedKeys = keys

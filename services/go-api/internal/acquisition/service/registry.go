@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"fmt"
@@ -77,7 +78,7 @@ func mergeSlotsReportingOutage(
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.source_find_failed",
-				"source", sources[i].Name(), "error", logSafeError(err))
+				"source", sources[i].Name(), "error", redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("every audio source failed: %w", firstErr)

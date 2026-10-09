@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _
 		if duration := ac.MeasuredDuration(); duration > 0 {
 			if err := track.SetDuration(duration); err != nil {
 				slog.WarnContext(ctx, "acquisition.duration_rejected",
-					"track_id", track.ID.String(), "duration", duration, "error", logSafeError(err))
+					"track_id", track.ID.String(), "duration", duration, "error", redact.LogError(err))
 			}
 		}
 		track.SetAcquisitionProvenance(ac.Provenance())
@@ -60,7 +61,7 @@ func recordConfidence(ctx context.Context, track *domain.Track, ac *AcquisitionC
 	}
 	if err := track.SetAcquisitionConfidence(ac.Confidence, raw); err != nil {
 		slog.WarnContext(ctx, "acquisition.confidence_rejected",
-			"track_id", track.ID.String(), "confidence", ac.Confidence, "error", logSafeError(err))
+			"track_id", track.ID.String(), "confidence", ac.Confidence, "error", redact.LogError(err))
 	}
 	return nil
 }

@@ -1856,3 +1856,19 @@ func TestDownloadStep_WorkspaceRollbackWithOnlyTempPathRemovesThatFile(t *testin
 		t.Errorf("removed = %v, want exactly [%s]", got, file)
 	}
 }
+
+func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) {
+	logs := captureDefaultLog(t)
+	step := NewDownloadStep(&fileWritingSearcher{err: ytdlpCookieErr()})
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x", Source: "youtube"}}}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
+		t.Fatal("expected download error")
+	}
+
+	out := logs.String()
+	assertNoCookiePath(t, out, "acquisition.candidate_download_failed")
+	if !strings.Contains(out, "https://example.com/x") {
+		t.Fatalf("candidate URL should stay in the log for triage:\n%s", out)
+	}
+}

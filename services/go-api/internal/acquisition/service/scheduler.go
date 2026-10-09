@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"log/slog"
@@ -271,7 +272,7 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 		return
 	}
 	if err != nil {
-		reason := logSafeError(err)
+		reason := redact.LogError(err)
 		record := s.log.complete(key, ports.JobFailed, reason)
 		s.recordOutcome(ctx, record)
 		slog.ErrorContext(ctx, "background acquisition failed", "track_id", key, "error", reason)
@@ -298,7 +299,7 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition.outcome_record_failed",
-				"track_id", record.TrackID, "error", logSafeError(err))
+				"track_id", record.TrackID, "error", redact.LogError(err))
 		}
 	}()
 }

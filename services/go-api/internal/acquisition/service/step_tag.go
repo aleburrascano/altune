@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
 )
@@ -29,7 +30,7 @@ func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterDo
 		TrackNumber: ac.Track.TrackNumber,
 	}
 	if err := s.tagger.Tag(ctx, ac.TempPath, tags); err != nil {
-		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", logSafeError(err))
+		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", redact.LogError(err))
 	}
 	return afterTag{}, nil
 }

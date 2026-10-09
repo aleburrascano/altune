@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
 	"time"
@@ -20,6 +21,6 @@ func recordOrphanedAudio(ctx context.Context, q catalogports.OrphanedAudioRecord
 	err := q.RecordOrphanedAudio(recordCtx, catalogports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.orphaned_audio_not_queued",
-			"track_id", trackId.String(), "audio_ref", audioRef, "error", logSafeError(err))
+			"track_id", trackId.String(), "audio_ref", audioRef, "error", redact.LogError(err))
 	}
 }

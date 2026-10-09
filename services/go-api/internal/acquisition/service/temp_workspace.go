@@ -5,7 +5,18 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
+	"time"
 )
+
+const tempDirPrefix = ports.TempDirPrefix
+
+var defaultTempWorkspace ports.TempWorkspace
+
+const maxLiveTempAge = acquireTimeout + 15*time.Minute
+
+func SweepStaleTempDirs(ws ports.TempWorkspace) {
+	ws.SweepAbandoned(time.Now().Add(-maxLiveTempAge))
+}
 
 func CleanupTemp(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionContext) {
 	if ac.TempPath == "" {

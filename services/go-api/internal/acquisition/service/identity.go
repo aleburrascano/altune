@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
 )
@@ -20,7 +21,7 @@ func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, id
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
-			"track_id", ac.Track.ID, "error", logSafeError(err))
+			"track_id", ac.Track.ID, "error", redact.LogError(err))
 		return
 	}
 	if identity.IsZero() {
@@ -50,7 +51,7 @@ func resolveExpectedCluster(ctx context.Context, identifier ports.AudioIdentifie
 	cluster, err := identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
 	if err != nil {
 		slog.WarnContext(ctx, identifyFailureEvent(err, "acquisition.expected_cluster_failed"),
-			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", logSafeError(err))
+			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", redact.LogError(err))
 		return
 	}
 	if len(cluster) == 0 {

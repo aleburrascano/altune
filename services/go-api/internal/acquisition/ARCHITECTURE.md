@@ -178,14 +178,13 @@ ports/                   the contracts, plus the small value helpers that belong
   probe.go               AudioProber — ProbeDuration + ValidateDecodable
   recording.go           Provider* identity keys, RecordingIdentity / RecordingSource / RecordingQuery, RecordingResolver (+ noop)
   source.go              FindRequest, AudioSource (Name / Find / Fetch), SearchQueries — the four query variants
-  status.go              AcquisitionStatus, JobRecord, AcquisitionVerification — the observe read model
+  status.go              AcquisitionStatus, JobRecord, AcquisitionVerification, AcquisitionOutcome — the observe read model
   tag.go                 TrackTags, AudioTagger
   writer.go              AudioWriter, AudioRefLookup, TrackRepository — the narrowed catalog slices
 service/                 the orchestration: pipeline shape, the pure decisions, scheduling, admission
-  pipeline.go            stage tokens, stage, Pipeline, StepError, RunPipeline, runStage, rollback, AcquisitionContext, TrackRef
+  pipeline.go            stage tokens, stage, Pipeline, StepError, RunPipeline, runStage, rollback, AcquisitionContext, TrackRef, buildSteps, CoreSteps
   acquire.go             Execute / ExecuteReplace orchestration + notification wiring
   reacquire.go           reacquirePolicy (reconcile, revertToPending)
-  buildsteps.go          buildSteps, CoreSteps
   step_search.go         SEARCH — query variants through the registry to deduped candidates
   step_select.go         SELECT — rankAndCollect to a ranked list plus the identity-gate rejections
   step_download.go       DOWNLOAD — the ≤8 attempt walk and the duration / decode / fingerprint gates
@@ -196,15 +195,13 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   duration.go            the tolerance windows — durationWithinTolerance, lengthCorroborated, durationAcceptable
   registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
   rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
-  sourcekey.go           sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
+  source_key.go          sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
-  logredact.go           logSafeError / logSafeText — cookie paths and host filesystem layout out of log lines
-  cleanup.go             CleanupTemp(ctx, ws, ac) — removes TempDir (the workspace-created root) through ports.TempWorkspace
-  tempreap.go            SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned; the reap itself lives in adapters/tempfs; also holds `defaultTempWorkspace`, nil in production and set by the service tests
+  temp_workspace.go      SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned (the reap itself lives in adapters/tempfs); CleanupTemp(ctx, ws, ac) removes TempDir through ports.TempWorkspace; also holds `defaultTempWorkspace`, nil in production and set by the service tests
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
-  joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
+  job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
-  domain/errors.go       admissionError and the admission sentinels (package domain)
+  domain/admission_error.go admissionError and the admission sentinels (package domain)
   audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
 adapters/
@@ -215,9 +212,7 @@ adapters/
     report.go            per-class scoring, Render, and the baselines.json comparison
     goldens/             selection.json (ranking + audio gates) and verification.json (identity, fingerprint, tolerance edges)
   handler/               the inbound HTTP surface
-    retry_handler.go     RetryHandler — POST /tracks/{id}/retry
-    reacquire_handler.go ReacquireHandler — POST /tracks/{id}/reacquire
-    command.go           acquisitionCommand — the admit-then-schedule body both handlers serve
+    acquisition_handler.go RetryHandler (POST /tracks/{id}/retry), ReacquireHandler (POST /tracks/{id}/reacquire) and acquisitionCommand, the admit-then-schedule body both serve
   ytdlp/
     searcher.go          YtDlpAudioSearcher — the ytsearch5:/scsearch5: fan-out and Download
     prober.go            FfprobeProber — ProbeDuration, ValidateDecodable, Available
@@ -233,8 +228,7 @@ adapters/
   discoverybridge/
     recording_resolver.go RecordingResolver — discovery's search service to a RecordingIdentity
   persistence/
-    cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns
-    cooldown_fallback.go FallbackCooldownStore — per-process windows while migration 019 is unapplied
+    cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns; FallbackCooldownStore — per-process windows while migration 019 is unapplied
 ```
 
 Ports are deliberately **narrow slices of larger capabilities**: `AudioWriter` is

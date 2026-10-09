@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
@@ -117,7 +118,7 @@ func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *Acquisition
 	defer func() {
 		if rec := recover(); rec != nil {
 			slog.ErrorContext(ctx, "download attempt panicked",
-				"track_id", ac.Track.ID, "panic", logSafeText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
+				"track_id", ac.Track.ID, "panic", redact.LogText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
 			result = attempt{candidate: candidate, rejection: &downloadRejection{
 				stage: RejectionDownload, reason: "download failed", err: fmt.Errorf("attempt panicked: %v", rec),
 			}}
