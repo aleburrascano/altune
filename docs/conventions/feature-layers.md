@@ -40,14 +40,13 @@ React or the platform. Library (`client/src/features/library`) is the worked exa
 - MC-8 (`client/eslint/consistency/mc-8-feature-ports.js`, see
   [mobile-consistency.md](mobile-consistency.md)) bans value imports from `@shared/api-client`
   outside `adapters/`.
-- `__tests__/libraryPortInvariants.test.ts` pins library's port boundary.
-- `__tests__/libraryLayersInvariants.test.ts` pins library's domain files and this doc.
-- `features/__tests__/featurePortInvariants.test.ts` checks library, discover and auth make no
-  api-client value import outside `adapters/`, and neither does settings, detail or playback.
+- `features/__tests__/featurePortInvariants.test.ts` checks that no feature with an `adapters/`
+  folder makes an api-client value import outside it.
 - `features/__tests__/featureLayersInvariants.test.ts` runs the domain purity check over every
-  `features/*/domain/` folder. Every feature uses the domain/ports/adapters/hooks/ui layout, and
-  the same test ratchets the loose `.ts`/`.tsx` files at each feature root: a count over its
-  ceiling fails, and a count under it fails with "lower the ceiling", so moves only ever lower it.
+  `features/*/domain/` file.
+
+These tests state a rule over a glob and only check that they found more than 0 files; they never
+name a file, list files or pin a count, so moving or adding a file needs no test edit.
 
 ## The purity rule
 
