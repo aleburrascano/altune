@@ -77,7 +77,7 @@ CASE="a doc alongside real code deploys"
 expect_deploy true services/go-api/RUNBOOK.md services/go-api/main.go
 
 CASE="a push touching nothing in the backend skips"
-expect_deploy false apps/mobile/App.tsx
+expect_deploy false client/App.tsx
 
 CASE="a manual dispatch has no diff base and fails safe"
 got=$(run_filter workflow_dispatch "" HEAD)

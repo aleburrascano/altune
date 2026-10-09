@@ -79,7 +79,7 @@ grep -q "^docker run .* -e RUSTFS_TLS_PATH=/opt/tls -v .*/tls:/opt/tls:ro .*rust
 [ "$(grep -c '^docker run' "$STUB_LOG")" = "$(grep -c '^docker run .*--label altune-ci=1 ' "$STUB_LOG")" ] || { echo "FAIL every docker run should carry the altune-ci label"; fail=1; }
 
 sleep 1
-for want in PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR=.*/apps/mobile/e2e/fixtures/providers \
+for want in PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR=.*/client/e2e/fixtures/providers \
   SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
   AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
   OCI_S3_ENDPOINT=https://127.0.0.1:5555 OCI_S3_BUCKET=altune-e2e OCI_S3_ACCESS_KEY=e2e \

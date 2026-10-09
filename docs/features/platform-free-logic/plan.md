@@ -77,7 +77,7 @@ Done looks like this to them:
 
 Platforms: ios, android, web
 
-Extends `apps/mobile/src/shared` (new ports: `navigation`, `ui/dialog`, `ui/keyboard`, `lifecycle`, `device`) and `apps/mobile/src/features/*` (adapter folders `native/` and `web/`). No new dependency, no new service. The rule and its reasons: `~/.claude/workflow/build/stacks/ts-react.md` "Platform code".
+Extends `client/src/shared` (new ports: `navigation`, `ui/dialog`, `ui/keyboard`, `lifecycle`, `device`) and `client/src/features/*` (adapter folders `native/` and `web/`). No new dependency, no new service. The rule and its reasons: `~/.claude/workflow/build/stacks/ts-react.md` "Platform code".
 
 ```mermaid
 flowchart LR
@@ -114,15 +114,15 @@ A builder writes a new library hook that imports `Alert` from `react-native` and
 
 ## Must-holds, rules that must always hold (living, grows during the build), each one a list item:
 
-1. No feature logic file imports `react-native`, `react-native-*`, `@react-native*` or `expo-*` outside `ui/`, `native/`, `web/` and `*.native.ts(x)` / `*.web.ts(x)`, unless it carries the legacy tag. [repo-test: apps/mobile/__tests__/platformMustHolds/mh01-logicBoundary.test.ts]
+1. No feature logic file imports `react-native`, `react-native-*`, `@react-native*` or `expo-*` outside `ui/`, `native/`, `web/` and `*.native.ts(x)` / `*.web.ts(x)`, unless it carries the legacy tag. [repo-test: client/__tests__/platformMustHolds/mh01-logicBoundary.test.ts]
    - Example: ESLint on `src/features/library/hooks/useProbe.ts` containing `import { Alert } from 'react-native';` → one `no-restricted-imports` error.
-2. The legacy baselines only shrink: every file in a `platform-legacy.json` still violates the rule, and no baseline holds a file absent from the frozen original set. [repo-test: apps/mobile/__tests__/platformMustHolds/mh02-baselineShrinks.test.ts]
+2. The legacy baselines only shrink: every file in a `platform-legacy.json` still violates the rule, and no baseline holds a file absent from the frozen original set. [repo-test: client/__tests__/platformMustHolds/mh02-baselineShrinks.test.ts]
    - Example: adding `src/features/discover/state.ts` to `discover/platform-legacy.json` → the test fails naming that file.
-3. Every `Navigator` adapter behaves the same: the expo-router adapter and `memoryNavigator` pass one contract. [repo-test: apps/mobile/src/shared/navigation/__tests__/navigator.contract.test.ts]
+3. Every `Navigator` adapter behaves the same: the expo-router adapter and `memoryNavigator` pass one contract. [repo-test: client/src/shared/navigation/__tests__/navigator.contract.test.ts]
    - Example: on a fresh navigator, `push('/library')` then `back()` → `canGoBack()` is `false`.
-4. Web confirm dialogs act: on web, `confirmDestructive` runs `onConfirm` when the user accepts. [repo-test: apps/mobile/src/shared/ui/dialog/__tests__/dialog.test.ts]
+4. Web confirm dialogs act: on web, `confirmDestructive` runs `onConfirm` when the user accepts. [repo-test: client/src/shared/ui/dialog/__tests__/dialog.test.ts]
    - Example: `window.confirm` returns `true` → `onConfirm` called once; returns `false` → not called.
-5. No auth link becomes a session without a server exchange, on either platform's split. [repo-test: apps/mobile/src/features/auth/__tests__/parseAuthLink.test.ts]
+5. No auth link becomes a session without a server exchange, on either platform's split. [repo-test: client/src/features/auth/__tests__/parseAuthLink.test.ts]
    - Example: `altune://auth/callback#access_token=x&refresh_token=y` → an intent that `completeAuthIntent` refuses (`no_spendable_credential`), never a session.
 
 ## Expected signals, what the running thing should show once built: the API endpoints and pages that change (everything unlisted must stay the same), and how telemetry should move ("p95 of GET /orders stays under 200ms"); see `~/.claude/workflow/feedback-loop.md`

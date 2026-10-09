@@ -13,7 +13,7 @@ func TestJsMatchExtensionsAndExcludedTrees(t *testing.T) {
 		{"../../dangerfile.js", true},
 		{"a.ts", false},
 		{"a.jsx", false},
-		{"apps/mobile/babel.config.js", false},
+		{"client/babel.config.js", false},
 		{"/repo/services/overseer/web/vite.config.js", false},
 		{"services/overseer/other.js", true},
 		{"tools/node_modules/x/index.js", false},

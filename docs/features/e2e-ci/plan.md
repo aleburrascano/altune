@@ -22,7 +22,7 @@ smoke or by hand.
 - The playback limit is react-native-track-player on web (backed by `shaka-player`)
   under headless Chromium. Playback is asserted at the state level (mini player shows,
   `/v1/audio-urls` returns 200, the audio URL returns 200), never by hearing sound.
-- Run it with `cd apps/mobile && npx playwright test -c e2e/playwright.config.ts`.
+- Run it with `cd client && npx playwright test -c e2e/playwright.config.ts`.
 
 ### 2. Backend: compose stack in CI, not staging
 
@@ -57,9 +57,9 @@ A fifth (sign-out / auth-gate redirect) only if the four are stable.
 
 ### 5. CI shape
 
-- Workflow `.gitea/workflows/e2e.yml` with `apps/mobile/e2e/playwright.config.ts`,
-  path-filtered to `apps/mobile/**`, `services/go-api/**` and
-  `apps/mobile/e2e/**`; runs on PRs and nightly.
+- Workflow `.gitea/workflows/e2e.yml` with `client/e2e/playwright.config.ts`,
+  path-filtered to `client/**`, `services/go-api/**` and
+  `client/e2e/**`; runs on PRs and nightly.
 - Informational for two weeks, then a required `gate` input once flake rate is under 2%.
 - Upload Playwright traces and screenshots and the go-api log as artifacts on failure.
 - Ubuntu runner, Node 22 (the Supabase client needs a global WebSocket).

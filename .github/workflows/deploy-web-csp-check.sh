@@ -4,7 +4,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 caddyfile=$root/services/go-api/deploy/Caddyfile
-dist=$root/apps/mobile/dist
+dist=$root/client/dist
 blocked=0
 while IFS= read -r inline_script; do
   [ -z "$inline_script" ] && continue

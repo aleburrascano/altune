@@ -22,7 +22,7 @@ func checkConcepts(root string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	features, err := featureNames(filepath.Join(repo, "apps", "mobile", "src", "features"))
+	features, err := featureNames(filepath.Join(repo, "client", "src", "features"))
 	return conceptLines(modules, features, terms), err
 }
 

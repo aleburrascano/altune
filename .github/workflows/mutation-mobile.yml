@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 90
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: client/package-lock.json
 
       - run: npm ci
 
@@ -41,6 +41,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: mutation-report
-          path: apps/mobile/reports/mutation/
+          path: client/reports/mutation/
           if-no-files-found: warn
           retention-days: 30

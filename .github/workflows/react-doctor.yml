@@ -5,7 +5,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - 'apps/mobile/**'
+      - 'client/**'
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
 
       - uses: millionco/react-doctor@v2
         with:
-          directory: apps/mobile
+          directory: client
           blocking: warning
 
       - name: keep react-doctor advisory (resolve its own threads)

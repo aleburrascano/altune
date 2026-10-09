@@ -27,18 +27,18 @@ jobs:
           git -C "$ALTUNE_REPO" fetch -q gitea || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea; }
           git -C "$ALTUNE_REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
       - name: dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
       - name: mutation test
         env:
           MUTATE: ${{ github.event.inputs.mutate }}
-        run: cd "$WT/apps/mobile" && bash "$WT/.gitea/workflows/mutation-mobile.sh"
+        run: cd "$WT/client" && bash "$WT/.gitea/workflows/mutation-mobile.sh"
       - name: keep the report
         if: always()
         run: |
-          [ -f "$WT/apps/mobile/reports/mutation/mutation.json" ] || exit 0
+          [ -f "$WT/client/reports/mutation/mutation.json" ] || exit 0
           dir="$HOME/.cache/altune-ci/mutation"
           mkdir -p "$dir"
-          cp "$WT/apps/mobile/reports/mutation/mutation.json" "$dir/mutation-${{ github.run_id }}.json"
+          cp "$WT/client/reports/mutation/mutation.json" "$dir/mutation-${{ github.run_id }}.json"
           echo "report: $dir/mutation-${{ github.run_id }}.json"
       - name: clean up
         if: always()

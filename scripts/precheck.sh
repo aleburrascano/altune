@@ -170,17 +170,17 @@ if touches '^(services/go-api|services/overseer)/.*\.go$'; then
 fi
 
 if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile event contracts"; then
-  if link_deps apps/mobile; then
-    test_check "mobile event contracts (go-api events changed)" apps/mobile "${heavy[@]}" npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
+  if link_deps client; then
+    test_check "mobile event contracts (go-api events changed)" client "${heavy[@]}" npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
   else
     echo "SKIP  mobile event contracts: no node_modules here or in $main_tree"; missing=1
   fi
 fi
 
-if touches '^apps/mobile/'; then
-  m=apps/mobile
+if touches '^client/'; then
+  m=client
   if need npx "mobile" && link_deps $m; then
-    src=$(grep -E '^apps/mobile/src/.*\.(ts|tsx)$' <<<"$changed" | sed 's#^apps/mobile/##')
+    src=$(grep -E '^client/src/.*\.(ts|tsx)$' <<<"$changed" | sed 's#^client/##')
     check "mobile typecheck" $m "${heavy[@]}" npx tsc --noEmit
     [ -n "$src" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $src
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"

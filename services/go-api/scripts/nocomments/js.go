@@ -22,7 +22,7 @@ var jsKind = kind{
 	same:     jsCommentFreeTokensEqual,
 }
 
-var jsOwnedByOtherTools = []string{"/apps/mobile/", "/services/overseer/web/", "/node_modules/"}
+var jsOwnedByOtherTools = []string{"/client/", "/services/overseer/web/", "/node_modules/"}
 
 func matchJSFile(path string, _ []byte) bool {
 	switch filepath.Ext(path) {

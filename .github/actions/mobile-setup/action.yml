@@ -19,13 +19,13 @@ runs:
       with:
         node-version: 22
         cache: npm
-        cache-dependency-path: apps/mobile/package-lock.json
+        cache-dependency-path: client/package-lock.json
 
     - run: npm ci
       shell: bash
-      working-directory: apps/mobile
+      working-directory: client
 
     - if: ${{ inputs.typed-routes == 'true' }}
       run: npx expo customize tsconfig.json
       shell: bash
-      working-directory: apps/mobile
+      working-directory: client

@@ -1,7 +1,7 @@
 # Feature layers
 
 A feature that talks to the API is split into layers so its logic runs without the network,
-React or the platform. Library (`apps/mobile/src/features/library`) is the worked example.
+React or the platform. Library (`client/src/features/library`) is the worked example.
 
 ## Which features are ported
 
@@ -37,7 +37,7 @@ React or the platform. Library (`apps/mobile/src/features/library`) is the worke
 
 ## How it is enforced
 
-- MC-8 (`apps/mobile/eslint/consistency/mc-8-feature-ports.js`, see
+- MC-8 (`client/eslint/consistency/mc-8-feature-ports.js`, see
   [mobile-consistency.md](mobile-consistency.md)) bans value imports from `@shared/api-client`
   outside `adapters/`.
 - `__tests__/libraryPortInvariants.test.ts` pins library's port boundary.

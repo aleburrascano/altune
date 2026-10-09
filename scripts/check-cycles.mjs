@@ -4,12 +4,12 @@ const WIRING = "graft/.graph/wiring.json";
 const SUPPORTED_GRAPH_VERSION = 1;
 
 const SHARED_ALIAS = "@shared";
-const SHARED_ROOT = "apps/mobile/src/shared";
+const SHARED_ROOT = "client/src/shared";
 
 const WORLDS = [
   { name: "services/go-api", prefix: "services/go-api/internal/" },
   { name: "services/overseer", prefix: "services/overseer/internal/" },
-  { name: "apps/mobile", prefix: "apps/mobile/src/" },
+  { name: "client", prefix: "client/src/" },
 ];
 
 const NUL = "\u0000";
@@ -43,9 +43,9 @@ function isFileSegment(segment) {
 
 function moduleOf(path) {
   const segments = path.split("/");
-  if (path.startsWith("apps/mobile/src/")) {
-    if (segments.length >= 6) return segments.slice(0, 5).join("/");
-    if (segments.length === 5) return isFileSegment(segments[4]) ? segments.slice(0, 4).join("/") : path;
+  if (path.startsWith("client/src/")) {
+    if (segments.length >= 5) return segments.slice(0, 4).join("/");
+    if (segments.length === 4) return isFileSegment(segments[3]) ? segments.slice(0, 3).join("/") : path;
     return null;
   }
   if (segments[0] === "services" && segments[2] === "internal" && segments.length >= 5) {

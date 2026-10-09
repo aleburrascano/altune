@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/mobile/**'
+      - 'client/**'
       - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
       entry: ${{ steps.pack.outputs.entry }}
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
@@ -130,7 +130,7 @@ jobs:
       entry: ${{ steps.pack.outputs.entry }}
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup

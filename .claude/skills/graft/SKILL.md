@@ -29,11 +29,11 @@ graft grep "<regex>"                  # exhaustive regex sweep, grouped by symbo
 Useful flags:
 
 - `graft ask "..." --json` — machine-readable, when you want to parse the result.
-- `graft ask "..." --in apps/mobile/` — scope to one sub-project of the monorepo.
+- `graft ask "..." --in client/` — scope to one sub-project of the monorepo.
 - `graft ask "..." --no-refresh` — skip the pre-query graph refresh (faster, may be stale).
 - `graft grep "..." -i --fixed` — case-insensitive literal string, not a regex.
 
-This repo has two worlds: `apps/mobile/` (Expo RN + TS) and `services/go-api/` (Go). Use `--in` to stay in one.
+This repo has two worlds: `client/` (Expo RN + TS) and `services/go-api/` (Go). Use `--in` to stay in one.
 
 ## Keeping the graph fresh
 

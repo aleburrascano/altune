@@ -3,7 +3,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
-dist=$root/apps/mobile/dist
+dist=$root/client/dist
 entry=$(grep -o '/_expo/static/js/web/entry-[0-9a-f]*\.js' "$dist/index.html" | head -1)
 [ -n "$entry" ] || { echo "::error::dist/index.html names no entry bundle"; exit 1; }
 echo "entry=$entry" >> "$GITHUB_OUTPUT"
