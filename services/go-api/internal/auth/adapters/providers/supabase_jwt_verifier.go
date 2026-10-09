@@ -105,7 +105,7 @@ func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	defer cancel()
 	if _, err := cache.Refresh(refreshCtx, jwksURL); err != nil {
 		v.metrics.JWKSFetchFailed()
-		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
+		slog.WarnContext(ctx, "initial JWKS fetch failed, will retry on first request", "error", err)
 	} else {
 		v.primed.Store(true)
 	}
@@ -130,7 +130,7 @@ func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, e
 func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
 	v.metrics.JWKSFetchFailed()
 	failures, age := v.refresher.recordBackgroundFailure(err)
-	slog.Warn("JWKS background refresh failed, serving last-known-good key set until it is older than stale_after, then rejecting tokens",
+	slog.WarnContext(context.Background(), "JWKS background refresh failed, serving last-known-good key set until it is older than stale_after, then rejecting tokens",
 		"error", err,
 		"consecutive_failures", failures,
 		"key_set_age", age.Round(time.Second).String(),

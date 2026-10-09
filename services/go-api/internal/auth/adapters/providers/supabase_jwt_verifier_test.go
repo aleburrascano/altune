@@ -5,11 +5,13 @@ import (
 	authdomain "altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1178,5 +1180,63 @@ func TestSupabaseJWTVerifier_RevokerErrorIsUnavailableNotInvalid(t *testing.T) {
 	var tokenErr *authdomain.InvalidTokenError
 	if errors.As(err, &tokenErr) {
 		t.Fatalf("revoker failure must be a plain error (503), got InvalidTokenError %v", tokenErr)
+	}
+}
+
+func warnRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("log line is not JSON: %q: %v", line, err)
+		}
+		if rec["level"] == "WARN" {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+func TestSupabaseJWTVerifier_InitialJWKSFetchFailureLogsOneWarn(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	f, jwksURL, healthy := newTogglingJWKSFixture(t)
+	ctx := context.Background()
+	verifier, err := NewSupabaseJWTVerifier(ctx, jwksURL, f.projectURL, f.audience)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	warns := warnRecords(t, &buf)
+	if len(warns) != 1 {
+		t.Fatalf("WARN records after failing initial fetch: got %d, want 1: %s", len(warns), buf.String())
+	}
+	if got := warns[0]["msg"]; got != "initial JWKS fetch failed, will retry on first request" {
+		t.Errorf("WARN msg: got %v", got)
+	}
+	if got, ok := warns[0]["error"].(string); !ok || got == "" {
+		t.Errorf("WARN record missing non-empty error attr: %v", warns[0])
+	}
+
+	healthy.Store(true)
+	token := f.signToken(t, map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": f.issuer,
+		"aud": f.audience,
+		"exp": time.Now().Add(30 * time.Minute),
+		"iat": time.Now().Add(-1 * time.Minute),
+	})
+	if _, err := verifier.Verify(ctx, token); err != nil {
+		t.Fatalf("Verify after endpoint recovery: %v", err)
+	}
+	if got := len(warnRecords(t, &buf)); got != 1 {
+		t.Fatalf("WARN records after successful fetch: got %d, want still 1: %s", got, buf.String())
 	}
 }
