@@ -1,7 +1,5 @@
 M1 src/features/library missing index.ts
 M1 src/features/library/gridColumns.ts loose root file
-M1 src/features/library/pinBatchSummary.ts loose root file
-M1 src/features/library/pinnedStatusDisplay.ts loose root file
 M1 src/features/library/selectionActions.ts loose root file
 M1 src/features/library/trackMenu.ts loose root file
 M1 src/features/settings missing index.ts

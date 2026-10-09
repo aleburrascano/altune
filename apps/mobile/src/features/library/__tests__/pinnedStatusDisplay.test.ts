@@ -1,13 +1,11 @@
-import { ArrowDownCircle, CircleAlert, CircleCheck } from 'lucide-react-native';
-
-import { pinnedStatusDisplay } from '../pinnedStatusDisplay';
+import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
 
 describe('pinnedStatusDisplay — one bucket decides the spoken label, the icon and the menu copy', () => {
   it('pairs a finished download with the check icon and an offer to remove it', () => {
     const { a11ySuffix, icon, menu } = pinnedStatusDisplay('ready');
     expect(a11ySuffix).toBe(', downloaded');
     expect(icon).toEqual({
-      glyph: CircleCheck,
+      kind: 'downloaded',
       color: 'accent',
       testIdPrefix: 'library-row-offline',
     });
@@ -19,7 +17,7 @@ describe('pinnedStatusDisplay — one bucket decides the spoken label, the icon 
     const { a11ySuffix, icon, menu } = pinnedStatusDisplay('queued');
     expect(a11ySuffix).toBe(', downloading');
     expect(icon).toEqual({
-      glyph: ArrowDownCircle,
+      kind: 'downloading',
       color: 'textTertiary',
       testIdPrefix: 'library-row-offline-pending',
     });
@@ -30,7 +28,7 @@ describe('pinnedStatusDisplay — one bucket decides the spoken label, the icon 
     const { a11ySuffix, icon, menu } = pinnedStatusDisplay('failed');
     expect(a11ySuffix).toBe(', download failed');
     expect(icon).toEqual({
-      glyph: CircleAlert,
+      kind: 'failed',
       color: 'danger',
       testIdPrefix: 'library-row-offline-failed',
     });

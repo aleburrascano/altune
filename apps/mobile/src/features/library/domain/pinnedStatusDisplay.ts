@@ -1,11 +1,9 @@
-import { ArrowDownCircle, CircleAlert, CircleCheck, type LucideIcon } from 'lucide-react-native';
-
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
 type PinnedStatusDisplay = {
   a11ySuffix: string;
   icon: {
-    glyph: LucideIcon;
+    kind: 'downloaded' | 'downloading' | 'failed';
     color: 'accent' | 'textTertiary' | 'danger';
     testIdPrefix: string;
   } | null;
@@ -21,7 +19,7 @@ const NEVER_DOWNLOADED: PinnedStatusDisplay = {
 const IN_FLIGHT: PinnedStatusDisplay = {
   a11ySuffix: ', downloading',
   icon: {
-    glyph: ArrowDownCircle,
+    kind: 'downloading',
     color: 'textTertiary',
     testIdPrefix: 'library-row-offline-pending',
   },
@@ -31,14 +29,14 @@ const IN_FLIGHT: PinnedStatusDisplay = {
 const BY_STATUS: Record<PinnedStatus, PinnedStatusDisplay> = {
   ready: {
     a11ySuffix: ', downloaded',
-    icon: { glyph: CircleCheck, color: 'accent', testIdPrefix: 'library-row-offline' },
+    icon: { kind: 'downloaded', color: 'accent', testIdPrefix: 'library-row-offline' },
     menu: { label: 'Remove download', action: 'unpin' },
   },
   queued: IN_FLIGHT,
   downloading: IN_FLIGHT,
   failed: {
     a11ySuffix: ', download failed',
-    icon: { glyph: CircleAlert, color: 'danger', testIdPrefix: 'library-row-offline-failed' },
+    icon: { kind: 'failed', color: 'danger', testIdPrefix: 'library-row-offline-failed' },
     menu: { label: 'Retry download', action: 'pin' },
   },
 };
