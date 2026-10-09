@@ -1,4 +1,3 @@
-M1 src/features/auth missing index.ts
 M1 src/features/detail missing index.ts
 M1 src/features/detail/extras-accessors.ts loose root file
 M1 src/features/detail/owned-playback.ts loose root file
@@ -13,10 +12,6 @@ M1 src/features/library/pinnedStatusDisplay.ts loose root file
 M1 src/features/library/selectionActions.ts loose root file
 M1 src/features/library/trackMenu.ts loose root file
 M1 src/features/settings missing index.ts
-M2 src/app/(auth)/_layout.tsx deep import @features/auth/ui/hero/ArtworkBackground
-M2 src/app/(auth)/forgot-password.tsx deep import @features/auth/ui/ForgotPasswordScreen
-M2 src/app/(auth)/sign-in.tsx deep import @features/auth/ui/SignInScreen
-M2 src/app/(auth)/sign-up.tsx deep import @features/auth/ui/SignUpScreen
 M2 src/app/(tabs)/discover/detail.tsx deep import @features/detail/ui/DetailScreen
 M2 src/app/(tabs)/discover/featuring.tsx deep import @features/library/ui/FeaturingScreen
 M2 src/app/(tabs)/library/detail.tsx deep import @features/detail/ui/DetailScreen
@@ -24,13 +19,6 @@ M2 src/app/(tabs)/library/featuring.tsx deep import @features/library/ui/Featuri
 M2 src/app/(tabs)/library/index.tsx deep import @features/library/ui/LibraryScreen
 M2 src/app/(tabs)/library/playlist/[id].tsx deep import @features/library/ui/PlaylistDetailScreen
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-M2 src/app/_layout.tsx deep import @features/auth/hooks/useAuthDeepLink
-M2 src/app/_layout.tsx deep import @features/auth/ui/AuthGate
-M2 src/app/_layout.tsx deep import @features/auth/ui/TestAuthBridge
-M2 src/app/auth/callback.tsx deep import @features/auth/ui/AuthCallbackScreen
-M2 src/app/auth/confirm.tsx deep import @features/auth/ui/AuthCallbackScreen
-M2 src/app/auth/recovery.tsx deep import @features/auth/ui/AuthCallbackScreen
-M2 src/app/reset-password.tsx deep import @features/auth/ui/SetNewPasswordScreen
 M4 src/features/detail/hooks/createEnrichmentHook.ts non-use* file in hooks/
 M4 src/features/detail/hooks/detailFetchGate.ts non-use* file in hooks/
 M4 src/features/library/hooks/dropVanishedTrack.ts non-use* file in hooks/
