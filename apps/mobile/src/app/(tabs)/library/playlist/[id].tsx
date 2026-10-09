@@ -1,3 +1,3 @@
-import { PlaylistDetailScreen } from '@features/library/ui/PlaylistDetailScreen';
+import { PlaylistDetailScreen } from '@features/library';
 
 export default PlaylistDetailScreen;

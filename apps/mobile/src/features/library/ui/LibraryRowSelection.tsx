@@ -6,7 +6,7 @@ import { Check } from 'lucide-react-native';
 import { Row, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
-import { rowSurfaceStyle } from '@features/library/ui/libraryRowSurface';
+import { rowSurfaceStyle } from '@features/library/ui/rowSurfaceStyle';
 
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 
