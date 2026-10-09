@@ -9,6 +9,8 @@ import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import type { DiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import { DiscoverScreen } from '@features/discovery/ui/DiscoverScreen';
 
+jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
+
 const mockPush = jest.fn();
 const focusEffects: Array<() => (() => void) | void> = [];
 
@@ -211,5 +213,11 @@ describe('DiscoverScreen tap-to-dismiss-keyboard area', () => {
     render(<DiscoverScreen />);
     fireEvent.press(screen.getByTestId('discover-screen-body'));
     expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('@features/discovery public surface', () => {
+  it('exports exactly DiscoverScreen', () => {
+    expect(Object.keys(require('@features/discovery')).sort()).toEqual(['DiscoverScreen']);
   });
 });
