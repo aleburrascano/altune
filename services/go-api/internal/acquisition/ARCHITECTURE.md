@@ -207,13 +207,13 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   domain/errors.go       admissionError and the admission sentinels (package domain)
   audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
+adapters/
   eval/                  the offline selection gate — real CoreSteps against committed goldens (§7.8)
     case.go              Case / Track / Candidate, LoadEmbedded over the embedded goldens
     ports.go             casePorts — the in-process source, prober, identifier and writer a case describes
-    harness.go           Run / RunAll and judge — one case through the pipeline, pass or fail
+    run.go               Run / RunAll and judge — one case through the pipeline, pass or fail
     report.go            per-class scoring, Render, and the baselines.json comparison
     goldens/             selection.json (ranking + audio gates) and verification.json (identity, fingerprint, tolerance edges)
-adapters/
   handler/               the inbound HTTP surface
     retry_handler.go     RetryHandler — POST /tracks/{id}/retry
     reacquire_handler.go ReacquireHandler — POST /tracks/{id}/reacquire
@@ -474,7 +474,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - One search engine failing never fails the search.
 - Feature extraction reads the raw title; "with" is never a feature separator.
 - No raw error chain reaches the Track row or the wire — `failureReason` first.
-- The service never touches the filesystem itself: every temp dir is created (`Create`) and removed (`Remove`) through `ports.TempWorkspace`, injected by `WithAcquireTempWorkspace` / `WithStepTempWorkspace` / `CoreSteps` (adapter: `adapters/tempfs`). The `acquisition-service-filesystem` depguard rule denies `os` in `service/` (`eval/` and tests excepted).
+- The service never touches the filesystem itself: every temp dir is created (`Create`) and removed (`Remove`) through `ports.TempWorkspace`, injected by `WithAcquireTempWorkspace` / `WithStepTempWorkspace` / `CoreSteps` (adapter: `adapters/tempfs`). The `acquisition-service-filesystem` depguard rule denies `os` in `service/` (tests excepted). The eval harness needs no exception: it lives in `adapters/eval/`.
 - `CleanupTemp` removes `TempDir` (the workspace-created root), falling back to the parent of `TempPath` when only `TempPath` is set; never `TempPath` itself.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.
@@ -580,7 +580,7 @@ reference set, and `Evidence.ISRCSetHit` is declared but never populated.
 
 ### 7.8 Selection is tested against curated goldens, not live results — partially closed
 
-**Done:** `service/eval/` runs the real `CoreSteps` selection in-process against a
+**Done:** `adapters/eval/` runs the real `CoreSteps` selection in-process against a
 committed golden set — `goldens/selection.json` (ranking and the audio gates) and
 `goldens/verification.json` (identity, fingerprint corroboration, tolerance edges),
 72 cases across `goldens/` spanning every class in §1's table, plus `realworld.json`

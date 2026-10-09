@@ -84,7 +84,7 @@ That is 2 + 3 + 4 + 1 = 10 discovery lines, 0 unassigned. Catalog and acquisitio
 
 - uuid with `shared.Id`: catalog `domain/playlist.go:8`, `domain/track.go:12`, `service/track_dto.go:7`; acquisition `service/step_store.go:13`.
 - `x/text/unicode/norm` with the existing `shared/textnorm` (not new work for `shared.Id`): catalog `domain/dedup.go:7`, `domain/source_url.go:8`; acquisition `service/title_qualifiers.go:9`. If `textnorm` lacks the exact call, add one function there.
-- Not covered here: `acquisition/service/eval/harness.go:4` and `:5` import adapters, which is a different G2 cause.
+- Not covered here: `acquisition/adapters/eval/run.go:4` and `:5` import adapters, which is a different G2 cause.
 
 ## Reaching catalog
 
