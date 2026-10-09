@@ -1,23 +1,72 @@
 import { act, renderHook } from '@testing-library/react-native';
+
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 
 import { useLateralNav } from '@/features/detail/hooks/useDetailNavigation';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
 import {
+  createPortWrapper,
   createTestQueryClient,
-  createWrapper,
 } from '@/features/detail/__tests__/support/queryHarness';
-
-const mockResolveEntityQuery = jest.fn();
-
-jest.mock('@/features/detail/domain/resolveEntityQuery', () => ({
-  resolveEntityQuery: (...args: unknown[]) => mockResolveEntityQuery(...args),
-}));
 
 const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
 }));
+
+function artist(title: string): DiscoveryResult {
+  return {
+    kind: 'artist',
+    title,
+    subtitle: null,
+    image_url: null,
+    confidence: 'high',
+    sources: [{ provider: 'deezer', external_id: title, url: `https://deezer/${title}` }],
+    extras: {},
+  };
+}
+
+type Search = { q: string; kinds: readonly string[] | undefined; limit: number | undefined };
+type Searches = Search[];
+type CountingPort = { port: DetailPort; searches: Searches };
+
+function countingPort(port: DetailPort): CountingPort {
+  const searches: Searches = [];
+  return {
+    searches,
+    port: {
+      ...port,
+      searchDiscovery: (params, signal) => {
+        searches.push({ q: params.q, kinds: params.kinds, limit: params.limit });
+        return port.searchDiscovery(params, signal);
+      },
+    },
+  };
+}
+
+function seeded(discovery: DiscoveryResult[]) {
+  return countingPort(createMemoryDetailPort({ discovery }));
+}
+
+function failing(message: string) {
+  return countingPort({
+    ...createMemoryDetailPort(),
+    searchDiscovery: () => Promise.reject(new Error(message)),
+  });
+}
+
+function renderLateralNav(port: DetailPort) {
+  return renderHook(() => useLateralNav('/discover/detail'), {
+    wrapper: createPortWrapper(createTestQueryClient(), { detail: port }),
+  });
+}
+
+function pushedResults(): (DiscoveryResult | undefined)[] {
+  return mockPush.mock.calls.map(([href]) => readDetailHandoff(href.params.handoff)?.result);
+}
 
 describe('useLateralNav', () => {
   describe('logging a failed lateral navigation', () => {
@@ -34,14 +83,7 @@ describe('useLateralNav', () => {
 
     describe('useLateralNav logs non-"not found" fetch failures', () => {
       it('logs the query/kind and error when the resolve fetch throws', async () => {
-        mockResolveEntityQuery.mockReturnValue({
-          queryKey: ['resolve-entity', 'artist', 'Boom', 1],
-          queryFn: () => Promise.reject(new Error('transport failed')),
-        });
-
-        const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-          wrapper: createWrapper(createTestQueryClient()),
-        });
+        const { result } = renderLateralNav(failing('transport failed').port);
 
         await act(async () => {
           await result.current.navigateTo('Boom', 'artist');
@@ -56,24 +98,19 @@ describe('useLateralNav', () => {
           }),
         );
         expect(result.current.state).toBe('idle');
+        expect(mockPush).not.toHaveBeenCalled();
       });
 
       it('does not log the ordinary "not found" result', async () => {
-        mockResolveEntityQuery.mockReturnValue({
-          queryKey: ['resolve-entity', 'artist', 'Nobody', 1],
-          queryFn: () => Promise.resolve([]),
-        });
-
-        const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-          wrapper: createWrapper(createTestQueryClient()),
-        });
+        const { result } = renderLateralNav(seeded([]).port);
 
         await act(async () => {
           await result.current.navigateTo('Nobody', 'artist');
         });
 
         expect(warnSpy).not.toHaveBeenCalled();
-        expect(result.current.error).toContain('not found');
+        expect(result.current.error).toBe('Artist not found: "Nobody"');
+        expect(mockPush).not.toHaveBeenCalled();
       });
     });
   });
@@ -83,25 +120,19 @@ describe('useLateralNav', () => {
       jest.clearAllMocks();
     });
 
-    it('calls openDetail with the discover detail route and the first result', async () => {
-      const firstResult = { id: 'artist-1' };
-      const secondResult = { id: 'artist-2' };
-      mockResolveEntityQuery.mockReturnValue({
-        queryKey: ['resolve-entity', 'artist', 'Boom', 1],
-        queryFn: () => Promise.resolve([firstResult, secondResult]),
-      });
-
-      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(createTestQueryClient()),
-      });
+    it('searches for one result of the kind and opens it on the discover detail route', async () => {
+      const first = artist('Boom');
+      const { port, searches } = seeded([first, artist('Boom Tribute')]);
+      const { result } = renderLateralNav(port);
 
       await act(async () => {
         await result.current.navigateTo('Boom', 'artist');
       });
 
-      const href = mockPush.mock.calls[0][0];
-      expect(href.pathname).toBe('/discover/detail');
-      expect(readDetailHandoff(href.params.handoff)?.result).toBe(firstResult);
+      expect(searches).toEqual([{ q: 'Boom', kinds: ['artist'], limit: 1 }]);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush.mock.calls[0][0].pathname).toBe('/discover/detail');
+      expect(pushedResults()).toEqual([first]);
     });
   });
 
@@ -111,15 +142,9 @@ describe('useLateralNav', () => {
     });
 
     it('releases the search lock after a pick so a second navigateTo looks up again', async () => {
-      const queryFn = jest.fn(() => Promise.resolve([{ id: 'artist-1' }]));
-      mockResolveEntityQuery.mockImplementation((_kind: string, query: string) => ({
-        queryKey: ['resolve-entity', 'artist', query, 1],
-        queryFn,
-      }));
-
-      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(createTestQueryClient()),
-      });
+      const found = artist('Boom');
+      const { port, searches } = seeded([found]);
+      const { result } = renderLateralNav(port);
 
       await act(async () => {
         await result.current.navigateTo('Boom', 'artist');
@@ -129,20 +154,13 @@ describe('useLateralNav', () => {
       await act(async () => {
         await result.current.navigateTo('Other', 'artist');
       });
-      expect(queryFn).toHaveBeenCalledTimes(2);
-      expect(mockPush).toHaveBeenCalledTimes(2);
+      expect(searches.map((s) => s.q)).toEqual(['Boom', 'Other']);
+      expect(pushedResults()).toEqual([found, found]);
     });
 
     it('shows a user-facing message when the lookup rejects', async () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      mockResolveEntityQuery.mockReturnValue({
-        queryKey: ['resolve-entity', 'artist', 'Boom', 1],
-        queryFn: () => Promise.reject(new Error('transport failed')),
-      });
-
-      const { result } = renderHook(() => useLateralNav('/discover/detail'), {
-        wrapper: createWrapper(createTestQueryClient()),
-      });
+      const { result } = renderLateralNav(failing('transport failed').port);
 
       await act(async () => {
         await result.current.navigateTo('Boom', 'artist');

@@ -5,19 +5,12 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
 import { useResolveMissingSources } from '@/features/detail/hooks/useResolveMissingSources';
+import type { DetailPort } from '@/features/detail/ports/detailPort';
+import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
 import {
+  createPortWrapper,
   createTestQueryClient,
-  createWrapper,
 } from '@/features/detail/__tests__/support/queryHarness';
-
-const mockQueryFn = jest.fn<Promise<DiscoveryResult[]>, []>();
-
-jest.mock('@/features/detail/domain/resolveEntityQuery', () => ({
-  resolveEntityQuery: (kind: string, q: string, limit: number, _port: unknown) => ({
-    queryKey: ['resolve-entity', kind, q, limit],
-    queryFn: () => mockQueryFn(),
-  }),
-}));
 
 function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {
@@ -37,10 +30,42 @@ const source = {
   external_id: 'abc',
 } as unknown as DiscoveryResult['sources'][number];
 
+type Search = { q: string; kinds: readonly string[] | undefined };
+type Searches = Search[];
+type CountingPort = { port: DetailPort; searches: Searches };
+
+function countingPort(port: DetailPort): CountingPort {
+  const searches: Searches = [];
+  return {
+    searches,
+    port: {
+      ...port,
+      searchDiscovery: (params, signal) => {
+        searches.push({ q: params.q, kinds: params.kinds });
+        return port.searchDiscovery(params, signal);
+      },
+    },
+  };
+}
+
+function seeded(discovery: DiscoveryResult[]) {
+  return countingPort(createMemoryDetailPort({ discovery }));
+}
+
+function failing(message: string) {
+  return countingPort({
+    ...createMemoryDetailPort(),
+    searchDiscovery: () => Promise.reject(new Error(message)),
+  });
+}
+
+function wrapperFor(port: DetailPort) {
+  return createPortWrapper(createTestQueryClient(), { detail: port });
+}
+
 let warnSpy: jest.SpyInstance;
 
 beforeEach(() => {
-  mockQueryFn.mockReset();
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
@@ -50,17 +75,28 @@ afterEach(() => {
 
 describe('useResolveMissingSources', () => {
   it('returns the result untouched without querying when it already has sources', () => {
+    const { port, searches } = seeded([]);
     const input = track({ sources: [source] });
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
     expect(result.current).toEqual({ resolved: input, isResolving: false });
-    expect(mockQueryFn).not.toHaveBeenCalled();
+    expect(searches).toEqual([]);
+  });
+
+  it('searches for the title and artist of the kind it is resolving', async () => {
+    const { port, searches } = seeded([]);
+    const { result } = renderHook(() => useResolveMissingSources(track()), {
+      wrapper: wrapperFor(port),
+    });
+
+    await waitFor(() => expect(result.current.isResolving).toBe(false));
+    expect(searches).toEqual([{ q: 'Karma Police Radiohead', kinds: ['track'] }]);
   });
 
   it('backfills sources from the exact title and artist match, keeping its own extras on top', async () => {
-    mockQueryFn.mockResolvedValue([
+    const { port } = seeded([
       track({ title: 'Karma Police', subtitle: 'Someone Else', sources: [source] }),
       track({
         title: ' karma police ',
@@ -71,7 +107,7 @@ describe('useResolveMissingSources', () => {
     ]);
     const input = track({ extras: { b: 2 } });
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
     expect(result.current.isResolving).toBe(true);
@@ -81,10 +117,10 @@ describe('useResolveMissingSources', () => {
   });
 
   it('keeps the original result when no candidate matches', async () => {
-    mockQueryFn.mockResolvedValue([track({ title: 'Paranoid Android', sources: [source] })]);
+    const { port } = seeded([track({ title: 'Paranoid Android', sources: [source] })]);
     const input = track();
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
@@ -92,9 +128,9 @@ describe('useResolveMissingSources', () => {
   });
 
   it('stays silent when the query succeeds with no match', async () => {
-    mockQueryFn.mockResolvedValue([]);
+    const { port } = seeded([]);
     const { result } = renderHook(() => useResolveMissingSources(track()), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
@@ -102,10 +138,10 @@ describe('useResolveMissingSources', () => {
   });
 
   it('stops resolving once a failed query settles', async () => {
-    mockQueryFn.mockRejectedValue(new Error('network down'));
+    const { port } = failing('network down');
     const input = track();
     const { result } = renderHook(() => useResolveMissingSources(input), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
@@ -113,9 +149,9 @@ describe('useResolveMissingSources', () => {
   });
 
   it('logs the kind, title and artist it was resolving when the query fails', async () => {
-    mockQueryFn.mockRejectedValue(new Error('network down'));
+    const { port } = failing('network down');
     renderHook(() => useResolveMissingSources(track()), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
     await waitFor(() =>
@@ -129,17 +165,17 @@ describe('useResolveMissingSources', () => {
   });
 
   it('does not query while the detail kill switch is off, and queries once it is back on', async () => {
-    mockQueryFn.mockResolvedValue([]);
+    const { port, searches } = seeded([]);
     act(() => applyKillSwitches({ detail_enrichment_enabled: false }));
     const { result } = renderHook(() => useResolveMissingSources(track()), {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: wrapperFor(port),
     });
 
-    expect(mockQueryFn).not.toHaveBeenCalled();
+    expect(searches).toEqual([]);
     expect(result.current.isResolving).toBe(false);
 
     act(() => applyKillSwitches({ detail_enrichment_enabled: true }));
 
-    await waitFor(() => expect(mockQueryFn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(searches).toHaveLength(1));
   });
 });
