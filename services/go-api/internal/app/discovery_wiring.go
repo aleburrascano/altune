@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/shared"
 	"context"
+	"expvar"
 	"log/slog"
 	"time"
 
@@ -291,4 +292,18 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		featuredBridge: content.featuredBridge,
 		musicBrainz:    sharedMB,
 	}
+}
+
+const cacheOpsVarName = "discovery_cache_ops"
+
+func cacheSignal() *discoveryCacheAdapters.Signal {
+	ops, ok := expvar.Get(cacheOpsVarName).(*expvar.Map)
+	if !ok {
+		ops = expvar.NewMap(cacheOpsVarName)
+	}
+	return discoveryCacheAdapters.NewSignal(ops, time.Now)
+}
+
+func cacheSignalOption() discoveryCacheAdapters.Option {
+	return discoveryCacheAdapters.WithSignal(cacheSignal())
 }
