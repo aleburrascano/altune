@@ -2,7 +2,7 @@
 
 
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 
 use_compose_file deploy/compose.staging.yml
 

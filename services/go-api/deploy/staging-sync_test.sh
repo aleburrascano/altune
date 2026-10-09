@@ -55,7 +55,7 @@ STUB
 
 start_postgres() {
     mkdir -p "$WORK/api/deploy"
-    cp "$HERE/lib.sh" "$HERE/staging-sync.sh" "$HERE/staging-sync.tables" "$WORK/api/deploy/"
+    cp "$HERE/prod_host.sh" "$HERE/staging-sync.sh" "$HERE/staging-sync.tables" "$WORK/api/deploy/"
     cp -r "$HERE/../migrations" "$WORK/api/migrations"
     docker run -d --label altune-ci=1 --name "$RUN_ID" -e POSTGRES_PASSWORD=pw \
         -v "$WORK/api:/api" "$IMAGE" >/dev/null || exit 1

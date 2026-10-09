@@ -14,7 +14,7 @@ setup_case() {
     local stub_preapplied=${STUB_PREAPPLIED:-}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/migrations"
-    cp "$HERE/lib.sh" "$HERE/prod-migrate.sh" "$WORK/api/deploy/"
+    cp "$HERE/prod_host.sh" "$HERE/prod-migrate.sh" "$WORK/api/deploy/"
     : >"$WORK/api/migrations/001_baseline.sql"
     : >"$WORK/api/migrations/002_indexes.sql"
     : >"$WORK/api/migrations/016_constraint.sql"

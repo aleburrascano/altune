@@ -18,7 +18,7 @@ printf '%s %s container=%s\n' "$step" "\$*" "\${SMOKE_GOAPI_CONTAINER:-}" >> "$W
 [ "$step" != "$failing" ]
 EOF
     done
-    printf 'active_color() { printf green; }\n' >"$WORK/altune/services/go-api/deploy/lib.sh"
+    printf 'active_color() { printf green; }\n' >"$WORK/altune/services/go-api/deploy/prod_host.sh"
     for tool in git docker; do
         cat >"$WORK/bin/$tool" <<EOF
 #!/usr/bin/env bash
@@ -112,9 +112,9 @@ exec 8>&-
 expect_rc 1
 expect_steps ""
 
-CASE="prod smokes the colour the real lib.sh reads from the live upstream"
+CASE="prod smokes the colour the real prod_host.sh reads from the live upstream"
 setup_case
-cp "$HERE/lib.sh" "$WORK/altune/services/go-api/deploy/lib.sh"
+cp "$HERE/prod_host.sh" "$WORK/altune/services/go-api/deploy/prod_host.sh"
 mkdir -p "$WORK/altune/services/go-api/deploy/caddy"
 printf 'reverse_proxy altune-go-api-green:8000\n' >"$WORK/altune/services/go-api/deploy/caddy/upstream.conf"
 release prod "$SHA" https://prod.example.test
@@ -123,7 +123,7 @@ expect_step "smoke https://prod.example.test altune-overseer $SHA container=altu
 
 CASE="prod smokes the colour of a pre-move upstream file without the adoption notice in the name"
 setup_case
-cp "$HERE/lib.sh" "$WORK/altune/services/go-api/deploy/lib.sh"
+cp "$HERE/prod_host.sh" "$WORK/altune/services/go-api/deploy/prod_host.sh"
 mkdir -p "$WORK/altune/services/go-api/caddy"
 printf 'reverse_proxy altune-go-api-green:8000\n' >"$WORK/altune/services/go-api/caddy/upstream.conf"
 release prod "$SHA" https://prod.example.test

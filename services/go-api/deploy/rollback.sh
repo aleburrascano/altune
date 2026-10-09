@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 resolve_public_health_url "${PROD_ENV_FILE:-.env.production}"
 
 ACTIVE=$(active_color)

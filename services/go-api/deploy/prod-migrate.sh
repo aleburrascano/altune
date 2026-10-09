@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 
 ENV_FILE="${PROD_ENV_FILE:-.env.production}"
 MIGRATIONS_DIR=migrations

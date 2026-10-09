@@ -4,7 +4,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 
 BASE_URL=${1:?usage: smoke.sh <base-url> <overseer-container> [expected-commit]}
 OVERSEER_CONTAINER=${2:?usage: smoke.sh <base-url> <overseer-container> [expected-commit]}

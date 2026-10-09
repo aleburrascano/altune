@@ -20,7 +20,7 @@ setup_case() {
     local expected_commit=${SMOKE_EXPECTED_COMMIT:-}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
-    cp "$HERE/lib.sh" "$HERE/smoke.sh" "$WORK/api/deploy/"
+    cp "$HERE/prod_host.sh" "$HERE/smoke.sh" "$WORK/api/deploy/"
 
     cat >"$WORK/bin/curl" <<EOF
 #!/usr/bin/env bash
