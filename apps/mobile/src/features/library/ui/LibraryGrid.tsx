@@ -12,7 +12,7 @@ import { useWideWebLayout } from '@shared/ui';
 
 import { LibraryEmptyMessage } from '@features/library/ui/LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from '@features/library/ui/ListLoadingMoreFooter';
-import { listContent } from '@features/library/ui/listContentStyles';
+import { listContent } from '@features/library/ui/listContent';
 import { GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 

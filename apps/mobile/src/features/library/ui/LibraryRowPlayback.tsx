@@ -9,7 +9,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { LibraryRowMoreButton } from '@features/library/ui/LibraryRowMoreButton';
 import { LibraryRowPinnedIcon } from '@features/library/ui/LibraryRowPinnedIcon';
-import { rowSurfaceStyle } from '@features/library/ui/libraryRowSurface';
+import { rowSurfaceStyle } from '@features/library/ui/rowSurfaceStyle';
 
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 

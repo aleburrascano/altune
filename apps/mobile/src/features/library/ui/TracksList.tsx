@@ -11,7 +11,7 @@ import type { Selection } from '@features/library/hooks/useSelection';
 import { LibraryEmptyMessage } from '@features/library/ui/LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from '@features/library/ui/ListLoadingMoreFooter';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
-import { listContent } from '@features/library/ui/listContentStyles';
+import { listContent } from '@features/library/ui/listContent';
 import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
 import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
 
