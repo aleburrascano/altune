@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -47,47 +48,53 @@ func newCircuitBreaker(now func() time.Time) *CircuitBreaker {
 	}
 }
 
-func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
+func (cb *CircuitBreaker) AllowRequest(ctx context.Context, provider domain.ProviderName) bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	entry := cb.getOrCreate(provider)
 
 	switch entry.state {
-	case CircuitClosed:
-		return true
 	case CircuitOpen:
-		if cb.now().Sub(entry.lastFailedAt) > openDuration {
-			entry.state = CircuitHalfOpen
-			entry.probing = true
-			entry.probeStartedAt = cb.now()
-			slog.Warn("circuit breaker half-open (probing recovery)",
-				"provider", provider.String())
-			return true
-		}
-		return false
+		return cb.allowOpen(ctx, entry, provider)
 	case CircuitHalfOpen:
-		if entry.probing && cb.now().Sub(entry.probeStartedAt) <= probeLease {
-			return false
-		}
-		if entry.probing {
-			slog.Warn("circuit breaker probe lease expired (re-probing)",
-				"provider", provider.String())
-		}
-		entry.probing = true
-		entry.probeStartedAt = cb.now()
-		return true
+		return cb.allowHalfOpen(ctx, entry, provider)
 	}
 	return true
 }
 
-func (cb *CircuitBreaker) RecordSuccess(provider domain.ProviderName) {
+func (cb *CircuitBreaker) allowOpen(ctx context.Context, entry *circuitEntry, provider domain.ProviderName) bool {
+	if cb.now().Sub(entry.lastFailedAt) <= openDuration {
+		return false
+	}
+	entry.state = CircuitHalfOpen
+	entry.probing = true
+	entry.probeStartedAt = cb.now()
+	slog.WarnContext(ctx, "circuit breaker half-open (probing recovery)",
+		"provider", provider.String())
+	return true
+}
+
+func (cb *CircuitBreaker) allowHalfOpen(ctx context.Context, entry *circuitEntry, provider domain.ProviderName) bool {
+	if entry.probing && cb.now().Sub(entry.probeStartedAt) <= probeLease {
+		return false
+	}
+	if entry.probing {
+		slog.WarnContext(ctx, "circuit breaker probe lease expired (re-probing)",
+			"provider", provider.String())
+	}
+	entry.probing = true
+	entry.probeStartedAt = cb.now()
+	return true
+}
+
+func (cb *CircuitBreaker) RecordSuccess(ctx context.Context, provider domain.ProviderName) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	entry := cb.getOrCreate(provider)
 	if entry.state != CircuitClosed {
-		slog.Info("circuit breaker closed (provider recovered)",
+		slog.InfoContext(ctx, "circuit breaker closed (provider recovered)",
 			"provider", provider.String())
 	}
 	entry.state = CircuitClosed
@@ -95,7 +102,7 @@ func (cb *CircuitBreaker) RecordSuccess(provider domain.ProviderName) {
 	entry.probing = false
 }
 
-func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
+func (cb *CircuitBreaker) RecordFailure(ctx context.Context, provider domain.ProviderName) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -106,7 +113,7 @@ func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
 
 	if entry.state != CircuitOpen && (entry.state == CircuitHalfOpen || entry.failures >= failureThreshold) {
 		entry.state = CircuitOpen
-		slog.Warn("circuit breaker opened (provider failing)",
+		slog.WarnContext(ctx, "circuit breaker opened (provider failing)",
 			"provider", provider.String(), "failures", entry.failures)
 	}
 }

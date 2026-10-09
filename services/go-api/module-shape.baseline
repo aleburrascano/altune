@@ -47,14 +47,6 @@ G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
-G7 internal/discovery/service/circuit_breaker.go:AllowRequest slog.Warn without context
-G7 internal/discovery/service/circuit_breaker.go:RecordFailure slog.Warn without context
-G7 internal/discovery/service/circuit_breaker.go:RecordSuccess slog.Info without context
-G7 internal/discovery/service/correction.go:correctTokens slog.Debug without context
-G7 internal/discovery/service/correction.go:pickBestCorrection slog.Debug without context
-G7 internal/discovery/service/suggest.go:supplementWithFuzzy slog.Debug without context
-G7 internal/discovery/service/vocabulary_refresh.go:normalizeAndStore slog.Info without context
-G7 internal/discovery/service/vocabulary_refresh.go:trim slog.Warn without context
 N1 deploy/lib.sh banned name lib
 N1 internal/discovery/adapters/cache/helpers_test.go banned name helpers
 N1 internal/discovery/adapters/persistence/helpers_test.go banned name helpers

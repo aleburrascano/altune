@@ -25,7 +25,7 @@ func (s *Service) fanOut(
 	var wg sync.WaitGroup
 
 	for i, provider := range s.providers {
-		call, ok := admitProviderCall(s.circuitBreaker, provider.Name())
+		call, ok := admitProviderCall(ctx, s.circuitBreaker, provider.Name())
 		if !ok {
 			statuses[i] = domain.ProviderSearchResponse{
 				Provider: provider.Name(),

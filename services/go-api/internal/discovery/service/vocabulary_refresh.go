@@ -51,7 +51,7 @@ func chartOutage(providerCount int, fetchErrs []error) error {
 
 func (s *VocabularyRefreshService) trim(ctx context.Context) {
 	if err := s.vocab.Trim(ctx, maxVocabEntries); err != nil {
-		slog.Warn("vocabulary trim failed", "error", err)
+		slog.WarnContext(ctx, "vocabulary trim failed", "error", err)
 	}
 }
 
@@ -91,6 +91,6 @@ func (s *VocabularyRefreshService) normalizeAndStore(
 	for i := range entries {
 		entries[i].TermNorm = textnorm.NormalizeForMatch(entries[i].Term)
 	}
-	slog.Info("vocabulary refresh", "entries", len(entries))
+	slog.InfoContext(ctx, "vocabulary refresh", "entries", len(entries))
 	return s.vocab.BulkAdd(ctx, entries)
 }

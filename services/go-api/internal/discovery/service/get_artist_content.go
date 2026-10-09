@@ -98,9 +98,9 @@ type identityJob struct {
 	call     breakerCall
 }
 
-func (s *GetArtistContentService) admitIdentityJobs(identity ResolvedArtistIdentity) (jobs []identityJob, partial bool) {
+func (s *GetArtistContentService) admitIdentityJobs(ctx context.Context, identity ResolvedArtistIdentity) (jobs []identityJob, partial bool) {
 	for _, name := range orderedProviderNames(s.providers) {
-		call, ok := admitProviderCall(s.breaker, name)
+		call, ok := admitProviderCall(ctx, s.breaker, name)
 		id := providerContentID(identity, name)
 		if !ok {
 			if id != "" {
@@ -122,7 +122,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	ctx, cancel := context.WithTimeout(ctx, detailFanOutTimeout)
 	defer cancel()
 
-	jobs, partial := s.admitIdentityJobs(identity)
+	jobs, partial := s.admitIdentityJobs(callerCtx, identity)
 
 	outcomes := runIdentityJobs(ctx, callerCtx, jobs, fetch)
 	groups, jobsPartial := collectIdentityOutcomes(callerCtx, jobs, outcomes)

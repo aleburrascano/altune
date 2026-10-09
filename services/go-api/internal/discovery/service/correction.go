@@ -67,7 +67,7 @@ func (s *CorrectionService) correctWholeQuery(ctx context.Context, norm string) 
 	if isExactVocabMatch(candidates, norm) {
 		return nil
 	}
-	return pickBestCorrection(norm, candidates)
+	return pickBestCorrection(ctx, norm, candidates)
 }
 
 func isExactVocabMatch(candidates []domain.VocabularyEntry, norm string) bool {
@@ -97,7 +97,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 
 		matches, err := s.vocab.SuggestByPrefix(ctx, token, 1)
 		if err != nil {
-			slog.Debug("correction.prefix_lookup_failed", "token", token, "error", err)
+			slog.DebugContext(ctx, "correction.prefix_lookup_failed", "token", token, "error", err)
 		}
 		if len(matches) > 0 && textnorm.NormalizeForMatch(matches[0].Term) == token {
 			corrected[i] = token
@@ -115,13 +115,13 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 			continue
 		}
 
-		best := pickBestCorrection(token, candidates)
+		best := pickBestCorrection(ctx, token, candidates)
 		if best == nil {
 			corrected[i] = token
 			continue
 		}
 
-		slog.Debug("correction.token",
+		slog.DebugContext(ctx, "correction.token",
 			logging.SearchTextAttr(token),
 			slog.Group("corrected", logging.SearchTextAttr(best.Corrected)),
 			"confidence", best.Confidence,
@@ -143,7 +143,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 	}
 }
 
-func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *CorrectionResult {
+func pickBestCorrection(ctx context.Context, queryNorm string, candidates []domain.VocabularyEntry) *CorrectionResult {
 	var best *CorrectionResult
 	bestDist := len([]rune(queryNorm)) + 1
 	maxDist := maxCorrectionDist(queryNorm)
@@ -153,16 +153,8 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 			continue
 		}
 		dist := textnorm.LevenshteinDistance(queryNorm, c.TermNorm)
-		slog.Debug("correction.candidate",
-			logging.SearchTextAttr(queryNorm),
-			slog.Group("candidate", logging.SearchTextAttr(c.TermNorm)),
-			"distance", dist,
-			"score", c.MatchScore,
-		)
-		if dist > maxDist {
-			continue
-		}
-		if dist < bestDist || (dist == bestDist && best != nil && c.MatchScore > best.Confidence) {
+		logCandidate(ctx, queryNorm, c, dist)
+		if dist <= maxDist && (dist < bestDist || (dist == bestDist && best != nil && c.MatchScore > best.Confidence)) {
 			best = &CorrectionResult{
 				Corrected:  c.Term,
 				Confidence: c.MatchScore,
@@ -171,6 +163,15 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 		}
 	}
 	return best
+}
+
+func logCandidate(ctx context.Context, queryNorm string, c domain.VocabularyEntry, dist int) {
+	slog.DebugContext(ctx, "correction.candidate",
+		logging.SearchTextAttr(queryNorm),
+		slog.Group("candidate", logging.SearchTextAttr(c.TermNorm)),
+		"distance", dist,
+		"score", c.MatchScore,
+	)
 }
 
 func maxCorrectionDist(query string) int {

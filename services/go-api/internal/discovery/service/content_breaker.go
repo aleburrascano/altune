@@ -10,18 +10,19 @@ import (
 var errCircuitOpen = errors.New("provider circuit open")
 
 type breakerCall struct {
+	ctx      context.Context
 	cb       *CircuitBreaker
 	provider domain.ProviderName
 }
 
-func admitProviderCall(cb *CircuitBreaker, provider domain.ProviderName) (breakerCall, bool) {
+func admitProviderCall(ctx context.Context, cb *CircuitBreaker, provider domain.ProviderName) (breakerCall, bool) {
 	if cb == nil {
-		return breakerCall{provider: provider}, true
+		return breakerCall{ctx: ctx, provider: provider}, true
 	}
-	if !cb.AllowRequest(provider) {
+	if !cb.AllowRequest(ctx, provider) {
 		return breakerCall{}, false
 	}
-	return breakerCall{cb: cb, provider: provider}, true
+	return breakerCall{ctx: ctx, cb: cb, provider: provider}, true
 }
 
 func (c breakerCall) settle(callerCtx context.Context, err error) {
@@ -30,11 +31,11 @@ func (c breakerCall) settle(callerCtx context.Context, err error) {
 	}
 	switch {
 	case err == nil:
-		c.cb.RecordSuccess(c.provider)
+		c.cb.RecordSuccess(callerCtx, c.provider)
 	case callerCtx.Err() != nil, !isProviderHealthFailure(err):
 		c.cb.ReleaseProbe(c.provider)
 	default:
-		c.cb.RecordFailure(c.provider)
+		c.cb.RecordFailure(callerCtx, c.provider)
 	}
 }
 
@@ -49,7 +50,7 @@ func (c breakerCall) failPanicked(settled *bool) {
 	if c.cb == nil || *settled {
 		return
 	}
-	c.cb.RecordFailure(c.provider)
+	c.cb.RecordFailure(c.ctx, c.provider)
 }
 
 func guardedFetch[T any](
@@ -58,7 +59,7 @@ func guardedFetch[T any](
 	provider domain.ProviderName,
 	call func() (T, error),
 ) (T, error) {
-	c, ok := admitProviderCall(cb, provider)
+	c, ok := admitProviderCall(callerCtx, cb, provider)
 	if !ok {
 		var zero T
 		return zero, errCircuitOpen
