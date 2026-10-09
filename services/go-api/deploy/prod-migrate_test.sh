@@ -186,7 +186,8 @@ CASE="only the newest 5 snapshots of a tier remain"
 STUB_OLD_SNAPSHOTS="prod-20200101T000000Z-before-a.dump prod-20200102T000000Z-before-a.dump prod-20200103T000000Z-before-a.dump prod-20200104T000000Z-before-a.dump prod-20200105T000000Z-before-a.dump prod-20200106T000000Z-before-a.dump staging-20190101T000000Z-before-a.dump" \
     STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
 expect_rc 0
-[ "$(ls "$WORK/snapshots" | grep -c '^prod-')" = 5 ] || fail "expected 5 prod snapshots"
+prod_dumps=("$WORK"/snapshots/prod-*.dump)
+[ "${#prod_dumps[@]}" = 5 ] || fail "expected 5 prod snapshots, got ${#prod_dumps[@]}"
 [ ! -e "$WORK/snapshots/prod-20200101T000000Z-before-a.dump" ] || fail "oldest snapshot kept"
 [ -e "$WORK/snapshots/prod-20200106T000000Z-before-a.dump" ] || fail "newer old snapshot deleted"
 [ -e "$WORK/snapshots/staging-20190101T000000Z-before-a.dump" ] || fail "other tier's snapshot deleted"
