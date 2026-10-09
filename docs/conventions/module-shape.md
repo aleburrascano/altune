@@ -156,7 +156,7 @@ After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --ex
 |---|---|
 | N1 | No file or folder is named `util`, `utils`, `helper`, `helpers`, `common`, `misc`, `lib`, `core`, `manager`, `base`, `generic`, `data`, `stuff`, `tmp`, `temp`, `new`, `old`, `types` or `constants`. Name it for the one thing it holds. `index.ts` as a barrel is allowed. |
 | N2 | A module or feature folder is named for a domain concept in [ubiquitous-language.md](../ubiquitous-language.md), and the same concept has the same name in every stack. |
-| N3 | Mobile only: a file with a single export is named for that export, in the stack's casing. Go files often hold several related declarations, so go-api has no N3; N1 and N2 still apply there. |
+| N3 | Mobile only: a file is named for its concept and may hold several related exports that change together (Common Closure Principle), so do not split a file one export at a time. File and folder names under `src/features/` and `src/shared/` are camelCase; a `.tsx` file whose default or main export is a React component is PascalCase. Platform suffixes (`.web`, `.native`, `.android`, `.ios`) and `index.ts` are allowed. `src/app/` is exempt, since expo-router route names are URLs. Go files already hold several related declarations under Go's own casing, so go-api has no N3; N1 and N2 still apply there. |
 
 ## Where the checks live
 
