@@ -27,6 +27,8 @@ import {
 } from '@shared/events/__tests__/trackCacheFixtures';
 
 describe('patchTrackInCaches', () => {
+  const SEEDED_TOTAL = 9;
+
   it('applies a partial patch to the matching track in a page, preserving unrelated fields and total', () => {
     const client = newClient();
     const target = makeTrack({
@@ -35,7 +37,7 @@ describe('patchTrackInCaches', () => {
       title: 'Original',
     });
     const other = makeTrack({ id: asTrackId('other') });
-    seedTracksPrefix(client, [makePage([target, other], { total: 9 })]);
+    seedTracksPrefix(client, [makePage([target, other], { total: SEEDED_TOTAL })]);
 
     patchTrackInCaches(client, asTrackId('target'), toReady());
 
@@ -47,7 +49,7 @@ describe('patchTrackInCaches', () => {
       ...toReady(),
     });
     expect(result.pages[0]!.items[1]).toEqual(other);
-    expect(result.pages[0]!.total).toBe(9);
+    expect(result.pages[0]!.total).toBe(SEEDED_TOTAL);
   });
 
   it('propagates an identical patch to every family caching a copy of the track', () => {
@@ -190,9 +192,12 @@ describe('patchTrackInCaches', () => {
 });
 
 describe('scheduleTrackPatch', () => {
-  const cachedStatus = (client: QueryClient): string =>
-    client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort'))!
-      .pages[0]!.items[0]!.acquisition_status;
+  function cachedStatus(client: QueryClient): string {
+    const data = client.getQueryData<InfiniteData<ListTracksResponse>>(
+      libraryKeys.tracks('q', 'sort'),
+    );
+    return data!.pages[0]!.items[0]!.acquisition_status;
+  }
 
   function seedOnePendingTrack(client: QueryClient): void {
     seedTracksPrefix(client, [
@@ -230,18 +235,20 @@ describe('scheduleTrackPatch', () => {
 
 describe('a late REST response cannot regress a patch that landed mid-fetch', () => {
   const key = libraryKeys.tracks('q', 'sort');
-  const trackX = (transition: ReturnType<typeof toReady | typeof toPending | typeof toFailed>) =>
-    makePage([makeTrack({ id: asTrackId('x'), ...transition })]);
+  type Transition = ReturnType<typeof toReady | typeof toPending | typeof toFailed>;
+  function trackX(transition: Transition) {
+    return makePage([makeTrack({ id: asTrackId('x'), ...transition })]);
+  }
 
   function slowStaleServer() {
-    let release: () => void = () => undefined;
+    let release: (() => void) | undefined;
     const queryFn = jest.fn(() => {
       if (queryFn.mock.calls.length > 1) return Promise.resolve(trackX(toReady()));
       return new Promise<ListTracksResponse>((resolve) => {
         release = () => resolve(trackX(toPending()));
       });
     });
-    return { queryFn, release: () => release() };
+    return { queryFn, release: () => release?.() };
   }
 
   function mountLibrary(queryFn: () => Promise<ListTracksResponse>, rendered: string[] = []) {

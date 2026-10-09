@@ -7,6 +7,7 @@ import {
   TRACK_CACHE_FAMILY_LIST,
   TRACK_SHAPES,
   type MapItems,
+  type TrackCacheFamily,
   type TrackCacheShape,
   type TrackPages,
 } from '@shared/events/trackCacheShapes';
@@ -28,33 +29,49 @@ function indicesOf(items: readonly TrackResponse[], trackId: TrackId): number[] 
   return out;
 }
 
+interface TrackList {
+  readonly queryKey: QueryKey;
+  readonly shape: TrackCacheShape;
+  readonly pageIndex: number;
+  readonly items: readonly TrackResponse[];
+}
+
+function pagedLists(queryKey: QueryKey, cached: TrackPages): TrackList[] {
+  return cached.pages.map((page, pageIndex) => ({
+    queryKey,
+    shape: 'paged',
+    pageIndex,
+    items: page.items,
+  }));
+}
+
+function listsOf(queryKey: QueryKey, shape: TrackCacheShape, cached: unknown): TrackList[] {
+  if (shape === 'paged') return pagedLists(queryKey, cached as TrackPages);
+  return [{ queryKey, shape, pageIndex: 0, items: TRACK_SHAPES[shape].items(cached) }];
+}
+
+function listsInFamily(queryClient: QueryClient, family: TrackCacheFamily): TrackList[] {
+  return queryClient
+    .getQueriesData({ queryKey: family.prefix })
+    .filter(([, cached]) => cached)
+    .flatMap(([queryKey, cached]) => listsOf(queryKey, family.shape, cached));
+}
+
+function placementIn(list: TrackList, trackId: TrackId): TrackCachePlacement | undefined {
+  const indices = indicesOf(list.items, trackId);
+  const track = list.items[indices[0] ?? -1];
+  const { queryKey, shape, pageIndex } = list;
+  return track ? { queryKey, shape, pageIndex, indices, track } : undefined;
+}
+
 export function captureTrackPlacements(
   queryClient: QueryClient,
   trackId: TrackId,
 ): TrackCachePlacement[] {
   flushTrackCachePatches();
-  const placements: TrackCachePlacement[] = [];
-  const record = (
-    queryKey: QueryKey,
-    shape: TrackCacheShape,
-    pageIndex: number,
-    items: readonly TrackResponse[],
-  ) => {
-    const indices = indicesOf(items, trackId);
-    const track = items[indices[0] ?? -1];
-    if (track) placements.push({ queryKey, shape, pageIndex, indices, track });
-  };
-  for (const family of TRACK_CACHE_FAMILY_LIST) {
-    for (const [queryKey, data] of queryClient.getQueriesData({ queryKey: family.prefix })) {
-      if (!data) continue;
-      if (family.shape === 'paged') {
-        (data as TrackPages).pages.forEach((page, i) => record(queryKey, 'paged', i, page.items));
-      } else {
-        record(queryKey, family.shape, 0, TRACK_SHAPES[family.shape].items(data));
-      }
-    }
-  }
-  return placements;
+  return TRACK_CACHE_FAMILY_LIST.flatMap((family) => listsInFamily(queryClient, family))
+    .map((list) => placementIn(list, trackId))
+    .filter((placement) => placement !== undefined);
 }
 
 function reinsert(items: TrackResponse[], placement: TrackCachePlacement): TrackResponse[] {
@@ -70,23 +87,29 @@ function reinsertOnPage(placement: TrackCachePlacement): MapItems {
     pageIndex === placement.pageIndex ? reinsert(items, placement) : items;
 }
 
+function canReinsert(placement: TrackCachePlacement, prev: unknown): boolean {
+  const present = TRACK_SHAPES[placement.shape]
+    .items(prev)
+    .some((t) => t.id === placement.track.id);
+  if (present) return false;
+  return (
+    placement.shape !== 'paged' || !!(prev as TrackPages | undefined)?.pages[placement.pageIndex]
+  );
+}
+
+function restoreOne(queryClient: QueryClient, placement: TrackCachePlacement): void {
+  const accessor = TRACK_SHAPES[placement.shape];
+  queryClient.setQueryData<unknown>(placement.queryKey, (prev: unknown) =>
+    canReinsert(placement, prev)
+      ? accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY)
+      : prev,
+  );
+}
+
 export function restoreTrackPlacements(
   queryClient: QueryClient,
   placements: readonly TrackCachePlacement[],
 ): void {
   flushTrackCachePatches();
-  for (const placement of placements) {
-    const id = placement.track.id;
-    const accessor = TRACK_SHAPES[placement.shape];
-    queryClient.setQueryData<unknown>(placement.queryKey, (prev: unknown) => {
-      if (accessor.items(prev).some((t) => t.id === id)) return prev;
-      if (
-        placement.shape === 'paged' &&
-        !(prev as TrackPages | undefined)?.pages[placement.pageIndex]
-      ) {
-        return prev;
-      }
-      return accessor.write(prev, reinsertOnPage(placement), RESIZE_POLICY);
-    });
-  }
+  for (const placement of placements) restoreOne(queryClient, placement);
 }
