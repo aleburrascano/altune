@@ -5,7 +5,7 @@ import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
-import { buildTrackMenuItems } from '../trackMenu';
+import { buildTrackMenuItems } from '@features/library/hooks/useTrackMenu';
 
 function readyPin(trackId: string): PinnedEntry {
   return {
