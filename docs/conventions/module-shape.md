@@ -138,7 +138,7 @@ Follow-up tickets, in order. Each removes its baseline lines in the same commit 
 
 After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --exclude='*_test.go'` shows only `adapters/catalogbridge/`.
 
-## mobile: `apps/mobile/src/features/<feature>/`
+## mobile: `client/src/features/<feature>/`
 
 | ID | Rule |
 |---|---|
@@ -161,5 +161,5 @@ After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --ex
 ## Where the checks live
 
 - go-api: one Go test walks `internal/` with `go/parser` for G1 to G7, N1 and N2. Baseline: `services/go-api/module-shape.baseline`.
-- mobile: one jest test walks `src/features/` and `src/shared/` for M1, M2, M4 and N1 to N3. ESLint zones carry M3 and M5. Baseline: `apps/mobile/module-shape.baseline`.
+- mobile: one jest test walks `src/features/` and `src/shared/` for M1, M2, M4 and N1 to N3. ESLint zones carry M3 and M5. Baseline: `client/module-shape.baseline`.
 - Both run in `scripts/precheck.sh`, so a PR that adds drift fails before review.

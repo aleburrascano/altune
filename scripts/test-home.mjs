@@ -184,8 +184,8 @@ function main() {
     ].filter(Boolean))];
     removed = git(["diff", "--no-renames", "--name-only", "--diff-filter=D", base]).split("\n").filter(Boolean);
     const moved = pureMoves(git(["diff", "--find-renames=100%", "--name-status", "--diff-filter=R", base]));
-    added = added.filter((path) => !moved.has(path));
     repo = gitRepo(".", base, added, removed);
+    added = added.filter((path) => !moved.has(path));
   } catch (e) {
     console.error(`test-home: could not diff against ${ref}: ${e.message.split("\n")[0]}`);
     process.exit(3);

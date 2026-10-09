@@ -29,7 +29,7 @@ jobs:
           git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
 
       - name: install dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
 
       - name: build staging
         id: staging_build

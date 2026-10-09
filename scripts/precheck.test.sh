@@ -398,8 +398,8 @@ add_mobile_stubs() {
     chmod +x "$WORK/bin/npx"
     (
         cd "$WORK/repo" || exit 1
-        mkdir -p apps/mobile
-        printf 'x\n' >apps/mobile/.keep
+        mkdir -p client
+        printf 'x\n' >client/.keep
         printf 'echo true\n' >scripts/worktree-deps.sh
         git add -A
         git commit -qm "mobile fixture"
@@ -424,8 +424,8 @@ new_repo
 add_mobile_stubs
 (
     cd "$WORK/repo" || exit 1
-    mkdir -p apps/mobile/src
-    printf 'export const x = 1;\n' >apps/mobile/src/x.ts
+    mkdir -p client/src
+    printf 'export const x = 1;\n' >client/src/x.ts
     git add -A
     git commit -qm "mobile change"
 )

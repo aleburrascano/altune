@@ -6,7 +6,7 @@ on:
     paths:
       - "services/go-api/**"
       - "services/overseer/**"
-      - "apps/mobile/**"
+      - "client/**"
       - "scripts/uptime/**"
       - "scripts/supabase-auth*"
       - "supabase/auth/**"
@@ -153,9 +153,9 @@ jobs:
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
           git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
       - name: jest with coverage ratchet
-        run: cd "$WT/apps/mobile" && npx jest --coverage --ci --maxWorkers=2 --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest"
+        run: cd "$WT/client" && npx jest --coverage --ci --maxWorkers=2 --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest"
       - name: clean up
         if: always()
         run: |
@@ -173,18 +173,18 @@ jobs:
           git -C "$ALTUNE_REPO" fetch -q gitea main || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; } || { sleep 5; git -C "$ALTUNE_REPO" fetch -q gitea main; }
           git -C "$ALTUNE_REPO" show "$SHA:.gitea/workflows/ci-checkout.sh" | bash -s "$SHA"
       - name: dependencies
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
       - name: react-doctor
         env:
           MAX_WARNINGS: 106
-        run: cd "$WT/apps/mobile" && bash "$WT/.github/workflows/test-mobile-react-doctor.sh"
+        run: cd "$WT/client" && bash "$WT/.github/workflows/test-mobile-react-doctor.sh"
       - name: architecture, dead code and duplication (fallow)
-        run: cd "$WT/apps/mobile" && npm run fallow
+        run: cd "$WT/client" && npm run fallow
       - name: complexity ratchet (fallow)
         continue-on-error: true
         env:
           MAX: 137
-        run: cd "$WT/apps/mobile" && bash "$WT/.github/workflows/test-mobile-complexity.sh"
+        run: cd "$WT/client" && bash "$WT/.github/workflows/test-mobile-complexity.sh"
       - name: clean up
         if: always()
         run: |

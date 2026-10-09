@@ -1,6 +1,6 @@
 # Web app
 
-`deploy-web.yml`, started by hand (`workflow_dispatch`), exports `apps/mobile` for web, releases it to staging with `deploy/web-release.sh`, smoke-tests it, and after a `production` approval does the same for prod. Caddy serves a file from `$WEB_ROOT/<tier>/current` when the path matches one, and go-api otherwise. `<tier>` is `staging` or `prod`. Caddy mounts `~/altune-web` read-only, the default `WEB_ROOT`.
+`deploy-web.yml`, started by hand (`workflow_dispatch`), exports `client` for web, releases it to staging with `deploy/web-release.sh`, smoke-tests it, and after a `production` approval does the same for prod. Caddy serves a file from `$WEB_ROOT/<tier>/current` when the path matches one, and go-api otherwise. `<tier>` is `staging` or `prod`. Caddy mounts `~/altune-web` read-only, the default `WEB_ROOT`.
 
 ```bash
 ls -t "$WEB_ROOT/<tier>/releases"
@@ -15,4 +15,4 @@ A build that fails on an inline script hash names a `sha256`: add it to that tie
 
 On a new VM, run `mkdir -p "$WEB_ROOT"` as the deploy user before `docker compose -f deploy/compose.prod.yml up -d caddy`.
 
-To run `npx expo export -p web` locally, copy `apps/mobile/.env.example` to `apps/mobile/.env` and fill it in. `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` come from the staging Supabase project's dashboard (Project Settings, API): the project URL and the publishable anon key. `EXPO_PUBLIC_API_URL` is `http://localhost:8000` for a local go-api, or the staging host. The export fails at start-up when the Supabase pair is unset.
+To run `npx expo export -p web` locally, copy `client/.env.example` to `client/.env` and fill it in. `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` come from the staging Supabase project's dashboard (Project Settings, API): the project URL and the publishable anon key. `EXPO_PUBLIC_API_URL` is `http://localhost:8000` for a local go-api, or the staging host. The export fails at start-up when the Supabase pair is unset.

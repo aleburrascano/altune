@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,10 +33,10 @@ jobs:
       - uses: ./.github/actions/mobile-setup
       - uses: actions/cache@v6
         with:
-          path: apps/mobile/.eslintcache
-          key: eslint-${{ hashFiles('apps/mobile/eslint.config.js', 'apps/mobile/package-lock.json') }}-${{ github.sha }}
+          path: client/.eslintcache
+          key: eslint-${{ hashFiles('client/eslint.config.js', 'client/package-lock.json') }}-${{ github.sha }}
           restore-keys: |
-            eslint-${{ hashFiles('apps/mobile/eslint.config.js', 'apps/mobile/package-lock.json') }}-
+            eslint-${{ hashFiles('client/eslint.config.js', 'client/package-lock.json') }}-
       - name: lint
         run: npx eslint . --cache --cache-location .eslintcache
       - name: mechanical style on changed code (diff-scoped)
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,16 +87,16 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
       - uses: actions/cache@v6
         with:
-          path: apps/mobile/.jestcache
-          key: jest-${{ hashFiles('apps/mobile/package-lock.json') }}-${{ github.sha }}
+          path: client/.jestcache
+          key: jest-${{ hashFiles('client/package-lock.json') }}-${{ github.sha }}
           restore-keys: |
-            jest-${{ hashFiles('apps/mobile/package-lock.json') }}-
+            jest-${{ hashFiles('client/package-lock.json') }}-
       - name: test with coverage ratchet
         run: npx jest --coverage --ci --cacheDirectory .jestcache
 
@@ -104,7 +104,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
@@ -119,7 +119,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/mobile
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
@@ -132,6 +132,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: react-doctor-report
-          path: apps/mobile/doctor-report.json
+          path: client/doctor-report.json
           if-no-files-found: ignore
           retention-days: 14

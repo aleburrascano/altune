@@ -54,7 +54,7 @@ echo "export PATH=$node_bin:\$PATH"
 
 main_tree=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')
 
-[ $# -eq 0 ] && set -- . apps/mobile
+[ $# -eq 0 ] && set -- . client
 
 for dir in "$@"; do
   [ -f "$dir/package-lock.json" ] || continue

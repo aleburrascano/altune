@@ -45,33 +45,33 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
+          cache-dependency-path: client/package-lock.json
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
       - name: Install JS deps
-        working-directory: apps/mobile
+        working-directory: client
         run: npm ci
 
       - name: Stamp version into app.json
-        working-directory: apps/mobile
+        working-directory: client
         env:
           VERSION: ${{ steps.meta.outputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: bash "$GITHUB_WORKSPACE/.github/workflows/release-ios-stamp.sh"
 
       - name: Expo prebuild (generate native iOS project)
-        working-directory: apps/mobile
+        working-directory: client
         run: npx expo prebuild --platform ios --no-install
 
       - name: Install CocoaPods
-        working-directory: apps/mobile/ios
+        working-directory: client/ios
         run: pod install
 
       - name: Build unsigned archive
-        working-directory: apps/mobile/ios
+        working-directory: client/ios
         run: bash "$GITHUB_WORKSPACE/.github/workflows/release-ios-build.sh"
 
       - name: Package .ipa

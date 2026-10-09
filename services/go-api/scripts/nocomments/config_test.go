@@ -13,12 +13,12 @@ func TestGitPatternMatchByBasename(t *testing.T) {
 		want bool
 	}{
 		{".gitignore", true},
-		{"apps/mobile/.gitignore", true},
+		{"client/.gitignore", true},
 		{".ignore", true},
 		{".gitattributes", true},
 		{".dockerignore", true},
 		{".github/CODEOWNERS", false},
-		{"apps/mobile/.npmrc", false},
+		{"client/.npmrc", false},
 		{".gitmessage", false},
 		{"services/go-api/.env.example", false},
 		{".claude/slos.tsv", false},
@@ -43,7 +43,7 @@ func TestLineConfigMatchByBasenameAndPattern(t *testing.T) {
 		{".claude/slos.tsv", true},
 		{".gitignore", false},
 		{".gitattributes", false},
-		{"apps/mobile/.npmrc", false},
+		{"client/.npmrc", false},
 		{"README.md", false},
 		{"services/go-api/.air.toml", false},
 		{".envrc", false},
@@ -61,7 +61,7 @@ func TestNpmrcMatchByBasename(t *testing.T) {
 		want bool
 	}{
 		{".npmrc", true},
-		{"apps/mobile/.npmrc", true},
+		{"client/.npmrc", true},
 		{".gitignore", false},
 		{"services/go-api/.env.example", false},
 	}

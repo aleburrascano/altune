@@ -138,7 +138,7 @@ start_api() {
   api_port=$(free_port)
   api_url="http://127.0.0.1:$api_port"
   ENV=test TEST_AUTH_ENABLED=true HOST=127.0.0.1 PORT="$api_port" \
-    PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR="$root/apps/mobile/e2e/fixtures/providers" \
+    PROVIDER_REPLAY_ENABLED=true PROVIDER_REPLAY_DIR="$root/client/e2e/fixtures/providers" \
     SPOTIFY_ENABLED=false SOUNDCLOUD_ENABLED=false APPLEMUSIC_ENABLED=false \
     AMAZONMUSIC_ENABLED=false YTMUSIC_ENABLED=false YTDLP_ENABLED=false \
     OCI_S3_ENDPOINT="$s3_endpoint" OCI_S3_ACCESS_KEY="$s3_key" OCI_S3_SECRET_KEY="$s3_secret" \
@@ -152,11 +152,11 @@ start_api() {
 
 export_and_serve_web() {
   mkdir -p "$state/metro-tmp"
-  (cd "$root/apps/mobile" && rm -rf dist \
+  (cd "$root/client" && rm -rf dist \
     && TMPDIR="$state/metro-tmp" EXPO_PUBLIC_TEST_AUTH=1 EXPO_PUBLIC_API_URL="$api_url" \
       EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:1 EXPO_PUBLIC_SUPABASE_ANON_KEY=e2e-anon-key \
       npx expo export -p web --dev)
-  start_detached web python3 -m http.server "$web_port" --bind 127.0.0.1 --directory "$root/apps/mobile/dist"
+  start_detached web python3 -m http.server "$web_port" --bind 127.0.0.1 --directory "$root/client/dist"
 }
 
 up() {

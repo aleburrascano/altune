@@ -205,8 +205,8 @@ func TestCollectN2(t *testing.T) {
 		{"bold term", join(module("catalog"), map[string]string{doc: "the **catalog** context\n"}), nil},
 		{"heading term", join(module("catalog"), map[string]string{doc: "### Catalog\n"}), nil},
 		{"unknown term", join(module("gadgets"), map[string]string{doc: "the **catalog** context\n"}), []string{"N2 internal/gadgets is not a term in docs/ubiquitous-language.md"}},
-		{"mobile differs", join(module("discovery"), map[string]string{doc: "**Discovery**\n", "apps/mobile/src/features/discover/index.ts": "x\n"}), []string{"N2 internal/discovery differs from mobile feature discover"}},
-		{"mobile same", join(module("playback"), map[string]string{doc: "**Playback**\n", "apps/mobile/src/features/playback/index.ts": "x\n"}), nil},
+		{"mobile differs", join(module("discovery"), map[string]string{doc: "**Discovery**\n", "client/src/features/discover/index.ts": "x\n"}), []string{"N2 internal/discovery differs from mobile feature discover"}},
+		{"mobile same", join(module("playback"), map[string]string{doc: "**Playback**\n", "client/src/features/playback/index.ts": "x\n"}), nil},
 		{"no glossary", module("gadgets"), nil},
 	}
 	for _, tc := range cases {

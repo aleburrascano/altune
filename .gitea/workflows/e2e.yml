@@ -37,29 +37,29 @@ jobs:
           set -euo pipefail
           [ -n "$PR" ] || exit 0
           cd "$WT"
-          if ! git diff --name-only gitea/main...HEAD | grep -qE '^(apps/mobile/|services/go-api/|scripts/e2e-stack\.sh$|\.gitea/workflows/e2e\.yml$)'; then
+          if ! git diff --name-only gitea/main...HEAD | grep -qE '^(client/|services/go-api/|scripts/e2e-stack\.sh$|\.gitea/workflows/e2e\.yml$)'; then
             echo "E2E_SKIP=true" >>"$GITHUB_ENV"
             echo "no mobile or backend change, skipping e2e"
           fi
       - name: dependencies
         if: env.E2E_SKIP != 'true'
-        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" apps/mobile
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
       - name: browser
         if: env.E2E_SKIP != 'true'
-        run: cd "$WT/apps/mobile" && npx playwright install chromium
+        run: cd "$WT/client" && npx playwright install chromium
       - name: journeys
         if: env.E2E_SKIP != 'true'
         run: |
           set -euo pipefail
           cd "$WT" && bash scripts/e2e-stack.sh up
           set -a && . "$GITHUB_ENV" && set +a
-          cd apps/mobile && npx playwright test -c e2e/playwright.config.ts
+          cd client && npx playwright test -c e2e/playwright.config.ts
       - name: keep the evidence
         if: failure() && env.E2E_SKIP != 'true'
         run: |
           dir="$HOME/.cache/altune-ci/e2e/${{ github.run_id }}"
           mkdir -p "$dir"
-          cp -r "$WT/apps/mobile/e2e/test-results" "$dir/" || true
+          cp -r "$WT/client/e2e/test-results" "$dir/" || true
           cp "${E2E_STACK_DIR:-${TMPDIR:-/tmp}/altune-e2e-stack}/api.log" "$dir/" || true
           echo "evidence: $dir"
       - name: stack down

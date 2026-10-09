@@ -10,6 +10,6 @@ flag() {
 }
 {
   flag backend '^(services/go-api/|scripts/uptime/|scripts/supabase-auth|supabase/auth/|\.gitea/workflows/ci|\.github/workflows/(test-backend|nilaway))'
-  flag mobile '^(apps/mobile/|\.gitea/workflows/ci|\.github/workflows/test-mobile)'
+  flag mobile '^(client/|\.gitea/workflows/ci|\.github/workflows/test-mobile)'
   flag overseer '^(services/overseer/|\.gitea/workflows/ci|\.github/workflows/nilaway)'
 } | tee -a "${GITHUB_OUTPUT:-/dev/null}"

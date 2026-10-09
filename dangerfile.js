@@ -11,7 +11,7 @@ if (body.trim().length < 20) {
   warn("This PR has little or no description. A reviewer needs the why and the shape of the change, not just the diff.");
 }
 
-const touchedSrc = files.some((f) => /^services\/go-api\/.*\.go$/.test(f) || /^apps\/mobile\/src\/.*\.(ts|tsx)$/.test(f));
+const touchedSrc = files.some((f) => /^services\/go-api\/.*\.go$/.test(f) || /^client\/src\/.*\.(ts|tsx)$/.test(f));
 const touchedTest = files.some((f) => /_test\.go$/.test(f) || /\.(test|spec)\.(ts|tsx)$/.test(f));
 if (touchedSrc && !touchedTest) {
   warn("Source changed but no test file did. If this is a behavior change, it should carry a test that proves it (and goes red first).");

@@ -4,7 +4,7 @@ Self-hosted music manager: discover music across providers, build a library you 
 
 ## Stack
 
-- **Mobile:** Expo (React Native + TypeScript) — [`apps/mobile/`](apps/mobile/)
+- **Mobile:** Expo (React Native + TypeScript) — [`client/`](client/)
 - **API:** Go, hexagonal modular monolith — [`services/go-api/`](services/go-api/)
 - **Data:** Supabase Postgres (session-mode pooler) + Redis
 - **Prod:** single OCI VM, Caddy in front, blue-green deploys from `main`
@@ -17,21 +17,21 @@ cd services/go-api
 cp .env.example .env.development
 go build -o ./tmp/api.exe ./cmd/api && ./tmp/api.exe
 
-cd apps/mobile && npm start
+cd client && npm start
 ```
 
 ## Layout
 
 ```
 .
-├── apps/mobile/         # Expo app; vertical slices under src/features/
+├── client/         # Expo app; vertical slices under src/features/
 ├── services/go-api/     # Go API; hexagonal, deploy/ holds everything Docker
 ├── docs/                # decisions and history (see docs/README.md)
 ├── scripts/             # the pre-commit staleness checks + AltStore source update
 └── .github/workflows/   # all CI — a nested .github/ elsewhere is never read
 ```
 
-**`apps/mobile/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in `docs/`.
+**`client/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in `docs/`.
 
 ## Conventions
 

@@ -2,7 +2,7 @@
 cd "$(dirname "$0")" || exit 1
 script=$PWD/web-build.sh
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/bin" "$work/wt/apps/mobile" "$work/wt/.github/workflows"
+mkdir -p "$work/bin" "$work/wt/client" "$work/wt/.github/workflows"
 
 cat > "$work/bin/npx" <<'STUB'
 #!/usr/bin/env bash
