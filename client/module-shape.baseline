@@ -1,13 +1,5 @@
 M1 src/features/settings missing index.ts
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-N3 src/features/detail/domain/content-status.ts is not camelCase
-N3 src/features/detail/domain/extras-accessors.ts is not camelCase
-N3 src/features/detail/domain/featured-artists.ts is not camelCase
-N3 src/features/detail/domain/owned-playback.ts is not camelCase
-N3 src/features/detail/domain/play-source.ts is not camelCase
-N3 src/features/detail/domain/save-all.ts is not camelCase
-N3 src/features/detail/domain/save-cache.ts is not camelCase
-N3 src/features/detail/domain/save-control-state.ts is not camelCase
 N3 src/features/library/domain/library-to-discovery.ts is not camelCase
 N3 src/features/playback/native/expoGoPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/native/trackPlayerPlaybackProvider.tsx is not PascalCase

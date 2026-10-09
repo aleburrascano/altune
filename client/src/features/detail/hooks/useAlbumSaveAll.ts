@@ -4,13 +4,13 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
 
-import { toCreateTrackRequest } from '@/features/detail/domain/save-cache';
 import {
+  toCreateTrackRequest,
   runBounded,
   SAVE_ALL_CONCURRENCY,
   type BatchOutcome,
-} from '@/features/detail/domain/save-all';
-import { trackExtras } from '@/features/detail/domain/extras-accessors';
+} from '@/features/detail/domain/saveTrack';
+import { trackExtras } from '@/features/detail/domain/trackExtras';
 import { ownedFromExtras } from '@/features/detail/domain/ownedTrack';
 import type { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
 

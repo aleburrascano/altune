@@ -6,7 +6,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
 import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchEnabled';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchGate';
 
 function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
   useEffect(() => {

@@ -24,7 +24,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 const mockUseLibraryTracksForAlbum = jest.fn();
-jest.mock('../hooks/useLibraryTracks', () => ({
+jest.mock('../hooks/useLibraryMatches', () => ({
   useLibraryTracksForAlbum: () => mockUseLibraryTracksForAlbum(),
 }));
 

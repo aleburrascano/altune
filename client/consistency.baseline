@@ -7,8 +7,8 @@ MC-1 src/features/auth/hooks/useSignIn.ts '@shared/auth/supabaseClient' import i
 MC-1 src/features/auth/hooks/useSignUp.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
 MC-1 src/features/auth/hooks/useUpdatePassword.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
 MC-1 src/features/auth/ui/AuthCallbackScreen.web.tsx '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
-MC-10 src/features/detail/hooks/useProviderEnrichment.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
-MC-10 src/features/detail/hooks/useAlbumDiscovery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/hooks/useDetailEnrichments.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
+MC-10 src/features/detail/hooks/useEntityDiscovery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/hooks/useArtistContent.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/hooks/useRelatedTracks.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/domain/resolveEntityQuery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
@@ -21,12 +21,11 @@ MC-4b src/features/detail/ui/CollapsibleSectionHeader.tsx 'Pressable' import fro
 MC-4b src/features/detail/ui/DetailActions.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/DetailTopBar.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/LastFmEnrichmentSection.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/RecordTypeChips.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
+MC-4b src/features/detail/ui/DiscographySections.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/RelatedTracksSection.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/SavePillShell.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
+MC-4b src/features/detail/ui/SaveControls.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/Section.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/TrackNavRow.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/TrackSaveControl.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
+MC-4b src/features/detail/ui/TrackInfoSection.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/secondaryLine.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/discovery/ui/CorrectionBanner.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/discovery/ui/DiscoverRow.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).

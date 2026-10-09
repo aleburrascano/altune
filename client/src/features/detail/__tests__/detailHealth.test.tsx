@@ -13,9 +13,8 @@ import {
   recordContentFetchOutcome,
 } from '@/features/detail/domain/detailHealth';
 import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
-import { useDetailEnrichments } from '@/features/detail/hooks/useDetailEnrichments';
+import { useDetailEnrichments, useEnrichment } from '@/features/detail/hooks/useDetailEnrichments';
 import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
-import { useEnrichment } from '@/features/detail/hooks/useEnrichment';
 import {
   createTestQueryClient,
   createWrapper,

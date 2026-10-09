@@ -3,15 +3,16 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/api-client/trackToDiscoveryResult';
 
-import { type ContentFailure } from '@/features/detail/domain/content-status';
+import { type ContentFailure } from '@/features/detail/domain/contentStatus';
 import { type DetailRoute } from '@/features/detail/domain/detailNavigation';
-import { useOpenDetail } from '@/features/detail/hooks/useOpenDetail';
-import { type OwnedTrack } from '@/features/detail/domain/ownedTrack';
-import { type OwnedSplit } from '@/features/detail/domain/owned-playback';
+import { useOpenDetail } from '@/features/detail/hooks/useDetailNavigation';
+import { type OwnedTrack, type OwnedSplit } from '@/features/detail/domain/ownedTrack';
 import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
-import { useArtistDiscovery } from '@/features/detail/hooks/useArtistDiscovery';
-import { useLibraryAlbumsForArtist } from '@/features/detail/hooks/useLibraryAlbumsForArtist';
-import { useLibraryTracksForArtist } from '@/features/detail/hooks/useLibraryTracks';
+import { useArtistDiscovery } from '@/features/detail/hooks/useEntityDiscovery';
+import {
+  useLibraryAlbumsForArtist,
+  useLibraryTracksForArtist,
+} from '@/features/detail/hooks/useLibraryMatches';
 import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
 import { useOwnedPlayback } from '@/features/detail/hooks/useOwnedPlayback';
 

@@ -19,10 +19,10 @@ jest.mock('@shared/playback/useQueuePlayback', () => ({
   useQueuePlayback: () => ({ playFromList: jest.fn() }),
 }));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('../hooks/useLibraryTracks', () => ({
+jest.mock('../hooks/useLibraryMatches', () => ({
   useLibraryTracksForAlbum: () => [],
 }));
-jest.mock('../hooks/useAlbumDiscovery', () => ({
+jest.mock('../hooks/useEntityDiscovery', () => ({
   useAlbumDiscovery: () => ({
     tracks: [],
     isLoading: false,

@@ -5,9 +5,9 @@ import type { FeaturedArtist } from '@shared/api-client/trackResponse';
 import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { Text } from '@shared/ui/primitives/Text';
 
-import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
+import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 
-import { sharedStyles } from '@features/detail/ui/sharedStyles';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
 
 const MAX_GENRES = 2;
 

@@ -1,10 +1,14 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Text } from '@shared/ui/primitives/Text';
-import { spacing } from '@shared/ui/theme/tokens';
+import { Text, type TextTone } from '@shared/ui/primitives/Text';
+import { spacing, type TypographyVariant } from '@shared/ui/theme';
+import { Button } from '@shared/ui/primitives/Button';
+import { asyncView } from '@shared/ui/asyncView';
+import { AsyncSection } from '@shared/ui/AsyncSection';
 
-import { sharedStyles } from '@features/detail/ui/sharedStyles';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
+import type { ContentFailure } from '@features/detail/domain/contentStatus';
 
 export function Section({
   label,
@@ -50,4 +54,96 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     minHeight: 20,
   },
+});
+
+export interface SectionErrorProps {
+  testIDPrefix: string;
+  message: string;
+  onRetry: () => void;
+  failure?: ContentFailure | null;
+}
+
+const SETTLED_NOTE = 'Not available right now — try again later.';
+
+export function SectionError({
+  testIDPrefix,
+  message,
+  onRetry,
+  failure,
+}: SectionErrorProps): ReactElement {
+  return (
+    <View testID={`${testIDPrefix}-error`} style={sectionErrorStyles.container}>
+      <Text variant="body" tone="danger">
+        {message}
+      </Text>
+      {failure === 'settled' ? (
+        <Text
+          testID={`${testIDPrefix}-settled`}
+          variant="caption"
+          tone="tertiary"
+          style={sectionErrorStyles.settledNote}
+        >
+          {SETTLED_NOTE}
+        </Text>
+      ) : (
+        <Button
+          action="detail.section.retry"
+          testID={`${testIDPrefix}-retry`}
+          label="Retry"
+          onPress={onRetry}
+          style={sharedStyles.retryButton}
+        />
+      )}
+    </View>
+  );
+}
+
+const sectionErrorStyles = StyleSheet.create({
+  container: { alignItems: 'center', paddingVertical: spacing.md },
+  settledNote: { marginTop: spacing.xs, textAlign: 'center' },
+});
+
+export interface AsyncEmptyConfig {
+  message: string;
+  variant: TypographyVariant;
+  tone: TextTone;
+}
+
+export interface AsyncListSectionProps {
+  isLoading: boolean;
+  isError: boolean;
+  isEmpty: boolean;
+  skeleton: () => ReactNode;
+  error: SectionErrorProps;
+  empty: AsyncEmptyConfig;
+  children: ReactNode;
+}
+
+export function AsyncListSection({
+  isLoading,
+  isError,
+  isEmpty,
+  skeleton,
+  error,
+  empty,
+  children,
+}: AsyncListSectionProps): ReactElement {
+  return (
+    <AsyncSection
+      view={asyncView({ isLoading, isError, isEmpty })}
+      skeleton={skeleton}
+      error={() => <SectionError {...error} />}
+      empty={() => (
+        <Text variant={empty.variant} tone={empty.tone} style={asyncListSectionStyles.emptySection}>
+          {empty.message}
+        </Text>
+      )}
+    >
+      {children}
+    </AsyncSection>
+  );
+}
+
+const asyncListSectionStyles = StyleSheet.create({
+  emptySection: { paddingVertical: spacing.md },
 });

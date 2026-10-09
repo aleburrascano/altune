@@ -9,7 +9,7 @@ import {
 } from '@shared/acquisition/trackStatusStore';
 
 import { ownedFromExtras, ownedTrack, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
-import type { TrackExtras } from '@/features/detail/domain/extras-accessors';
+import type { TrackExtras } from '@/features/detail/domain/trackExtras';
 
 export type TrackIdentity = {
   title: string;

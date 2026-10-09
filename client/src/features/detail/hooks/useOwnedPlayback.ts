@@ -2,20 +2,21 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { RetryEntryPoint } from '@shared/acquisition/acquisitionTelemetry';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/trackExtras';
 import {
   playButtonState,
   splitOwned,
   toPlaybackQueue,
   type OwnedSplit,
-} from '@/features/detail/domain/owned-playback';
+  ownedFromExtras,
+  type OwnedTrack,
+} from '@/features/detail/domain/ownedTrack';
 import {
   ownedRetryTrackId,
   saveControlInteractive,
   saveControlState,
-} from '@/features/detail/domain/save-control-state';
-import { toCreateTrackRequest } from '@/features/detail/domain/save-cache';
-import { ownedFromExtras, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
+  toCreateTrackRequest,
+} from '@/features/detail/domain/saveTrack';
 import { resolveOwnedTrackAtActionTime } from '@/features/detail/hooks/useOwnedTrack';
 import { useRetryTrack } from '@/features/detail/hooks/useRetryTrack';
 import type { SaveTrack } from '@/features/detail/hooks/useSaveTrack';

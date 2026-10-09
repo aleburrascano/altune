@@ -1,0 +1,470 @@
+import type { CreateTrackRequest, AcquisitionStatus } from '@shared/api-client/trackResponse';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { asTrackId } from '@shared/api-client/ids';
+
+import {
+  optimisticTrack,
+  saveIdempotencyKey,
+  toCreateTrackRequest,
+  isOptimisticTrackId,
+  optimisticTrackId,
+  saveControlLabel,
+  saveControlState,
+  saveControlText,
+  type SaveControlState,
+  ownedRetryTrackId,
+  saveControlInteractive,
+  saveDisplayState,
+  runBounded,
+  SAVE_ALL_CONCURRENCY,
+} from '@/features/detail/domain/saveTrack';
+import { ownedTrack, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
+
+describe('save cache', () => {
+  type ResultOverrides = {
+    title?: string;
+    subtitle?: string | null;
+    image_url?: string | null;
+    sources?: DiscoveryResult['sources'];
+    extras?: Record<string, unknown>;
+  };
+
+  function result(overrides: ResultOverrides = {}): DiscoveryResult {
+    return {
+      kind: 'track',
+      title: overrides.title ?? 'Song',
+      subtitle: overrides.subtitle === undefined ? 'Artist' : overrides.subtitle,
+      image_url: overrides.image_url === undefined ? 'https://cdn/art.jpg' : overrides.image_url,
+      confidence: 'high',
+      sources: overrides.sources ?? [],
+      extras: overrides.extras ?? {},
+    };
+  }
+
+  describe('toCreateTrackRequest', () => {
+    it('maps a result into the create request the tracks API accepts', () => {
+      const req = toCreateTrackRequest(
+        result({
+          extras: {
+            album: 'Album',
+            duration_seconds: 210.9,
+            isrc: 'US-ABC',
+            year: 1994,
+            genre: 'Rock',
+            album_artist: 'Album Artist',
+            track_position: 3,
+          },
+        }),
+      );
+
+      const expected: CreateTrackRequest = {
+        title: 'Song',
+        artist: 'Artist',
+        album: 'Album',
+        duration_seconds: 210,
+        artwork_url: 'https://cdn/art.jpg',
+        isrc: 'US-ABC',
+        year: 1994,
+        genre: 'Rock',
+        album_artist: 'Album Artist',
+        track_number: 3,
+        source_url: null,
+      };
+      expect(req).toEqual(expected);
+    });
+
+    it('floors a fractional duration to whole seconds', () => {
+      const req = toCreateTrackRequest(result({ extras: { duration_seconds: 210.9 } }));
+
+      expect(req.duration_seconds).toBe(210);
+    });
+
+    it('leaves an absent duration null rather than flooring null', () => {
+      expect(toCreateTrackRequest(result({ extras: {} })).duration_seconds).toBeNull();
+    });
+
+    it('persists a negative sentinel duration as null rather than -1', () => {
+      expect(
+        toCreateTrackRequest(result({ extras: { duration: -1 } })).duration_seconds,
+      ).toBeNull();
+    });
+
+    it('falls back to an empty artist for a null subtitle', () => {
+      expect(toCreateTrackRequest(result({ subtitle: null })).artist).toBe('');
+    });
+
+    it('carries the soundcloud source url and omits others', () => {
+      const req = toCreateTrackRequest(
+        result({
+          sources: [
+            { provider: 'spotify', external_id: 's1', url: 'https://spotify/x' },
+            { provider: 'soundcloud', external_id: 'sc1', url: 'https://sc/x' },
+          ],
+        }),
+      );
+
+      expect(req.source_url).toBe('https://sc/x');
+    });
+
+    it('leaves source url null when no soundcloud source is present', () => {
+      const req = toCreateTrackRequest(
+        result({ sources: [{ provider: 'spotify', external_id: 's1', url: 'https://spotify/x' }] }),
+      );
+
+      expect(req.source_url).toBeNull();
+    });
+
+    it('includes featured_artists only when present', () => {
+      const withFeatured = toCreateTrackRequest(
+        result({ extras: { featured_artists: [{ name: 'Guest', mbid: null, deezer_id: null }] } }),
+      );
+      const withoutFeatured = toCreateTrackRequest(result({ extras: {} }));
+
+      expect(withFeatured.featured_artists).toEqual([
+        { name: 'Guest', mbid: null, deezer_id: null },
+      ]);
+      expect('featured_artists' in withoutFeatured).toBe(false);
+    });
+  });
+
+  describe('saveIdempotencyKey', () => {
+    function body(overrides: Partial<CreateTrackRequest> = {}): CreateTrackRequest {
+      return { ...toCreateTrackRequest(result({ extras: { album: 'Album' } })), ...overrides };
+    }
+
+    it('is the same for two saves of one track, so the server can collapse them', () => {
+      expect(saveIdempotencyKey(body())).toBe(saveIdempotencyKey(body()));
+    });
+
+    it('ignores the fields the server does not dedup on, so enrichment cannot split a save', () => {
+      expect(saveIdempotencyKey(body({ artwork_url: 'https://cdn/other.jpg', year: 1994 }))).toBe(
+        saveIdempotencyKey(body()),
+      );
+    });
+
+    it('separates the same title and artist on two albums, as the server itself does', () => {
+      expect(saveIdempotencyKey(body({ album: 'Live' }))).not.toBe(saveIdempotencyKey(body()));
+    });
+
+    it('separates two tracks whose title and artist fields only look alike', () => {
+      const encore = body({ title: 'Encore', artist: 'Jay Z Interlude' });
+      const interlude = body({ title: 'Encore Jay Z', artist: 'Interlude' });
+
+      expect(saveIdempotencyKey(encore)).not.toBe(saveIdempotencyKey(interlude));
+    });
+
+    it('stays inside a header and inside the server key limit for an over-long title', () => {
+      const titleRepeats = 40;
+      const key = saveIdempotencyKey(
+        body({ title: 'Sinfonía '.repeat(titleRepeats), artist: 'Bläck Fööss' }),
+      );
+
+      expect(key).toMatch(/^save-[0-9a-f]{16}$/);
+    });
+
+    it('leaves a track with no usable identity on a per-attempt key', () => {
+      expect(saveIdempotencyKey(body({ artist: '' }))).toBeUndefined();
+    });
+  });
+
+  describe('optimisticTrack', () => {
+    it('stamps a pending placeholder keyed by title and artist', () => {
+      const body = toCreateTrackRequest(result());
+
+      const track = optimisticTrack(body, '2026-01-01T00:00:00Z');
+
+      expect(track.id).toMatch(/^optimistic-[0-9a-f]{8}$/);
+      expect(optimisticTrack(body, '2026-02-02T00:00:00Z').id).toBe(track.id);
+      expect(optimisticTrack({ ...body, title: 'Other' }, '2026-01-01T00:00:00Z').id).not.toBe(
+        track.id,
+      );
+      expect(track.acquisition_status).toBe('pending');
+      expect(track.added_at).toBe('2026-01-01T00:00:00Z');
+      expect(track.audio_ref).toBeNull();
+    });
+
+    it('carries every populated request field onto the placeholder', () => {
+      const body = toCreateTrackRequest(
+        result({
+          extras: {
+            year: 1994,
+            genre: 'Rock',
+            track_position: 3,
+            album_artist: 'Album Artist',
+            isrc: 'US-ABC',
+            featured_artists: [{ name: 'Guest', mbid: null, deezer_id: null }],
+          },
+        }),
+      );
+
+      const track = optimisticTrack(body, '2026-01-01T00:00:00Z');
+
+      expect(track.year).toBe(1994);
+      expect(track.genre).toBe('Rock');
+      expect(track.track_number).toBe(3);
+      expect(track.album_artist).toBe('Album Artist');
+      expect(track.isrc).toBe('US-ABC');
+      expect(track.featured_artists).toEqual([{ name: 'Guest', mbid: null, deezer_id: null }]);
+    });
+
+    it('leaves featured_artists off the placeholder when the request omits them', () => {
+      const track = optimisticTrack(
+        toCreateTrackRequest(result({ extras: {} })),
+        '2026-01-01T00:00:00Z',
+      );
+
+      expect('featured_artists' in track).toBe(false);
+    });
+  });
+
+  describe('isOptimisticTrackId', () => {
+    it('recognizes the placeholder id a save mints for a track still in flight', () => {
+      const body = toCreateTrackRequest(result());
+      const placeholder = optimisticTrack(body, '2026-01-01T00:00:00Z');
+
+      expect(isOptimisticTrackId(placeholder.id)).toBe(true);
+    });
+
+    it('does not mistake a server-issued id for a placeholder', () => {
+      expect(isOptimisticTrackId(asTrackId('server-1'))).toBe(false);
+    });
+  });
+
+  describe('optimisticTrackId', () => {
+    const base = { title: 'Song', artist: 'Artist' } as CreateTrackRequest;
+
+    it('separates same-title same-artist saves that differ by album', () => {
+      const onAlbum = optimisticTrackId({ ...base, album: 'Album' });
+      const onCompilation = optimisticTrackId({ ...base, album: 'Greatest Hits' });
+
+      expect(onAlbum).not.toBe(onCompilation);
+    });
+
+    it('gives one id to the same save however the album is cased or padded', () => {
+      expect(optimisticTrackId({ ...base, album: ' ALBUM ' })).toBe(
+        optimisticTrackId({ ...base, album: 'album' }),
+      );
+    });
+  });
+});
+
+describe('save control state', () => {
+  function owned(acquisitionStatus: AcquisitionStatus): OwnedTrack {
+    return ownedTrack(asTrackId('track-a'), acquisitionStatus, null);
+  }
+
+  describe('saveControlState', () => {
+    it('derives add for a track with no ownership', () => {
+      expect(saveControlState(null)).toBe('add');
+    });
+
+    it('derives failed for a failed acquisition', () => {
+      expect(saveControlState(owned('failed'))).toBe('failed');
+    });
+
+    it('derives saving while acquisition is pending', () => {
+      expect(saveControlState(owned('pending'))).toBe('saving');
+    });
+
+    it('derives ready once acquisition completes', () => {
+      expect(saveControlState(owned('ready'))).toBe('ready');
+    });
+  });
+
+  describe('saveControlLabel', () => {
+    it('announces the downloading state for a saving track', () => {
+      expect(saveControlLabel('saving', 'Song')).toBe('Song downloading');
+    });
+
+    it('announces library membership for a ready track', () => {
+      expect(saveControlLabel('ready', 'Song')).toBe('Song in library');
+    });
+
+    it('offers a retry for a failed track', () => {
+      expect(saveControlLabel('failed', 'Song')).toBe('Retry saving Song');
+    });
+
+    it('offers to save an unsaved track', () => {
+      expect(saveControlLabel('add', 'Song')).toBe('Save Song');
+    });
+  });
+
+  describe('saveControlText', () => {
+    it('reads distinct labels for each control state', () => {
+      const text: Record<SaveControlState, string> = {
+        saving: saveControlText('saving'),
+        ready: saveControlText('ready'),
+        failed: saveControlText('failed'),
+        rejected: saveControlText('rejected'),
+        add: saveControlText('add'),
+      };
+
+      expect(text).toEqual({
+        saving: 'Saving…',
+        ready: 'Saved',
+        failed: 'Retry',
+        rejected: "Can't save",
+        add: 'Save',
+      });
+    });
+  });
+
+  describe('ownedRetryTrackId', () => {
+    it('returns null for a track that was never owned', () => {
+      expect(ownedRetryTrackId(null)).toBeNull();
+    });
+
+    it('returns null for an owned track that is not failed', () => {
+      expect(ownedRetryTrackId(owned('ready'))).toBeNull();
+      expect(ownedRetryTrackId(owned('pending'))).toBeNull();
+    });
+
+    it('returns the server trackId for a genuinely owned, failed track', () => {
+      const failedTrack = owned('failed');
+
+      expect(ownedRetryTrackId(failedTrack)).toBe(failedTrack.trackId);
+    });
+
+    it('returns null for a failed track that only carries an in-flight save placeholder id', () => {
+      const result: DiscoveryResult = {
+        kind: 'track',
+        title: 'Song',
+        subtitle: 'Artist',
+        image_url: null,
+        confidence: 'high',
+        sources: [],
+        extras: {},
+      };
+      const placeholderId = optimisticTrack(
+        toCreateTrackRequest(result),
+        '2026-01-01T00:00:00Z',
+      ).id;
+      const placeholder = ownedTrack(placeholderId, 'failed', 'network error');
+
+      expect(ownedRetryTrackId(placeholder)).toBeNull();
+    });
+  });
+
+  describe('saveControlInteractive', () => {
+    it('lets the user tap save only to add a track or retry a failed one', () => {
+      expect(saveControlInteractive('add')).toBe(true);
+      expect(saveControlInteractive('failed')).toBe(true);
+    });
+
+    it('refuses a tap while disabled, saving, saved or permanently rejected', () => {
+      expect(saveControlInteractive('disabled')).toBe(false);
+      expect(saveControlInteractive('saving')).toBe(false);
+      expect(saveControlInteractive('ready')).toBe(false);
+      expect(saveControlInteractive('rejected')).toBe(false);
+    });
+  });
+
+  describe('saveDisplayState', () => {
+    it('shows a track with no known artist as the plain save affordance', () => {
+      expect(saveDisplayState('disabled')).toBe('add');
+    });
+
+    it('shows every control state as itself', () => {
+      expect(saveDisplayState('add')).toBe('add');
+      expect(saveDisplayState('saving')).toBe('saving');
+      expect(saveDisplayState('ready')).toBe('ready');
+      expect(saveDisplayState('failed')).toBe('failed');
+      expect(saveDisplayState('rejected')).toBe('rejected');
+    });
+  });
+
+  describe('saveControlLabel for a refused save', () => {
+    it('announces that the track could not be saved', () => {
+      expect(saveControlLabel('rejected', 'Song')).toBe("Couldn't save Song");
+    });
+  });
+});
+
+describe('save all', () => {
+  type Deferred = { resolve: () => void; reject: (e: unknown) => void };
+
+  function tracker() {
+    let active = 0;
+    let maxConcurrent = 0;
+    const started: number[] = [];
+    const pending: Deferred[] = [];
+    const worker = (n: number): Promise<void> => {
+      active += 1;
+      maxConcurrent = Math.max(maxConcurrent, active);
+      started.push(n);
+      return new Promise<void>((resolve, reject) => {
+        pending.push({
+          resolve: () => {
+            active -= 1;
+            resolve();
+          },
+          reject: (e) => {
+            active -= 1;
+            reject(e);
+          },
+        });
+      });
+    };
+    return {
+      worker,
+      started,
+      pending,
+      get maxConcurrent() {
+        return maxConcurrent;
+      },
+    };
+  }
+
+  async function flush(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  describe('runBounded', () => {
+    it('never runs more than the limit of workers at once, yet processes every item', async () => {
+      const t = tracker();
+      const items = Array.from({ length: 20 }, (_, i) => i);
+
+      const done = runBounded(items, 4, t.worker);
+
+      expect(t.started).toHaveLength(4);
+      for (let guard = 0; guard < 50 && t.pending.length > 0; guard += 1) {
+        t.pending.splice(0).forEach((d) => d.resolve());
+        await flush();
+      }
+      await done;
+
+      expect(t.started).toHaveLength(20);
+      expect(t.maxConcurrent).toBe(4);
+    });
+
+    it('lets a rejected worker not abort its siblings, and reports which item failed', async () => {
+      const t = tracker();
+      const items = [0, 1, 2];
+
+      const done = runBounded(items, 3, t.worker);
+      expect(t.pending).toHaveLength(3);
+
+      t.pending[1]!.reject(new Error('save failed'));
+      t.pending[0]!.resolve();
+      t.pending[2]!.resolve();
+      await flush();
+
+      await expect(done).resolves.toEqual({ succeeded: [0, 2], failed: [1] });
+      expect(t.started).toEqual([0, 1, 2]);
+    });
+
+    it('caps at the item count when there are fewer items than the limit', async () => {
+      const t = tracker();
+
+      const done = runBounded([0, 1], SAVE_ALL_CONCURRENCY, t.worker);
+      expect(t.started).toHaveLength(2);
+
+      t.pending.splice(0).forEach((d) => d.resolve());
+      await flush();
+      await done;
+
+      expect(t.maxConcurrent).toBe(2);
+    });
+  });
+});

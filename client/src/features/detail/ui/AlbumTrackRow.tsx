@@ -8,10 +8,10 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { formatDuration } from '@shared/ui/displayFormat';
 
-import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import { trackExtras } from '@/features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
-import { sharedStyles } from '@features/detail/ui/sharedStyles';
-import { TrackSaveControl } from '@features/detail/ui/TrackSaveControl';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
+import { TrackSaveControl } from '@features/detail/ui/SaveControls';
 
 type AlbumTrackRowProps = {
   track: DiscoveryResult;

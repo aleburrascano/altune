@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, spacing, useTheme } from '@shared/ui/theme';
 
-import { sharedStyles } from '@features/detail/ui/sharedStyles';
+import { sharedStyles } from '@features/detail/ui/detailStyles';
 
 export type CollapsibleSectionHeaderProps = {
   label: string;

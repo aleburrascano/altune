@@ -5,10 +5,10 @@ import { readDetailHandoff, type DetailHandoff } from '@shared/navigation/detail
 import { featuredArtistsFromExtras } from '@shared/api-client/featuredArtists';
 import { tabRootFromSegments } from '@shared/navigation';
 
-import { useArtistDiscovery } from '@features/detail/hooks/useArtistDiscovery';
+import { useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
-import { useLateralNav } from '@features/detail/hooks/useLateralNav';
+import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
 import { DetailHandoffProvider } from '@features/detail/hooks/useDetailHandoff';
 import { detailRouteFor } from '@features/detail/domain/detailNavigation';
 

@@ -8,12 +8,14 @@ import {
   DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
   type ContentFailure,
-} from '@/features/detail/domain/content-status';
+} from '@/features/detail/domain/contentStatus';
 import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchEnabled';
-import { useGatedRefetch } from '@/features/detail/hooks/useGatedRefetch';
-import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
+import {
+  useDetailFetchEnabled,
+  useGatedRefetch,
+  useContentFetchRetry,
+} from '@/features/detail/hooks/useDetailFetchGate';
 
 type UseAlbumTracksParams = {
   provider: string;

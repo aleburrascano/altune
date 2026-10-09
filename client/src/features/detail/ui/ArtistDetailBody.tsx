@@ -15,17 +15,15 @@ import {
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { compactCount } from '@features/detail/ui/formatters';
-import { buildArtistFacts } from '@features/detail/ui/artistDetailFacts';
-import { AsyncListSection } from '@features/detail/ui/AsyncListSection';
+import { buildArtistFacts, DetailFacts } from '@features/detail/ui/DetailFacts';
+import { AsyncListSection, Section } from '@features/detail/ui/Section';
 import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
 import { ArtistExploreDiscography } from '@features/detail/ui/ArtistExploreDiscography';
 import { ArtistTopTracks } from '@features/detail/ui/ArtistTopTracks';
 import { DetailActions } from '@features/detail/ui/DetailActions';
-import { DetailFacts } from '@features/detail/ui/DetailFacts';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
 import { DiscographySections } from '@features/detail/ui/DiscographySections';
 import { LastFmEnrichmentSection } from '@features/detail/ui/LastFmEnrichmentSection';
-import { Section } from '@features/detail/ui/Section';
 
 type ArtistDetailBodyProps = {
   chrome: DetailChrome;

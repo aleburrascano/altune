@@ -25,7 +25,7 @@ jest.mock('expo-router', () => {
 jest.mock('@/features/detail/hooks/useResolveMissingSources', () => ({
   useResolveMissingSources: (result: unknown) => ({ resolved: result }),
 }));
-jest.mock('@/features/detail/hooks/useArtistDiscovery', () => ({
+jest.mock('@/features/detail/hooks/useEntityDiscovery', () => ({
   useArtistDiscovery: () => ({ imageUrl: null }),
 }));
 jest.mock('@/features/detail/hooks/useDetailEnrichments', () => ({
@@ -33,7 +33,7 @@ jest.mock('@/features/detail/hooks/useDetailEnrichments', () => ({
     errors: { musicbrainz: false, deezer: false, lastfm: false },
   }),
 }));
-jest.mock('@/features/detail/hooks/useLateralNav', () => ({ useLateralNav: () => ({}) }));
+jest.mock('@/features/detail/hooks/useDetailNavigation', () => ({ useLateralNav: () => ({}) }));
 jest.mock('@/features/detail/ui/secondaryLine', () => ({ secondaryLine: () => null }));
 
 function MockHandoffProbe({ result }: { result: DiscoveryResult }) {

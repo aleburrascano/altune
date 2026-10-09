@@ -3,10 +3,10 @@ import { StyleSheet, View } from 'react-native';
 
 import { spacing } from '@shared/ui/theme';
 
-import { type ContentFailure } from '@features/detail/domain/content-status';
+import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import type { ArtistDetailState } from '@features/detail/hooks/useArtistDetailState';
 
-import { AsyncListSection } from '@features/detail/ui/AsyncListSection';
+import { AsyncListSection } from '@features/detail/ui/Section';
 import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
 import { CollapsibleSectionHeader } from '@features/detail/ui/CollapsibleSectionHeader';
 import { DiscographySections } from '@features/detail/ui/DiscographySections';
