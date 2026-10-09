@@ -1,8 +1,8 @@
 package service
 
-import "altune/go-api/internal/acquisition/ports"
+import acqdomain "altune/go-api/internal/acquisition/domain"
 
-func sourceKey(rawURL string) string { return ports.SourceKey(rawURL) }
+func sourceKey(rawURL string) string { return acqdomain.SourceKey(rawURL) }
 
 func SourceKeys(rawURLs []string) []string {
 	keys := make([]string, 0, len(rawURLs))
