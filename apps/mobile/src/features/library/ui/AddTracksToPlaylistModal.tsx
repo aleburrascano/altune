@@ -17,7 +17,7 @@ import {
   useAddableTracks,
   type AddableTracksState,
   type SearchApi,
-} from '@features/library/ui/useAddableTracks';
+} from '@features/library/hooks/useAddableTracks';
 
 type AddTracksToPlaylistModalProps = {
   visible: boolean;

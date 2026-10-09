@@ -37,6 +37,7 @@ const PLATFORM_HOOKS_MOVED_INTO_HOOKS_FOLDER = [
   'src/features/playback/hooks/useQueueResume.ts',
   'src/features/playback/hooks/useScrubberGesture.ts',
   'src/features/playback/hooks/useMediaSession.ts',
+  'src/features/library/hooks/useLibraryGridLayout.ts',
 ];
 
 const featureIsolationZones = [

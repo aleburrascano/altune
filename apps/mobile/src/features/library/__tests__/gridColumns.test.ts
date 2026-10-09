@@ -1,5 +1,9 @@
-import { avatarColumns, cellSize, coverColumns } from '../gridColumns';
-import { wideCoverColumns } from '../gridColumns';
+import {
+  avatarColumns,
+  cellSize,
+  coverColumns,
+  wideCoverColumns,
+} from '@features/library/domain/gridColumns';
 
 describe('coverColumns — breakpoints at 700 and 1000, inclusive lower bounds', () => {
   it('is 2 below the tablet breakpoint', () => {
