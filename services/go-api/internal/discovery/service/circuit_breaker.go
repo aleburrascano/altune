@@ -63,7 +63,6 @@ func (cb *CircuitBreaker) AllowRequest(ctx context.Context, provider domain.Prov
 	return true
 }
 
-// allowOpen and allowHalfOpen run with cb.mu held by AllowRequest.
 func (cb *CircuitBreaker) allowOpen(ctx context.Context, entry *circuitEntry, provider domain.ProviderName) bool {
 	if cb.now().Sub(entry.lastFailedAt) <= openDuration {
 		return false
