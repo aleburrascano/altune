@@ -20,7 +20,7 @@ catalog/
 │   ├── library_lens.go          library lens (filtered views of the library)
 │   ├── dedup.go                 duplicate-track detection key
 │   ├── source_url.go            validated source URL value
-│   └── errors.go                domain errors
+│   └── coded_error.go           CodedError and the domain sentinels
 ├── ports/                       interfaces the services depend on
 │   ├── track_repo.go            track persistence
 │   ├── playlist_repo.go         playlist persistence
@@ -35,22 +35,19 @@ catalog/
 │   ├── add_track.go             save a track and schedule acquisition
 │   ├── delete_track.go          delete a track row, then its audio object
 │   ├── reconcile_orphaned_audio.go  retry deletion of orphaned audio
-│   ├── list_tracks.go           list a user's tracks
-│   ├── list_featuring.go        list tracks featuring an artist
-│   ├── get_track_status.go      track acquisition status
+│   ├── track_reads.go           list a user's tracks and read one track's status
 │   ├── set_track_number.go      set a track number
 │   ├── stream_track.go          stream a track's audio
 │   ├── audio_url.go             audio URL issuing
-│   ├── playlists.go             playlist CRUD
+│   ├── playlist_lifecycle.go    playlist CRUD
 │   ├── playlist_membership.go   add/remove/reorder playlist tracks
 │   ├── library_lenses.go        library lens queries
-│   ├── backfill_featured.go     featured-artist backfill
-│   ├── backfill_admission.go    backfill admission control
+│   ├── featured_artist.go       featured-artist backfill, its admission gate, tracks featuring an artist
 │   ├── track_dto.go             track DTO mapping
 │   ├── options.go               service options
 │   └── errors.go                service errors
 ├── adapters/
-│   ├── handler/                 HTTP handlers (tracks, playlists, library, stream, audio URL, featured artists) and audio rate limit
+│   ├── handler/                 HTTP handlers (tracks, playlists, library, stream, audio URL, featured artists) and their rate limits
 │   ├── persistence/             Postgres repositories and connection pool
 │   ├── storage/                 audio store: filesystem, object storage, scoped store
 │   ├── metrics/                 expvar metrics
