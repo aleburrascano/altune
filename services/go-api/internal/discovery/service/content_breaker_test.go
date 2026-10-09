@@ -240,7 +240,7 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 			if entry.state != tc.wantState {
 				t.Errorf("state = %v, want %v", entry.state, tc.wantState)
 			}
-			if entry.state == CircuitHalfOpen && !cb.AllowRequest(domain.ProviderDeezer) {
+			if entry.state == CircuitHalfOpen && !cb.AllowRequest(context.Background(), domain.ProviderDeezer) {
 				t.Error("probe slot still held: next request not admitted")
 			}
 		})
@@ -295,7 +295,7 @@ func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
 
 func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
 	cb := NewCircuitBreaker()
-	c, ok := admitProviderCall(cb, domain.ProviderDeezer)
+	c, ok := admitProviderCall(context.Background(), cb, domain.ProviderDeezer)
 	if !ok {
 		t.Fatal("fresh breaker refused a call")
 	}
@@ -306,7 +306,7 @@ func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
 		t.Fatalf("err = %v, want the call's own error returned unmapped", err)
 	}
 	for i := 0; i < 10; i++ {
-		if !cb.AllowRequest(domain.ProviderDeezer) {
+		if !cb.AllowRequest(context.Background(), domain.ProviderDeezer) {
 			t.Fatal("mapper returned nil, so failures must not be recorded")
 		}
 	}
@@ -314,7 +314,7 @@ func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
 
 func TestRunAdmitted_PanicRecordsOneFailureAndPropagates(t *testing.T) {
 	cb := NewCircuitBreaker()
-	c, _ := admitProviderCall(cb, domain.ProviderDeezer)
+	c, _ := admitProviderCall(context.Background(), cb, domain.ProviderDeezer)
 	func() {
 		defer func() {
 			if recover() == nil {

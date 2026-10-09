@@ -801,7 +801,7 @@ func relatedAlbumTrackQuery() []domain.SearchResult {
 func TestFindRelated_OpenDeezerBreakerSkipsProviderCall(t *testing.T) {
 	cb := NewCircuitBreaker()
 	for range failureThreshold {
-		cb.RecordFailure(domain.ProviderDeezer)
+		cb.RecordFailure(context.Background(), domain.ProviderDeezer)
 	}
 	provider := &breakerProbeAlbumProvider{}
 	svc := NewFindRelatedService(nil, provider, nil, WithFindRelatedCircuitBreaker(cb))

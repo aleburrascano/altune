@@ -43,7 +43,7 @@ func (s *SuggestService) supplementWithFuzzy(
 	remaining := limit - len(prefix)
 	fuzzy, err := s.vocab.FindClosest(ctx, norm, remaining+len(prefix))
 	if err != nil {
-		slog.Debug("suggest.fuzzy_supplement_failed", "error", err)
+		slog.DebugContext(ctx, "suggest.fuzzy_supplement_failed", "error", err)
 		return prefix, nil
 	}
 	return deduplicateSuggestions(prefix, fuzzy, limit), nil

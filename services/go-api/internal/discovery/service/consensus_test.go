@@ -286,7 +286,7 @@ func TestConsensusOpensBreakerAndStopsCallingFailingProvider(t *testing.T) {
 	if got := calls.Load(); got != failureThreshold {
 		t.Errorf("failing provider called %d times, want %d before the circuit opens", got, failureThreshold)
 	}
-	if breaker.AllowRequest(domain.ProviderLastFM) {
+	if breaker.AllowRequest(context.Background(), domain.ProviderLastFM) {
 		t.Error("circuit for the failing provider should be open")
 	}
 }

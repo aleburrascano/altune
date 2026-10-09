@@ -35,7 +35,7 @@ func TestPickBestCorrection(t *testing.T) {
 			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.72},
 			{Term: "madonna", TermNorm: "madonna", Kind: "artist", MatchScore: 0.30},
 		}
-		result := pickBestCorrection("megamsn", candidates)
+		result := pickBestCorrection(context.Background(), "megamsn", candidates)
 		if result == nil {
 			t.Fatal("expected a correction result")
 		}
@@ -49,16 +49,26 @@ func TestPickBestCorrection(t *testing.T) {
 			{Term: "zzzzzzz", TermNorm: "zzzzzzz", Kind: "track", MatchScore: 0.80},
 			{Term: "yyyyyyy", TermNorm: "yyyyyyy", Kind: "track", MatchScore: 0.90},
 		}
-		result := pickBestCorrection("megamsn", candidates)
+		result := pickBestCorrection(context.Background(), "megamsn", candidates)
 		if result != nil {
 			t.Errorf("expected nil for high-distance candidates, got %+v", result)
 		}
 	})
 
 	t.Run("empty candidates returns nil", func(t *testing.T) {
-		result := pickBestCorrection("megamsn", nil)
+		result := pickBestCorrection(context.Background(), "megamsn", nil)
 		if result != nil {
 			t.Errorf("expected nil, got %+v", result)
+		}
+	})
+
+	t.Run("single candidate is returned unchanged", func(t *testing.T) {
+		candidates := []domain.VocabularyEntry{
+			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.72},
+		}
+		result := pickBestCorrection(context.Background(), "megamsn", candidates)
+		if result == nil || result.Corrected != "megaman" {
+			t.Fatalf("want the lone candidate megaman, got %+v", result)
 		}
 	})
 
@@ -67,7 +77,7 @@ func TestPickBestCorrection(t *testing.T) {
 			{Term: "weekand", TermNorm: "weekand", Kind: "track", MatchScore: 0.45},
 			{Term: "weekynd", TermNorm: "weekynd", Kind: "artist", MatchScore: 0.66},
 		}
-		result := pickBestCorrection("weekend", candidates)
+		result := pickBestCorrection(context.Background(), "weekend", candidates)
 		if result == nil {
 			t.Fatal("expected a correction result")
 		}
@@ -81,7 +91,7 @@ func TestPickBestCorrection(t *testing.T) {
 			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.50},
 			{Term: "megazan", TermNorm: "megazan", Kind: "track", MatchScore: 0.90},
 		}
-		result := pickBestCorrection("megamsn", candidates)
+		result := pickBestCorrection(context.Background(), "megamsn", candidates)
 		if result == nil {
 			t.Fatal("expected a correction result")
 		}

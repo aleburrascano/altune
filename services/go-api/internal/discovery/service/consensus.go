@@ -192,7 +192,7 @@ func (s *ConsensusService) fetchFromProviders(ctx, callerCtx context.Context, ar
 }
 
 func (s *ConsensusService) fetchProvider(ctx, callerCtx context.Context, p ConsensusProvider, artistName string) providerFetch {
-	call, admitted := admitProviderCall(s.breaker, p.Provider)
+	call, admitted := admitProviderCall(callerCtx, s.breaker, p.Provider)
 	if !admitted {
 		slog.WarnContext(callerCtx, "consensus.provider_circuit_open", "provider", p.Name)
 		return providerFetch{}

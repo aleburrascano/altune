@@ -66,7 +66,7 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 		results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	cb := NewCircuitBreaker()
 	for i := 0; i < failureThreshold; i++ {
-		cb.RecordFailure(domain.ProviderITunes)
+		cb.RecordFailure(context.Background(), domain.ProviderITunes)
 	}
 	svc := NewService([]ports.SearchProvider{skipped, good}, cb)
 
@@ -182,7 +182,7 @@ func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 	if statuses[0].Status == domain.ProviderStatusCircuitOpen {
 		t.Fatalf("setup: probe not admitted")
 	}
-	if !cb.AllowRequest(domain.ProviderITunes) {
+	if !cb.AllowRequest(context.Background(), domain.ProviderITunes) {
 		t.Errorf("next request refused: the shed probe held its slot or re-opened the circuit")
 	}
 }

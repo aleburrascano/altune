@@ -366,7 +366,7 @@ func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *te
 	leaky := &url.Error{Op: "Get", URL: "https://musicbrainz.org/ws/2/?api_key=" + secret, Err: errors.New("connection refused")}
 	openBreaker := NewCircuitBreaker()
 	for range failureThreshold {
-		openBreaker.RecordFailure(domain.ProviderMusicBrainz)
+		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz)
 	}
 	cases := map[string]*GetArtistContentService{
 		"anchor error": anchoredAlbumsService(stubMBAnchor{err: leaky}),
@@ -530,7 +530,7 @@ func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 	buf := captureProductionLogs(t)
 	openBreaker := NewCircuitBreaker()
 	for range failureThreshold {
-		openBreaker.RecordFailure(domain.ProviderMusicBrainz)
+		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz)
 	}
 	svc := anchoredAlbumsServiceWith(funcMBAnchor(func(context.Context, string) ([]string, error) {
 		return nil, errors.New("mb unavailable")
@@ -552,7 +552,7 @@ func TestGetAlbums_v2_openBreakerAfterCallerLeftIsSilent(t *testing.T) {
 	buf := captureProductionLogs(t)
 	openBreaker := NewCircuitBreaker()
 	for range failureThreshold {
-		openBreaker.RecordFailure(domain.ProviderMusicBrainz)
+		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
