@@ -3,6 +3,8 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"fmt"
@@ -82,7 +84,7 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err e
 				step = run.current.Name()
 			}
 			slog.ErrorContext(ctx, "pipeline step panicked",
-				"step", step, "track_id", ac.Track.ID, "panic", logSafeText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
+				"step", step, "track_id", ac.Track.ID, "panic", redact.LogText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
 			rollback(ctx, run.completed, ac)
 			err = &StepError{Step: step, Err: fmt.Errorf("panic: %v", rec)}
 		}
@@ -134,7 +136,7 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 	out, execErr := s.Execute(ctx, ac, prev)
 	if execErr != nil {
 		slog.ErrorContext(ctx, "pipeline step failed",
-			"step", s.Name(), "track_id", ac.Track.ID, "error", logSafeError(execErr))
+			"step", s.Name(), "track_id", ac.Track.ID, "error", redact.LogError(execErr))
 		rollback(ctx, run.completed, ac)
 		return none, &StepError{Step: s.Name(), Err: execErr}
 	}
@@ -172,7 +174,7 @@ func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext)
 		step := completed[i]
 		slog.InfoContext(rbCtx, "rolling back step", "step", step.Name())
 		if err := step.Rollback(rbCtx, ac); err != nil {
-			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), "error", logSafeError(err))
+			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), "error", redact.LogError(err))
 		}
 	}
 }
@@ -269,4 +271,36 @@ type TrackRef struct {
 	TrackNumber int
 	AlbumArtist string
 	Genre       string
+}
+
+func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) Pipeline {
+	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.workspace,
+		[]func(*DownloadStep){
+			WithStepDownloadLimiter(s.downloadLimiter),
+			WithConfidenceFloor(s.confidenceFloor),
+			WithStepVerifySkips(s.verifySkips),
+		},
+		WithStoreAudioRefGuard(s.trackRepo, trackId),
+		WithStoreOrphanQueue(s.orphans, userId),
+		WithStoreKeyPrefix(s.storeKeyPrefix)).
+		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
+}
+
+func CoreSteps(
+	sources *SourceRegistry,
+	tagger ports.AudioTagger,
+	store ports.AudioWriter,
+	prober ports.AudioProber,
+	identifier ports.AudioIdentifier,
+	workspace ports.TempWorkspace,
+	downloadOpts []func(*DownloadStep),
+	storeOpts ...func(*StoreStep),
+) Pipeline {
+	return Pipeline{
+		search:     NewSearchStep(sources),
+		selectBest: NewSelectStep(),
+		download:   NewDownloadStep(sources, append([]func(*DownloadStep){WithDownloadProber(prober), WithDownloadIdentifier(identifier), WithVerifyWidth(2), WithStepTempWorkspace(workspace)}, downloadOpts...)...),
+		tag:        NewTagStep(tagger),
+		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober)}, storeOpts...)...),
+	}
 }

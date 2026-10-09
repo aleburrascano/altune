@@ -6,6 +6,7 @@ import (
 	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"fmt"
@@ -199,7 +200,7 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 	}
 	if err := s.audioStore.Delete(delCtx, old); err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
-			"track_id", trackId.String(), "audio_ref", old, "error", logSafeError(err))
+			"track_id", trackId.String(), "audio_ref", old, "error", redact.LogError(err))
 		recordOrphanedAudio(ctx, s.orphans, userId, trackId, old)
 	}
 }
@@ -208,7 +209,7 @@ func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, tra
 	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_audio_usage_unknown",
-			"track_id", trackId.String(), "audio_ref", audioRef, "error", logSafeError(err))
+			"track_id", trackId.String(), "audio_ref", audioRef, "error", redact.LogError(err))
 		return true
 	}
 	if inUse {
@@ -289,7 +290,7 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
 		"replace", true,
-		"error", logSafeError(err),
+		"error", redact.LogError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
@@ -305,7 +306,7 @@ func (s *AcquireTrackAudioService) reportSchedulerCancelledWithoutMarkingFailed(
 	slog.WarnContext(ctx, "track_acquisition_cancelled",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
-		"error", logSafeError(err),
+		"error", redact.LogError(err),
 	)
 	return err
 }
@@ -319,7 +320,7 @@ func (s *AcquireTrackAudioService) reportRetryableFailure(ctx context.Context, u
 	slog.WarnContext(ctx, "track_acquisition_retryable",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
-		"error", logSafeError(err),
+		"error", redact.LogError(err),
 	)
 	return fmt.Errorf("%w: %w", ErrAcquisitionRetryable, err)
 }
@@ -329,7 +330,7 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
 		"replace", false,
-		"error", logSafeError(err),
+		"error", redact.LogError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
@@ -374,12 +375,12 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 	})
 	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
-			"track_id", trackId.String(), "error", logSafeError(err))
+			"track_id", trackId.String(), "error", redact.LogError(err))
 		return false
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
-			"track_id", trackId.String(), "error", logSafeError(err))
+			"track_id", trackId.String(), "error", redact.LogError(err))
 		return false
 	}
 	return true

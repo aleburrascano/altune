@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"fmt"
@@ -68,7 +69,7 @@ func (s *DownloadStep) noteIdentifyFailure(
 ) {
 	slog.WarnContext(ctx, identifyFailureEvent(err, fallbackEvent),
 		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-		"error", logSafeError(err))
+		"error", redact.LogError(err))
 	s.recordSkip(gate)
 }
 

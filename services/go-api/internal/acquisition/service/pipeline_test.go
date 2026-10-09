@@ -6,8 +6,13 @@ import (
 	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -832,4 +837,128 @@ func TestRunPipeline_ElapsedAcquireDeadlineStillDeletesTheStoredAudio(t *testing
 	if len(queue.recorded) != 0 {
 		t.Errorf("recorded = %+v, want nothing queued", queue.recorded)
 	}
+}
+
+func assertStepOrder(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("step count = %d %v, want %d %v", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("step[%d] = %q, want %q (full order %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, *AcquisitionContext) {
+	t.Helper()
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+
+	audio := filepath.Join(t.TempDir(), "song.mp3")
+	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write audio: %v", err)
+	}
+	searcher := &fakeAudioSearcher{
+		searchResults: []ports.AudioCandidate{{
+			Title:      "Blinding Lights",
+			Channel:    "The Weeknd - Topic",
+			Duration:   200,
+			URL:        "https://youtube.com/watch?v=topic1",
+			Categories: []string{"Music"},
+		}},
+		downloadPath: audio,
+	}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore())
+	ac := &AcquisitionContext{Track: TrackRef{
+		ID: track.ID.String(), UserID: userId.String(),
+		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Duration: 200,
+	}}
+	return svc, track, ac
+}
+
+func TestBuildSteps_RunsAllSixInOrder(t *testing.T) {
+	svc, track, ac := acquirableFixture(t)
+	rep := &recordingReporter{}
+	ctx := withJobReporter(context.Background(), rep)
+
+	if err := RunPipeline(ctx, svc.buildSteps(track.UserId, track.ID), ac); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	CleanupTemp(ctx, svc.workspace, ac)
+	assertStepOrder(t, rep.stages, []string{"search", "select", "download", "tag", "store", "update_track"})
+}
+
+func TestCoreSteps_StopsAfterStore(t *testing.T) {
+	svc, _, ac := acquirableFixture(t)
+	rep := &recordingReporter{}
+	ctx := withJobReporter(context.Background(), rep)
+
+	core := CoreSteps(svc.sources, svc.audioTagger, svc.audioStore, svc.audioProber, svc.identifier, svc.workspace, nil)
+	if err := RunPipeline(ctx, core, ac); err != nil {
+		t.Fatalf("pipeline: %v", err)
+	}
+	CleanupTemp(ctx, svc.workspace, ac)
+	assertStepOrder(t, rep.stages, []string{"search", "select", "download", "tag", "store"})
+	if ac.AudioRef == "" {
+		t.Error("store stage did not record an audio ref")
+	}
+}
+
+const secretCookiePath = "/run/secrets/altune/yt_cookies.txt"
+
+func ytdlpCookieErr() error {
+	stderr := "ERROR: '" + secretCookiePath + "' does not look like a Netscape format cookies file " +
+		"(called with --cookies " + secretCookiePath + ")"
+	return fmt.Errorf("yt-dlp download: %w (stderr: %s)", errors.New("exit status 1"), stderr)
+}
+
+func captureDefaultLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func assertNoCookiePath(t *testing.T, logs string, wantMsg string) {
+	t.Helper()
+	if !strings.Contains(logs, wantMsg) {
+		t.Fatalf("expected log %q, got:\n%s", wantMsg, logs)
+	}
+	if strings.Contains(logs, secretCookiePath) || strings.Contains(logs, "/run/secrets") {
+		t.Fatalf("cookie file path leaked into logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "exit status 1") {
+		t.Fatalf("redaction dropped the diagnostic error text:\n%s", logs)
+	}
+}
+
+func TestRunPipeline_StepFailedLogRedactsCookiePath(t *testing.T) {
+	logs := captureDefaultLog(t)
+	step := &mockStep{name: "download", executeErr: ytdlpCookieErr()}
+
+	err := RunPipeline(context.Background(), pipelineOf(step), &AcquisitionContext{})
+	if err == nil {
+		t.Fatal("expected pipeline error")
+	}
+
+	assertNoCookiePath(t, logs.String(), "pipeline step failed")
+}
+
+func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
+	logs := captureDefaultLog(t)
+	first := &mockStep{name: "search", rollbackErr: ytdlpCookieErr()}
+	second := &mockStep{name: "download", executeErr: errors.New("boom")}
+
+	_ = RunPipeline(context.Background(), pipelineOf(first, second), &AcquisitionContext{})
+
+	assertNoCookiePath(t, logs.String(), "rollback failed")
 }

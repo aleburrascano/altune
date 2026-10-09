@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
@@ -391,7 +392,7 @@ func (s *DownloadStep) fetchFull(
 		err = candidateTimedOut(ctx, fetchCtx, candidate, err)
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"error", logSafeError(err))
+			"error", redact.LogError(err))
 		return "", &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
 	}
 	return filePath, nil
@@ -403,7 +404,7 @@ func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCa
 	}
 	return &ports.SourceUnavailableError{
 		Source: candidate.Source,
-		Err:    fmt.Errorf("candidate timed out: %s", logSafeError(err)),
+		Err:    fmt.Errorf("candidate timed out: %s", redact.LogError(err)),
 	}
 }
 
@@ -479,7 +480,7 @@ func (s *DownloadStep) probeDuration(
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"error", logSafeError(err))
+			"error", redact.LogError(err))
 		s.recordSkip(ports.SkipProbeFailed)
 		return false, 0, nil
 	case !ac.durationAcceptable(actual):
@@ -542,7 +543,7 @@ func decodeRejection(
 	}
 	slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
 		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-		"error", logSafeError(err))
+		"error", redact.LogError(err))
 	return &downloadRejection{
 		stage:  RejectionUndecodable,
 		reason: "audio failed to decode",

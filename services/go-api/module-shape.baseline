@@ -9,11 +9,8 @@ G2 internal/discovery/service/record_history.go:12 service imports github.com/go
 G2 internal/discovery/service/result_cache.go:8 service imports github.com/google/uuid
 G2 internal/discovery/service/search.go:15 service imports github.com/google/uuid
 G2 internal/discovery/service/search.go:16 service imports golang.org/x/sync/singleflight
-G3 internal/acquisition/adapters/handler/command.go:5 imports auth outside adapters/authbridge
-G3 internal/acquisition/adapters/handler/command.go:6 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/adapters/handler/reacquire_handler.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/adapters/handler/retry_handler.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/adapters/persistence/cooldown_fallback.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/handler/acquisition_handler.go:5 imports auth outside adapters/authbridge
+G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/cooldown_store.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/job_queue.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/ports/cooldown.go:4 imports catalog outside adapters/catalogbridge
@@ -21,7 +18,6 @@ G3 internal/acquisition/ports/queue.go:4 imports catalog outside adapters/catalo
 G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/buildsteps.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/eval/case.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/failure_reason.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/mem_job_queue.go:5 imports catalog outside adapters/catalogbridge

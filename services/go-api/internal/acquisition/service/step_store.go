@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
@@ -125,7 +126,7 @@ func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string)
 	inUse, err := s.trackRefs.AudioRefInUse(ctx, audioRef, s.ownTrackID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.rollback_audio_usage_unknown",
-			"audio_ref", audioRef, "error", logSafeError(err))
+			"audio_ref", audioRef, "error", redact.LogError(err))
 		return true
 	}
 	return inUse

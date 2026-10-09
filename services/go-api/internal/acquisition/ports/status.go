@@ -1,6 +1,9 @@
 package ports
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type AcquisitionVerification struct {
 	Ffprobe             bool
@@ -67,4 +70,15 @@ type AcquisitionStatus struct {
 	Verification     AcquisitionVerification
 	ActiveJobs       []JobRecord
 	Recent           []JobRecord
+}
+
+type AcquisitionOutcome struct {
+	TrackID   string
+	Outcome   JobState
+	Reason    string
+	ElapsedMs int64
+}
+
+type OutcomeRecorder interface {
+	Record(ctx context.Context, o AcquisitionOutcome) error
 }
