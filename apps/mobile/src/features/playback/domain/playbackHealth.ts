@@ -1,5 +1,5 @@
 import { subscribeAppState } from '@shared/lifecycle/appState';
-import type { PlaybackErrorKind } from '@shared/playback/types';
+import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 export type PrefetchFailureStage = 'resolve' | 'download' | 'swap';

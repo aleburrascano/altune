@@ -3,10 +3,10 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw } from 'lucide-react-native';
 
-import { withFeaturing } from '@shared/lib/featured';
+import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
+import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/playbackContextValue';
 import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';
 import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/ui/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';

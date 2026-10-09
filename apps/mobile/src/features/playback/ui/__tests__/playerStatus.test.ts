@@ -1,4 +1,4 @@
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { TrackId } from '@shared/api-client/ids';
 import { endedLabel, libraryTrackId, statusFlagsOf } from '@features/playback/ui/playerStatus';
 

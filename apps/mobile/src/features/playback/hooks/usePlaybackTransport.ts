@@ -1,7 +1,7 @@
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { statusFlagsOf } from '@features/playback/ui/playerStatus';
 

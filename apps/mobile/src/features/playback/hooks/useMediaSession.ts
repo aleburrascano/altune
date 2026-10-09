@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { usePlaybackRateStore } from '@features/playback/hooks/usePlaybackRateStore';
 

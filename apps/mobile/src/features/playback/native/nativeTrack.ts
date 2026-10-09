@@ -1,7 +1,7 @@
 import { Image } from 'react-native';
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 

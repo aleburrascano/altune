@@ -8,7 +8,7 @@ import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
 import { recordPresignOutcome } from '@features/playback/domain/playbackHealth';
 import { MAX_PRESIGN } from '@features/playback/domain/presignWindow';
 import { toNativeTrack } from '@features/playback/native/nativeTrack';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 function headersFor(tracks: readonly PlaybackTrack[]): Promise<Record<string, string>> {
   const needsAuth = tracks.some((t) => t.source.kind === 'library');

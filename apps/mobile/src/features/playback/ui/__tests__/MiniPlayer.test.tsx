@@ -5,7 +5,10 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback/types';
+import type {
+  PlaybackContextValue,
+  PlaybackErrorKind,
+} from '@shared/playback/playbackContextValue';
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import { MiniPlayer } from '@features/playback/ui/MiniPlayer';

@@ -8,7 +8,7 @@ import { currentLoadToken, isStale, type LoadToken } from '@features/playback/do
 import { NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 function stillUpcoming(
   upcoming: readonly PlaybackTrack[],

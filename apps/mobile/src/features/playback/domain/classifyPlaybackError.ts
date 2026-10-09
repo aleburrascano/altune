@@ -1,5 +1,5 @@
 import { ApiError, NetworkError } from '@shared/errors';
-import type { PlaybackErrorKind } from '@shared/playback/types';
+import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 
 function httpStatusKind(status: number): PlaybackErrorKind {
   if (status === 401 || status === 403) return 'auth';

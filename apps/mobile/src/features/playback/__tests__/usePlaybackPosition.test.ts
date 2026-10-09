@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { usePlaybackPosition } from '@features/playback/hooks/usePlaybackPosition';
 

@@ -7,7 +7,7 @@ import { REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 import { asTrackId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';

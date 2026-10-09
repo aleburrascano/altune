@@ -5,7 +5,7 @@ import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { ApiError } from '@shared/api-client';
 import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { orderedQueueTracks } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';

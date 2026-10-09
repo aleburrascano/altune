@@ -1,4 +1,4 @@
-import type { PlaybackErrorKind } from '@shared/playback/types';
+import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 
 import { classifyPlaybackFailure } from '@features/playback/domain/classifyPlaybackError';
 
