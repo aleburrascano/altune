@@ -1,4 +1,3 @@
-M1 src/features/detail missing index.ts
 M1 src/features/library missing index.ts
 M1 src/features/library/gridColumns.ts loose root file
 M1 src/features/library/pinBatchSummary.ts loose root file
@@ -6,9 +5,7 @@ M1 src/features/library/pinnedStatusDisplay.ts loose root file
 M1 src/features/library/selectionActions.ts loose root file
 M1 src/features/library/trackMenu.ts loose root file
 M1 src/features/settings missing index.ts
-M2 src/app/(tabs)/discover/detail.tsx deep import @features/detail/ui/DetailScreen
 M2 src/app/(tabs)/discover/featuring.tsx deep import @features/library/ui/FeaturingScreen
-M2 src/app/(tabs)/library/detail.tsx deep import @features/detail/ui/DetailScreen
 M2 src/app/(tabs)/library/featuring.tsx deep import @features/library/ui/FeaturingScreen
 M2 src/app/(tabs)/library/index.tsx deep import @features/library/ui/LibraryScreen
 M2 src/app/(tabs)/library/playlist/[id].tsx deep import @features/library/ui/PlaylistDetailScreen

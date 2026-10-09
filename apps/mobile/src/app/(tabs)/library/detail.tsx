@@ -1,3 +1,3 @@
-import { DetailScreen } from '@features/detail/ui/DetailScreen';
+import { DetailScreen } from '@features/detail';
 
 export default DetailScreen;
