@@ -71,7 +71,9 @@ test('the import scan flags a value import and spares type and pure-module impor
   expect(apiClientValueImports("import { asTrackId } from '@shared/api-client/ids';")).toHaveLength(
     0,
   );
-  expect(apiClientValueImports("import { ApiError } from '@shared/errors';")).toHaveLength(0);
+  expect(apiClientValueImports("import { ApiError } from '@shared/failure/errors';")).toHaveLength(
+    0,
+  );
 });
 
 test.each(files)(

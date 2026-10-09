@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 
 import { LibraryScreen } from '../ui/LibraryScreen';
 

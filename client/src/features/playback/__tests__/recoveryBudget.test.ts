@@ -1,4 +1,4 @@
-import type { TrackKey } from '@shared/playback/trackKey';
+import type { TrackKey } from '@shared/playback/playbackTrack';
 
 import {
   MAX_TRACKED_RECOVERIES,

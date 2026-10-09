@@ -109,7 +109,7 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
       jest.doMock('@shared/session/signOutCleanup', () => ({
         onIdentityChange: (fn: (userId: string | null) => void) => handlers.push(fn),
       }));
-      const { registerIdentityListeners } = require('@shared/auth/registerIdentityListeners');
+      const { registerIdentityListeners } = require('@shared/auth/userLocalData');
       registerIdentityListeners();
       handlers.forEach((fn) => fn('user-a'));
       return claimPinnedDownloads;

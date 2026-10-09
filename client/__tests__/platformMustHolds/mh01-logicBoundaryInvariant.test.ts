@@ -59,7 +59,7 @@ describe('feature logic stays platform-free', () => {
 
 describe('shared logic stays platform-free', () => {
   // lintText needs a file the typed parser's project knows, so these paths exist on disk.
-  const SHARED_FILE = 'src/shared/events/eventTypes.ts';
+  const SHARED_FILE = 'src/shared/events/serverEventTypes.ts';
 
   it.each([
     ["import { AppState } from 'react-native';", '@shared/lifecycle'],

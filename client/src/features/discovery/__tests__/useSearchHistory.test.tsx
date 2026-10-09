@@ -9,7 +9,7 @@ import {
   suggestDiscovery,
   type DiscoverySearchHistoryResponse,
 } from '@shared/api-client/discovery';
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { recordEvent } from '@shared/telemetry/recordEvent';

@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 
 export function failureCopyForAction(error: unknown): string {
   if (error instanceof NetworkError) {

@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/api-client/ids';
 import {
   asArray,
@@ -15,7 +15,7 @@ import type {
   QueueStateResponse,
 } from '@shared/api-client/playback';
 import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
-import type { QueueSource, RepeatMode } from '@shared/playback/queueSource';
+import type { QueueSource, RepeatMode } from '@shared/playback/queueOrder';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
 

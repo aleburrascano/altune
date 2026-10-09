@@ -1,4 +1,4 @@
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { PlaybackSource, PlaybackTrack } from '@shared/playback/playbackTrack';
 
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
@@ -43,3 +43,20 @@ export interface PlaybackControls {
 }
 
 export type PlaybackContextValue = PlaybackState & PlaybackControls;
+
+export function isCurrentlyPlaying(
+  playback: Pick<PlaybackContextValue, 'status' | 'track'>,
+  source: PlaybackSource,
+): boolean {
+  const isActive = playback.status === 'playing' || playback.status === 'loading';
+  if (!isActive || !playback.track) return false;
+  if (source.kind === 'library') {
+    return (
+      playback.track.source.kind === 'library' && playback.track.source.trackId === source.trackId
+    );
+  }
+  return (
+    playback.track.source.kind === 'preview' &&
+    playback.track.source.previewUrl === source.previewUrl
+  );
+}

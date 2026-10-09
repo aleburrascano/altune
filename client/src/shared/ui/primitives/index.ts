@@ -1,7 +1,6 @@
 export { Text } from '@shared/ui/primitives/Text';
 export type { TextProps, TextTone } from '@shared/ui/primitives/Text';
-export { Screen } from '@shared/ui/primitives/Screen';
-export { SCREEN_HORIZONTAL_PADDING } from '@shared/ui/primitives/screenLayout';
+export { Screen, SCREEN_HORIZONTAL_PADDING } from '@shared/ui/primitives/Screen';
 export type { ScreenProps } from '@shared/ui/primitives/Screen';
 export { Card } from '@shared/ui/primitives/Card';
 export type { CardProps } from '@shared/ui/primitives/Card';

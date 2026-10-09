@@ -120,7 +120,7 @@ function deriveMobileSessionExpiredStatus(source: string): number {
   const match = /if \(response\.status === (\w+)\) markSessionExpired\(sentWith\);/.exec(source);
   expect(match).not.toBeNull();
   const errorsSource = fs.readFileSync(
-    path.join(REPO_ROOT!, 'client', 'src', 'shared', 'errors.ts'),
+    path.join(REPO_ROOT!, 'client', 'src', 'shared', 'failure', 'errors.ts'),
     'utf8',
   );
   const constant = new RegExp(`export const ${match![1]} = (\\d+);`).exec(errorsSource);

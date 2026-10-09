@@ -21,7 +21,7 @@ import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
 import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/playback';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
-import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
+import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '@shared/ui/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';

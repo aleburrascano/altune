@@ -1,4 +1,4 @@
-import { ApiError, ContractError, NetworkError } from '@shared/errors';
+import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import {
   classifyLibraryError,

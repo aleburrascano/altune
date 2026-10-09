@@ -9,6 +9,6 @@ export function showAlert(title: string, message: string): void {
   window.alert(`${title}\n\n${message}`);
 }
 
-export function confirm({ title, message, onConfirm }: ConfirmOptions): void {
+export function confirmDestructive({ title, message, onConfirm }: ConfirmOptions): void {
   if (window.confirm(`${title}\n\n${message}`)) onConfirm();
 }

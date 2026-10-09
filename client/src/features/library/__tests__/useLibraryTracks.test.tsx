@@ -4,10 +4,13 @@ import type { ReactNode } from 'react';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 import { libraryKeys } from '@shared/query/queryKeys';
-import { removeTrackFromCaches } from '@shared/events/trackCachePatch';
-import { captureTrackPlacements, restoreTrackPlacements } from '@shared/events/trackPlacements';
+import {
+  removeTrackFromCaches,
+  captureTrackPlacements,
+  restoreTrackPlacements,
+} from '@shared/events/trackCachePatch';
 
 import { TRACKS_PAGE_SIZE, useLibraryTracks } from '../hooks/useLibraryTracks';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';

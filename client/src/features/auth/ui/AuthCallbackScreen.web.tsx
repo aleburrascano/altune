@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
-import { NetworkError } from '@shared/errors';
+import { NetworkError } from '@shared/failure/errors';
 import { Text } from '@shared/ui/primitives/Text';
 
 import {

@@ -3,8 +3,7 @@ import { renderHook } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 
-import { usePlayback } from '@shared/playback/usePlayback';
-import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { usePlayback, PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 function buildContextValue(): PlaybackContextValue {

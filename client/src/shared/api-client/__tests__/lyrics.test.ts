@@ -1,5 +1,5 @@
 import { getLyrics, type LyricsResponse } from '@shared/api-client/lyrics';
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('@testing/doubles/fetch.js');

@@ -3,7 +3,7 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { Keyboard, Platform } from 'react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
-import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import type { DiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';

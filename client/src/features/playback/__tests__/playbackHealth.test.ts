@@ -1,7 +1,7 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
+import { trackKey } from '@shared/playback/playbackTrack';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { prefetchNext } from '@features/playback/native/audioPrefetch';

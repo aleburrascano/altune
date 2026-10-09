@@ -1,12 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { ACQUISITION_HANDLERS } from '@shared/events/acquisitionEvents';
-import type { ServerEventHandlers } from '@shared/events/eventPayload';
 import {
+  type ServerEventHandlers,
   isServerEventType,
   recordUnhandledEvent,
   type ServerEventType,
-} from '@shared/events/eventTypes';
+} from '@shared/events/serverEventTypes';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
 import { RESYNC_HANDLERS } from '@shared/events/resyncEvents';
 import type { ServerEvent } from '@shared/events/sseFrames';

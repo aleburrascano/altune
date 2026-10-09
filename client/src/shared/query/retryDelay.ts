@@ -1,5 +1,5 @@
 import { clampedExponent, equalJitterMs } from '@shared/backoff';
-import { isRetryable } from '@shared/errors';
+import { isRetryable } from '@shared/failure/errors';
 
 export const RETRY_BACKOFF_BASE_MS = 1_000;
 export const RETRY_BACKOFF_CAP_MS = 30_000;

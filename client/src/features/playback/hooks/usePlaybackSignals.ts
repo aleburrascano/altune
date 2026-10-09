@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Event, useTrackPlayerEvents } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey, type TrackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackKey, type TrackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { buildTrackPayload, hasCrossedListenThreshold } from '@features/playback/domain/signals';

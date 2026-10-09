@@ -16,12 +16,12 @@ import {
   NetworkError,
   isAbort,
   isSessionFetchFailure,
-} from '@shared/errors';
+} from '@shared/failure/errors';
 import { parseErrorBody } from '@shared/api-client/wireDecoders';
 import { apiBase, REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 
-export { ApiError, NetworkError, ContractError } from '@shared/errors';
-export type { NetworkFailure } from '@shared/errors';
+export { ApiError, NetworkError, ContractError } from '@shared/failure/errors';
+export type { NetworkFailure } from '@shared/failure/errors';
 
 export { apiBase, REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 
@@ -221,4 +221,9 @@ export function apiSend<T>(
     headers: { ...init?.headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export function withQuery(path: string, params: URLSearchParams): string {
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
 }

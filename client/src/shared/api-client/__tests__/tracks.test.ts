@@ -14,7 +14,7 @@ import {
   parseTrackResponse,
   tryParseTrackResponse,
 } from '@shared/api-client/tracks';
-import { ContractError, NetworkError, isAbort } from '@shared/errors';
+import { ContractError, NetworkError, isAbort } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type {

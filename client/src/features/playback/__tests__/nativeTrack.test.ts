@@ -1,9 +1,9 @@
 import TrackPlayer from 'react-native-track-player';
 
 import { audioStreamUrl } from '@shared/api-client/audio';
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import { trackKey } from '@shared/playback/trackKey';
+import { trackKey } from '@shared/playback/playbackTrack';
 
 import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
 

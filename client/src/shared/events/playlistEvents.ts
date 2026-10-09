@@ -9,7 +9,7 @@ import {
   stringArray,
   type ServerEventHandler,
   type ServerEventHandlers,
-} from '@shared/events/eventPayload';
+} from '@shared/events/serverEventTypes';
 import {
   patchPlaylistName,
   removeTrackFromPlaylistCache,

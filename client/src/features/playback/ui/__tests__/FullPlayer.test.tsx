@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { asTrackId } from '@shared/api-client/ids';
-import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type {
   PlaybackContextValue,

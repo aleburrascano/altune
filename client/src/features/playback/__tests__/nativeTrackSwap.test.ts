@@ -3,9 +3,8 @@ import TrackPlayer from 'react-native-track-player';
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import {
   forgetAllSwaps,

@@ -1,6 +1,5 @@
 import { asFavoriteKey, type FavoriteKey } from '@shared/api-client/ids';
-import { apiFetch, signalInit } from '@shared/api-client/index';
-import { withQuery } from '@shared/api-client/queryString';
+import { apiFetch, signalInit, withQuery } from '@shared/api-client/index';
 import {
   parseArray,
   parseListEnvelope,

@@ -4,7 +4,7 @@ import {
   NetworkError,
   isSessionFetchFailure,
   correlationIdOf,
-} from '@shared/errors';
+} from '@shared/failure/errors';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import type { FailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/api-client/ids';

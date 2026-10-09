@@ -1,6 +1,5 @@
-import { apiFetch, apiSend, signalInit } from '@shared/api-client/index';
+import { apiFetch, apiSend, signalInit, withQuery } from '@shared/api-client/index';
 import { asPlaylistId, idPathSegment, type PlaylistId } from '@shared/api-client/ids';
-import { withQuery } from '@shared/api-client/queryString';
 import { parseTrackResponse } from '@shared/api-client/tracks';
 import type {
   AddTracksToPlaylistRequest,

@@ -32,13 +32,17 @@ import {
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
-import { forgetTrack } from '@shared/events/forgetTrack';
-import { asString, asTrackIdOrNull, type ServerEventHandlers } from '@shared/events/eventPayload';
 import {
+  forgetTrack,
   getTrackFromCaches,
   invalidateLibraryDerived,
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
+import {
+  asString,
+  asTrackIdOrNull,
+  type ServerEventHandlers,
+} from '@shared/events/serverEventTypes';
 import { scheduleTrackPatch } from '@shared/events/trackPatchBatch';
 import type { ServerEvent } from '@shared/events/sseFrames';
 

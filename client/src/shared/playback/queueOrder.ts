@@ -1,6 +1,12 @@
-import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource, RepeatMode } from '@shared/playback/queueSource';
+import type { PlaylistId } from '@shared/api-client/ids';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+
+export type RepeatMode = 'off' | 'all' | 'one';
+
+export type QueueSource =
+  | { readonly kind: 'playlist'; readonly playlistId: PlaylistId; readonly name: string }
+  | { readonly kind: 'library' }
+  | { readonly kind: 'search'; readonly query: string };
 
 type TrackList = readonly PlaybackTrack[];
 

@@ -1,4 +1,4 @@
-import { isNetworkError } from '@shared/failure/isNetworkError';
+import { isNetworkError } from '@shared/failure/errors';
 
 import {
   classifyAuthError,

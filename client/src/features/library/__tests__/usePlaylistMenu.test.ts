@@ -19,7 +19,8 @@ jest.mock('@shared/playlists', () => ({
 
 const mockConfirm = jest.fn();
 
-jest.mock('@shared/ui/confirmDestructive', () => ({
+jest.mock('@shared/ui/dialog/dialog', () => ({
+  ...jest.requireActual('@shared/ui/dialog/dialog'),
   confirmDestructive: (opts: unknown) => mockConfirm(opts),
 }));
 

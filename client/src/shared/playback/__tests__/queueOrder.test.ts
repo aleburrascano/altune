@@ -1,5 +1,4 @@
 import { asTrackId } from '@shared/api-client/ids';
-
 import {
   ascending,
   currentAfterMove,
@@ -12,10 +11,11 @@ import {
   resolveSyncTarget,
   withAppended,
   withoutTrack,
+  type QueueState,
+  type RepeatMode,
 } from '@shared/playback/queueOrder';
-import type { QueueState } from '@shared/playback/queueOrder';
-import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 function track(id: string): PlaybackTrack {
   return {
@@ -200,5 +200,12 @@ describe('freshQueue', () => {
     expect(freshQueue({ ...base, generation: FOUR }).generation).toBe(FIVE);
     expect(freshQueue({ ...base, generation: FOUR }).generation).toBe(FIVE);
     expect(freshQueue({ ...base, generation: FIVE }).generation).toBe(SIX);
+  });
+});
+
+describe('queueSource', () => {
+  it('RepeatMode accepts off, all and one and refuses shuffle', () => {
+    expectType<IsAssignable<'off' | 'all' | 'one', RepeatMode>>();
+    expectType<Not<IsAssignable<'shuffle', RepeatMode>>>();
   });
 });

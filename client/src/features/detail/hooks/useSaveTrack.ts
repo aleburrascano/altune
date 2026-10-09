@@ -1,7 +1,7 @@
 import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useRef } from 'react';
 
-import { isRetryable } from '@shared/errors';
+import { isRetryable } from '@shared/failure/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import {
   acquisitionOf,
@@ -27,7 +27,7 @@ import {
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
 import { useAppMutation } from '@shared/query/useAppMutation';
-import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 

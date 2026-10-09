@@ -1,7 +1,16 @@
-import { bumpSessionEpoch } from '@shared/session/sessionEpoch';
+let sessionEpoch = 0;
 
-export { currentSessionEpoch, isSameSession } from '@shared/session/sessionEpoch';
-export { guardedMutationOptions, SessionEndedError } from '@shared/session/guardedMutation';
+export function currentSessionEpoch(): number {
+  return sessionEpoch;
+}
+
+export function isSameSession(epoch: number | undefined): boolean {
+  return epoch === sessionEpoch;
+}
+
+export function bumpSessionEpoch(): void {
+  sessionEpoch += 1;
+}
 
 export type SignOutCleanup = () => void | Promise<void>;
 

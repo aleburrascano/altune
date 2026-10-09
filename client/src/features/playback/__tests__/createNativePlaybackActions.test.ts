@@ -2,8 +2,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
-import { type TrackKey, trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { createNativePlaybackActions } from '@features/playback/native/createNativePlaybackActions';
 import { swapUpcomingToLocal, wasSwappedToLocal } from '@features/playback/native/nativeTrackSwap';

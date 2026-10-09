@@ -8,8 +8,7 @@ import {
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/restartOnPrevious';
 import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { setSignedInUser } from '@shared/session/signOutCleanup';
 
 import {

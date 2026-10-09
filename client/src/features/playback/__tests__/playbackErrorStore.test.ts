@@ -1,9 +1,9 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { NetworkError } from '@shared/errors';
+import { NetworkError } from '@shared/failure/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId } from '@shared/api-client/ids';
-import { trackKey } from '@shared/playback/trackKey';
+import { trackKey } from '@shared/playback/playbackTrack';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 

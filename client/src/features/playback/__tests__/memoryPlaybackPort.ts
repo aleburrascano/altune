@@ -1,4 +1,4 @@
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import type { LyricsResponse } from '@shared/api-client/lyrics';
 import type { QueueStateResponse } from '@shared/api-client/playback';

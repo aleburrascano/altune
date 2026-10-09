@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { NetworkError } from '@shared/errors';
+import { NetworkError } from '@shared/failure/errors';
 import {
   type AuthIntentResult,
   completeAuthIntent,

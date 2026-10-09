@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { BackfillFeaturedResult } from '@shared/api-client/tracks';
-import { guardedMutationOptions } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { detailKeys, libraryKeys } from '@shared/query/queryKeys';
 import { useAppMutation } from '@shared/query/useAppMutation';
-import { ContractError, NetworkError } from '@shared/errors';
+import { ContractError, NetworkError } from '@shared/failure/errors';
 import { transientRetryOptions } from '@shared/query/retryDelay';
 
 import { useSettingsPort } from '@features/settings/ports/SettingsPortProvider';

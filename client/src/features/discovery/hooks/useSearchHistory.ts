@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discovery';
 
-import { isRetryable } from '@shared/errors';
+import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/search-history/useClearSearchHistory';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';

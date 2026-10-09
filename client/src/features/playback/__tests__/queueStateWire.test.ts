@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/errors';
+import { ContractError } from '@shared/failure/errors';
 import { asPlaylistId } from '@shared/api-client/ids';
 import { canPlay } from '@shared/playback/canPlay';
 

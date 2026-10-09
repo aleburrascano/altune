@@ -3,7 +3,7 @@ import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { ApiError, NetworkError } from '@shared/api-client';
 import { clampedExponent, equalJitterMs } from '@shared/backoff';
-import { isTelemetryGated } from '@shared/errors';
+import { isTelemetryGated } from '@shared/failure/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 import { onSignOut } from '@shared/session/signOutCleanup';
 

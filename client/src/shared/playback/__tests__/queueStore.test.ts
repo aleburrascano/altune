@@ -3,9 +3,8 @@ import fc from 'fast-check';
 import { asTrackId, asPlaylistId } from '@shared/api-client/ids';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource, RepeatMode } from '@shared/playback/queueSource';
+import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { QueueSource, RepeatMode } from '@shared/playback/queueOrder';
 
 const INITIAL_STATE = useQueueStore.getState();
 

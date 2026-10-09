@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
-import type { ServerEventHandlers } from '@shared/events/eventPayload';
+import type { ServerEventHandlers } from '@shared/events/serverEventTypes';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
 
 const RESYNC_KEYS: readonly (readonly string[])[] = [

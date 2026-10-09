@@ -4,12 +4,7 @@ module.exports = {
     'No Alert.alert or direct showAlert import outside the failure module and the dialog seam',
   config: [
     {
-      ignores: [
-        'src/shared/ui/failure/**',
-        'src/shared/ui/dialog/**',
-        'src/shared/ui/confirmDestructive.ts',
-        '**/__tests__/**',
-      ],
+      ignores: ['src/shared/ui/failure/**', 'src/shared/ui/dialog/**', '**/__tests__/**'],
       rules: {
         'no-restricted-properties': [
           'error',
@@ -41,7 +36,7 @@ module.exports = {
     ],
     valid: [
       "showFailureAlert({ surface: 'a.b', title: 'Oops', message: 'Broke' });\n",
-      "import { confirm } from './dialog/dialog';\n",
+      "import { confirmDestructive } from './dialog/dialog';\n",
     ],
   },
 };

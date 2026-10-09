@@ -8,7 +8,7 @@ import {
   searchDiscovery,
   suggestDiscovery,
 } from '@shared/api-client/discovery';
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import {

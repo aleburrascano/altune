@@ -1,4 +1,4 @@
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 

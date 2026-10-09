@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { TrackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/playbackTrack';
+import type { TrackKey, PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import type { RedactedPlaybackFailure } from '@features/playback/domain/playbackError';
 

@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { QueueSource } from '@shared/playback/queueSource';
+import type { QueueSource } from '@shared/playback/queueOrder';
 
 interface QueuePlaybackControls {
   playFromList: (

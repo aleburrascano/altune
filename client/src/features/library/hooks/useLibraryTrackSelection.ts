@@ -2,7 +2,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { confirmDestructive } from '@shared/ui/confirmDestructive';
+import { confirmDestructive } from '@shared/ui/dialog/dialog';
 import { useDeleteTrack, useDeleteTracks } from '@features/library/hooks/useDeleteTracks';
 import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/hooks/usePlaylistActions';

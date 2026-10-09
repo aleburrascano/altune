@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackStatus as AcquisitionTrackStatus } from '@shared/api-client/trackAcquisition';
-import { isRetryable } from '@shared/errors';
+import { isRetryable } from '@shared/failure/errors';
 import { onSignOut } from '@shared/session/signOutCleanup';
 import {
   recordStatusChanged,

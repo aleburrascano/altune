@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 import {
   createMemoryFileStore,
   type MemoryFileStore,

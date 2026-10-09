@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { isAbort } from '@shared/errors';
+import { isAbort } from '@shared/failure/errors';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 

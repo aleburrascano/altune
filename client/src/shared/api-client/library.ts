@@ -1,5 +1,4 @@
-import { apiFetch, signalInit } from '@shared/api-client/index';
-import { withQuery } from '@shared/api-client/queryString';
+import { apiFetch, signalInit, withQuery } from '@shared/api-client/index';
 import {
   parseListEnvelope,
   asNumber,

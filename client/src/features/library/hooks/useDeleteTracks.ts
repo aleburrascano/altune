@@ -3,16 +3,18 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { showFailureAlert } from '@shared/ui';
 import type { TrackId } from '@shared/api-client/ids';
-import { forgetTrack } from '@shared/events/forgetTrack';
-import { invalidateLibraryDerived } from '@shared/events/trackCachePatch';
+import {
+  forgetTrack,
+  invalidateLibraryDerived,
+  captureTrackPlacements,
+  restoreTrackPlacements,
+  type TrackCachePlacement,
+} from '@shared/events/trackCachePatch';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { libraryKeys } from '@shared/query/queryKeys';
-import {
-  currentSessionEpoch,
-  guardedMutationOptions,
-  isSameSession,
-} from '@shared/session/signOutCleanup';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import {
@@ -23,11 +25,6 @@ import {
   failureTail,
   type LibraryFailure,
 } from '@features/library/domain/libraryFailure';
-import {
-  captureTrackPlacements,
-  restoreTrackPlacements,
-  type TrackCachePlacement,
-} from '@shared/events/trackPlacements';
 import {
   patchTrackStatus,
   useTrackStatusStore,

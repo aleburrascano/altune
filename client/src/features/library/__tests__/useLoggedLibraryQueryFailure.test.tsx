@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { ApiError, NetworkError } from '@shared/errors';
+import { ApiError, NetworkError } from '@shared/failure/errors';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';

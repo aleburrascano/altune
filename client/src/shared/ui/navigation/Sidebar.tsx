@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme/tokens';
 import type { Theme } from '@shared/ui/theme/theme';
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
 import {
   TAB_ROUTE_INFO_BY_ROUTE,
   TAB_ROUTES,
@@ -14,6 +13,32 @@ import {
   type TabRoute,
   type TabRouteInfo,
 } from '@shared/ui/navigation/tabRoutes';
+
+export type PressableWebState = PressableStateCallbackType & {
+  hovered?: boolean;
+  focused?: boolean;
+};
+
+const itemStyles = StyleSheet.create({
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 2,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+});
+
+export function sidebarItemStyle(theme: Theme, active: boolean) {
+  return ({ hovered, focused }: PressableWebState): StyleProp<ViewStyle> => [
+    itemStyles.item,
+    hovered ? { backgroundColor: theme.color.surface2 } : null,
+    { borderColor: focused ? theme.color.accent : 'transparent' },
+    active ? { backgroundColor: theme.color.accentTint } : null,
+  ];
+}
 
 export type SidebarProps = {
   activeRoute: string;

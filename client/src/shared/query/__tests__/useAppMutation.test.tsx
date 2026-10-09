@@ -2,13 +2,18 @@ import React from 'react';
 import { isCancelledError, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/errors';
-import { guardedMutationOptions, runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { ApiError, NetworkError } from '@shared/failure/errors';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { reportClientError } from '@shared/telemetry/clientErrorReporting';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
-import { appMutationCache, appQueryCache, useAppMutation } from '@shared/query/useAppMutation';
-import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
+import {
+  appMutationCache,
+  appQueryCache,
+  useAppMutation,
+  useOptimisticMutation,
+} from '@shared/query/useAppMutation';
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
 jest.mock('@shared/telemetry/clientErrorReporting', () => ({ reportClientError: jest.fn() }));

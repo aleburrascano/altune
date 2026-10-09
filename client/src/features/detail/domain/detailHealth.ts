@@ -1,6 +1,6 @@
 import { subscribeAppState } from '@shared/lifecycle/appState';
 
-import { isAbort } from '@shared/errors';
+import { isAbort } from '@shared/failure/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
 

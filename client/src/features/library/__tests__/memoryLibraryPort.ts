@@ -7,7 +7,7 @@ import type {
 } from '@shared/api-client/trackResponse';
 import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { MAX_ALL_TRACKS } from '@shared/api-client/tracks';
-import { ApiError } from '@shared/errors';
+import { ApiError } from '@shared/failure/errors';
 
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
