@@ -52,7 +52,7 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     );
   });
 
-  it('covers the 18 playback domain files', () => {
+  it('covers the 15 playback domain files', () => {
     expect(
       files
         .filter(({ feature }) => feature === 'playback')
@@ -60,24 +60,21 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
         .sort(),
     ).toEqual(
       [
-        'canRetryPlaybackError.ts',
         'clamp.ts',
-        'classifyPlaybackError.ts',
         'derivePlaybackState.ts',
         'loadToken.ts',
-        'lyrics-sync.ts',
+        'lyricsSync.ts',
+        'playbackError.ts',
         'playbackHealth.ts',
+        'playerStatus.ts',
         'playsThroughTrackPlayer.ts',
         'playsThroughTrackPlayer.web.ts',
         'presignWindow.ts',
-        'queueItem.ts',
-        'queueMenuOptions.ts',
-        'queueRebuildStrategies.ts',
+        'queueResume.ts',
         'queueStateWire.ts',
-        'redactPlaybackError.ts',
-        'resumeQueue.ts',
         'signals.ts',
         'time.ts',
+        'upNextQueue.ts',
       ].sort(),
     );
   });

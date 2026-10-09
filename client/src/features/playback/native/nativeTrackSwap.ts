@@ -14,7 +14,7 @@ import {
 import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
 import { reportLoadFailure } from '@features/playback/hooks/usePlaybackErrorStore';
 import { recordPresignOutcome } from '@features/playback/domain/playbackHealth';
-import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
+import { warnPlayback } from '@features/playback/domain/playbackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 

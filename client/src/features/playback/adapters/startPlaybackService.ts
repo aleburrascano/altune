@@ -2,5 +2,5 @@ import { playsThroughTrackPlayer } from '@features/playback/domain/playsThroughT
 
 export function startPlaybackService(): void {
   if (!playsThroughTrackPlayer) return;
-  require('@features/playback/native/registerPlaybackService').registerPlaybackService();
+  require('@features/playback/native/playbackService').registerPlaybackService();
 }

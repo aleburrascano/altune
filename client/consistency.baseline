@@ -55,7 +55,6 @@ MC-4b src/features/library/ui/TracksList.tsx 'Pressable' import from 'react-nati
 MC-4b src/features/playback/ui/LyricsSheet.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/playback/ui/MiniPlayer.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/playback/ui/PlayerBar.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/playback/ui/QueueRow.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/playback/ui/QueueSheet.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/settings/ui/AppearanceCard.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/settings/ui/ConfirmModal.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).

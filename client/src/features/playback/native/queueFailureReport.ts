@@ -4,7 +4,7 @@ import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 import { NativeQueueTimeoutError } from '@features/playback/native/nativeQueueLock';
 import { reportPlaybackError } from '@features/playback/hooks/usePlaybackErrorStore';
 import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
-import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
+import { warnPlayback } from '@features/playback/domain/playbackError';
 
 export type NativeQueueFailureKind = 'transient' | 'permanent';
 

@@ -13,8 +13,10 @@ import { usePlayback } from '@shared/playback/usePlayback';
 
 import { prefetchNext } from '@features/playback/native/audioPrefetch';
 import { TrackPlayerPlaybackProvider } from '@features/playback/native/trackPlayerPlaybackProvider';
-import { registerPlaybackService } from '@features/playback/native/registerPlaybackService';
-import { playbackService } from '@features/playback/native/service';
+import {
+  registerPlaybackService,
+  playbackService,
+} from '@features/playback/native/playbackService';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 

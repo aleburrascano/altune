@@ -7,7 +7,7 @@ import {
   redactPlaybackErrorMessage,
   warnPlayback,
   type RedactedPlaybackFailure,
-} from '@features/playback/domain/redactPlaybackError';
+} from '@features/playback/domain/playbackError';
 import {
   IDLE_PLAYBACK,
   isSourceStale,

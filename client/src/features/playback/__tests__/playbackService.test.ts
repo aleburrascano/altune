@@ -17,14 +17,17 @@ import {
   QUEUE_UPDATE_FAILED_MESSAGE,
 } from '@features/playback/native/queueFailureReport';
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
-import { redactPlaybackErrorMessage } from '@features/playback/domain/redactPlaybackError';
+import { redactPlaybackErrorMessage } from '@features/playback/domain/playbackError';
 import {
   MAX_TRACKED_RECOVERIES,
   RECOVERY_ATTEMPTS_PER_TRACK,
   RECOVERY_COOLDOWN_BASE_MS,
 } from '@features/playback/native/recoveryBudget';
 import * as nativeTrackSwap from '@features/playback/native/nativeTrackSwap';
-import { playbackService, resetPlaybackForSignOut } from '@features/playback/native/service';
+import {
+  playbackService,
+  resetPlaybackForSignOut,
+} from '@features/playback/native/playbackService';
 
 import { previewTrack, libraryTrackWithId } from '@features/playback/__tests__/fixtures';
 

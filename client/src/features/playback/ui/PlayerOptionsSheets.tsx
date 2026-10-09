@@ -2,8 +2,8 @@ import { useRef, useState, type ReactElement } from 'react';
 
 import { ActionSheet, type ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 
-import { useSleepOptions } from '@features/playback/ui/SleepOptions';
-import { useSpeedOptions } from '@features/playback/ui/SpeedOptions';
+import { useSleepOptions } from '@features/playback/hooks/useSleepTimer';
+import { useSpeedOptions } from '@features/playback/hooks/usePlaybackRate';
 
 type OpenSheet = 'root' | 'speed' | 'sleep' | null;
 

@@ -7,8 +7,7 @@ import {
   withNativeQueue,
   type Fence,
 } from '@features/playback/native/nativeQueueLock';
-import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
-import { nativeTrackBuilder } from '@features/playback/native/nativeTrackBuilder';
+import { activeNativeTrackId, nativeTrackBuilder } from '@features/playback/native/nativeTrack';
 import {
   rebuildNativeTail,
   reorderUpcomingApplied,

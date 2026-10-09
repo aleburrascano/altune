@@ -23,7 +23,10 @@ import {
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
-import { playbackService, resetPlaybackForSignOut } from '@features/playback/native/service';
+import {
+  playbackService,
+  resetPlaybackForSignOut,
+} from '@features/playback/native/playbackService';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';

@@ -18,7 +18,7 @@ import {
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
 } from '@features/playback/domain/playbackHealth';
-import { resetPlaybackForSignOut } from '@features/playback/native/service';
+import { resetPlaybackForSignOut } from '@features/playback/native/playbackService';
 import '@features/playback/native/loadNativeTrack';
 import {
   NATIVE_QUEUE_OP_TIMEOUT_MS,

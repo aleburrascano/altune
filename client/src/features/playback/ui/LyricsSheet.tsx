@@ -10,7 +10,7 @@ import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { useLyrics } from '@features/playback/hooks/useLyrics';
-import { activeLineIndex, _lyricsView } from '@features/playback/domain/lyrics-sync';
+import { activeLineIndex, _lyricsView } from '@features/playback/domain/lyricsSync';
 import {
   SheetHeader,
   SheetHeaderCenter,

@@ -1,5 +1,5 @@
 const FLAG = '@features/playback/domain/playsThroughTrackPlayer';
-const SERVICE = '@features/playback/native/registerPlaybackService';
+const SERVICE = '@features/playback/native/playbackService';
 
 function run(flag: boolean) {
   const register = jest.fn();

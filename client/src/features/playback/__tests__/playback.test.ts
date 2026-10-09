@@ -24,7 +24,7 @@ describe('@features/playback public surface', () => {
   it('does not load the native playback service when required', () => {
     const factory = jest.fn(() => ({ registerPlaybackService: jest.fn() }));
     jest.isolateModules(() => {
-      jest.doMock('@features/playback/native/registerPlaybackService', factory);
+      jest.doMock('@features/playback/native/playbackService', factory);
       require('@features/playback');
     });
     expect(factory).not.toHaveBeenCalled();
