@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import type { SelectionAction } from '@features/library/selectionActions';
+import type { SelectionAction } from '@features/library/hooks/useTrackSelection';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 
 type SelectionBarProps = {

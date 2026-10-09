@@ -8,7 +8,7 @@ import type { PinnedEntry, UnpinBatchResult } from '@shared/offline/pinnedStore'
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { trackResponseFactory } from '@testing/factories';
 
-import { buildSelectionActions } from '../selectionActions';
+import { buildSelectionActions } from '@features/library/hooks/useTrackSelection';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return trackResponseFactory.build({

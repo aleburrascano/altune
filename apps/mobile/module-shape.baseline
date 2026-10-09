@@ -1,7 +1,5 @@
 M1 src/features/library missing index.ts
 M1 src/features/library/gridColumns.ts loose root file
-M1 src/features/library/selectionActions.ts loose root file
-M1 src/features/library/trackMenu.ts loose root file
 M1 src/features/settings missing index.ts
 M2 src/app/(tabs)/discover/featuring.tsx deep import @features/library/ui/FeaturingScreen
 M2 src/app/(tabs)/library/featuring.tsx deep import @features/library/ui/FeaturingScreen
@@ -15,7 +13,6 @@ N1 src/shared/lib generic name
 N1 src/shared/playback/constants.ts generic name
 N1 src/shared/playback/types.ts generic name
 N2 src/features/discover go-api module is discovery
-N3 src/features/library/trackMenu.ts only export is buildTrackMenuItems
 N3 src/features/library/ui/libraryRowSurface.ts only export is rowSurfaceStyle
 N3 src/features/library/ui/listContentStyles.ts only export is listContent
 N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
