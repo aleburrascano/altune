@@ -5,7 +5,7 @@ import { enqueueCritical } from '@shared/telemetry/outbox';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
-import type { SignInFailureReporter } from '@features/auth/ports/signInFailureReporter';
+import type { SignInFailureReason } from '@features/auth/domain/authError';
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
@@ -83,8 +83,8 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
   });
 });
 
-describe('reportSignInFailure: conformance to SignInFailureReporter', () => {
-  const reporter: SignInFailureReporter = reportSignInFailure;
+describe('reportSignInFailure: conformance to the reporter signature', () => {
+  const reporter: (reason: SignInFailureReason) => void = reportSignInFailure;
 
   it('posts exactly one request carrying the reason', () => {
     reporter('invalid_credentials');

@@ -1,10 +1,52 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
+import { Text } from '@shared/ui/primitives/Text';
 import { TextField } from '@shared/ui/primitives/TextField';
 
 import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/domain/validation';
-import { FieldError } from '@features/auth/ui/FieldError';
-import { NewPasswordField } from '@features/auth/ui/NewPasswordField';
+
+type FieldErrorProps = {
+  testID: string;
+  children: ReactNode;
+};
+
+export function FieldError({ testID, children }: FieldErrorProps): ReactElement {
+  return (
+    <Text testID={testID} variant="caption" tone="danger">
+      {children}
+    </Text>
+  );
+}
+
+type NewPasswordFieldProps = {
+  testID: string;
+  placeholder: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  error: boolean;
+};
+
+export function NewPasswordField({
+  testID,
+  placeholder,
+  value,
+  onChangeText,
+  error,
+}: NewPasswordFieldProps): ReactElement {
+  return (
+    <TextField
+      testID={testID}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      secure
+      autoCapitalize="none"
+      textContentType="newPassword"
+      autoComplete="new-password"
+      error={error}
+    />
+  );
+}
 
 type EmailPasswordFieldsProps = {
   email: string;

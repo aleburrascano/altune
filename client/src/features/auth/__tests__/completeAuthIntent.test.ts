@@ -3,7 +3,7 @@ import {
   _resetConsumedCredentialForTest,
 } from '@features/auth/domain/completeAuthIntent';
 import { type AuthLinkIntent, parseAuthLink } from '@features/auth/domain/parseAuthLink';
-import { clearRecoveryUnlock, isRecoveryUnlocked } from '@features/auth/domain/recoveryUnlock';
+import { clearRecoveryUnlock, isRecoveryUnlocked } from '@features/auth/domain/passwordRecovery';
 import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
 
 describe('the outcome it reports', () => {

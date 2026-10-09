@@ -7,7 +7,7 @@ import { act, renderRouter, screen } from 'expo-router/testing-library';
 
 import { AuthGate } from '../src/features/auth/ui/AuthGate';
 import { useAuthDeepLink } from '../src/features/auth/hooks/useAuthDeepLink';
-import { clearRecoveryUnlock } from '../src/features/auth/domain/recoveryUnlock';
+import { clearRecoveryUnlock } from '../src/features/auth/domain/passwordRecovery';
 import IndexScreen from '../src/app/index';
 import AuthCallbackRoute from '../src/app/auth/callback';
 import AuthConfirmRoute from '../src/app/auth/confirm';

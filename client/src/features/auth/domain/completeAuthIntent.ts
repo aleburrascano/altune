@@ -3,14 +3,16 @@ import type { Navigator } from '@shared/navigation';
 
 import { withAuthDeadline } from '@features/auth/domain/authDeadline';
 import {
+  type SupabaseAuthErrorLike,
   type SupabaseErrorDetail,
   supabaseErrorDetail,
   thrownErrorDetail,
-} from '@features/auth/domain/errorDetail';
+} from '@features/auth/domain/authError';
 import type { AuthLinkIntent, AuthLinkParams } from '@features/auth/domain/parseAuthLink';
-import { markRecoveryUnlocked } from '@features/auth/domain/recoveryUnlock';
-import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/auth/domain/resetPasswordRouteSegment';
-import type { SupabaseAuthErrorLike } from '@features/auth/domain/supabaseAuthError';
+import {
+  markRecoveryUnlocked,
+  RESET_PASSWORD_ROUTE_SEGMENT,
+} from '@features/auth/domain/passwordRecovery';
 
 type AuthClient = Pick<
   SupabaseClient['auth'],

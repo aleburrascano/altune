@@ -8,7 +8,7 @@ import { spacing } from '@shared/ui/theme';
 import { useEmailPasswordFields } from '@features/auth/hooks/useEmailPasswordFields';
 import { useSignIn } from '@features/auth/hooks/useSignIn';
 import { AuthForm } from '@features/auth/ui/AuthForm';
-import { EmailPasswordFields } from '@features/auth/ui/EmailPasswordFields';
+import { EmailPasswordFields } from '@features/auth/ui/AuthFields';
 
 const GENERIC_SIGN_IN_ERROR = "Couldn't sign you in. Please try again.";
 

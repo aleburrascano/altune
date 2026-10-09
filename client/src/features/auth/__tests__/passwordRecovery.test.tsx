@@ -13,7 +13,7 @@ import {
   markRecoveryUnlocked,
   RECOVERY_UNLOCK_WINDOW_MS,
   _listenerCountForTest,
-} from '@features/auth/domain/recoveryUnlock';
+} from '@features/auth/domain/passwordRecovery';
 import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
