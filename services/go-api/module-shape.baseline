@@ -86,8 +86,6 @@ G7 internal/acquisition/service/scheduler_shutdown.go:awaitDrainBudget slog.Warn
 G7 internal/acquisition/service/scheduler_shutdown.go:waitOutcomes slog.Warn without context
 G7 internal/acquisition/service/scheduler_shutdown.go:waitRunners slog.Warn without context
 G7 internal/acquisition/service/scheduler_status.go:pendingDepth slog.Error without context
-G7 internal/auth/adapters/providers/supabase_jwt.go:newSupabaseJWTVerifier slog.Warn without context
-G7 internal/auth/adapters/providers/supabase_jwt.go:onBackgroundRefreshError slog.Warn without context
 G7 internal/discovery/service/circuit_breaker.go:AllowRequest slog.Warn without context
 G7 internal/discovery/service/circuit_breaker.go:RecordFailure slog.Warn without context
 G7 internal/discovery/service/circuit_breaker.go:RecordSuccess slog.Info without context
