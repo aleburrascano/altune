@@ -41,7 +41,6 @@ N3 src/shared/events/acquisitionEvents.ts only export is ACQUISITION_HANDLERS
 N3 src/shared/events/playlistEvents.ts only export is PLAYLIST_HANDLERS
 N3 src/shared/events/resyncEvents.ts only export is RESYNC_HANDLERS
 N3 src/shared/id/uuid.ts only export is randomUuid
-N3 src/shared/lib/track-to-discovery.ts only export is trackToDiscoveryResult
 N3 src/shared/offline/offlineSupport.ts only export is offlineDownloadsSupported
 N3 src/shared/playback/playFromList.ts only export is buildPlayableQueue
 N3 src/shared/telemetry/native/uncaughtErrors.ts only export is chainUncaughtErrorHandler
