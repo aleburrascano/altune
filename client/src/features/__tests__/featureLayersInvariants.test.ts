@@ -7,7 +7,7 @@ const IMPORT_STATEMENT = /^\s*(import|export)\s+(type\s+)?([^;]*?\s+from\s+)?['"
 const FORBIDDEN_VALUE_SOURCE =
   /^(?!@shared\/ui\/(asyncView|displayFormat)$)(react|react-native|expo(-.*)?|lucide-react-native|@shared\/ui|.*\/(hooks|ui|adapters)(\/.*)?)$/;
 
-const DISCOVER_DOMAIN_FILE_COUNT = 9;
+const DISCOVER_DOMAIN_FILE_COUNT = 6;
 
 function domainFiles(featuresRoot: string = FEATURES_ROOT): { feature: string; file: string }[] {
   return readdirSync(featuresRoot, { withFileTypes: true })
@@ -46,7 +46,7 @@ describe('feature domain layers — pure rules import no framework, UI or outer 
     },
   );
 
-  it('covers all 9 discovery domain files', () => {
+  it('covers all 6 discovery domain files', () => {
     expect(files.filter(({ feature }) => feature === 'discovery')).toHaveLength(
       DISCOVER_DOMAIN_FILE_COUNT,
     );

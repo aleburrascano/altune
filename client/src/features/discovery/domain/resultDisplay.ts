@@ -1,7 +1,20 @@
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/api-client/featuredArtists';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
 
-import { kindLabel } from '@features/discovery/domain/kindLabel';
+const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
+  artist: ['Artist', 'Artists'],
+  album: ['Album', 'Albums'],
+  track: ['Track', 'Tracks'],
+};
+
+export function kindLabel(kind: DiscoveryKind, opts?: { plural?: boolean }): string {
+  return KIND_LABELS[kind][opts?.plural ? 1 : 0];
+}
+
+export function resultKey(result: DiscoveryResult, index: number): string {
+  const source = result.sources[0];
+  return `${result.kind}-${source?.provider ?? 'x'}-${source?.external_id || `${result.title}-${index}`}`;
+}
 
 export function resultSecondaryLine(result: DiscoveryResult): string {
   const kind = kindLabel(result.kind);

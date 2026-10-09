@@ -8,7 +8,7 @@ import {
   clampQueryWords,
   isSearchableQuery,
   sliceCodePoints,
-} from '@features/discovery/domain/searchLimits';
+} from '@features/discovery/domain/searchPaging';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;

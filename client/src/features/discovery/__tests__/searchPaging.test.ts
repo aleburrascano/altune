@@ -4,7 +4,7 @@ import {
   clampQueryWords,
   isSearchableQuery,
   sliceCodePoints,
-} from '@features/discovery/domain/searchLimits';
+} from '@features/discovery/domain/searchPaging';
 
 describe('isSearchableQuery', () => {
   it('rejects text whose trimmed length is below the minimum', () => {

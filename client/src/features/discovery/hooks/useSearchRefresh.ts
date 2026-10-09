@@ -1,7 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import type { SearchPages } from '@features/discovery/domain/searchPages';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+
+import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
+import type { SearchPageParam, SearchPages } from '@features/discovery/domain/searchPaging';
 
 type HeldSlate = { key: readonly unknown[]; pages: SearchPages | undefined };
 type RefetchResult = { isError: boolean };
@@ -69,4 +72,43 @@ export function useRefreshFromFirstPage(queryKey: readonly unknown[], refetch: R
     held: held?.key === queryKey ? held.pages : undefined,
     refreshFailed: failedKey === queryKey,
   };
+}
+
+function slateMismatch(
+  page: DiscoverySearchResponse,
+  pageParam: SearchPageParam | undefined,
+): boolean {
+  const sentId = pageParam?.searchId;
+  return sentId !== undefined && page.search_id !== sentId;
+}
+
+function firstSlateMismatch(source: SearchPages | undefined): number | undefined {
+  if (source === undefined) return undefined;
+  const index = source.pages.findIndex((page, i) => slateMismatch(page, source.pageParams[i]));
+  return index === -1 ? undefined : index;
+}
+
+function useStableGatedRestart(restart: () => unknown): () => void {
+  const isEnabled = useDiscoverFetchEnabled();
+  return useCallback(() => {
+    if (isEnabled) void restart();
+  }, [isEnabled, restart]);
+}
+
+function useRestartWhenExpired(expiredAt: number | undefined, restart: () => void): void {
+  useEffect(() => {
+    if (expiredAt !== undefined) restart();
+  }, [expiredAt, restart]);
+}
+
+export function useRestartOnExpiredSlate(
+  source: SearchPages | undefined,
+  restart: () => unknown,
+): DiscoverySearchResponse[] | undefined {
+  const expiredAt = firstSlateMismatch(source);
+  useRestartWhenExpired(expiredAt, useStableGatedRestart(restart));
+  return useMemo(
+    () => source?.pages.slice(0, expiredAt ?? source.pages.length),
+    [source, expiredAt],
+  );
 }

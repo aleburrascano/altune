@@ -3,13 +3,15 @@ import { StyleSheet, View } from 'react-native';
 import { AsyncSection, type AsyncSectionProps } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from '@features/discovery/ui/BlendedSection';
-import { DiscoverFullError, DiscoverUnavailable } from '@features/discovery/ui/DiscoverFullError';
-import { DiscoverSkeleton } from '@features/discovery/ui/DiscoverSkeleton';
-import { DiscoverZeroResults } from '@features/discovery/ui/DiscoverZeroResults';
+import {
+  DiscoverFullError,
+  DiscoverSkeleton,
+  DiscoverUnavailable,
+  DiscoverZeroResults,
+} from '@features/discovery/ui/DiscoverBodyStates';
 import { FilterChips } from '@features/discovery/ui/FilterChips';
 import { FilteredResults } from '@features/discovery/ui/FilteredResults';
-import { IncompleteResultsBanner } from '@features/discovery/ui/IncompleteResultsBanner';
-import { RefreshFailedNotice } from '@features/discovery/ui/RefreshFailedNotice';
+import { IncompleteResultsBanner, RefreshFailedNotice } from '@features/discovery/ui/ResultNotices';
 import { RecentSearches } from '@features/discovery/ui/RecentSearches';
 import {
   searchAnnouncement,

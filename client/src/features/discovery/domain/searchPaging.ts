@@ -1,3 +1,11 @@
+import type { InfiniteData } from '@tanstack/react-query';
+
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+
+export type SearchPageParam = { offset: number; searchId: string | undefined };
+
+export type SearchPages = InfiniteData<DiscoverySearchResponse, SearchPageParam>;
+
 export const SEARCH_PAGE_SIZE = 20;
 
 export const MIN_QUERY_LENGTH = 2;

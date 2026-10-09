@@ -15,7 +15,7 @@ import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
-} from '@features/discovery/domain/searchLimits';
+} from '@features/discovery/domain/searchPaging';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 

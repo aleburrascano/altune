@@ -13,11 +13,13 @@ import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { discoveryKeys } from '@shared/query/queryKeys';
 
-import { useAutocompleteSuggestions } from '@features/discovery/hooks/useAutocompleteSuggestions';
-import { useDiscoverClearSearchHistory } from '@features/discovery/hooks/useDiscoverClearSearchHistory';
+import { useAutocompleteSuggestions } from '@features/discovery/hooks/useSuggestions';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
-import { useSearchHistory } from '@features/discovery/hooks/useSearchHistory';
+import {
+  useDiscoverClearSearchHistory,
+  useSearchHistory,
+} from '@features/discovery/hooks/useSearchHistory';
 import { setSearchState } from '@features/discovery/domain/searchState';
 
 jest.mock('@shared/api-client/discovery', () => ({

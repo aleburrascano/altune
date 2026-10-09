@@ -4,20 +4,22 @@ import { useQueryClient } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
-import { isSearchableQuery } from '@features/discovery/domain/searchLimits';
+import { isSearchableQuery } from '@features/discovery/domain/searchPaging';
 import {
   SEARCH_DEBOUNCE_MS,
   useAutocompleteSuggestions,
-} from '@features/discovery/hooks/useAutocompleteSuggestions';
+  useSuggestionVisibility,
+} from '@features/discovery/hooks/useSuggestions';
 import {
   useImpressionLogger,
   type ImpressionHandlers,
 } from '@features/discovery/hooks/useImpressionLogger';
-import { useSearchHistory } from '@features/discovery/hooks/useSearchHistory';
+import {
+  useDiscoverClearSearchHistory,
+  useSearchHistory,
+} from '@features/discovery/hooks/useSearchHistory';
 import { useResultsFilter } from '@features/discovery/hooks/useResultsFilter';
-import { useDiscoverClearSearchHistory } from '@features/discovery/hooks/useDiscoverClearSearchHistory';
 import { useResultTap, type ResultTapHandler } from '@features/discovery/hooks/useResultTap';
-import { useSuggestionVisibility } from '@features/discovery/hooks/useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from '@features/discovery/hooks/useDegradedSearchTelemetry';
 import {
   correctionForResponse,

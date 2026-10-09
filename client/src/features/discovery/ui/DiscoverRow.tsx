@@ -10,7 +10,7 @@ import { FavoriteButton } from '@shared/favorites';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 
-import { resultSecondaryLine } from '@features/discovery/domain/resultSecondaryLine';
+import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';
 import { usePreviewPlayback } from '@features/discovery/hooks/usePreviewPlayback';
 
 type DiscoverRowProps = {
