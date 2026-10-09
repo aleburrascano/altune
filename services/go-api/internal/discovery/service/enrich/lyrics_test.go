@@ -1,41 +1,12 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
-
-type fakeLyricsProvider struct {
-	resolves   int
-	lookups    int
-	lastArtist string
-	lastTitle  string
-	resolveID  string
-	resolveErr error
-	lookupErr  error
-	lyrics     domain.DeezerLyrics
-}
-
-func (f *fakeLyricsProvider) ResolveTrackID(_ context.Context, artist, title string) (string, error) {
-	f.resolves++
-	f.lastArtist = artist
-	f.lastTitle = title
-	if f.resolveErr != nil {
-		return "", f.resolveErr
-	}
-	return f.resolveID, nil
-}
-
-func (f *fakeLyricsProvider) Lookup(_ context.Context, _ string) (domain.DeezerLyrics, error) {
-	f.lookups++
-	if f.lookupErr != nil {
-		return domain.EmptyDeezerLyrics(), f.lookupErr
-	}
-	return f.lyrics, nil
-}
 
 type memLyricsCache struct {
 	pos  map[string]domain.DeezerLyrics
@@ -47,18 +18,22 @@ type memLyricsCache struct {
 func newMemLyricsCache() *memLyricsCache {
 	return &memLyricsCache{pos: map[string]domain.DeezerLyrics{}, neg: map[string]bool{}}
 }
+
 func (c *memLyricsCache) Get(_ context.Context, k string) (domain.DeezerLyrics, bool, error) {
 	l, ok := c.pos[k]
 	return l, ok, nil
 }
+
 func (c *memLyricsCache) Set(_ context.Context, k string, l domain.DeezerLyrics) error {
 	c.sets++
 	c.pos[k] = l
 	return nil
 }
+
 func (c *memLyricsCache) GetNegative(_ context.Context, k string) (bool, error) {
 	return c.neg[k], nil
 }
+
 func (c *memLyricsCache) SetNegative(_ context.Context, k string) error {
 	c.negs++
 	c.neg[k] = true
@@ -74,36 +49,36 @@ func sampleLyrics() domain.DeezerLyrics {
 }
 
 func TestLyricsService_TranslatesNames(t *testing.T) {
-	provider := &fakeLyricsProvider{resolveID: "3135556", lyrics: sampleLyrics()}
+	provider := &discoverytest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
 	svc := NewLyricsService(provider, newMemLyricsCache())
 
 	_, err := svc.Execute(context.Background(), "Hello", "Adele")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if provider.lastArtist != "Adele" || provider.lastTitle != "Hello" {
-		t.Errorf("names: got artist=%q title=%q", provider.lastArtist, provider.lastTitle)
+	if provider.LastArtist != "Adele" || provider.LastTitle != "Hello" {
+		t.Errorf("names: got artist=%q title=%q", provider.LastArtist, provider.LastTitle)
 	}
 }
 
 func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
-	provider := &fakeLyricsProvider{resolveID: "3135556", lyrics: sampleLyrics()}
+	provider := &discoverytest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
 	cache := newMemLyricsCache()
 	svc := NewLyricsService(provider, cache)
 
 	_, _ = svc.Execute(context.Background(), "Hello", "Adele")
-	if provider.lookups != 1 || cache.sets != 1 {
-		t.Fatalf("setup: lookups=%d sets=%d", provider.lookups, cache.sets)
+	if provider.Lookups != 1 || cache.sets != 1 {
+		t.Fatalf("setup: lookups=%d sets=%d", provider.Lookups, cache.sets)
 	}
 	_, _ = svc.Execute(context.Background(), "Hello", "Adele")
-	if provider.resolves != 1 || provider.lookups != 1 {
+	if provider.Resolves != 1 || provider.Lookups != 1 {
 		t.Errorf("expected cache hit (no extra resolve/lookup), got resolves=%d lookups=%d",
-			provider.resolves, provider.lookups)
+			provider.Resolves, provider.Lookups)
 	}
 }
 
 func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
-	provider := &fakeLyricsProvider{resolveID: ""}
+	provider := &discoverytest.LyricsProvider{ResolvedID: ""}
 	cache := newMemLyricsCache()
 	svc := NewLyricsService(provider, cache)
 
@@ -117,13 +92,13 @@ func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 	if cache.negs != 1 {
 		t.Errorf("expected a negative cache write, got negs=%d", cache.negs)
 	}
-	if provider.lookups != 0 {
-		t.Errorf("an unresolved id should not be looked up, got lookups=%d", provider.lookups)
+	if provider.Lookups != 0 {
+		t.Errorf("an unresolved id should not be looked up, got lookups=%d", provider.Lookups)
 	}
 }
 
 func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
-	provider := &fakeLyricsProvider{resolveID: "1", lyrics: domain.EmptyDeezerLyrics()}
+	provider := &discoverytest.LyricsProvider{ResolvedID: "1", Lyrics: domain.EmptyDeezerLyrics()}
 	cache := newMemLyricsCache()
 	svc := NewLyricsService(provider, cache)
 
@@ -140,7 +115,7 @@ func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
 }
 
 func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
-	provider := &fakeLyricsProvider{resolveID: "1", lookupErr: errors.New("pipe 500")}
+	provider := &discoverytest.LyricsProvider{ResolvedID: "1", LookupErr: errors.New("pipe 500")}
 	cache := newMemLyricsCache()
 	svc := NewLyricsService(provider, cache)
 
