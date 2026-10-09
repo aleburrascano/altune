@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-
 import { countLabel } from '@shared/ui/displayFormat';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
@@ -9,28 +8,28 @@ import { Screen, useTheme } from '@shared/ui';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
-
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
-
 import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
 import { useLibraryIsEmpty } from '@features/library/hooks/useLibraryIsEmpty';
 import { useLibrarySearch } from '@features/library/hooks/useLibrarySearch';
 import { useLibraryTrackSelection } from '@features/library/hooks/useLibraryTrackSelection';
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
-import { librarySection } from '@features/library/domain/state';
-import { LibraryChips } from '@features/library/ui/LibraryChips';
-import { LibraryHeader } from '@features/library/ui/LibraryHeader';
-import { LibraryNoResults } from '@features/library/ui/LibraryNoResults';
 import {
+  librarySection,
+  type LibraryChip,
+  type SortKey,
+} from '@features/library/domain/libraryView';
+import { LibraryChips } from '@features/library/ui/LibraryChips';
+import {
+  LibraryHeader,
+  LibraryNoResults,
   LibraryEmptyScreen,
   LibraryErrorScreen,
   LibrarySkeletonScreen,
 } from '@features/library/ui/LibraryStateScreens';
 import { SortControl } from '@features/library/ui/SortControl';
 import { TrackSelectionOverlay } from '@features/library/ui/TrackSelectionOverlay';
-import type { LibraryChip } from '@features/library/domain/activeView';
-import { type SortKey } from '@features/library/domain/sort';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {

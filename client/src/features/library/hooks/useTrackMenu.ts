@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
@@ -7,14 +6,13 @@ import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-
 import {
   reportStorageFull,
   useLibraryOffline,
   type LibraryOffline,
 } from '@features/library/hooks/useLibraryOffline';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
-import { useReacquireTrack } from '@features/library/hooks/useReacquireTrack';
+import { useReacquireTrack } from '@features/library/hooks/useRetryAcquisition';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
 

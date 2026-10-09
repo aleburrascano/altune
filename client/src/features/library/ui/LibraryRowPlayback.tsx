@@ -1,16 +1,15 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-
 import { formatDuration } from '@shared/ui/displayFormat';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 import { Row, Text, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-
-import { LibraryRowMoreButton } from '@features/library/ui/LibraryRowMoreButton';
-import { LibraryRowPinnedIcon } from '@features/library/ui/LibraryRowPinnedIcon';
-import { rowSurfaceStyle } from '@features/library/ui/rowSurfaceStyle';
-
+import {
+  LibraryRowMoreButton,
+  LibraryRowPinnedIcon,
+} from '@features/library/ui/libraryRowAccessories';
+import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 export function LibraryRowPlayback({

@@ -1,13 +1,10 @@
 import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
-
 import { useDownloadPhase } from '@shared/acquisition/downloadStore';
 import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { Text } from '@shared/ui';
-
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
 import { acquisitionProgressLabel, albumSuffix } from '@features/library/ui/libraryRowLabels';
-
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 export function LibraryRowDetails({

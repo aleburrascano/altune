@@ -1,18 +1,18 @@
-import { type ComponentProps, type ReactElement } from 'react';
+import type { ComponentProps, ReactElement } from 'react';
 import { ActivityIndicator, FlatList, Modal, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { Text, spacing, useTheme, type Theme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
-
 import type { Selection } from '@features/library/hooks/useSelection';
-import { AddTracksHeader } from '@features/library/ui/AddTracksHeader';
-import { AlreadyAddedRow } from '@features/library/ui/AlreadyAddedRow';
-import { ConfirmButton } from '@features/library/ui/ConfirmButton';
+import {
+  AddTracksHeader,
+  AlreadyAddedRow,
+  ConfirmButton,
+  SelectAllButton,
+} from '@features/library/ui/AddTracksControls';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
-import { SelectAllButton } from '@features/library/ui/SelectAllButton';
 import {
   useAddableTracks,
   type AddableTracksState,

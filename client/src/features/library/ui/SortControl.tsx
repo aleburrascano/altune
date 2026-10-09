@@ -1,11 +1,9 @@
 import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
-
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
-
-import type { SortKey } from '@features/library/domain/sort';
+import type { SortKey } from '@features/library/domain/libraryView';
 
 type SortOption = { key: SortKey; label: string };
 

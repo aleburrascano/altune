@@ -1,10 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
-
-import type { ListRefresh } from '../domain/refresh';
-import { AlbumsGrid } from '../ui/AlbumsGrid';
-import { ArtistsGrid } from '../ui/ArtistsGrid';
-import { PlaylistsGrid } from '../ui/PlaylistsGrid';
+import type { ListRefresh } from '@features/library/domain/libraryView';
+import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
+import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };

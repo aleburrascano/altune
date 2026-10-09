@@ -1,6 +1,5 @@
 M1 src/features/settings missing index.ts
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-N3 src/features/library/domain/library-to-discovery.ts is not camelCase
 N3 src/features/playback/native/expoGoPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/native/trackPlayerPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/web/webPlaybackProvider.tsx is not PascalCase

@@ -7,14 +7,14 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-
 import { useWideWebLayout } from '@shared/ui';
-
-import { LibraryEmptyMessage } from '@features/library/ui/LibraryEmptyMessage';
-import { ListLoadingMoreFooter } from '@features/library/ui/ListLoadingMoreFooter';
-import { listContent } from '@features/library/ui/listContent';
+import {
+  LibraryEmptyMessage,
+  ListLoadingMoreFooter,
+  listContent,
+} from '@features/library/ui/libraryListParts';
 import { GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
-import type { ListPaging, ListRefresh } from '@features/library/domain/refresh';
+import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';
 
 type LibraryGridProps<TItem> = {
   testID: string;

@@ -1,11 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { useEffect, type ReactElement } from 'react';
-
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
-
 import {
   useTrackSelection,
   type TrackSelectionController,

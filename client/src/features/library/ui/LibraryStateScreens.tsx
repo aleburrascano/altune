@@ -1,10 +1,7 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-
 import { describeError } from '@shared/failure/describeError';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
-
-import { LibraryHeader } from '@features/library/ui/LibraryHeader';
 
 const SKELETON_TILES = [0, 1, 2, 3];
 
@@ -85,5 +82,50 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.md,
     paddingTop: spacing.xl,
+  },
+});
+
+interface LibraryNoResultsProps {
+  query: string;
+  onClear: () => void;
+}
+
+export function LibraryNoResults({ query, onClear }: LibraryNoResultsProps) {
+  return (
+    <View testID="library-no-results" style={noResultsStyles.center}>
+      <Text variant="title" style={noResultsStyles.title}>
+        No results for &ldquo;{query}&rdquo;
+      </Text>
+      <Text variant="label" tone="secondary" style={noResultsStyles.sub}>
+        Your library is still here — it&apos;s just filtered by your search.
+      </Text>
+      <Button
+        action="library.search.clear"
+        testID="library-clear-search"
+        label="Clear search"
+        onPress={onClear}
+      />
+    </View>
+  );
+}
+
+const noResultsStyles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
+  title: { textAlign: 'center' },
+  sub: { marginTop: spacing.xs, marginBottom: spacing.lg, textAlign: 'center' },
+});
+
+export function LibraryHeader(): ReactElement {
+  return (
+    <View style={headerStyles.header}>
+      <Text variant="displayL">Library</Text>
+    </View>
+  );
+}
+
+const headerStyles = StyleSheet.create({
+  header: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
 });

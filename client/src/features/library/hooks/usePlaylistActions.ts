@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
-
 import { useCreatePlaylist } from '@shared/playlists';
-
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
-
-import { pagedListControls } from '@features/library/domain/pagedListControls';
+import {
+  pagedListControls,
+  GROUP_PAGE_SIZE,
+  nextGroupPageOffset,
+} from '@features/library/domain/listPaging';
 import { useLoggedLibraryQueryFailure } from '@features/library/hooks/useLoggedLibraryQueryFailure';
-import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '@features/library/domain/groupPaging';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];

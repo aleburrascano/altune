@@ -1,15 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistPage } from '@shared/api-client/playlists';
 import type { ListPlaylistsResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
-
-import { GROUP_PAGE_SIZE } from '../domain/groupPaging';
-import { usePlaylistActions } from '../hooks/usePlaylistActions';
-import { usePlaylistsView } from '../hooks/usePlaylistsView';
-import { SortControl } from '../ui/SortControl';
+import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
+import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
+import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
+import { SortControl } from '@features/library/ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const PLAYLIST_COUNT = 20;
@@ -38,8 +36,8 @@ jest.mock('@shared/api-client/playlists', () => ({
   getPlaylists: (page?: PlaylistPage) => mockGetPlaylists(page),
 }));
 
-jest.mock('../domain/groupPaging', () => {
-  const actual = jest.requireActual('../domain/groupPaging');
+jest.mock('../domain/listPaging', () => {
+  const actual = jest.requireActual('../domain/listPaging');
   return {
     __esModule: true,
     get GROUP_PAGE_SIZE() {
@@ -47,6 +45,7 @@ jest.mock('../domain/groupPaging', () => {
     },
     nextGroupPageOffset: (pageLength: number, pageOffset: number) =>
       actual.nextGroupPageOffset(pageLength, pageOffset, mockGroupPageSize),
+    pagedListControls: actual.pagedListControls,
   };
 });
 

@@ -1,13 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-
 import { supabase } from '@shared/auth/supabaseClient';
 import { sessionFactory } from '@testing/factories';
-
-import { useLibraryAlbums } from '../hooks/useLibraryAlbums';
-import { useLibraryArtists } from '../hooks/useLibraryArtists';
-import { useLibraryTracks } from '../hooks/useLibraryTracks';
+import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
+import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

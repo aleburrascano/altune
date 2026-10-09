@@ -2,11 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
-
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
-
-import type { ActiveView } from '@features/library/domain/activeView';
+import type { ActiveView } from '@features/library/domain/libraryView';
 import { trackResponseFactory } from '@testing/factories';
 import { useSelection } from '../hooks/useSelection';
 import { useTracksView } from '../hooks/useTracksView';
