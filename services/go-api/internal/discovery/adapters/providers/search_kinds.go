@@ -48,3 +48,7 @@ func searchAcrossKinds(
 	}
 	return results, nil
 }
+
+func allSearchKinds() domain.ResultKindSet {
+	return domain.AllKinds()
+}

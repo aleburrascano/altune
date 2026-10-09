@@ -215,7 +215,7 @@ no key):
 
 Detail-open enrichment (caps 7–8), built 2026-06-22, mirroring the MB/Discogs/Last.fm enrichers:
 
-- `domain/deezer_enrichment.go` — the `DeezerEnrichment` value object (+ `Empty`/`IsZero`).
+- `domain/enrichment.go` — the `DeezerEnrichment` value object (+ `Empty`/`IsZero`).
 - `ports/ports.go` — `DeezerEnricher` (`ResolveID` + `Lookup`) + `DeezerEnrichmentCache`.
 - `adapters/providers/deezer_enrichment.go` — name-resolve via search, then `/track/{id}` (bpm round /
   gain / explicit) or `/album/{id}` (label / genres dedup / upc / record_type) lookup. Also bumped the
@@ -236,7 +236,7 @@ Detail-open enrichment (caps 7–8), built 2026-06-22, mirroring the MB/Discogs/
 
 Lyrics (cap 6), built 2026-06-22 — distinct from the public-API enrichment (the `pipe` GraphQL path):
 
-- `domain/deezer_lyrics.go` — the `DeezerLyrics` value object + `SyncedLyricLine` (+ `Empty`/`IsZero`).
+- `domain/enrichment.go` — the `DeezerLyrics` value object + `SyncedLyricLine` (+ `Empty`/`IsZero`).
 - `ports/ports.go` — `LyricsProvider` (`ResolveTrackID` + `Lookup`) + `LyricsCache`.
 - `adapters/providers/deezer_lyrics.go` — `DeezerLyricsAdapter`: delegates track-id resolution to the
   public-API `DeezerAdapter`, fetches lyrics via `pipe.deezer.com` `SynchronizedLyrics`, gated by the

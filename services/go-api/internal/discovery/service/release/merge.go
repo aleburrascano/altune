@@ -162,3 +162,31 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
+
+func NormalizeRecordType(m MergedRelease) domain.RecordType {
+	if m.Result.TrackCount == 1 {
+		return domain.RecordTypeSingle
+	}
+	switch domain.ParseRecordType(string(m.Result.RecordType)) {
+	case domain.RecordTypeSingle:
+		return domain.RecordTypeSingle
+	case domain.RecordTypeEP:
+		return domain.RecordTypeEP
+	default:
+		return domain.RecordTypeAlbum
+	}
+}
+
+func KeepRelease(m MergedRelease) bool {
+	return m.IDVerified
+}
+
+func FilterKept(releases []MergedRelease) []MergedRelease {
+	out := make([]MergedRelease, 0, len(releases))
+	for _, m := range releases {
+		if KeepRelease(m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}

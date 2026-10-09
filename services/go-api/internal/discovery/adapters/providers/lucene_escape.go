@@ -14,3 +14,7 @@ func mbLuceneEscape(s string) string {
 	}
 	return b.String()
 }
+
+func dslQuote(phrase string) string {
+	return `"` + phrase + `"`
+}

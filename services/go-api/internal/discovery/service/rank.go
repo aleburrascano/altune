@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"sort"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const rrfK = 60
@@ -220,4 +219,42 @@ func TailNoiseInTopK(results []domain.SearchResult, k int) int {
 		}
 	}
 	return n
+}
+
+func rankPipeline(perProvider [][]domain.SearchResult, queryNorm string) []domain.SearchResult {
+	return rankPipelineWith(perProvider, queryNorm, RankOptions{})
+}
+
+type RankOptions struct {
+	TailDemotion        bool
+	CrossKindProminence bool
+	Behavioral          map[string]float64
+}
+
+func (o RankOptions) config() rankConfig {
+	cfg := rankConfig{behavioral: o.Behavioral, prominence: o.CrossKindProminence}
+	if o.TailDemotion {
+		cfg.demote = isLowConfidenceTail
+	}
+	return cfg
+}
+
+func RankWith(entities []Entity, queryNorm string, opts RankOptions) []domain.SearchResult {
+	return rankWith(entities, queryNorm, opts.config())
+}
+
+func Reshape(ranked []domain.SearchResult) []domain.SearchResult {
+	return CollapseArtistDuplicates(EnforceDiversity(ranked))
+}
+
+func rankPipelineWith(
+	perProvider [][]domain.SearchResult,
+	queryNorm string,
+	opts RankOptions,
+) []domain.SearchResult {
+	return Reshape(RankWith(Merge(perProvider), queryNorm, opts))
+}
+
+func rankPipelineNoReshape(perProvider [][]domain.SearchResult, queryNorm string) []domain.SearchResult {
+	return Rank(Merge(perProvider), queryNorm)
 }

@@ -467,3 +467,14 @@ func (s *Service) InspectSearchWithStatuses(
 func (s *Service) WaitForBackground() {
 	s.bg.wait()
 }
+
+func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResult {
+	if offset >= len(ranked) {
+		return nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > len(ranked) {
+		end = len(ranked)
+	}
+	return ranked[offset:end]
+}
