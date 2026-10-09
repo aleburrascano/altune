@@ -226,8 +226,8 @@ func shapeLine(line string) bool {
 	return strings.HasPrefix(line, "G1 ") || strings.HasPrefix(line, "G2 ") || strings.HasPrefix(line, "G3 ")
 }
 
-func TestCollectLive(t *testing.T) {
-	got, err := collect("../..")
+func TestCollectFixtureTree(t *testing.T) {
+	got, err := collect("testdata/live")
 	if err != nil {
 		t.Fatal(err)
 	}
