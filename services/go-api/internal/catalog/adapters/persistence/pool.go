@@ -2,12 +2,12 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,7 +55,7 @@ func classifyDBError(err error) error {
 func isTransientDBError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return isTransientSQLState(pgErr.Code)
+		return database.IsTransientSQLState(pgErr.Code)
 	}
 	if errors.Is(err, context.Canceled) {
 		return false
@@ -72,21 +72,6 @@ func isTransientDBError(err error) bool {
 	}
 	var netErr net.Error
 	return errors.As(err, &netErr)
-}
-
-func isTransientSQLState(code string) bool {
-	if strings.HasPrefix(code, "08") || strings.HasPrefix(code, "53") {
-		return true
-	}
-	switch code {
-	case "57P01",
-		"57P02",
-		"57P03",
-		"40001",
-		"40P01":
-		return true
-	}
-	return false
 }
 
 func recordIfDBCallTimedOut(dbCtx context.Context) {

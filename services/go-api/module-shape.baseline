@@ -12,7 +12,7 @@ G2 internal/discovery/service/search.go:16 service imports golang.org/x/sync/sin
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:5 imports auth outside adapters/authbridge
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/cooldown_store.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/adapters/persistence/job_queue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/adapters/persistence/job_queue.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/ports/cooldown.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/ports/queue.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catalogbridge
@@ -20,13 +20,13 @@ G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/ca
 G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/eval/case.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/failure_reason.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/mem_job_queue.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/mem_job_queue.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/pipeline.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/reacquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/retry_admission.go:6 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/scheduler.go:5 imports catalog outside adapters/catalogbridge
+G3 internal/acquisition/service/scheduler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/scheduler_enqueue.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_store.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/step_store.go:6 imports catalog outside adapters/catalogbridge
@@ -43,4 +43,3 @@ G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
 G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler
-N1 internal/shared/events/types.go banned name types

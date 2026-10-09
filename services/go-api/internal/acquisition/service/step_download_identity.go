@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -74,7 +75,7 @@ func (s *DownloadStep) noteIdentifyFailure(
 }
 
 func identifyFailureEvent(err error, fallback string) string {
-	if errors.Is(err, ports.ErrIdentifyThrottled) {
+	if errors.Is(err, acqdomain.ErrIdentifyThrottled) {
 		return "acquisition.identify_throttled"
 	}
 	return fallback

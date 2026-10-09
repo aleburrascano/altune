@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"bytes"
@@ -30,7 +31,7 @@ func (s *fileWritingSearcher) Search(_ context.Context, _ string) ([]ports.Audio
 	return nil, nil
 }
 
-func (s *fileWritingSearcher) Name() ports.SourceName { return "filewriting" }
+func (s *fileWritingSearcher) Name() acqdomain.SourceName { return "filewriting" }
 
 func (s *fileWritingSearcher) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return nil, nil
@@ -381,7 +382,7 @@ func (f *sequenceFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ str
 
 func TestDownloadStep_EarlierUnavailableSurvivesADifferentLastFailure(t *testing.T) {
 	fetcher := &sequenceFetcher{errs: []error{
-		&ports.SourceUnavailableError{Source: "ytdlp", Err: errors.New("HTTP Error 429")},
+		&acqdomain.SourceUnavailableError{Source: "ytdlp", Err: errors.New("HTTP Error 429")},
 		errors.New("exit 1"),
 	}}
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "u1"}, {URL: "u2"}}}
@@ -1319,7 +1320,7 @@ func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(
 	ac := logTestDownloadContext()
 	ac.Track.Duration = 0
 	ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
-	throttled := fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled)
+	throttled := fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)
 
 	runDownloadForLog(context.Background(), t, ac,
 		WithDownloadIdentifier(&stubIdentifier{err: throttled}))
@@ -1336,7 +1337,7 @@ func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(
 func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing.T) {
 	logs := captureJSONLog(t)
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
-	identifier := &stubIdentifier{err: fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled)}
+	identifier := &stubIdentifier{err: fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)}
 	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
 	ac := previewContext()
 
@@ -1370,8 +1371,8 @@ func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T
 		t.Fatalf("Execute error: %v", err)
 	}
 	root := ac.TempDir
-	if !strings.HasPrefix(filepath.Base(root), tempDirPrefix) || filepath.Dir(root) != os.TempDir() {
-		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, tempDirPrefix)
+	if !strings.HasPrefix(filepath.Base(root), ports.TempDirPrefix) || filepath.Dir(root) != os.TempDir() {
+		t.Fatalf("TempDir = %q, want the %s* MkdirTemp root", root, ports.TempDirPrefix)
 	}
 
 	if err := step.Rollback(context.Background(), ac); err != nil {
@@ -1383,13 +1384,13 @@ func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T
 }
 
 type findOnlySource struct {
-	name       ports.SourceName
+	name       acqdomain.SourceName
 	candidates []ports.AudioCandidate
 	err        error
 	fetchErr   error
 }
 
-func (s findOnlySource) Name() ports.SourceName { return s.name }
+func (s findOnlySource) Name() acqdomain.SourceName { return s.name }
 
 func (s findOnlySource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
 	return s.candidates, s.err
@@ -1421,11 +1422,11 @@ func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.
 }
 
 func TestDownloadStep_SearchOutageWithAllSurvivorsRejected_IsRetryable(t *testing.T) {
-	down := findOnlySource{name: "down", err: &ports.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+	down := findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
 
 	ctx, err := searchThenDownloadRejectingAll(t, down)
 
-	if !ports.IsSourceUnavailable(err) || !willRetry(ctx, err) {
+	if !acqdomain.IsSourceUnavailable(err) || !willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
 	}
 }
@@ -1435,7 +1436,7 @@ func TestDownloadStep_HealthySourcesAllRejected_StaysPermanent(t *testing.T) {
 
 	ctx, err := searchThenDownloadRejectingAll(t, quiet)
 
-	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
+	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a permanent failure", err)
 	}
 }
@@ -1674,9 +1675,9 @@ func TestDownloadStep_SuccessfulProbeRecordsNoSkip(t *testing.T) {
 
 type scriptedSourceFetcher struct {
 	hangURL     string
-	unavailable ports.SourceName
+	unavailable acqdomain.SourceName
 	mu          sync.Mutex
-	calls       map[ports.SourceName]int
+	calls       map[acqdomain.SourceName]int
 }
 
 func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
@@ -1688,14 +1689,14 @@ func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidat
 		return "", ctx.Err()
 	}
 	if c.Source == f.unavailable {
-		return "", &ports.SourceUnavailableError{Source: c.Source, Err: errors.New("HTTP Error 429")}
+		return "", &acqdomain.SourceUnavailableError{Source: c.Source, Err: errors.New("HTTP Error 429")}
 	}
 	path := filepath.Join(outDir, "track.mp3")
 	return path, os.WriteFile(path, []byte("audio-bytes"), 0o644)
 }
 
 func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T) {
-	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[ports.SourceName]int{}}
+	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[acqdomain.SourceName]int{}}
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{
 		{URL: "u1", Source: "streamrip"},
 		{URL: "u2", Source: "ytdlp"},
@@ -1714,7 +1715,7 @@ func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T
 }
 
 func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
-	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[ports.SourceName]int{}}
+	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[acqdomain.SourceName]int{}}
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "u1", Source: "streamrip"}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1732,7 +1733,7 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 	for _, width := range []int{1, 2} {
 		t.Run(fmt.Sprintf("width%d", width), func(t *testing.T) {
-			fetcher := &scriptedSourceFetcher{unavailable: "ytdlp", calls: map[ports.SourceName]int{}}
+			fetcher := &scriptedSourceFetcher{unavailable: "ytdlp", calls: map[acqdomain.SourceName]int{}}
 			ranked := make([]ports.AudioCandidate, 8)
 			for i := range ranked {
 				ranked[i] = ports.AudioCandidate{URL: fmt.Sprintf("u%d", i), Source: "ytdlp"}
@@ -1829,8 +1830,8 @@ func TestDownloadStep_WorkspacePreviewDirCreatedAndRemovedAfterIdentify(t *testi
 		t.Fatalf("preview dirs = %v, want one", fetcher.previewDirs)
 	}
 	preview := fetcher.previewDirs[0]
-	if !strings.HasPrefix(filepath.Base(preview), tempDirPrefix+"preview-") {
-		t.Errorf("preview dir %q, want a %spreview-* dir", preview, tempDirPrefix)
+	if !strings.HasPrefix(filepath.Base(preview), ports.TempDirPrefix+"preview-") {
+		t.Errorf("preview dir %q, want a %spreview-* dir", preview, ports.TempDirPrefix)
 	}
 	if ws.removedCount(preview) != 1 {
 		t.Errorf("preview dir removed %d times, want 1", ws.removedCount(preview))

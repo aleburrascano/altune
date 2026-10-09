@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
@@ -157,7 +158,7 @@ var (
 )
 
 func outageSource() findOnlySource {
-	return findOnlySource{name: "down", err: &ports.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
 }
 
 func TestSelectStep_SearchOutageWithAllRejected_IsRetryable(t *testing.T) {
@@ -165,7 +166,7 @@ func TestSelectStep_SearchOutageWithAllRejected_IsRetryable(t *testing.T) {
 
 	ctx, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
 
-	if !ports.IsSourceUnavailable(err) || !willRetry(ctx, err) {
+	if !acqdomain.IsSourceUnavailable(err) || !willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
 	}
 }
@@ -175,7 +176,7 @@ func TestSelectStep_SearchOutageWithSkipTopRanked_IsSourceUnavailable(t *testing
 
 	_, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{SkipTopRanked: true})
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("err = %v, want source-unavailable", err)
 	}
 }
@@ -186,7 +187,7 @@ func TestSelectStep_PlainSourceErrorWithAllRejected_StaysPermanent(t *testing.T)
 
 	ctx, err := searchOutageThenSelect(t, down, healthy, ReplaceState{})
 
-	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
+	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a permanent failure", err)
 	}
 }
@@ -212,7 +213,7 @@ func TestSelectStep_OutageDoesNotLeakIntoNextAttempt(t *testing.T) {
 	ctx2 := withJobAttempt(context.Background(), 2)
 	_, err := searchOutageThenSelect(t, findOnlySource{name: "quiet"}, healthy, ReplaceState{})
 
-	if ports.IsSourceUnavailable(err) || willRetry(ctx2, err) {
+	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx2, err) {
 		t.Fatalf("err = %v, want a permanent failure on attempt 2", err)
 	}
 }

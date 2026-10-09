@@ -9,7 +9,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -205,64 +204,6 @@ func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 
 	if rec := serve(h, req); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("missing principal must still be a 401, got %d", rec.Code)
-	}
-}
-
-func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallOtherCallers(t *testing.T) {
-	for _, idleBuckets := range []int{1_000, 250_000} {
-		t.Run(strconv.Itoa(idleBuckets), func(t *testing.T) {
-			clock := newFakeClock()
-			limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
-			l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
-			for i := range idleBuckets {
-				l.allow(strconv.Itoa(i))
-			}
-			clock.advance(l.idleTTL())
-
-			l.allow("caller")
-
-			if len(l.active) != 1 {
-				t.Fatalf("rotation must start a fresh active map, got %d entries", len(l.active))
-			}
-			if len(l.cooling) != idleBuckets {
-				t.Fatalf("rotation must hand the old map over untouched, cooling has %d of %d buckets", len(l.cooling), idleBuckets)
-			}
-		})
-	}
-}
-
-func TestUserRateLimiter_EvictsRefilledBuckets(t *testing.T) {
-	clock := newFakeClock()
-	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
-	idleTTL := limit.Every * time.Duration(limit.Burst)
-	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
-
-	for range 1000 {
-		l.allow(uuid.NewString())
-	}
-	for range 2 {
-		clock.advance(idleTTL)
-		l.allow("fresh")
-	}
-
-	if got := len(l.active) + len(l.cooling); got != 1 {
-		t.Fatalf("idle refilled buckets must be reclaimed within two idle TTLs, %d remain", got)
-	}
-}
-
-func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
-	clock := newFakeClock()
-	limit := QueueStateRateLimit{Every: time.Minute, Burst: 1}
-	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
-
-	l.allow("other")
-	clock.advance(50 * time.Second)
-	l.allow("spender")
-	clock.advance(11 * time.Second)
-	l.allow("other")
-
-	if allowed, _ := l.allow("spender"); allowed {
-		t.Fatal("a bucket surviving a reclaim with only 11s of a 60s refill must still be throttled")
 	}
 }
 

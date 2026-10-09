@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -15,7 +16,7 @@ import (
 func TestMemJobQueue_ClaimOnEmptyQueueReturnsErrNoJobAvailable(t *testing.T) {
 	q := newMemJobQueue(nil)
 
-	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Fatalf("Claim on empty queue = %v, want ErrNoJobAvailable", err)
 	}
 }
@@ -38,7 +39,7 @@ func TestMemJobQueue_EnqueueThenClaimReturnsTheJobAndLeasesIt(t *testing.T) {
 		t.Errorf("Claim = %+v, want the enqueued track/user/kind", job)
 	}
 
-	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Fatalf("second Claim while leased = %v, want ErrNoJobAvailable", err)
 	}
 }
@@ -54,7 +55,7 @@ func TestMemJobQueue_HeartbeatWrongFenceReturnsErrLeaseLost(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Heartbeat(context.Background(), trackID, job.Fence+1, time.Minute); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := q.Heartbeat(context.Background(), trackID, job.Fence+1, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Fatalf("Heartbeat with a stale fence = %v, want ErrLeaseLost", err)
 	}
 	if err := q.Heartbeat(context.Background(), trackID, job.Fence, time.Minute); err != nil {
@@ -110,7 +111,7 @@ func TestMemJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := q.Enqueue(context.Background(), trackID, ports.JobKindReplace, 0); !errors.Is(err, ports.ErrJobKindConflict) {
+	if err := q.Enqueue(context.Background(), trackID, ports.JobKindReplace, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
 		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -150,7 +151,7 @@ func TestMemJobQueue_ClaimReclaimsAJobWhoseLeaseExpired(t *testing.T) {
 	}
 
 	clock = clock.Add(30 * time.Second)
-	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := q.Claim(context.Background(), time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Fatalf("Claim before expiry = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -193,7 +194,7 @@ func TestMemJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 	if job.Run != 1 || job.Attempts != 4 {
 		t.Errorf("Run/Attempts = %d/%d, want 1/4", job.Run, job.Attempts)
 	}
-	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
 	}
 }
@@ -215,7 +216,7 @@ func TestMemJobQueue_ReleaseWithADelayIsClaimableOnlyOnceTheQueueClockPassesIt(t
 	}
 
 	clock = clock.Add(9 * time.Second)
-	if _, err := q.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := q.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Fatalf("Claim before the delay elapsed = %v, want ErrNoJobAvailable", err)
 	}
 	clock = clock.Add(time.Second)
@@ -241,7 +242,7 @@ func TestMemJobQueue_SettleWithAnExpiredClaimsFenceKeepsAJobEnqueuedAfterTheLeas
 		t.Fatalf("Enqueue after lease expiry = %v", err)
 	}
 
-	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := q.Settle(ctx, trackID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Fatalf("Settle with the expired claim's fence = %v, want ErrLeaseLost", err)
 	}
 	if _, err := q.Claim(ctx, time.Minute); err != nil {

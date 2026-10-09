@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
@@ -32,7 +33,7 @@ func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSucces
 		*lastSuccess = s.now()
 		return true
 	}
-	if errors.Is(err, ports.ErrLeaseLost) {
+	if errors.Is(err, acqdomain.ErrLeaseLost) {
 		slog.WarnContext(s.baseCtx, "acquisition.lease_lost", "track_id", job.TrackID.String())
 		return false
 	}

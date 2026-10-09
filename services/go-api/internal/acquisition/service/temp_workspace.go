@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-const tempDirPrefix = ports.TempDirPrefix
-
 var defaultTempWorkspace ports.TempWorkspace
 
 const maxLiveTempAge = acquireTimeout + 15*time.Minute

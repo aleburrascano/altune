@@ -23,7 +23,7 @@ type StreamHandler struct {
 	writeIdleTimeout time.Duration
 	rateLimit        AudioRateLimit
 	now              func() time.Time
-	limiter          *audioRateLimiter
+	limiter          rateLimitMiddleware
 }
 
 func NewStreamHandler(svc *service.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
@@ -44,8 +44,8 @@ func withStreamClock(now func() time.Time) func(*StreamHandler) {
 }
 
 func (h *StreamHandler) Routes(r chi.Router) {
-	r.With(h.limiter.middleware).Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
-	r.With(h.limiter.middleware).Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
+	r.With(h.limiter).Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
+	r.With(h.limiter).Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
 }
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {

@@ -49,8 +49,8 @@ func (f *recordingTrackNumberFiller) FillTrackNumber(_ context.Context, _ shared
 
 func goldenOwned() goldenOwnershipReader {
 	return goldenOwnershipReader{owned: map[string]ports.OwnedTrack{
-		ports.OwnershipKey("Owned Song", "Artist"):  {TrackID: "track-1", AcquisitionStatus: "ready"},
-		ports.OwnershipKey("Placed Song", "Artist"): {TrackID: "track-2", AcquisitionStatus: "pending"},
+		discdomain.OwnershipKey("Owned Song", "Artist"):  {TrackID: "track-1", AcquisitionStatus: "ready"},
+		discdomain.OwnershipKey("Placed Song", "Artist"): {TrackID: "track-2", AcquisitionStatus: "pending"},
 	}}
 }
 

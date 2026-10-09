@@ -19,7 +19,7 @@ type AudioURLHandler struct {
 	prefetchEnabled bool
 	rateLimit       AudioRateLimit
 	now             func() time.Time
-	limiter         *audioRateLimiter
+	limiter         rateLimitMiddleware
 }
 
 func NewAudioURLHandler(svc *service.AudioURLService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
@@ -46,7 +46,7 @@ func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {
 }
 
 func (h *AudioURLHandler) Routes(r chi.Router) {
-	r.With(h.limiter.middleware).Post("/audio-urls", h.HandleResolve)
+	r.With(h.limiter).Post("/audio-urls", h.HandleResolve)
 }
 
 type resolveAudioURLsRequest struct {

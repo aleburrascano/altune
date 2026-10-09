@@ -2,10 +2,7 @@ package ports
 
 import (
 	"context"
-	"errors"
 )
-
-var ErrIdentifyThrottled = errors.New("acoustid: throttled")
 
 type LinkedRecording struct {
 	MBID     string

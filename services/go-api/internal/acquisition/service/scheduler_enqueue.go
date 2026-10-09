@@ -67,7 +67,7 @@ func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context,
 		s.pending.untrack(key)
 		s.corrIDs.Delete(key)
 	}
-	if errors.Is(err, ports.ErrJobKindConflict) {
+	if errors.Is(err, acqdomain.ErrJobKindConflict) {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.job_in_flight",
 			"track_id", trackId.String(), "requested_kind", string(kind))

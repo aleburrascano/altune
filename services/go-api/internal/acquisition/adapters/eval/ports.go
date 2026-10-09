@@ -1,6 +1,7 @@
 package eval
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
@@ -73,12 +74,12 @@ type evalSource struct {
 	shared *casePorts
 }
 
-func (s *evalSource) Name() ports.SourceName { return ports.SourceName(s.spec.Name) }
+func (s *evalSource) Name() acqdomain.SourceName { return acqdomain.SourceName(s.spec.Name) }
 
 func (s *evalSource) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	s.shared.clock.recordSearch(s.spec.searchSeconds())
 	if s.spec.Fails {
-		return nil, &ports.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
+		return nil, &acqdomain.SourceUnavailableError{Source: s.Name(), Err: errors.New("eval: simulated source failure")}
 	}
 	variants := queryVariantsFor(req)
 	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))

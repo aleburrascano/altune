@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
@@ -42,7 +43,7 @@ func TestResolveIdentity_ClusterLookupErrorLogEvent(t *testing.T) {
 	}{
 		{
 			name:      "throttled",
-			err:       fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled),
+			err:       fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled),
 			want:      "acquisition.identify_throttled",
 			notWanted: "acquisition.expected_cluster_failed",
 		},

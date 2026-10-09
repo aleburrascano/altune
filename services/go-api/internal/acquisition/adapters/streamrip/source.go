@@ -1,10 +1,12 @@
 package streamrip
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/ytdlp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -74,7 +76,7 @@ func (s *Source) Available() bool {
 
 func (s *Source) Binary() string { return s.bin }
 
-func (s *Source) Name() ports.SourceName { return "streamrip:" + ports.SourceName(s.service) }
+func (s *Source) Name() acqdomain.SourceName { return "streamrip:" + acqdomain.SourceName(s.service) }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	source, ok := req.Identity.SourceFor(s.service)
@@ -166,10 +168,10 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 }
 
 func (s *Source) classifiedFailure(err error, stderr string, timedOut bool) error {
-	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
+	if s.Available() && !timedOut && !ytdlp.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
-	return &ports.SourceUnavailableError{Source: s.Name(), Err: err}
+	return &acqdomain.SourceUnavailableError{Source: s.Name(), Err: err}
 }
 
 func diagnose(stderr string) string {

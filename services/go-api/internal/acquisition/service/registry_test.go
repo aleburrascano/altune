@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"context"
@@ -10,7 +11,7 @@ import (
 )
 
 type stubSource struct {
-	name       ports.SourceName
+	name       acqdomain.SourceName
 	found      []ports.AudioCandidate
 	findErr    error
 	panicValue any
@@ -19,7 +20,7 @@ type stubSource struct {
 	fetched    []ports.AudioCandidate
 }
 
-func (s *stubSource) Name() ports.SourceName { return s.name }
+func (s *stubSource) Name() acqdomain.SourceName { return s.name }
 
 func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	if s.panicValue != nil {
@@ -248,7 +249,7 @@ func TestSourceRegistry_FetchUnknownSource(t *testing.T) {
 func throttledSource() *stubSource {
 	return &stubSource{
 		name:    "ytdlp",
-		findErr: &ports.SourceUnavailableError{Source: "ytdlp", Err: errors.New("HTTP Error 429")},
+		findErr: &acqdomain.SourceUnavailableError{Source: "ytdlp", Err: errors.New("HTTP Error 429")},
 	}
 }
 
@@ -265,7 +266,7 @@ func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *test
 	reg := NewSourceRegistry(throttledSource(), &stubSource{name: "streamrip"})
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
-	if !ports.IsSourceUnavailable(err) || len(got) != 0 {
+	if !acqdomain.IsSourceUnavailable(err) || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and a source-unavailable error", got, err)
 	}
 	if code := searchFailureCode(t, reg); code != domain.FailureSourceUnavailable {

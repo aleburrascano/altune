@@ -1,6 +1,7 @@
 package chromaprint
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
@@ -195,7 +196,7 @@ func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values,
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, ports.ErrIdentifyThrottled)
+		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, acqdomain.ErrIdentifyThrottled)
 	}
 	return resp, nil
 }

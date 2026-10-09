@@ -1,7 +1,7 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/ports"
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
@@ -28,7 +28,7 @@ func TestFailureReason(t *testing.T) {
 		{"unknown step", &StepError{Step: "update_track", Err: errors.New("persist track update: boom")}, "acquisition_failed"},
 		{"download throttled on every candidate", &StepError{Step: "download", Err: fmt.Errorf(
 			"no candidate produced acceptable audio: %w",
-			&ports.SourceUnavailableError{Source: "ytdlp", Err: errors.New("yt-dlp download: exit status 1 (stderr: HTTP Error 429: Too Many Requests)")},
+			&acqdomain.SourceUnavailableError{Source: "ytdlp", Err: errors.New("yt-dlp download: exit status 1 (stderr: HTTP Error 429: Too Many Requests)")},
 		)}, "source_unavailable"},
 	}
 
@@ -86,7 +86,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 	}{
 		{
 			name: "every source throttled",
-			searchErr: &ports.SourceUnavailableError{
+			searchErr: &acqdomain.SourceUnavailableError{
 				Source: "ytdlp",
 				Err:    errors.New("yt-dlp search: exit status 1 (stderr: HTTP Error 429: Too Many Requests)"),
 			},

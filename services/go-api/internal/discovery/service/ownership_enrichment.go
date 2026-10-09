@@ -76,7 +76,7 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 	if item.Kind != domain.ResultKindTrack.String() || item.Extras == nil {
 		return
 	}
-	match, ok := owned[ports.OwnershipKey(item.Title, item.Artist)]
+	match, ok := owned[domain.OwnershipKey(item.Title, item.Artist)]
 	if !ok {
 		return
 	}

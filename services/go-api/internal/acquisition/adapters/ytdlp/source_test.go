@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
@@ -50,7 +51,7 @@ func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.
 		t.Fatalf("Find error: %v", err)
 	}
 
-	wantSearches := len(ports.SearchQueries(findRequest())) * len(searchEngines)
+	wantSearches := len(searchQueries(findRequest())) * len(searchEngines)
 	if len(specs) != wantSearches {
 		t.Fatalf("searches = %d %v, want all %d even though the first query's engines already return %d candidates",
 			len(specs), specs, wantSearches, ports.EnoughCandidates)
@@ -97,7 +98,7 @@ func TestSource_Find_RunsEveryQueryWhileCandidatesStayScarce(t *testing.T) {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	wantSearches := len(ports.SearchQueries(findRequest())) * len(searchEngines)
+	wantSearches := len(searchQueries(findRequest())) * len(searchEngines)
 	if len(specs) != wantSearches {
 		t.Fatalf("searches = %d %v, want all %d when no query is fruitful", len(specs), specs, wantSearches)
 	}
@@ -131,7 +132,7 @@ func TestSource_Find_MustHold9_ISRCQueryWithManyHitsStillRunsEveryOtherQueryVari
 		t.Fatalf("Find error: %v", err)
 	}
 
-	wantQueries := ports.SearchQueries(req)
+	wantQueries := searchQueries(req)
 	if len(wantQueries) < 4 {
 		t.Fatalf("findRequest fixture carries only %d query variants, want at least 4 to prove this", len(wantQueries))
 	}
@@ -210,7 +211,7 @@ func TestSource_Find_OrderIsDeterministicAndSurvivesOneFailingSearch(t *testing.
 
 func TestSource_Find_ThreeOfFourQueriesFailingStillMergesTheSurvivor(t *testing.T) {
 	req := findRequest()
-	survivorQuery := ports.SearchQueries(req)[len(ports.SearchQueries(req))-1]
+	survivorQuery := searchQueries(req)[len(searchQueries(req))-1]
 	src := NewSource(withRunner(concurrencySafeRunner(func(spec string) ([]ports.AudioCandidate, error) {
 		if strings.Contains(spec, survivorQuery) {
 			return candidatesPerSpec(spec, 1), nil
@@ -229,12 +230,12 @@ func TestSource_Find_ThreeOfFourQueriesFailingStillMergesTheSurvivor(t *testing.
 
 func TestSource_Find_EveryQueryUnavailableIsSourceUnavailable(t *testing.T) {
 	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, &ports.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
+		return nil, &acqdomain.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
 	}))
 
 	_, err := src.Find(context.Background(), findRequest())
 
-	if !ports.IsSourceUnavailable(err) {
+	if !acqdomain.IsSourceUnavailable(err) {
 		t.Fatalf("Find error = %v, want a source-unavailable error when every query and engine is unavailable", err)
 	}
 }

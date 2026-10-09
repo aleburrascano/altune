@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -93,7 +94,7 @@ type capturingSource struct {
 	fetched []string
 }
 
-func (c *capturingSource) Name() ports.SourceName { return "capturing" }
+func (c *capturingSource) Name() acqdomain.SourceName { return "capturing" }
 
 func (c *capturingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
 	offered := []string{

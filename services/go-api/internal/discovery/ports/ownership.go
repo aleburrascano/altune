@@ -2,7 +2,6 @@ package ports
 
 import (
 	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 )
 
@@ -16,10 +15,6 @@ type OwnedTrack struct {
 
 type TrackNumberFiller interface {
 	FillTrackNumber(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) error
-}
-
-func OwnershipKey(title, artist string) string {
-	return textnorm.NormalizeForMatch(title) + "|" + textnorm.NormalizeForMatch(artist)
 }
 
 type OwnershipReader interface {

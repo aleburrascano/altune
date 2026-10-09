@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"context"
@@ -191,7 +192,7 @@ func searchWithAllExcluded(t *testing.T, down findOnlySource) (context.Context, 
 func TestSearchStep_OutageWithAllExcluded_IsRetryable(t *testing.T) {
 	ctx, err := searchWithAllExcluded(t, outageSource())
 
-	if !ports.IsSourceUnavailable(err) || !willRetry(ctx, err) {
+	if !acqdomain.IsSourceUnavailable(err) || !willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
 	}
 }
@@ -199,7 +200,7 @@ func TestSearchStep_OutageWithAllExcluded_IsRetryable(t *testing.T) {
 func TestSearchStep_PlainSourceErrorWithAllExcluded_StaysPermanent(t *testing.T) {
 	ctx, err := searchWithAllExcluded(t, findOnlySource{name: "down", err: errors.New("exit 1")})
 
-	if ports.IsSourceUnavailable(err) || willRetry(ctx, err) {
+	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx, err) {
 		t.Fatalf("err = %v, want a permanent failure", err)
 	}
 }

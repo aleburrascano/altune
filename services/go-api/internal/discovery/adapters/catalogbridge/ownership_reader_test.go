@@ -2,7 +2,7 @@ package catalogbridge
 
 import (
 	catalogdomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -35,7 +35,7 @@ func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	match, ok := owned[ports.OwnershipKey("bohemian rhapsody (remastered)", "QUEEN")]
+	match, ok := owned[domain.OwnershipKey("bohemian rhapsody (remastered)", "QUEEN")]
 	if !ok {
 		t.Fatalf("expected a match for a differently-cased, bracket-suffixed title; got keys %v", owned)
 	}
@@ -52,7 +52,7 @@ func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
 
 	owned, _ := reader.OwnedByTitleArtist(context.Background(), testUser())
 
-	if got := owned[ports.OwnershipKey("Alive", "Pearl Jam")].TrackID; got != "first" {
+	if got := owned[domain.OwnershipKey("Alive", "Pearl Jam")].TrackID; got != "first" {
 		t.Errorf("TrackID = %q, want %q", got, "first")
 	}
 }
@@ -116,7 +116,7 @@ func TestOwnedByTitleArtist_OneRefMapsEveryField(t *testing.T) {
 	if len(owned) != 1 {
 		t.Fatalf("len(owned) = %d, want 1", len(owned))
 	}
-	got := owned[ports.OwnershipKey("Black", "Pearl Jam")]
+	got := owned[domain.OwnershipKey("Black", "Pearl Jam")]
 	if got.TrackID != "t-1" || got.Title != "Black" || got.Artist != "Pearl Jam" ||
 		got.AcquisitionStatus != "ready" || got.TrackNumber != &num {
 		t.Errorf("got %+v, want all fields of the ref unchanged", got)
@@ -136,7 +136,7 @@ func TestOwnedByTitleArtist_SameTitleArtistDifferentCaseKeepsFirst(t *testing.T)
 	if len(owned) != 1 {
 		t.Fatalf("len(owned) = %d, want 1", len(owned))
 	}
-	if got := owned[ports.OwnershipKey("alive", "pearl jam")].TrackID; got != "first" {
+	if got := owned[domain.OwnershipKey("alive", "pearl jam")].TrackID; got != "first" {
 		t.Errorf("TrackID = %q, want %q", got, "first")
 	}
 }
@@ -168,10 +168,10 @@ func TestOwnedByTitleArtist_SecondCallReturnsSecondMap(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if first[ports.OwnershipKey("One", "X")].TrackID != "a" || len(first) != 1 {
+	if first[domain.OwnershipKey("One", "X")].TrackID != "a" || len(first) != 1 {
 		t.Errorf("first = %v, want only a", first)
 	}
-	if len(second) != 1 || second[ports.OwnershipKey("Two", "Y")].TrackID != "b" {
+	if len(second) != 1 || second[domain.OwnershipKey("Two", "Y")].TrackID != "b" {
 		t.Errorf("second = %v, want only b", second)
 	}
 }
