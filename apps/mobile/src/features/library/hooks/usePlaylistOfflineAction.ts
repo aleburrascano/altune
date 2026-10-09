@@ -1,4 +1,4 @@
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
 import { reportPinBatch, reportUnpinBatch } from '@features/library/pinBatchSummary';

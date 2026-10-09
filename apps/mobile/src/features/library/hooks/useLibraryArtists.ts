@@ -1,5 +1,5 @@
 import type { LibrarySort } from '@shared/api-client/library';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 

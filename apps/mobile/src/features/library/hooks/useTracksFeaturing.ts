@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import type { FeaturedArtist } from '@shared/api-client/types';
-import { libraryKeys } from '@shared/lib/query-keys';
+import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 

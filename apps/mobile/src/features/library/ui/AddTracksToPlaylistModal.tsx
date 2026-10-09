@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Modal, StyleSheet, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { Text, spacing, useTheme, type Theme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 

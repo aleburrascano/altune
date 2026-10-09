@@ -3,9 +3,9 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
 import { ApiError } from '@shared/errors';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 import {
   captureTrackPlacements,
   removeTrackFromCaches,

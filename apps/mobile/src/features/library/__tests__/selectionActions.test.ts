@@ -3,9 +3,9 @@ import { Alert } from 'react-native';
 import { Download, XCircle } from 'lucide-react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import type { PinnedEntry, UnpinBatchResult } from '@shared/offline/pinnedStore';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { buildSelectionActions } from '../selectionActions';
 

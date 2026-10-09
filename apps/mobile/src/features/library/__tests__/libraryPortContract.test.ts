@@ -1,5 +1,5 @@
 import { asTrackId } from '@shared/api-client/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
 import { MAX_ALL_TRACKS } from '@shared/api-client/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 

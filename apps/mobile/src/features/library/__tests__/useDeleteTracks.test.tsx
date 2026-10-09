@@ -6,7 +6,7 @@ import { ApiError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { RETRY_TAIL } from '@shared/lib/describeError';
+import { RETRY_TAIL } from '@shared/failure/describeError';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCachePatch';
 import type * as ForgetTrackModule from '@shared/events/forgetTrack';
 import type { ReactNode } from 'react';

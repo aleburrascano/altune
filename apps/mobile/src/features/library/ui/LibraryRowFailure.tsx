@@ -6,7 +6,7 @@ import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry
 
 import { LibraryRowRetryAction } from '@features/library/ui/LibraryRowRetryAction';
 
-import type { FailedAcquisition, TrackFields } from '@shared/api-client/types';
+import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
 
 type FailedTrack = TrackFields & FailedAcquisition;
 

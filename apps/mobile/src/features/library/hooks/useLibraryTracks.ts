@@ -8,8 +8,8 @@ import {
 import { useEffect } from 'react';
 
 import type { LibrarySort } from '@shared/api-client/library';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
-import { libraryKeys } from '@shared/lib/query-keys';
+import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';

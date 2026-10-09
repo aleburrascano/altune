@@ -1,5 +1,5 @@
 import { ApiError, ContractError, NetworkError } from '@shared/errors';
-import { RETRY_TAIL } from '@shared/lib/describeError';
+import { RETRY_TAIL } from '@shared/failure/describeError';
 
 import { classifyLibraryError, failureTail, librarySection } from '../domain/state';
 

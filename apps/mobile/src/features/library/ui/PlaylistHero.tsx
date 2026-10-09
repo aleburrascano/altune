@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Play, Plus, Shuffle } from 'lucide-react-native';
 
-import { countLabel } from '@shared/lib/format';
+import { countLabel } from '@shared/ui/displayFormat';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { fontFamily } from '@shared/ui/theme/tokens';
 

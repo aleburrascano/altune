@@ -3,10 +3,9 @@ import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import type {
   FeaturedArtist,
   ListTracksResponse,
-  PlaylistDetailResponse,
-  PlaylistResponse,
   TrackResponse,
-} from '@shared/api-client/types';
+} from '@shared/api-client/trackResponse';
+import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { MAX_ALL_TRACKS } from '@shared/api-client/tracks';
 import { ApiError } from '@shared/errors';
 

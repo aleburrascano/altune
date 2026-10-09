@@ -1,6 +1,13 @@
 'use strict';
 
-const NETWORK_FREE_MODULES = ['ids', 'trackAcquisition', 'types', 'wireDecoders'];
+const NETWORK_FREE_MODULES = [
+  'featuredArtists',
+  'ids',
+  'trackAcquisition',
+  'trackToDiscoveryResult',
+  'types',
+  'wireDecoders',
+];
 
 const API_CLIENT_SOURCE_DOT_FOR_SLASH = `^(@shared|(\\.{1,2}.)+.*shared).api-client(.(?!(${NETWORK_FREE_MODULES.join('|')})$)[^.]+)?$`;
 
@@ -28,7 +35,7 @@ module.exports = {
           {
             selector: SELECTOR,
             message:
-              'Features reach the API through their own adapters, not a value import from shared/api-client (MC-8). Type imports and ids/trackAcquisition/types/wireDecoders are allowed.',
+              'Features reach the API through their own adapters, not a value import from shared/api-client (MC-8). Type imports and ids/trackAcquisition/types/wireDecoders/featuredArtists/trackToDiscoveryResult are allowed.',
           },
         ],
       },

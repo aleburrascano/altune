@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/types';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { darkTheme } from '@shared/ui';
 
 import { SidebarPlaylists } from '../ui/SidebarPlaylists';

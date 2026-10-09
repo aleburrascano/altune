@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';

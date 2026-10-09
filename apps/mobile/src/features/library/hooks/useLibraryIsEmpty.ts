@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 

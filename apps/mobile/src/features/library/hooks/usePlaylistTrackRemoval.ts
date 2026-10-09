@@ -1,6 +1,6 @@
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
-import { countLabel } from '@shared/lib/format';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { countLabel } from '@shared/ui/displayFormat';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { useRemoveTracksFromPlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';

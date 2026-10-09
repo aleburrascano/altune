@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 import type { Selection } from '@features/library/hooks/useSelection';
 

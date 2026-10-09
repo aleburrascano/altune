@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { NO_PLAYLIST_ID, parsePlaylistId, type PlaylistId } from '@shared/api-client/ids';
 import { Screen, Skeleton, spacing } from '@shared/ui';
-import type { PlaylistDetailResponse } from '@shared/api-client/types';
+import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 
 import { goBackOrToLibrary } from '@features/library/domain/goBackOrToLibrary';
 import { useLoggedPlaylistDetailFailure } from '@features/library/hooks/useLoggedPlaylistDetailFailure';

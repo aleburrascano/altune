@@ -8,7 +8,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowSurface';
 
-import type { TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 
 export function LibraryRowSelection({
   track,

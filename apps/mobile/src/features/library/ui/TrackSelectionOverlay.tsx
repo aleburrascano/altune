@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 
-import type { TrackResponse } from '@shared/api-client/types';
-import { countLabel } from '@shared/lib/format';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { countLabel } from '@shared/ui/displayFormat';
 import { AddToPlaylistSheet } from '@shared/playlists';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 
