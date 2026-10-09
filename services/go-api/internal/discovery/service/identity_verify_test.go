@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -30,9 +31,9 @@ func verifyAlbums(titles ...string) []domain.SearchResult {
 	return out
 }
 
-func albumProvider(fn func() ([]domain.SearchResult, error)) *fakeArtistContentProvider {
-	return &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+func albumProvider(fn func() ([]domain.SearchResult, error)) *discoverytest.ArtistContentProvider {
+	return &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return fn()
 		},
 	}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
@@ -123,7 +124,7 @@ func TestOwnershipGolden_Search(t *testing.T) {
 
 func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	albumSvc := service.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
-		discdomain.ProviderDeezer: &fakeAlbumContentProvider{results: goldenTracks()},
+		discdomain.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: goldenTracks()},
 	})
 	filler := &recordingTrackNumberFiller{done: make(chan struct{}), want: 1}
 	router := goldenRouter(DiscoveryServices{Album: albumSvc}, filler)
@@ -148,7 +149,7 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 
 func goldenArtistSvc() *service.GetArtistContentService {
 	return service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
-		discdomain.ProviderDeezer: &fakeArtistContentProvider{topTracks: goldenTracks(), albums: goldenTracks()},
+		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
 	})
 }
 

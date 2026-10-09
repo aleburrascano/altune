@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
@@ -13,20 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 )
-
-type fakeArtworkResolver struct {
-	url   string
-	calls int32
-}
-
-func (r *fakeArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
-	atomic.AddInt32(&r.calls, 1)
-	return r.url, "", nil
-}
-
-func (r *fakeArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
-	return "", "", nil
-}
 
 type fakeArtworkCache struct {
 	mu    sync.Mutex
@@ -48,7 +35,7 @@ func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _,
 }
 
 func TestService_EnrichesMissingArtwork(t *testing.T) {
-	resolver := &fakeArtworkResolver{url: "https://art/cover.jpg"}
+	resolver := &discoverytest.ArtworkResolver{URL: "https://art/cover.jpg"}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(resolver))
 
@@ -63,7 +50,7 @@ func TestService_EnrichesMissingArtwork(t *testing.T) {
 }
 
 func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
-	resolver := &fakeArtworkResolver{url: "https://art/new.jpg"}
+	resolver := &discoverytest.ArtworkResolver{URL: "https://art/new.jpg"}
 	withArt := deezerTrack("Humble", "Kendrick Lamar", 80)
 	withArt.ImageURL = "https://existing/art.jpg"
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{withArt}}
@@ -74,7 +61,7 @@ func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 	if out.Results[0].ImageURL != "https://existing/art.jpg" {
 		t.Errorf("artwork = %q, want the existing image kept", out.Results[0].ImageURL)
 	}
-	if n := atomic.LoadInt32(&resolver.calls); n != 0 {
+	if n := resolver.Calls(); n != 0 {
 		t.Errorf("resolver called %d times, want 0 (track already had art)", n)
 	}
 }
@@ -244,7 +231,7 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 }
 
 func TestService_ArtworkCacheShortCircuits(t *testing.T) {
-	resolver := &fakeArtworkResolver{url: "https://art/resolved.jpg"}
+	resolver := &discoverytest.ArtworkResolver{URL: "https://art/resolved.jpg"}
 	cache := &fakeArtworkCache{store: map[string]string{"Humble": "https://art/cached.jpg"}}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService(
@@ -259,7 +246,7 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	if out.Results[0].ImageURL != "https://art/cached.jpg" {
 		t.Errorf("artwork = %q, want the cached image", out.Results[0].ImageURL)
 	}
-	if n := atomic.LoadInt32(&resolver.calls); n != 0 {
+	if n := resolver.Calls(); n != 0 {
 		t.Errorf("resolver called %d times, want 0 (cache hit)", n)
 	}
 }
@@ -338,7 +325,7 @@ func assertDurableXrefApplied(t *testing.T, got []domain.SearchResult) {
 
 func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 	store := &batchingIdentityStore{}
-	f := newArtworkFiller(&fakeArtworkResolver{}, nil, store, nil)
+	f := newArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 
 	got := f.fill(context.Background(), fiftyArtlessResults())
 
@@ -356,7 +343,7 @@ func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 
 func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 	store := &batchingIdentityStore{}
-	f := newArtworkFiller(&fakeArtworkResolver{}, nil, store, nil)
+	f := newArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 	results := fiftyArtlessResults()[:3]
 	results[0].ImageURL = "https://provider/art.jpg"
 	results[1].Xref = map[domain.ProviderKey]string{"spotify": "s1"}
@@ -374,7 +361,7 @@ func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 
 func TestArtworkFiller_FallsBackToPerResultLookupWithoutBatch(t *testing.T) {
 	store := &countingIdentityStore{}
-	f := newArtworkFiller(&fakeArtworkResolver{}, nil, store, nil)
+	f := newArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 
 	got := f.fill(context.Background(), fiftyArtlessResults())
 
@@ -742,7 +729,7 @@ func TestArtworkPathFor(t *testing.T) {
 	}
 }
 
-type panickingArtworkResolver struct{ fakeArtworkResolver }
+type panickingArtworkResolver struct{ discoverytest.ArtworkResolver }
 
 func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
 	panic("artwork resolver exploded")

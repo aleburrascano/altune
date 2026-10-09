@@ -1,6 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,9 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 func withDate(d string) func(*domain.SearchResult) {
@@ -54,16 +54,16 @@ func v2Album(provider domain.ProviderName, id, title string, opts ...func(*domai
 }
 
 func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
-	deezer := &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{
 				v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded",
 					withDate("2026-04-01"), withCover("cover-dz"), withType("ep")),
 			}, nil
 		},
 	}
-	itunes := &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	itunes := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{
 				v2Album(domain.ProviderITunes, "i-fl", "Fully Loaded", withTracks(5)),
 			}, nil
@@ -111,8 +111,8 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 }
 
 func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
-	deezer := &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			if id != "399574001" {
 				t.Errorf("deezer queried id %q, want the seed 399574001", id)
 			}
@@ -138,15 +138,15 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 }
 
 func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
-	deezer := &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{
 				v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01")),
 			}, nil
 		},
 	}
-	itunes := &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	itunes := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{
 				v2Album(domain.ProviderITunes, "i-fl", "FULLY LOADED", withTracks(5)),
 			}, nil
@@ -180,13 +180,13 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	detailFanOutTimeout = 50 * time.Millisecond
 	defer func() { detailFanOutTimeout = old }()
 
-	fast := &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	fast := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
 	}
-	slow := &fakeArtistContentProvider{
-		getAlbumsFn: func(ctx context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	slow := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(ctx context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
 		},
@@ -213,17 +213,17 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	}
 }
 
-func failOnceThenEmptyProvider() *fakeArtistContentProvider {
+func failOnceThenEmptyProvider() *discoverytest.ArtistContentProvider {
 	var albumCalls, trackCalls int
-	return &fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	return &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			albumCalls++
 			if albumCalls == 1 {
 				return nil, errors.New("provider down")
 			}
 			return nil, nil
 		},
-		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			trackCalls++
 			if trackCalls == 1 {
 				return nil, errors.New("provider down")
@@ -233,7 +233,7 @@ func failOnceThenEmptyProvider() *fakeArtistContentProvider {
 	}
 }
 
-func fallbackPartialService(p *fakeArtistContentProvider) *GetArtistContentService {
+func fallbackPartialService(p *discoverytest.ArtistContentProvider) *GetArtistContentService {
 	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1"}}
 	return NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
@@ -262,11 +262,11 @@ func TestGetTopTracks_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing
 }
 
 func TestGetArtistContent_v2_fallbackNotPartialWhenNoProviderFailed(t *testing.T) {
-	svc := fallbackPartialService(&fakeArtistContentProvider{
-		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	svc := fallbackPartialService(&discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return nil, nil
 		},
-		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return nil, nil
 		},
 	})
@@ -287,16 +287,16 @@ func TestGetArtistContent_v2_fallbackNotPartialWhenNoProviderFailed(t *testing.T
 }
 
 func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
-	deezer := &fakeArtistContentProvider{
-		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{
 				trackFrom(domain.ProviderDeezer, "d-real", "Real Song", "Che"),
 				trackFrom(domain.ProviderDeezer, "d-solo", "Solo", "Che"),
 			}, nil
 		},
 	}
-	itunes := &fakeArtistContentProvider{
-		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+	itunes := &discoverytest.ArtistContentProvider{
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{trackFrom(domain.ProviderITunes, "i-real", "Real Song", "Che")}, nil
 		},
 	}
@@ -331,8 +331,8 @@ func (a stubMBAnchor) ReleaseGroupTitles(context.Context, string) ([]string, err
 }
 
 func anchoredAlbumsService(anchor stubMBAnchor, extra ...ArtistContentOption) *GetArtistContentService {
-	deezer := &fakeArtistContentProvider{
-		getAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
 	}
@@ -431,8 +431,8 @@ func (f funcMBAnchor) ReleaseGroupTitles(ctx context.Context, mbid string) ([]st
 }
 
 func anchoredAlbumsServiceWith(anchor ports.MBDiscographyAnchor, extra ...ArtistContentOption) *GetArtistContentService {
-	deezer := &fakeArtistContentProvider{
-		getAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},
 	}
@@ -556,8 +556,8 @@ func TestGetAlbums_v2_openBreakerAfterCallerLeftIsSilent(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	deezer := &fakeArtistContentProvider{
-		getAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	deezer := &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			cancel()
 			return []domain.SearchResult{v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 		},

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"bytes"
@@ -35,8 +36,8 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getTopTracksFn: func(_ context.Context, pn domain.ProviderName, extID string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, extID string) ([]domain.SearchResult, error) {
 						if pn != domain.ProviderDeezer {
 							t.Errorf("expected provider deezer, got %s", pn.String())
 						}
@@ -65,8 +66,8 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 			externalID:   "artist-err",
 			limit:        0,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return nil, errors.New("network error")
 					},
 				},
@@ -80,8 +81,8 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 			externalID:   "artist-42",
 			limit:        2,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return sampleTracks, nil
 					},
 				},
@@ -128,8 +129,8 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return []domain.SearchResult{
 							{Kind: domain.ResultKindAlbum, Title: "After Hours", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}}},
 							{Kind: domain.ResultKindAlbum, Title: "Starboy", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}}},
@@ -155,8 +156,8 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return []domain.SearchResult{
 							{
 								Kind:       domain.ResultKindAlbum,
@@ -189,8 +190,8 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return []domain.SearchResult{
 							{
 								Kind:       domain.ResultKindAlbum,
@@ -217,8 +218,8 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 			externalID:   "artist-err",
 			limit:        0,
 			providers: map[domain.ProviderName]ports.ArtistContentProvider{
-				domain.ProviderDeezer: &fakeArtistContentProvider{
-					getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+				domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+					GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return nil, errors.New("api failure")
 					},
 				},
@@ -258,8 +259,8 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 
 	t.Run("sorts newest-first and normalizes year from release_date", func(t *testing.T) {
 		providers := map[domain.ProviderName]ports.ArtistContentProvider{
-			domain.ProviderDeezer: &fakeArtistContentProvider{
-				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 					return []domain.SearchResult{
 						album("Older", "2016-09-09", "a1"),
 						album("Newest", "2022-01-07", "a3"),
@@ -293,8 +294,8 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 
 	t.Run("albums with no date sort to the end", func(t *testing.T) {
 		providers := map[domain.ProviderName]ports.ArtistContentProvider{
-			domain.ProviderDeezer: &fakeArtistContentProvider{
-				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 					return []domain.SearchResult{
 						album("NoDate", "", "a1"),
 						album("Dated", "2019-05-01", "a2"),
@@ -315,8 +316,8 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 
 	t.Run("limit keeps the newest after sorting", func(t *testing.T) {
 		providers := map[domain.ProviderName]ports.ArtistContentProvider{
-			domain.ProviderDeezer: &fakeArtistContentProvider{
-				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 					return []domain.SearchResult{
 						album("Old", "2010-01-01", "a1"),
 						album("New", "2024-01-01", "a2"),
@@ -470,14 +471,14 @@ func identityFanOutWithErr(errFor func(domain.ProviderName) error, opts ...Artis
 	xref := make(map[domain.ProviderKey]string, len(everyContentProvider))
 	for _, name := range everyContentProvider {
 		xref[name.Key()] = "id-" + name.String()
-		providers[name] = &fakeArtistContentProvider{
-			getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+		providers[name] = &discoverytest.ArtistContentProvider{
+			GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				if err := errFor(pn); err != nil {
 					return nil, err
 				}
 				return []domain.SearchResult{trackFrom(pn, id, "Real Song", "Che")}, nil
 			},
-			getAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			GetAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				if err := errFor(pn); err != nil {
 					return nil, err
 				}
@@ -564,13 +565,13 @@ func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
 }
 
 func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
-	answer := &fakeArtistContentProvider{
-		getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	answer := &discoverytest.ArtistContentProvider{
+		GetTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{trackFrom(pn, id, "Real Song", "Che")}, nil
 		},
 	}
-	unreachable := &fakeArtistContentProvider{
-		getTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	unreachable := &discoverytest.ArtistContentProvider{
+		GetTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			t.Error("provider without a stored ID was called")
 			return nil, upstreamDown
 		},
@@ -598,8 +599,8 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 
 func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
 	svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
-		domain.ProviderDeezer: &fakeArtistContentProvider{},
-		domain.ProviderITunes: &fakeArtistContentProvider{},
+		domain.ProviderDeezer: &discoverytest.ArtistContentProvider{},
+		domain.ProviderITunes: &discoverytest.ArtistContentProvider{},
 	})
 	identity := ResolvedArtistIdentity{ProviderIDs: map[domain.ProviderName]string{
 		domain.ProviderDeezer: "dz",
@@ -647,8 +648,8 @@ func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
 
 	t.Run("single provider albums", func(t *testing.T) {
 		svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
-			domain.ProviderDeezer: &fakeArtistContentProvider{
-				getAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			domain.ProviderDeezer: &discoverytest.ArtistContentProvider{
+				GetAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 					return []domain.SearchResult{v2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, truncated
 				},
 			},

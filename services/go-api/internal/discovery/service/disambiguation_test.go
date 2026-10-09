@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"context"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestFillArtwork_FillsArtworkWithoutReordering(t *testing.T) {
-	resolver := &fakeArtworkResolver{url: "art://cover.jpg"}
+	resolver := &discoverytest.ArtworkResolver{URL: "art://cover.jpg"}
 	s := NewService(nil, NewCircuitBreaker(), WithArtworkResolver(resolver))
 	in := []domain.SearchResult{
 		deezerTrack("Alpha", "A", 30),
