@@ -9,6 +9,11 @@ RuleTester.itOnly = it.only;
 
 const ruleTester = new RuleTester({ languageOptions: { parser: tsParser } });
 
+const jsx = {
+  filename: 'view.tsx',
+  languageOptions: { parser: tsParser, parserOptions: { ecmaFeatures: { jsx: true } } },
+};
+
 const flagged = (word) => [{ messageId: 'bannedNoun', data: { word } }];
 
 ruleTester.run('no-banned-noun', rule, {
@@ -21,6 +26,7 @@ ruleTester.run('no-banned-noun', rule, {
     { code: 'const SONGBOOK_URL = base;' },
     { code: 'const isong = 1;' },
     { code: 'const songbird = "decoy";' },
+    { code: 'const x = <b>Songwriter</b>;', ...jsx },
   ],
   invalid: [
     { code: 'const song = current;', errors: flagged('song') },
@@ -36,5 +42,7 @@ ruleTester.run('no-banned-noun', rule, {
     { code: 'const view = current.songList;', errors: flagged('song') },
     { code: 'type SongTitle = string;', errors: flagged('Song') },
     { code: 'const label = "legacy songs table import";', errors: flagged('songs') },
+    { code: 'const x = <b>Song</b>;', ...jsx, errors: flagged('Song') },
+    { code: 'const x = <p>Play all songs</p>;', ...jsx, errors: flagged('songs') },
   ],
 });

@@ -30,6 +30,9 @@ module.exports = {
       Literal(node) {
         check(node, node.value);
       },
+      JSXText(node) {
+        check(node, node.value);
+      },
       TemplateElement(node) {
         check(node, node.value.cooked ?? node.value.raw);
       },
