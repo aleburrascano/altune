@@ -37,9 +37,9 @@ import { asString, asTrackIdOrNull, type ServerEventHandlers } from '@shared/eve
 import {
   getTrackFromCaches,
   invalidateLibraryDerived,
-  scheduleTrackPatch,
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
+import { scheduleTrackPatch } from '@shared/events/trackPatchBatch';
 import type { ServerEvent } from '@shared/events/sse-client';
 
 type AcquisitionEventType =
