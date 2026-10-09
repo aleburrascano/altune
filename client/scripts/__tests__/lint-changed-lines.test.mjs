@@ -18,6 +18,10 @@ function git(cwd, ...args) {
 
 function write(root, files) {
   for (const [path, body] of Object.entries(files)) {
+    if (body === null) {
+      rmSync(join(root, path));
+      continue;
+    }
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), body);
   }
@@ -295,6 +299,47 @@ describe('lint-changed-lines follows a moved app folder', { concurrency: true },
   test('fails a violation added to a moved file', async (t) => {
     const { app, base } = movedAppRepo(t, 'export const big = items.length * 91;\n');
     const r = await lint(app, base);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /no-magic-numbers/);
+  });
+});
+
+const OTHER = 'export const first = 1;\nexport const second = 2;\nexport const third = 3;\n';
+
+describe('lint-changed-lines skips code moved between files', { concurrency: true }, () => {
+  test('passes old violations moved from one file into another', async (t) => {
+    const { root, base } = mobileRepo(
+      t,
+      { ...DEP, 'src/scaled.ts': HOUSE_VIOLATIONS, 'src/other.ts': OTHER },
+      {
+        'src/scaled.ts': 'export const kept = 1;\n',
+        'src/other.ts': `${OTHER}${HOUSE_VIOLATIONS}`,
+      },
+    );
+    const r = await lint(root, base);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('passes old violations moved out of a deleted file', async (t) => {
+    const { root, base } = mobileRepo(
+      t,
+      { ...DEP, 'src/scaled.ts': HOUSE_VIOLATIONS, 'src/other.ts': OTHER },
+      { 'src/scaled.ts': null, 'src/other.ts': `${OTHER}${HOUSE_VIOLATIONS}` },
+    );
+    const r = await lint(root, base);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  });
+
+  test('fails a violation added beside moved code', async (t) => {
+    const { root, base } = mobileRepo(
+      t,
+      { ...DEP, 'src/scaled.ts': HOUSE_VIOLATIONS, 'src/other.ts': OTHER },
+      {
+        'src/scaled.ts': 'export const kept = 1;\n',
+        'src/other.ts': `${OTHER}${HOUSE_VIOLATIONS}export const big = a * 91;\n`,
+      },
+    );
+    const r = await lint(root, base);
     assert.equal(r.status, 1, r.stdout + r.stderr);
     assert.match(r.stdout, /no-magic-numbers/);
   });

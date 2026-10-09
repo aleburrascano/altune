@@ -47,14 +47,27 @@ const changedFiles = (pathspec) =>
 const FILE_HEADER = /^diff --git a\/.* b\/(.*)$/gm;
 const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 
-const hunksOf = (block) => {
+const removedText = (patch) =>
+  new Set(
+    patch
+      .split('\n')
+      .filter((line) => line.startsWith('-') && !line.startsWith('---'))
+      .map((line) => line.slice(1).trim())
+      .filter(Boolean),
+  );
+
+const addedLinesOf = (block, moved) => {
   const added = new Set();
+  let next = null;
   for (const line of block.split('\n')) {
     const m = HUNK.exec(line);
-    if (!m) continue;
-    const start = Number(m[1]);
-    const count = m[2] === undefined ? 1 : Number(m[2]);
-    for (let n = start; n < start + count; n += 1) added.add(n);
+    if (m) {
+      next = Number(m[1]);
+      continue;
+    }
+    if (next === null || !line.startsWith('+')) continue;
+    if (!moved.has(line.slice(1).trim())) added.add(next);
+    next += 1;
   }
   return added;
 };
@@ -71,12 +84,13 @@ const addedLinesByFile = (pathspec) => {
     ':/',
   ]);
   const headers = [...patch.matchAll(FILE_HEADER)];
+  const moved = removedText(git(['diff', '--text', ...DIFF_DETECT_FLAGS, '-U0', base, '--', ':/']));
   const byFile = new Map();
   headers.forEach((header, i) => {
     const file = header[1];
     if (!underPathspec(pathspec)(file)) return;
     const block = patch.slice(header.index, headers[i + 1]?.index ?? patch.length);
-    byFile.set(file.slice(prefix.length), hunksOf(block));
+    byFile.set(file.slice(prefix.length), addedLinesOf(block, moved));
   });
   return byFile;
 };
