@@ -9,7 +9,7 @@ import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch
 import { onSignOut } from '@shared/session/signOutCleanup';
 import { applyServerEvent } from '@shared/events/applyServerEvent';
 import { SSEClient } from '@shared/events/sse-client';
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 
 async function getAccessToken(): Promise<string | null> {
   try {

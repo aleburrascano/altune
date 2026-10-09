@@ -9,7 +9,7 @@ import {
 } from '@shared/events/eventTypes';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
 import { RESYNC_HANDLERS } from '@shared/events/resyncEvents';
-import type { ServerEvent } from '@shared/events/sse-client';
+import type { ServerEvent } from '@shared/events/sseFrames';
 
 const HANDLERS: ServerEventHandlers<ServerEventType> = {
   ...RESYNC_HANDLERS,
