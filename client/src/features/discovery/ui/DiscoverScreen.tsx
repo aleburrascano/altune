@@ -9,7 +9,7 @@ import { registerSearchFocus } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
 import { SuggestionsList } from '@features/discovery/ui/SuggestionsList';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
-import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchLimits';
+import { MAX_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();

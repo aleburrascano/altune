@@ -9,14 +9,17 @@ import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
 } from '@features/discovery/hooks/useDiscoverFetchGate';
-import { useRefreshFromFirstPage } from '@features/discovery/hooks/useRefreshFromFirstPage';
-import { useRestartOnExpiredSlate } from '@features/discovery/hooks/useRestartOnExpiredSlate';
+import {
+  useRefreshFromFirstPage,
+  useRestartOnExpiredSlate,
+} from '@features/discovery/hooks/useSearchRefresh';
 import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
-} from '@features/discovery/domain/searchLimits';
-import type { SearchPageParam, SearchPages } from '@features/discovery/domain/searchPages';
+  type SearchPageParam,
+  type SearchPages,
+} from '@features/discovery/domain/searchPaging';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
 

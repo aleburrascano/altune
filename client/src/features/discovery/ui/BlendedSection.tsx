@@ -1,19 +1,72 @@
 import type { ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 
-import { spacing, useWideWebLayout } from '@shared/ui';
+import { Text, pressedStyle, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 
 import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 import { SectionLabel } from '@features/discovery/ui/SectionLabel';
 import { SectionGrid, useGridColumns } from '@features/discovery/ui/SectionGrid';
-import { SeeAllLink } from '@features/discovery/ui/SeeAllLink';
 import { TopResultCard } from '@features/discovery/ui/TopResultCard';
-import { kindLabel } from '@features/discovery/domain/kindLabel';
-import { resultKey } from '@features/discovery/domain/resultKey';
+import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
+
+type SeeAllLinkProps = {
+  kind: DiscoveryKind;
+  title: string;
+  onSeeAll: (kind: DiscoveryKind) => void;
+};
+
+type PressState = { pressed: boolean };
+
+function seeAllPressableProps({ kind, title, onSeeAll }: SeeAllLinkProps) {
+  return {
+    testID: `discover-see-all-${kind}`,
+    onPress: () => onSeeAll(kind),
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: `See all ${title.toLowerCase()}`,
+    hitSlop: 8,
+    style: ({ pressed }: PressState) => [seeAllStyles.seeAll, pressedStyle(pressed)],
+  };
+}
+
+function SeeAllChevron(): ReactElement {
+  const theme = useTheme();
+  return <ChevronRight size={16} color={theme.color.accent} />;
+}
+
+function SeeAllLabel({ title }: { title: string }): ReactElement {
+  return (
+    <>
+      <Text variant="label" tone="accent">
+        See all {title.toLowerCase()}
+      </Text>
+      <SeeAllChevron />
+    </>
+  );
+}
+
+function SeeAllLink(props: SeeAllLinkProps): ReactElement {
+  return (
+    <Pressable {...seeAllPressableProps(props)}>
+      <SeeAllLabel title={props.title} />
+    </Pressable>
+  );
+}
+
+const seeAllStyles = StyleSheet.create({
+  seeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    alignSelf: 'flex-start',
+    minHeight: 44,
+  },
+});
 
 function isGridKind(kind: DiscoveryKind): boolean {
   return kind === 'album' || kind === 'artist';

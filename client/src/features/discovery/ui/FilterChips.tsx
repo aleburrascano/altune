@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Chip, spacing } from '@shared/ui';
 
-import { kindLabel } from '@features/discovery/domain/kindLabel';
+import { kindLabel } from '@features/discovery/domain/resultDisplay';
 import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
 
 const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
