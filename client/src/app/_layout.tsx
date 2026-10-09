@@ -14,7 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { appMutationCache, appQueryCache } from '@shared/query/useAppMutation';
 import { transientRetryOptions } from '@shared/query/retryDelay';
-import { StagingBanner } from '@shared/staging/ui/StagingBanner';
+import { StagingBanner } from '@/chrome/StagingBanner';
 import { AuthGate, TestAuthBridge, useAuthDeepLink } from '@features/auth';
 import { useServerEvents } from '@shared/events/useServerEvents';
 import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
@@ -25,8 +25,8 @@ import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '@shared/ui/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
-import { AppChrome } from '@/app-shell/AppChrome';
-import { PlaybackShortcuts, SystemNavigationBar } from '@/app-shell/platformExtras';
+import { AppChrome } from '@/chrome/AppChrome';
+import { PlaybackShortcuts, SystemNavigationBar } from '@/chrome/platformExtras';
 
 startPlaybackService();
 

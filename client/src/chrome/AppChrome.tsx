@@ -3,7 +3,7 @@ import { useRouter, useSegments, usePathname } from 'expo-router';
 
 import { TAB_ROUTES, type TabRoute } from '@shared/ui/navigation/tabRoutes';
 
-import { WideChrome } from '@/app-shell/wideChrome';
+import { WideChrome } from '@/chrome/wideChrome';
 
 function activeTabRouteFor(pathname: string): TabRoute {
   const match = TAB_ROUTES.find((route) => pathname.startsWith(`/${route}`));

@@ -4,7 +4,7 @@ import type { ComponentType, ReactNode } from 'react';
 
 import { ThemeProvider } from '@shared/ui/theme';
 
-import { StagingBanner } from '@shared/staging/ui/StagingBanner';
+import { StagingBanner } from '@/chrome/StagingBanner';
 
 jest.mock('@features/auth/ui/AuthGate', () => ({
   AuthGate: () => {
