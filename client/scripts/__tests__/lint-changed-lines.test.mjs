@@ -8,7 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'lint-changed-lines.mjs');
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const MOBILE_LINT_SETUP = ['eslint.config.js', 'eslint-rules/no-comments.js', 'tsconfig.json'];
+const MOBILE_LINT_SETUP = [
+  'eslint.config.js',
+  'eslint-rules/no-comments.js',
+  'eslint-rules/no-banned-noun.js',
+  'tsconfig.json',
+];
 
 function git(cwd, ...args) {
   const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
