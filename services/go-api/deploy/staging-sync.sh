@@ -2,7 +2,7 @@
 
 
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 
 PROD_ENV="${PROD_ENV_FILE:-.env.production}"
 STAGING_ENV="${STAGING_ENV_FILE:-.env.staging}"

@@ -2,7 +2,7 @@
 
 
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 
 ENV_FILE="${OVERSEER_ENV_FILE:-.env.production}"
 REQUIRED_VARS="OVERSEER_OWNER_USER_ID OVERSEER_SUPABASE_URL OVERSEER_SUPABASE_ANON_KEY"

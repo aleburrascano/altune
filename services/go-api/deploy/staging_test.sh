@@ -16,7 +16,7 @@ setup_case() {
     local stub_tag_fails=${STUB_TAG_FAILS:-no} stub_signal=${STUB_SIGNAL_DURING_DRILL:-}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/migrations"
-    cp "$HERE/lib.sh" "$HERE/staging.sh" "$HERE/compose.staging.yml" "$WORK/api/deploy/"
+    cp "$HERE/prod_host.sh" "$HERE/staging.sh" "$HERE/compose.staging.yml" "$WORK/api/deploy/"
     : >"$WORK/api/migrations/001_baseline.sql"
     : >"$WORK/api/migrations/002_indexes.sql"
     : >"$WORK/api/migrations/016_constraint.sql"

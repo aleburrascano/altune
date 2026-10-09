@@ -12,7 +12,7 @@ setup_case() {
     local prod_env=${PROD_ENV-PUBLIC_HEALTH_URL=https://prod.example.test/health}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"
-    cp "$HERE/lib.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
+    cp "$HERE/prod_host.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
     cp "$HERE/compose.prod.yml" "$HERE/Caddyfile" "$WORK/api/deploy/"
     if [ "${CADDY_DRIFT:-no}" = yes ]; then
         echo stale >"$WORK/container.hash"

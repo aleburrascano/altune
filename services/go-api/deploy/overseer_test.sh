@@ -14,7 +14,7 @@ setup_case() {
     local stub_logs=${STUB_LOGS:-}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
-    cp "$HERE/lib.sh" "$HERE/overseer.sh" "$HERE/compose.prod.yml" "$WORK/api/deploy/"
+    cp "$HERE/prod_host.sh" "$HERE/overseer.sh" "$HERE/compose.prod.yml" "$WORK/api/deploy/"
 
     if [ "$has_file" = yes ]; then
         printf '%s\n' "$env_body" >"$WORK/api/.env.production"

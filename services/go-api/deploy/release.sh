@@ -34,7 +34,7 @@ main() {
         bash deploy/prod-migrate.sh
         bash deploy/blue-green.sh
         bash deploy/overseer.sh
-        SMOKE_GOAPI_CONTAINER="altune-go-api-$(. deploy/lib.sh && active_color)" \
+        SMOKE_GOAPI_CONTAINER="altune-go-api-$(. deploy/prod_host.sh && active_color)" \
             bash deploy/smoke.sh "$url" altune-overseer "$sha"
     fi
     docker image prune -f
