@@ -30,18 +30,7 @@ describe('library layers convention doc and domain contents', () => {
 
   it('has a feature-layers doc that names every port file and every domain file', () => {
     const doc = readFileSync(
-      join(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        '..',
-        '..',
-        '..',
-        'docs',
-        'conventions',
-        'feature-layers.md',
-      ),
+      join(__dirname, '..', '..', '..', '..', '..', 'docs', 'conventions', 'feature-layers.md'),
       'utf8',
     );
     const missing = [
