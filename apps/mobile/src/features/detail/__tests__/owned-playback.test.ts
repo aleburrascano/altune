@@ -3,7 +3,11 @@ import type { AcquisitionStatus } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { canPlay } from '@shared/playback/canPlay';
 
-import { playButtonState, splitOwned, toPlaybackQueue } from '../owned-playback';
+import {
+  playButtonState,
+  splitOwned,
+  toPlaybackQueue,
+} from '@/features/detail/domain/owned-playback';
 
 type ResultOverrides = {
   title?: string;

@@ -1,4 +1,4 @@
-import { albumExtras, trackExtras } from '../extras-accessors';
+import { albumExtras, trackExtras } from '@/features/detail/domain/extras-accessors';
 
 describe('trackExtras', () => {
   it('parses a full wire map into the narrowed track shape', () => {

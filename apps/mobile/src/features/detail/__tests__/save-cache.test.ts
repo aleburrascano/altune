@@ -1,10 +1,14 @@
 import type { CreateTrackRequest } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { optimisticTrack, saveIdempotencyKey, toCreateTrackRequest } from '../save-cache';
+import {
+  optimisticTrack,
+  saveIdempotencyKey,
+  toCreateTrackRequest,
+  isOptimisticTrackId,
+  optimisticTrackId,
+} from '@/features/detail/domain/save-cache';
 import { asTrackId } from '@shared/api-client/ids';
-import { isOptimisticTrackId } from '../save-cache';
-import { optimisticTrackId } from '../save-cache';
 
 type ResultOverrides = {
   title?: string;

@@ -7,8 +7,7 @@ import { spacing } from '@shared/ui/theme';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useLateralNav';
-import type { SaveFailure } from '@features/detail/hooks/useSaveTrack';
-import { saveFailureBanner } from '@features/detail/save-control-state';
+import { saveFailureBanner, type SaveFailure } from '@/features/detail/domain/save-control-state';
 
 const styles = StyleSheet.create({
   banner: { marginTop: spacing.lg },

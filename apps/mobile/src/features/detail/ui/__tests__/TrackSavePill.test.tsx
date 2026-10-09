@@ -1,8 +1,8 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 
-import type { SaveState } from '../../save-control-state';
-import { TrackSavePill } from '../TrackSavePill';
+import type { SaveState } from '@/features/detail/domain/save-control-state';
+import { TrackSavePill } from '@/features/detail/ui/TrackSavePill';
 
 const TITLE = 'Midnight City';
 

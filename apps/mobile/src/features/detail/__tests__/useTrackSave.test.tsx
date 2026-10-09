@@ -8,19 +8,24 @@ import { ApiError } from '@shared/errors';
 
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
-import { toCreateTrackRequest } from '../save-cache';
-import { ownedTrack } from '../hooks/useOwnedTrack';
-import { useTrackSave } from '../hooks/useTrackSave';
-import { createMemoryDetailPort } from './memoryDetailPort';
-import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
+import { toCreateTrackRequest } from '@/features/detail/domain/save-cache';
+import { ownedTrack } from '@/features/detail/domain/ownedTrack';
+import { useTrackSave } from '@/features/detail/hooks/useTrackSave';
+import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetailPort';
+import {
+  createPortWrapper,
+  createTestQueryClient,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('../save-cache', () => ({
-  ...jest.requireActual('../save-cache'),
-  toCreateTrackRequest: jest.fn(jest.requireActual('../save-cache').toCreateTrackRequest),
+jest.mock('@/features/detail/domain/save-cache', () => ({
+  ...jest.requireActual('@/features/detail/domain/save-cache'),
+  toCreateTrackRequest: jest.fn(
+    jest.requireActual('@/features/detail/domain/save-cache').toCreateTrackRequest,
+  ),
 }));
 
 let wrapper: ReturnType<typeof createPortWrapper>;

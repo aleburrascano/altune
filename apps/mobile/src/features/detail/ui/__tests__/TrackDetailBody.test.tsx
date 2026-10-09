@@ -11,15 +11,15 @@ import {
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
 
-import { optimisticTrackId, toCreateTrackRequest } from '../../save-cache';
-import type { LateralNavHandle } from '../../hooks/useTrackDetailActions';
-import { TrackDetailBody } from '../TrackDetailBody';
+import { optimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/save-cache';
+import type { LateralNavHandle } from '@/features/detail/hooks/useTrackDetailActions';
+import { TrackDetailBody } from '@/features/detail/ui/TrackDetailBody';
 import { readDetailHandoff } from '@shared/lib/detail-handoff';
 import {
   createTestQueryClient,
   createWrapper,
   mockSupabaseSession,
-} from '../../__tests__/support/queryHarness';
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
 
@@ -38,8 +38,10 @@ jest.mock('@shared/playback/usePlayback', () => ({
 }));
 jest.mock('@shared/playlists', () => ({ AddToPlaylistSheet: () => null }));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('../RelatedTracksSection', () => ({ RelatedTracksSection: () => null }));
-jest.mock('../DetailScaffold', () => {
+jest.mock('@/features/detail/ui/RelatedTracksSection', () => ({
+  RelatedTracksSection: () => null,
+}));
+jest.mock('@/features/detail/ui/DetailScaffold', () => {
   const { View } = jest.requireActual('react-native');
   return {
     DetailScaffold: ({ actions, children }: { actions: unknown; children: unknown }) => (

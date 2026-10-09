@@ -1,9 +1,4 @@
 M1 src/features/detail missing index.ts
-M1 src/features/detail/extras-accessors.ts loose root file
-M1 src/features/detail/owned-playback.ts loose root file
-M1 src/features/detail/play-source.ts loose root file
-M1 src/features/detail/save-cache.ts loose root file
-M1 src/features/detail/save-control-state.ts loose root file
 M1 src/features/library missing index.ts
 M1 src/features/library/gridColumns.ts loose root file
 M1 src/features/library/libraryFailureAlert.ts loose root file

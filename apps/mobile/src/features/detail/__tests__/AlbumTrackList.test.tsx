@@ -4,9 +4,9 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { asTrackId } from '@shared/api-client/ids';
 
-import type { AlbumDetailState } from '../hooks/useAlbumDetailState';
-import { ownedTrack } from '../hooks/useOwnedTrack';
-import { AlbumTrackList } from '../ui/AlbumTrackList';
+import type { AlbumDetailState } from '@/features/detail/hooks/useAlbumDetailState';
+import { ownedTrack } from '@/features/detail/domain/ownedTrack';
+import { AlbumTrackList } from '@/features/detail/ui/AlbumTrackList';
 
 function track(title: string): DiscoveryResult {
   return {

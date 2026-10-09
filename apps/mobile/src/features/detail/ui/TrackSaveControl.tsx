@@ -8,12 +8,9 @@ import {
   saveControlLabel,
   saveControlState,
   type SaveControlState,
-} from '@features/detail/save-control-state';
-import {
-  useResolvedOwnedTrack,
-  type OwnedTrack,
-  type TrackIdentity,
-} from '@features/detail/hooks/useOwnedTrack';
+} from '@/features/detail/domain/save-control-state';
+import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
+import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
 
 import { sharedStyles } from '@features/detail/ui/styles';
 import { SaveGlyph } from '@features/detail/ui/SaveGlyph';

@@ -13,7 +13,7 @@ import {
 import { getSessionId } from '@shared/telemetry/session';
 import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telemetry/outbox';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
-import type { TrackExtras } from '@features/detail/extras-accessors';
+import type { TrackExtras } from '@features/detail/domain/extras-accessors';
 import { TrackSaveControl } from '@features/detail/ui/TrackSaveControl';
 import type { ServerEvent } from '@shared/events/sse-client';
 import {

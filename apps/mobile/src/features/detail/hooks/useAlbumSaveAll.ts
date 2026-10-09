@@ -4,14 +4,14 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
 
-import { toCreateTrackRequest } from '@/features/detail/save-cache';
+import { toCreateTrackRequest } from '@/features/detail/domain/save-cache';
 import {
   runBounded,
   SAVE_ALL_CONCURRENCY,
   type BatchOutcome,
 } from '@/features/detail/domain/save-all';
-import { trackExtras } from '@/features/detail/extras-accessors';
-import { ownedFromExtras } from '@/features/detail/hooks/useOwnedTrack';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import { ownedFromExtras } from '@/features/detail/domain/ownedTrack';
 import type { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
 
 function _albumExtras(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult['extras'] {

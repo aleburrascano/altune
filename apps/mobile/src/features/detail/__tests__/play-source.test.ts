@@ -1,9 +1,9 @@
 import { asTrackId } from '@shared/api-client/ids';
 import type { PlaybackContextValue, PlaybackSource, PlaybackStatus } from '@shared/playback/types';
 
-import { trackExtras } from '../extras-accessors';
-import type { OwnedTrack } from '../hooks/useOwnedTrack';
-import { isResultPlaying, resolvePlaySource } from '../play-source';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+import { isResultPlaying, resolvePlaySource } from '@/features/detail/domain/play-source';
 
 type Playback = Pick<PlaybackContextValue, 'status' | 'track'>;
 

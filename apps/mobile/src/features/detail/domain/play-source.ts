@@ -2,8 +2,8 @@ import { canPlay } from '@shared/playback/canPlay';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import type { PlaybackContextValue, PlaybackSource } from '@shared/playback/types';
 
-import type { TrackExtras } from './extras-accessors';
-import type { OwnedTrack } from './hooks/useOwnedTrack';
+import type { TrackExtras } from '@/features/detail/domain/extras-accessors';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
 
 export function resolvePlaySource(
   te: TrackExtras,

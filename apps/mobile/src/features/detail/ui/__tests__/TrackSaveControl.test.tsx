@@ -13,20 +13,20 @@ import {
 } from '@shared/acquisition/trackStatusStore';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { useOwnedPlayback, type OwnedPlaybackContext } from '../../hooks/useOwnedPlayback';
-import { useSaveTrack } from '../../hooks/useSaveTrack';
 import {
-  useResolvedOwnedTrack,
-  type OwnedTrack,
-  type TrackIdentity,
-} from '../../hooks/useOwnedTrack';
-import { saveControlLabel, saveControlState } from '../../save-control-state';
-import { TrackSaveControl } from '../TrackSaveControl';
+  useOwnedPlayback,
+  type OwnedPlaybackContext,
+} from '@/features/detail/hooks/useOwnedPlayback';
+import { useSaveTrack } from '@/features/detail/hooks/useSaveTrack';
+import { useResolvedOwnedTrack, type TrackIdentity } from '@/features/detail/hooks/useOwnedTrack';
+import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';
+import { saveControlLabel, saveControlState } from '@/features/detail/domain/save-control-state';
+import { TrackSaveControl } from '@/features/detail/ui/TrackSaveControl';
 import {
   createTestQueryClient,
   createWrapper,
   mockSupabaseSession,
-} from '../../__tests__/support/queryHarness';
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
 

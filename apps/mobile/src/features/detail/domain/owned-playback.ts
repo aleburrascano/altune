@@ -1,8 +1,8 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { trackExtras } from './extras-accessors';
-import { ownedFromExtras, type OwnedTrack } from './hooks/useOwnedTrack';
+import { trackExtras } from '@/features/detail/domain/extras-accessors';
+import { ownedFromExtras, type OwnedTrack } from '@/features/detail/domain/ownedTrack';
 
 export type PlayableTrack = {
   owned: OwnedTrack;
