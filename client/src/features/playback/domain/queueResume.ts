@@ -9,14 +9,108 @@ import {
   recordQueueRebuildOutcome,
   type QueueRebuildRung,
 } from '@features/playback/domain/playbackHealth';
+import { clamp } from '@features/playback/domain/clamp';
 import { fromWireSource } from '@features/playback/domain/queueStateWire';
-import {
-  currentOccurrence,
-  currentTrackId,
-  isSavedCurrentResumable,
-  reconstructPlayOrder,
-  resolveResumeStartIndex,
-} from '@features/playback/domain/resumeQueue';
+
+function savedCursor(savedTrackIds: readonly string[], savedCurrentIndex: number): number {
+  return savedTrackIds[savedCurrentIndex] === undefined ? 0 : savedCurrentIndex;
+}
+
+export function currentTrackId(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+): string {
+  return savedTrackIds[savedCursor(savedTrackIds, savedCurrentIndex)] ?? '';
+}
+
+export function currentOccurrence(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+): number {
+  const cursor = savedCursor(savedTrackIds, savedCurrentIndex);
+  const id = savedTrackIds[cursor];
+  return savedTrackIds.slice(0, cursor).filter((other) => other === id).length;
+}
+
+function occurrenceIndex(ids: readonly string[], id: string, occurrence: number): number {
+  let found = -1;
+  let seen = 0;
+  for (let i = 0; i < ids.length && seen <= occurrence; i++) {
+    if (ids[i] !== id) continue;
+    found = i;
+    seen++;
+  }
+  return found;
+}
+
+function savedCurrentPosition(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+  validTrackIds: readonly string[],
+): number {
+  const currentId = currentTrackId(savedTrackIds, savedCurrentIndex);
+  const occurrence = currentOccurrence(savedTrackIds, savedCurrentIndex);
+  return currentId ? occurrenceIndex(validTrackIds, currentId, occurrence) : -1;
+}
+
+export function isSavedCurrentResumable(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+  validTrackIds: readonly string[],
+): boolean {
+  return savedCurrentPosition(savedTrackIds, savedCurrentIndex, validTrackIds) >= 0;
+}
+
+export function resolveResumeStartIndex(
+  savedTrackIds: readonly string[],
+  savedCurrentIndex: number,
+  validTrackIds: readonly string[],
+): number {
+  if (validTrackIds.length === 0) return 0;
+  const found = savedCurrentPosition(savedTrackIds, savedCurrentIndex, validTrackIds);
+  if (found >= 0) return found;
+  return clamp(savedCurrentIndex, 0, validTrackIds.length - 1);
+}
+
+function naturalPositions(naturalIds: readonly string[]): (id: string) => number | undefined {
+  const positions = new Map<string, number[]>();
+  naturalIds.forEach((id, i) => {
+    const list = positions.get(id);
+    if (list) list.push(i);
+    else positions.set(id, [i]);
+  });
+  const taken = new Map<string, number>();
+  return (id) => {
+    const list = positions.get(id);
+    if (!list) return undefined;
+    const n = taken.get(id) ?? 0;
+    taken.set(id, n + 1);
+    return list[Math.min(n, list.length - 1)];
+  };
+}
+
+export function reconstructPlayOrder(
+  naturalIds: readonly string[],
+  playIds: readonly string[],
+  currentId: string,
+  currentOccurrenceRank: number,
+): { playOrder: number[]; currentIndex: number; found: boolean } {
+  const nextNatural = naturalPositions(naturalIds);
+  const playOrder: number[] = [];
+  let currentIndex = 0;
+  let currentSeen = 0;
+  let found = false;
+  for (const id of playIds) {
+    const ni = nextNatural(id);
+    if (ni === undefined) continue;
+    if (id === currentId && currentSeen++ <= currentOccurrenceRank) {
+      currentIndex = playOrder.length;
+      found = true;
+    }
+    playOrder.push(ni);
+  }
+  return { playOrder, currentIndex, found };
+}
 
 export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): number | null {
   if (!saved.current_track || !canPlay(saved.current_track.acquisition_status)) return null;

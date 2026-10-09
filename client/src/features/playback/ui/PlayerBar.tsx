@@ -19,8 +19,12 @@ import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
-import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';
-import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/ui/playerStatus';
+import {
+  canRetryPlaybackError,
+  endedLabel,
+  isPreviewTrack,
+  libraryTrackId,
+} from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 import { Scrubber } from '@features/playback/ui/Scrubber';
 import { TransportControls } from '@features/playback/ui/TransportControls';

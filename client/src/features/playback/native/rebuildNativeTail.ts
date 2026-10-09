@@ -2,8 +2,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
 import { withNativeQueue, type Fence } from '@features/playback/native/nativeQueueLock';
-import { activeNativeTrackId } from '@features/playback/native/nativeTrack';
-import { nativeTrackBuilder } from '@features/playback/native/nativeTrackBuilder';
+import { activeNativeTrackId, nativeTrackBuilder } from '@features/playback/native/nativeTrack';
 import { currentLoadToken, isStale, type LoadToken } from '@features/playback/domain/loadToken';
 import { NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';

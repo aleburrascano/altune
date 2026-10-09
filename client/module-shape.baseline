@@ -9,11 +9,8 @@ N3 src/features/detail/domain/save-all.ts is not camelCase
 N3 src/features/detail/domain/save-cache.ts is not camelCase
 N3 src/features/detail/domain/save-control-state.ts is not camelCase
 N3 src/features/library/domain/library-to-discovery.ts is not camelCase
-N3 src/features/playback/domain/lyrics-sync.ts is not camelCase
 N3 src/features/playback/native/expoGoPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/native/trackPlayerPlaybackProvider.tsx is not PascalCase
-N3 src/features/playback/ui/SleepOptions.ts is not camelCase
-N3 src/features/playback/ui/SpeedOptions.ts is not camelCase
 N3 src/features/playback/web/webPlaybackProvider.tsx is not PascalCase
 N3 src/shared/api-client is not camelCase
 N3 src/shared/events/sse-client.ts is not camelCase

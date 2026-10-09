@@ -5,13 +5,13 @@ import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
-import { classifyPlaybackFailure } from '@features/playback/domain/classifyPlaybackError';
+import { classifyPlaybackFailure } from '@features/playback/domain/playbackError';
 import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
 import {
   redactPlaybackErrorMessage,
   type RedactedPlaybackFailure,
   warnPlayback,
-} from '@features/playback/domain/redactPlaybackError';
+} from '@features/playback/domain/playbackError';
 
 interface PlaybackErrorState {
   key: TrackKey | null;

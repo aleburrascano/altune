@@ -4,7 +4,7 @@ import {
   derivePlaybackState,
   type DerivePlaybackStateInput,
 } from '@features/playback/domain/derivePlaybackState';
-import type { RedactedPlaybackFailure } from '@features/playback/domain/redactPlaybackError';
+import type { RedactedPlaybackFailure } from '@features/playback/domain/playbackError';
 
 const TRACK: PlaybackTrack = {
   source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },

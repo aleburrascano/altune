@@ -22,7 +22,7 @@ import {
   swapUpcomingToLocal,
   type SwapOutcome,
 } from '@features/playback/native/nativeTrackSwap';
-import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
+import { warnPlayback } from '@features/playback/domain/playbackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,

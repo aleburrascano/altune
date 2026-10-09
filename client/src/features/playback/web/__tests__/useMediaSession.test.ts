@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { usePlaybackRateStore } from '@features/playback/hooks/usePlaybackRateStore';
+import { usePlaybackRateStore } from '@features/playback/hooks/usePlaybackRate';
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { useMediaSession } from '@features/playback/hooks/useMediaSession';

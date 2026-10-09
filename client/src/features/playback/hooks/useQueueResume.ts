@@ -18,7 +18,7 @@ import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,
   type RungOutcome,
-} from '@features/playback/domain/queueRebuildStrategies';
+} from '@features/playback/domain/queueResume';
 import {
   asRepeatMode,
   fromWireSource,
@@ -31,7 +31,7 @@ import {
   recordQueueStateRejected,
   type QueueRestoreStage,
 } from '@features/playback/domain/playbackHealth';
-import { warnPlayback } from '@features/playback/domain/redactPlaybackError';
+import { warnPlayback } from '@features/playback/domain/playbackError';
 import { progressSecondsToRoundedMs } from '@features/playback/domain/time';
 
 import { useAppStateChange } from '@shared/lifecycle';

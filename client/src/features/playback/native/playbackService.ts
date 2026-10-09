@@ -13,7 +13,7 @@ import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { parseTrackId } from '@shared/api-client/ids';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
-import { hasSignedInUser } from '@shared/session/signOutCleanup';
+import { hasSignedInUser, onSignOut } from '@shared/session/signOutCleanup';
 import {
   discardPrefetchedAudio,
   evictCached,
@@ -33,7 +33,11 @@ import {
   repairActiveToStreaming,
   wasSwappedToLocal,
 } from '@features/playback/native/nativeTrackSwap';
-import { classifyNativePlaybackError } from '@features/playback/domain/classifyPlaybackError';
+import {
+  classifyNativePlaybackError,
+  redactedPlaybackFailure,
+  redactPlaybackErrorMessage,
+} from '@features/playback/domain/playbackError';
 import {
   clearPlaybackError,
   reportPlaybackError,
@@ -42,10 +46,6 @@ import {
   recordAudioRecoveryFailure,
   recordPlaybackFailure,
 } from '@features/playback/domain/playbackHealth';
-import {
-  redactedPlaybackFailure,
-  redactPlaybackErrorMessage,
-} from '@features/playback/domain/redactPlaybackError';
 import { progressSecondsToMs } from '@features/playback/domain/time';
 import {
   reportingQueueFailure,
@@ -230,4 +230,9 @@ export async function playbackService() {
     void prefetchNext(idx);
     void slidePresignWindow(idx);
   });
+}
+
+export function registerPlaybackService(): void {
+  TrackPlayer.registerPlaybackService(() => playbackService);
+  onSignOut(resetPlaybackForSignOut);
 }

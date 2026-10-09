@@ -23,10 +23,7 @@ import {
   isIndexOutOfBounds,
   reportingQueueFailure,
 } from '@features/playback/native/queueFailureReport';
-import {
-  redactedPlaybackFailure,
-  warnPlayback,
-} from '@features/playback/domain/redactPlaybackError';
+import { redactedPlaybackFailure, warnPlayback } from '@features/playback/domain/playbackError';
 
 export interface NativePlaybackActions {
   controls: PlaybackControls;

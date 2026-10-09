@@ -1,6 +1,11 @@
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { TrackId } from '@shared/api-client/ids';
-import { endedLabel, libraryTrackId, statusFlagsOf } from '@features/playback/ui/playerStatus';
+import {
+  canRetryPlaybackError,
+  endedLabel,
+  libraryTrackId,
+  statusFlagsOf,
+} from '@features/playback/domain/playerStatus';
 
 describe('playerStatus', () => {
   it('labels an ended preview and an ended full track differently', () => {
@@ -22,5 +27,23 @@ describe('playerStatus', () => {
   it('returns undefined for a preview source', () => {
     const track = { source: { kind: 'preview', previewUrl: 'x' } } as PlaybackTrack;
     expect(libraryTrackId(track)).toBeUndefined();
+  });
+});
+
+describe('canRetryPlaybackError — which kinds a retry can still rescue', () => {
+  it.each([
+    ['network', true],
+    ['auth', true],
+    ['queue_out_of_sync', true],
+    ['queue_update_failed', true],
+    ['unknown', true],
+    ['not_found', false],
+    ['decode', false],
+  ] as const)('%s is retryable: %s', (kind, canRetry) => {
+    expect(canRetryPlaybackError(kind)).toBe(canRetry);
+  });
+
+  it('offers a retry when nothing classified the failure', () => {
+    expect(canRetryPlaybackError(null)).toBe(true);
   });
 });

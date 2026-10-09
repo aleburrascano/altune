@@ -13,13 +13,13 @@ import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
-import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';
 import {
+  canRetryPlaybackError,
   endedLabel,
   isPreviewTrack,
   libraryTrackId,
   statusFlagsOf,
-} from '@features/playback/ui/playerStatus';
+} from '@features/playback/domain/playerStatus';
 
 export function MiniPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage, errorKind } =

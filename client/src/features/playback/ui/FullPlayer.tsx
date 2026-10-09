@@ -7,8 +7,12 @@ import { withFeaturing } from '@shared/api-client/featuredArtists';
 import { shouldRestartOnPrevious } from '@shared/playback/restartOnPrevious';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/playbackContextValue';
-import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';
-import { endedLabel, isPreviewTrack, libraryTrackId } from '@features/playback/ui/playerStatus';
+import {
+  canRetryPlaybackError,
+  endedLabel,
+  isPreviewTrack,
+  libraryTrackId,
+} from '@features/playback/domain/playerStatus';
 import { PlayerOptionsSheets } from '@features/playback/ui/PlayerOptionsSheets';
 import { Scrubber } from '@features/playback/ui/Scrubber';
 import {

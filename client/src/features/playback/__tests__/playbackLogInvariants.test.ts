@@ -8,14 +8,11 @@ import { asTrackId } from '@shared/api-client/ids';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { ignoringNativeRejection } from '@features/playback/native/createNativePlaybackActions';
-import { playbackService } from '@features/playback/native/service';
+import { playbackService } from '@features/playback/native/playbackService';
 import { repairActiveToStreaming } from '@features/playback/native/nativeTrackSwap';
 import { _resetPlaybackHealthForTest } from '@features/playback/domain/playbackHealth';
 import { reportingQueueFailure } from '@features/playback/native/queueFailureReport';
-import {
-  redactPlaybackErrorMessage,
-  warnPlayback,
-} from '@features/playback/domain/redactPlaybackError';
+import { redactPlaybackErrorMessage, warnPlayback } from '@features/playback/domain/playbackError';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 

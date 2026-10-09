@@ -1,9 +1,12 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { formatSeconds, type QueueItem } from '@features/playback/domain/queueItem';
-import { QueueRow } from '@features/playback/ui/QueueRow';
+import { formatSeconds, type QueueItem } from '@features/playback/domain/upNextQueue';
+import { QueueRow } from '@features/playback/ui/QueueSheet';
 
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+}));
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: { View: jest.requireActual('react-native').View },
