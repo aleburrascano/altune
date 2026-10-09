@@ -7,7 +7,7 @@ fi
 
 DUMP_FILE=$(realpath -- "$2")
 cd "$(dirname "$0")/.." || exit
-. deploy/lib.sh
+. deploy/prod_host.sh
 
 case "$1" in
     prod) ENV_FILE="${PROD_ENV_FILE:-.env.production}" ;;

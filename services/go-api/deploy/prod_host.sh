@@ -204,8 +204,10 @@ snapshot_database() {
     SNAPSHOT_DIR="${SNAPSHOT_DIR:-$HOME/altune-snapshots}"
     local file
     file="$SNAPSHOT_DIR/$MIGRATE_TIER-$(date -u +%Y%m%dT%H%M%SZ)-before-$1.dump"
-    (umask 077 && mkdir -p "$SNAPSHOT_DIR") && chmod 700 "$SNAPSHOT_DIR" \
-        || { log "FAILED: cannot create private snapshot dir $SNAPSHOT_DIR"; exit 1; }
+    if ! (umask 077 && mkdir -p "$SNAPSHOT_DIR") || ! chmod 700 "$SNAPSHOT_DIR"; then
+        log "FAILED: cannot create private snapshot dir $SNAPSHOT_DIR"
+        exit 1
+    fi
     log "snapshotting $MIGRATE_TIER database to $file"
     if ! (umask 077 && pg_dump --format=custom --file "$file" "$MIGRATE_DATABASE_URL"); then
         rm -f -- "$file"
