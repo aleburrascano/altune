@@ -1,5 +1,4 @@
 import { isNetworkError } from '@shared/failure/isNetworkError';
-import { isNetworkError as libShimIsNetworkError } from '@shared/lib/isNetworkError';
 import { apiFetch } from '@shared/api-client';
 import { ApiError } from '@shared/errors';
 import { NetworkError } from '@shared/errors';
@@ -159,32 +158,22 @@ describe('isNetworkError — an ApiError is a server response, never transport',
   });
 });
 
-describe('isNetworkError — lib shim', () => {
+describe('isNetworkError — undefined, ApiError and a mutated message', () => {
   const HTTP_BAD_REQUEST = 400;
 
-  it('re-exports the same function as the failure path', () => {
-    expect(libShimIsNetworkError).toBe(isNetworkError);
+  it('is false for undefined and true for a timeout', () => {
+    expect(isNetworkError(undefined)).toBe(false);
+    expect(isNetworkError(new Error('timeout'))).toBe(true);
   });
 
-  it('agrees through both paths on undefined and on a timeout', () => {
-    for (const check of [isNetworkError, libShimIsNetworkError]) {
-      expect(check(undefined)).toBe(false);
-      expect(check(new Error('timeout'))).toBe(true);
-    }
+  it('refuses an ApiError whose message looks like a network failure', () => {
+    expect(isNetworkError(new ApiError(HTTP_BAD_REQUEST, 'network down'))).toBe(false);
   });
 
-  it('refuses an ApiError whose message looks like a network failure, through both paths', () => {
-    const err = new ApiError(HTTP_BAD_REQUEST, 'network down');
-    expect(isNetworkError(err)).toBe(false);
-    expect(libShimIsNetworkError(err)).toBe(false);
-  });
-
-  it('agrees through both paths when one Error changes its message', () => {
+  it('follows an Error whose message changes', () => {
     const err = new Error('boom');
     expect(isNetworkError(err)).toBe(false);
-    expect(libShimIsNetworkError(err)).toBe(false);
     err.message = 'fetch failed';
     expect(isNetworkError(err)).toBe(true);
-    expect(libShimIsNetworkError(err)).toBe(true);
   });
 });

@@ -30,7 +30,7 @@ import {
   toTrackStatus,
 } from '@shared/api-client/trackAcquisition';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
-import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
+import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
 import { forgetTrack } from '@shared/events/forgetTrack';
 import { asString, asTrackIdOrNull, type ServerEventHandlers } from '@shared/events/eventPayload';

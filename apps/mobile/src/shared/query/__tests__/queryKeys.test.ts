@@ -11,7 +11,7 @@ import {
   libraryKeys,
   playlistKeys,
   isSearchKeyFor,
-} from '@shared/lib/query-keys';
+} from '@shared/query/queryKeys';
 
 function makeClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });

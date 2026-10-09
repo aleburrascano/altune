@@ -9,7 +9,7 @@ import { asFavoriteKey } from '@shared/api-client/ids';
 import { FavoritesPortProvider } from '@shared/favorites';
 import { createMemoryFavoritesPort } from '@shared/favorites/__tests__/memoryFavoritesPort';
 import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys } from '@shared/query/queryKeys';
 
 let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;
 let mockedList: jest.MockedFunction<FavoritesPort['listFavorites']>;

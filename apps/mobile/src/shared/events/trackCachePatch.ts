@@ -8,7 +8,7 @@ import type {
   TrackResponse,
 } from '@shared/api-client/trackResponse';
 import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
-import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
+import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
 type TrackPages = InfiniteData<ListTracksResponse>;
 

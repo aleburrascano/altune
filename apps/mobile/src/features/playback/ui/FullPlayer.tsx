@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw } from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/api-client/featuredArtists';
-import { shouldRestartOnPrevious } from '@shared/playback/constants';
+import { shouldRestartOnPrevious } from '@shared/playback/restartOnPrevious';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/playbackContextValue';
 import { canRetryPlaybackError } from '@features/playback/domain/canRetryPlaybackError';

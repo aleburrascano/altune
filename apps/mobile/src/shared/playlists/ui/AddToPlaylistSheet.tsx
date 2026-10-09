@@ -12,8 +12,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
-import { countLabel } from '@shared/lib/format';
-import { playlistKeys } from '@shared/lib/query-keys';
+import { countLabel } from '@shared/ui/displayFormat';
+import { playlistKeys } from '@shared/query/queryKeys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 
 import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';

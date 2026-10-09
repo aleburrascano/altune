@@ -12,7 +12,7 @@ import {
 } from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/api-client/featuredArtists';
-import { shouldRestartOnPrevious } from '@shared/playback/constants';
+import { shouldRestartOnPrevious } from '@shared/playback/restartOnPrevious';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';

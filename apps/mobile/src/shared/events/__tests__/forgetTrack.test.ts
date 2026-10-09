@@ -4,7 +4,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import { toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
 import type { ListTracksResponse } from '@shared/api-client/trackResponse';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { libraryKeys } from '@shared/query/queryKeys';
 
 import { forgetTrack } from '@shared/events/forgetTrack';
 

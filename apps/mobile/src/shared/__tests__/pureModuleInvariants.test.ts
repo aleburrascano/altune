@@ -1,31 +1,32 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-const SLICE_ROOT = path.join(__dirname, '..');
-const FEATURES_ROOT = path.join(__dirname, '..', '..', '..', 'features');
+const SHARED_ROOT = path.join(__dirname, '..');
+const FEATURES_ROOT = path.join(__dirname, '..', '..', 'features');
+
+const PURE_MODULES = [
+  'api-client/featuredArtists',
+  'api-client/trackToDiscoveryResult',
+  'failure/describeError',
+  'failure/isNetworkError',
+  'navigation/detailHandoff',
+  'query/queryKeys',
+  'ui/asyncView',
+  'ui/displayFormat',
+];
 
 type FeatureFile = { relativePath: string; content: string };
 
-function sliceModuleNames(): string[] {
-  return fs
-    .readdirSync(SLICE_ROOT, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
-    .map((entry) => entry.name.replace(/\.tsx?$/, ''))
-    .filter((moduleName) => !isReExportShim(readSliceFile(moduleName)))
-    .sort();
-}
-
-const RE_EXPORT_LINE_PATTERN = /^export (type )?\{[^}]*\} from '[^']+';$/;
-
-function isReExportShim(source: string): boolean {
-  const lines = source.split('\n').filter((line) => line.trim() !== '');
-  return lines.length > 0 && lines.every((line) => RE_EXPORT_LINE_PATTERN.test(line));
-}
-
-function readSliceFile(moduleName: string): string {
-  const withTs = path.join(SLICE_ROOT, `${moduleName}.ts`);
+function readModule(modulePath: string): string {
+  const withTs = path.join(SHARED_ROOT, `${modulePath}.ts`);
   if (fs.existsSync(withTs)) return fs.readFileSync(withTs, 'utf8');
-  return fs.readFileSync(path.join(SLICE_ROOT, `${moduleName}.tsx`), 'utf8');
+  return fs.readFileSync(path.join(SHARED_ROOT, `${modulePath}.tsx`), 'utf8');
+}
+
+const REGEX_SPECIAL_CHARACTER = /[.*+?^${}()|[\]\\]/g;
+
+function escapeRegExp(text: string): string {
+  return text.replace(REGEX_SPECIAL_CHARACTER, '\\$&');
 }
 
 function walkSourceFiles(dir: string): string[] {
@@ -73,8 +74,8 @@ function runtimeImportViolations(source: string): string[] {
   return violations;
 }
 
-function distinctFeatureConsumers(moduleName: string, files: FeatureFile[]): Set<string> {
-  const specifierPattern = new RegExp(`@shared/lib/${moduleName}(?=['"/])`);
+function distinctFeatureConsumers(modulePath: string, files: FeatureFile[]): Set<string> {
+  const specifierPattern = new RegExp(`@shared/${escapeRegExp(modulePath)}(?=['"/])`);
   const features = new Set<string>();
   for (const { relativePath, content } of files) {
     if (specifierPattern.test(content)) {
@@ -84,12 +85,12 @@ function distinctFeatureConsumers(moduleName: string, files: FeatureFile[]): Set
   return features;
 }
 
-function siblingImporters(moduleName: string): Set<string> {
-  const specifierPattern = new RegExp(`(?:@shared/lib/|\\./)${moduleName}(?=['"/])`);
+function siblingImporters(modulePath: string): Set<string> {
+  const specifierPattern = new RegExp(`@shared/${escapeRegExp(modulePath)}(?=['"/])`);
   const importers = new Set<string>();
-  for (const other of sliceModuleNames()) {
-    if (other === moduleName) continue;
-    if (specifierPattern.test(readSliceFile(other))) importers.add(other);
+  for (const other of PURE_MODULES) {
+    if (other === modulePath) continue;
+    if (specifierPattern.test(readModule(other))) importers.add(other);
   }
   return importers;
 }
@@ -122,9 +123,9 @@ function bannedNounViolations(source: string): string[] {
   return words(source).filter((word) => /^songs?$/i.test(word));
 }
 
-describe('shared/lib rule 1 — pure utility functions, no React/RN/Expo/react-query/api-client at runtime', () => {
-  it.each(sliceModuleNames())('%s.ts imports no banned runtime module', (moduleName) => {
-    expect(runtimeImportViolations(readSliceFile(moduleName))).toEqual([]);
+describe('pure shared modules rule 1 — pure utility functions, no React/RN/Expo/react-query/api-client at runtime', () => {
+  it.each(PURE_MODULES)('%s imports no banned runtime module', (moduleName) => {
+    expect(runtimeImportViolations(readModule(moduleName))).toEqual([]);
   });
 
   it('flags a runtime import of a banned module while allowing the type-only form of the same module', () => {
@@ -144,21 +145,21 @@ describe('shared/lib rule 1 — pure utility functions, no React/RN/Expo/react-q
     ]);
 
     const typeOnly = [
-      "import type { FeaturedArtist } from '@shared/api-client/types';",
+      "import type { FeaturedArtist } from '@shared/api-client/trackResponse';",
       "import type { DiscoveryResult } from '@shared/api-client/discovery';",
     ].join('\n');
     expect(runtimeImportViolations(typeOnly)).toEqual([]);
   });
 });
 
-describe('shared/lib rule 2 — extraction requires 2+ distinct feature consumers', () => {
+describe('pure shared modules rule 2 — extraction requires 2+ distinct feature consumers', () => {
   const featureFiles = readFeatureFiles();
 
-  it.each(sliceModuleNames())('%s is imported by at least two distinct features', (moduleName) => {
+  it.each(PURE_MODULES)('%s is imported by at least two distinct features', (moduleName) => {
     const consumers = [...effectiveFeatureConsumers(moduleName, featureFiles)].sort();
     if (consumers.length < 2) {
       throw new Error(
-        `@shared/lib/${moduleName} has ${consumers.length} distinct feature consumer(s): ` +
+        `@shared/${moduleName} has ${consumers.length} distinct feature consumer(s): ` +
           `[${consumers.join(', ')}]. Extraction to shared/ requires 2+ real consumers.`,
       );
     }
@@ -166,33 +167,37 @@ describe('shared/lib rule 2 — extraction requires 2+ distinct feature consumer
 
   it('counts distinct feature directories, not distinct files — three files in one feature is one consumer', () => {
     const threeFilesOneFeature: FeatureFile[] = [
-      { relativePath: 'detail/a.ts', content: "from '@shared/lib/format'" },
-      { relativePath: 'detail/ui/b.tsx', content: "from '@shared/lib/format'" },
-      { relativePath: 'detail/hooks/c.ts', content: "from '@shared/lib/format'" },
+      { relativePath: 'detail/a.ts', content: "from '@shared/ui/displayFormat'" },
+      { relativePath: 'detail/ui/b.tsx', content: "from '@shared/ui/displayFormat'" },
+      { relativePath: 'detail/hooks/c.ts', content: "from '@shared/ui/displayFormat'" },
     ];
-    expect(distinctFeatureConsumers('format', threeFilesOneFeature)).toEqual(new Set(['detail']));
+    expect(distinctFeatureConsumers('ui/displayFormat', threeFilesOneFeature)).toEqual(
+      new Set(['detail']),
+    );
   });
 
   it('a module referenced by two different features counts as two consumers', () => {
     const twoFeatures: FeatureFile[] = [
-      { relativePath: 'detail/a.ts', content: "from '@shared/lib/format'" },
-      { relativePath: 'library/b.ts', content: "from '@shared/lib/format'" },
+      { relativePath: 'detail/a.ts', content: "from '@shared/ui/displayFormat'" },
+      { relativePath: 'library/b.ts', content: "from '@shared/ui/displayFormat'" },
     ];
-    expect(distinctFeatureConsumers('format', twoFeatures)).toEqual(new Set(['detail', 'library']));
+    expect(distinctFeatureConsumers('ui/displayFormat', twoFeatures)).toEqual(
+      new Set(['detail', 'library']),
+    );
   });
 
   it('a similarly-named sibling module specifier does not count as a match', () => {
     const decoyOnly: FeatureFile[] = [
-      { relativePath: 'detail/a.ts', content: "from '@shared/lib/query-keys'" },
-      { relativePath: 'library/b.ts', content: "from '@shared/lib/query-keys-extra'" },
+      { relativePath: 'detail/a.ts', content: "from '@shared/query/queryKeys'" },
+      { relativePath: 'library/b.ts', content: "from '@shared/query/queryKeysExtra'" },
     ];
-    expect(distinctFeatureConsumers('query-keys', decoyOnly)).toEqual(new Set(['detail']));
+    expect(distinctFeatureConsumers('query/queryKeys', decoyOnly)).toEqual(new Set(['detail']));
   });
 });
 
-describe('shared/lib rule 3 — the banned noun never appears', () => {
-  it.each(sliceModuleNames())('%s.ts contains no occurrence of "song"', (moduleName) => {
-    expect(bannedNounViolations(readSliceFile(moduleName))).toEqual([]);
+describe('pure shared modules rule 3 — the banned noun never appears', () => {
+  it.each(PURE_MODULES)('%s contains no occurrence of "song"', (moduleName) => {
+    expect(bannedNounViolations(readModule(moduleName))).toEqual([]);
   });
 
   it('flags "song" standalone, in camelCase, in PascalCase, in SCREAMING_SNAKE_CASE and pluralized', () => {
@@ -208,4 +213,13 @@ describe('shared/lib rule 3 — the banned noun never appears', () => {
     expect(bannedNounViolations('const songwriter = credit.name;')).toEqual([]);
     expect(bannedNounViolations('const songbird = "decoy";')).toEqual([]);
   });
+});
+
+describe('pure shared modules rule 4 — the shared/lib and types shims are gone', () => {
+  it.each(['lib', 'api-client/types.ts', 'playback/types.ts', 'playback/constants.ts'])(
+    'src/shared/%s does not exist',
+    (shimPath) => {
+      expect(fs.existsSync(path.join(SHARED_ROOT, shimPath))).toBe(false);
+    },
+  );
 });

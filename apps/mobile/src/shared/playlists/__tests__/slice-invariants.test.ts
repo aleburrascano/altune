@@ -202,7 +202,7 @@ describe('rule 3 — no feature imports from shared/playlists', () => {
     expect(featureImportViolations("import type { X } from '@features/library';")).toEqual([
       '@features/library',
     ]);
-    expect(featureImportViolations("import { X } from '@shared/lib/query-keys';")).toEqual([]);
+    expect(featureImportViolations("import { X } from '@shared/query/queryKeys';")).toEqual([]);
   });
 });
 
@@ -251,7 +251,7 @@ describe('rule 4 — components never call playlist write functions directly; on
     ).toBe(true);
     expect(
       importsApiClientPlaylists(
-        "import type { PlaylistResponse } from '@shared/api-client/types';",
+        "import type { PlaylistResponse } from '@shared/api-client/playlistResponse';",
       ),
     ).toBe(false);
   });

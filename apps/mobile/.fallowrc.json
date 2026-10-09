@@ -59,7 +59,6 @@
       { "name": "shared-files", "patterns": ["src/shared/files/**"] },
       { "name": "shared-killSwitch", "patterns": ["src/shared/killSwitch/**"] },
       { "name": "shared-lifecycle", "patterns": ["src/shared/lifecycle/**"] },
-      { "name": "shared-lib", "patterns": ["src/shared/lib/**"] },
       { "name": "shared-navigation", "patterns": ["src/shared/navigation/**"] },
       { "name": "shared-offline", "patterns": ["src/shared/offline/**"] },
       { "name": "shared-playback", "patterns": ["src/shared/playback/**"] },
@@ -90,7 +89,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -116,7 +114,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -142,7 +139,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -168,7 +164,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -194,7 +189,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -220,7 +214,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -246,7 +239,6 @@
           "shared-favorites",
           "shared-files",
           "shared-killSwitch",
-          "shared-lib",
           "shared-lifecycle",
           "shared-navigation",
           "shared-offline",
@@ -291,7 +283,6 @@
           "shared-errors",
           "shared-killSwitch",
           "shared-lifecycle",
-          "shared-lib",
           "shared-offline",
           "shared-session",
           "shared-telemetry"
@@ -300,7 +291,7 @@
       { "from": "shared-failure", "allow": ["shared-errors"] },
       {
         "from": "shared-favorites",
-        "allow": ["shared-api-client", "shared-failure", "shared-lib", "shared-query", "shared-ui"]
+        "allow": ["shared-api-client", "shared-failure", "shared-query", "shared-ui"]
       },
       { "from": "shared-files", "allow": [] },
       {
@@ -308,7 +299,6 @@
         "allow": ["shared-deadline", "shared-files", "shared-lifecycle"]
       },
       { "from": "shared-lifecycle", "allow": [] },
-      { "from": "shared-lib", "allow": ["shared-api-client", "shared-errors", "shared-failure", "shared-session"] },
       { "from": "shared-navigation", "allow": [] },
       {
         "from": "shared-offline",
@@ -325,7 +315,7 @@
       { "from": "shared-playback", "allow": ["shared-api-client"] },
       {
         "from": "shared-playlists",
-        "allow": ["shared-api-client", "shared-failure", "shared-lib", "shared-query", "shared-session", "shared-ui"]
+        "allow": ["shared-api-client", "shared-failure", "shared-query", "shared-session", "shared-ui"]
       },
       {
         "from": "shared-query",
@@ -344,7 +334,7 @@
           "shared-session"
         ]
       },
-      { "from": "shared-ui", "allow": ["shared-files", "shared-lib", "shared-telemetry"] }
+      { "from": "shared-ui", "allow": ["shared-files", "shared-telemetry"] }
     ]
   },
   "health": {

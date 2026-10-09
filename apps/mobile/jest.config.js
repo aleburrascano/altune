@@ -13,7 +13,6 @@ const RATCHET_RAISE_ONLY = {
   'src/shared/killSwitch/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
   'src/shared/files/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
   'src/shared/telemetry/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
-  'src/shared/lib/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
   'src/shared/failure/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
   'src/shared/auth/**': { statements: 100, branches: 80, functions: 100, lines: 100 },
   'src/shared/playlists/**': { statements: 100, branches: 92, functions: 100, lines: 100 },
