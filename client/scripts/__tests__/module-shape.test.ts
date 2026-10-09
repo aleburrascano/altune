@@ -53,14 +53,19 @@ describe('M1', () => {
       'src/features/library/domain/rule.ts': 'export const rule = 1;\n',
     });
     expect(status).toBe(1);
-    expect(stdout).toContain('new violation: M1 src/features/library/gridColumns.ts loose root file');
+    expect(stdout).toContain(
+      'new violation: M1 src/features/library/gridColumns.ts loose root file',
+    );
   });
 
   test('fails on a missing index.ts and a missing domain/', () => {
     const tree = cleanTree();
     delete tree['src/features/library/index.ts'];
     delete tree['src/features/library/domain/rule.ts'];
-    const { stdout } = run({ ...tree, 'src/features/library/ui/Other.tsx': 'export const Other = 1;\n' });
+    const { stdout } = run({
+      ...tree,
+      'src/features/library/ui/Other.tsx': 'export const Other = 1;\n',
+    });
     expect(stdout).toContain('M1 src/features/library missing index.ts');
     expect(stdout).toContain('M1 src/features/library missing domain/');
   });
@@ -79,35 +84,49 @@ describe('M2', () => {
       'src/app/screen.tsx': "import { x } from '@features/library/ui';\nexport const s = x;\n",
     });
     expect(bad.status).toBe(1);
-    expect(bad.stdout).toContain('new violation: M2 src/app/screen.tsx deep import @features/library/ui');
+    expect(bad.stdout).toContain(
+      'new violation: M2 src/app/screen.tsx deep import @features/library/ui',
+    );
   });
 
   test('fails on a deep import of another feature but not of its own', () => {
     const own = run({
       ...cleanTree(),
-      'src/features/library/ui/Own.tsx': "import { y } from '@features/library/domain/rule';\nexport const Own = y;\n",
+      'src/features/library/ui/Own.tsx':
+        "import { y } from '@features/library/domain/rule';\nexport const Own = y;\n",
     });
     expect(own.status).toBe(0);
 
     const other = run({
       ...cleanTree(),
       ...cleanFeature('settings'),
-      'src/features/settings/ui/Cross.tsx': "import { y } from '@features/library/domain/rule';\nexport const Cross = y;\n",
+      'src/features/settings/ui/Cross.tsx':
+        "import { y } from '@features/library/domain/rule';\nexport const Cross = y;\n",
     });
-    expect(other.stdout).toContain('M2 src/features/settings/ui/Cross.tsx deep import @features/library/domain/rule');
+    expect(other.stdout).toContain(
+      'M2 src/features/settings/ui/Cross.tsx deep import @features/library/domain/rule',
+    );
   });
 });
 
 describe('M4', () => {
   test('passes on a use* file in hooks/ and fails on one in ui/', () => {
     expect(run(cleanTree()).status).toBe(0);
-    const bad = run({ ...cleanTree(), 'src/features/library/ui/useAddable.ts': 'export const useAddable = 1;\n' });
+    const bad = run({
+      ...cleanTree(),
+      'src/features/library/ui/useAddable.ts': 'export const useAddable = 1;\n',
+    });
     expect(bad.status).toBe(1);
-    expect(bad.stdout).toContain('new violation: M4 src/features/library/ui/useAddable.ts use* file outside hooks/');
+    expect(bad.stdout).toContain(
+      'new violation: M4 src/features/library/ui/useAddable.ts use* file outside hooks/',
+    );
   });
 
   test('fails on a non-use* file in hooks/', () => {
-    const { stdout } = run({ ...cleanTree(), 'src/features/library/hooks/gate.ts': 'export const gate = 1;\n' });
+    const { stdout } = run({
+      ...cleanTree(),
+      'src/features/library/hooks/gate.ts': 'export const gate = 1;\n',
+    });
     expect(stdout).toContain('M4 src/features/library/hooks/gate.ts non-use* file in hooks/');
   });
 });
@@ -119,7 +138,8 @@ describe('M7', () => {
     const { status } = run({
       ...cleanTree(),
       'jest/factories.ts': factories,
-      'src/features/library/__tests__/a.test.ts': "import { trackFactory } from '@testing/factories';\nexport const a = trackFactory;\n",
+      'src/features/library/__tests__/a.test.ts':
+        "import { trackFactory } from '@testing/factories';\nexport const a = trackFactory;\n",
     });
     expect(status).toBe(0);
   });
@@ -127,13 +147,17 @@ describe('M7', () => {
   test('fails when no file under src/ imports a factory', () => {
     const { status, stdout } = run({ ...cleanTree(), 'jest/factories.ts': factories });
     expect(status).toBe(1);
-    expect(stdout).toContain('new violation: M7 jest/factories.ts trackFactory has no importer under src/');
+    expect(stdout).toContain(
+      'new violation: M7 jest/factories.ts trackFactory has no importer under src/',
+    );
   });
 });
 
 describe('N1', () => {
   test('passes on a named file and fails on types.ts and a lib folder', () => {
-    expect(run({ ...cleanTree(), 'src/shared/trackKey.ts': 'export const trackKey = 1;\n' }).status).toBe(0);
+    expect(
+      run({ ...cleanTree(), 'src/shared/trackKey.ts': 'export const trackKey = 1;\n' }).status,
+    ).toBe(0);
     const bad = run({
       ...cleanTree(),
       'src/shared/api/types.ts': 'export type A = 1;\nexport type B = 2;\n',
@@ -150,26 +174,97 @@ describe('N2', () => {
     expect(run(cleanFeature('library')).status).toBe(0);
     const bad = run(cleanFeature('discover'));
     expect(bad.status).toBe(1);
-    expect(bad.stdout).toContain('new violation: N2 src/features/discover go-api module is discovery');
+    expect(bad.stdout).toContain(
+      'new violation: N2 src/features/discover go-api module is discovery',
+    );
   });
 });
 
 describe('N3', () => {
-  test('passes when the only export names the file and fails when it does not', () => {
-    expect(run({ ...cleanTree(), 'src/shared/trackKey.ts': 'export function trackKey() {}\n' }).status).toBe(0);
-    const bad = run({ ...cleanTree(), 'src/shared/trackKey.ts': 'export function makeKey() {}\n' });
+  test('fails on a kebab-case file under src/shared', () => {
+    const bad = run({
+      ...cleanTree(),
+      'src/shared/track-key.ts': 'export function trackKey() {}\n',
+    });
     expect(bad.status).toBe(1);
-    expect(bad.stdout).toContain('new violation: N3 src/shared/trackKey.ts only export is makeKey');
+    expect(bad.stdout).toContain('new violation: N3 src/shared/track-key.ts is not camelCase');
   });
 
-  test('does not judge a file with several exports', () => {
-    const { status } = run({ ...cleanTree(), 'src/shared/trackKey.ts': 'export const a = 1;\nexport const b = 2;\n' });
+  test('passes a single-export file named for its concept', () => {
+    const { status } = run({
+      ...cleanTree(),
+      'src/shared/trackKey.ts': 'export function makeKey() {}\n',
+    });
     expect(status).toBe(0);
+  });
+
+  test('passes a file holding several related exports', () => {
+    const { status } = run({
+      ...cleanTree(),
+      'src/shared/trackKey.ts': 'export const a = 1;\nexport const b = 2;\n',
+    });
+    expect(status).toBe(0);
+  });
+
+  test('fails on a kebab-case folder', () => {
+    const bad = run({
+      ...cleanTree(),
+      'src/shared/search-history/history.ts': 'export const history = 1;\n',
+    });
+    expect(bad.stdout).toContain('new violation: N3 src/shared/search-history is not camelCase');
+    expect(bad.stdout).not.toContain('search-history/history.ts');
+  });
+
+  test('wants PascalCase for a component file and camelCase for any other', () => {
+    const component = 'export function TrackRow(): null {\n  return null;\n}\n';
+    expect(run({ ...cleanTree(), 'src/shared/ui/TrackRow.tsx': component }).status).toBe(0);
+    const camelComponent = run({ ...cleanTree(), 'src/shared/ui/trackRow.tsx': component });
+    expect(camelComponent.stdout).toContain(
+      'new violation: N3 src/shared/ui/trackRow.tsx is not PascalCase',
+    );
+    const pascalModule = run({
+      ...cleanTree(),
+      'src/shared/TrackKey.ts': 'export const trackKey = 1;\n',
+    });
+    expect(pascalModule.stdout).toContain(
+      'new violation: N3 src/shared/TrackKey.ts is not camelCase',
+    );
+  });
+
+  test('reads the default export as the main export of a .tsx file', () => {
+    const tree = {
+      ...cleanTree(),
+      'src/shared/ui/sheet.tsx': 'export default function Sheet() {}\nexport const x = 1;\n',
+    };
+    expect(run(tree).stdout).toContain(
+      'new violation: N3 src/shared/ui/sheet.tsx is not PascalCase',
+    );
+  });
+
+  test('keeps camelCase for a .tsx concept that mixes a component with plain exports', () => {
+    const source = 'export function dismissKeyboard() {}\nexport function DismissArea() {}\n';
+    expect(run({ ...cleanTree(), 'src/shared/ui/keyboard.tsx': source }).status).toBe(0);
+  });
+
+  test('allows platform suffixes, index.ts and the app folder', () => {
+    const tree = {
+      ...cleanTree(),
+      'src/shared/haptics.web.ts': 'export const tap = 1;\n',
+      'src/shared/haptics.native.ts': 'export const tap = 1;\n',
+      'src/shared/haptics.android.ts': 'export const tap = 1;\n',
+      'src/shared/haptics.ios.ts': 'export const tap = 1;\n',
+      'src/shared/index.ts': 'export {};\n',
+      'src/app/(tabs)/now-playing.tsx': 'export default function Screen() {}\n',
+    };
+    expect(run(tree).status).toBe(0);
   });
 });
 
 describe('baseline', () => {
-  const drift = { ...cleanTree(), 'src/features/library/ui/useAddable.ts': 'export const useAddable = 1;\n' };
+  const drift = {
+    ...cleanTree(),
+    'src/features/library/ui/useAddable.ts': 'export const useAddable = 1;\n',
+  };
   const line = 'M4 src/features/library/ui/useAddable.ts use* file outside hooks/';
 
   test('a violation listed in the baseline passes', () => {

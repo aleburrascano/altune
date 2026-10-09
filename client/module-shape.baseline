@@ -1,16 +1,21 @@
 M1 src/features/settings missing index.ts
 M2 src/app/(tabs)/settings/index.tsx deep import @features/settings/ui/SettingsScreen
-N3 src/features/settings/hooks/useClearSearchHistory.ts only export is useSettingsClearSearchHistory
-N3 src/shared/api-client/queryString.ts only export is withQuery
-N3 src/shared/events/acquisitionEvents.ts only export is ACQUISITION_HANDLERS
-N3 src/shared/events/playlistEvents.ts only export is PLAYLIST_HANDLERS
-N3 src/shared/events/resyncEvents.ts only export is RESYNC_HANDLERS
-N3 src/shared/id/uuid.ts only export is randomUuid
-N3 src/shared/offline/offlineSupport.ts only export is offlineDownloadsSupported
-N3 src/shared/playback/playFromList.ts only export is buildPlayableQueue
-N3 src/shared/telemetry/native/uncaughtErrors.ts only export is chainUncaughtErrorHandler
-N3 src/shared/ui/haptics.ts only export is tapFeedback
-N3 src/shared/ui/haptics.web.ts only export is tapFeedback
-N3 src/shared/ui/motion/pressScale.ts only export is usePressScale
-N3 src/shared/ui/navigation/pageTitle.ts only export is pageTitleFor
-N3 src/shared/ui/primitives/screenLayout.ts only export is SCREEN_HORIZONTAL_PADDING
+N3 src/features/detail/domain/content-status.ts is not camelCase
+N3 src/features/detail/domain/extras-accessors.ts is not camelCase
+N3 src/features/detail/domain/featured-artists.ts is not camelCase
+N3 src/features/detail/domain/owned-playback.ts is not camelCase
+N3 src/features/detail/domain/play-source.ts is not camelCase
+N3 src/features/detail/domain/save-all.ts is not camelCase
+N3 src/features/detail/domain/save-cache.ts is not camelCase
+N3 src/features/detail/domain/save-control-state.ts is not camelCase
+N3 src/features/library/domain/library-to-discovery.ts is not camelCase
+N3 src/features/playback/domain/lyrics-sync.ts is not camelCase
+N3 src/features/playback/native/expoGoPlaybackProvider.tsx is not PascalCase
+N3 src/features/playback/native/trackPlayerPlaybackProvider.tsx is not PascalCase
+N3 src/features/playback/ui/SleepOptions.ts is not camelCase
+N3 src/features/playback/ui/SpeedOptions.ts is not camelCase
+N3 src/features/playback/web/webPlaybackProvider.tsx is not PascalCase
+N3 src/shared/api-client is not camelCase
+N3 src/shared/events/sse-client.ts is not camelCase
+N3 src/shared/playback/PlaybackContext.ts is not camelCase
+N3 src/shared/search-history is not camelCase
