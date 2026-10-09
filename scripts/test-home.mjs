@@ -162,6 +162,15 @@ export function violations(added, repo) {
   return out;
 }
 
+function pureMoves(nameStatus) {
+  const moved = new Set();
+  for (const line of nameStatus.split("\n")) {
+    const [status, from, to] = line.split("\t");
+    if (status === "R100" && from && to && posix.basename(from) === posix.basename(to)) moved.add(to);
+  }
+  return moved;
+}
+
 function main() {
   const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 << 20 });
   const hasRef = (r) => { try { git(["rev-parse", "-q", "--verify", r]); return true; } catch { return false; } };
@@ -174,6 +183,8 @@ function main() {
       ...git(["ls-files", "--others", "--exclude-standard"]).split("\n"),
     ].filter(Boolean))];
     removed = git(["diff", "--no-renames", "--name-only", "--diff-filter=D", base]).split("\n").filter(Boolean);
+    const moved = pureMoves(git(["diff", "--find-renames=100%", "--name-status", "--diff-filter=R", base]));
+    added = added.filter((path) => !moved.has(path));
     repo = gitRepo(".", base, added, removed);
   } catch (e) {
     console.error(`test-home: could not diff against ${ref}: ${e.message.split("\n")[0]}`);

@@ -74,5 +74,13 @@ git checkout -q -B committed origin/main && git clean -qfd
 out=$(node "$th" origin/main 2>&1)
 [ $? = 1 ] && grep -q 'svc/sched/scheduler_test.go' <<<"$out" || { echo "FAIL a committed per-bug file names its home: $out"; fail=1; }
 
+git checkout -q -B moved origin/main && git clean -qfd
+git mv svc server && git commit -qm move
+node "$th" origin/main >/dev/null 2>&1 || { echo "FAIL a folder moved unchanged carries its old scenario test files with it"; fail=1; }
+
+git checkout -q -B moved-edited origin/main && git clean -qfd
+git mv svc server && printf 'package sched\n' > server/sched/drain_edge_test.go && git commit -qam move-edit
+node "$th" origin/main >/dev/null 2>&1 && { echo "FAIL a moved scenario test file that was also edited is still judged"; fail=1; }
+
 [ $fail = 0 ] && echo "test-home.test.sh: all cases pass"
 exit $fail
