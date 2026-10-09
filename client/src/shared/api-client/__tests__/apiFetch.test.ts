@@ -1111,3 +1111,77 @@ describe('platform-dependent request headers', () => {
     expect(headers['X-Correlation-ID']).toBeUndefined();
   });
 });
+
+const DEADLINE_MS = 15_000;
+const LONGER_THAN_ANY_RETRY_BACKOFF_MS = 60_000;
+
+describe('a failing call reaches the network exactly once', () => {
+  beforeEach(() => {
+    withSession();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it.each([
+    ['a 503', () => __http.reply('GET /v1/library/tracks', { status: 503, json: {} })],
+    ['a 500', () => __http.reply('GET /v1/library/tracks', { status: 500, json: {} })],
+    ['a 429', () => __http.reply('GET /v1/library/tracks', { status: 429, json: {} })],
+    ['a transport failure', () => __http.fail('GET /v1/library/tracks')],
+    [
+      'a truncated body',
+      () => __http.reply('GET /v1/library/tracks', { status: 200, malformed: true }),
+    ],
+  ])(
+    'sends one request for %s, and none after the retry backoff window',
+    async (_label, arrange) => {
+      jest.useFakeTimers();
+      arrange();
+
+      await apiFetch('/v1/library/tracks').catch(() => undefined);
+      await jest.advanceTimersByTimeAsync(LONGER_THAN_ANY_RETRY_BACKOFF_MS);
+
+      expect(__http.countFor('GET /v1/library/tracks')).toBe(1);
+    },
+  );
+
+  it('sends one request for a call that times out, and none after', async () => {
+    jest.useFakeTimers();
+    __http.hang('GET /v1/library/tracks');
+
+    const caught = apiFetch('/v1/library/tracks').catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(DEADLINE_MS);
+    await caught;
+    await jest.advanceTimersByTimeAsync(LONGER_THAN_ANY_RETRY_BACKOFF_MS);
+
+    expect(__http.countFor('GET /v1/library/tracks')).toBe(1);
+  });
+});
+
+describe('a hung request is aborted at the deadline', () => {
+  beforeEach(() => {
+    withSession();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('leaves the in-flight request open until the 15000ms deadline, then aborts it', async () => {
+    jest.useFakeTimers();
+    __http.hang('GET /v1/library/tracks');
+
+    const caught = apiFetch('/v1/library/tracks').catch((e: unknown) => e);
+    await jest.advanceTimersByTimeAsync(DEADLINE_MS - 1);
+
+    expect(__http.requests).toHaveLength(1);
+    const { signal } = __http.last();
+    expect(signal.aborted).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(signal.aborted).toBe(true);
+    await expect(caught).resolves.toMatchObject({ name: 'NetworkError', failure: 'timeout' });
+  });
+});
