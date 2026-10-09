@@ -183,7 +183,9 @@ func login(t *testing.T, r chi.Router) string {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/test/login: got %d, want 200", rec.Code)
 	}
-	var resp testLoginResponse
+	var resp struct {
+		AccessToken string `json:"access_token"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode login: %v", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/auth/adapters/middleware"
 	"altune/go-api/internal/auth/adapters/testauth"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/httputil"
 	"context"
 	"log/slog"
 	"net/http"
@@ -48,28 +47,5 @@ type testAuthConfig interface {
 
 func mountTestLogin(ctx context.Context, r chi.Router, ta *testauth.TestAuth) {
 	slog.WarnContext(ctx, "test auth enabled: unauthenticated /test/login is mounted")
-	r.Post("/test/login", testLoginHandler(ta))
-}
-
-type testLoginResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresAt   int64  `json:"expires_at"`
-	UserID      string `json:"user_id"`
-}
-
-func testLoginHandler(ta *testauth.TestAuth) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		token, exp, err := ta.IssueToken()
-		if err != nil {
-			httputil.WriteError(w, http.StatusInternalServerError, "could not issue test token")
-			return
-		}
-		httputil.WriteJSON(w, http.StatusOK, testLoginResponse{
-			AccessToken: token,
-			TokenType:   "bearer",
-			ExpiresAt:   exp.Unix(),
-			UserID:      testauth.TestUserId().String(),
-		})
-	}
+	r.Post("/test/login", ta.LoginHandler())
 }
