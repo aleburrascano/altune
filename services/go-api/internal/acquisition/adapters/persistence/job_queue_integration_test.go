@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
@@ -80,7 +81,7 @@ func TestPgxJobQueue_ClaimSkipsUnavailableAndLeasedRows(t *testing.T) {
 		t.Errorf("Attempts = %d, want 1", job.Attempts)
 	}
 
-	if _, err := queue.Claim(ctx, 2*time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, 2*time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("second Claim = %v, want ErrNoJobAvailable (track is leased, future one is not yet due)", err)
 	}
 }
@@ -106,7 +107,7 @@ func TestPgxJobQueue_ConcurrentClaimersNeverDoubleClaim(t *testing.T) {
 			defer wg.Done()
 			queue := NewPgxJobQueue(pool)
 			job, err := queue.Claim(ctx, 2*time.Minute)
-			if errors.Is(err, ports.ErrNoJobAvailable) {
+			if errors.Is(err, acqdomain.ErrNoJobAvailable) {
 				return
 			}
 			if err != nil {
@@ -148,7 +149,7 @@ func TestPgxJobQueue_LapsedLeaseIsReclaimed(t *testing.T) {
 		t.Fatalf("first Claim returned %s, want %s", first.TrackID, track.ID)
 	}
 
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("Claim while leased = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -184,7 +185,7 @@ func TestPgxJobQueue_HeartbeatExtendsLeaseAndFailsOnceLapsed(t *testing.T) {
 	if until := leaseUntil(t, pool, track.ID); time.Until(until) < 30*time.Minute {
 		t.Errorf("lease after an hour-long heartbeat ends in %s, want about an hour", time.Until(until))
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("Claim after heartbeat extended the lease = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -212,7 +213,7 @@ func TestPgxJobQueue_ReleaseSchedulesRetryAtAvailableAt(t *testing.T) {
 		t.Fatalf("Release = %v, want nil", err)
 	}
 
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("Claim before the backoff elapses = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -304,13 +305,13 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 		t.Fatalf("reclaim did not advance the fence: zombie.Attempts=%d newOwner.Attempts=%d", zombie.Attempts, newOwner.Attempts)
 	}
 
-	if err := queue.Heartbeat(ctx, track.ID, zombie.Fence, time.Minute); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Heartbeat(ctx, track.ID, zombie.Fence, time.Minute); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("zombie Heartbeat = %v, want ErrLeaseLost", err)
 	}
-	if err := queue.Release(ctx, track.ID, zombie.Fence, 0); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Release(ctx, track.ID, zombie.Fence, 0); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("zombie Release = %v, want ErrLeaseLost", err)
 	}
-	if err := queue.Settle(ctx, track.ID, zombie.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Settle(ctx, track.ID, zombie.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("zombie Settle = %v, want ErrLeaseLost", err)
 	}
 
@@ -392,7 +393,7 @@ func TestPgxJobQueue_EnqueueKeepsALiveLeaseSoNoSecondWorkerClaims(t *testing.T) 
 	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue while leased = %v, want nil", err)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Fatalf("Claim while the owner's lease is live = %v, want ErrNoJobAvailable", err)
 	}
 	if err := queue.Heartbeat(ctx, track.ID, owner.Fence, time.Minute); err != nil {
@@ -411,7 +412,7 @@ func TestPgxJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); !errors.Is(err, ports.ErrJobKindConflict) {
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindReplace, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
 		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -479,7 +480,7 @@ func TestPgxJobQueue_ReplaceOfAReadyTrackKeepsItReadyThroughClaimAndSettle(t *te
 	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
 		t.Errorf("status after a failed replace settles = %q, want ready", got)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("Claim after Settle = %v, want ErrNoJobAvailable", err)
 	}
 }
@@ -513,7 +514,7 @@ func TestPgxJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); !errors.Is(err, ports.ErrJobKindConflict) {
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, 0); !errors.Is(err, acqdomain.ErrJobKindConflict) {
 		t.Errorf("Enqueue of another kind while a replace is leased = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -649,7 +650,7 @@ func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 	if job.Run != 1 || job.Attempts != 4 {
 		t.Errorf("Run/Attempts = %d/%d, want 1/4", job.Run, job.Attempts)
 	}
-	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, ports.ErrLeaseLost) {
+	if err := queue.Settle(ctx, track.ID, stale.Fence); !errors.Is(err, acqdomain.ErrLeaseLost) {
 		t.Errorf("stale Settle = %v, want ErrLeaseLost", err)
 	}
 }
@@ -669,7 +670,7 @@ func TestPgxJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 	if err := queue.Release(ctx, track.ID, job.Fence, time.Hour); err != nil {
 		t.Fatalf("Release = %v, want nil", err)
 	}
-	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, ports.ErrNoJobAvailable) {
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("Claim inside the delay = %v, want ErrNoJobAvailable", err)
 	}
 
@@ -705,16 +706,16 @@ func TestPgxJobQueue_FencedUpdatesWrapErrorsWithTheirOperation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.op, func(t *testing.T) {
 			err := tc.run(context.Background())
-			if !errors.Is(err, ports.ErrLeaseLost) {
+			if !errors.Is(err, acqdomain.ErrLeaseLost) {
 				t.Fatalf("zero rows = %v, want ErrLeaseLost", err)
 			}
-			want := tc.op + " acquisition job for track " + missing.String() + ": " + ports.ErrLeaseLost.Error()
+			want := tc.op + " acquisition job for track " + missing.String() + ": " + acqdomain.ErrLeaseLost.Error()
 			if err.Error() != want {
 				t.Errorf("zero-rows error = %q, want %q", err.Error(), want)
 			}
 
 			err = tc.run(cancelled)
-			if err == nil || errors.Is(err, ports.ErrLeaseLost) {
+			if err == nil || errors.Is(err, acqdomain.ErrLeaseLost) {
 				t.Fatalf("cancelled context = %v, want a database error", err)
 			}
 			if prefix := tc.op + " acquisition job: "; !strings.HasPrefix(err.Error(), prefix) {

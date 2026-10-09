@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"bytes"
@@ -1319,7 +1320,7 @@ func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(
 	ac := logTestDownloadContext()
 	ac.Track.Duration = 0
 	ac.Identity = ports.RecordingIdentity{MBID: "mb-want"}
-	throttled := fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled)
+	throttled := fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)
 
 	runDownloadForLog(context.Background(), t, ac,
 		WithDownloadIdentifier(&stubIdentifier{err: throttled}))
@@ -1336,7 +1337,7 @@ func TestDownloadStep_ThrottledIdentifyLogsThrottledAndLeavesIdentityUnverified(
 func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing.T) {
 	logs := captureJSONLog(t)
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
-	identifier := &stubIdentifier{err: fmt.Errorf("acoustid lookup: %w", ports.ErrIdentifyThrottled)}
+	identifier := &stubIdentifier{err: fmt.Errorf("acoustid lookup: %w", acqdomain.ErrIdentifyThrottled)}
 	step := NewDownloadStep(fetcher, WithDownloadIdentifier(identifier))
 	ac := previewContext()
 

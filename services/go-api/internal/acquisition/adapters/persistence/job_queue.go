@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -80,7 +81,7 @@ func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID domain.Tra
 		return fmt.Errorf("enqueue acquisition job: %w", err)
 	}
 	if ports.JobKind(runningKind) != kind {
-		return ports.ErrJobKindConflict
+		return acqdomain.ErrJobKindConflict
 	}
 	return nil
 }
@@ -146,7 +147,7 @@ func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job
 	row := q.pool.QueryRow(ctx, claimJobSQL, lease.Seconds())
 	err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts, &run)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.Job{}, ports.ErrNoJobAvailable
+		return ports.Job{}, acqdomain.ErrNoJobAvailable
 	}
 	if err != nil {
 		return ports.Job{}, fmt.Errorf("claim acquisition job: %w", err)
@@ -173,7 +174,7 @@ func (q *PgxJobQueue) execFenced(ctx context.Context, trackID domain.TrackId, op
 		return fmt.Errorf("%s acquisition job: %w", op, err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("%s acquisition job for track %s: %w", op, trackID, ports.ErrLeaseLost)
+		return fmt.Errorf("%s acquisition job for track %s: %w", op, trackID, acqdomain.ErrLeaseLost)
 	}
 	return nil
 }

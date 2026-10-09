@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -179,7 +180,7 @@ func (s *BackgroundAcquisitionScheduler) claimJob() (ports.Job, bool) {
 
 func (s *BackgroundAcquisitionScheduler) claimNext() (ports.Job, bool) {
 	job, err := s.queue.Claim(s.baseCtx, s.leaseDuration)
-	if errors.Is(err, ports.ErrNoJobAvailable) {
+	if errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		return ports.Job{}, false
 	}
 	if err != nil {
@@ -350,7 +351,7 @@ func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID doma
 	if err == nil {
 		return
 	}
-	if errors.Is(err, ports.ErrLeaseLost) {
+	if errors.Is(err, acqdomain.ErrLeaseLost) {
 		slog.WarnContext(s.baseCtx, "acquisition."+op+"_lease_lost", "track_id", trackID.String())
 		return
 	}

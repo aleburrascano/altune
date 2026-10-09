@@ -1,6 +1,7 @@
 package service
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -97,7 +98,7 @@ func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt tim
 	running := j.kind
 	if running != kind {
 		q.mu.Unlock()
-		return true, ports.ErrJobKindConflict
+		return true, acqdomain.ErrJobKindConflict
 	}
 	j.reenqueued = true
 	j.run = 0
@@ -114,7 +115,7 @@ func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, 
 	now := q.now()
 	bestID, best := q.findClaimable(now)
 	if best == nil {
-		return ports.Job{}, ports.ErrNoJobAvailable
+		return ports.Job{}, acqdomain.ErrNoJobAvailable
 	}
 	best.leased = true
 	best.leaseUntil = now.Add(lease)
@@ -171,7 +172,7 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence
 		return fmt.Errorf("heartbeat acquisition job: track %s not found", trackID)
 	}
 	if !j.leased || ports.Fence(j.fence) != fence {
-		return ports.ErrLeaseLost
+		return acqdomain.ErrLeaseLost
 	}
 	j.leaseUntil = q.now().Add(lease)
 	return nil
@@ -185,7 +186,7 @@ func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence p
 		return fmt.Errorf("release acquisition job: track %s not found", trackID)
 	}
 	if ports.Fence(j.fence) != fence {
-		return ports.ErrLeaseLost
+		return acqdomain.ErrLeaseLost
 	}
 	j.leased = false
 	j.availableAt = q.now().Add(delay)
@@ -201,7 +202,7 @@ func (q *memJobQueue) Settle(_ context.Context, trackID domain.TrackId, fence po
 		return nil
 	}
 	if ports.Fence(j.fence) != fence {
-		return ports.ErrLeaseLost
+		return acqdomain.ErrLeaseLost
 	}
 	if j.reenqueued {
 		j.leased = false

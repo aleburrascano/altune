@@ -1,6 +1,7 @@
 package chromaprint
 
 import (
+	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
@@ -863,7 +864,7 @@ func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
 
 	_, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 
-	if !errors.Is(err, ports.ErrIdentifyThrottled) {
+	if !errors.Is(err, acqdomain.ErrIdentifyThrottled) {
 		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
 	}
 	if *hits != 2 {
@@ -890,7 +891,7 @@ func TestAcoustIDsFor_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.
 
 	_, err := id.AcoustIDsFor(context.Background(), "mbid")
 
-	if !errors.Is(err, ports.ErrIdentifyThrottled) {
+	if !errors.Is(err, acqdomain.ErrIdentifyThrottled) {
 		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
 	}
 	if *hits != 2 {
@@ -925,7 +926,7 @@ func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	defer failing.Close()
 	id = NewIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
 	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
-	if err == nil || errors.Is(err, ports.ErrIdentifyThrottled) {
+	if err == nil || errors.Is(err, acqdomain.ErrIdentifyThrottled) {
 		t.Errorf("500 err = %v, want a non-throttled error", err)
 	}
 }
@@ -943,7 +944,7 @@ func TestLookup_ContextCancelAbortsTheRetryAfterWait(t *testing.T) {
 	start := time.Now()
 	_, err := id.lookup(ctx, fingerprint{Duration: 100, Fingerprint: "abc"})
 
-	if err == nil || errors.Is(err, ports.ErrIdentifyThrottled) {
+	if err == nil || errors.Is(err, acqdomain.ErrIdentifyThrottled) {
 		t.Errorf("err = %v, want the context error", err)
 	}
 	if time.Since(start) > time.Second {
