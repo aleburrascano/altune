@@ -33,3 +33,13 @@ type MBDiscographyAnchor interface {
 type RelatedTracksProvider interface {
 	GetRelatedTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
+
+type ResultCache interface {
+	Get(ctx context.Context, key string) ([]domain.SearchResult, bool)
+	Set(ctx context.Context, key string, results []domain.SearchResult)
+}
+
+type HeldSlateCache interface {
+	Get(ctx context.Context, key string) ([]domain.SearchResult, bool)
+	Set(ctx context.Context, key string, results []domain.SearchResult)
+}

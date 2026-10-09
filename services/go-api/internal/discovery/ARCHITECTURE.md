@@ -193,7 +193,7 @@ touching the others — result caching (`searchResultCache`, `result_cache.go`),
 fan-out/merge/rank (`fanOut`/`mergeRankEnrich`), zero-result correction retry
 (`CorrectionService`, `search_correction.go`), favorites lift (`favorites.go`),
 related aggregation (`FindRelatedService`, `find_related.go`), pagination
-(`pageOf`, `paging.go`), the eval-gated ranking experiments and exploration
+(`pageOf`, `search.go`), the eval-gated ranking experiments and exploration
 coin-flip (`rankingExperiments`, `ranking_experiments.go`), search-history
 persistence (`RecordSearchHistoryService`, `record_history.go`), event telemetry
 (`SearchTelemetry`, `telemetry.go`), and vocabulary ingestion
@@ -418,7 +418,7 @@ top-tracks get cohesion only.
    fills the gap; no variant is ever wholesale-discarded. (This replaced an earlier
    "replace-by-completeness" merge that scored only image/isrc/duration/album and
    silently dropped year/track-count — the root cause of blank-year discographies.)
-2. **`FilterKept`** (`service/release/keep.go`) — keep a merged cluster **iff `IDVerified`**:
+2. **`FilterKept`** (`service/release/merge.go`) — keep a merged cluster **iff `IDVerified`**:
    at least one provider returned it when queried by the artist's *verified id*.
    This is the one sound signal for ambiguous names. A strong identifier and
    ≥2-provider corroboration were both tried and are **unsound** — a namesake's
@@ -438,7 +438,7 @@ top-tracks get cohesion only.
      connected components by cross-provider co-occurrence and drops single-source
      islands that corroborate with nothing (the album-level MB anchor doesn't apply
      to tracks).
-4. **`NormalizeRecordType`** (`service/release/bucket.go`) — fold
+4. **`NormalizeRecordType`** (`service/release/merge.go`) — fold
    per-provider `record_type` signals plus a one-track⇒single rule into reliable
    album/single/EP buckets, then normalize a numeric year and sort newest-first
    (via `albumReleaseSortKey`, shared with the fallback so both agree on order).
@@ -623,7 +623,7 @@ Per-provider notes worth carrying:
 - **Related** (`find_related.go`, `get_related_tracks.go`) powers "more from this
   album/artist" and SoundCloud's per-track related list via `RelatedTracksProvider`.
 
-- **Featured artists** (`featured_artists.go`, `featured_resolver.go`) merges
+- **Featured artists** (`featured_resolver.go`) merges
   MusicBrainz `artist-credit` with Deezer track contributors (MB-primary, Deezer
   fills gaps) so the detail "Featuring" row shows structured, tappable credits.
 
@@ -909,7 +909,7 @@ The blast radius, per change:
 
 **Where correctness is concentrated.** The pure, no-I/O functions are where the
 hard logic lives and where it is safest to change: `Merge` (`merge.go`), the
-`rankPipeline` composition (`pipeline.go` / `rank.go` / `rank_relevance.go`), and
+`rankPipeline` composition (`rank.go` / `rank_relevance.go`), and
 the detail cores `MergeReleases` / `FilterKept` / `NormalizeRecordType` /
 `FilterGroupsByMBAnchor` / `FilterCohesive` (`service/release/*.go`). Each is exhaustively
 unit-testable with plain data and deletable in isolation. Every regression this

@@ -186,7 +186,7 @@ Thin projection (caps 1–2), built and on `main`:
 Detail-open enrichment (cap 3 + cap-4 similar artists), built 2026-06-22, mirroring
 `musicbrainz-enrichment` / the Discogs enricher:
 
-- `domain/lastfm_enrichment.go` — the `LastFmEnrichment` value object (+ `Empty`/`IsZero`).
+- `domain/enrichment.go` — the `LastFmEnrichment` value object (+ `Empty`/`IsZero`).
 - `ports/ports.go` — `LastFmEnricher` (single `Lookup(kind, artist, title)`) + `LastFmEnrichmentCache`.
 - `adapters/providers/lastfm_enrichment.go` — the kind-dispatched `*.getInfo` lookups (`autocorrect=1`),
   tag/similar parsers tolerant of the empty-collection-as-`""` quirk, and `cleanLastFmBio` (strips the

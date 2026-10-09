@@ -20,3 +20,8 @@ type VocabularyStore interface {
 	VocabularyReader
 	VocabularyWriter
 }
+
+type ChartProvider interface {
+	Name() domain.ProviderName
+	FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error)
+}

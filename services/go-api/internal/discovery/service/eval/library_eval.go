@@ -216,3 +216,7 @@ func aggregate(results []EvalResult, k int) EvalReport {
 	report.Evaluated = report.Total - report.Skipped
 	return report
 }
+
+func quoteJSON(s string) ([]byte, error) {
+	return []byte(`"` + s + `"`), nil
+}

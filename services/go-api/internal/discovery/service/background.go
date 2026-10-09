@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"log/slog"
+	"runtime/debug"
 	"sync"
 )
 
@@ -26,3 +28,10 @@ func (r *backgroundRunner) launch(parentCtx context.Context, label string, fn fu
 }
 
 func (r *backgroundRunner) wait() { r.wg.Wait() }
+
+func RecoverGoroutine(ctx context.Context, event string, attrs ...any) {
+	if r := recover(); r != nil {
+		slog.ErrorContext(ctx, event,
+			append(attrs, "panic", r, "stack", string(debug.Stack()))...)
+	}
+}
