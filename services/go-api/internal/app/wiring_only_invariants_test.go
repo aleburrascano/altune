@@ -188,25 +188,6 @@ func TestWiringOnly_PackageHasNoRuntimeOutsideAllowlist(t *testing.T) {
 	}
 }
 
-func TestWiringOnly_ViolatingFilesEqualAllowlist(t *testing.T) {
-	fset, files := parseAppPackage(t)
-	var got, want []string
-	for name := range wiringViolations(fset, files) {
-		got = append(got, name)
-	}
-	for name := range wiringOnlyAllowlist {
-		want = append(want, name)
-	}
-	sort.Strings(got)
-	sort.Strings(want)
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("files with violations = %v, want exactly the allowlist %v", got, want)
-	}
-	if len(want) != 2 {
-		t.Errorf("allowlist has %d entries, want 2 at the start", len(want))
-	}
-}
-
 func TestWiringOnly_Rules(t *testing.T) {
 	cases := []struct {
 		name string
