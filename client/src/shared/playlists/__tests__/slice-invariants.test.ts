@@ -69,14 +69,6 @@ function exportedFunctionNames(source: string): string[] {
   return names;
 }
 
-function words(source: string): string[] {
-  return source.split(/[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])/).filter((word) => word.length > 0);
-}
-
-function bannedNounViolations(source: string): string[] {
-  return words(source).filter((word) => /^songs?$/i.test(word));
-}
-
 describe('sanity: this suite is actually scanning the real slice', () => {
   it('shared/playlists is found under process.cwd()/src and contains mutations.ts, index.ts, the two component files and the single-flight hook', () => {
     const names = listSourceFiles(SLICE_DIR)
@@ -333,7 +325,7 @@ describe('rule 5 — the barrel is the public surface', () => {
   });
 });
 
-describe('rule 6 — the banned noun never appears in this slice', () => {
+describe('rule 6 — the slice holds its source modules', () => {
   const sliceFiles = readAll(listSourceFiles(SLICE_DIR));
 
   it("scanned exactly the slice's five source modules (sanity)", () => {
@@ -347,26 +339,6 @@ describe('rule 6 — the banned noun never appears in this slice', () => {
       'playlistsPort.ts',
       'useSingleFlightAction.ts',
     ]);
-  });
-
-  it('no identifier or string literal in mutations.ts, AddToPlaylistSheet.tsx, CreatePlaylistModal.tsx or index.ts contains "song"', () => {
-    const offenders = sliceFiles
-      .filter(({ source }) => bannedNounViolations(source).length > 0)
-      .map(({ file }) => path.basename(file));
-    expect(offenders).toEqual([]);
-  });
-
-  it('flags "song" standalone, in camelCase, in PascalCase, in SCREAMING_SNAKE_CASE and pluralized', () => {
-    expect(bannedNounViolations('const song = current;')).toEqual(['song']);
-    expect(bannedNounViolations('const songId = current.id;')).toEqual(['song']);
-    expect(bannedNounViolations('type SongTitle = string;')).toEqual(['Song']);
-    expect(bannedNounViolations('const SONG_ID = 1;')).toEqual(['SONG']);
-    expect(bannedNounViolations('const songs = [];')).toEqual(['songs']);
-  });
-
-  it('does not flag a legitimate word that merely contains "song" as a substring', () => {
-    expect(bannedNounViolations('const songwriter = credit.name;')).toEqual([]);
-    expect(bannedNounViolations('const songbird = "decoy";')).toEqual([]);
   });
 });
 

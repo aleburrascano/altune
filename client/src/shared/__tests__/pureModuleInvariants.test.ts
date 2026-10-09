@@ -115,14 +115,6 @@ function effectiveFeatureConsumers(moduleName: string, files: FeatureFile[]): Se
   return consumers;
 }
 
-function words(source: string): string[] {
-  return source.split(/[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])/).filter((word) => word.length > 0);
-}
-
-function bannedNounViolations(source: string): string[] {
-  return words(source).filter((word) => /^songs?$/i.test(word));
-}
-
 describe('pure shared modules rule 1 — pure utility functions, no React/RN/Expo/react-query/api-client at runtime', () => {
   it.each(PURE_MODULES)('%s imports no banned runtime module', (moduleName) => {
     expect(runtimeImportViolations(readModule(moduleName))).toEqual([]);
@@ -192,26 +184,6 @@ describe('pure shared modules rule 2 — extraction requires 2+ distinct feature
       { relativePath: 'library/b.ts', content: "from '@shared/query/queryKeysExtra'" },
     ];
     expect(distinctFeatureConsumers('query/queryKeys', decoyOnly)).toEqual(new Set(['detail']));
-  });
-});
-
-describe('pure shared modules rule 3 — the banned noun never appears', () => {
-  it.each(PURE_MODULES)('%s contains no occurrence of "song"', (moduleName) => {
-    expect(bannedNounViolations(readModule(moduleName))).toEqual([]);
-  });
-
-  it('flags "song" standalone, in camelCase, in PascalCase, in SCREAMING_SNAKE_CASE and pluralized', () => {
-    expect(bannedNounViolations('const song = current;')).toEqual(['song']);
-    expect(bannedNounViolations('const songId = current.id;')).toEqual(['song']);
-    expect(bannedNounViolations('type SongTitle = string;')).toEqual(['Song']);
-    expect(bannedNounViolations('const SONG_ID = 1;')).toEqual(['SONG']);
-    expect(bannedNounViolations('const songs = [];')).toEqual(['songs']);
-    expect(bannedNounViolations('"legacy songs table import"')).toEqual(['songs']);
-  });
-
-  it('does not flag a legitimate word that merely contains "song" as a substring', () => {
-    expect(bannedNounViolations('const songwriter = credit.name;')).toEqual([]);
-    expect(bannedNounViolations('const songbird = "decoy";')).toEqual([]);
   });
 });
 

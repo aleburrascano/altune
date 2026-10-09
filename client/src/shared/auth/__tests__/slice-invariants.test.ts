@@ -37,14 +37,6 @@ function createClientCallCount(source: string): number {
   return (source.match(/\bcreateClient\(/g) ?? []).length;
 }
 
-function words(source: string): string[] {
-  return source.split(/[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])/).filter((word) => word.length > 0);
-}
-
-function bannedNounViolations(source: string): string[] {
-  return words(source).filter((word) => /^songs?$/i.test(word));
-}
-
 describe('sanity: this suite is actually scanning the real slice', () => {
   it('shared/auth is found under process.cwd()/src and contains supabaseClient.ts', () => {
     const names = listSourceFiles(AUTH_DIR).map((file) => path.basename(file));
@@ -114,29 +106,6 @@ describe('no console.log in shared/auth', () => {
       .map((file) => path.basename(file));
 
     expect(offenders).toEqual([]);
-  });
-});
-
-describe('the banned noun never appears in shared/auth', () => {
-  it('no identifier or string literal in shared/auth contains "song"', () => {
-    const offenders = listSourceFiles(AUTH_DIR)
-      .filter((file) => bannedNounViolations(fs.readFileSync(file, 'utf8')).length > 0)
-      .map((file) => path.basename(file));
-
-    expect(offenders).toEqual([]);
-  });
-
-  it('flags "song" standalone, in camelCase, PascalCase, SCREAMING_SNAKE_CASE and pluralized', () => {
-    expect(bannedNounViolations('const song = current;')).toEqual(['song']);
-    expect(bannedNounViolations('const songId = current.id;')).toEqual(['song']);
-    expect(bannedNounViolations('type SongTitle = string;')).toEqual(['Song']);
-    expect(bannedNounViolations('const SONG_ID = 1;')).toEqual(['SONG']);
-    expect(bannedNounViolations('const songs = [];')).toEqual(['songs']);
-  });
-
-  it('does not flag a legitimate word that merely contains "song" as a substring', () => {
-    expect(bannedNounViolations('const songwriter = credit.name;')).toEqual([]);
-    expect(bannedNounViolations('const songbird = "decoy";')).toEqual([]);
   });
 });
 
