@@ -10,7 +10,8 @@ import {
 import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
-import { useDetailFetchEnabled, useGatedRefetch } from '@/features/detail/hooks/detailFetchGate';
+import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchEnabled';
+import { useGatedRefetch } from '@/features/detail/hooks/useGatedRefetch';
 import { useContentFetchRetry } from '@/features/detail/hooks/useContentFetchRetry';
 import { useLoggedSearchFailure } from '@/features/detail/hooks/useLoggedSearchFailure';
 
