@@ -74,7 +74,6 @@ function retryAfterMs(header: string | null, now: number): number {
 type EventHandler = (event: ServerEvent) => void;
 type ErrorHandler = (error: unknown) => void;
 
-
 export class SSEClient {
   private xhr: XMLHttpRequest | null = null;
   private lastEventId = '';

@@ -43,31 +43,46 @@ export function isServerEvent(block: ParsedBlock): block is ServerEvent {
   return !(block instanceof MalformedSSEEventError);
 }
 
+const CRLF_PATTERN = /\r\n/g;
+const BARE_CR_PATTERN = /\r/g;
+
 function withUnixLineEndings(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return text.replace(CRLF_PATTERN, '\n').replace(BARE_CR_PATTERN, '\n');
 }
 
-function parseBlock(block: string): ParsedBlock | null {
-  let id = '';
-  let type = 'message';
-  const dataLines: string[] = [];
+interface BlockFields {
+  id: string;
+  type: string;
+  dataLines: string[];
+}
 
+function applyField(fields: BlockFields, field: WireField): void {
+  if (field.name === 'id') fields.id = field.value;
+  else if (field.name === 'event') fields.type = field.value;
+  else if (field.name === 'data') fields.dataLines.push(field.value);
+}
+
+function collectFields(block: string): BlockFields {
+  const fields: BlockFields = { id: '', type: 'message', dataLines: [] };
   for (const line of block.split('\n')) {
     const field = fieldOf(line);
-    if (field === null) continue;
-    if (field.name === 'id') id = field.value;
-    else if (field.name === 'event') type = field.value;
-    else if (field.name === 'data') dataLines.push(field.value);
+    if (field !== null) applyField(fields, field);
   }
+  return fields;
+}
 
-  if (dataLines.length === 0) return null;
-
-  const payload = dataLines.join('\n');
+function parsePayload(id: string, type: string, payload: string): ParsedBlock {
   try {
     return { id, type, data: JSON.parse(payload) as Record<string, unknown> };
   } catch {
     return new MalformedSSEEventError(id, type, payload.length);
   }
+}
+
+function parseBlock(block: string): ParsedBlock | null {
+  const { id, type, dataLines } = collectFields(block);
+  if (dataLines.length === 0) return null;
+  return parsePayload(id, type, dataLines.join('\n'));
 }
 
 function latestEventId(blocks: ParsedBlock[], fallback: string): string {
