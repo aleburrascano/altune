@@ -11,7 +11,7 @@ FAILURES=0
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
     local stub_tracks=${STUB_TRACKS:-t} stub_fail=${STUB_MIGRATE_FAIL:-__none__}
-    local stub_preapplied=${STUB_PREAPPLIED:-}
+    local stub_preapplied=${STUB_PREAPPLIED:-} stub_dump_rc=${STUB_DUMP_RC:-0}
     WORK=$(mktemp -d -p "$parent")
     mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/migrations"
     cp "$HERE/prod_host.sh" "$HERE/prod-migrate.sh" "$WORK/api/deploy/"
@@ -58,14 +58,27 @@ case "\$query" in
 esac
 exit 0
 EOF
+    cat >"$WORK/bin/pg_dump" <<EOF
+#!/usr/bin/env bash
+printf '%s\\n' "\$*" >> "$WORK/dumps.log"
+wc -l < "$WORK/applies.log" | tr -d ' ' >> "$WORK/dump-applies-seen.log"
+prev=""
+for a in "\$@"; do
+    [ "\$prev" = "--file" ] && : >"\$a"
+    prev="\$a"
+done
+exit $stub_dump_rc
+EOF
     chmod +x "$WORK/bin"/*
+    mkdir -p "$WORK/snapshots"
+    for name in ${STUB_OLD_SNAPSHOTS:-}; do : >"$WORK/snapshots/$name"; done
     : >"$WORK/applies.log"
     [ -n "$stub_preapplied" ] && printf '%s\n' "$stub_preapplied" >"$WORK/applied"
 
-    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" \
+    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" \
         bash deploy/prod-migrate.sh >"$WORK/out.log" 2>&1)
     RC=$?
-    unset STUB_TRACKS STUB_MIGRATE_FAIL STUB_PREAPPLIED
+    unset STUB_TRACKS STUB_MIGRATE_FAIL STUB_PREAPPLIED STUB_DUMP_RC STUB_OLD_SNAPSHOTS
 }
 
 fail() {
@@ -146,6 +159,43 @@ CASE="a failing migration aborts non-zero before the deploy swaps"
 STUB_TRACKS=f STUB_MIGRATE_FAIL='*' setup_case "$FULL_ENV"
 expect_rc 1
 grep -qF "prod migrations up to date" "$WORK/out.log" && fail "reported success despite a failed migration"
+
+CASE="a pending migration is snapshotted once, in custom format, before any apply"
+STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
+expect_rc 0
+[ "$(wc -l <"$WORK/dumps.log")" = 1 ] || fail "expected exactly one pg_dump call"
+grep -qF -e "--format=custom" "$WORK/dumps.log" || fail "pg_dump was not called with --format=custom"
+grep -qF "before-016_constraint.dump" "$WORK/dumps.log" || fail "snapshot not named for the first pending version"
+grep -qF "postgres://u:p@h:5432/db" "$WORK/dumps.log" || fail "pg_dump was not given the database url"
+[ "$(cat "$WORK/dump-applies-seen.log")" = 0 ] || fail "snapshot was taken after a migration was applied"
+
+CASE="a failing pg_dump exits 1 with FAILED and applies nothing"
+STUB_DUMP_RC=1 STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "FAILED: snapshot"
+expect_out "before-016_constraint.dump"
+[ ! -s "$WORK/applies.log" ] || fail "applied a migration after the snapshot failed"
+[ -z "$(ls "$WORK/snapshots")" ] || fail "left a partial snapshot behind"
+
+CASE="no pending migration writes no snapshot"
+STUB_PREAPPLIED=$'001_baseline\n002_indexes\n016_constraint\n020_marked_index\n021_unmarked_index\n022_prose_only' setup_case "$FULL_ENV"
+expect_rc 0
+[ ! -e "$WORK/dumps.log" ] || fail "pg_dump called with nothing pending"
+
+CASE="only the newest 5 snapshots of a tier remain"
+STUB_OLD_SNAPSHOTS="prod-20200101T000000Z-before-a.dump prod-20200102T000000Z-before-a.dump prod-20200103T000000Z-before-a.dump prod-20200104T000000Z-before-a.dump prod-20200105T000000Z-before-a.dump prod-20200106T000000Z-before-a.dump staging-20190101T000000Z-before-a.dump" \
+    STUB_PREAPPLIED=$'001_baseline\n002_indexes' setup_case "$FULL_ENV"
+expect_rc 0
+prod_dumps=("$WORK"/snapshots/prod-*.dump)
+[ "${#prod_dumps[@]}" = 5 ] || fail "expected 5 prod snapshots, got ${#prod_dumps[@]}"
+[ ! -e "$WORK/snapshots/prod-20200101T000000Z-before-a.dump" ] || fail "oldest snapshot kept"
+[ -e "$WORK/snapshots/prod-20200106T000000Z-before-a.dump" ] || fail "newer old snapshot deleted"
+[ -e "$WORK/snapshots/staging-20190101T000000Z-before-a.dump" ] || fail "other tier's snapshot deleted"
+
+CASE="restore-snapshot.sh with no arguments prints usage and exits 2"
+OUT=$(bash "$HERE/restore-snapshot.sh" 2>&1); RC=$?
+[ "$RC" = 2 ] || fail "expected exit 2, got $RC"
+[ "$OUT" = "usage: restore-snapshot.sh <staging|prod> <dump file>" ] || fail "unexpected usage line: $OUT"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

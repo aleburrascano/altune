@@ -183,12 +183,43 @@ apply_migration_file() {
         -c "INSERT INTO schema_migrations (version) VALUES ('$version');"
 }
 
-apply_new_migrations() {
+pending_migration_versions() {
     local version
     for version in $(migration_versions); do
-        if [ "$(psql_value "SELECT 1 FROM schema_migrations WHERE version='$version';")" = 1 ]; then
-            continue
+        if [ "$(psql_value "SELECT 1 FROM schema_migrations WHERE version='$version';")" != 1 ]; then
+            echo "$version"
         fi
+    done
+}
+
+prune_snapshots() {
+    local keep=5 dumps
+    dumps=$(printf '%s\n' "$SNAPSHOT_DIR/$MIGRATE_TIER"-*.dump | sort -r)
+    printf '%s\n' "$dumps" | tail -n +$((keep + 1)) | while IFS= read -r old; do
+        rm -f -- "$old"
+    done
+}
+
+snapshot_database() {
+    SNAPSHOT_DIR="${SNAPSHOT_DIR:-$HOME/altune-snapshots}"
+    local file
+    file="$SNAPSHOT_DIR/$MIGRATE_TIER-$(date -u +%Y%m%dT%H%M%SZ)-before-$1.dump"
+    mkdir -p "$SNAPSHOT_DIR" || { log "FAILED: cannot create snapshot dir $SNAPSHOT_DIR"; exit 1; }
+    log "snapshotting $MIGRATE_TIER database to $file"
+    if ! pg_dump --format=custom --file "$file" "$MIGRATE_DATABASE_URL"; then
+        rm -f -- "$file"
+        log "FAILED: snapshot $file could not be written; no migration applied"
+        exit 1
+    fi
+    prune_snapshots
+}
+
+apply_new_migrations() {
+    local pending version
+    pending=$(pending_migration_versions)
+    [ -n "$pending" ] || return 0
+    snapshot_database "$(head -1 <<<"$pending")"
+    for version in $pending; do
         log "applying $MIGRATE_TIER migration $version"
         apply_migration_file "$version"
     done
