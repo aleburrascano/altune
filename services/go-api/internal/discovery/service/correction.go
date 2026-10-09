@@ -153,16 +153,8 @@ func pickBestCorrection(ctx context.Context, queryNorm string, candidates []doma
 			continue
 		}
 		dist := textnorm.LevenshteinDistance(queryNorm, c.TermNorm)
-		slog.DebugContext(ctx, "correction.candidate",
-			logging.SearchTextAttr(queryNorm),
-			slog.Group("candidate", logging.SearchTextAttr(c.TermNorm)),
-			"distance", dist,
-			"score", c.MatchScore,
-		)
-		if dist > maxDist {
-			continue
-		}
-		if dist < bestDist || (dist == bestDist && best != nil && c.MatchScore > best.Confidence) {
+		logCandidate(ctx, queryNorm, c, dist)
+		if dist <= maxDist && (dist < bestDist || (dist == bestDist && best != nil && c.MatchScore > best.Confidence)) {
 			best = &CorrectionResult{
 				Corrected:  c.Term,
 				Confidence: c.MatchScore,
@@ -171,6 +163,15 @@ func pickBestCorrection(ctx context.Context, queryNorm string, candidates []doma
 		}
 	}
 	return best
+}
+
+func logCandidate(ctx context.Context, queryNorm string, c domain.VocabularyEntry, dist int) {
+	slog.DebugContext(ctx, "correction.candidate",
+		logging.SearchTextAttr(queryNorm),
+		slog.Group("candidate", logging.SearchTextAttr(c.TermNorm)),
+		"distance", dist,
+		"score", c.MatchScore,
+	)
 }
 
 func maxCorrectionDist(query string) int {

@@ -55,30 +55,37 @@ func (cb *CircuitBreaker) AllowRequest(ctx context.Context, provider domain.Prov
 	entry := cb.getOrCreate(provider)
 
 	switch entry.state {
-	case CircuitClosed:
-		return true
 	case CircuitOpen:
-		if cb.now().Sub(entry.lastFailedAt) > openDuration {
-			entry.state = CircuitHalfOpen
-			entry.probing = true
-			entry.probeStartedAt = cb.now()
-			slog.WarnContext(ctx, "circuit breaker half-open (probing recovery)",
-				"provider", provider.String())
-			return true
-		}
-		return false
+		return cb.allowOpen(ctx, entry, provider)
 	case CircuitHalfOpen:
-		if entry.probing && cb.now().Sub(entry.probeStartedAt) <= probeLease {
-			return false
-		}
-		if entry.probing {
-			slog.WarnContext(ctx, "circuit breaker probe lease expired (re-probing)",
-				"provider", provider.String())
-		}
-		entry.probing = true
-		entry.probeStartedAt = cb.now()
-		return true
+		return cb.allowHalfOpen(ctx, entry, provider)
 	}
+	return true
+}
+
+// allowOpen and allowHalfOpen run with cb.mu held by AllowRequest.
+func (cb *CircuitBreaker) allowOpen(ctx context.Context, entry *circuitEntry, provider domain.ProviderName) bool {
+	if cb.now().Sub(entry.lastFailedAt) <= openDuration {
+		return false
+	}
+	entry.state = CircuitHalfOpen
+	entry.probing = true
+	entry.probeStartedAt = cb.now()
+	slog.WarnContext(ctx, "circuit breaker half-open (probing recovery)",
+		"provider", provider.String())
+	return true
+}
+
+func (cb *CircuitBreaker) allowHalfOpen(ctx context.Context, entry *circuitEntry, provider domain.ProviderName) bool {
+	if entry.probing && cb.now().Sub(entry.probeStartedAt) <= probeLease {
+		return false
+	}
+	if entry.probing {
+		slog.WarnContext(ctx, "circuit breaker probe lease expired (re-probing)",
+			"provider", provider.String())
+	}
+	entry.probing = true
+	entry.probeStartedAt = cb.now()
 	return true
 }
 
