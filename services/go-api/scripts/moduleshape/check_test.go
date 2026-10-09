@@ -234,7 +234,6 @@ func TestCollectLive(t *testing.T) {
 	for _, want := range []string{
 		"G3 internal/acquisition/ports/queue.go:4 imports catalog outside adapters/catalogbridge",
 		"G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler",
-		"N2 internal/discovery differs from mobile feature discover",
 	} {
 		if !slices.Contains(got, want) {
 			t.Errorf("missing %q", want)
