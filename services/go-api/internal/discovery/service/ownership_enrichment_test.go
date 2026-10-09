@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 	"context"
@@ -51,7 +52,7 @@ func ownable(kind, title, artist string, extras map[string]any) (OwnableItem, *m
 
 func TestStampOwnership_StampsOwnedTracksOnly(t *testing.T) {
 	svc := NewOwnershipEnrichmentService(stubOwnershipReader{owned: map[string]ports.OwnedTrack{
-		ports.OwnershipKey("Song", "Artist"): {TrackID: "t1", AcquisitionStatus: "ready"},
+		domain.OwnershipKey("Song", "Artist"): {TrackID: "t1", AcquisitionStatus: "ready"},
 	}}, nil)
 	track, trackExtras := ownable("track", "Song", "Artist", nil)
 	album, albumExtras := ownable("album", "Song", "Artist", map[string]any{})

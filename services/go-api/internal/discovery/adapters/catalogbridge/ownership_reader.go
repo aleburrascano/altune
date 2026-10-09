@@ -3,6 +3,7 @@ package catalogbridge
 import (
 	catalogdomain "altune/go-api/internal/catalog/domain"
 	catalogservice "altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 	"context"
@@ -41,7 +42,7 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 			AcquisitionStatus: ref.AcquisitionStatus,
 			TrackNumber:       ref.TrackNumber,
 		}
-		key := ports.OwnershipKey(track.Title, track.Artist)
+		key := domain.OwnershipKey(track.Title, track.Artist)
 		if _, taken := owned[key]; taken {
 			continue
 		}
