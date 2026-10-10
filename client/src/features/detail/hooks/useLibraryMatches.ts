@@ -97,7 +97,10 @@ function useLibraryAlbumsQuery(artistName: string, enabled: boolean) {
 export function useLibraryAlbumsForArtist(artistName: string, enabled: boolean): DiscoveryResult[] {
   const { data: response } = useLibraryAlbumsQuery(artistName, enabled);
   const wanted = normalizeForCompare(artistName);
-  return (response?.items ?? [])
-    .filter((group) => normalizeForCompare(group.artist) === wanted)
-    .map(albumFromLibraryGroup);
+  const matches: DiscoveryResult[] = [];
+  if (!response) return matches;
+  for (const group of response.items) {
+    if (normalizeForCompare(group.artist) === wanted) matches.push(albumFromLibraryGroup(group));
+  }
+  return matches;
 }

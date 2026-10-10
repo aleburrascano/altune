@@ -81,10 +81,15 @@ function refreshPage(target: PollTarget, offset: number) {
     });
 }
 
-const pendingOffsets = ({ queryClient, query, sort }: PollTarget) =>
-  (queryClient.getQueryData<TracksData>(libraryKeys.tracks(query, sort))?.pages ?? [])
-    .filter(hasPending)
-    .map((page) => page.offset);
+function pendingOffsets({ queryClient, query, sort }: PollTarget): number[] {
+  const cached = queryClient.getQueryData<TracksData>(libraryKeys.tracks(query, sort));
+  const offsets: number[] = [];
+  if (!cached) return offsets;
+  for (const page of cached.pages) {
+    if (hasPending(page)) offsets.push(page.offset);
+  }
+  return offsets;
+}
 
 async function refreshPending(target: PollTarget) {
   for (const offset of pendingOffsets(target)) {

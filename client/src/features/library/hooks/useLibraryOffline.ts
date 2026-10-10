@@ -43,7 +43,10 @@ export function offlineEligibility(
   tracks: readonly TrackResponse[],
   statusOf: LibraryOffline['statusOf'],
 ): { downloadableIds: TrackId[]; pinnedCount: number; allPinned: boolean } {
-  const downloadableIds = tracks.filter((t) => t.acquisition_status === 'ready').map((t) => t.id);
+  const downloadableIds: TrackId[] = [];
+  for (const t of tracks) {
+    if (t.acquisition_status === 'ready') downloadableIds.push(t.id);
+  }
   const pinnedCount = downloadableIds.filter((id) => statusOf(id) === 'ready').length;
   const allPinned = downloadableIds.length > 0 && pinnedCount === downloadableIds.length;
   return { downloadableIds, pinnedCount, allPinned };

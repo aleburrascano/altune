@@ -151,7 +151,11 @@ type SelectionActionDeps = {
 };
 
 function selectedIds(selection: Selection, tracks: TrackResponse[]): TrackId[] {
-  return tracks.filter((t) => selection.has(t.id)).map((t) => t.id);
+  const ids: TrackId[] = [];
+  for (const t of tracks) {
+    if (selection.has(t.id)) ids.push(t.id);
+  }
+  return ids;
 }
 
 function allSelected(selection: Selection, tracks: TrackResponse[]): boolean {
