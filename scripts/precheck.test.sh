@@ -620,6 +620,20 @@ expect_rc 1
 expect_out "FAIL  repo script self-tests"
 [ -f "$WORK/selftest.log" ] || fail "worktree-deps.test.sh should have run"
 
+CASE="repo script self-tests link the root deps before they run, as a fresh ci worktree has none"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    printf 'mkdir -p node_modules/js-yaml\necho "export PATH=$PATH"\n' >scripts/worktree-deps.sh
+    printf 'process.exit(0);\n' >scripts/gate-parity.mjs
+    printf '[ -d node_modules/js-yaml ] || { echo "Cannot find package js-yaml"; exit 1; }\n' >scripts/gate-parity.test.sh
+    git add -A
+    git commit -qm "gate parity change"
+)
+run_script
+expect_out "ok    repo script self-tests"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

@@ -126,7 +126,9 @@ if touches '^services/go-api/migrations/|^scripts/migration-prefixes\.sh$'; then
 fi
 
 script_tests=$(grep -E '^(scripts/(worktree-deps|e2e-stack|web-export-check|migration-prefixes|gate-parity)|\.gitea/workflows/ci-node-deps)(\.test\.sh|\.sh|\.mjs)$' <<<"$changed" | sed -E 's/(\.test\.sh|\.sh|\.mjs)$/.test.sh/' | sort -u)
-if [ -n "$script_tests" ]; then
+if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
+  echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1
+elif [ -n "$script_tests" ]; then
   test_check "repo script self-tests" . bash -c 'for t in "$@"; do [ -f "$t" ] || continue; bash "$t" || exit 1; done' _ $script_tests
 fi
 
