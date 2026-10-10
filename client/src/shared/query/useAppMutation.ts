@@ -132,19 +132,10 @@ type BaseOptions<TData, TVariables> = {
   onSuccess?: (data: TData, variables: TVariables) => void;
 };
 
-type GuardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> & {
-  unguarded?: false;
+type OptimisticMutationOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> & {
   applyOptimistic: (previous: TCache, variables: TVariables) => TCache;
   revertOptimistic: (current: TCache, variables: TVariables, previous: TCache) => TCache;
 };
-
-type UnguardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> & {
-  unguarded: true;
-  applyOptimistic: (previous: TCache | undefined, variables: TVariables) => TCache;
-};
-
-type OptimisticMutationOptions<TData, TVariables, TCache> =
-  GuardedOptions<TData, TVariables, TCache> | UnguardedOptions<TData, TVariables, TCache>;
 
 type Snapshot<TCache> = { previous: TCache | undefined; epoch: number };
 
@@ -182,10 +173,6 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     options.invalidate?.(variables) ?? [queryKey];
 
   const writeOptimistic = (previous: TCache | undefined, variables: TVariables): void => {
-    if (options.unguarded) {
-      queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
-      return;
-    }
     if (previous) {
       queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
     }
@@ -198,10 +185,6 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
   };
 
   const rollback = (variables: TVariables, context: Snapshot<TCache> | undefined): void => {
-    if (options.unguarded) {
-      queryClient.setQueryData(queryKey, context?.previous);
-      return;
-    }
     const previous = context?.previous;
     if (!previous) return;
     queryClient.setQueryData<TCache>(queryKey, (current) =>
@@ -212,13 +195,11 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
   return useAppMutation<TData, Error, TVariables, Snapshot<TCache>>({
     action: options.action,
     mutationFn: onlyWhileTheStartingSessionLasts(options.mutationFn),
-    onMutate: options.unguarded
-      ? (variables, run) => optimisticWrite(variables, pinStartingSession(run))
-      : async (variables, run) => {
-          const epoch = pinStartingSession(run);
-          await queryClient.cancelQueries({ queryKey });
-          return optimisticWrite(variables, epoch);
-        },
+    onMutate: async (variables, run) => {
+      const epoch = pinStartingSession(run);
+      await queryClient.cancelQueries({ queryKey });
+      return optimisticWrite(variables, epoch);
+    },
     ...(options.onSuccess ? { onSuccess: onlyInTheStartingSession(options.onSuccess) } : {}),
     onError: (_error, variables, context) => {
       if (!isSameSession(context?.epoch)) return;
@@ -227,14 +208,9 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     },
     onSettled: (_data, _error, variables, context) => {
       if (!isSameSession(context?.epoch)) return undefined;
-      const invalidations = invalidationKeys(variables).map((key) =>
-        queryClient.invalidateQueries({ queryKey: key }),
+      return Promise.all(
+        invalidationKeys(variables).map((key) => queryClient.invalidateQueries({ queryKey: key })),
       );
-      if (options.unguarded) {
-        void Promise.all(invalidations);
-        return undefined;
-      }
-      return Promise.all(invalidations);
     },
   });
 }

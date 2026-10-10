@@ -264,102 +264,12 @@ describe('useOptimisticMutation(): guarded (default)', () => {
   });
 });
 
-describe('useOptimisticMutation(): unguarded', () => {
-  it('does not cancel, writes against a cold cache, and rolls back unconditionally without alerting', async () => {
-    const queryClient = newClient();
-    const cancelSpy = jest.spyOn(queryClient, 'cancelQueries');
-    let seenMidFlight: Counter | undefined;
-
-    const { result } = renderHook(
-      () =>
-        useOptimisticMutation({
-          action: 'test.optimistic',
-          queryKey: KEY,
-          unguarded: true,
-          mutationFn: (by: number) => {
-            seenMidFlight = queryClient.getQueryData<Counter>(KEY);
-            return Promise.reject(new Error(`boom ${by}`));
-          },
-          applyOptimistic: (previous: Counter | undefined, by) => ({
-            count: (previous?.count ?? 0) + by,
-          }),
-        }),
-      { wrapper: wrapperFor(queryClient) },
-    );
-
-    await act(async () => {
-      await expect(result.current.mutateAsync(5)).rejects.toThrow('boom 5');
-    });
-
-    expect(cancelSpy).not.toHaveBeenCalled();
-    expect(seenMidFlight).toEqual({ count: 5 });
-    expect(queryClient.getQueryData(KEY)).toEqual({ count: 5 });
-    expect(alertSpy).not.toHaveBeenCalled();
-  });
-
-  it('restores a warm snapshot on failure and does not wait for invalidation to settle', async () => {
-    const queryClient = newClient();
-    queryClient.setQueryData(KEY, { count: 1 });
-    jest
-      .spyOn(queryClient, 'invalidateQueries')
-      .mockImplementation(() => new Promise<void>(() => {}));
-
-    const { result } = renderHook(
-      () =>
-        useOptimisticMutation({
-          action: 'test.optimistic',
-          queryKey: KEY,
-          unguarded: true,
-          mutationFn: failing,
-          applyOptimistic: (previous: Counter | undefined, by: number) => ({
-            count: (previous?.count ?? 0) + by,
-          }),
-        }),
-      { wrapper: wrapperFor(queryClient) },
-    );
-
-    await act(async () => {
-      await expect(result.current.mutateAsync(3)).rejects.toThrow('boom');
-    });
-
-    expect(queryClient.getQueryData(KEY)).toEqual({ count: 1 });
-  });
-});
-
 function switchUser(queryClient: QueryClient, theirCache: Counter): void {
   runSignOutCleanups();
   queryClient.setQueryData(KEY, theirCache);
 }
 
 describe('useOptimisticMutation(): session fencing', () => {
-  it('leaves the next user data in place when an unguarded rollback lands after a user switch', async () => {
-    const queryClient = newClient();
-    queryClient.setQueryData(KEY, { count: 1 });
-
-    const { result } = renderHook(
-      () =>
-        useOptimisticMutation({
-          action: 'test.optimistic',
-          queryKey: KEY,
-          unguarded: true,
-          mutationFn: (_by: number) => {
-            switchUser(queryClient, { count: 99 });
-            return failing();
-          },
-          applyOptimistic: (previous: Counter | undefined, by: number) => ({
-            count: (previous?.count ?? 0) + by,
-          }),
-        }),
-      { wrapper: wrapperFor(queryClient) },
-    );
-
-    await act(async () => {
-      await expect(result.current.mutateAsync(3)).rejects.toThrow('boom');
-    });
-
-    expect(queryClient.getQueryData(KEY)).toEqual({ count: 99 });
-  });
-
   it('does not revert its own delta against the next user cache after a user switch', async () => {
     const queryClient = newClient();
     queryClient.setQueryData(KEY, { count: 1 });
