@@ -435,6 +435,13 @@ describe('session fencing of the request and its callbacks', () => {
 });
 
 describe('useOptimisticMutation(): alerting on web', () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+
+  afterEach(() => {
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  });
+
   it('shows the failure through window.alert with the title and message', async () => {
     const windowAlert = jest.fn();
     Object.defineProperty(globalThis, 'window', {
