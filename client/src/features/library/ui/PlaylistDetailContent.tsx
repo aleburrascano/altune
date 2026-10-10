@@ -54,7 +54,7 @@ function addModalProps(props: DetailProps): Omit<ModalProps, 'adding' | 'onAdd'>
   };
 }
 
-export function PlaylistAddTracks(props: DetailProps): ReactElement {
+function PlaylistAddTracks(props: DetailProps): ReactElement {
   const add = useAddTracks(props);
   return <AddTracksToPlaylistModal {...addModalProps(props)} {...add} />;
 }

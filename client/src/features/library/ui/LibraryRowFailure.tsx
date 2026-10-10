@@ -1,5 +1,12 @@
 import { useEffect, type ReactElement } from 'react';
-import { StyleSheet, View, ActivityIndicator, Pressable } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  ActivityIndicator,
+  Pressable,
+  type GestureResponderEvent,
+  type PressableProps,
+} from 'react-native';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
@@ -48,41 +55,55 @@ const styles = StyleSheet.create({
   failed: { flexShrink: 1 },
 });
 
-export function LibraryRowRetryAction({
-  trackId,
-  title,
-  retrying,
-  onRetry,
-}: {
+const RETRY_HIT_SLOP = 8;
+
+type RetryActionProps = {
   trackId: TrackId;
   title: string;
   retrying: boolean;
   onRetry: () => void;
-}): ReactElement {
+};
+
+type RetryButtonProps = Omit<RetryActionProps, 'retrying'>;
+
+function RetryingIndicator({ trackId }: Pick<RetryActionProps, 'trackId'>): ReactElement {
   const theme = useTheme();
-  if (retrying) {
-    return (
-      <ActivityIndicator
-        testID={`library-row-retrying-${trackId}`}
-        size="small"
-        color={theme.color.accent}
-      />
-    );
-  }
   return (
-    <Pressable
-      testID={`library-row-retry-${trackId}`}
-      onPress={(e) => {
-        e?.stopPropagation?.();
-        onRetry();
-      }}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={`Retry acquisition for ${title}`}
-    >
+    <ActivityIndicator
+      testID={`library-row-retrying-${trackId}`}
+      size="small"
+      color={theme.color.accent}
+    />
+  );
+}
+
+function retryPressHandler(onRetry: () => void): (e: GestureResponderEvent) => void {
+  return (e) => {
+    e?.stopPropagation?.();
+    onRetry();
+  };
+}
+
+function retryButtonProps({ trackId, title, onRetry }: RetryButtonProps): PressableProps {
+  return {
+    testID: `library-row-retry-${trackId}`,
+    onPress: retryPressHandler(onRetry),
+    hitSlop: RETRY_HIT_SLOP,
+    accessibilityRole: 'button',
+    accessibilityLabel: `Retry acquisition for ${title}`,
+  };
+}
+
+function RetryButton(props: RetryButtonProps): ReactElement {
+  return (
+    <Pressable {...retryButtonProps(props)}>
       <Text variant="caption" tone="accent">
         Retry
       </Text>
     </Pressable>
   );
+}
+
+function LibraryRowRetryAction({ retrying, ...rest }: RetryActionProps): ReactElement {
+  return retrying ? <RetryingIndicator trackId={rest.trackId} /> : <RetryButton {...rest} />;
 }

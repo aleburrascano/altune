@@ -119,35 +119,59 @@ interface PlaylistDetailFailureProps {
   onGoToLibrary: () => void;
 }
 
-export function PlaylistDetailFailure({
-  error,
-  onRetry,
+function PlaylistNotFound({
   onGoToLibrary,
-}: PlaylistDetailFailureProps): ReactElement {
-  if (classifyLibraryError(error) === 'not-found') {
-    return (
-      <View testID="playlist-detail-not-found" style={failureStyles.center}>
-        <Text variant="title">Playlist not found</Text>
-        <Button action="library.playlist.error.go_back" label="Go back" onPress={onGoToLibrary} />
-      </View>
-    );
-  }
+}: Pick<PlaylistDetailFailureProps, 'onGoToLibrary'>): ReactElement {
+  return (
+    <View testID="playlist-detail-not-found" style={failureStyles.center}>
+      <Text variant="title">Playlist not found</Text>
+      <Button action="library.playlist.error.go_back" label="Go back" onPress={onGoToLibrary} />
+    </View>
+  );
+}
 
+type LoadErrorProps = Pick<PlaylistDetailFailureProps, 'error' | 'onRetry'>;
+
+type ErrorBodyProps = { body: string };
+
+function PlaylistErrorBody({ body }: ErrorBodyProps): ReactElement {
+  return (
+    <Text variant="label" tone="secondary" style={failureStyles.sub}>
+      {body}
+    </Text>
+  );
+}
+
+function PlaylistRetryButton({ onRetry }: Pick<LoadErrorProps, 'onRetry'>): ReactElement {
+  return (
+    <Button
+      action="library.playlist.error.retry"
+      testID="playlist-detail-retry"
+      label="Retry"
+      onPress={onRetry}
+    />
+  );
+}
+
+function PlaylistLoadError({ error, onRetry }: LoadErrorProps): ReactElement {
   const { title, body } = describeError(error);
   return (
     <View testID="playlist-detail-error" style={failureStyles.center}>
       <Text variant="title">{title}</Text>
-      <Text variant="label" tone="secondary" style={failureStyles.sub}>
-        {body}
-      </Text>
-      <Button
-        action="library.playlist.error.retry"
-        testID="playlist-detail-retry"
-        label="Retry"
-        onPress={onRetry}
-      />
+      <PlaylistErrorBody body={body} />
+      <PlaylistRetryButton onRetry={onRetry} />
     </View>
   );
+}
+
+function PlaylistDetailFailure({
+  error,
+  onRetry,
+  onGoToLibrary,
+}: PlaylistDetailFailureProps): ReactElement {
+  if (classifyLibraryError(error) === 'not-found')
+    return <PlaylistNotFound onGoToLibrary={onGoToLibrary} />;
+  return <PlaylistLoadError error={error} onRetry={onRetry} />;
 }
 
 const failureStyles = StyleSheet.create({

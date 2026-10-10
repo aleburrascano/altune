@@ -8,7 +8,14 @@ import type {
   TrackSelectionController,
   SelectionAction,
 } from '@features/library/hooks/useTrackSelection';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  View,
+  type ListRenderItemInfo,
+  type PressableProps,
+} from 'react-native';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 
 type TrackSelectionOverlayProps = {
@@ -63,88 +70,173 @@ type SelectionBarProps = {
   actions: SelectionAction[];
 };
 
-export function SelectionBar({
-  count,
-  allSelected,
-  onSelectAll,
-  onCancel,
-  actions,
-}: SelectionBarProps): ReactElement {
+const HIT_SLOP = 8;
+const ACTION_ICON_SIZE = 16;
+
+type Theme = ReturnType<typeof useTheme>;
+type HeaderProps = Pick<SelectionBarProps, 'count' | 'allSelected' | 'onSelectAll' | 'onCancel'>;
+type SelectAllProps = Pick<HeaderProps, 'allSelected' | 'onSelectAll'>;
+type HeaderActionsProps = Omit<HeaderProps, 'count'>;
+type ColoredActionProps = ActionButtonProps & { color: string };
+type BarColors = { backgroundColor: string; borderTopColor: string };
+type CancelProps = Pick<HeaderProps, 'onCancel'>;
+type ActionButtonProps = { action: SelectionAction };
+
+function selectAllProps({ allSelected, onSelectAll }: SelectAllProps): PressableProps {
+  return {
+    testID: 'selection-select-all',
+    onPress: onSelectAll,
+    hitSlop: HIT_SLOP,
+    accessibilityRole: 'button',
+    accessibilityLabel: allSelected ? 'Deselect all tracks' : 'Select all tracks',
+  };
+}
+
+function SelectAllButton(props: SelectAllProps): ReactElement {
   const theme = useTheme();
-
   return (
-    <View
-      testID="selection-bar"
-      style={[
-        styles.bar,
-        { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border },
-      ]}
-    >
-      <View style={styles.header}>
-        <Text variant="bodyStrong" testID="selection-count">
-          {count} selected
-        </Text>
-        <View style={styles.headerActions}>
-          <Pressable
-            testID="selection-select-all"
-            onPress={onSelectAll}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={allSelected ? 'Deselect all tracks' : 'Select all tracks'}
-          >
-            <Text variant="label" style={{ color: theme.color.accent }}>
-              {allSelected ? 'Deselect all' : 'Select all'}
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="selection-cancel"
-            onPress={onCancel}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Exit selection"
-          >
-            <Text variant="label" tone="secondary">
-              Cancel
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+    <Pressable {...selectAllProps(props)}>
+      <Text variant="label" style={{ color: theme.color.accent }}>
+        {props.allSelected ? 'Deselect all' : 'Select all'}
+      </Text>
+    </Pressable>
+  );
+}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.actions}
-      >
-        {actions.map((action) => {
-          const Icon = action.icon;
-          const color = action.disabled
-            ? theme.color.textTertiary
-            : action.tone === 'danger'
-              ? theme.color.danger
-              : theme.color.textPrimary;
-          return (
-            <Pressable
-              key={action.key}
-              testID={`selection-action-${action.key}`}
-              onPress={action.onPress}
-              disabled={action.disabled}
-              accessibilityRole="button"
-              accessibilityLabel={action.label}
-              accessibilityState={{ disabled: action.disabled === true }}
-              style={({ pressed }) => [
-                styles.action,
-                { backgroundColor: theme.color.surface2 },
-                pressed && !action.disabled ? styles.pressed : null,
-              ]}
-            >
-              <Icon size={16} color={color} />
-              <Text variant="label" style={{ color }}>
-                {action.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+function cancelProps({ onCancel }: CancelProps): PressableProps {
+  return {
+    testID: 'selection-cancel',
+    onPress: onCancel,
+    hitSlop: HIT_SLOP,
+    accessibilityRole: 'button',
+    accessibilityLabel: 'Exit selection',
+  };
+}
+
+function CancelButton(props: CancelProps): ReactElement {
+  return (
+    <Pressable {...cancelProps(props)}>
+      <Text variant="label" tone="secondary">
+        Cancel
+      </Text>
+    </Pressable>
+  );
+}
+
+function SelectionCount({ count }: Pick<HeaderProps, 'count'>): ReactElement {
+  return (
+    <Text variant="bodyStrong" testID="selection-count">
+      {count} selected
+    </Text>
+  );
+}
+
+function HeaderActions(props: HeaderActionsProps): ReactElement {
+  return (
+    <View style={styles.headerActions}>
+      <SelectAllButton allSelected={props.allSelected} onSelectAll={props.onSelectAll} />
+      <CancelButton onCancel={props.onCancel} />
+    </View>
+  );
+}
+
+function SelectionHeader({ count, ...rest }: HeaderProps): ReactElement {
+  return (
+    <View style={styles.header}>
+      <SelectionCount count={count} />
+      <HeaderActions {...rest} />
+    </View>
+  );
+}
+
+function actionColor(action: SelectionAction, theme: Theme): string {
+  if (action.disabled) return theme.color.textTertiary;
+  return action.tone === 'danger' ? theme.color.danger : theme.color.textPrimary;
+}
+
+function actionStyle(action: SelectionAction, backgroundColor: string): PressableProps['style'] {
+  return ({ pressed }) => [
+    styles.action,
+    { backgroundColor },
+    pressed && !action.disabled ? styles.pressed : null,
+  ];
+}
+
+function actionA11y(action: SelectionAction): PressableProps {
+  return {
+    accessibilityRole: 'button',
+    accessibilityLabel: action.label,
+    accessibilityState: { disabled: action.disabled === true },
+  };
+}
+
+function actionProps(action: SelectionAction, backgroundColor: string): PressableProps {
+  return {
+    testID: `selection-action-${action.key}`,
+    onPress: action.onPress,
+    disabled: action.disabled,
+    ...actionA11y(action),
+    style: actionStyle(action, backgroundColor),
+  };
+}
+
+function ActionLabel({ action, color }: ColoredActionProps): ReactElement {
+  return (
+    <Text variant="label" style={{ color }}>
+      {action.label}
+    </Text>
+  );
+}
+
+function ActionContent({ action, color }: ColoredActionProps): ReactElement {
+  const Icon = action.icon;
+  return (
+    <>
+      <Icon size={ACTION_ICON_SIZE} color={color} />
+      <ActionLabel action={action} color={color} />
+    </>
+  );
+}
+
+function SelectionActionButton({ action }: ActionButtonProps): ReactElement {
+  const theme = useTheme();
+  const color = actionColor(action, theme);
+  return (
+    <Pressable {...actionProps(action, theme.color.surface2)}>
+      <ActionContent action={action} color={color} />
+    </Pressable>
+  );
+}
+
+function actionKey(action: SelectionAction): string {
+  return action.key;
+}
+
+function renderActionItem({ item }: ListRenderItemInfo<SelectionAction>): ReactElement {
+  return <SelectionActionButton action={item} />;
+}
+
+const ACTION_LIST_PROPS = {
+  horizontal: true,
+  showsHorizontalScrollIndicator: false,
+  keyExtractor: actionKey,
+  renderItem: renderActionItem,
+} as const;
+
+function ActionsRow({ actions }: Pick<SelectionBarProps, 'actions'>): ReactElement {
+  return <FlatList {...ACTION_LIST_PROPS} data={actions} contentContainerStyle={styles.actions} />;
+}
+
+function barColors(theme: Theme): BarColors {
+  return { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border };
+}
+
+function SelectionBar({ actions, ...header }: SelectionBarProps): ReactElement {
+  const theme = useTheme();
+  return (
+    <View testID="selection-bar" style={[styles.bar, barColors(theme)]}>
+      <SelectionHeader {...header} />
+      <ActionsRow actions={actions} />
     </View>
   );
 }
