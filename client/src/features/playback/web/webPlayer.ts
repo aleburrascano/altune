@@ -2,13 +2,12 @@ import type { Dispatch, SetStateAction } from 'react';
 
 import type { TrackKey, PlaybackTrack } from '@shared/playback/playbackTrack';
 
+import type { PlayerPhase } from '@features/playback/domain/derivePlaybackState';
 import type { RedactedPlaybackFailure } from '@features/playback/domain/playbackError';
-
-type AudioPhase = 'loading' | 'playing' | 'paused' | 'ended';
 
 export interface WebPlayback {
   readonly track: PlaybackTrack | null;
-  readonly phase: AudioPhase;
+  readonly phase: PlayerPhase;
   readonly failure: RedactedPlaybackFailure | null;
   readonly positionMs: number;
   readonly durationMs: number;
@@ -75,11 +74,7 @@ export function createWebAudioPlayer(
   return { audio, update, now, ...initialPlayerState() };
 }
 
-export function secondsToMs(seconds: number): number {
-  return Number.isFinite(seconds) ? Math.round(seconds * 1000) : 0;
-}
-
-function phaseOf(player: WebAudioPlayer): AudioPhase {
+function phaseFromAudioElement(player: WebAudioPlayer): PlayerPhase {
   const { audio } = player;
   if (player.awaitingSource) return 'loading';
   if (audio.ended) return 'ended';
@@ -88,7 +83,7 @@ function phaseOf(player: WebAudioPlayer): AudioPhase {
 }
 
 export function syncPhase(player: WebAudioPlayer): void {
-  player.update({ phase: phaseOf(player) });
+  player.update({ phase: phaseFromAudioElement(player) });
 }
 
 export function isPresignStale(issuedAt: number, now: number): boolean {

@@ -28,7 +28,7 @@ const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   one: RepeatMode.Track,
 };
 
-function phaseOf(tpState: State | undefined): PlayerPhase {
+function phaseFromTrackPlayerState(tpState: State | undefined): PlayerPhase {
   if (tpState === State.Buffering || tpState === State.Loading) return 'loading';
   if (tpState === State.Ended) return 'ended';
   return tpState === State.Playing ? 'playing' : 'paused';
@@ -48,7 +48,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const tpState = playbackState.state;
   const isPlaying = tpState === State.Playing;
-  const phase = phaseOf(tpState);
+  const phase = phaseFromTrackPlayerState(tpState);
 
   const [native] = useState(() => createNativePlaybackActions(setTrack, isPlaying));
   useEffect(() => {

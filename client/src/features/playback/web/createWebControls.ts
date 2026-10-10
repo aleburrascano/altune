@@ -10,7 +10,8 @@ import {
   represignAndResume,
   stopPlayer,
 } from '@features/playback/web/webLoad';
-import { isSourceStale, secondsToMs, type WebAudioPlayer } from '@features/playback/web/webPlayer';
+import { msToSeconds, secondsToMs } from '@features/playback/domain/time';
+import { isSourceStale, type WebAudioPlayer } from '@features/playback/web/webPlayer';
 import { prefetchNextTrack } from '@features/playback/web/webPresign';
 
 function resumeAudio(player: WebAudioPlayer): void {
@@ -31,7 +32,7 @@ function seekAudio(player: WebAudioPlayer, positionMs: number): void {
     });
     return;
   }
-  player.audio.currentTime = positionMs / 1000;
+  player.audio.currentTime = msToSeconds(positionMs);
 }
 
 function setAudioRate(audio: HTMLAudioElement, rate: number): void {

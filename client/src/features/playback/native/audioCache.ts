@@ -3,6 +3,8 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { TrackId } from '@shared/api-client/ids';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
+import { libraryTrackId } from '@features/playback/domain/playerStatus';
+
 const CACHE_SUBDIR = 'audio-prefetch';
 const KEEP_WINDOW = 4;
 const MB = 1024 * 1024;
@@ -88,6 +90,11 @@ function sizeOf(file: File): number {
   }
 }
 
+function libraryIdAt(ordered: readonly PlaybackTrack[], index: number): string | undefined {
+  const track = ordered[index];
+  return track ? libraryTrackId(track) : undefined;
+}
+
 function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): string[] {
   const ids = new Set<string>();
   for (
@@ -95,8 +102,8 @@ function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): str
     i < ordered.length && i <= currentIndex + KEEP_WINDOW;
     i++
   ) {
-    const t = ordered[i];
-    if (t && t.source.kind === 'library') ids.add(t.source.trackId);
+    const id = libraryIdAt(ordered, i);
+    if (id !== undefined) ids.add(id);
   }
   return [...ids];
 }
@@ -111,8 +118,8 @@ function enforceByteCap(
   let total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
   const protectedIds = new Set<string>();
   for (const i of [currentIndex, currentIndex + 1]) {
-    const t = ordered[i];
-    if (t && t.source.kind === 'library') protectedIds.add(t.source.trackId);
+    const id = libraryIdAt(ordered, i);
+    if (id !== undefined) protectedIds.add(id);
   }
   const farthestFirst = windowIds(ordered, currentIndex).reverse();
   for (const id of farthestFirst) {

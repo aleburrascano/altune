@@ -16,12 +16,12 @@ import {
 import {
   createWebAudioPlayer,
   IDLE_PLAYBACK,
-  secondsToMs,
   syncPhase,
   type WebAudioPlayer,
   type WebPlayback,
 } from '@features/playback/web/webPlayer';
 import { createWebControls } from '@features/playback/web/createWebControls';
+import { secondsToMs } from '@features/playback/domain/time';
 
 const PHASE_EVENTS = ['play', 'pause', 'waiting', 'seeked'];
 

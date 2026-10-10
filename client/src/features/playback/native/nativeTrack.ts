@@ -9,6 +9,7 @@ import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { classifyPlaybackFailure, warnPlayback } from '@features/playback/domain/playbackError';
 import { recordPresignOutcome } from '@features/playback/domain/playbackHealth';
+import { libraryTrackId } from '@features/playback/domain/playerStatus';
 import { MAX_PRESIGN } from '@features/playback/domain/presignWindow';
 import { ContractError } from '@shared/failure/errors';
 
@@ -56,12 +57,14 @@ function headersFor(tracks: readonly PlaybackTrack[]): Promise<Record<string, st
 interface ResolvedUrls {
   urls: Map<string, ResolvedAudioUrl>;
   denied: boolean;
+  presigned: boolean;
 }
 
 function libraryIdsToSign(tracks: readonly PlaybackTrack[]): string[] {
   const ids: string[] = [];
   for (const t of tracks) {
-    if (t.source.kind === 'library') ids.push(t.source.trackId);
+    const id = libraryTrackId(t);
+    if (id !== undefined) ids.push(id);
     if (ids.length >= MAX_PRESIGN) break;
   }
   return ids;
@@ -70,14 +73,14 @@ function libraryIdsToSign(tracks: readonly PlaybackTrack[]): string[] {
 function presignFailed(ids: string[], err: unknown): ResolvedUrls {
   warnPlayback('presign failed', { trackIds: ids }, err);
   recordPresignOutcome(false);
-  return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth' };
+  return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth', presigned: false };
 }
 
 async function fetchResolvedUrls(ids: string[]): Promise<ResolvedUrls> {
   try {
     const resolved = await playbackPort().fetchAudioUrls(ids);
     recordPresignOutcome(true);
-    return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false };
+    return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false, presigned: true };
   } catch (err) {
     return presignFailed(ids, err);
   }
@@ -85,7 +88,7 @@ async function fetchResolvedUrls(ids: string[]): Promise<ResolvedUrls> {
 
 async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<ResolvedUrls> {
   const ids = libraryIdsToSign(tracks);
-  if (ids.length === 0) return { urls: new Map(), denied: false };
+  if (ids.length === 0) return { urls: new Map(), denied: false, presigned: true };
   return fetchResolvedUrls(ids);
 }
 
@@ -95,11 +98,19 @@ function signedUrl(track: PlaybackTrack, resolved: ResolvedUrls): string | undef
   return resolvePinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
 
+interface NativeTrackBuild {
+  build: (track: PlaybackTrack) => AddTrack;
+  presigned: boolean;
+}
+
 export async function nativeTrackBuilder(
   signFor: readonly PlaybackTrack[],
   headersForTracks: readonly PlaybackTrack[] = signFor,
-): Promise<(track: PlaybackTrack) => AddTrack> {
+): Promise<NativeTrackBuild> {
   const headers = await headersFor(headersForTracks);
   const resolved = await resolveLibraryUrls(signFor);
-  return (track) => toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers });
+  return {
+    build: (track) => toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }),
+    presigned: resolved.presigned,
+  };
 }

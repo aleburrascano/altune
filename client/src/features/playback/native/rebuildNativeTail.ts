@@ -46,14 +46,14 @@ function takeRequestedTail(): RequestedTail | null {
 
 let rebuildInFlight: Promise<boolean> | null = null;
 
-export function reorderUpcomingApplied(upcoming: readonly PlaybackTrack[]): Promise<boolean> {
+export function reorderUpcomingPresigned(upcoming: readonly PlaybackTrack[]): Promise<boolean> {
   requestedTail = { upcoming, token: currentLoadToken() };
   rebuildInFlight ??= Promise.resolve().then(rebuildRequestedTails);
   return rebuildInFlight;
 }
 
 export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
-  await reorderUpcomingApplied(upcoming);
+  await reorderUpcomingPresigned(upcoming);
 }
 
 async function drainRequestedTails(): Promise<boolean> {
@@ -120,14 +120,15 @@ interface TailInputs {
   upcoming: readonly PlaybackTrack[];
   keyAtCall: string | undefined;
   build: (track: PlaybackTrack) => AddTrack;
+  presigned: boolean;
 }
 
 async function tailInputs(upcoming: readonly PlaybackTrack[]): Promise<TailInputs> {
-  const [keyAtCall, build] = await Promise.all([
+  const [keyAtCall, { build, presigned }] = await Promise.all([
     activeNativeTrackId(),
     nativeTrackBuilder(upcoming),
   ]);
-  return { upcoming, keyAtCall, build };
+  return { upcoming, keyAtCall, build, presigned };
 }
 
 function windowFor(inputs: TailInputs, keyNow: string | undefined): AddTrack[] {
@@ -152,5 +153,6 @@ export async function rebuildNativeTail(
 ): Promise<boolean> {
   await ensurePlayerSetup();
   const inputs = await tailInputs(upcoming);
-  return withNativeQueue((fence) => applyTailLocked(inputs, token, fence));
+  const applied = await withNativeQueue((fence) => applyTailLocked(inputs, token, fence));
+  return applied && inputs.presigned;
 }

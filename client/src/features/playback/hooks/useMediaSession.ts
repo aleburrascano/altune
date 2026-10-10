@@ -4,6 +4,7 @@ import type { PlaybackContextValue } from '@shared/playback/playbackContextValue
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { usePlaybackRateStore } from '@features/playback/hooks/usePlaybackRate';
+import { msToSeconds, progressSecondsToMs } from '@features/playback/domain/time';
 
 const SEEK_STEP_SECONDS = 10;
 const POSITION_STATE_THROTTLE_MS = 1000;
@@ -39,21 +40,21 @@ interface PositionSnapshot {
 function syncPositionState(session: MediaSession, snapshot: PositionSnapshot): void {
   const { positionMs, durationMs, rate } = snapshot;
   if (!session.setPositionState || !Number.isFinite(durationMs) || durationMs <= 0) return;
-  const position = Math.min(positionMs, durationMs) / 1000;
+  const position = msToSeconds(Math.min(positionMs, durationMs));
   try {
-    session.setPositionState({ duration: durationMs / 1000, position, playbackRate: rate });
+    session.setPositionState({ duration: msToSeconds(durationMs), position, playbackRate: rate });
   } catch {
     return;
   }
 }
 
 function seekOffsetMs(details: MediaSessionActionDetails): number {
-  return (details.seekOffset ?? SEEK_STEP_SECONDS) * 1000;
+  return progressSecondsToMs(details.seekOffset ?? SEEK_STEP_SECONDS);
 }
 
 function seekTo(playback: PlaybackContextValue, details: MediaSessionActionDetails): void {
   if (details.seekTime == null || !Number.isFinite(details.seekTime)) return;
-  playback.seekTo(details.seekTime * 1000);
+  playback.seekTo(progressSecondsToMs(details.seekTime));
 }
 
 function seekBy(playback: PlaybackContextValue, deltaMs: number): void {

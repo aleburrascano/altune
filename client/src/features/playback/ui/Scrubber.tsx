@@ -5,6 +5,7 @@ import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { useScrubberGesture } from '@features/playback/hooks/useScrubberGesture';
+import { msToSeconds } from '@features/playback/domain/time';
 
 interface ScrubberProps {
   positionMs: number;
@@ -14,7 +15,7 @@ interface ScrubberProps {
 
 function formatMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '0:00';
-  const totalSeconds = Math.floor(ms / 1000);
+  const totalSeconds = Math.floor(msToSeconds(ms));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;

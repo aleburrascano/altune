@@ -1267,3 +1267,83 @@ describe('a tail rebuild that outlived the lock deadline', () => {
     });
   });
 });
+
+describe('a failed presign leaves the presign window unmarked', () => {
+  const QUEUE_LENGTH = 60;
+  const SLIDE_INDEX = 20;
+  const LOAD_THEN_FAILED_SLIDE_THEN_RETRY = 3;
+  const FIRST_PRESIGN = 1;
+  const SLIDE_PRESIGN = 2;
+  const tracks = libraryTrackList(QUEUE_LENGTH);
+  const signedUrls = cdnAudioUrls(tracks.map((_, i) => `t${i}`));
+
+  function presignFailingOnCalls(failing: readonly number[]): () => number {
+    const memory = createMemoryPlaybackPort({ audioUrls: signedUrls });
+    let calls = 0;
+    installMemoryPort(
+      {},
+      {
+        fetchAudioUrls: (ids) => {
+          calls += 1;
+          if (failing.includes(calls)) return Promise.reject(new Error('presign 503'));
+          return memory.fetchAudioUrls(ids);
+        },
+      },
+    );
+    return () => calls;
+  }
+
+  function lastAddedUrlOf(key: string): string | undefined {
+    const adds = (__player.calls('add') as unknown[][]).flatMap(([arg]) =>
+      Array.isArray(arg) ? arg : [arg],
+    ) as { id: string; url: string }[];
+    return adds.filter((t) => t.id === key).at(-1)?.url;
+  }
+
+  beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('re-presigns the next track after a failed load presign instead of streaming it', async () => {
+    presignFailingOnCalls([FIRST_PRESIGN]);
+    await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
+    expect(lastAddedUrlOf('library:t2')).toBe(
+      createMemoryPlaybackPort().audioStreamUrl(asTrackId('t2')),
+    );
+
+    useQueueStore.getState().skipToIndex(1);
+    await refreshUpcomingPresign(1);
+
+    expect(lastAddedUrlOf('library:t2')).toBe(signedUrls.t2?.url);
+  });
+
+  it('re-presigns on the next refresh after a slide whose presign failed', async () => {
+    const presignCalls = presignFailingOnCalls([SLIDE_PRESIGN]);
+    await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
+    useQueueStore.getState().skipToIndex(SLIDE_INDEX);
+    await refreshUpcomingPresign(SLIDE_INDEX);
+    expect(lastAddedUrlOf('library:t30')).toBe(
+      createMemoryPlaybackPort().audioStreamUrl(asTrackId('t30')),
+    );
+
+    await refreshUpcomingPresign(SLIDE_INDEX);
+
+    expect(presignCalls()).toBe(LOAD_THEN_FAILED_SLIDE_THEN_RETRY);
+    expect(lastAddedUrlOf('library:t30')).toBe(signedUrls.t30?.url);
+  });
+
+  it('keeps skipping refreshes deep inside a window a successful presign marked', async () => {
+    const presignCalls = presignFailingOnCalls([]);
+    await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), 0, { autoplay: false });
+
+    useQueueStore.getState().skipToIndex(1);
+    await refreshUpcomingPresign(1);
+
+    expect(presignCalls()).toBe(1);
+  });
+});

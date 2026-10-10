@@ -3,6 +3,7 @@ import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
+import { msToSeconds, secondsToMs } from '@features/playback/domain/time';
 import {
   redactPlaybackErrorMessage,
   warnPlayback,
@@ -11,7 +12,6 @@ import {
 import {
   IDLE_PLAYBACK,
   isSourceStale,
-  secondsToMs,
   syncPhase,
   type LoadOptions,
   type SourceOutcome,
@@ -140,7 +140,7 @@ function beginLoad(player: WebAudioPlayer, track: PlaybackTrack): number {
 
 function startSource(player: WebAudioPlayer, url: string, options: LoadOptions): void {
   player.audio.src = url;
-  player.audio.currentTime = (options.startPositionMs ?? 0) / 1000;
+  player.audio.currentTime = msToSeconds(options.startPositionMs ?? 0);
   if (options.autoplay === false) syncPhase(player);
   else playAudio(player);
 }
