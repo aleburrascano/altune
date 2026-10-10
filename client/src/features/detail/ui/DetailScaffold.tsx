@@ -299,14 +299,14 @@ function BannerText({ title, secondary }: BannerTextProps): ReactElement {
   );
 }
 
-export type DetailHeroBannerProps = {
+type DetailHeroBannerProps = {
   title: string;
   secondary?: ReactNode;
   artworkUrl: string | null;
   height: number;
 };
 
-export function DetailHeroBanner(props: DetailHeroBannerProps): ReactElement {
+function DetailHeroBanner(props: DetailHeroBannerProps): ReactElement {
   const canvas = useTheme().color.canvas;
   return (
     <View style={[heroBannerStyles.banner, { height: props.height }]}>

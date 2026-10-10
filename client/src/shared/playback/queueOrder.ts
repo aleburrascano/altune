@@ -124,7 +124,7 @@ export function freshQueue({
   return { ...loaded, ...NOTHING_QUEUED, generation: generation + 1 };
 }
 
-export function survivingPositions(
+function survivingPositions(
   indices: readonly number[],
   renumbered: ReadonlyMap<number, number>,
 ): number[] {
@@ -156,7 +156,7 @@ export function trackAt(
   return tracks[trackIndex] ?? null;
 }
 
-export function nearestKeyPosition(
+function nearestKeyPosition(
   ordered: readonly (PlaybackTrack | null)[],
   key: string,
   preferred: number,

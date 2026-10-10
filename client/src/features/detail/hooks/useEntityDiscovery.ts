@@ -23,19 +23,17 @@ type SearchedEntity = {
   artist: string | null;
 };
 
-export function useLoggedSearchFailure(error: Error | null, searched: SearchedEntity): void {
-  const { kind, title, artist } = searched;
+function warnSearchFailure(error: Error, searched: SearchedEntity): void {
+  console.warn('[detail] discovery search failed', { ...searched, error: error.message });
+}
 
+function useLoggedSearchFailure(error: Error | null, searched: SearchedEntity): void {
+  const { kind, title, artist } = searched;
   useEffect(() => {
     if (error === null) {
       return;
     }
-    console.warn('[detail] discovery search failed', {
-      kind,
-      title,
-      artist,
-      error: error.message,
-    });
+    warnSearchFailure(error, { kind, title, artist });
   }, [error, kind, title, artist]);
 }
 

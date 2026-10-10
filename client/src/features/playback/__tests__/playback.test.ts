@@ -1,7 +1,7 @@
 jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
 
 describe('@features/playback public surface', () => {
-  it('exports exactly the nine public names', () => {
+  it('exports exactly the eight public names', () => {
     expect(Object.keys(require('@features/playback')).sort()).toEqual(
       [
         'FullPlayer',
@@ -11,7 +11,6 @@ describe('@features/playback public surface', () => {
         'PlayerBar',
         'QueueSheet',
         'SleepTimerBridge',
-        'playsThroughTrackPlayer',
         'startPlaybackService',
       ].sort(),
     );

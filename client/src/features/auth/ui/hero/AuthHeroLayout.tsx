@@ -9,21 +9,40 @@ import { spacing, useTheme } from '@shared/ui/theme';
 
 import { ArtworkBackground } from '@features/auth/ui/hero/ArtworkBackground';
 
-const BAR_HEIGHTS = [7, 14, 6, 12, 16];
+const EQ_BARS = [
+  { id: 'a', height: 7 },
+  { id: 'b', height: 14 },
+  { id: 'c', height: 6 },
+  { id: 'd', height: 12 },
+  { id: 'e', height: 16 },
+];
 
-export function EqGlyph() {
+const HIDDEN_FROM_A11Y = {
+  accessibilityElementsHidden: true,
+  importantForAccessibility: 'no-hide-descendants',
+} as const;
+
+const EQ_BAR_WIDTH = 3;
+const EQ_BAR_RADIUS = 2;
+const EQ_GLYPH_HEIGHT = 16;
+
+const eqStyles = StyleSheet.create({
+  glyph: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: EQ_GLYPH_HEIGHT },
+  bar: { width: EQ_BAR_WIDTH, borderRadius: EQ_BAR_RADIUS },
+});
+
+type EqBarProps = { height: number };
+
+function EqBar({ height }: EqBarProps) {
   const theme = useTheme();
+  return <View style={[eqStyles.bar, { height, backgroundColor: theme.color.accent }]} />;
+}
+
+function EqGlyph() {
   return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 16 }}
-    >
-      {BAR_HEIGHTS.map((h, i) => (
-        <View
-          key={i}
-          style={{ width: 3, height: h, borderRadius: 2, backgroundColor: theme.color.accent }}
-        />
+    <View {...HIDDEN_FROM_A11Y} style={eqStyles.glyph}>
+      {EQ_BARS.map((bar) => (
+        <EqBar key={bar.id} height={bar.height} />
       ))}
     </View>
   );
