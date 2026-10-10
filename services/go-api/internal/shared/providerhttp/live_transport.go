@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -51,10 +53,21 @@ type liveTransport struct {
 	limiters  map[string]*rate.Limiter
 	sleep     func(context.Context, time.Duration) error
 	randFloat func() float64
+	onRetry   func(host string)
 }
 
-func NewLiveTransport() http.RoundTripper {
-	return &liveTransport{base: baseTransport(), limiters: map[string]*rate.Limiter{}}
+type LiveOption func(*liveTransport)
+
+func WithRetryRecorder(record func(host string)) LiveOption {
+	return func(t *liveTransport) { t.onRetry = record }
+}
+
+func NewLiveTransport(opts ...LiveOption) http.RoundTripper {
+	t := &liveTransport{base: baseTransport(), limiters: map[string]*rate.Limiter{}}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t
 }
 
 func (t *liveTransport) limiter(host string) *rate.Limiter {
@@ -81,45 +94,90 @@ func providerBurst(host string) int {
 const liveMaxAttempts = 3
 
 func (t *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var lastErr error
-	var retryAfter time.Duration
+	var last attemptResult
 	for attempt := 0; attempt < liveMaxAttempts; attempt++ {
 		if attempt > 0 {
-			if err := t.prepareRetry(req, attempt, retryAfter); err != nil {
+			if err := t.prepareRetry(req, attempt, last); err != nil {
 				return nil, err
 			}
 		}
-		if err := t.awaitRateLimit(req); err != nil {
-			return nil, err
+		resp, result, done := t.attempt(req, attempt)
+		if done {
+			return resp, result.err
 		}
-
-		resp, err := t.base.RoundTrip(req)
-		if err != nil {
-			lastErr = err
-			retryAfter = 0
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return nil, err
-			}
-			continue
-		}
-		if attempt < liveMaxAttempts-1 && retryableStatus(resp.StatusCode) {
-			retryAfter, _ = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-			_ = resp.Body.Close()
-			lastErr = fmt.Errorf("upstream status %d", resp.StatusCode)
-			continue
-		}
-		return resp, nil
+		last = result
 	}
-	return nil, lastErr
+	return nil, last.err
 }
 
-func (t *liveTransport) prepareRetry(req *http.Request, attempt int, retryAfter time.Duration) error {
+type attemptResult struct {
+	err        error
+	retryAfter time.Duration
+	cause      retryCause
+}
+
+func (t *liveTransport) attempt(req *http.Request, attempt int) (*http.Response, attemptResult, bool) {
+	if err := t.awaitRateLimit(req); err != nil {
+		return nil, attemptResult{err: err}, true
+	}
+	resp, err := t.base.RoundTrip(req)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, attemptResult{err: err}, true
+		}
+		return nil, attemptResult{err: err, cause: retryCause{errorClass: transportErrorClass(err)}}, false
+	}
+	if attempt < liveMaxAttempts-1 && retryableStatus(resp.StatusCode) {
+		retryAfter, _ := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		_ = resp.Body.Close()
+		failed := fmt.Errorf("upstream status %d", resp.StatusCode)
+		return nil, attemptResult{err: failed, retryAfter: retryAfter, cause: retryCause{status: resp.StatusCode}}, false
+	}
+	return resp, attemptResult{}, true
+}
+
+type retryCause struct {
+	status     int
+	errorClass string
+}
+
+func (c retryCause) attr() slog.Attr {
+	if c.status != 0 {
+		return slog.Int("status", c.status)
+	}
+	return slog.String("error_class", c.errorClass)
+}
+
+func transportErrorClass(err error) string {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "timeout"
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return opErr.Op
+	}
+	return "transport"
+}
+
+func (t *liveTransport) prepareRetry(req *http.Request, attempt int, last attemptResult) error {
 	body, err := rewindBody(req)
 	if err != nil {
 		return err
 	}
 	req.Body = body
-	return t.wait(req.Context(), t.retryDelay(attempt, retryAfter))
+	delay := t.retryDelay(attempt, last.retryAfter)
+	t.reportRetry(req, attempt, last.cause, delay)
+	return t.wait(req.Context(), delay)
+}
+
+func (t *liveTransport) reportRetry(req *http.Request, attempt int, cause retryCause, delay time.Duration) {
+	host := req.URL.Hostname()
+	slog.WarnContext(req.Context(), "provider.retry",
+		"host", host, "attempt", attempt+1, cause.attr(), "delay", delay)
+	if t.onRetry != nil {
+		t.onRetry(host)
+	}
 }
 
 func (t *liveTransport) awaitRateLimit(req *http.Request) error {

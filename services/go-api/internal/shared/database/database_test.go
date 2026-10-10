@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestNewPool_UnresponsiveHostFailsFastWithNamedError(t *testing.T) {
@@ -103,5 +107,60 @@ func TestReadPoolStats_ReportsCeilingAndSaturationCounters(t *testing.T) {
 func TestReadPoolStats_NilPoolReadsAsZero(t *testing.T) {
 	if stats := ReadPoolStats(nil); stats != (PoolStats{}) {
 		t.Fatalf("ReadPoolStats(nil) = %+v, want zero value", stats)
+	}
+}
+
+const (
+	supabaseSessionPoolSize = 15
+	sessionsKeptFree        = 3
+)
+
+func stagingPoolMaxConns(t *testing.T, service string) int {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "compose.staging.yml"))
+	if err != nil {
+		t.Fatalf("read staging compose: %v", err)
+	}
+	var compose struct {
+		Services map[string]struct {
+			Environment []string `yaml:"environment"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatalf("parse staging compose: %v", err)
+	}
+	for _, kv := range compose.Services[service].Environment {
+		if value, ok := strings.CutPrefix(kv, "DB_POOL_MAX_CONNS="); ok {
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				t.Fatalf("%s DB_POOL_MAX_CONNS=%q: %v", service, value, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("%s in compose.staging.yml sets no DB_POOL_MAX_CONNS, so it falls back to the default %d", service, defaultMaxConns)
+	return 0
+}
+
+func TestStagingCompose_TwoInstancesLeaveSessionSlotsFree(t *testing.T) {
+	held := 0
+	for _, service := range []string{"go-api-blue", "go-api-green"} {
+		held += stagingPoolMaxConns(t, service)
+	}
+
+	if free := supabaseSessionPoolSize - held; free < sessionsKeptFree {
+		t.Fatalf("blue and green together may hold %d of %d session slots, leaving %d; want at least %d free for migration psql and an operator",
+			held, supabaseSessionPoolSize, free, sessionsKeptFree)
+	}
+}
+
+func TestPoolConfig_ReleasesIdleSessionsAfterABurst(t *testing.T) {
+	cfg, err := poolConfig("postgres://u:p@localhost:5432/db?sslmode=disable", 6)
+	if err != nil {
+		t.Fatalf("poolConfig: %v", err)
+	}
+
+	if cfg.MaxConnIdleTime <= 0 || cfg.MaxConnIdleTime > 5*time.Minute {
+		t.Fatalf("MaxConnIdleTime = %s, want a release within 5m so a burst does not pin session slots for pgxpool's 30m default", cfg.MaxConnIdleTime)
 	}
 }

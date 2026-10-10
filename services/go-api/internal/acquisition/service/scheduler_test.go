@@ -2620,3 +2620,61 @@ func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhe
 		t.Errorf("job state = %q, want %q (claimability follows the queue clock, not the scheduler's)", settled.State, acqports.JobSucceeded)
 	}
 }
+
+type claimSignalQueue struct {
+	acqports.JobQueue
+	claims  atomic.Int64
+	claimed chan struct{}
+}
+
+func (q *claimSignalQueue) Claim(ctx context.Context, lease time.Duration) (acqports.Job, error) {
+	job, err := q.JobQueue.Claim(ctx, lease)
+	if err == nil {
+		q.claims.Add(1)
+		close(q.claimed)
+	}
+	return job, err
+}
+
+func seededPendingQueue(t *testing.T) *claimSignalQueue {
+	t.Helper()
+	mem := newMemJobQueue(nil)
+	trackID := domain.NewTrackId()
+	mem.rememberUser(trackID, shared.NewUserId(uuid.New()))
+	if err := mem.Enqueue(context.Background(), trackID, acqports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("seed pending job: %v", err)
+	}
+	return &claimSignalQueue{JobQueue: mem, claimed: make(chan struct{})}
+}
+
+func driveWorkerLoops(s *BackgroundAcquisitionScheduler, loops int) {
+	for range loops + 1 {
+		s.wake <- struct{}{}
+	}
+}
+
+func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *testing.T) {
+	queue := seededPendingQueue(t)
+	acq := &stubAcquirer{}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+		WithJobQueue(queue),
+		WithPollInterval(time.Hour),
+		WithSchedulerPaused(true))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	if !scheduler.Status().Paused {
+		t.Fatal("Status().Paused = false right after construction, want true")
+	}
+	driveWorkerLoops(scheduler, 3)
+	if n := queue.claims.Load(); n != 0 {
+		t.Fatalf("paused scheduler claimed %d job(s) before Resume, want 0", n)
+	}
+
+	scheduler.Resume()
+	select {
+	case <-queue.claimed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("seeded job was not claimed after Resume")
+	}
+}

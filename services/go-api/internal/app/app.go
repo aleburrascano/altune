@@ -132,6 +132,7 @@ func (a *App) setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("provider replay: %w", err)
 	}
+	warnIgnoredStartupOptIns(ctx, a.cfg)
 
 	if err := a.applyDisabledJobs(ctx); err != nil {
 		return fmt.Errorf("startup switches: %w", err)

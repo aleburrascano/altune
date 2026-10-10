@@ -17,6 +17,10 @@ func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionSchedu
 	}
 }
 
+func WithSchedulerPaused(paused bool) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.paused.Store(paused) }
+}
+
 func WithJobQueue(q ports.JobQueue) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
 		if q != nil {

@@ -12,6 +12,7 @@ x-go-api: &go-api
     - ../.env.staging
   environment:
     - EVAL_METER_ENABLED=false
+    - DB_POOL_MAX_CONNS=6
   volumes:
     - ../../../cookies.txt:/data/cookies.txt:ro
     - ../../../streamrip.toml:/home/altune/.config/streamrip/config.toml:ro

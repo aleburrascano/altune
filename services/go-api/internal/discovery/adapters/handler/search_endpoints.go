@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -194,8 +193,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req DiscoveryEventRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidBody, "invalid request body")
+	if !httputil.DecodeJSONWithCode(w, r, &req, requestCodeInvalidBody) {
 		return
 	}
 

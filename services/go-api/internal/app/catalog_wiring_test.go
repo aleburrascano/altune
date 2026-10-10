@@ -658,3 +658,23 @@ func TestAcquisitionSources_ProviderReplayUsesOnlyFixture(t *testing.T) {
 		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
 	}
 }
+
+func TestBuildAcquisitionScheduler_AcquisitionPausedStartsPausedBeforeStartupSwitches(t *testing.T) {
+	a := &App{
+		cfg: &config.Config{MusicDir: t.TempDir(), YtMusicEnabled: true, AcquisitionPaused: true},
+		sem: make(chan struct{}, 1),
+	}
+
+	got, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
+	if err != nil {
+		t.Fatalf("wireCatalog: %v", err)
+	}
+	if got.scheduler == nil {
+		t.Fatal("scheduler not wired")
+	}
+	t.Cleanup(func() { got.scheduler.Shutdown(context.Background()) })
+
+	if !got.scheduler.Status().Paused {
+		t.Fatal("Status().Paused = false straight out of wiring, want true so no worker claims before applyStartupSwitches")
+	}
+}

@@ -232,3 +232,22 @@ func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordRetry_CountsPerProviderHost(t *testing.T) {
+	before := ReadSnapshot()
+
+	RecordRetry("api.deezer.com")
+	RecordRetry("api.deezer.com")
+	RecordRetry("musicbrainz.org")
+
+	after := ReadSnapshot()
+	if got := after[providerDeezer].Retries - before[providerDeezer].Retries; got != 2 {
+		t.Errorf("deezer retries moved by %d, want 2", got)
+	}
+	if got := after[providerMusicBrainz].Retries - before[providerMusicBrainz].Retries; got != 1 {
+		t.Errorf("musicbrainz retries moved by %d, want 1", got)
+	}
+	if got := after[providerSpotify].Retries - before[providerSpotify].Retries; got != 0 {
+		t.Errorf("spotify retries moved by %d, want 0", got)
+	}
+}

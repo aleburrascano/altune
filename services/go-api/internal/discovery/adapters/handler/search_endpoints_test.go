@@ -610,12 +610,12 @@ func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusInternalServerError)
 }
 
-func TestHandleRecordEvent_OversizedBodyReturns400(t *testing.T) {
+func TestHandleRecordEvent_OversizedBodyReturns413(t *testing.T) {
 	router := buildEventRouter(&recordingEventStore{})
 
 	oversized := `{"type":"play","query_norm":"` + strings.Repeat("a", 1<<20) + `"}`
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(oversized))
-	discAssertStatus(t, rec, http.StatusBadRequest)
+	discAssertStatus(t, rec, http.StatusRequestEntityTooLarge)
 }
 
 func TestHandleRecordEvent_ClientOccurredAt(t *testing.T) {
@@ -1313,8 +1313,8 @@ func TestRecordEvent_OversizedPayloadsAreNeverStored(t *testing.T) {
 
 	for i := range 100 {
 		rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(body))
-		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusTooManyRequests {
-			t.Fatalf("request %d: status = %d, want 400 or 429 (body: %s)", i+1, rec.Code, rec.Body.String())
+		if rec.Code != http.StatusRequestEntityTooLarge && rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("request %d: status = %d, want 413 or 429 (body: %s)", i+1, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -1331,12 +1331,12 @@ func TestRecordEvent_PayloadOverTheCapAnswersWithTheInvalidEventCode(t *testing.
 	assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_event")
 }
 
-func TestRecordEvent_BodyPastTheRouteCapIsRejectedUndecoded(t *testing.T) {
+func TestRecordEvent_BodyPastTheRouteCapIs413TooLarge(t *testing.T) {
 	router := buildEventRouter(&recordingEventStore{})
 
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(eventBodyWithJunk(t, 900<<10)))
 
-	assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_body")
+	assertErrorCode(t, rec, http.StatusRequestEntityTooLarge, "request.too_large")
 }
 
 func TestHandleSuggest_OverlongQ(t *testing.T) {

@@ -754,7 +754,7 @@ func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "some-token")
 
-	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable"}`+"\n")
+	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
@@ -768,7 +768,7 @@ func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "t")
 
-	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"detail":"too many failed authentication attempts"}`+"\n")
+	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"detail":"too many failed authentication attempts","code":"auth.throttled"}`+"\n")
 	if got := rec.Header().Get("Retry-After"); got != "60" {
 		t.Errorf("Retry-After: got %q, want %q", got, "60")
 	}
@@ -854,4 +854,30 @@ func TestRequireUserID_ChangesBetweenTicks(t *testing.T) {
 	if second.Body.Len() != 0 {
 		t.Errorf("second tick wrote body %q, want none", second.Body.String())
 	}
+}
+
+func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	rejecter{metrics: ports.NoopAuthMetrics()}.rejectThrottled(rec, httptest.NewRequest(http.MethodGet, "/", nil), 0)
+
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After: got %q, want %q", got, "1")
+	}
+}
+
+func TestMiddleware_ClientCancelledBodyCarriesUnavailableCode(t *testing.T) {
+	next, _ := noopHandler()
+	ctx, cancel := context.WithCancel(context.Background())
+	verifier := ports.VerifierFunc(func(context.Context, string) (domain.VerifiedToken, error) {
+		cancel()
+		return domain.VerifiedToken{}, context.Canceled
+	})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer t")
+	rec := httptest.NewRecorder()
+
+	Middleware(verifier)(next).ServeHTTP(rec, req)
+
+	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
 }

@@ -176,6 +176,7 @@ func (a *App) buildAcquisitionScheduler(
 		acquireOpts...,
 	)
 	schedulerOpts := []func(*acqService.BackgroundAcquisitionScheduler){
+		acqService.WithSchedulerPaused(a.cfg.AcquisitionPaused),
 		acqService.WithSchedulerEvents(tap),
 		acqService.WithVerificationStatus(verification),
 		acqService.WithVerifySkipCount(skips.Count),

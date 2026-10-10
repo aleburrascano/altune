@@ -71,7 +71,7 @@ func TestPathID(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid param writes byte-identical 400 with the supplied message", func(t *testing.T) {
+	t.Run("invalid param writes a coded 400 with the supplied message", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := newRequestWithURLParam("id", "not-a-number")
 
@@ -85,8 +85,8 @@ func TestPathID(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid track ID"}` {
-			t.Errorf("body: got %s, want %s", got, `{"detail":"invalid track ID"}`)
+		if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid track ID","code":"request.invalid_id"}` {
+			t.Errorf("body: got %s, want %s", got, `{"detail":"invalid track ID","code":"request.invalid_id"}`)
 		}
 	})
 }
