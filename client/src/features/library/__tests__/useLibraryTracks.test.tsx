@@ -16,34 +16,59 @@ import { TRACKS_PAGE_SIZE, useLibraryTracks } from '../hooks/useLibraryTracks';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { track as seededTrack } from '@features/library/__tests__/trackMutationFixtures';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-const mockGetTracks = jest.fn();
-const mockGetAllTracks = jest.fn();
-jest.mock('@shared/api-client/tracks', () => ({
-  getTracks: (params: unknown) => mockGetTracks(params),
-  getAllTracks: (params: unknown) => mockGetAllTracks(params),
-}));
+const SERVICE_UNAVAILABLE = 503;
+const MAX_PENDING_POLLS = 10;
+
+function track(i: number): TrackResponse {
+  return seededTrack(`t${i}`);
+}
+
+function library(size: number): TrackResponse[] {
+  return Array.from({ length: size }, (_, i) => track(i));
+}
+
+function ids(tracks: readonly TrackResponse[]): string[] {
+  return tracks.map((t) => t.id);
+}
+
+function spiedPort(tracks: TrackResponse[]) {
+  const memory = createMemoryLibraryPort({ tracks });
+  return {
+    ...memory,
+    getTracks: jest.fn(memory.getTracks),
+    getAllTracks: jest.fn(memory.getAllTracks),
+  };
+}
+
+let client: QueryClient;
+let port: LibraryPort;
+
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={client}>
+      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+    </QueryClientProvider>
+  );
+}
 
 beforeEach(() => {
-  mockGetTracks.mockReset();
-  mockGetAllTracks.mockReset();
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 
-describe('useLibraryTracks on a page that reports more tracks than it serves', () => {
-  const track = (i: number) => ({ id: asTrackId(`t${i}`) }) as TrackResponse;
+afterEach(() => client.clear());
 
+describe('useLibraryTracks on a page that reports more tracks than it serves', () => {
   function page(offset: number, items: TrackResponse[], hasMore: boolean): ListTracksResponse {
     return { items, total: 3, limit: TRACKS_PAGE_SIZE, offset, has_more: hasMore };
   }
 
+  const FIRST_AND_EMPTY_PAGE = 2;
   const firstPage = page(0, [track(0), track(1)], true);
   const emptyPageClaimingMore = page(2, [], true);
-  const lastPage = page(2, [track(2)], false);
 
-  let client: QueryClient;
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
+  let spied: ReturnType<typeof spiedPort>;
 
   async function loadFirstPage() {
     const hook = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
@@ -59,110 +84,89 @@ describe('useLibraryTracks on a page that reports more tracks than it serves', (
   }
 
   beforeEach(() => {
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    mockGetTracks.mockReset();
-    mockGetTracks.mockResolvedValueOnce(firstPage);
+    spied = spiedPort(library(firstPage.total));
+    spied.getTracks.mockResolvedValueOnce(firstPage);
+    port = spied;
   });
 
-  afterEach(() => client.clear());
-
   it('stops requesting once a page comes back empty', async () => {
-    mockGetTracks.mockResolvedValue(emptyPageClaimingMore);
+    spied.getTracks.mockResolvedValue(emptyPageClaimingMore);
     const hook = await loadFirstPage();
 
     act(() => hook.result.current.onEndReached());
-    await waitFor(() => expect(mockGetTracks).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(spied.getTracks).toHaveBeenCalledTimes(FIRST_AND_EMPTY_PAGE));
     await settle(hook);
     act(() => hook.result.current.onEndReached());
     await settle(hook);
 
-    expect(mockGetTracks).toHaveBeenCalledTimes(2);
-    expect(hook.result.current.tracks.map((t) => t.id)).toEqual(['t0', 't1']);
+    expect(spied.getTracks).toHaveBeenCalledTimes(FIRST_AND_EMPTY_PAGE);
+    expect(ids(hook.result.current.tracks)).toEqual(['t0', 't1']);
   });
 
   it('keeps requesting the next offset while pages still serve tracks', async () => {
-    mockGetTracks.mockResolvedValue(lastPage);
     const hook = await loadFirstPage();
 
     act(() => hook.result.current.onEndReached());
     await waitFor(() => expect(hook.result.current.tracks).toHaveLength(3));
 
-    expect(mockGetTracks).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 2 }));
+    expect(ids(hook.result.current.tracks)).toEqual(['t0', 't1', 't2']);
+    expect(spied.getTracks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 2 }),
+      expect.anything(),
+    );
   });
 });
 
 describe('useLibraryTracks loadAll', () => {
-  function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const whole = library(TRACKS_PAGE_SIZE + 1);
+  const loadedPage = whole.slice(0, TRACKS_PAGE_SIZE);
+
+  async function loadFirstPage() {
+    const hook = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
+    await waitFor(() => expect(hook.result.current.tracks).toHaveLength(TRACKS_PAGE_SIZE));
+    return hook;
   }
 
-  const loaded = [{ id: asTrackId('a') }, { id: asTrackId('b') }];
-
-  beforeEach(() => {
-    mockGetTracks.mockReset();
-    mockGetAllTracks.mockReset();
-    mockGetTracks.mockResolvedValue({
-      items: loaded,
-      total: 5,
-      limit: 200,
-      offset: 0,
-      has_more: true,
-    });
-  });
-
   it('resolves the full library when the fetch succeeds', async () => {
-    const all = [...loaded, { id: asTrackId('c') }];
-    mockGetAllTracks.mockResolvedValue({ items: all, truncated: false });
-    const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
-    await waitFor(() => expect(result.current.tracks).toHaveLength(2));
+    port = createMemoryLibraryPort({ tracks: whole });
+    const { result } = await loadFirstPage();
 
-    let resolved: unknown;
+    let resolved: TrackResponse[] = [];
     await act(async () => {
       resolved = await result.current.loadAll();
     });
 
-    expect(resolved).toEqual(all);
+    expect(ids(resolved)).toEqual(ids(whole));
   });
 
   it('falls back to the loaded pages on failure and records that the fallback fired', async () => {
-    mockGetAllTracks.mockRejectedValue(new Error('boom'));
+    const spied = spiedPort(whole);
+    spied.getAllTracks.mockRejectedValue(new Error('boom'));
+    port = spied;
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
-    await waitFor(() => expect(result.current.tracks).toHaveLength(2));
+    const { result } = await loadFirstPage();
 
-    let resolved: unknown;
+    let resolved: TrackResponse[] = [];
     await act(async () => {
       resolved = await result.current.loadAll();
     });
 
-    expect(resolved).toEqual(loaded);
+    expect(ids(resolved)).toEqual(ids(loadedPage));
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('[library]'),
-      expect.objectContaining({ loaded: 2 }),
+      expect.objectContaining({ loaded: TRACKS_PAGE_SIZE }),
     );
     warn.mockRestore();
   });
-});
-
-describe('useLibraryTracks loadAll failure log', () => {
-  function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
 
   it('logs status, failure class and correlation id when the fetch is rejected', async () => {
-    mockGetTracks.mockResolvedValue({
-      items: [{ id: asTrackId('a') }],
-      total: 5,
-      limit: 200,
-      offset: 0,
-      has_more: true,
-    });
-    mockGetAllTracks.mockRejectedValue(new ApiError(503, 'unavailable', undefined, 'corr-1'));
+    const spied = spiedPort(whole);
+    spied.getAllTracks.mockRejectedValue(
+      new ApiError(SERVICE_UNAVAILABLE, 'unavailable', undefined, 'corr-1'),
+    );
+    port = spied;
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
-    await waitFor(() => expect(result.current.tracks).toHaveLength(1));
+    const { result } = await loadFirstPage();
 
     await act(async () => {
       await result.current.loadAll();
@@ -171,7 +175,7 @@ describe('useLibraryTracks loadAll failure log', () => {
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('[library]'),
       expect.objectContaining({
-        loaded: 1,
+        loaded: TRACKS_PAGE_SIZE,
         status: 503,
         failure: expect.any(String),
         correlationId: 'corr-1',
@@ -179,62 +183,45 @@ describe('useLibraryTracks loadAll failure log', () => {
     );
     warn.mockRestore();
   });
-});
-
-describe('useLibraryTracks loadAll refetch', () => {
-  function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
 
   it('refetches the whole library on every loadAll', async () => {
-    const a = { id: asTrackId('a') };
-    const b = { id: asTrackId('b') };
-    mockGetTracks.mockResolvedValue({
-      items: [a],
-      total: 1,
-      limit: 200,
-      offset: 0,
-      has_more: false,
-    });
-    mockGetAllTracks
-      .mockResolvedValueOnce({ items: [a, b], truncated: false })
-      .mockResolvedValueOnce({ items: [a], truncated: false });
+    port = createMemoryLibraryPort({ tracks: [seededTrack('a'), seededTrack('b')] });
     const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
-    await waitFor(() => expect(result.current.tracks).toHaveLength(1));
+    await waitFor(() => expect(result.current.tracks).toHaveLength(2));
 
-    let first: unknown;
-    let second: unknown;
+    let first: TrackResponse[] = [];
+    let second: TrackResponse[] = [];
     await act(async () => {
       first = await result.current.loadAll();
+      await port.deleteTrack(asTrackId('b'));
       second = await result.current.loadAll();
     });
 
-    expect(first).toEqual([a, b]);
-    expect(second).toEqual([a]);
-    expect(mockGetAllTracks).toHaveBeenCalledTimes(2);
+    expect(ids(first)).toEqual(['a', 'b']);
+    expect(ids(second)).toEqual(['a']);
+  });
+
+  it('passes the query and the query signal to the whole-library fetch and unwraps its items', async () => {
+    const spied = spiedPort([seededTrack('a')]);
+    port = spied;
+    const { result } = renderHook(() => useLibraryTracks('q', 'recent', true), { wrapper });
+    await waitFor(() => expect(result.current.tracks).toHaveLength(1));
+
+    let resolved: TrackResponse[] = [];
+    await act(async () => {
+      resolved = await result.current.loadAll();
+    });
+
+    expect(ids(resolved)).toEqual(['a']);
+    expect(spied.getAllTracks).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'q', signal: expect.any(AbortSignal) }),
+    );
   });
 });
 
 describe('useLibraryTracks pagination after a delete', () => {
-  let server: TrackResponse[] = [];
-  const serveLibraryPage = ({ limit, offset }: { limit: number; offset: number }) =>
-    Promise.resolve({
-      items: server.slice(offset, offset + limit),
-      total: server.length,
-      limit,
-      offset,
-      has_more: offset + limit < server.length,
-    });
-
-  const track = (i: number) => ({ id: asTrackId(`t${i}`) }) as TrackResponse;
-
-  let client: QueryClient;
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-
   const LIBRARY_SIZE = TRACKS_PAGE_SIZE * 2 + 3;
+  let spied: ReturnType<typeof spiedPort>;
 
   async function loadTwoPages() {
     const hook = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
@@ -250,24 +237,26 @@ describe('useLibraryTracks pagination after a delete', () => {
   }
 
   beforeEach(() => {
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    server = Array.from({ length: LIBRARY_SIZE }, (_, i) => track(i));
-    mockGetTracks.mockImplementation(serveLibraryPage);
+    spied = spiedPort(library(LIBRARY_SIZE));
+    port = spied;
   });
-
-  afterEach(() => client.clear());
 
   it('does not skip a track when a track on an earlier loaded page is deleted', async () => {
     const hook = await loadTwoPages();
 
-    server = server.filter((t) => t.id !== 't5');
-    act(() => removeTrackFromCaches(client, asTrackId('t5')));
+    await act(async () => {
+      await port.deleteTrack(asTrackId('t5'));
+      removeTrackFromCaches(client, asTrackId('t5'));
+    });
     await loadRest(hook, LIBRARY_SIZE - 1);
 
-    expect(mockGetTracks).toHaveBeenLastCalledWith(
+    expect(spied.getTracks).toHaveBeenLastCalledWith(
       expect.objectContaining({ offset: TRACKS_PAGE_SIZE * 2 - 1 }),
+      expect.anything(),
     );
-    expect(hook.result.current.tracks.map((t) => t.id)).toEqual(server.map((t) => t.id));
+    expect(ids(hook.result.current.tracks)).toEqual(
+      ids(library(LIBRARY_SIZE)).filter((id) => id !== 't5'),
+    );
   });
 
   it('keeps the offsets right after a failed delete is rolled back', async () => {
@@ -278,31 +267,24 @@ describe('useLibraryTracks pagination after a delete', () => {
     act(() => restoreTrackPlacements(client, placements));
     await loadRest(hook, LIBRARY_SIZE);
 
-    expect(hook.result.current.tracks.map((t) => t.id)).toEqual(server.map((t) => t.id));
+    expect(ids(hook.result.current.tracks)).toEqual(ids(library(LIBRARY_SIZE)));
   });
 });
 
 describe('useLibraryTracks pending poll', () => {
   const PAGES = 5;
+  const PENDING_ID = 't3';
   let status: 'pending' | 'ready' = 'pending';
-  const servePollPage = ({ limit, offset }: { limit: number; offset: number }) =>
-    Promise.resolve({
-      items: Array.from({ length: limit }, (_, i) => {
-        const n = offset + i;
-        return {
-          id: asTrackId(`t${n}`),
-          acquisition_status: n === 3 ? status : 'ready',
-        } as TrackResponse;
-      }),
-      total: TRACKS_PAGE_SIZE * PAGES,
-      limit,
-      offset,
-      has_more: offset + limit < TRACKS_PAGE_SIZE * PAGES,
-    });
+  let spied: ReturnType<typeof spiedPort>;
 
-  let client: QueryClient;
-  function wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  function servePollPage(memory: LibraryPort): LibraryPort['getTracks'] {
+    return async (params, signal) => {
+      const served = await memory.getTracks(params, signal);
+      const items = served.items.map((t) =>
+        t.id === PENDING_ID ? ({ ...t, acquisition_status: status } as TrackResponse) : t,
+      );
+      return { ...served, items };
+    };
   }
 
   async function loadAllPages() {
@@ -316,25 +298,29 @@ describe('useLibraryTracks pending poll', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     status = 'pending';
-    mockGetTracks.mockImplementation(servePollPage);
+    const memory = createMemoryLibraryPort({ tracks: library(TRACKS_PAGE_SIZE * PAGES) });
+    spied = {
+      ...memory,
+      getTracks: jest.fn(servePollPage(memory)),
+      getAllTracks: jest.fn(memory.getAllTracks),
+    };
+    port = spied;
   });
 
   afterEach(() => {
-    client.clear();
     jest.useRealTimers();
   });
 
   it('refetches one page a minute, not every loaded page, and stops on a stuck row', async () => {
     await loadAllPages();
-    mockGetTracks.mockClear();
+    spied.getTracks.mockClear();
 
     await act(() => jest.advanceTimersByTimeAsync(60_000));
-    expect(mockGetTracks).toHaveBeenCalledTimes(1);
+    expect(spied.getTracks).toHaveBeenCalledTimes(1);
 
     await act(() => jest.advanceTimersByTimeAsync(60 * 60_000));
-    expect(mockGetTracks.mock.calls.length).toBeLessThanOrEqual(10);
+    expect(spied.getTracks.mock.calls.length).toBeLessThanOrEqual(MAX_PENDING_POLLS);
   });
 
   it('shows a track that goes ready', async () => {
@@ -346,10 +332,11 @@ describe('useLibraryTracks pending poll', () => {
 
   function holdNextPoll() {
     let land: () => void = () => undefined;
-    mockGetTracks.mockImplementationOnce(
-      (params: { limit: number; offset: number }) =>
+    const serve = spied.getTracks.getMockImplementation()!;
+    spied.getTracks.mockImplementationOnce(
+      (params, signal) =>
         new Promise((resolve) => {
-          land = () => resolve(servePollPage(params));
+          land = () => resolve(serve(params, signal));
         }),
     );
     return () => land();
@@ -366,15 +353,15 @@ describe('useLibraryTracks pending poll', () => {
       land();
     });
     await act(() => jest.advanceTimersByTimeAsync(0));
-    expect(hook.result.current.tracks.map((t) => t.id)).not.toContain('t1');
+    expect(ids(hook.result.current.tracks)).not.toContain('t1');
   });
 
   it('sends no poll request while the previous one is unsettled', async () => {
     await loadAllPages();
-    mockGetTracks.mockClear();
+    spied.getTracks.mockClear();
     holdNextPoll();
     await act(() => jest.advanceTimersByTimeAsync(3 * 60_000));
-    expect(mockGetTracks).toHaveBeenCalledTimes(1);
+    expect(spied.getTracks).toHaveBeenCalledTimes(1);
   });
 
   it('writes nothing when the consumer unmounts with a poll in flight', async () => {
@@ -391,58 +378,5 @@ describe('useLibraryTracks pending poll', () => {
     );
     expect(cached).toBeDefined();
     expect(cached?.pages.flatMap((p) => p.items)[3]?.acquisition_status).toBe('pending');
-  });
-});
-
-describe('useLibraryTracks loadAll cancellation', () => {
-  function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-  }
-
-  it('passes the query signal to the whole-library fetch and unwraps its items', async () => {
-    const a = { id: asTrackId('a') };
-    mockGetTracks.mockResolvedValue({
-      items: [a],
-      total: 1,
-      limit: 200,
-      offset: 0,
-      has_more: false,
-    });
-    mockGetAllTracks.mockReset().mockResolvedValue({ items: [a], truncated: false });
-    const { result } = renderHook(() => useLibraryTracks('q', 'recent', true), { wrapper });
-    await waitFor(() => expect(result.current.tracks).toHaveLength(1));
-
-    let resolved: unknown;
-    await act(async () => {
-      resolved = await result.current.loadAll();
-    });
-
-    expect(resolved).toEqual([a]);
-    expect(mockGetAllTracks).toHaveBeenCalledWith(
-      expect.objectContaining({ q: 'q', signal: expect.any(AbortSignal) }),
-    );
-  });
-});
-
-describe('useLibraryTracks on an injected LibraryPort', () => {
-  it('lists the tracks the injected port holds', async () => {
-    const tracks = [seededTrack('m0'), seededTrack('m1'), seededTrack('m2')];
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    function wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>
-          <LibraryPortProvider port={createMemoryLibraryPort({ tracks })}>
-            {children}
-          </LibraryPortProvider>
-        </QueryClientProvider>
-      );
-    }
-
-    const { result } = renderHook(() => useLibraryTracks('', 'recent', true), { wrapper });
-
-    await waitFor(() => expect(result.current.tracks.map((t) => t.id)).toEqual(['m0', 'm1', 'm2']));
-    expect(mockGetTracks).not.toHaveBeenCalled();
-    client.clear();
   });
 });

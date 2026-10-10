@@ -1,166 +1,67 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import type { ReactElement, ReactNode } from 'react';
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { useActiveLibraryView } from '@features/library/hooks/useActiveLibraryView';
+import { useSelection } from '@features/library/hooks/useSelection';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   type LibraryChip,
+  type SortKey,
 } from '@features/library/domain/libraryView';
-import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
-import { trackResponseFactory } from '@testing/factories';
-import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
-import { TracksList } from '@features/library/ui/TracksList';
+import {
+  createMemoryLibraryPort,
+  type MemoryLibrarySeed,
+} from '@features/library/__tests__/memoryLibraryPort';
+import { track } from '@features/library/__tests__/trackMutationFixtures';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { TRACKS_PAGE_SIZE } from '@features/library/hooks/useLibraryTracks';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import type { Navigator } from '@shared/navigation/navigator';
 
-let mockUseLibraryTracks: () => unknown;
-let mockUseLibraryAlbums: () => unknown;
-let mockUseLibraryArtists: () => unknown;
+type ActiveLibraryView = ReturnType<typeof useActiveLibraryView>;
+type Deps = Parameters<typeof useActiveLibraryView>[3];
+type Sorts = Record<LibraryChip, SortKey>;
 
-jest.mock('../hooks/useLibraryTracks', () => ({
-  useLibraryTracks: () => mockUseLibraryTracks(),
-}));
+const SEEDED_TRACKS = 7;
+const SEEDED_ALBUMS = 3;
+const SEEDED_ARTISTS = 2;
+const BEYOND_FIRST_PAGE = 50;
 
-jest.mock('../hooks/useLibraryGroups', () => ({
-  useLibraryAlbums: () => mockUseLibraryAlbums(),
-  useLibraryArtists: () => mockUseLibraryArtists(),
-}));
+const SORTS: Sorts = { playlists: 'recent', tracks: 'recent', albums: 'az', artists: 'az' };
 
-const mockAlbumsError = new Error('albums request failed');
-const mockLoadedAlbums = [{ key: 'a1' }, { key: 'a2' }, { key: 'a3' }];
-let mockAlbums: { key: string }[] = mockLoadedAlbums;
-
-function stubChipCollections() {
-  mockUseLibraryTracks = () => ({
-    tracks: [{ id: 't1' }],
-    total: 7,
-    isLoading: false,
-    isRefetching: false,
-    error: null,
-    isFetchingNextPage: false,
-    onEndReached: jest.fn(),
-    refetch: jest.fn(),
-    loadAll: jest.fn(),
-  });
-  mockUseLibraryAlbums = () => ({
-    albums: mockAlbums,
-    isLoading: false,
-    isRefetching: false,
-    error: mockAlbumsError,
-    refetch: jest.fn(),
-  });
-  mockUseLibraryArtists = () => ({
-    artists: [{ key: 'r1' }, { key: 'r2' }],
-    isLoading: true,
-    isRefetching: false,
-    error: null,
-    refetch: jest.fn(),
-  });
+const base = track('base');
+function row(id: string): TrackResponse {
+  return { ...base, id: asTrackId(id), title: `Track ${id}` };
 }
 
-const SORTS = { playlists: 'recent', tracks: 'recent', albums: 'az', artists: 'az' } as const;
-
-function makeDeps(): Parameters<typeof useActiveLibraryView>[3] {
+function album(key: string): AlbumGroup {
   return {
-    pl: {
-      playlists: [
-        {
-          id: asPlaylistId('p1'),
-          name: 'Only Playlist',
-          track_count: 0,
-          preview_artwork_urls: [],
-          created_at: '2026-01-01T00:00:00Z',
-          updated_at: '2026-01-01T00:00:00Z',
-        },
-      ],
-      isRefetchingPlaylists: false,
-      refetchPlaylists: jest.fn(),
-      setCreateModalVisible: jest.fn(),
-    },
-    router: { push: jest.fn() },
-    navigation: {
-      navigateToTrack: jest.fn(),
-      navigateToAlbum: jest.fn(),
-      navigateToArtist: jest.fn(),
-    },
-    selection: {},
-    queue: { playFromList: jest.fn(), shuffleFromList: jest.fn() },
-    playback: {},
-    retryMutation: { mutate: jest.fn(), isPending: false, variables: undefined },
-    onTrackMore: jest.fn(),
-  } as unknown as Parameters<typeof useActiveLibraryView>[3];
+    key,
+    album: `Album ${key}`,
+    artist: 'An Artist',
+    artwork_url: null,
+    year: null,
+    track_count: 1,
+    most_recent_added_at: '2026-01-01T00:00:00Z',
+  };
 }
 
-function activeViewFor(chip: LibraryChip) {
-  const { result } = renderHook(() => useActiveLibraryView(chip, SORTS, '', makeDeps()));
-  return result.current.active;
-}
-
-describe('useActiveLibraryView — the chip picks its own view', () => {
-  beforeEach(() => {
-    stubChipCollections();
-    mockAlbums = mockLoadedAlbums;
-  });
-
-  it('renders the playlists grid with the playlist noun, options and count', () => {
-    const active = activeViewFor('playlists');
-
-    expect(active.content.type).toBe(PlaylistsGrid);
-    expect(active.noun).toBe('playlist');
-    expect(active.options).toBe(PLAYLIST_SORT_OPTIONS);
-    expect(active.count).toBe(1);
-  });
-
-  it('renders the tracks list with the track noun, options and total', () => {
-    const active = activeViewFor('tracks');
-
-    expect(active.content.type).toBe(TracksList);
-    expect(active.noun).toBe('track');
-    expect(active.options).toBe(TRACK_SORT_OPTIONS);
-    expect(active.count).toBe(7);
-  });
-
-  it('renders the albums grid with the album noun, options and count', () => {
-    const active = activeViewFor('albums');
-
-    expect(active.content.type).toBe(AlbumsGrid);
-    expect(active.noun).toBe('album');
-    expect(active.options).toBe(ALBUM_SORT_OPTIONS);
-    expect(active.count).toBe(3);
-  });
-
-  it('renders the artists grid with the artist noun, options and count', () => {
-    const active = activeViewFor('artists');
-
-    expect(active.content.type).toBe(ArtistsGrid);
-    expect(active.noun).toBe('artist');
-    expect(active.options).toBe(ARTIST_SORT_OPTIONS);
-    expect(active.count).toBe(2);
-  });
-
-  it("surfaces the selected chip's own failure, never a neighbour's", () => {
-    mockAlbums = [];
-    expect(activeViewFor('albums').error).toBe(mockAlbumsError);
-    expect(activeViewFor('tracks').error).toBeNull();
-    expect(activeViewFor('artists').error).toBeNull();
-  });
-
-  it("surfaces the selected chip's own loading state", () => {
-    expect(activeViewFor('artists').isLoading).toBe(true);
-    expect(activeViewFor('albums').isLoading).toBe(false);
-    expect(activeViewFor('playlists').isLoading).toBe(false);
-  });
-});
-
-const mockEmptyState = { isLoading: false, isRefetching: false, error: null, refetch: jest.fn() };
-
-function stubEmptyCollections() {
-  mockUseLibraryTracks = () => ({ ...mockEmptyState, tracks: [], total: 0, loadAll: jest.fn() });
-  mockUseLibraryAlbums = () => ({ ...mockEmptyState, albums: [] });
-  mockUseLibraryArtists = () => ({ ...mockEmptyState, artists: [] });
+function artist(key: string): ArtistGroup {
+  return {
+    key,
+    artist: `Artist ${key}`,
+    artwork_url: null,
+    track_count: 1,
+    most_recent_added_at: '2026-01-01T00:00:00Z',
+  };
 }
 
 function playlist(id: string, name: string, createdAt: string): PlaylistResponse {
@@ -174,30 +75,184 @@ function playlist(id: string, name: string, createdAt: string): PlaylistResponse
   };
 }
 
-function sortedIds(playlists: PlaylistResponse[], sort: 'recent' | 'az'): string[] {
-  const deps = {
+const onlyPlaylist = playlist('p1', 'Only Playlist', '2026-01-01T00:00:00Z');
+
+type FakeDeps = Omit<Deps, 'selection'>;
+
+function asDeps(fake: unknown): FakeDeps {
+  return fake as FakeDeps;
+}
+
+function makeDeps(over: Record<string, unknown> = {}): FakeDeps {
+  return asDeps({
     pl: {
-      playlists,
+      playlists: [onlyPlaylist],
       isRefetchingPlaylists: false,
       refetchPlaylists: jest.fn(),
       loadMorePlaylists: jest.fn(),
+      setCreateModalVisible: jest.fn(),
     },
     navigation: {
       navigateToTrack: jest.fn(),
       navigateToAlbum: jest.fn(),
       navigateToArtist: jest.fn(),
+      navigateToPlaylist: jest.fn(),
     },
-    retryMutation: { mutate: jest.fn(), isPending: false, variables: undefined },
-  } as unknown as Parameters<typeof useActiveLibraryView>[3];
-  const sorts = { playlists: sort, tracks: 'recent', albums: 'az', artists: 'az' } as const;
-  const { result } = renderHook(() => useActiveLibraryView('playlists', sorts, '', deps));
-  return result.current.playlists.map((p) => p.id);
+    queue: { playFromList: jest.fn(), shuffleFromList: jest.fn() },
+    playback: {},
+    retryMutation: { mutate: jest.fn(), isInFlight: () => false },
+    onTrackMore: jest.fn(),
+    ...over,
+  });
 }
 
-describe('useActiveLibraryView — playlist sort', () => {
-  beforeEach(() => {
-    stubEmptyCollections();
+let client: QueryClient;
+
+beforeEach(() => {
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+});
+
+afterEach(() => client.clear());
+
+function renderActive(
+  chip: LibraryChip,
+  port: LibraryPort,
+  deps: FakeDeps = makeDeps(),
+  sorts: Sorts = SORTS,
+) {
+  const seen: { current: ActiveLibraryView | null } = { current: null };
+  function Library(): ReactElement {
+    const selection = useSelection();
+    const view = useActiveLibraryView(chip, sorts, '', { ...deps, selection } as Deps);
+    seen.current = view;
+    return <>{view.active.content}</>;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <LibraryPortProvider port={port}>
+        <Library />
+      </LibraryPortProvider>
+    </QueryClientProvider>,
+  );
+  return () => seen.current!;
+}
+
+function seededPort(seed: MemoryLibrarySeed = {}) {
+  return createMemoryLibraryPort({
+    tracks: ['t1', 't2', 't3', 't4', 't5', 't6', 't7'].map(row),
+    albums: [album('a1'), album('a2'), album('a3')],
+    artists: [artist('r1'), artist('r2')],
+    ...seed,
   });
+}
+
+describe('useActiveLibraryView — the chip picks its own view', () => {
+  it('renders the playlists grid with the playlist noun, options and count', () => {
+    const view = renderActive('playlists', seededPort());
+
+    expect(screen.getByTestId('library-playlists-grid')).toBeTruthy();
+    expect(screen.getByText('Only Playlist')).toBeTruthy();
+    const { active } = view();
+    expect(active.noun).toBe('playlist');
+    expect(active.options).toBe(PLAYLIST_SORT_OPTIONS);
+    expect(active.count).toBe(1);
+  });
+
+  it('renders the tracks list with the track noun, options and total', async () => {
+    const memory = seededPort();
+    const port = {
+      ...memory,
+      getTracks: jest.fn<
+        ReturnType<LibraryPort['getTracks']>,
+        Parameters<LibraryPort['getTracks']>
+      >((params, signal) => memory.getTracks({ ...params, limit: 1 }, signal)),
+    };
+    const view = renderActive('tracks', port);
+
+    await waitFor(() => expect(screen.getByText('Track t1')).toBeTruthy());
+    expect(screen.getByTestId('library-tracks-list')).toBeTruthy();
+    expect(screen.queryByText('Track t2')).toBeNull();
+    const { active } = view();
+    expect(active.noun).toBe('track');
+    expect(active.options).toBe(TRACK_SORT_OPTIONS);
+    expect(active.count).toBe(SEEDED_TRACKS);
+  });
+
+  it('renders the albums grid with the album noun, options and count', async () => {
+    const view = renderActive('albums', seededPort());
+
+    await waitFor(() => expect(view().active.count).toBe(SEEDED_ALBUMS));
+    expect(screen.getByTestId('library-albums-grid')).toBeTruthy();
+    expect(screen.getByTestId('library-album-a3')).toBeTruthy();
+    const { active } = view();
+    expect(active.noun).toBe('album');
+    expect(active.options).toBe(ALBUM_SORT_OPTIONS);
+  });
+
+  it('renders the artists grid with the artist noun, options and count', async () => {
+    const view = renderActive('artists', seededPort());
+
+    await waitFor(() => expect(view().active.count).toBe(SEEDED_ARTISTS));
+    expect(screen.getByTestId('library-artists-grid')).toBeTruthy();
+    expect(screen.getByTestId('library-artist-r2')).toBeTruthy();
+    const { active } = view();
+    expect(active.noun).toBe('artist');
+    expect(active.options).toBe(ARTIST_SORT_OPTIONS);
+  });
+
+  describe('with an albums request that fails', () => {
+    const albumsError = new Error('albums request failed');
+
+    function failingAlbumsPort(): LibraryPort {
+      return { ...seededPort(), getLibraryAlbums: () => Promise.reject(albumsError) };
+    }
+
+    it("surfaces the selected chip's own failure, never a neighbour's", async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const albums = renderActive('albums', failingAlbumsPort());
+      await waitFor(() => expect(albums().active.error).toBe(albumsError));
+
+      const tracks = renderActive('tracks', failingAlbumsPort());
+      await waitFor(() => expect(tracks().active.count).toBe(SEEDED_TRACKS));
+      expect(tracks().active.error).toBeNull();
+
+      const artists = renderActive('artists', failingAlbumsPort());
+      await waitFor(() => expect(artists().active.count).toBe(SEEDED_ARTISTS));
+      expect(artists().active.error).toBeNull();
+      warn.mockRestore();
+    });
+  });
+
+  it("surfaces the selected chip's own loading state", async () => {
+    const holdingArtists: LibraryPort = {
+      ...seededPort(),
+      getLibraryArtists: () => new Promise(() => undefined),
+    };
+
+    const artists = renderActive('artists', holdingArtists);
+    expect(artists().active.isLoading).toBe(true);
+
+    const albums = renderActive('albums', holdingArtists);
+    await waitFor(() => expect(albums().active.count).toBe(SEEDED_ALBUMS));
+    expect(albums().active.isLoading).toBe(false);
+
+    const playlists = renderActive('playlists', holdingArtists);
+    expect(playlists().active.isLoading).toBe(false);
+    expect(artists().active.isLoading).toBe(true);
+  });
+});
+
+describe('useActiveLibraryView — playlist sort', () => {
+  function sortedIds(playlists: PlaylistResponse[], sort: 'recent' | 'az'): string[] {
+    const deps = makeDeps({
+      pl: { ...makeDeps().pl, playlists },
+    });
+    const view = renderActive('playlists', createMemoryLibraryPort(), deps, {
+      ...SORTS,
+      playlists: sort,
+    });
+    return view().playlists.map((p) => p.id);
+  }
 
   it('orders same-second timestamps of differing precision by instant, newest first', () => {
     const whole = playlist('whole', 'Whole', '2026-01-01T00:00:00Z');
@@ -229,164 +284,76 @@ describe('useActiveLibraryView — playlist sort', () => {
   });
 });
 
-function trackResponse(id: string): TrackResponse {
-  return trackResponseFactory.build({
-    id: asTrackId(id),
-    title: `Track ${id}`,
-    artist: 'An Artist',
-    album: null,
-    duration_seconds: 180,
-    added_at: '2024-01-01T00:00:00Z',
-    acquisition_status: 'ready',
-    artwork_url: null,
-    failure_reason: null,
-    year: null,
-    genre: null,
-    track_number: null,
-    album_artist: null,
-    isrc: null,
-    audio_ref: null,
-  });
-}
-
-const mockFullLibrary = Array.from({ length: 250 }, (_, i) => trackResponse(`t${i}`));
-const mockLoadedPages = mockFullLibrary.slice(0, 200);
-const mockLoadAll = jest.fn(() => Promise.resolve(mockFullLibrary));
-
-function stubPagedLibrary() {
-  mockUseLibraryTracks = () => ({
-    tracks: mockLoadedPages,
-    total: mockFullLibrary.length,
-    isLoading: false,
-    isRefetching: false,
-    error: null,
-    isFetchingNextPage: false,
-    onEndReached: jest.fn(),
-    refetch: jest.fn(),
-    loadAll: mockLoadAll,
-  });
-  mockUseLibraryAlbums = () => ({
-    albums: [],
-    isLoading: false,
-    isRefetching: false,
-    error: null,
-    refetch: jest.fn(),
-  });
-  mockUseLibraryArtists = () => ({
-    artists: [],
-    isLoading: false,
-    isRefetching: false,
-    error: null,
-    refetch: jest.fn(),
-  });
-}
-
-function makeShuffleDeps() {
-  const shuffleFromList = jest.fn();
-  const playFromList = jest.fn();
-  const deps = {
-    pl: {
-      playlists: [],
-      isRefetchingPlaylists: false,
-      refetchPlaylists: jest.fn(),
-      setCreateModalVisible: jest.fn(),
-    },
-    router: { push: jest.fn(), replace: jest.fn() },
-    navigation: {
-      navigateToTrack: jest.fn(),
-      navigateToAlbum: jest.fn(),
-      navigateToArtist: jest.fn(),
-    },
-    selection: {},
-    queue: { shuffleFromList, playFromList },
-    playback: {},
-    retryMutation: { mutate: jest.fn(), isPending: false, variables: undefined },
-    onTrackMore: jest.fn(),
-  } as unknown as Parameters<typeof useActiveLibraryView>[3];
-  return { deps, shuffleFromList };
-}
-
 describe('useActiveLibraryView — shuffleWholeLibrary', () => {
-  beforeEach(() => {
-    stubPagedLibrary();
-    mockLoadAll.mockClear();
-  });
+  const fullLibrary = Array.from({ length: TRACKS_PAGE_SIZE + BEYOND_FIRST_PAGE }, (_, i) =>
+    row(`t${i}`),
+  );
 
-  it('seeds the shuffle from the full library (loadAll), not the loaded pages', async () => {
-    const { deps, shuffleFromList } = makeShuffleDeps();
-    const { result } = renderHook(() => useActiveLibraryView('tracks', SORTS, '', deps));
+  it('seeds the shuffle from the full library, not the loaded pages', async () => {
+    const shuffleFromList = jest.fn();
+    const deps = makeDeps({ queue: { shuffleFromList, playFromList: jest.fn() } });
+    const view = renderActive('tracks', createMemoryLibraryPort({ tracks: fullLibrary }), deps);
+    await waitFor(() => expect(view().tracks).toHaveLength(TRACKS_PAGE_SIZE));
 
     await act(async () => {
-      await result.current.shuffleWholeLibrary();
+      await view().shuffleWholeLibrary();
     });
 
-    expect(mockLoadAll).toHaveBeenCalledTimes(1);
     expect(shuffleFromList).toHaveBeenCalledTimes(1);
     const [playable, source] = shuffleFromList.mock.calls[0]!;
-    expect(playable).toHaveLength(mockFullLibrary.length);
-    expect(playable.length).toBeGreaterThan(mockLoadedPages.length);
+    expect(playable).toHaveLength(fullLibrary.length);
     expect(source).toEqual({ kind: 'library' });
     const seededIds = (playable as { source: { trackId: string } }[]).map((t) => t.source.trackId);
-    expect(seededIds).toContain(mockFullLibrary[249]!.id);
+    expect(seededIds).toContain(fullLibrary[fullLibrary.length - 1]!.id);
   });
 });
 
 describe('useActiveLibraryView — playlist press', () => {
-  beforeEach(() => {
-    stubEmptyCollections();
-  });
+  const second = playlist('p2', 'Second Playlist', '2025-06-01T00:00:00Z');
+
+  type NavigatedLibraryProps = { push: jest.Mock };
+
+  function NavigatedLibrary({ push }: NavigatedLibraryProps): ReactElement {
+    const router: Navigator = { push, replace: jest.fn(), back: jest.fn(), canGoBack: () => false };
+    const navigation = useLibraryNavigation(router);
+    const selection = useSelection();
+    const deps = makeDeps({ pl: { ...makeDeps().pl, playlists: [onlyPlaylist, second] } });
+    const { active } = useActiveLibraryView('playlists', SORTS, '', {
+      ...deps,
+      navigation,
+      selection,
+    } as Deps);
+    return <>{active.content}</>;
+  }
+
+  function renderNavigated(push: jest.Mock): void {
+    function wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>
+          <LibraryPortProvider port={createMemoryLibraryPort()}>{children}</LibraryPortProvider>
+        </QueryClientProvider>
+      );
+    }
+    render(<NavigatedLibrary push={push} />, { wrapper });
+  }
 
   it('pushes /library/playlist/<id> when a playlist is pressed', () => {
-    const fakeRouter = { push: jest.fn() } as unknown as Parameters<typeof useLibraryNavigation>[0];
-    const { result: navigationResult } = renderHook(() => useLibraryNavigation(fakeRouter));
-    const deps = {
-      ...makeDeps(),
-      router: fakeRouter,
-      navigation: navigationResult.current,
-    } as unknown as Parameters<typeof useActiveLibraryView>[3];
+    const push = jest.fn();
+    renderNavigated(push);
 
-    const { result } = renderHook(() => useActiveLibraryView('playlists', SORTS, '', deps));
-    const props = result.current.active.content.props as {
-      onPlaylistPress: (playlist: PlaylistResponse) => void;
-    };
-    const pressedPlaylist = (deps as unknown as { pl: { playlists: PlaylistResponse[] } }).pl
-      .playlists[0]!;
-    props.onPlaylistPress(pressedPlaylist);
+    fireEvent.press(screen.getByTestId('library-playlist-p1'));
 
-    expect(fakeRouter.push).toHaveBeenCalledWith(`/library/playlist/${pressedPlaylist.id}`);
-  });
-});
-
-describe('useActiveLibraryView — playlist press without a router in deps', () => {
-  beforeEach(() => {
-    stubEmptyCollections();
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/library/playlist/p1');
   });
 
-  it('opens the pressed playlist through navigation when deps carry no router', () => {
-    const fakeRouter = { push: jest.fn() } as unknown as Parameters<typeof useLibraryNavigation>[0];
-    const { result: navigationResult } = renderHook(() => useLibraryNavigation(fakeRouter));
-    const second: PlaylistResponse = {
-      id: asPlaylistId('p2'),
-      name: 'Second Playlist',
-      track_count: 3,
-      preview_artwork_urls: [],
-      created_at: '2025-06-01T00:00:00Z',
-      updated_at: '2025-06-01T00:00:00Z',
-    };
-    const withoutRouter = { ...makeDeps() } as unknown as Record<string, unknown>;
-    delete withoutRouter.router;
-    const deps = {
-      ...withoutRouter,
-      navigation: navigationResult.current,
-    } as unknown as Parameters<typeof useActiveLibraryView>[3];
+  it('opens the playlist that was pressed, not the first one', () => {
+    const push = jest.fn();
+    renderNavigated(push);
 
-    const { result } = renderHook(() => useActiveLibraryView('playlists', SORTS, '', deps));
-    const props = result.current.active.content.props as {
-      onPlaylistPress: (playlist: PlaylistResponse) => void;
-    };
-    props.onPlaylistPress(second);
+    fireEvent.press(screen.getByTestId('library-playlist-p2'));
 
-    expect(fakeRouter.push).toHaveBeenCalledTimes(1);
-    expect(fakeRouter.push).toHaveBeenCalledWith('/library/playlist/p2');
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/library/playlist/p2');
   });
 });
