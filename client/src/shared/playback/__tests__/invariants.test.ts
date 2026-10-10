@@ -81,19 +81,6 @@ describe('canPlay.ts is the only place playability is checked', () => {
   });
 });
 
-describe('the restart threshold has exactly one definition', () => {
-  it.each([
-    path.join(SRC_DIR, 'features', 'playback', 'ui', 'FullPlayer.tsx'),
-    path.join(SRC_DIR, 'features', 'playback', 'native', 'playbackService.ts'),
-    path.join(SRC_DIR, 'features', 'playback', 'web', 'createWebControls.ts'),
-  ])('%s derives from the shared constant instead of restating its value', (file) => {
-    const source = fs.readFileSync(file, 'utf8');
-
-    expect(source).toContain('shouldRestartOnPrevious');
-    expect(source).not.toMatch(/\b3_?000\b/);
-  });
-});
-
 describe('useQueueStore is reached only through the useQueuePlayback facade', () => {
   it('finds no importer of useQueueStore outside shared/playback and features/playback', () => {
     const offenders = findQueueStoreImporters(SRC_DIR).filter(

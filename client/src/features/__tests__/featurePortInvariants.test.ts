@@ -54,10 +54,20 @@ function apiClientValueImports(text: string): string[] {
   return offenders;
 }
 
-const PORTED_FEATURES = ['library', 'discovery', 'auth', 'settings', 'detail', 'playback'];
-const files = PORTED_FEATURES.flatMap(featureFiles);
+const portedFeatures = fs
+  .readdirSync(featuresRoot, { withFileTypes: true })
+  .filter(
+    (entry) =>
+      entry.isDirectory() && fs.existsSync(path.join(featuresRoot, entry.name, 'adapters')),
+  )
+  .map((entry) => entry.name);
+const files = portedFeatures.flatMap(featureFiles);
 
-test.each(PORTED_FEATURES)('%s has source files to check', (feature) => {
+test('finds features with an adapters/ folder, so a broken walk cannot pass by finding nothing', () => {
+  expect(portedFeatures.length).toBeGreaterThan(0);
+});
+
+test.each(portedFeatures)('%s has source files to check', (feature) => {
   expect(files.filter(({ name }) => name.startsWith(`${feature}/`)).length).toBeGreaterThan(0);
 });
 
