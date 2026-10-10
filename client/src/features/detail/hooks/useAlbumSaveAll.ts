@@ -104,11 +104,31 @@ function useBatchState() {
   return { savingAll: lock.savingAll, activeRef: lock.activeRef, isSavingInBatch, setBatch };
 }
 
-function useOutcomeRecorder() {
+function _rememberUnowned(
+  saved: Set<string>,
+  succeeded: readonly DiscoveryResult[],
+  owned: ReadonlySet<string>,
+): void {
+  for (const identity of _identitiesOf(succeeded)) {
+    if (!owned.has(identity)) saved.add(identity);
+  }
+}
+
+function useOwnedIdentities(
+  candidates: readonly DiscoveryResult[],
+): RefObject<ReadonlySet<string>> {
+  const owned = useRef<ReadonlySet<string>>(NO_CLAIMS);
+  useEffect(() => {
+    owned.current = _identitiesOf(_ownedTracks(candidates));
+  }, [candidates]);
+  return owned;
+}
+
+function useOutcomeRecorder(owned: RefObject<ReadonlySet<string>>) {
   const saved = useRef(new Set<string>());
   const [lastBatch, setLastBatch] = useState<LastBatch | null>(null);
   const record = (outcome: BatchOutcome<DiscoveryResult>): void => {
-    for (const identity of _identitiesOf(outcome.succeeded)) saved.current.add(identity);
+    _rememberUnowned(saved.current, outcome.succeeded, owned.current);
     setLastBatch({ saved: outcome.succeeded.length, failed: outcome.failed.length });
   };
   return { saved, lastBatch, record, clear: () => setLastBatch(null) };
@@ -125,7 +145,7 @@ function useForgetOnceOwned(
 
 function useSaveAllState(candidates: readonly DiscoveryResult[]) {
   const batch = useBatchState();
-  const outcomes = useOutcomeRecorder();
+  const outcomes = useOutcomeRecorder(useOwnedIdentities(candidates));
   useForgetOnceOwned(outcomes.saved, candidates);
   return { ...batch, ...outcomes };
 }
