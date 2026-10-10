@@ -11,7 +11,7 @@ import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '@testing/makeWrapper';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
-import { useClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
+import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
@@ -62,7 +62,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('useClearSearchHistory racing an in-flight history fetch', () => {
+describe('useSettingsClearSearchHistory racing an in-flight history fetch', () => {
   beforeEach(() => {
     signedIn();
   });
@@ -77,7 +77,7 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
       .catch(() => undefined);
     __http.replyOnce(CLEAR, CLEARED);
 
-    const hook = renderHook(() => useClearSearchHistory(), {
+    const hook = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -97,7 +97,7 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
   });
 });
 
-describe('useClearSearchHistory when the clear fails', () => {
+describe('useSettingsClearSearchHistory when the clear fails', () => {
   beforeEach(() => {
     signedIn();
   });
@@ -111,7 +111,7 @@ describe('useClearSearchHistory when the clear fails', () => {
     });
     __http.reply(CLEAR, BAD_REQUEST);
 
-    const hook = renderHook(() => useClearSearchHistory(), {
+    const hook = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -130,7 +130,7 @@ describe('useClearSearchHistory when the clear fails', () => {
 
 describe('settings mutations retry transient failures', () => {
   function renderClear() {
-    const hook = renderHook(useClearSearchHistory, {
+    const hook = renderHook(useSettingsClearSearchHistory, {
       wrapper: makeWrapper(new QueryClient()),
     });
     act(() => {
@@ -203,7 +203,7 @@ describe('the jittered retry backoff', () => {
       async ({ sample, dueMs }) => {
         jest.spyOn(Math, 'random').mockReturnValue(sample);
         const queryClient = new QueryClient();
-        const hook = renderHook(useClearSearchHistory, {
+        const hook = renderHook(useSettingsClearSearchHistory, {
           wrapper: makeWrapper(queryClient),
         });
         act(() => {
@@ -293,7 +293,7 @@ describe('settings mutations racing a sign-out', () => {
     __http.replyOnce(CLEAR, BAD_REQUEST);
     const release = holdResponses();
 
-    const clear = renderHook(() => useClearSearchHistory(), {
+    const clear = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -328,7 +328,7 @@ describe('settings mutations racing a sign-out', () => {
     const session = await bootAsUserA(queryClient);
     __http.reply(CLEAR, BAD_GATEWAY);
 
-    const clear = renderHook(() => useClearSearchHistory(), {
+    const clear = renderHook(() => useSettingsClearSearchHistory(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -359,7 +359,7 @@ describe('settings mutations racing a sign-out', () => {
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'a' }] });
 
     const hooks = renderHook(
-      () => ({ backfill: useBackfillFeatured(), clear: useClearSearchHistory() }),
+      () => ({ backfill: useBackfillFeatured(), clear: useSettingsClearSearchHistory() }),
       { wrapper: makeWrapper(queryClient) },
     );
     act(() => {

@@ -46,6 +46,17 @@ function run(cwd, ...args) {
 }
 
 describe('prettier-changed', () => {
+  test('checks a staged rename at its new path during a commit', (t) => {
+    const { root, base } = repo(t, {}, { 'src/old.ts': CLEAN });
+    git(root, 'mv', 'src/old.ts', 'src/renamed.ts');
+    writeFileSync(join(root, 'src/renamed.ts'), DIRTY);
+    git(root, 'add', '-A');
+    const r = run(root, base);
+    assert.equal(r.status, 1, r.stderr);
+    assert.match(r.stderr, /^src\/renamed\.ts$/m);
+    assert.doesNotMatch(r.stderr, /ENOENT/);
+  });
+
   test('exits 1 naming a changed file that is not Prettier-clean', (t) => {
     const { root, base } = repo(
       t,
