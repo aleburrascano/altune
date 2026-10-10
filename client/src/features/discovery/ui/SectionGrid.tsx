@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } f
 
 import { Card, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
 
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
@@ -23,21 +24,6 @@ export function useGridColumns(): [number, (event: LayoutChangeEvent) => void] {
     gridColumnsFor(gridWidth),
     (event: LayoutChangeEvent) => setGridWidth(event.nativeEvent.layout.width),
   ];
-}
-
-function buildHighlightProps(setHovered: (v: boolean) => void, setFocused: (v: boolean) => void) {
-  return {
-    onHoverIn: () => setHovered(true),
-    onHoverOut: () => setHovered(false),
-    onFocus: () => setFocused(true),
-    onBlur: () => setFocused(false),
-  };
-}
-
-function useHighlighted(): [boolean, ReturnType<typeof buildHighlightProps>] {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  return [hovered || focused, buildHighlightProps(setHovered, setFocused)];
 }
 
 function GridCardArt({ item }: { item: DiscoveryResult }): ReactElement {
@@ -72,19 +58,34 @@ function gridCardPressableProps(item: DiscoveryResult, position: number, grid: G
     onPress: () => grid.onPress(item, position),
     accessibilityRole: 'button' as const,
     accessibilityLabel: `${item.title}, ${kindLabel(item.kind)}`,
-    style: [{ flexBasis: `${100 / grid.columns}%` as ViewStyle['flexBasis'] }, styles.gridCardSlot],
   };
+}
+
+const FULL_WIDTH_PERCENT = 100;
+
+function gridCardSlotStyle(columns: number) {
+  const slot = [
+    { flexBasis: `${FULL_WIDTH_PERCENT / columns}%` as ViewStyle['flexBasis'] },
+    styles.gridCardSlot,
+  ];
+  return () => slot;
 }
 
 type GridResultCardProps = { item: DiscoveryResult; position: number; grid: GridContext };
 
 function GridResultCard({ item, position, grid }: GridResultCardProps): ReactElement {
   const theme = useTheme();
-  const [highlighted, highlightProps] = useHighlighted();
+  const { hovered, focused, pressableProps } = usePressableInteraction(
+    gridCardSlotStyle(grid.columns),
+  );
   const testID = `discover-grid-card-body-${item.kind}-${position}`;
   return (
-    <Pressable {...gridCardPressableProps(item, position, grid)} {...highlightProps}>
-      <GridCardBody item={item} cardStyle={gridCardStyle(theme, highlighted)} testID={testID} />
+    <Pressable {...gridCardPressableProps(item, position, grid)} {...pressableProps}>
+      <GridCardBody
+        item={item}
+        cardStyle={gridCardStyle(theme, hovered || focused)}
+        testID={testID}
+      />
     </Pressable>
   );
 }

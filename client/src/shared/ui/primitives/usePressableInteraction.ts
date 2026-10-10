@@ -33,11 +33,22 @@ function styleWithInteraction(style: InteractionStyle, interaction: InteractionS
   return (state: PressableStateCallbackType) => style({ ...state, ...interaction });
 }
 
-export function usePressableInteraction(style: InteractionStyle): PressableInteractionProps {
+export type PressableInteraction = InteractionState & {
+  pressableProps: PressableInteractionProps;
+};
+
+type Setters = [Setter, Setter];
+
+function pressablePropsFor(style: InteractionStyle, setters: Setters, state: InteractionState) {
+  return {
+    ...interactionHandlers(...setters),
+    style: styleWithInteraction(style, state),
+  };
+}
+
+export function usePressableInteraction(style: InteractionStyle): PressableInteraction {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  return {
-    ...interactionHandlers(setHovered, setFocused),
-    style: styleWithInteraction(style, { hovered, focused }),
-  };
+  const state = { hovered, focused };
+  return { ...state, pressableProps: pressablePropsFor(style, [setHovered, setFocused], state) };
 }
