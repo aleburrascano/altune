@@ -12,6 +12,15 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+const styles = StyleSheet.create({
+  grid: {
+    position: 'absolute',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    transform: [{ rotate: '-8deg' }, { scale: 1.06 }],
+  },
+});
+
 const COLS = 4;
 const ROWS = 4;
 
@@ -38,16 +47,15 @@ export function ArtworkBackground() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <View
-        style={{
-          position: 'absolute',
-          top: (height - grid) / 2 - height * 0.16,
-          left: (width - grid) / 2,
-          width: grid,
-          height: grid,
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          transform: [{ rotate: '-8deg' }, { scale: 1.06 }],
-        }}
+        style={[
+          styles.grid,
+          {
+            top: (height - grid) / 2 - height * 0.16,
+            left: (width - grid) / 2,
+            width: grid,
+            height: grid,
+          },
+        ]}
       >
         {Array.from({ length: COLS * ROWS }).map((_, i) => {
           const [start, end] = pairs[i % pairs.length] ?? [theme.color.accent, theme.color.accent];

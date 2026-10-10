@@ -10,6 +10,37 @@ type PlaylistCoverProps = {
   size: number;
 };
 
+type CoverCellProps = { url: string | undefined; half: number };
+type EmptyCellProps = { half: number };
+
+const EMPTY_ICON_SCALE = 0.3;
+const EMPTY_ICON_PROPS = { strokeWidth: 1.5, style: { opacity: EMPTY_ICON_SCALE } };
+
+function EmptyCell({ half }: EmptyCellProps): ReactElement {
+  const theme = useTheme();
+  const size = half * EMPTY_ICON_SCALE;
+  return (
+    <View style={[styles.iconCell, { width: half, height: half }]}>
+      <Music size={size} color={theme.color.textTertiary} {...EMPTY_ICON_PROPS} />
+    </View>
+  );
+}
+
+function CellArt({ url, half }: CoverCellProps): ReactElement {
+  if (url == null) return <EmptyCell half={half} />;
+  return <Image source={{ uri: url }} style={{ width: half, height: half }} contentFit="cover" />;
+}
+
+function CoverCell({ url, half }: CoverCellProps): ReactElement {
+  const theme = useTheme();
+  const style = { width: half, height: half, backgroundColor: theme.color.surface2 };
+  return (
+    <View style={style}>
+      <CellArt url={url} half={half} />
+    </View>
+  );
+}
+
 export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactElement {
   const theme = useTheme();
   const urls = artworkUrls.filter(Boolean);
@@ -73,7 +104,12 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
   }
 
   const half = size / 2;
-  const cells = [urls[0], urls[1], urls[2], urls[3]];
+  const cells = [
+    { id: 'top-left', url: urls[0] },
+    { id: 'top-right', url: urls[1] },
+    { id: 'bottom-left', url: urls[2] },
+    { id: 'bottom-right', url: urls[3] },
+  ];
 
   return (
     <View
@@ -82,21 +118,8 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
         { width: size, height: size, borderRadius: radius.sm, overflow: 'hidden' },
       ]}
     >
-      {cells.map((url, i) => (
-        <View key={i} style={{ width: half, height: half, backgroundColor: theme.color.surface2 }}>
-          {url != null ? (
-            <Image source={{ uri: url }} style={{ width: half, height: half }} contentFit="cover" />
-          ) : (
-            <View style={[styles.iconCell, { width: half, height: half }]}>
-              <Music
-                size={half * 0.3}
-                color={theme.color.textTertiary}
-                strokeWidth={1.5}
-                style={{ opacity: 0.3 }}
-              />
-            </View>
-          )}
-        </View>
+      {cells.map(({ id, url }) => (
+        <CoverCell key={id} url={url} half={half} />
       ))}
     </View>
   );

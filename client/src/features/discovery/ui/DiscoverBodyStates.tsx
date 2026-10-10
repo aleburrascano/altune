@@ -10,7 +10,7 @@ import { FilterChips } from '@features/discovery/ui/FilterChips';
 import { IncompleteResultsBanner } from '@features/discovery/ui/ResultNotices';
 import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
 
-const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
+const SKELETON_ROWS = ['row-a', 'row-b', 'row-c', 'row-d', 'row-e', 'row-f'];
 
 function SkeletonText(): ReactElement {
   return (
@@ -33,8 +33,8 @@ function SkeletonRow(): ReactElement {
 export function DiscoverSkeleton(): ReactElement {
   return (
     <View testID="discover-loading" style={skeletonStyles.list}>
-      {SKELETON_ROWS.map((i) => (
-        <SkeletonRow key={i} />
+      {SKELETON_ROWS.map((id) => (
+        <SkeletonRow key={id} />
       ))}
     </View>
   );

@@ -3,13 +3,13 @@ import { StyleSheet, View } from 'react-native';
 import { describeError } from '@shared/failure/describeError';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
-const SKELETON_TILES = [0, 1, 2, 3];
+const SKELETON_TILES = ['tile-a', 'tile-b', 'tile-c', 'tile-d'];
 
 function SkeletonGrid(): ReactElement {
   return (
     <View testID="library-loading" style={styles.skeletonGrid}>
-      {SKELETON_TILES.map((i) => (
-        <Skeleton key={i} width="47%" height={140} radius={8} />
+      {SKELETON_TILES.map((id) => (
+        <Skeleton key={id} width="47%" height={140} radius={8} />
       ))}
     </View>
   );
