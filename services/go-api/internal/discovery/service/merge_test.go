@@ -45,6 +45,18 @@ func TestMerge_CapsEachProviderGroupBeforeTheQuadraticScan(t *testing.T) {
 	}
 }
 
+func TestMerge_ScansOnlyTheCappedGroup(t *testing.T) {
+	huge := make([]domain.SearchResult, 10000)
+	for i := range huge {
+		huge[i] = track("title "+string(rune(0x4e00+i)), "artist "+string(rune(0x4e00+i)), domain.ProviderDeezer, nil)
+	}
+	comparisons := 0
+	mergeObserving([][]domain.SearchResult{huge}, func() { comparisons++ })
+	if limit := maxMergeResultsPerProvider * maxMergeResultsPerProvider; comparisons > limit {
+		t.Fatalf("scan made %d comparisons, want at most %d (the cap must run before the scan)", comparisons, limit)
+	}
+}
+
 func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 	t.Helper()
 	for _, e := range entities {

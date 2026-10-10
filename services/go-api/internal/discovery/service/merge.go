@@ -44,6 +44,10 @@ func keyed(r domain.SearchResult) keyedResult {
 }
 
 func Merge(perProvider [][]domain.SearchResult) []Entity {
+	return mergeObserving(perProvider, func() {})
+}
+
+func mergeObserving(perProvider [][]domain.SearchResult, onCompare func()) []Entity {
 	perProvider = capPerProvider(perProvider)
 	ambiguous := ambiguousArtistNames(perProvider)
 	entities := make([]Entity, 0)
@@ -52,13 +56,9 @@ func Merge(perProvider [][]domain.SearchResult) []Entity {
 		for rank, c := range group {
 			cProviders := providersOf(c)
 			kc := keyed(c)
-			i, tier, ok := findMergeTarget(entities, keys, kc, ambiguous)
+			i, tier, ok := findMergeTarget(entities, keys, kc, ambiguous, onCompare)
 			if !ok {
-				ranks := make(map[domain.ProviderName]int, len(cProviders))
-				for p := range cProviders {
-					ranks[p] = rank
-				}
-				entities = append(entities, Entity{Result: c, BestRank: ranks})
+				entities = append(entities, newEntity(c, cProviders, rank))
 				keys = append(keys, kc.key)
 				continue
 			}
@@ -70,8 +70,17 @@ func Merge(perProvider [][]domain.SearchResult) []Entity {
 	return entities
 }
 
-func findMergeTarget(entities []Entity, keys []matchKey, c keyedResult, ambiguous map[string]bool) (int, domain.EntityResolutionTier, bool) {
+func newEntity(c domain.SearchResult, providers map[domain.ProviderName]bool, rank int) Entity {
+	ranks := make(map[domain.ProviderName]int, len(providers))
+	for p := range providers {
+		ranks[p] = rank
+	}
+	return Entity{Result: c, BestRank: ranks}
+}
+
+func findMergeTarget(entities []Entity, keys []matchKey, c keyedResult, ambiguous map[string]bool, onCompare func()) (int, domain.EntityResolutionTier, bool) {
 	for i := range entities {
+		onCompare()
 		tier, ok := sameEntity(keyedResult{result: entities[i].Result, key: keys[i]}, c)
 		if !ok {
 			continue
