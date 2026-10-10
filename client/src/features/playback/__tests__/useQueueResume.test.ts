@@ -10,6 +10,8 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { recordEvent } from '@shared/telemetry/recordEvent';
+import { ApiError, NetworkError } from '@shared/failure/errors';
+import { _resetGlobalErrorReportingForTest } from '@shared/telemetry/clientErrorReporting';
 
 import { useQueueResume } from '@features/playback/hooks/useQueueResume';
 import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
@@ -1204,6 +1206,114 @@ describe('queue save and restore failures move playback_health counters', () => 
     expect(flushedPayloads()).toEqual([
       expect.objectContaining({ queue_state_rejected: 1, queue_restore_failed_fetch: 0 }),
     ]);
+  });
+});
+
+describe('a queue save the server rejects as a client fault', () => {
+  const BAD_REQUEST = 400;
+  const SERVICE_UNAVAILABLE = 503;
+  const SETTLE_TICKS = 40;
+  const SAVE_ATTEMPTS = 3;
+  let appStateListeners: ((state: AppStateStatus) => void)[];
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      for (let i = 0; i < SETTLE_TICKS; i++) await Promise.resolve();
+    });
+  }
+
+  async function backgroundApp(): Promise<void> {
+    await act(async () => {
+      for (const l of [...appStateListeners]) l('background');
+    });
+    await settle();
+  }
+
+  function reportedMessages(): string[] {
+    return (recordEvent as jest.Mock).mock.calls
+      .map(([event]) => event as { type: string; payload: { message: string } })
+      .filter((event) => event.type === 'client_error')
+      .map((event) => event.payload.message);
+  }
+
+  async function saveRejectedWith(error: Error): Promise<void> {
+    (saveQueueState as jest.Mock).mockRejectedValue(error);
+    renderHook(() => useQueueResume());
+    await settle();
+    await backgroundApp();
+  }
+
+  beforeEach(() => {
+    _resetGlobalErrorReportingForTest();
+    appStateListeners = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListeners.push(listener as (state: AppStateStatus) => void);
+      return { remove: jest.fn() };
+    });
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (getQueueState as jest.Mock).mockReset().mockResolvedValue({
+      track_ids: [],
+      current_index: 0,
+      position_ms: 0,
+      shuffled: false,
+      repeat_mode: 'off',
+      source: null,
+      natural_order: [],
+    });
+    (saveQueueState as jest.Mock).mockReset();
+    const queue = [libraryTrack(), libraryTrack()];
+    useQueueStore.getState().loadQueue(queue, 0, null);
+    nativePlayer.getActiveTrack!.mockResolvedValue({ id: trackKey(queue[0]!) });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('reports a 400 with the server error code', async () => {
+    await saveRejectedWith(new ApiError(BAD_REQUEST, 'bad', 'playback.malformed_track_id'));
+
+    expect(reportedMessages()).toEqual([expect.stringContaining('playback.malformed_track_id')]);
+  });
+
+  it('reports the same queue fingerprint once however often the save retries', async () => {
+    await saveRejectedWith(new ApiError(BAD_REQUEST, 'bad', 'playback.malformed_track_id'));
+    await backgroundApp();
+    await backgroundApp();
+
+    expect(saveQueueState).toHaveBeenCalledTimes(SAVE_ATTEMPTS);
+    expect(reportedMessages()).toHaveLength(1);
+  });
+
+  it('reports again once the queue changes', async () => {
+    await saveRejectedWith(new ApiError(BAD_REQUEST, 'bad', 'playback.natural_order_mismatch'));
+    (saveQueueState as jest.Mock).mockRejectedValue(
+      new ApiError(BAD_REQUEST, 'bad', 'playback.malformed_track_id'),
+    );
+    useQueueStore.getState().loadQueue([libraryTrack(), libraryTrack(), libraryTrack()], 0, null);
+    nativePlayer.getActiveTrack!.mockResolvedValue({
+      id: trackKey(useQueueStore.getState().currentTrack()!),
+    });
+    await backgroundApp();
+
+    expect(reportedMessages()).toEqual([
+      expect.stringContaining('playback.natural_order_mismatch'),
+      expect.stringContaining('playback.malformed_track_id'),
+    ]);
+  });
+
+  it('does not report a 5xx', async () => {
+    await saveRejectedWith(new ApiError(SERVICE_UNAVAILABLE, 'down', 'server.unavailable'));
+
+    expect(saveQueueState).toHaveBeenCalled();
+    expect(reportedMessages()).toEqual([]);
+  });
+
+  it('does not report a network failure', async () => {
+    await saveRejectedWith(new NetworkError('transport', 'offline'));
+
+    expect(saveQueueState).toHaveBeenCalled();
+    expect(reportedMessages()).toEqual([]);
   });
 });
 

@@ -10,7 +10,7 @@ const DEDUPE_STACK_HEAD_LENGTH = 200;
 const MAX_TRACKED_ERRORS = 50;
 
 export type ClientErrorSource =
-  'uncaught' | 'unhandled_rejection' | 'boundary' | 'query' | 'mutation';
+  'uncaught' | 'unhandled_rejection' | 'boundary' | 'query' | 'mutation' | 'playback';
 
 function trimmed(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
