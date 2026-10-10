@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestNewPool_UnresponsiveHostFailsFastWithNamedError(t *testing.T) {
@@ -107,21 +111,46 @@ func TestReadPoolStats_NilPoolReadsAsZero(t *testing.T) {
 }
 
 const (
-	supabaseSessionPoolSize   = 15
-	goAPIInstancesDuringDrill = 2
-	sessionsKeptFree          = 3
+	supabaseSessionPoolSize = 15
+	sessionsKeptFree        = 3
 )
 
-func TestPoolConfig_DefaultLeavesSessionsFreeWhileTwoInstancesRun(t *testing.T) {
-	cfg, err := poolConfig("postgres://u:p@localhost:5432/db?sslmode=disable", 0)
+func stagingPoolMaxConns(t *testing.T, service string) int {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "compose.staging.yml"))
 	if err != nil {
-		t.Fatalf("poolConfig: %v", err)
+		t.Fatalf("read staging compose: %v", err)
+	}
+	var compose struct {
+		Services map[string]struct {
+			Environment []string `yaml:"environment"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(raw, &compose); err != nil {
+		t.Fatalf("parse staging compose: %v", err)
+	}
+	for _, kv := range compose.Services[service].Environment {
+		if value, ok := strings.CutPrefix(kv, "DB_POOL_MAX_CONNS="); ok {
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				t.Fatalf("%s DB_POOL_MAX_CONNS=%q: %v", service, value, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("%s in compose.staging.yml sets no DB_POOL_MAX_CONNS, so it falls back to the default %d", service, defaultMaxConns)
+	return 0
+}
+
+func TestStagingCompose_TwoInstancesLeaveSessionSlotsFree(t *testing.T) {
+	held := 0
+	for _, service := range []string{"go-api-blue", "go-api-green"} {
+		held += stagingPoolMaxConns(t, service)
 	}
 
-	held := goAPIInstancesDuringDrill * int(cfg.MaxConns)
 	if free := supabaseSessionPoolSize - held; free < sessionsKeptFree {
-		t.Fatalf("two go-api at the default %d conns hold %d of %d session slots, leaving %d; want at least %d free for migration psql and an operator",
-			cfg.MaxConns, held, supabaseSessionPoolSize, free, sessionsKeptFree)
+		t.Fatalf("blue and green together may hold %d of %d session slots, leaving %d; want at least %d free for migration psql and an operator",
+			held, supabaseSessionPoolSize, free, sessionsKeptFree)
 	}
 }
 

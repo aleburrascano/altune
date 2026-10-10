@@ -14,7 +14,7 @@ var ErrUnreachable = errors.New("database unreachable")
 
 var connectTimeout = 10 * time.Second
 
-const defaultMaxConns = 6
+const defaultMaxConns = 20
 
 const idleSessionRelease = time.Minute
 

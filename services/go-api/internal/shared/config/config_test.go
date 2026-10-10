@@ -703,7 +703,7 @@ func TestLoad_PoolSizes(t *testing.T) {
 		wantDBMax     int
 		wantRedisSize int
 	}{
-		{name: "defaults", env: nil, wantDBMax: 6, wantRedisSize: 50},
+		{name: "defaults", env: nil, wantDBMax: 20, wantRedisSize: 50},
 		{
 			name:          "tuned",
 			env:           map[string]string{"DB_POOL_MAX_CONNS": "40", "REDIS_POOL_SIZE": "80"},
