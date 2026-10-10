@@ -1,11 +1,11 @@
-import { KeyboardAvoidingView } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type * as SettingsModalExports from '@features/settings/ui/ConfirmModal';
 
 const sharedReact = jest.requireActual('react');
 const sharedReactNative = jest.requireActual('react-native');
 
-function keyboardAvoidingBehaviorOn(os: 'ios' | 'android'): unknown {
+function keyboardAvoidingStyleOn(os: 'ios' | 'android'): Record<string, unknown> {
   let loaded!: typeof SettingsModalExports;
   jest.isolateModules(() => {
     jest.doMock('react', () => sharedReact);
@@ -14,19 +14,19 @@ function keyboardAvoidingBehaviorOn(os: 'ios' | 'android'): unknown {
     loaded = jest.requireActual<typeof SettingsModalExports>('@features/settings/ui/ConfirmModal');
   });
   render(
-    <loaded.SettingsModal visible onClose={() => undefined}>
+    <loaded.SettingsModal visible onClose={() => undefined} testID="modal">
       {null}
     </loaded.SettingsModal>,
   );
-  return screen.UNSAFE_getByType(KeyboardAvoidingView).props.behavior;
+  return StyleSheet.flatten(screen.getByTestId('modal-keyboard').props.style);
 }
 
 describe('SettingsModal', () => {
   it('pads the keyboard-avoiding view on iOS', () => {
-    expect(keyboardAvoidingBehaviorOn('ios')).toBe('padding');
+    expect(keyboardAvoidingStyleOn('ios')).toHaveProperty('paddingBottom', 0);
   });
 
   it('leaves the keyboard-avoiding view unpadded on Android', () => {
-    expect(keyboardAvoidingBehaviorOn('android')).toBeUndefined();
+    expect(keyboardAvoidingStyleOn('android')).not.toHaveProperty('paddingBottom');
   });
 });

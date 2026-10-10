@@ -103,6 +103,7 @@ export function SettingsModal({
         style={modalStyles.centering}
         behavior={keyboardAvoidingBehavior}
         pointerEvents="box-none"
+        testID={testID == null ? undefined : `${testID}-keyboard`}
       >
         <ScrollView
           style={modalStyles.scroll}

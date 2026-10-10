@@ -1,5 +1,6 @@
-import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
-import { useState, type ReactElement } from 'react';
+import { Eraser, LogOut, Trash2, type LucideIcon, type LucideProps } from 'lucide-react-native';
+import { forwardRef, useState, type ReactElement } from 'react';
+import { View } from 'react-native';
 
 import { Text } from '@shared/ui';
 import { ConfirmModal } from '@features/settings/ui/ConfirmModal';
@@ -9,10 +10,20 @@ import {
 } from '@features/settings/domain/dangerZoneActions';
 import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
+function taggedIcon(Icon: LucideIcon, testID: string): LucideIcon {
+  const Tagged = forwardRef<unknown, LucideProps>((props, _ref) => (
+    <View testID={testID}>
+      <Icon {...props} />
+    </View>
+  ));
+  Tagged.displayName = testID;
+  return Tagged;
+}
+
 const DANGER_ZONE_ICONS: Record<DangerZoneActionKey, LucideIcon> = {
-  downloads: Trash2,
-  history: Eraser,
-  'sign-out': LogOut,
+  downloads: taggedIcon(Trash2, 'settings-icon-trash'),
+  history: taggedIcon(Eraser, 'settings-icon-eraser'),
+  'sign-out': taggedIcon(LogOut, 'settings-icon-log-out'),
 };
 
 type DangerZoneCardProps = Parameters<typeof buildDangerZoneActions>[0];

@@ -20,12 +20,29 @@ function makeStats(over: Partial<DownloadStats> = {}): DownloadStats {
 
 const row = () => within(screen.getByTestId('settings-downloads-usage'));
 
+type RenderedNode = ReturnType<typeof screen.toJSON> | string;
+
+function renderedStrokes(): string[] {
+  const strokes = new Set<string>();
+  function visit(node: RenderedNode): void {
+    if (node == null || typeof node === 'string') return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (typeof node.props.stroke === 'string') strokes.add(node.props.stroke);
+    node.children?.forEach(visit);
+  }
+  visit(screen.toJSON());
+  return [...strokes];
+}
+
 describe('OfflineDownloadsCard', () => {
   it('renders a neutral row with no detail when nothing is downloaded', () => {
     render(<OfflineDownloadsCard stats={makeStats()} />);
     expect(row().getByText('No downloads on this device')).toBeTruthy();
     expect(row().queryByText(/MB|KB|B$/)).toBeNull();
-    expect(row().UNSAFE_getByProps({ color: darkTheme.color.textSecondary })).toBeTruthy();
+    expect(renderedStrokes()).toEqual([darkTheme.color.textSecondary]);
   });
 
   it('renders a neutral row with the leftover-bytes copy when files remain but no track is ready', () => {
@@ -42,7 +59,7 @@ describe('OfflineDownloadsCard', () => {
     );
     expect(row().getByText('Leftover download files')).toBeTruthy();
     expect(row().getByText('4 MB')).toBeTruthy();
-    expect(row().UNSAFE_getByProps({ color: darkTheme.color.textSecondary })).toBeTruthy();
+    expect(renderedStrokes()).toEqual([darkTheme.color.textSecondary]);
   });
 
   it('renders a success-toned row with the track count and size when downloads exist', () => {
@@ -60,7 +77,6 @@ describe('OfflineDownloadsCard', () => {
     );
     expect(row().getByText('3 tracks')).toBeTruthy();
     expect(row().getByText('12 MB')).toBeTruthy();
-    expect(row().UNSAFE_getByProps({ color: darkTheme.color.success })).toBeTruthy();
-    expect(row().UNSAFE_queryByProps({ color: darkTheme.color.textSecondary })).toBeNull();
+    expect(renderedStrokes()).toEqual([darkTheme.color.success]);
   });
 });
