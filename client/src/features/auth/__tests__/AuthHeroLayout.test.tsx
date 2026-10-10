@@ -1,4 +1,3 @@
-import { ScrollView } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type * as AuthHeroLayoutExports from '@features/auth/ui/hero/AuthHeroLayout';
 
@@ -16,7 +15,7 @@ function adjustsInsetsOn(os: 'ios' | 'android'): unknown {
     );
   });
   render(<loaded.AuthHeroLayout background={false}>{null}</loaded.AuthHeroLayout>);
-  return screen.UNSAFE_getByType(ScrollView).props.automaticallyAdjustKeyboardInsets;
+  return screen.getByTestId('auth-hero-scroll').props.automaticallyAdjustKeyboardInsets;
 }
 
 describe('AuthHeroLayout', () => {

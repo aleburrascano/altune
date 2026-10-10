@@ -73,8 +73,4 @@ export function subscribeRecoveryUnlock(listener: () => void): () => void {
   };
 }
 
-export function _listenerCountForTest(): number {
-  return listeners.size;
-}
-
 onSignOut(clearRecoveryUnlock);
