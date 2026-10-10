@@ -595,6 +595,20 @@ describe('the pinned index is written through to disk and loaded back on relaunc
 
       expect(readIndex()).toEqual({ t2: seed.t2 });
     });
+
+    it('unpinning a track absent from the index writes nothing to disk and leaves the state as it was', () => {
+      const seed = { t1: readyEntry('t1') };
+      const seededIndex = JSON.stringify({ entries: seed });
+      __fs.seedFile(INDEX_URI, seededIndex);
+      const queue = [asTrackId('t1')];
+      usePinnedStore.setState({ entries: seed, queue, isWorking: false });
+
+      usePinnedStore.getState().unpin(asTrackId('never-pinned'));
+
+      expect(__fs.readFile(INDEX_URI)).toBe(seededIndex);
+      expect(usePinnedStore.getState().entries).toBe(seed);
+      expect(usePinnedStore.getState().queue).toBe(queue);
+    });
   });
 
   describe('unpinAll — writes an empty index to disk', () => {

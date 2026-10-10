@@ -28,6 +28,25 @@ function bodyOf(init: RequestInit | undefined): Record<string, unknown> {
   return JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
 }
 
+function wireTrack(id: string): Record<string, unknown> {
+  return {
+    id,
+    title: id,
+    artist: 'Artist',
+    album: null,
+    duration_seconds: null,
+    added_at: '2026-01-01T00:00:00Z',
+    artwork_url: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    acquisition_status: 'ready',
+    failure_reason: null,
+  };
+}
+
 function serveFakeServer(): PlaylistsPort {
   const rows = new Map<string, FakeRow>();
   let nextId = 1;
@@ -67,6 +86,12 @@ function serveFakeServer(): PlaylistsPort {
       } as unknown as PlaylistResponse;
       rows.set(id, { summary, trackIds: [] });
       reply('POST', path, { json: summary });
+    } else if (one !== undefined && method === 'GET') {
+      if (row === undefined) missing(method, path);
+      else {
+        const tracks = row.trackIds.map(wireTrack);
+        reply(method, path, { json: { ...row.summary, total_duration_seconds: 0, tracks } });
+      }
     } else if (one !== undefined && method === 'PATCH') {
       if (row === undefined) missing(method, path);
       else {
@@ -154,6 +179,27 @@ describe.each<[string, () => PlaylistsPort]>([
     expect(first.added).toBe(2);
     expect(again.added).toBe(0);
     expect((await port.getPlaylists()).items[0]?.track_count).toBe(2);
+  });
+
+  it('reads back the tracks a playlist holds by its id', async () => {
+    const port = freshPort();
+    const { id } = await port.createPlaylist({ name: 'a' });
+    await port.addTracksToPlaylist(id, { track_ids: [t1, t2] });
+
+    const detail = await port.getPlaylist(id);
+
+    expect(detail.tracks.map((track) => track.id)).toEqual([t1, t2]);
+  });
+
+  it('rejects reading a playlist that does not exist with a 404 ApiError', async () => {
+    const port = freshPort();
+    const { id } = await port.createPlaylist({ name: 'a' });
+    await port.deletePlaylist(id);
+
+    const read = port.getPlaylist(id);
+
+    await expect(read).rejects.toBeInstanceOf(ApiError);
+    await expect(read).rejects.toMatchObject({ status: NOT_FOUND_STATUS });
   });
 
   it('lowers track_count by 1 when a track is removed', async () => {

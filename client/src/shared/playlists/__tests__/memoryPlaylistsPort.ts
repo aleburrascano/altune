@@ -1,6 +1,7 @@
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { ApiError } from '@shared/failure/errors';
 
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
@@ -28,6 +29,30 @@ async function resolveOnLaterTick<T>(
   await Promise.resolve();
   rejectIfAborted(signal);
   return produce();
+}
+
+function storedTrack(id: TrackId, addedAt: string): TrackResponse {
+  return {
+    id,
+    title: id,
+    artist: 'Artist',
+    album: null,
+    duration_seconds: null,
+    added_at: addedAt,
+    artwork_url: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    acquisition_status: 'ready',
+    failure_reason: null,
+  };
+}
+
+function detailOf({ summary, trackIds }: StoredPlaylist): PlaylistDetailResponse {
+  const tracks = trackIds.map((id) => storedTrack(id, summary.updated_at));
+  return { ...summary, total_duration_seconds: 0, tracks };
 }
 
 function notFound(id: PlaylistId): ApiError {
@@ -60,6 +85,7 @@ export function createMemoryPlaylistsPort(): PlaylistsPort {
         const end = limit === undefined ? all.length : offset + limit;
         return { items: all.slice(offset, end), total: all.length };
       }),
+    getPlaylist: async (id) => detailOf(find(id)),
     createPlaylist: async ({ name }) => {
       const now = new Date().toISOString();
       const summary: PlaylistResponse = {

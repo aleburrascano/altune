@@ -201,8 +201,20 @@ describe('featured artists', () => {
       expect(extractFeaturedFromText('Song (feat. Guest )', null)).toBe('Guest');
     });
 
-    it('reads a with credit that runs to the end of the string', () => {
-      expect(extractFeaturedFromText('Song with Guest', null)).toBe('Guest');
+    it('reads a bracketed with credit', () => {
+      expect(extractFeaturedFromText('Song (with Guest)', null)).toBe('Guest');
+    });
+
+    it('does not read ft inside an artist name such as Soft Cell as a credit', () => {
+      expect(extractFeaturedFromText('Song', 'Soft Cell')).toBeNull();
+    });
+
+    it('does not read a plain with in a title as a credit', () => {
+      expect(extractFeaturedFromText('Dance with Me', null)).toBeNull();
+    });
+
+    it('still reads every name of a feat. credit', () => {
+      expect(extractFeaturedFromText('Song (feat. A, B)', null)).toBe('A, B');
     });
 
     it('falls through to the subtitle when the title has no credit', () => {

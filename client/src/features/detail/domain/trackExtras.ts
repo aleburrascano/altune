@@ -79,7 +79,8 @@ export function albumExtras(extras: Record<string, unknown>): AlbumExtrasResult 
   };
 }
 
-const _FEAT_RE = /(?:\(|\[)?\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+?)(?:\)|\]|$)/i;
+const _FEAT_RE =
+  /(?:[([]\s*(?:feat\.?|ft\.?|featuring|with)|\b(?:feat\.?|ft\.?|featuring))\s+([^)\]]+?)(?:[)\]]|$)/i;
 
 export function extractFeaturedFromText(title: string, subtitle: string | null): string | null {
   for (const text of [title, subtitle ?? '']) {

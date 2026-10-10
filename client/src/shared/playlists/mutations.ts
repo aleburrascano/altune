@@ -1,7 +1,8 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { ApiError, isServerFaultStatus } from '@shared/api-client';
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import { countLabel } from '@shared/ui/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
@@ -52,8 +53,34 @@ function leftInPlace(playlist: PlaylistResponse): CreateWithTracksResult {
   return { playlist, added: 0, addFailed: true };
 }
 
-function rollBackInSameSession(port: PlaylistsPort, { playlist, epoch }: CreatedInSession) {
-  return isSameSession(epoch) ? rollBackCreatedPlaylist(port, playlist) : leftInPlace(playlist);
+function isDefiniteRefusal(error: unknown): boolean {
+  return error instanceof ApiError && !isServerFaultStatus(error.status);
+}
+
+function requestedTracksPresent(detail: PlaylistDetailResponse, trackIds: TrackId[]): number {
+  const present = new Set(detail.tracks.map((track) => track.id));
+  return new Set(trackIds.filter((id) => present.has(id))).size;
+}
+
+function resultFromPresent(playlist: PlaylistResponse, added: number): CreateWithTracksResult {
+  return added > 0 ? { playlist, added, addFailed: false } : leftInPlace(playlist);
+}
+
+function rereadAfterUnclearAdd(
+  port: PlaylistsPort,
+  { playlist, trackIds }: CreatedInSession,
+): Promise<CreateWithTracksResult> {
+  return port
+    .getPlaylist(playlist.id)
+    .then((detail) => resultFromPresent(playlist, requestedTracksPresent(detail, trackIds)))
+    .catch(() => leftInPlace(playlist));
+}
+
+function settleFailedAdd(port: PlaylistsPort, created: CreatedInSession, error: unknown) {
+  if (!isSameSession(created.epoch)) return leftInPlace(created.playlist);
+  return isDefiniteRefusal(error)
+    ? rollBackCreatedPlaylist(port, created.playlist)
+    : rereadAfterUnclearAdd(port, created);
 }
 
 async function addCreatedTracks(
@@ -69,7 +96,9 @@ async function fillCreatedPlaylist(
   created: CreatedInSession,
 ): Promise<CreateWithTracksResult> {
   if (!isSameSession(created.epoch)) return leftInPlace(created.playlist);
-  return addCreatedTracks(port, created).catch(() => rollBackInSameSession(port, created));
+  return addCreatedTracks(port, created).catch((error: unknown) =>
+    settleFailedAdd(port, created, error),
+  );
 }
 
 async function createWithTracks(
