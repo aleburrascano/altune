@@ -18,7 +18,11 @@ const PASSWORD_RULES: readonly (readonly [PasswordIssue, (password: string) => b
 ];
 
 function validatePassword(password: string): PasswordIssue[] {
-  return PASSWORD_RULES.filter(([, failed]) => failed(password)).map(([issue]) => issue);
+  const issues: PasswordIssue[] = [];
+  for (const [issue, failed] of PASSWORD_RULES) {
+    if (failed(password)) issues.push(issue);
+  }
+  return issues;
 }
 
 function passwordsMatch(password: string, confirm: string): boolean {

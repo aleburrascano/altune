@@ -106,6 +106,16 @@ const libraryChipsRailIsTheFixedChipsConstant = {
   rules: ['react-doctor/rn-no-scrollview-mapped-list'],
 };
 
+const passwordHintIsFormTextNotACredential = {
+  files: ['src/features/auth/domain/validation.ts'],
+  rules: ['react-doctor/no-secrets-in-client-code'],
+};
+
+const resultSignatureIsASearchResultIdentityNotACryptoSignature = {
+  files: ['src/features/discovery/hooks/useResultTap.ts'],
+  rules: ['react-doctor/insecure-crypto-risk'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -170,6 +180,8 @@ export default {
       screenReaderAnnouncementSyncsAnExternalSystem,
       relatedRailIsCappedAtTwentyTracks,
       libraryChipsRailIsTheFixedChipsConstant,
+      passwordHintIsFormTextNotACredential,
+      resultSignatureIsASearchResultIdentityNotACryptoSignature,
     ],
   },
 };
