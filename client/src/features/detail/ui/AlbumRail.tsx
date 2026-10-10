@@ -355,11 +355,11 @@ function AlbumCard(props: AlbumCardProps): ReactElement {
   const year = albumYear(props.album);
   const trackCount = albumExtras(props.album.extras).trackCount;
   const cardWidth = props.cardWidth ?? DISCOGRAPHY_CARD_SIZE;
-  const interaction = usePressableInteraction(
+  const { pressableProps } = usePressableInteraction(
     albumCardStyle(theme, cardWidth, props.isGrid ?? false),
   );
   return (
-    <Pressable {...albumCardPressableProps({ props, year, trackCount })} {...interaction}>
+    <Pressable {...albumCardPressableProps({ props, year, trackCount })} {...pressableProps}>
       <CardBody album={props.album} year={year} trackCount={trackCount} cardWidth={cardWidth} />
     </Pressable>
   );

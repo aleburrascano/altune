@@ -30,9 +30,9 @@ function SidebarPlaylistRow({ playlist }: { playlist: PlaylistResponse }) {
   const router = useRouter();
   const theme = useTheme();
   const onPress = () => router.push(`/library/playlist/${playlist.id}`);
-  const interaction = usePressableInteraction(sidebarItemStyle(theme, false));
+  const { pressableProps } = usePressableInteraction(sidebarItemStyle(theme, false));
   return (
-    <Pressable {...sidebarPlaylistRowProps(playlist, onPress)} {...interaction}>
+    <Pressable {...sidebarPlaylistRowProps(playlist, onPress)} {...pressableProps}>
       <SidebarPlaylistLabel name={playlist.name} color={theme.color.textSecondary} />
     </Pressable>
   );

@@ -1,27 +1,20 @@
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import {
+  usePressableInteraction,
+  type PressableInteractionState,
+} from '@shared/ui/primitives/usePressableInteraction';
 
 import { SectionLabel } from '@features/discovery/ui/SectionLabel';
 import { kindLabel } from '@features/discovery/domain/resultDisplay';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 
-function buildHighlightProps(setHovered: (v: boolean) => void, setFocused: (v: boolean) => void) {
-  return {
-    onHoverIn: () => setHovered(true),
-    onHoverOut: () => setHovered(false),
-    onFocus: () => setFocused(true),
-    onBlur: () => setFocused(false),
-  };
-}
-
-function useHighlighted(): [boolean, ReturnType<typeof buildHighlightProps>] {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  return [hovered || focused, buildHighlightProps(setHovered, setFocused)];
+function pressedStyle({ pressed }: PressableInteractionState) {
+  return pressed ? styles.pressed : null;
 }
 
 export function TopResultCard({
@@ -34,17 +27,17 @@ export function TopResultCard({
   const isArtist = result.kind === 'artist';
   const label = kindLabel(result.kind);
   const theme = useTheme();
-  const [highlighted, highlightHandlers] = useHighlighted();
+  const { hovered, focused, pressableProps } = usePressableInteraction(pressedStyle);
+  const highlighted = hovered || focused;
   return (
     <View style={styles.topResultWrap}>
       <SectionLabel style={styles.sectionHeaderSpacing}>TOP RESULT</SectionLabel>
       <Pressable
         testID="discover-top-result"
         onPress={() => onPress(result, 0)}
-        {...highlightHandlers}
+        {...pressableProps}
         accessibilityRole="button"
         accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${label}`}
-        style={({ pressed }) => (pressed ? styles.pressed : null)}
       >
         <Card
           testID="discover-top-result-card"
