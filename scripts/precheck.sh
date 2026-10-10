@@ -189,6 +189,9 @@ if touches '^client/'; then
     [ -n "$src" ] && test_check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
     check "mobile own-module mock ratchet" $m node scripts/mock-ratchet.mjs
+    check "mobile fallow" $m npm run --silent fallow
+    check "mobile react-doctor" $m "${heavy[@]}" bash "$root/.github/workflows/test-mobile-react-doctor.sh"
+    check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base" doctor-report.json
     check "mobile module shape" $m node scripts/module-shape.mjs
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1

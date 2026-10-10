@@ -44,7 +44,7 @@ export function previewTrackList(count: number): PlaybackTrack[] {
   );
 }
 
-export function resolvedAudio(trackId: string): ResolvedAudioUrl {
+function resolvedAudio(trackId: string): ResolvedAudioUrl {
   return { trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' };
 }
 
