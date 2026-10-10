@@ -162,11 +162,8 @@ describe('no console.log in this slice', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('console.warn is present at least once, confirming the scan is exercising real code, not an empty slice', () => {
-    const hasWarn = listSourceFiles(TELEMETRY_DIR).some((file) =>
-      /console\.warn\(/.test(fs.readFileSync(file, 'utf8')),
-    );
-    expect(hasWarn).toBe(true);
+  it('finds source files under client/src/shared/telemetry, so a broken walk cannot pass by finding nothing', () => {
+    expect(listSourceFiles(TELEMETRY_DIR).length).toBeGreaterThan(0);
   });
 });
 

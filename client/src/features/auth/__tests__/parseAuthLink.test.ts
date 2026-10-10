@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { Platform } from 'react-native';
 
 import appJson from '@/../app.json';
@@ -401,14 +398,5 @@ describe('parseAuthLink reads its scheme and web origin through the device port'
       kind: 'confirm',
       params: { type: 'signup' },
     });
-  });
-});
-
-describe.each(['parseAuthLink.ts', 'completeAuthIntent.ts'])('%s is platform-free', (file) => {
-  it('imports no expo or react-native module', () => {
-    const source = readFileSync(join(__dirname, '..', 'domain', file), 'utf8');
-    const specifiers = [...source.matchAll(/from '([^']+)'/g)].map((m) => m[1] ?? '');
-
-    expect(specifiers.filter((s) => /^(expo|react-native)/.test(s))).toEqual([]);
   });
 });

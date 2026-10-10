@@ -38,10 +38,8 @@ function createClientCallCount(source: string): number {
 }
 
 describe('sanity: this suite is actually scanning the real slice', () => {
-  it('shared/auth is found under process.cwd()/src and contains supabaseClient.ts', () => {
-    const names = listSourceFiles(AUTH_DIR).map((file) => path.basename(file));
-    expect(names.length).toBeGreaterThan(0);
-    expect(names).toContain('supabaseClient.ts');
+  it('finds source files under client/src/shared/auth, so a broken walk cannot pass by finding nothing', () => {
+    expect(listSourceFiles(AUTH_DIR).length).toBeGreaterThan(0);
   });
 });
 

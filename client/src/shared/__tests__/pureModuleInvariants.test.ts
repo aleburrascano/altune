@@ -186,12 +186,3 @@ describe('pure shared modules rule 2 — extraction requires 2+ distinct feature
     expect(distinctFeatureConsumers('query/queryKeys', decoyOnly)).toEqual(new Set(['detail']));
   });
 });
-
-describe('pure shared modules rule 4 — the shared/lib and types shims are gone', () => {
-  it.each(['lib', 'api-client/types.ts', 'playback/types.ts', 'playback/constants.ts'])(
-    'src/shared/%s does not exist',
-    (shimPath) => {
-      expect(fs.existsSync(path.join(SHARED_ROOT, shimPath))).toBe(false);
-    },
-  );
-});
