@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
+import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { _resetConsumedCredentialForTest } from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
 

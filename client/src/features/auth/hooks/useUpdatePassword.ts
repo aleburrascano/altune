@@ -1,6 +1,6 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { withAuthDeadline } from '@features/auth/domain/authDeadline';
+import { withAuthDeadline } from '@shared/auth/authDeadline';
 import {
   classifyAuthError,
   isWeakPasswordError,

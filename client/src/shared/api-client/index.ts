@@ -7,8 +7,8 @@ import {
   type CredentialStamp,
 } from '@shared/auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
-import { startDeadline } from '@shared/deadline/deadline';
-import type { Deadline } from '@shared/deadline/deadline';
+import { startDeadline } from '@shared/timing/deadline';
+import type { Deadline } from '@shared/timing/deadline';
 import {
   ApiError,
   ContractError,

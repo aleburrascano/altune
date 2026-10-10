@@ -52,7 +52,7 @@
       { "name": "shared-acquisition", "patterns": ["src/shared/acquisition/**"] },
       { "name": "shared-api-client", "patterns": ["src/shared/api-client/**"] },
       { "name": "shared-auth", "patterns": ["src/shared/auth/**"] },
-      { "name": "shared-deadline", "patterns": ["src/shared/deadline/**"] },
+      { "name": "shared-timing", "patterns": ["src/shared/timing/**"] },
       { "name": "shared-errors", "patterns": ["src/shared/failure/errors.ts"] },
       { "name": "shared-events", "patterns": ["src/shared/events/**"] },
       { "name": "shared-failure", "patterns": ["src/shared/failure/**"] },
@@ -83,7 +83,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -108,7 +108,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -133,7 +133,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -158,7 +158,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -183,7 +183,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -208,7 +208,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -233,7 +233,7 @@
           "shared-acquisition",
           "shared-api-client",
           "shared-auth",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-events",
@@ -265,19 +265,19 @@
       },
       {
         "from": "shared-api-client",
-        "allow": ["shared-auth", "shared-deadline", "shared-device", "shared-errors"]
+        "allow": ["shared-auth", "shared-timing", "shared-device", "shared-errors"]
       },
       {
         "from": "shared-auth",
         "allow": [
-          "shared-deadline",
+          "shared-timing",
           "shared-errors",
           "shared-offline",
           "shared-session",
           "shared-telemetry"
         ]
       },
-      { "from": "shared-deadline", "allow": [] },
+      { "from": "shared-timing", "allow": [] },
       { "from": "shared-errors", "allow": [] },
       {
         "from": "shared-events",
@@ -302,7 +302,7 @@
       { "from": "shared-files", "allow": [] },
       {
         "from": "shared-killSwitch",
-        "allow": ["shared-deadline", "shared-files", "shared-lifecycle"]
+        "allow": ["shared-timing", "shared-files", "shared-lifecycle"]
       },
       { "from": "shared-lifecycle", "allow": [] },
       { "from": "shared-navigation", "allow": ["shared-api-client", "shared-session"] },
@@ -310,7 +310,7 @@
         "from": "shared-offline",
         "allow": [
           "shared-api-client",
-          "shared-deadline",
+          "shared-timing",
           "shared-device",
           "shared-errors",
           "shared-files",
@@ -322,11 +322,24 @@
       { "from": "shared-playback", "allow": ["shared-api-client", "shared-device"] },
       {
         "from": "shared-playlists",
-        "allow": ["shared-api-client", "shared-failure", "shared-query", "shared-session", "shared-ui"]
+        "allow": [
+          "shared-api-client",
+          "shared-failure",
+          "shared-query",
+          "shared-session",
+          "shared-ui"
+        ]
       },
       {
         "from": "shared-query",
-        "allow": ["shared-api-client", "shared-errors", "shared-session", "shared-telemetry", "shared-ui"]
+        "allow": [
+          "shared-api-client",
+          "shared-errors",
+          "shared-session",
+          "shared-telemetry",
+          "shared-timing",
+          "shared-ui"
+        ]
       },
       { "from": "shared-session", "allow": [] },
       {
@@ -338,7 +351,8 @@
           "shared-files",
           "shared-killSwitch",
           "shared-lifecycle",
-          "shared-session"
+          "shared-session",
+          "shared-timing"
         ]
       },
       { "from": "shared-ui", "allow": ["shared-files", "shared-telemetry"] }
