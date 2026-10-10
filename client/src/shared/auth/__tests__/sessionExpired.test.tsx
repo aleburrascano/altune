@@ -2,7 +2,6 @@ import { Text } from 'react-native';
 import { act, render, screen, renderHook } from '@testing-library/react-native';
 
 import {
-  _listenerCountForTest,
   clearSessionExpired,
   markSessionExpired,
   useSessionExpired,
@@ -73,37 +72,72 @@ describe('useSessionExpired — liveness through a mounted consumer', () => {
   });
 });
 
-describe('_listenerCountForTest — the listeners set tracks mount/unmount exactly', () => {
-  it('starts empty, grows by exactly one per mounted consumer, and shrinks back to the prior size on unmount', () => {
-    expect(_listenerCountForTest()).toBe(0);
+describe('unsubscribe on unmount — a later event no longer reaches an unmounted consumer', () => {
+  type CountingGateProps = { onRender: (expired: boolean) => void };
 
-    const a = render(<SessionGate />);
-    expect(_listenerCountForTest()).toBe(1);
+  function CountingGate({ onRender }: CountingGateProps) {
+    const expired = useSessionExpired();
+    onRender(expired);
+    return <Text>{expired ? 'expired' : 'active'}</Text>;
+  }
 
-    const b = render(<SessionGate />);
-    expect(_listenerCountForTest()).toBe(2);
+  it('reaches every mounted consumer, and stops reaching each one once it unmounts', () => {
+    const renderedA = jest.fn();
+    const renderedB = jest.fn();
+    const a = render(<CountingGate onRender={renderedA} />);
+    const b = render(<CountingGate onRender={renderedB} />);
+
+    act(() => {
+      markSessionExpired();
+    });
+    expect(renderedA).toHaveBeenLastCalledWith(true);
+    expect(renderedB).toHaveBeenLastCalledWith(true);
 
     a.unmount();
-    expect(_listenerCountForTest()).toBe(1);
+    renderedA.mockClear();
+    renderedB.mockClear();
+    act(() => {
+      clearSessionExpired();
+    });
+    expect(renderedA).not.toHaveBeenCalled();
+    expect(renderedB).toHaveBeenLastCalledWith(false);
+    expect(b.getByText('active')).toBeTruthy();
 
     b.unmount();
-    expect(_listenerCountForTest()).toBe(0);
+    renderedB.mockClear();
+    act(() => {
+      markSessionExpired();
+    });
+    expect(renderedA).not.toHaveBeenCalled();
+    expect(renderedB).not.toHaveBeenCalled();
   });
 
-  it('returns to the same count across a mount -> unmount -> remount cycle', () => {
-    expect(_listenerCountForTest()).toBe(0);
-
-    const first = render(<SessionGate />);
-    expect(_listenerCountForTest()).toBe(1);
-
+  it('reaches a remounted consumer exactly as it reached the first, and never the unmounted one', () => {
+    const renderedFirst = jest.fn();
+    const first = render(<CountingGate onRender={renderedFirst} />);
     first.unmount();
-    expect(_listenerCountForTest()).toBe(0);
+    renderedFirst.mockClear();
 
-    const second = render(<SessionGate />);
-    expect(_listenerCountForTest()).toBe(1);
+    const renderedSecond = jest.fn();
+    const second = render(<CountingGate onRender={renderedSecond} />);
+    renderedSecond.mockClear();
+
+    act(() => {
+      markSessionExpired();
+    });
+
+    expect(renderedFirst).not.toHaveBeenCalled();
+    expect(renderedSecond).toHaveBeenCalledTimes(1);
+    expect(renderedSecond).toHaveBeenLastCalledWith(true);
+    expect(second.getByText('expired')).toBeTruthy();
 
     second.unmount();
-    expect(_listenerCountForTest()).toBe(0);
+    renderedSecond.mockClear();
+    act(() => {
+      clearSessionExpired();
+    });
+
+    expect(renderedSecond).not.toHaveBeenCalled();
   });
 });
 

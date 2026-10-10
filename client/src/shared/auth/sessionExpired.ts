@@ -41,10 +41,6 @@ export function getSessionExpired(): boolean {
   return expired;
 }
 
-export function _listenerCountForTest(): number {
-  return listeners.size;
-}
-
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => {

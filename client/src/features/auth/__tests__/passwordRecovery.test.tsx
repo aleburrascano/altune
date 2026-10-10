@@ -12,7 +12,7 @@ import {
   isRecoveryUnlocked,
   markRecoveryUnlocked,
   RECOVERY_UNLOCK_WINDOW_MS,
-  _listenerCountForTest,
+  subscribeRecoveryUnlock,
 } from '@features/auth/domain/passwordRecovery';
 import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
 
@@ -80,9 +80,34 @@ describe('recoveryUnlock marker', () => {
     act(() => clearRecoveryUnlock());
     expect(result.current).toBe(false);
 
-    expect(_listenerCountForTest()).toBe(1);
     unmount();
-    expect(_listenerCountForTest()).toBe(0);
+    const afterUnmount = renders;
+    act(() => markRecoveryUnlocked(VERIFIED_USER));
+    expect(renders).toBe(afterUnmount);
+  });
+
+  it('stops notifying a listener once it unsubscribes, while others keep hearing', () => {
+    const gone = jest.fn();
+    const kept = jest.fn();
+    const unsubscribeGone = subscribeRecoveryUnlock(gone);
+    const unsubscribeKept = subscribeRecoveryUnlock(kept);
+
+    markRecoveryUnlocked(VERIFIED_USER);
+    expect(gone).toHaveBeenCalledTimes(1);
+    expect(kept).toHaveBeenCalledTimes(1);
+
+    unsubscribeGone();
+    gone.mockClear();
+    kept.mockClear();
+    clearRecoveryUnlock();
+    expect(gone).not.toHaveBeenCalled();
+    expect(kept).toHaveBeenCalledTimes(1);
+
+    unsubscribeKept();
+    kept.mockClear();
+    markRecoveryUnlocked(VERIFIED_USER);
+    expect(gone).not.toHaveBeenCalled();
+    expect(kept).not.toHaveBeenCalled();
   });
 
   it('reports locked when nothing was marked', () => {

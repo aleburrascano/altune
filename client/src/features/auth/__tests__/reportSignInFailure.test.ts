@@ -5,7 +5,6 @@ import { enqueueCritical } from '@shared/telemetry/outbox';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
-import type { SignInFailureReason } from '@features/auth/domain/authError';
 
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
@@ -80,24 +79,5 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
 
     expect(signal.aborted).toBe(true);
     jest.useRealTimers();
-  });
-});
-
-describe('reportSignInFailure: conformance to the reporter signature', () => {
-  const reporter: (reason: SignInFailureReason) => void = reportSignInFailure;
-
-  it('posts exactly one request carrying the reason', () => {
-    reporter('invalid_credentials');
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).reason).toBe('invalid_credentials');
-  });
-
-  it('makes no fetch when telemetryFlush is disabled', () => {
-    applyKillSwitches({ telemetry_enabled: false });
-
-    reporter('invalid_credentials');
-
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

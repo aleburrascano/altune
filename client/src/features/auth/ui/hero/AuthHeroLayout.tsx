@@ -61,6 +61,7 @@ export function AuthHeroLayout({
         ) : null}
       </View>
       <ScrollView
+        testID="auth-hero-scroll"
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
