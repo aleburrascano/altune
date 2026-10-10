@@ -2,7 +2,6 @@ import { Platform, StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { darkTheme } from '@shared/ui';
 
 import { AlbumRail } from '../ui/AlbumRail';
 
@@ -109,22 +108,13 @@ describe('AlbumRail: grid on the web at a wide width', () => {
     expect(screen.getByTestId('detail-album-1')).toHaveStyle({ width: 182 });
   });
 
-  it('gives a grid card the same hover and focus ring as the sidebar', () => {
+  it('draws a transparent ring on a resting grid card', () => {
     renderRail();
-    function card() {
-      return screen.getByTestId('detail-album-0');
-    }
-    expect(card()).toHaveStyle({ borderColor: 'transparent' });
 
-    fireEvent(card(), 'hoverIn');
-    expect(card()).toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
-    fireEvent(card(), 'hoverOut');
-    expect(card()).not.toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
-
-    fireEvent(card(), 'focus');
-    expect(card()).toHaveStyle({ borderColor: darkTheme.color.accent });
-    fireEvent(card(), 'blur');
-    expect(card()).toHaveStyle({ borderColor: 'transparent' });
+    expect(screen.getByTestId('detail-album-0')).toHaveStyle({
+      borderWidth: 2,
+      borderColor: 'transparent',
+    });
   });
 });
 

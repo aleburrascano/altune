@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import type { LayoutChangeEvent } from 'react-native';
+import type { LayoutChangeEvent, PressableStateCallbackType } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
@@ -22,7 +22,7 @@ import {
   sharedStyles,
 } from '@features/detail/ui/detailStyles';
 
-type CardHighlight = { hovered: boolean; focused: boolean };
+type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 
 function railKey(album: DiscoveryResult, index: number): string {
   return `${album.title}-${album.sources[0]?.external_id ?? index}`;
@@ -281,29 +281,13 @@ function albumCardLabel(
   return `${props.typeLabel}: ${props.album.title}${yearPart}${trackPart}`;
 }
 
-type CardStyleArgs = {
-  theme: ReturnType<typeof useTheme>;
-  cardWidth: number;
-  isGrid: boolean;
-  highlight: CardHighlight;
-};
-
-type PressedState = { pressed: boolean };
-
-function gridHighlightStyle({ theme, isGrid, highlight }: CardStyleArgs) {
-  if (!isGrid) return [null, null];
-  return [
-    highlight.hovered ? { backgroundColor: theme.color.surface2 } : null,
-    { borderColor: highlight.focused ? theme.color.accent : 'transparent' },
-  ];
-}
-
-function albumCardStyle(args: CardStyleArgs) {
-  return ({ pressed }: PressedState) => [
+function albumCardStyle(theme: ReturnType<typeof useTheme>, cardWidth: number, isGrid: boolean) {
+  return ({ pressed, hovered, focused }: PressableWebState) => [
     styles.card,
-    { width: args.cardWidth },
-    args.isGrid ? styles.gridCard : null,
-    ...gridHighlightStyle(args),
+    { width: cardWidth },
+    isGrid ? styles.gridCard : null,
+    isGrid && hovered ? { backgroundColor: theme.color.surface2 } : null,
+    isGrid ? { borderColor: focused ? theme.color.accent : 'transparent' } : null,
     pressed ? sharedStyles.pressed : null,
   ];
 }
@@ -313,39 +297,16 @@ type AlbumCardPressableArgs = {
   year: string | null;
   trackCount: number | null;
   theme: ReturnType<typeof useTheme>;
-  highlight: CardHighlight;
 };
 
-function cardStyleArgs({ props, theme, highlight }: AlbumCardPressableArgs): CardStyleArgs {
-  const cardWidth = props.cardWidth ?? DISCOGRAPHY_CARD_SIZE;
-  return { theme, cardWidth, isGrid: props.isGrid ?? false, highlight };
-}
-
-function albumCardPressableProps(args: AlbumCardPressableArgs) {
+function albumCardPressableProps({ props, year, trackCount, theme }: AlbumCardPressableArgs) {
   return {
-    testID: args.props.testID,
-    onPress: args.props.onPress,
+    testID: props.testID,
+    onPress: props.onPress,
     accessibilityRole: 'button' as const,
-    accessibilityLabel: albumCardLabel(args.props, args.year, args.trackCount),
-    style: albumCardStyle(cardStyleArgs(args)),
+    accessibilityLabel: albumCardLabel(props, year, trackCount),
+    style: albumCardStyle(theme, props.cardWidth ?? DISCOGRAPHY_CARD_SIZE, props.isGrid ?? false),
   };
-}
-
-type SetFlag = (value: boolean) => void;
-
-function highlightHandlers(setHovered: SetFlag, setFocused: SetFlag) {
-  return {
-    onHoverIn: () => setHovered(true),
-    onHoverOut: () => setHovered(false),
-    onFocus: () => setFocused(true),
-    onBlur: () => setFocused(false),
-  };
-}
-
-function useCardHighlight() {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  return { highlight: { hovered, focused }, handlers: highlightHandlers(setHovered, setFocused) };
 }
 
 function CardTitle({ title }: { title: string }): ReactElement {
@@ -394,12 +355,8 @@ function AlbumCard(props: AlbumCardProps): ReactElement {
   const year = albumYear(props.album);
   const trackCount = albumExtras(props.album.extras).trackCount;
   const cardWidth = props.cardWidth ?? DISCOGRAPHY_CARD_SIZE;
-  const { highlight, handlers } = useCardHighlight();
   return (
-    <Pressable
-      {...albumCardPressableProps({ props, year, trackCount, theme, highlight })}
-      {...handlers}
-    >
+    <Pressable {...albumCardPressableProps({ props, year, trackCount, theme })}>
       <CardBody album={props.album} year={year} trackCount={trackCount} cardWidth={cardWidth} />
     </Pressable>
   );
