@@ -219,7 +219,7 @@
     "src/features/playback/hooks/useSleepTimer.ts:minutesRemaining",
     "src/features/playback/ports/activePlaybackPort.ts:installPlaybackPort",
     "src/features/playback/ui/QueueSheet.tsx:QueueRow",
-    "src/features/settings/ui/ConfirmModal.tsx:SettingsModal",
+    "src/features/settings/ui/ConfirmModal.tsx:ModalFrame",
     "src/shared/device/device.ts:deviceInfo",
     "src/shared/events/sseFrames.ts:MalformedSSEEventError"
   ],
