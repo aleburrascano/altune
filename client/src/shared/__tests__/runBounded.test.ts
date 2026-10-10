@@ -1,5 +1,7 @@
 import { runBounded } from '@shared/runBounded';
 
+const limit = 4;
+
 describe('runBounded', () => {
   type Deferred = { resolve: () => void; reject: (e: unknown) => void };
 
@@ -44,9 +46,9 @@ describe('runBounded', () => {
     const t = tracker();
     const items = Array.from({ length: 20 }, (_, i) => i);
 
-    const done = runBounded(items, 4, t.worker);
+    const done = runBounded(items, limit, t.worker);
 
-    expect(t.started).toHaveLength(4);
+    expect(t.started).toHaveLength(limit);
     for (let guard = 0; guard < 50 && t.pending.length > 0; guard += 1) {
       t.pending.splice(0).forEach((d) => d.resolve());
       await flush();
@@ -54,7 +56,7 @@ describe('runBounded', () => {
     await done;
 
     expect(t.started).toHaveLength(20);
-    expect(t.maxConcurrent).toBe(4);
+    expect(t.maxConcurrent).toBe(limit);
   });
 
   it('lets a rejected worker not abort its siblings, and reports which item failed', async () => {
@@ -76,7 +78,7 @@ describe('runBounded', () => {
   it('caps at the item count when there are fewer items than the limit', async () => {
     const t = tracker();
 
-    const done = runBounded([0, 1], 4, t.worker);
+    const done = runBounded([0, 1], limit, t.worker);
     expect(t.started).toHaveLength(2);
 
     t.pending.splice(0).forEach((d) => d.resolve());
@@ -89,7 +91,7 @@ describe('runBounded', () => {
   it('resolves empty and never calls the worker for 0 items', async () => {
     const t = tracker();
 
-    await expect(runBounded([], 4, t.worker)).resolves.toEqual({ succeeded: [], failed: [] });
+    await expect(runBounded([], limit, t.worker)).resolves.toEqual({ succeeded: [], failed: [] });
 
     expect(t.started).toEqual([]);
   });
@@ -97,7 +99,7 @@ describe('runBounded', () => {
   it('runs the worker exactly once for 1 item with limit 4', async () => {
     const t = tracker();
 
-    const done = runBounded([0], 4, t.worker);
+    const done = runBounded([0], limit, t.worker);
     t.pending.splice(0).forEach((d) => d.resolve());
     await flush();
     await done;
@@ -108,9 +110,13 @@ describe('runBounded', () => {
   it('stops taking items once shouldContinue turns false', async () => {
     const t = tracker();
     let calls = 0;
-    const shouldContinue = () => (calls += 1) === 1;
+    function shouldContinue(): boolean {
+      calls += 1;
+      return calls === 1;
+    }
+    const items = [0, 1, 2];
 
-    const done = runBounded([0, 1, 2], 1, t.worker, shouldContinue);
+    const done = runBounded(items, 1, t.worker, shouldContinue);
     t.pending.splice(0).forEach((d) => d.resolve());
     await flush();
 
