@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Platform, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -56,6 +56,34 @@ describe('next page failure', () => {
   });
 });
 
+const WIDE_WIDTH = 1440;
+const FIRST_ITEM = 1;
+const SECOND_ITEM = 2;
+
+type CounterProps = { item: number };
+
+function Counter({ item }: CounterProps) {
+  const [taps, setTaps] = useState(0);
+  return (
+    <Text testID={`item-${item}`} onPress={() => setTaps(taps + 1)}>
+      {taps}
+    </Text>
+  );
+}
+
+function pairedTree() {
+  return (
+    <ResultsList
+      data={[FIRST_ITEM, SECOND_ITEM]}
+      keyExtractor={(item) => String(item)}
+      renderItem={({ item }) => <Counter item={item} />}
+      headerExtra={<Text testID="header-extra">H</Text>}
+      pairFirstItemWithHeader
+      common={common({})}
+    />
+  );
+}
+
 describe('pairing the header with the first item on a wide screen', () => {
   beforeEach(() => {
     Platform.OS = 'web';
@@ -80,8 +108,18 @@ describe('pairing the header with the first item on a wide screen', () => {
     );
 
     expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
+    expect(screen.getByTestId('item-1').props.children).toBe(1);
     expect(screen.getAllByTestId('item-1')).toHaveLength(1);
     expect(screen.getByTestId('item-2')).toBeTruthy();
+  });
+
+  it('keeps the paired item mounted and its state when the parent rerenders with a new renderItem', () => {
+    mockWindowWidth = WIDE_WIDTH;
+    const view = render(pairedTree());
+    fireEvent.press(screen.getByTestId('item-1'));
+    view.rerender(pairedTree());
+
+    expect(screen.getByTestId('item-1').props.children).toBe(1);
   });
 
   it('renders the header above the full list unchanged on a compact screen', () => {
@@ -123,7 +161,7 @@ describe('pairing the header with the first item on a wide screen', () => {
     mockWindowWidth = 1440;
     render(
       <ResultsList
-        data={[1, 2]}
+        data={[FIRST_ITEM, SECOND_ITEM]}
         keyExtractor={(item) => String(item)}
         renderItem={({ item }) => <Text testID={`item-${item}`}>{item}</Text>}
         headerExtra={<Text testID="header-extra">H</Text>}

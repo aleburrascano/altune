@@ -1,5 +1,11 @@
-import type { ReactElement } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
+import { memo, useCallback, useMemo, type ReactElement } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  type ListRenderItem,
+} from 'react-native';
 import { Shuffle } from 'lucide-react-native';
 import type { TrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
@@ -80,6 +86,82 @@ function ShuffleAllButton({ onPress, busy }: { onPress: () => void; busy: boolea
   );
 }
 
+type TrackRowHandlers = Pick<
+  TracksListProps,
+  'onPlay' | 'onPress' | 'onMore' | 'onRetry' | 'isRetrying' | 'isPlaying'
+>;
+
+type TrackRowProps = {
+  track: TrackResponse;
+  handlers: TrackRowHandlers;
+  selection: Selection | undefined;
+};
+
+function useTrackCallbacks(track: TrackResponse, handlers: TrackRowHandlers) {
+  const { onPlay, onPress, onMore, onRetry } = handlers;
+  const play = useCallback(() => onPlay(track), [onPlay, track]);
+  const retry = useCallback(() => onRetry(track), [onRetry, track]);
+  const press = useCallback(() => onPress(track), [onPress, track]);
+  const more = useCallback((anchor: MenuAnchor) => onMore(track, anchor), [onMore, track]);
+  return { play, retry, press, more };
+}
+
+function useSelectionCallbacks(track: TrackResponse, selection: Selection | undefined) {
+  const begin = useCallback(() => selection?.begin(track.id), [selection, track.id]);
+  const toggle = useCallback(() => selection?.toggle(track.id), [selection, track.id]);
+  return { begin, toggle };
+}
+
+type TrackCallbacks = ReturnType<typeof useTrackCallbacks>;
+type SelectionCallbacks = ReturnType<typeof useSelectionCallbacks>;
+
+function rowCallbackProps(track: TrackResponse, calls: TrackCallbacks) {
+  return {
+    ...(track.acquisition_status === 'ready' ? { onPlay: calls.play } : null),
+    ...(track.acquisition_status === 'failed' ? { onRetry: calls.retry } : null),
+    onPress: calls.press,
+    onMore: calls.more,
+  };
+}
+
+function selectableProps(track: TrackResponse, selection: Selection, onToggle: () => void) {
+  if (!selection.active) return undefined;
+  return { selected: selection.has(track.id), onToggle };
+}
+
+function rowSelectionProps(
+  track: TrackResponse,
+  selection: Selection | undefined,
+  calls: SelectionCallbacks,
+) {
+  if (selection == null) return null;
+  const selectable = selectableProps(track, selection, calls.toggle);
+  return { onLongPress: calls.begin, selectable };
+}
+
+function useRowSelectionProps(track: TrackResponse, selection: Selection | undefined) {
+  const calls = useSelectionCallbacks(track, selection);
+  return rowSelectionProps(track, selection, calls);
+}
+
+function useRowActionProps(track: TrackResponse, handlers: TrackRowHandlers) {
+  return rowCallbackProps(track, useTrackCallbacks(track, handlers));
+}
+
+function rowStatusProps(track: TrackResponse, handlers: TrackRowHandlers) {
+  return { retrying: handlers.isRetrying(track.id), isPlaying: handlers.isPlaying(track.id) };
+}
+
+function TrackRowImpl({ track, handlers, selection }: TrackRowProps): ReactElement {
+  const actions = useRowActionProps(track, handlers);
+  const selecting = useRowSelectionProps(track, selection);
+  return (
+    <LibraryRow track={track} {...actions} {...selecting} {...rowStatusProps(track, handlers)} />
+  );
+}
+
+const TrackRow = memo(TrackRowImpl);
+
 export function TracksList({
   tracks,
   emptyLabel,
@@ -96,6 +178,14 @@ export function TracksList({
   selection,
 }: TracksListProps): ReactElement {
   const isWide = useWideWebLayout();
+  const handlers = useMemo<TrackRowHandlers>(
+    () => ({ onPlay, onPress, onMore, onRetry, isRetrying, isPlaying }),
+    [onPlay, onPress, onMore, onRetry, isRetrying, isPlaying],
+  );
+  const renderItem = useCallback<ListRenderItem<TrackResponse>>(
+    ({ item }) => <TrackRow track={item} handlers={handlers} selection={selection} />,
+    [handlers, selection],
+  );
   return (
     <FlatList
       testID="library-tracks-list"
@@ -123,26 +213,7 @@ export function TracksList({
       }
       contentContainerStyle={tracks.length === 0 ? listContent.empty : listContent.padded}
       ListEmptyComponent={<LibraryEmptyMessage label={emptyLabel} />}
-      renderItem={({ item }) => (
-        <LibraryRow
-          track={item}
-          {...(item.acquisition_status === 'ready' ? { onPlay: () => onPlay(item) } : {})}
-          onPress={() => onPress(item)}
-          onMore={(anchor) => onMore(item, anchor)}
-          {...(selection != null ? { onLongPress: () => selection.begin(item.id) } : {})}
-          {...(selection?.active
-            ? {
-                selectable: {
-                  selected: selection.has(item.id),
-                  onToggle: () => selection.toggle(item.id),
-                },
-              }
-            : {})}
-          {...(item.acquisition_status === 'failed' ? { onRetry: () => onRetry(item) } : {})}
-          retrying={isRetrying(item.id)}
-          isPlaying={isPlaying(item.id)}
-        />
-      )}
+      renderItem={renderItem}
     />
   );
 }

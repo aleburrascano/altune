@@ -225,6 +225,15 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
     expect(onPlay.mock.calls[0][0].id).toBe('b');
   });
 
+  it('toggles the pressed row, not its neighbour, while selecting', () => {
+    const selection = probeSelection(true);
+    renderProbeTracksList([probeTrack('a'), probeTrack('b')], { selection });
+
+    fireEvent.press(screen.getByTestId('library-row-b'));
+
+    expect(selection.toggle).toHaveBeenCalledWith('b');
+  });
+
   it('renders a wide row with no album and no duration without printing null or NaN', () => {
     renderProbeTracksList([probeTrack('a', { album: null, duration_seconds: null })]);
 

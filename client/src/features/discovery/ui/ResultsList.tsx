@@ -44,11 +44,19 @@ function pairedHeaderInfo<T>(item: T): ListRenderItemInfo<T> {
 
 type PairedHeaderProps<T> = { headerExtra: ReactNode; item: T; renderItem: ListRenderItem<T> };
 
+type PairedItemProps<T> = { item: T; renderItem: ListRenderItem<T> };
+
+function PairedItem<T>({ item, renderItem }: PairedItemProps<T>): ReactNode {
+  return renderItem(pairedHeaderInfo(item));
+}
+
 function PairedHeader<T>({ headerExtra, item, renderItem }: PairedHeaderProps<T>): ReactElement {
   return (
     <View style={styles.pairedRow} testID="discover-top-pair">
       <View style={styles.pairedSide}>{headerExtra}</View>
-      <View style={styles.pairedSide}>{renderItem(pairedHeaderInfo(item))}</View>
+      <View style={styles.pairedSide}>
+        <PairedItem item={item} renderItem={renderItem} />
+      </View>
     </View>
   );
 }

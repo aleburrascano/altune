@@ -32,17 +32,32 @@ import {
   SheetScreen,
 } from '@features/playback/ui/SheetHeader';
 
-function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>, theme: Theme) {
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: drag.value + 80 }],
+const REMOVE_ACTION_WIDTH = 80;
+
+type RemoveActionProps = { drag: SharedValue<number>; theme: Theme };
+
+function useRemoveActionStyle(drag: SharedValue<number>) {
+  return useAnimatedStyle(() => ({
+    transform: [{ translateX: drag.value + REMOVE_ACTION_WIDTH }],
   }));
+}
+
+type RemoveLabelProps = { color: string };
+
+function RemoveLabel({ color }: RemoveLabelProps): ReactElement {
   return (
-    <Reanimated.View
-      style={[rowStyles.removeAction, { backgroundColor: theme.color.danger }, style]}
-    >
-      <Text variant="label" style={{ color: theme.color.onAccent }}>
-        Remove
-      </Text>
+    <Text variant="label" style={{ color }}>
+      Remove
+    </Text>
+  );
+}
+
+function RemoveAction({ drag, theme }: RemoveActionProps): ReactElement {
+  const style = useRemoveActionStyle(drag);
+  const background = { backgroundColor: theme.color.danger };
+  return (
+    <Reanimated.View style={[rowStyles.removeAction, background, style]}>
+      <RemoveLabel color={theme.color.onAccent} />
     </Reanimated.View>
   );
 }
@@ -60,7 +75,7 @@ export function QueueRow({ item, onSkip, onRemove, onOpenMenu }: QueueRowProps):
     <ReanimatedSwipeable
       friction={2}
       rightThreshold={40}
-      renderRightActions={(prog, drag) => RemoveAction(prog, drag, theme)}
+      renderRightActions={(_prog, drag) => <RemoveAction drag={drag} theme={theme} />}
       onSwipeableOpen={() => onRemove(item.queueIndex)}
     >
       <Pressable
@@ -105,7 +120,7 @@ const rowStyles = StyleSheet.create({
   removeAction: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 80,
+    width: REMOVE_ACTION_WIDTH,
   },
 });
 
