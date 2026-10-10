@@ -486,6 +486,9 @@ case "${STUB_JEST:-pass}" in
         echo "  ● library rows › shows the artist name"
         echo ""
         echo "    expect(received).toBe(expected)"
+        echo ""
+        echo "    Expected: \"Ada Lovelace\""
+        echo "    Received: \"\""
         for i in $(seq 1 80); do echo "    at frame $i (node_modules/x.js:$i:1)"; done
         echo "  ● Console"
         echo "  ● player › resumes after a seek"
@@ -535,8 +538,14 @@ expect_out "failed tests:"
 expect_out "● library rows › shows the artist name"
 expect_out "● player › resumes after a seek"
 expect_out "Tests:       2 failed, 40 passed, 42 total"
+expect_out "first failure:"
+expect_out "expect(received).toBe(expected)"
+expect_out 'Expected: "Ada Lovelace"'
+expect_out 'Received: ""'
+grep -qF "at frame 1 (node_modules/x.js" "$WORK/out.log" && fail "the first failure block should drop stack frames"
 grep -qF "at frame 80 (node_modules/y.js" "$WORK/out.log" && fail "the stack trace tail should not be printed"
-[ "$(grep -cF "● library rows › shows the artist name" "$WORK/out.log")" = 1 ] || fail "each failed test should be named once"
+[ "$(grep -cF "● library rows › shows the artist name" "$WORK/out.log")" = 2 ] || fail "the first failed test should be named once in the list and once heading its block"
+[ "$(grep -cF "● player › resumes after a seek" "$WORK/out.log")" = 1 ] || fail "a later failed test should be named once, in the list only"
 grep -qF "● Console" "$WORK/out.log" && fail "console blocks are not failed tests"
 
 CASE="a jest run that never exits is killed at the timeout and fails loud"

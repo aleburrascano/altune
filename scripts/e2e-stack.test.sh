@@ -64,8 +64,10 @@ run down
 check 0 "down with nothing up is a no-op"
 
 : >"$STUB_LOG"
+started=$(date +%s)
 run up
 check 0 "up exits 0 once /health is 200"
+[ $(($(date +%s) - started)) -lt 15 ] || { echo "FAIL capturing up's stdout should return while the 30s api and web servers still run"; fail=1; }
 for key in API_URL WEB_URL DATABASE_URL; do
   grep -q "^$key=" <<<"$OUT" || { echo "FAIL up should print $key"; fail=1; }
 done

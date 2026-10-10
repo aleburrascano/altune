@@ -36,7 +36,7 @@ publish() {
 
 start_detached() {
   local name=$1; shift
-  "$@" >"$state/$name.log" 2>&1 &
+  "$@" >"$state/$name.log" 2>&1 {publish_fd}>&- &
   echo $! >"$state/$name.pid"
 }
 

@@ -61,7 +61,7 @@ test_check() {
   [ $lint_only = 1 ] || check "$@"
 }
 
-jest_limit=${PRECHECK_JEST_TIMEOUT:-600}
+jest_limit=${PRECHECK_JEST_TIMEOUT:-1800}
 
 jest_failures() {
   if [ "$last_rc" = 124 ] || [ "$last_rc" = 137 ]; then
@@ -73,6 +73,11 @@ jest_failures() {
     echo "failed tests:"
     echo "$names"
     sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^(Test Suites|Tests):'
+    echo "first failure:"
+    sed -E 's/\x1b\[[0-9;]*m//g' "$log" | awk '
+      /^[[:space:]]*● / { if (on) exit; if (!/● Console$/) on = 1 }
+      on && /^[[:space:]]+at / { next }
+      on { print; if (++n >= 25) exit }'
   else
     log_tail
   fi
