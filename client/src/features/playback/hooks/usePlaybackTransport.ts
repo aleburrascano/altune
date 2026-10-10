@@ -1,4 +1,4 @@
-import { shouldRestartOnPrevious } from '@shared/playback/restartOnPrevious';
+import { shouldRestartOnPrevious } from '@features/playback/domain/restartOnPrevious';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';

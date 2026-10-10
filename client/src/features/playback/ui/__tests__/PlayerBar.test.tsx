@@ -5,7 +5,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';
-import { RESTART_THRESHOLD_MS } from '@shared/playback/restartOnPrevious';
+import { RESTART_THRESHOLD_MS } from '@features/playback/domain/restartOnPrevious';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';

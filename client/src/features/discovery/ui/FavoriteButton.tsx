@@ -6,7 +6,7 @@ import { tapFeedback } from '@shared/ui/haptics';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui';
 
-import { useFavorites } from '@shared/favorites/useFavorites';
+import { useFavorites } from '@features/discovery/hooks/useFavorites';
 
 export type FavoriteButtonProps = {
   target: FavoriteTarget;

@@ -3,12 +3,12 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { useFavorites } from '@shared/favorites/useFavorites';
+import { useFavorites } from '@features/discovery/hooks/useFavorites';
 import type { FavoritesResponse, FavoriteTarget } from '@shared/api-client/favorites';
 import { asFavoriteKey } from '@shared/api-client/ids';
-import { FavoritesPortProvider } from '@shared/favorites';
-import { createMemoryFavoritesPort } from '@shared/favorites/__tests__/memoryFavoritesPort';
-import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
+import { FavoritesPortProvider } from '@features/discovery/ports/FavoritesPortProvider';
+import { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
+import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 import { discoveryKeys } from '@shared/query/queryKeys';
 
 let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;

@@ -1,7 +1,7 @@
 import { asFavoriteKey } from '@shared/api-client/ids';
 import type { Favorite, FavoriteRef } from '@shared/api-client/favorites';
 
-import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
+import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 
 function sameEntry(a: Favorite, b: Favorite): boolean {
   return a.kind === b.kind && a.key === b.key;
