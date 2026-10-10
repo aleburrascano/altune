@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import TrackPlayer, { RepeatMode, State, usePlaybackState } from 'react-native-track-player';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
@@ -35,7 +35,15 @@ function phaseFromTrackPlayerState(tpState: State | undefined): PlayerPhase {
 }
 
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
-  const [track, setTrack] = useState<PlaybackTrack | null>(null);
+  const [displayed, setDisplayed] = useState<{
+    track: PlaybackTrack | null;
+    syncedQueueTrack: PlaybackTrack | null;
+  }>(() => ({ track: null, syncedQueueTrack: useQueueStore.getState().currentTrack() }));
+  const { track, syncedQueueTrack } = displayed;
+  const setTrack = useCallback(
+    (next: PlaybackTrack | null) => setDisplayed((prev) => ({ ...prev, track: next })),
+    [],
+  );
   const failure = usePlaybackErrorFor(track ? trackKey(track) : null);
 
   const playbackState = usePlaybackState();
@@ -83,17 +91,15 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
-  const [syncedQueueTrack, setSyncedQueueTrack] = useState(currentQueueTrack);
   if (currentQueueTrack && currentQueueTrack !== syncedQueueTrack) {
-    setSyncedQueueTrack(currentQueueTrack);
-    setTrack(currentQueueTrack);
+    setDisplayed({ track: currentQueueTrack, syncedQueueTrack: currentQueueTrack });
   }
 
   useEffect(() => {
     if (track) native.rememberTrack(track);
   }, [native, track]);
 
-  useEffect(() => onSignOut(() => setTrack(null)), []);
+  useEffect(() => onSignOut(() => setTrack(null)), [setTrack]);
 
   useQueueResume();
 

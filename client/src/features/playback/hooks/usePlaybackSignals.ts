@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import { Event, useTrackPlayerEvents } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
@@ -10,53 +10,48 @@ import { progressSecondsToMs, progressSecondsToRoundedMs } from '@features/playb
 
 const COMPLETION_EPSILON_MS = 2000;
 
+type PlayProgress = { key: TrackKey | null; emitted: boolean; stalePositionMs: number };
+
+function isFirstCrossing(ps: PlayProgress, positionMs: number, durationMs: number): boolean {
+  if (ps.emitted || positionMs === ps.stalePositionMs) return false;
+  return hasCrossedListenThreshold(positionMs, durationMs);
+}
+
 export function usePlaybackSignals(args: {
   track: PlaybackTrack | null;
   positionMs: number;
   durationMs: number;
 }): void {
   const recordEvent = useRecordEvent();
-  const recordRef = useRef(recordEvent);
   const queueSource = useQueueStore((s) => s.source);
-  const queueSourceRef = useRef(queueSource);
 
   const emit = (
     type: 'play' | 'skip' | 'completed',
     track: PlaybackTrack,
     dwellMs?: number,
   ): void => {
-    recordRef.current.mutate({
+    recordEvent.mutate({
       type,
       search_id: track.searchId,
-      payload: buildTrackPayload(track, queueSourceRef.current, dwellMs),
+      payload: buildTrackPayload(track, queueSource, dwellMs),
     });
   };
-  const emitRef = useRef(emit);
-
-  useEffect(() => {
-    recordRef.current = recordEvent;
-    queueSourceRef.current = queueSource;
-    emitRef.current = emit;
-  });
 
   const { track, positionMs, durationMs } = args;
-  const playRef = useRef<{
-    key: TrackKey | null;
-    emitted: boolean;
-    stalePositionMs: number;
-  }>({ key: null, emitted: false, stalePositionMs: 0 });
+  const playRef = useRef<PlayProgress>({ key: null, emitted: false, stalePositionMs: 0 });
   const key = track ? trackKey(track) : null;
-  useEffect(() => {
-    if (playRef.current.key !== key) {
+  const trackProgress = useEffectEvent((): void => {
+    const ps = playRef.current;
+    if (ps.key !== key) {
       playRef.current = { key, emitted: false, stalePositionMs: positionMs };
       return;
     }
-    const ps = playRef.current;
-    if (!track || positionMs === ps.stalePositionMs) return;
-    if (!ps.emitted && hasCrossedListenThreshold(positionMs, durationMs)) {
-      ps.emitted = true;
-      emitRef.current('play', track);
-    }
+    if (!track || !isFirstCrossing(ps, positionMs, durationMs)) return;
+    ps.emitted = true;
+    emit('play', track);
+  });
+  useEffect(() => {
+    trackProgress();
   }, [track, key, positionMs, durationMs]);
 
   const handledKeyRef = useRef<TrackKey | null>(null);
@@ -77,7 +72,7 @@ export function usePlaybackSignals(args: {
             : 0;
       const completed = durMs > 0 && dwellMs >= durMs - COMPLETION_EPSILON_MS;
       handledKeyRef.current = trackKey(outgoing);
-      emitRef.current(completed ? 'completed' : 'skip', outgoing, dwellMs);
+      emit(completed ? 'completed' : 'skip', outgoing, dwellMs);
     } else {
       const trackIdx = s.playOrder[event.track];
       const ended = trackIdx != null ? s.tracks[trackIdx] : undefined;
@@ -86,7 +81,7 @@ export function usePlaybackSignals(args: {
       handledKeyRef.current = null;
       if (alreadyHandled) return;
       const dwellMs = progressSecondsToRoundedMs(event.position ?? 0) || undefined;
-      emitRef.current('completed', ended, dwellMs);
+      emit('completed', ended, dwellMs);
     }
   });
 }

@@ -61,6 +61,16 @@ const recordEventIsFireAndForgetAndReadsNoQueryCache = {
   rules: ['react-doctor/query-mutation-missing-invalidation'],
 };
 
+const mediaSessionEffectsSyncTheBrowserMediaSession = {
+  files: ['src/features/playback/hooks/useMediaSession.ts'],
+  rules: ['react-doctor/no-event-handler'],
+};
+
+const rememberTrackSyncsNativeTrackPlayer = {
+  files: ['src/features/playback/native/trackPlayerPlaybackProvider.tsx'],
+  rules: ['react-doctor/no-event-handler'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -115,6 +125,8 @@ export default {
       imageOnlyResolvesAssetSource,
       failureShownIsAnImpressionLogSyncedInEffect,
       bannerChildrenOnlyPicksTelemetryMessage,
+      mediaSessionEffectsSyncTheBrowserMediaSession,
+      rememberTrackSyncsNativeTrackPlayer,
       recordEventIsFireAndForgetAndReadsNoQueryCache,
     ],
   },

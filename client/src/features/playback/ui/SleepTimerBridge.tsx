@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type ReactElement } from 'react';
+import { useEffect, useEffectEvent, type ReactElement } from 'react';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 
@@ -19,10 +19,11 @@ export function SleepTimerBridge({
   const cancel = useSleepTimerStore((s) => s.cancel);
   const { pause } = usePlayback();
 
-  const fire = useCallback((): void => {
+  function fire(): void {
     pause();
     cancel();
-  }, [pause, cancel]);
+  }
+  const fireFromTimer = useEffectEvent(fire);
 
   useEffect(() => {
     if (monoDeadline === null) return;
@@ -31,14 +32,14 @@ export function SleepTimerBridge({
     const check = (): void => {
       const remaining = monoDeadline - monotonicNow();
       if (remaining <= 0) {
-        fire();
+        fireFromTimer();
         return;
       }
       timeout = setTimeout(check, Math.min(remaining, MAX_SLEEP_CHECK_MS));
     };
     check();
     return () => clearTimeout(timeout);
-  }, [monoDeadline, fire, monotonicNow]);
+  }, [monoDeadline, monotonicNow]);
 
   useAppStateChange((next) => {
     if (monoDeadline !== null && next === 'active' && monotonicNow() >= monoDeadline) fire();
