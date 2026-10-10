@@ -1,9 +1,8 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { audioStreamUrl } from '@shared/api-client/audio';
+import { apiBase } from '@shared/api-client/config';
 import { ContractError } from '@shared/failure/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import { trackKey } from '@shared/playback/playbackTrack';
 
 import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
 
@@ -17,7 +16,7 @@ describe('toNativeTrack — identity and metadata', () => {
 
     const native = toNativeTrack(track);
 
-    expect(native.id).toBe(trackKey(track));
+    expect(native.id).toBe('library:trk-1');
     expect(native.title).toBe('Song One');
     expect(native.artist).toBe('Band');
   });
@@ -81,7 +80,7 @@ describe('toNativeTrack — url resolution', () => {
 
     const native = toNativeTrack(track);
 
-    expect(native.url).toBe(audioStreamUrl(asTrackId('trk-42')));
+    expect(native.url).toBe(`${apiBase}/v1/tracks/trk-42/audio`);
   });
 
   it.each(['a/b', 'a?b=1', 'a#frag', '../x/y?z#w'])(
@@ -115,7 +114,7 @@ describe('activeNativeTrackId — reading back the id toNativeTrack wrote', () =
     const track = libraryTrack();
     player.getActiveTrack!.mockResolvedValue(toNativeTrack(track));
 
-    await expect(activeNativeTrackId()).resolves.toBe(trackKey(track));
+    await expect(activeNativeTrackId()).resolves.toBe('library:trk-1');
   });
 
   it('names no track when the player has none active', async () => {

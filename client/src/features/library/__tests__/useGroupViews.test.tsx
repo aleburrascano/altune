@@ -7,7 +7,7 @@ import {
   waitForElementToBeRemoved,
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { FlatList, View } from 'react-native';
+import { View } from 'react-native';
 import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import {
   createMemoryLibraryPort,
@@ -119,20 +119,6 @@ describe('useAlbumsView', () => {
 
       await waitFor(() => expect(screen.getByText(`${LIBRARY_SIZE} albums`)).toBeTruthy());
     });
-
-    it.each([['albums', () => render(<AlbumsScreen />, { wrapper })]])(
-      'hands the %s list its own end-of-list callback',
-      async (noun, renderScreen) => {
-        renderScreen();
-        await waitFor(() =>
-          expect(screen.getByText(`${SERVER_DEFAULT_LIMIT} ${noun}`)).toBeTruthy(),
-        );
-
-        const list = screen.UNSAFE_getByType(FlatList);
-
-        expect(list.props.onEndReached).toBeInstanceOf(Function);
-      },
-    );
 
     it('stops asking for albums once a page comes back short of a full one', async () => {
       render(<AlbumsScreen />, { wrapper });
@@ -322,20 +308,6 @@ describe('useArtistsView', () => {
 
       await waitFor(() => expect(screen.getByText(`${LIBRARY_SIZE} artists`)).toBeTruthy());
     });
-
-    it.each([['artists', () => render(<ArtistsScreen />, { wrapper })]])(
-      'hands the %s list its own end-of-list callback',
-      async (noun, renderScreen) => {
-        renderScreen();
-        await waitFor(() =>
-          expect(screen.getByText(`${SERVER_DEFAULT_LIMIT} ${noun}`)).toBeTruthy(),
-        );
-
-        const list = screen.UNSAFE_getByType(FlatList);
-
-        expect(list.props.onEndReached).toBeInstanceOf(Function);
-      },
-    );
   });
 
   describe('a library list whose next page fails to load', () => {

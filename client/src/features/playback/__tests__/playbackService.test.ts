@@ -114,7 +114,7 @@ describe('native PlaybackError handling', () => {
 
       await new Promise((resolve) => setImmediate(resolve));
       const stored = usePlaybackErrorStore.getState();
-      expect(stored.key).toBe(trackKey(track));
+      expect(stored.key).toBe('preview:https://cdn.example/p.mp3');
       expect(stored.message).not.toMatch(/s3cr3t-token|deadbeef|audio\.altune\.example/);
       expect(stored.message).toBe('Response code: 403 url=[redacted url]');
     });
@@ -129,7 +129,7 @@ describe('native PlaybackError handling', () => {
       handler({ code, message });
 
       await new Promise((resolve) => setImmediate(resolve));
-      expect(usePlaybackErrorStore.getState().key).toBe(trackKey(track));
+      expect(usePlaybackErrorStore.getState().key).toBe('preview:https://cdn.example/p.mp3');
       return usePlaybackErrorStore.getState().kind;
     }
 
@@ -485,7 +485,7 @@ describe('remote skip commands', () => {
       skipPrevious();
       await settled();
 
-      expect(usePlaybackErrorStore.getState().key).toBe(trackKey(numberedPreviewTrack(1)));
+      expect(usePlaybackErrorStore.getState().key).toBe('preview:https://cdn.example/1.mp3');
       expect(warn).toHaveBeenCalledWith(
         '[playback] native queue mutation failed',
         expect.objectContaining({ op: 'remoteSkipPrevious', kind: 'transient' }),

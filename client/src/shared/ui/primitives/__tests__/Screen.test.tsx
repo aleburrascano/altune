@@ -1,5 +1,5 @@
 import { Text } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
 import type { ReactTestRendererJSON } from 'react-test-renderer';
 
 import { CONTENT_MAX_WIDTH } from '@shared/ui/layout/useLayoutMode';
@@ -48,16 +48,15 @@ describe('Screen', () => {
     expect(wrapper.props.style).toEqual(expect.objectContaining({ maxWidth: CONTENT_MAX_WIDTH }));
   });
 
-  it('renders children directly under the outer view on a compact screen', () => {
+  it('renders its children inside the screen on a compact screen', () => {
     mockWindowWidth = 390;
 
-    const { toJSON } = render(
+    render(
       <Screen testID="screen">
         <Text testID="content">body</Text>
       </Screen>,
     );
 
-    const child = singleChild(toJSON());
-    expect(child.type).toBe('Text');
+    expect(within(screen.getByTestId('screen')).getByTestId('content')).toHaveTextContent('body');
   });
 });

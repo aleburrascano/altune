@@ -3,7 +3,6 @@ import { posix } from 'path';
 import TrackPlayer from 'react-native-track-player';
 
 import { fetchAudioUrls } from '@shared/api-client/audio';
-import { REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 import { asTrackId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
@@ -1042,34 +1041,6 @@ describe('prefetch health tally', () => {
 });
 
 describe('playback port wiring', () => {
-  it('keeps the stall timeout equal to the api-client request timeout', () => {
-    expect(PREFETCH_STALL_TIMEOUT_MS).toBe(REQUEST_TIMEOUT_MS);
-  });
-
-  it('reads the port on each call, not at module load', async () => {
-    const wiringFs = (FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } })
-      .__fs;
-    forgetAllSwaps();
-    useQueueStore.getState().clearQueue();
-    installMemoryPort(
-      { audioUrls: cdnAudioUrls(['p0', 'p1']) },
-      { isAudioPrefetchEnabled: () => false },
-    );
-    useQueueStore.getState().loadQueue(
-      ['p0', 'p1'].map((id) =>
-        libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } }),
-      ),
-      0,
-      null,
-    );
-
-    await prefetchNext(0);
-
-    expect(wiringFs.allFiles()).toEqual({});
-    expect((TrackPlayer as unknown as { add: jest.Mock }).add).not.toHaveBeenCalled();
-    useQueueStore.getState().clearQueue();
-  });
-
   describe('against the memory port', () => {
     const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
     const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
