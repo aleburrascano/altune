@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { LibrarySort } from '@shared/api-client/library';
+import type { LibrarySort } from '@shared/apiClient/library';
 import { failureLogFields } from '@features/library/domain/libraryFailure';
 import type { LibraryChip, SortKey } from '@features/library/domain/libraryView';
 

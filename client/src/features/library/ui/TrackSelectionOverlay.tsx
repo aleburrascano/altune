@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import { AddToPlaylistSheet } from '@shared/playlists';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';

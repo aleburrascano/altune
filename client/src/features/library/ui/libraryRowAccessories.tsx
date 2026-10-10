@@ -1,7 +1,7 @@
 import { useRef, type ReactElement } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native';
 import { MoreVertical } from 'lucide-react-native';
-import type { TrackId } from '@shared/api-client/ids';
+import type { TrackId } from '@shared/apiClient/ids';
 import { useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';

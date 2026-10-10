@@ -1,6 +1,6 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { TrackResponse, ListTracksResponse } from '@shared/api-client/trackResponse';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import type { TrackResponse, ListTracksResponse } from '@shared/apiClient/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
 import {
   useReacquireTrack,
@@ -22,7 +22,7 @@ import {
 } from '@features/library/__tests__/trackMutationFixtures';
 import { Alert } from 'react-native';
 import { ApiError, NetworkError } from '@shared/failure/errors';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';

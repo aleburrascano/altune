@@ -1,8 +1,8 @@
 import { createElement, type ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
-import { asTrackId } from '@shared/api-client/ids';
+import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/apiClient/audio';
+import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 
 import { libraryTrack } from '../../src/features/playback/__tests__/fixtures';
@@ -14,7 +14,7 @@ beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
+jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
 const presign = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 

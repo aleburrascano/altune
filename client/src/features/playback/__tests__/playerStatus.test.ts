@@ -1,5 +1,5 @@
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
-import type { TrackId } from '@shared/api-client/ids';
+import type { TrackId } from '@shared/apiClient/ids';
 import {
   canRetryPlaybackError,
   endedLabel,

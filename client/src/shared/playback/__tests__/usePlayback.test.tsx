@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 import { usePlayback, PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';

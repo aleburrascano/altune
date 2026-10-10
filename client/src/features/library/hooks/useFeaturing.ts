@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 import {
@@ -9,7 +9,7 @@ import {
   classifyLibraryError,
 } from '@features/library/domain/libraryFailure';
 import { showFailureAlert } from '@shared/ui';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { detailHref } from '@shared/navigation/detailHandoff';
 import { useNavigator, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';

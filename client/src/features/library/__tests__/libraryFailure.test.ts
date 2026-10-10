@@ -7,7 +7,7 @@ import {
   logTrackMutationFailure,
   trackNotFoundAlert,
 } from '@features/library/domain/libraryFailure';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
 describe('classifyLibraryError — one boundary, typed errors only', () => {
   it.each([

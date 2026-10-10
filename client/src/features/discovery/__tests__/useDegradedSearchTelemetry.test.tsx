@@ -7,7 +7,7 @@ import {
   searchDiscovery,
   suggestDiscovery,
   type DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
+} from '@shared/apiClient/discovery';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import { setSearchState } from '@features/discovery/domain/searchState';
@@ -15,7 +15,7 @@ import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-jest.mock('@shared/api-client/discovery', () => ({
+jest.mock('@shared/apiClient/discovery', () => ({
   searchDiscovery: jest.fn(),
   suggestDiscovery: jest.fn(),
   listSearchHistory: jest.fn(),

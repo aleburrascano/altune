@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { isRetryable } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import type { DiscoverySource } from '@shared/api-client/discovery';
+import type { DiscoverySource } from '@shared/apiClient/discovery';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 

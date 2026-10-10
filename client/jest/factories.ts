@@ -2,8 +2,8 @@ import { faker } from '@faker-js/faker';
 import type { Session } from '@supabase/supabase-js';
 import { Factory } from 'fishery';
 
-import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 const REFERENCE_DATE = new Date('2026-01-01T00:00:00Z');
 

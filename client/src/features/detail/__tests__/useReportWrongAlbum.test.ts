@@ -5,7 +5,7 @@ import { createElement, type ReactElement, type ReactNode } from 'react';
 import { DetailHandoffProvider } from '@/features/detail/hooks/useDetailHandoff';
 import { useReportWrongAlbum } from '@/features/detail/hooks/useReportWrongAlbum';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 const mockEnqueueCritical = jest.fn();
 

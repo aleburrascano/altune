@@ -16,15 +16,15 @@ React or the platform. Library (`client/src/features/library`) is the worked exa
 | Folder           | Holds                                                                                                                    | May import                                                                                                                                                                |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `domain/`        | Pure rules: libraryFailure, libraryView, listPaging, libraryRoutes, libraryToDiscovery, pinnedStatusDisplay, gridColumns | Types and other pure modules only. No value import from `react`, `react-native`, `expo-*`, `lucide-react-native`, the `@shared/ui` barrel, `hooks/`, `ui/` or `adapters/` |
-| `ports/`         | The interfaces the feature owns, and the context that supplies one                                                       | `domain/`, type imports of api-client                                                                                                                                     |
-| `adapters/http/` | The only place the feature imports api-client network functions                                                          | `ports/`, `@shared/api-client`                                                                                                                                            |
+| `ports/`         | The interfaces the feature owns, and the context that supplies one                                                       | `domain/`, type imports of apiClient                                                                                                                                     |
+| `adapters/http/` | The only place the feature imports apiClient network functions                                                          | `ports/`, `@shared/apiClient`                                                                                                                                            |
 | `hooks/`         | React glue: query hooks and actions that read the port from context                                                      | `domain/`, `ports/`                                                                                                                                                       |
 | `ui/`            | Screens and components                                                                                                   | `hooks/`, `domain/`                                                                                                                                                       |
 
 ## Moving the next feature
 
 1. Move the pure files into `domain/` (`git mv`, then fix import specifiers).
-2. Write the port as an interface whose members are `typeof` the api-client functions,
+2. Write the port as an interface whose members are `typeof` the apiClient functions,
    as in `ports/libraryPort.ts`.
 3. Write the HTTP adapter as an object literal that forwards each call, as in
    `adapters/http/httpLibraryPort.ts`.
@@ -35,15 +35,15 @@ React or the platform. Library (`client/src/features/library`) is the worked exa
 5. Write a memory fake, `__tests__/memoryLibraryPort.ts`.
 6. Write a `describe.each` contract test, `__tests__/libraryPortContract.test.ts`, that runs the
    same cases against the HTTP adapter (fake fetch) and the memory fake, so the fake cannot drift.
-7. Point hooks at the port (`useLibraryPort()`) and drop their api-client imports.
+7. Point hooks at the port (`useLibraryPort()`) and drop their apiClient imports.
 
 ## How it is enforced
 
 - MC-8 (`client/eslint/consistency/mc-8-feature-ports.js`, see
-  [mobile-consistency.md](mobile-consistency.md)) bans value imports from `@shared/api-client`
+  [mobile-consistency.md](mobile-consistency.md)) bans value imports from `@shared/apiClient`
   outside `adapters/`.
 - `features/__tests__/featurePortInvariants.test.ts` checks that no feature with an `adapters/`
-  folder makes an api-client value import outside it.
+  folder makes an apiClient value import outside it.
 - `features/__tests__/featureLayersInvariants.test.ts` runs the domain purity check over every
   `features/*/domain/` file.
 

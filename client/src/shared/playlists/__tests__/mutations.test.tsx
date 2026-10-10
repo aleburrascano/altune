@@ -16,17 +16,17 @@ import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
 import { PlaylistsPortProvider } from '@shared/playlists/ports/PlaylistsPortProvider';
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
 import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
-import { asPlaylistId, asTrackId, type TrackId, type PlaylistId } from '@shared/api-client/ids';
+import { asPlaylistId, asTrackId, type TrackId, type PlaylistId } from '@shared/apiClient/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/api-client/playlistResponse';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/playlistResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import * as playlistsApi from '@shared/api-client/playlists';
+import * as playlistsApi from '@shared/apiClient/playlists';
 import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');

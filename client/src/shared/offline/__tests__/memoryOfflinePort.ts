@@ -1,4 +1,4 @@
-import type { ResolvedAudioUrl } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 

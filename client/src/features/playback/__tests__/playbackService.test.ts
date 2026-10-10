@@ -5,7 +5,7 @@ import {
   _resetAudioCacheInvalidatorsForTest,
   invalidateAudioCaches,
 } from '@shared/acquisition/audioCacheInvalidation';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { RESTART_THRESHOLD_MS } from '@features/playback/domain/restartOnPrevious';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';

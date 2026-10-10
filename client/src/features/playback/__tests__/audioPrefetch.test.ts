@@ -2,8 +2,8 @@ import * as FileSystem from 'expo-file-system';
 import { posix } from 'path';
 import TrackPlayer from 'react-native-track-player';
 
-import { fetchAudioUrls } from '@shared/api-client/audio';
-import { asTrackId, parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { fetchAudioUrls } from '@shared/apiClient/audio';
+import { asTrackId, parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { recordEvent } from '@shared/telemetry/recordEvent';

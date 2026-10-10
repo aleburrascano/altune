@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
 
-import { asTrackId } from '@shared/api-client/ids';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 

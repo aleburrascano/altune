@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { trackToDiscoveryResult } from '@shared/api-client/trackToDiscoveryResult';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import { trackToDiscoveryResult } from '@shared/apiClient/trackToDiscoveryResult';
 
 import { type ContentFailure } from '@/features/detail/domain/contentStatus';
 import { type DetailRoute } from '@/features/detail/domain/detailNavigation';

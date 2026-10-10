@@ -7,8 +7,8 @@ if (!fs.existsSync(path.join(SRC_ROOT, 'shared', 'playlists'))) {
 }
 
 const PORT_MODULES = ['playlists', 'acquisition', 'offline'] as const;
-const API_CLIENT = '@shared/api-client';
-const IDS_SPECIFIER = '@shared/api-client/ids';
+const API_CLIENT = '@shared/apiClient';
+const IDS_SPECIFIER = '@shared/apiClient/ids';
 
 function listSourceFiles(dir: string): string[] {
   const files: string[] = [];
@@ -78,18 +78,18 @@ const ADAPTER = 'shared/playlists/adapters/http/x.ts';
 
 describe('apiClientValueImports', () => {
   it.each([
-    ['named', "import { getPlaylists } from '@shared/api-client/playlists';"],
-    ['bare barrel', "import { apiFetch } from '@shared/api-client';"],
-    ['multi-line', "import {\n  retryAcquisition,\n} from '@shared/api-client/tracks';"],
-    ['side-effect', "import '@shared/api-client/audio';"],
-    ['re-export named', "export { getPlaylists } from '@shared/api-client/playlists';"],
-    ['re-export star', "export * from '@shared/api-client';"],
-    ['dynamic import', "const m = await import('@shared/api-client/tracks');"],
-    ['require', "const m = require('@shared/api-client/tracks');"],
-    ['default plus type named', "import api, { type Foo } from '@shared/api-client';"],
-    ['mixed type and value', "import { type A, b } from '@shared/api-client/tracks';"],
-    ['ids look-alike', "import { x } from '@shared/api-client/idsHttp';"],
-    ['ids subpath', "import { x } from '@shared/api-client/ids/extra';"],
+    ['named', "import { getPlaylists } from '@shared/apiClient/playlists';"],
+    ['bare barrel', "import { apiFetch } from '@shared/apiClient';"],
+    ['multi-line', "import {\n  retryAcquisition,\n} from '@shared/apiClient/tracks';"],
+    ['side-effect', "import '@shared/apiClient/audio';"],
+    ['re-export named', "export { getPlaylists } from '@shared/apiClient/playlists';"],
+    ['re-export star', "export * from '@shared/apiClient';"],
+    ['dynamic import', "const m = await import('@shared/apiClient/tracks');"],
+    ['require', "const m = require('@shared/apiClient/tracks');"],
+    ['default plus type named', "import api, { type Foo } from '@shared/apiClient';"],
+    ['mixed type and value', "import { type A, b } from '@shared/apiClient/tracks';"],
+    ['ids look-alike', "import { x } from '@shared/apiClient/idsHttp';"],
+    ['ids subpath', "import { x } from '@shared/apiClient/ids/extra';"],
   ])('flags %s', (_name, source) => {
     expect(apiClientValueImports(source)).toHaveLength(1);
     expect(offendersIn(NON_ADAPTER, source)).toHaveLength(1);
@@ -98,31 +98,31 @@ describe('apiClientValueImports', () => {
 
   it.each([
     ['empty source', ''],
-    ['import type', "import type { PlaylistResponse } from '@shared/api-client/playlistResponse';"],
-    ['import type namespace', "import type * as tracks from '@shared/api-client/tracks';"],
-    ['all inline type', "import { type A, type B } from '@shared/api-client/types';"],
-    ['export type', "export type { X } from '@shared/api-client/types';"],
-    ['ids value', "import { parseTrackId } from '@shared/api-client/ids';"],
+    ['import type', "import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';"],
+    ['import type namespace', "import type * as tracks from '@shared/apiClient/tracks';"],
+    ['all inline type', "import { type A, type B } from '@shared/apiClient/types';"],
+    ['export type', "export type { X } from '@shared/apiClient/types';"],
+    ['ids value', "import { parseTrackId } from '@shared/apiClient/ids';"],
     [
       'ids mixed with type',
-      "import { isSafeId, parseTrackId, type TrackId } from '@shared/api-client/ids';",
+      "import { isSafeId, parseTrackId, type TrackId } from '@shared/apiClient/ids';",
     ],
-    ['unrelated package', "import { foo } from '@shared/api-clientele';"],
-    ['commented out', "// import { x } from '@shared/api-client/tracks';"],
+    ['unrelated package', "import { foo } from '@shared/apiClientele';"],
+    ['commented out', "// import { x } from '@shared/apiClient/tracks';"],
   ])('allows %s', (_name, source) => {
     expect(apiClientValueImports(source)).toEqual([]);
   });
 
   it('does not run an export statement into a following import', () => {
     const source =
-      "export const a = 1;\nimport type { T } from '@shared/api-client/tracks';\nexport const b = 2;";
+      "export const a = 1;\nimport type { T } from '@shared/apiClient/tracks';\nexport const b = 2;";
     expect(apiClientValueImports(source)).toEqual([]);
   });
 
   it('tracks edits to a source', () => {
-    const clean = "import type { T } from '@shared/api-client/tracks';";
+    const clean = "import type { T } from '@shared/apiClient/tracks';";
     expect(apiClientValueImports(clean)).toHaveLength(0);
-    const dirty = `${clean}\nimport { retryAcquisition } from '@shared/api-client/tracks';`;
+    const dirty = `${clean}\nimport { retryAcquisition } from '@shared/apiClient/tracks';`;
     expect(apiClientValueImports(dirty)).toHaveLength(1);
   });
 });
@@ -150,7 +150,7 @@ describe('real tree', () => {
     expect(relFiles).toContain('acquisition/adapters/http/httpAcquisitionPort.ts');
   });
 
-  it('has no value imports of the api-client outside adapters', () => {
+  it('has no value imports of the apiClient outside adapters', () => {
     const offenders = allFiles.flatMap((file) =>
       offendersIn(file, fs.readFileSync(file, 'utf8')).map((spec) => `${rel(file)} -> ${spec}`),
     );

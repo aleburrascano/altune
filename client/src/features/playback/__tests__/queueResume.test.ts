@@ -1,6 +1,6 @@
-import { asTrackId } from '@shared/api-client/ids';
-import type { QueueStateResponse } from '@shared/api-client/playback';
-import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/trackResponse';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { QueueStateResponse } from '@shared/apiClient/playback';
+import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackResponse';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 

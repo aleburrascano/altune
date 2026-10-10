@@ -7,7 +7,7 @@ import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoverView } from '@features/discovery/domain/discoverView';
 import { fireEvent } from '@testing-library/react-native';
-import type { ResultSection } from '@shared/api-client/discovery';
+import type { ResultSection } from '@shared/apiClient/discovery';
 
 const NATIVE_OS = Platform.OS;
 

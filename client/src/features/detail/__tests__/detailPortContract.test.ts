@@ -1,9 +1,9 @@
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import type {
   CreateTrackRequest,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/trackResponse';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';

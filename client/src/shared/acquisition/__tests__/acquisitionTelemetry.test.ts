@@ -1,5 +1,5 @@
 import { ApiError } from '@shared/failure/errors';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import {

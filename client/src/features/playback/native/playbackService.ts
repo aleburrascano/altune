@@ -10,7 +10,7 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
-import { parseTrackId } from '@shared/api-client/ids';
+import { parseTrackId } from '@shared/apiClient/ids';
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
 import { hasSignedInUser, onSignOut } from '@shared/session/signOutCleanup';
 import {

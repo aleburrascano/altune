@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
-import { ApiError, NetworkError } from '@shared/api-client';
+import { ApiError, NetworkError } from '@shared/apiClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import type { OutboxEntry } from '@shared/telemetry/outbox';

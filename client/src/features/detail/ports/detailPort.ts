@@ -1,7 +1,7 @@
-import type * as discovery from '@shared/api-client/discovery';
-import type * as enrichment from '@shared/api-client/enrichment';
-import type * as library from '@shared/api-client/library';
-import type * as tracks from '@shared/api-client/tracks';
+import type * as discovery from '@shared/apiClient/discovery';
+import type * as enrichment from '@shared/apiClient/enrichment';
+import type * as library from '@shared/apiClient/library';
+import type * as tracks from '@shared/apiClient/tracks';
 
 export interface DetailPort {
   searchDiscovery: typeof discovery.searchDiscovery;

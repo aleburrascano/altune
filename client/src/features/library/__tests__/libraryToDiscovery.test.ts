@@ -1,4 +1,4 @@
-import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import {
   albumToDiscoveryResult,
   artistToDiscoveryResult,

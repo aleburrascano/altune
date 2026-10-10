@@ -1,4 +1,4 @@
-import { apiFetch } from '@shared/api-client';
+import { apiFetch } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import {

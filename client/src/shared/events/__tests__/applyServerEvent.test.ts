@@ -6,13 +6,13 @@ import {
 } from '@shared/acquisition/audioCacheInvalidation';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/api-client/playlistResponse';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/playlistResponse';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
@@ -20,7 +20,7 @@ import { applyServerEvent } from '@shared/events/applyServerEvent';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
+jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
 type TrackPages = InfiniteData<ListTracksResponse>;
 

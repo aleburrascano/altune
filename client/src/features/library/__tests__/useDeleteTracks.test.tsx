@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { ApiError } from '@shared/failure/errors';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';
@@ -34,8 +34,8 @@ import {
   PLAYLIST_KEY,
   READY,
 } from './trackMutationFixtures';
-import type { ListTracksResponse } from '@shared/api-client/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import type { ListTracksResponse } from '@shared/apiClient/trackResponse';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 

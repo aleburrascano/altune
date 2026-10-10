@@ -2,7 +2,7 @@ import React from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import type { BackfillFeaturedResult } from '@shared/api-client/tracks';
+import type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { makeWrapper } from '@testing/makeWrapper';
@@ -17,7 +17,7 @@ import {
   LONG_REQUEST_TIMEOUT_MS,
   NetworkError,
   REQUEST_TIMEOUT_MS,
-} from '@shared/api-client';
+} from '@shared/apiClient';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
@@ -98,7 +98,7 @@ describe.each<[string, (pages: BackfillFeaturedResult[]) => SettingsPort]>([
 });
 
 describe('useBackfillFeatured on the memory fake', () => {
-  it('totals every seeded page with no api-client mock', async () => {
+  it('totals every seeded page with no apiClient mock', async () => {
     const queryClient = new QueryClient();
     const port = createMemorySettingsPort({ pages: [firstPage, donePage] });
     const Query = makeWrapper(queryClient);

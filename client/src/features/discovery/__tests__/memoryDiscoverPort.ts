@@ -3,7 +3,7 @@ import type {
   DiscoverySearchHistoryResponse,
   DiscoverySearchResponse,
   DiscoverySuggestResponse,
-} from '@shared/api-client/discovery';
+} from '@shared/apiClient/discovery';
 
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 

@@ -7,7 +7,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { FavoriteButton } from '@features/discovery/ui/FavoriteButton';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
 
 import { resultSecondaryLine } from '@features/discovery/domain/resultDisplay';

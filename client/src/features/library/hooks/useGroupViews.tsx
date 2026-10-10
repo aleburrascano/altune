@@ -1,4 +1,4 @@
-import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
 import {
   type ActiveView,

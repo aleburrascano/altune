@@ -1,13 +1,13 @@
-import { searchDiscovery } from '@shared/api-client/discovery';
-import { getLibraryAlbums, getLibraryArtists } from '@shared/api-client/library';
-import { getPlaylist, getPlaylists } from '@shared/api-client/playlists';
+import { searchDiscovery } from '@shared/apiClient/discovery';
+import { getLibraryAlbums, getLibraryArtists } from '@shared/apiClient/library';
+import { getPlaylist, getPlaylists } from '@shared/apiClient/playlists';
 import {
   deleteTrack,
   getAllTracks,
   getTracks,
   listTracksFeaturing,
   reacquireTrack,
-} from '@shared/api-client/tracks';
+} from '@shared/apiClient/tracks';
 
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 

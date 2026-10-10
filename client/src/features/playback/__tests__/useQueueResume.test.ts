@@ -2,10 +2,10 @@ import { act, renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import TrackPlayer from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
-import type { ResolvedAudioUrl } from '@shared/api-client/audio';
-import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/api-client/playback';
-import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/trackResponse';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
+import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient/playback';
+import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackResponse';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';

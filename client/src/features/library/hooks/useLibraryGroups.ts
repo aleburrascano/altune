@@ -5,7 +5,7 @@ import {
   type QueryKey,
   type UseInfiniteQueryResult,
 } from '@tanstack/react-query';
-import type { LibrarySort } from '@shared/api-client/library';
+import type { LibrarySort } from '@shared/apiClient/library';
 import {
   pagedListControls,
   GROUP_PAGE_SIZE,

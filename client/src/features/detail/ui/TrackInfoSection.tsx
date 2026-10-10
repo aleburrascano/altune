@@ -3,8 +3,8 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
 import { radius, spacing, useTheme } from '@shared/ui/theme';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 

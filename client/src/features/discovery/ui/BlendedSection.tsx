@@ -12,7 +12,7 @@ import { TopResultCard } from '@features/discovery/ui/TopResultCard';
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
 
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
-import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
+import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 
 type SeeAllLinkProps = {
   kind: DiscoveryKind;

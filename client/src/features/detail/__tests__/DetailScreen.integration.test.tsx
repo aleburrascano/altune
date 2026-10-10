@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
 
 import { DetailScreen } from '../ui/DetailScreen';
@@ -116,7 +116,7 @@ jest.mock('../hooks/useArtistContent', () => ({
 }));
 
 jest.mock('../hooks/useLibraryMatches', () => {
-  const { asTrackId } = require('@shared/api-client/ids');
+  const { asTrackId } = require('@shared/apiClient/ids');
   const libraryTrack = (id: string, title: string, artist: string, album: string) => ({
     id: asTrackId(id),
     title,

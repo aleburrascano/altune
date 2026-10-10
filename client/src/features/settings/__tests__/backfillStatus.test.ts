@@ -1,4 +1,4 @@
-import { NetworkError } from '@shared/api-client';
+import { NetworkError } from '@shared/apiClient';
 import {
   backfillActionLabel,
   backfillActionTone,

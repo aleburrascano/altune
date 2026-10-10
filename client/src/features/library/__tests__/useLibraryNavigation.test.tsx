@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import { asPlaylistId } from '@shared/apiClient/ids';
+import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 

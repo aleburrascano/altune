@@ -1,7 +1,7 @@
 import { type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { asyncView } from '@shared/ui/asyncView';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 import { Text } from '@shared/ui/primitives/Text';

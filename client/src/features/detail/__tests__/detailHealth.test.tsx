@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 
-import { apiFetch } from '@shared/api-client';
+import { apiFetch } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut } from '@shared/auth/useSignOut';
 

@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 

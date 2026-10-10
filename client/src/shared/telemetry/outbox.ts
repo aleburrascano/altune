@@ -1,7 +1,7 @@
 import { randomUuid } from '@shared/id/uuid';
 import { subscribeAppState } from '@shared/lifecycle/appState';
 
-import { ApiError, NetworkError } from '@shared/api-client';
+import { ApiError, NetworkError } from '@shared/apiClient';
 import { clampedExponent, equalJitterMs } from '@shared/timing/backoff';
 import { isTelemetryGated } from '@shared/failure/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';

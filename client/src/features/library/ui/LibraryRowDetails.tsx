@@ -1,11 +1,11 @@
 import type { ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
 import { useDownloadPhase } from '@shared/acquisition/downloadStore';
-import { withFeaturing } from '@shared/api-client/featuredArtists';
+import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { Text } from '@shared/ui';
 import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
 import { acquisitionProgressLabel, albumSuffix } from '@features/library/ui/libraryRowLabels';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 export function LibraryRowDetails({
   track,

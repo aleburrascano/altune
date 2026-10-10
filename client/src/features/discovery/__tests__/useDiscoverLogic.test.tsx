@@ -17,7 +17,7 @@ import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
-import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },

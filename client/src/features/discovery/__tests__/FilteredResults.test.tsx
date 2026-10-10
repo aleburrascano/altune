@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react-native';
 import { FilteredResults } from '@features/discovery/ui/FilteredResults';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { SearchCorrection } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 

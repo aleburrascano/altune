@@ -18,7 +18,7 @@ import {
   asyncViewForDiscoverView,
 } from '@features/discovery/domain/discoverView';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
-import type { DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
+import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type {
   HistorySlice,
   PaginationSlice,

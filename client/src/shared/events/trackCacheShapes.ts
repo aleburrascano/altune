@@ -1,7 +1,7 @@
 import type { InfiniteData, QueryClient, QueryFilters } from '@tanstack/react-query';
 
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
 export type TrackPages = InfiniteData<ListTracksResponse>;

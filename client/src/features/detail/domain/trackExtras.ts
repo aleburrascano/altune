@@ -1,6 +1,6 @@
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import type { AcquisitionStatus, FeaturedArtist } from '@shared/api-client/trackResponse';
-import { featuredArtistsFromExtras } from '@shared/api-client/featuredArtists';
+import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
+import type { AcquisitionStatus, FeaturedArtist } from '@shared/apiClient/trackResponse';
+import { featuredArtistsFromExtras } from '@shared/apiClient/featuredArtists';
 
 export type TrackExtras = {
   durationSeconds: number | null;

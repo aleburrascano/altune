@@ -3,7 +3,7 @@ import * as ReactQuery from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { Session } from '@supabase/supabase-js';
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
+jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
 const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 

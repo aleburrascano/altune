@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@shared/api-client';
+import { ApiError, NetworkError } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import {

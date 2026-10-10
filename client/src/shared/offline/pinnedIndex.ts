@@ -1,5 +1,5 @@
 import { defaultFileStore } from '@shared/files/defaultFileStore';
-import { isSafeId, parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { isSafeId, parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import {
   readVersionedEntries,
   writeDocumentAtomically,

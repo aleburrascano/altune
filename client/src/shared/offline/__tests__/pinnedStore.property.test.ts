@@ -1,9 +1,9 @@
 import fc from 'fast-check';
 
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
-jest.mock('@shared/api-client/audio', () => ({
+jest.mock('@shared/apiClient/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
 }));
 

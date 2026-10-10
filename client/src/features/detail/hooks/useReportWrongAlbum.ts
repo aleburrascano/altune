@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { trackExtras } from '@/features/detail/domain/trackExtras';

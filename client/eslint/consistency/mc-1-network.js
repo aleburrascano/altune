@@ -4,7 +4,7 @@ module.exports = {
   config: [
     {
       ignores: [
-        'src/shared/api-client/index.ts',
+        'src/shared/apiClient/index.ts',
         'src/shared/auth/authDeadline.ts',
         'src/shared/killSwitch/killSwitchPoll.ts',
         'src/shared/events/sseClient.ts',
@@ -18,7 +18,7 @@ module.exports = {
           'error',
           ...['fetch', 'XMLHttpRequest', 'EventSource', 'WebSocket'].map((name) => ({
             name,
-            message: `Use apiFetch/apiSend from @shared/api-client, not raw ${name} (MC-1).`,
+            message: `Use apiFetch/apiSend from @shared/apiClient, not raw ${name} (MC-1).`,
           })),
         ],
         'no-restricted-syntax': [
@@ -33,7 +33,7 @@ module.exports = {
     {
       ignores: [
         'src/shared/auth/**',
-        'src/shared/api-client/**',
+        'src/shared/apiClient/**',
         'src/shared/events/**',
         '**/__tests__/**',
       ],
@@ -44,7 +44,7 @@ module.exports = {
             paths: [
               {
                 name: 'axios',
-                message: 'Use apiFetch/apiSend from @shared/api-client (MC-1).',
+                message: 'Use apiFetch/apiSend from @shared/apiClient (MC-1).',
               },
               {
                 name: '@shared/auth/supabaseClient',
@@ -65,7 +65,7 @@ module.exports = {
       "import { File } from 'expo-file-system';\nexport const d = () => File.downloadFileAsync('u', new File('f'));\n",
     ],
     valid: [
-      "import { apiFetch } from '@shared/api-client';\nexport const r = () => apiFetch('/x');\n",
+      "import { apiFetch } from '@shared/apiClient';\nexport const r = () => apiFetch('/x');\n",
     ],
   },
 };

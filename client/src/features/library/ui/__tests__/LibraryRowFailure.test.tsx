@@ -1,9 +1,9 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition/acquisitionTelemetry';
-import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
+import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
 import { LibraryRowFailure } from '../LibraryRowFailure';
 

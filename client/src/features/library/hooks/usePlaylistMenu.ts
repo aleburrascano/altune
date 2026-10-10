@@ -1,9 +1,9 @@
-import type { PlaylistId } from '@shared/api-client/ids';
+import type { PlaylistId } from '@shared/apiClient/ids';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui/dialog/dialog';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import {
   offlineEligibility,

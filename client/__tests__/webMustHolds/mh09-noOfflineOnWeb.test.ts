@@ -2,11 +2,11 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { FeaturePorts } from '../../src/chrome/FeaturePorts';
 import { httpFeaturePorts } from '../../src/chrome/httpFeaturePorts';
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
+jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
 let mockOfflineDownloadsSupported = true;
 const mockPinnedStoreDouble: Record<string, unknown> = {};
@@ -26,8 +26,8 @@ const MODULES_MOCKED_PER_TEST = [
   '@shared/auth/useSignOut',
   '@features/settings/hooks/useAccountEmail',
   '@features/settings/hooks/useDownloads',
-  '@shared/api-client/tracks',
-  '@shared/api-client/discovery',
+  '@shared/apiClient/tracks',
+  '@shared/apiClient/discovery',
 ];
 
 afterEach(() => {
@@ -220,12 +220,12 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
         usageDetail: undefined,
       }),
     }));
-    jest.doMock('@shared/api-client/tracks', () => ({
-      ...jest.requireActual('@shared/api-client/tracks'),
+    jest.doMock('@shared/apiClient/tracks', () => ({
+      ...jest.requireActual('@shared/apiClient/tracks'),
       backfillFeaturedArtists: jest.fn().mockResolvedValue({ updated: 0, scanned: 0 }),
     }));
-    jest.doMock('@shared/api-client/discovery', () => ({
-      ...jest.requireActual('@shared/api-client/discovery'),
+    jest.doMock('@shared/apiClient/discovery', () => ({
+      ...jest.requireActual('@shared/apiClient/discovery'),
       clearSearchHistory: jest.fn().mockResolvedValue(undefined),
     }));
     SettingsScreen = require('@features/settings/ui/SettingsScreen').SettingsScreen;

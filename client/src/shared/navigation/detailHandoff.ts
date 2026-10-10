@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
 export type DetailHandoff = {

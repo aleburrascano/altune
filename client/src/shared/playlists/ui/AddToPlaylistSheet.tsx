@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
-import type { PlaylistId, TrackId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
+import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';

@@ -13,7 +13,7 @@ import {
 } from '@shared/acquisition/downloadStore';
 import { ACQUISITION_PHASES } from '@shared/acquisition/stagePhase';
 import * as announceModule from '@shared/ui/announce';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 function entry(overrides: Partial<DownloadEntry>): DownloadEntry {
   return {

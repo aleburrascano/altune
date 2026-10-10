@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { isAppActive, subscribeAppState } from '@shared/lifecycle/appState';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { apiBase } from '@shared/api-client/config';
+import { apiBase } from '@shared/apiClient/config';
 import { withinAuthDeadline } from '@shared/auth/authDeadline';
 import { supabase } from '@shared/auth/supabaseClient';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';

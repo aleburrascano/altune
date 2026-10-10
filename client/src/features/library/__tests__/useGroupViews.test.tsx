@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { View } from 'react-native';
-import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import {
   createMemoryLibraryPort,
   type MemoryLibrarySeed,

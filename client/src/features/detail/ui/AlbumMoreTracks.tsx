@@ -5,7 +5,7 @@ import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { type ContentFailure } from '@features/detail/domain/contentStatus';
 import { type LastBatch } from '@features/detail/hooks/useAlbumSaveAll';

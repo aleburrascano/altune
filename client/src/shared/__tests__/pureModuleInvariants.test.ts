@@ -5,8 +5,8 @@ const SHARED_ROOT = path.join(__dirname, '..');
 const FEATURES_ROOT = path.join(__dirname, '..', '..', 'features');
 
 const PURE_MODULES = [
-  'api-client/featuredArtists',
-  'api-client/trackToDiscoveryResult',
+  'apiClient/featuredArtists',
+  'apiClient/trackToDiscoveryResult',
   'failure/describeError',
   'failure/errors',
   'navigation/detailHandoff',
@@ -57,7 +57,7 @@ const BANNED_RUNTIME_MODULES: ((moduleSpecifier: string) => boolean)[] = [
   (m) => m === 'react-native' || m.startsWith('react-native/'),
   (m) => m === 'expo' || m === 'expo-router' || m.startsWith('expo/') || m.startsWith('expo-'),
   (m) => m === '@tanstack/react-query' || m.startsWith('@tanstack/react-query/'),
-  (m) => m === '@shared/api-client' || m.startsWith('@shared/api-client/'),
+  (m) => m === '@shared/apiClient' || m.startsWith('@shared/apiClient/'),
 ];
 
 const IMPORT_STATEMENT = /import\s+(type\s+)?[^;\n]*?from\s+['"]([^'"]+)['"]/g;
@@ -115,7 +115,7 @@ function effectiveFeatureConsumers(moduleName: string, files: FeatureFile[]): Se
   return consumers;
 }
 
-describe('pure shared modules rule 1 — pure utility functions, no React/RN/Expo/react-query/api-client at runtime', () => {
+describe('pure shared modules rule 1 — pure utility functions, no React/RN/Expo/react-query/apiClient at runtime', () => {
   it.each(PURE_MODULES)('%s imports no banned runtime module', (moduleName) => {
     expect(runtimeImportViolations(readModule(moduleName))).toEqual([]);
   });
@@ -126,19 +126,19 @@ describe('pure shared modules rule 1 — pure utility functions, no React/RN/Exp
       "import { View } from 'react-native';",
       "import * as FileSystem from 'expo-file-system';",
       "import { useQuery } from '@tanstack/react-query';",
-      "import { fetchTrack } from '@shared/api-client/tracks';",
+      "import { fetchTrack } from '@shared/apiClient/tracks';",
     ].join('\n');
     expect(runtimeImportViolations(violating)).toEqual([
       'react',
       'react-native',
       'expo-file-system',
       '@tanstack/react-query',
-      '@shared/api-client/tracks',
+      '@shared/apiClient/tracks',
     ]);
 
     const typeOnly = [
-      "import type { FeaturedArtist } from '@shared/api-client/trackResponse';",
-      "import type { DiscoveryResult } from '@shared/api-client/discovery';",
+      "import type { FeaturedArtist } from '@shared/apiClient/trackResponse';",
+      "import type { DiscoveryResult } from '@shared/apiClient/discovery';",
     ].join('\n');
     expect(runtimeImportViolations(typeOnly)).toEqual([]);
   });

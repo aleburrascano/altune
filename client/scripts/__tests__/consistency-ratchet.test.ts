@@ -108,7 +108,7 @@ test('running the real script reports MC-1 at its baselined supabaseClient impor
 
 test('running the script exits 1 when one violation is fixed and another added, count unchanged', () => {
   const relativePath = path.join('src', '__consistency_ratchet_swap__.ts');
-  const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
+  const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
 
   const { status, stdout } = runRatchetOnFixtureTree(
     { [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n" },
@@ -122,7 +122,7 @@ test('running the script exits 1 when one violation is fixed and another added, 
 });
 
 test('running the real script exits 1 for a listed violation that no longer occurs', () => {
-  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
+  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
   const listed = path.join(os.tmpdir(), `consistency-stale-${process.pid}.baseline`);
   fs.writeFileSync(
     listed,
@@ -143,7 +143,7 @@ test('running the real script exits 1 for a listed violation that no longer occu
 test('--write drops a fixed line from the baseline, so the next run passes', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
   const baselineFile = path.join(root, 'consistency.baseline');
-  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
+  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
   const env = { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile };
   try {
     fs.mkdirSync(path.join(root, 'src'));
@@ -163,7 +163,7 @@ test('--write with a new violation refuses, lists it and leaves the baseline unc
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
   const baselineFile = path.join(root, 'consistency.baseline');
   const relativePath = path.join('src', '__consistency_ratchet_new__.ts');
-  const baseline = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).\n';
+  const baseline = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).\n';
   try {
     fs.mkdirSync(path.join(root, 'src'));
     fs.writeFileSync(
@@ -238,12 +238,12 @@ async function lintMc2At(filename: string, source: string) {
 
 describe('MC-2 owner of the library delete and re-acquire calls', () => {
   const importing = (name: string) =>
-    `import { ${name} } from '@shared/api-client/tracks';\nexport const f = ${name};\n`;
+    `import { ${name} } from '@shared/apiClient/tracks';\nexport const f = ${name};\n`;
 
   test.each([
     ['useDeleteTracks.ts', 'deleteTrack'],
     ['useReacquireTrack.ts', 'reacquireTrack'],
-  ])('flags %s importing %s from the api-client', async (hook, name) => {
+  ])('flags %s importing %s from the apiClient', async (hook, name) => {
     const messages = await lintMc2At(`src/features/library/hooks/${hook}`, importing(name));
 
     expect(messages.length).toBeGreaterThan(0);
@@ -265,9 +265,9 @@ describe('MC-2 owner of the library delete and re-acquire calls', () => {
 
 describe('MC-2 owner of the settings featured-artist backfill', () => {
   const importing =
-    "import { backfillFeaturedArtists } from '@shared/api-client/tracks';\nexport const f = backfillFeaturedArtists;\n";
+    "import { backfillFeaturedArtists } from '@shared/apiClient/tracks';\nexport const f = backfillFeaturedArtists;\n";
 
-  test('flags useBackfillFeatured.ts importing backfillFeaturedArtists from the api-client', async () => {
+  test('flags useBackfillFeatured.ts importing backfillFeaturedArtists from the apiClient', async () => {
     const messages = await lintMc2At(
       'src/features/settings/hooks/useBackfillFeatured.ts',
       importing,
@@ -289,14 +289,14 @@ describe('MC-2 owner of the settings featured-artist backfill', () => {
 
 describe('MC-2 keeps backfillFeaturedArtists out of every file but the settings adapter', () => {
   const importing =
-    "import { backfillFeaturedArtists } from '@shared/api-client/tracks';\nexport const f = backfillFeaturedArtists;\n";
+    "import { backfillFeaturedArtists } from '@shared/apiClient/tracks';\nexport const f = backfillFeaturedArtists;\n";
 
   test.each([
     'src/features/settings/components/LibraryCard.tsx',
     'src/features/settings/ports/SettingsPortProvider.tsx',
     'src/features/library/adapters/http/httpLibraryPort.ts',
     'src/features/settings/adapters/http/httpSettingsPortHelper.ts',
-  ])('flags %s importing it from the api-client', async (filename) => {
+  ])('flags %s importing it from the apiClient', async (filename) => {
     const messages = await lintMc2At(filename, importing);
 
     expect(messages.length).toBeGreaterThan(0);
@@ -306,7 +306,7 @@ describe('MC-2 keeps backfillFeaturedArtists out of every file but the settings 
   test('flags the hook importing it under an alias', async () => {
     const messages = await lintMc2At(
       'src/features/settings/hooks/useBackfillFeatured.ts',
-      "import { backfillFeaturedArtists as runBackfill } from '@shared/api-client/tracks';\nexport const f = runBackfill;\n",
+      "import { backfillFeaturedArtists as runBackfill } from '@shared/apiClient/tracks';\nexport const f = runBackfill;\n",
     );
 
     expect(messages.length).toBeGreaterThan(0);
@@ -330,7 +330,7 @@ async function lintMc8At(filename: string, source: string) {
 
 describe('MC-8 features reach the API only through their own adapters', () => {
   const barrelImport =
-    "import { getTracks } from '@shared/api-client';\nexport const g = getTracks;\n";
+    "import { getTracks } from '@shared/apiClient';\nexport const g = getTracks;\n";
 
   test('checklist doc has an MC-8 row', () => {
     const doc = fs.readFileSync(
@@ -355,8 +355,8 @@ describe('MC-8 features reach the API only through their own adapters', () => {
   });
 
   test.each([
-    "import type { TrackResponse } from '@shared/api-client/types';\nexport type T = TrackResponse;\n",
-    "import { asTrackId } from '@shared/api-client/ids';\nexport const t = asTrackId;\n",
+    "import type { TrackResponse } from '@shared/apiClient/types';\nexport type T = TrackResponse;\n",
+    "import { asTrackId } from '@shared/apiClient/ids';\nexport const t = asTrackId;\n",
   ])('allows a type or pure-module import in a feature hook', async (source) => {
     expect(await lintMc8At('src/features/library/hooks/useThing.ts', source)).toHaveLength(0);
   });

@@ -1,5 +1,5 @@
-import type { TrackResponse } from '@shared/api-client/trackResponse';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';

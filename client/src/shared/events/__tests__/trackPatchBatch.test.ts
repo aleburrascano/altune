@@ -7,10 +7,10 @@ import {
 import { waitFor } from '@testing-library/react-native';
 import fc from 'fast-check';
 
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
-import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
-import type { ListTracksResponse } from '@shared/api-client/trackResponse';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+import { toFailed, toPending, toReady } from '@shared/apiClient/trackAcquisition';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
+import type { ListTracksResponse } from '@shared/apiClient/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
 import { getTrackFromCaches } from '@shared/events/trackCachePatch';

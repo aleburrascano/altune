@@ -5,7 +5,7 @@ import { fireEvent } from '@testing-library/react-native';
 import { BlendedSection, SECTION_ITEM_CAP } from '@features/discovery/ui/BlendedSection';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-import type { DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
+import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
 
 jest.mock('@features/discovery/hooks/usePreviewPlayback', () => ({

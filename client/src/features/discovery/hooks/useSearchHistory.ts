@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchHistoryResponse } from '@shared/apiClient/discovery';
 
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';

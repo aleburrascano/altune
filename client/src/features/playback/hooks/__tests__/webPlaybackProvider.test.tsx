@@ -1,9 +1,9 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import type { ResolvedAudioUrl } from '@shared/api-client/audio';
-import { ApiError } from '@shared/api-client';
-import { asTrackId } from '@shared/api-client/ids';
+import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
+import { ApiError } from '@shared/apiClient';
+import { asTrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';

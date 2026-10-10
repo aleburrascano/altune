@@ -1,7 +1,7 @@
 import TrackPlayer from 'react-native-track-player';
 
-import type { ResolvedAudioUrl } from '@shared/api-client/audio';
-import { asTrackId } from '@shared/api-client/ids';
+import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
+import { asTrackId } from '@shared/apiClient/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { recordEvent } from '@shared/telemetry/recordEvent';

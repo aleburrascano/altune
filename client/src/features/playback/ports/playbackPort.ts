@@ -1,7 +1,7 @@
-import type * as audio from '@shared/api-client/audio';
-import type * as lyrics from '@shared/api-client/lyrics';
-import type * as playback from '@shared/api-client/playback';
-import type * as tracks from '@shared/api-client/tracks';
+import type * as audio from '@shared/apiClient/audio';
+import type * as lyrics from '@shared/apiClient/lyrics';
+import type * as playback from '@shared/apiClient/playback';
+import type * as tracks from '@shared/apiClient/tracks';
 
 export interface PlaybackPort {
   audioStreamUrl: typeof audio.audioStreamUrl;

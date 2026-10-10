@@ -1,4 +1,4 @@
-import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
+import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/apiClient/discovery';
 
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 

@@ -16,7 +16,7 @@ import {
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import type { PinnedEntry } from '@shared/offline/pinnedIndex';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn(() => Promise.resolve()),

@@ -8,8 +8,8 @@ import {
 } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { Alert, View } from 'react-native';
-import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import type { ActiveView } from '@features/library/domain/libraryView';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { track } from '@features/library/__tests__/trackMutationFixtures';

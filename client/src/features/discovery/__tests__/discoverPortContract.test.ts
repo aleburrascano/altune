@@ -2,8 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import * as discoveryApi from '@shared/api-client/discovery';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import * as discoveryApi from '@shared/apiClient/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { ApiError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -173,7 +173,7 @@ describe.each<[string, (seed: PortSeed) => DiscoverPort]>([
 });
 
 describe('useAutocompleteSuggestions on the memory fake', () => {
-  it('returns the seeded suggestions with no api-client mock', async () => {
+  it('returns the seeded suggestions with no apiClient mock', async () => {
     const queryClient = new QueryClient();
     const port = createMemoryDiscoverPort({ suggestions: ['radiohead'] });
     function wrapper({ children }: { children: React.ReactNode }) {
@@ -349,7 +349,7 @@ describe('httpDiscoverPort', () => {
     await expect(calling).rejects.toMatchObject({ status: 404 });
   });
 
-  it('reaches spies installed on the api-client after the port was imported', async () => {
+  it('reaches spies installed on the apiClient after the port was imported', async () => {
     const search = { results: [] } as unknown as discoveryApi.DiscoverySearchResponse;
     const suggest = { suggestions: [] };
     const history = { items: [], total: 0 };

@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { detailHref } from '@shared/navigation/detailHandoff';
 import type { Navigator } from '@shared/navigation';
-import { trackToDiscoveryResult } from '@shared/api-client/trackToDiscoveryResult';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
-import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
+import { trackToDiscoveryResult } from '@shared/apiClient/trackToDiscoveryResult';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import {
   albumToDiscoveryResult,
   artistToDiscoveryResult,

@@ -1,9 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { NO_PLAYLIST_ID, parsePlaylistId, type PlaylistId } from '@shared/api-client/ids';
+import { NO_PLAYLIST_ID, parsePlaylistId, type PlaylistId } from '@shared/apiClient/ids';
 import { Screen, Skeleton, spacing, Button, Text } from '@shared/ui';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
 import {
   useLoggedPlaylistDetailFailure,

@@ -1,0 +1,114 @@
+import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
+import { ApiError, ContractError, HTTP_UNAUTHORIZED } from '@shared/failure/errors';
+import { idPathSegment, parseTrackId, type TrackId } from '@shared/apiClient/ids';
+import { apiBase, apiFetch, apiSend, authorization, logFailure } from '@shared/apiClient/index';
+import {
+  asArray,
+  asHttpsUrl,
+  asRecord,
+  asString,
+  nullableString,
+} from '@shared/apiClient/wireDecoders';
+import { startDeadline } from '@shared/timing/deadline';
+
+const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';
+
+function isSessionRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.status === HTTP_UNAUTHORIZED;
+}
+
+export function audioStreamUrl(trackId: TrackId): string {
+  return `${apiBase}/v1/tracks/${idPathSegment(trackId)}/audio`;
+}
+
+export async function audioRequestHeaders(): Promise<Record<string, string>> {
+  const correlationId = newCorrelationId() ?? undefined;
+  return {
+    ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
+    ...(await authorizationHeaderOrNone(correlationId)),
+  };
+}
+
+async function authorizationHeaderOrNone(
+  correlationId: string | undefined,
+): Promise<Record<string, string>> {
+  const sentWith = stampCredentials();
+  try {
+    return { Authorization: await authorization(AUDIO_STREAM_ROUTE, correlationId) };
+  } catch (error) {
+    if (isSessionRefusal(error)) markSessionExpired(sentWith);
+    logFailure('GET', AUDIO_STREAM_ROUTE, correlationId, error);
+    return {};
+  }
+}
+
+export interface ResolvedAudioUrl {
+  trackId: string;
+  url: string;
+  version: string;
+}
+
+export async function recoverAudio(trackId: TrackId): Promise<void> {
+  await apiFetch<undefined>(`/v1/tracks/${idPathSegment(trackId)}/audio/recover`, {
+    method: 'POST',
+  });
+}
+
+let prefetchEnabled = true;
+
+export function isAudioPrefetchEnabled(): boolean {
+  return prefetchEnabled;
+}
+
+export const AUDIO_URLS_TIMEOUT_MS = 2500;
+
+interface AudioUrlsResponse {
+  urls: ResolvedAudioUrl[];
+  prefetchEnabled: boolean | undefined;
+}
+
+function decodeTrackId(value: unknown, at: string): TrackId {
+  const parsed = parseTrackId(asString(value, at));
+  if (!parsed.ok) throw new ContractError(at, 'not a valid id shape');
+  return parsed.id;
+}
+
+function decodeResolvedAudioUrl(value: unknown, at: string): ResolvedAudioUrl {
+  const r = asRecord(value, at);
+  return {
+    trackId: decodeTrackId(r.track_id, `${at}.track_id`),
+    url: asHttpsUrl(r.url, `${at}.url`),
+    version: nullableString(r.version, `${at}.version`) ?? '',
+  };
+}
+
+function decodeAudioUrls(value: unknown, at: string): AudioUrlsResponse {
+  const r = asRecord(value, at);
+  return {
+    urls: asArray(r.urls, `${at}.urls`).map((item, i) =>
+      decodeResolvedAudioUrl(item, `${at}.urls[${i}]`),
+    ),
+    prefetchEnabled: typeof r.prefetch_enabled === 'boolean' ? r.prefetch_enabled : undefined,
+  };
+}
+
+function postAudioUrls(trackIds: string[], signal: AbortSignal): Promise<unknown> {
+  return apiSend<unknown>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal });
+}
+
+function acceptAudioUrls(body: unknown): ResolvedAudioUrl[] {
+  const decoded = decodeAudioUrls(body, 'audio-urls');
+  if (decoded.prefetchEnabled !== undefined) prefetchEnabled = decoded.prefetchEnabled;
+  return decoded.urls;
+}
+
+export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioUrl[]> {
+  if (trackIds.length === 0) return [];
+  const deadline = startDeadline(undefined, AUDIO_URLS_TIMEOUT_MS);
+  try {
+    return acceptAudioUrls(await postAudioUrls(trackIds, deadline.signal));
+  } finally {
+    deadline.release();
+  }
+}

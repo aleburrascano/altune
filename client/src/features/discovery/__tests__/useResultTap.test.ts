@@ -5,7 +5,7 @@ import { useResultTap } from '@features/discovery/hooks/useResultTap';
 import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 const mockMutate = jest.fn();
 const mockPush = jest.fn();

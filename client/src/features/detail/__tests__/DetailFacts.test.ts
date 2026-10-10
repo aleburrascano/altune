@@ -1,4 +1,4 @@
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { buildAlbumFacts } from '@features/detail/ui/buildDetailFacts';
 

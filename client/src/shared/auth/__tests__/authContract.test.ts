@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { apiFetch } from '@shared/api-client';
+import { apiFetch } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';
 
@@ -92,7 +92,7 @@ function middlewareSource(): string {
 
 function apiClientSource(): string {
   return fs.readFileSync(
-    path.join(REPO_ROOT!, 'client', 'src', 'shared', 'api-client', 'index.ts'),
+    path.join(REPO_ROOT!, 'client', 'src', 'shared', 'apiClient', 'index.ts'),
     'utf8',
   );
 }

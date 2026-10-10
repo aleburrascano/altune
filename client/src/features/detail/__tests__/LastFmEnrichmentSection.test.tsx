@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 
-import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 
 import { LastFmEnrichmentSection } from '../ui/LastFmEnrichmentSection';
 

@@ -3,13 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { backfillFeaturedArtists } from '@shared/api-client/tracks';
+import { backfillFeaturedArtists } from '@shared/apiClient/tracks';
 import { LibraryCard } from '@features/settings/ui/LibraryCard';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-jest.mock('@shared/api-client/tracks', () => ({
-  ...jest.requireActual('@shared/api-client/tracks'),
+jest.mock('@shared/apiClient/tracks', () => ({
+  ...jest.requireActual('@shared/apiClient/tracks'),
   backfillFeaturedArtists: jest.fn(),
 }));
 

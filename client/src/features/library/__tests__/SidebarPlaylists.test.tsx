@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 
-import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import { asPlaylistId } from '@shared/apiClient/ids';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { Sidebar } from '@shared/ui/navigation/Sidebar';
 import { darkTheme } from '@shared/ui/theme';
 

@@ -6,7 +6,7 @@ import type {
   DiscoveryProviderInfo,
   DiscoveryProviderStatus,
   DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
+} from '@shared/apiClient/discovery';
 
 export function useDegradedSearchTelemetry(
   searchData: DiscoverySearchResponse | undefined,

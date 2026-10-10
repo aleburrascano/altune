@@ -1,4 +1,4 @@
-import { backfillFeaturedArtists } from '@shared/api-client/tracks';
+import { backfillFeaturedArtists } from '@shared/apiClient/tracks';
 
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
 

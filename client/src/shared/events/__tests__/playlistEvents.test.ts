@@ -1,11 +1,11 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
-} from '@shared/api-client/playlistResponse';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/playlistResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { PLAYLIST_HANDLERS } from '@shared/events/playlistEvents';
 import type { ServerEvent } from '@shared/events/sseFrames';

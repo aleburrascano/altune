@@ -1,4 +1,4 @@
-import { apiBase } from '@shared/api-client/config';
+import { apiBase } from '@shared/apiClient/config';
 import { appVersion } from '@shared/device/device';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 

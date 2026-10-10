@@ -2,9 +2,9 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { NetworkError } from '@shared/api-client';
+import { NetworkError } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
-import { CORRELATION_HEADER } from '@shared/api-client/correlationId';
+import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
 import { transientRetryOptions } from '@shared/query/retryDelay';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { MIN_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';

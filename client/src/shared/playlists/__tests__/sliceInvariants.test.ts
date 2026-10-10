@@ -59,7 +59,7 @@ function namedValueImportsFrom(source: string, moduleSpecifier: string): string[
 }
 
 function importsApiClientPlaylists(source: string): boolean {
-  return importSpecifiers(source, false).includes('@shared/api-client/playlists');
+  return importSpecifiers(source, false).includes('@shared/apiClient/playlists');
 }
 
 function exportedFunctionNames(source: string): string[] {
@@ -200,20 +200,20 @@ describe('rule 4 — components never call playlist write functions directly; on
     expect(componentFiles.length).toBeGreaterThan(0);
   });
 
-  it('no component imports a playlist writer from @shared/api-client/playlists', () => {
+  it('no component imports a playlist writer from @shared/apiClient/playlists', () => {
     const offenders = componentFiles
       .map((file) => ({
         file: path.basename(file),
         writers: namedValueImportsFrom(
           fs.readFileSync(file, 'utf8'),
-          '@shared/api-client/playlists',
+          '@shared/apiClient/playlists',
         ).filter((name) => WRITE_FUNCTIONS.includes(name)),
       }))
       .filter(({ writers }) => writers.length > 0);
     expect(offenders).toEqual([]);
   });
 
-  it('no slice file outside adapters/ value-imports from @shared/api-client/playlists', () => {
+  it('no slice file outside adapters/ value-imports from @shared/apiClient/playlists', () => {
     const offenders = listSourceFiles(SLICE_DIR)
       .filter((file) => !file.includes(`${path.sep}adapters${path.sep}`))
       .filter((file) => importsApiClientPlaylists(fs.readFileSync(file, 'utf8')))
@@ -221,22 +221,21 @@ describe('rule 4 — components never call playlist write functions directly; on
     expect(offenders).toEqual([]);
   });
 
-  it('the api-client detector flags a value import and allows a type-only import from api-client/types', () => {
+  it('the apiClient detector flags a value import and allows a type-only import from apiClient/types', () => {
     expect(
-      importsApiClientPlaylists("import { getPlaylists } from '@shared/api-client/playlists';"),
+      importsApiClientPlaylists("import { getPlaylists } from '@shared/apiClient/playlists';"),
     ).toBe(true);
     expect(
       importsApiClientPlaylists(
-        "import type { PlaylistResponse } from '@shared/api-client/playlistResponse';",
+        "import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';",
       ),
     ).toBe(false);
   });
 
   it('the writer-import detector fires when a component imports createPlaylist directly', () => {
-    const violating =
-      "import { createPlaylist, getPlaylists } from '@shared/api-client/playlists';";
+    const violating = "import { createPlaylist, getPlaylists } from '@shared/apiClient/playlists';";
     expect(
-      namedValueImportsFrom(violating, '@shared/api-client/playlists').filter((name) =>
+      namedValueImportsFrom(violating, '@shared/apiClient/playlists').filter((name) =>
         WRITE_FUNCTIONS.includes(name),
       ),
     ).toEqual(['createPlaylist']);

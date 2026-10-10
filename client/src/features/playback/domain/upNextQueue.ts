@@ -1,4 +1,4 @@
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { QueueSource } from '@shared/playback/queueOrder';
 import type { ActionSheetOption } from '@shared/ui/primitives/ActionSheet';

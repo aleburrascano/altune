@@ -2,8 +2,8 @@ import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import { asPlaylistId } from '@shared/apiClient/ids';
+import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { supabase } from '@shared/auth/supabaseClient';
 import { playlistKeys } from '@shared/query/queryKeys';
 

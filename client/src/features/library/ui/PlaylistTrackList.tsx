@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, View, type FlatListProps, type ListRenderItem } f
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Text, spacing, useWideWebLayout } from '@shared/ui';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { usePlaylistPlayback } from '@features/library/hooks/usePlaylistPlayback';
 import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition';
 import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';

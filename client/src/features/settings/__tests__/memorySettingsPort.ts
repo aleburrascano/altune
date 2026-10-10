@@ -1,4 +1,4 @@
-import type { BackfillFeaturedResult } from '@shared/api-client/tracks';
+import type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
 
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
 

@@ -14,7 +14,7 @@ import {
   markSessionExpired,
   stampCredentials,
 } from '@shared/auth/sessionExpired';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },

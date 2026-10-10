@@ -1,5 +1,5 @@
 import { ContractError } from '@shared/failure/errors';
-import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/api-client/ids';
+import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/apiClient/ids';
 import {
   asArray,
   asBoolean,
@@ -8,13 +8,13 @@ import {
   asString,
   nullableNumber,
   nullableString,
-} from '@shared/api-client/wireDecoders';
+} from '@shared/apiClient/wireDecoders';
 import type {
   QueueSourceWire,
   QueueStateCurrentTrack,
   QueueStateResponse,
-} from '@shared/api-client/playback';
-import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/playback';
+import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
 import type { QueueSource, RepeatMode } from '@shared/playback/queueOrder';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;

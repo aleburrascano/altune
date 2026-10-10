@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
-import type { AlbumGroup } from '@shared/api-client/library';
+import type { AlbumGroup } from '@shared/apiClient/library';
 import type { ListRefresh } from '@features/library/domain/libraryView';
 import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
 import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
@@ -112,7 +112,7 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: mockWideGridWindowWidth, height: 800, scale: 2, fontScale: 1 }),
 }));
 
-const { asPlaylistId: probeAsPlaylistId } = require('@shared/api-client/ids');
+const { asPlaylistId: probeAsPlaylistId } = require('@shared/apiClient/ids');
 
 const probeAlbumList: AlbumGroup[] = Array.from({ length: 12 }, (_, i) => ({
   key: `al-${i}`,

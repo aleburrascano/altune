@@ -2,7 +2,7 @@ import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';

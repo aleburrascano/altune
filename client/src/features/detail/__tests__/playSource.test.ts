@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import type { PlaybackContextValue, PlaybackStatus } from '@shared/playback/playbackContextValue';
 import type { PlaybackSource } from '@shared/playback/playbackTrack';
 

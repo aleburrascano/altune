@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 

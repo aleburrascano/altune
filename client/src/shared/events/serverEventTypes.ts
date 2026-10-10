@@ -5,7 +5,7 @@ import {
   parseTrackId,
   type PlaylistId,
   type TrackId,
-} from '@shared/api-client/ids';
+} from '@shared/apiClient/ids';
 
 import type { ServerEvent } from '@shared/events/sseFrames';
 

@@ -1,4 +1,4 @@
-import type { PlaylistId } from '@shared/api-client/ids';
+import type { PlaylistId } from '@shared/apiClient/ids';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 export type RepeatMode = 'off' | 'all' | 'one';

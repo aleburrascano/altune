@@ -1,7 +1,7 @@
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
-import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/trackResponse';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { trackExtras } from '@/features/detail/domain/trackExtras';
 import type { OwnedTrack } from '@/features/detail/domain/ownedTrack';

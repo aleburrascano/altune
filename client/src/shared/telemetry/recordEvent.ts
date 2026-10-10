@@ -1,4 +1,4 @@
-import { apiFetch } from '@shared/api-client';
+import { apiFetch } from '@shared/apiClient';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
 import { getSessionId } from '@shared/telemetry/eventSession';

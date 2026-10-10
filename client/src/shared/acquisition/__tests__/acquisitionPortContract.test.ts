@@ -1,4 +1,4 @@
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { supabase } from '@shared/auth/supabaseClient';
 import { ApiError, ContractError } from '@shared/failure/errors';
 

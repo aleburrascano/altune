@@ -1,5 +1,5 @@
-import { asTrackId } from '@shared/api-client/ids';
-import type { QueueStateResponse } from '@shared/api-client/playback';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { QueueStateResponse } from '@shared/apiClient/playback';
 import { supabase } from '@shared/auth/supabaseClient';
 import { ContractError } from '@shared/failure/errors';
 

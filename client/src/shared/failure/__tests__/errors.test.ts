@@ -8,7 +8,7 @@ import {
   isNetworkError,
   isTelemetryGated,
 } from '@shared/failure/errors';
-import { apiFetch } from '@shared/api-client';
+import { apiFetch } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 import { describeError } from '@shared/failure/describeError';
 
@@ -167,7 +167,7 @@ describe('isNetworkError — adversarial catch-block payloads', () => {
   });
 });
 
-describe('the NetworkError the api-client throws', () => {
+describe('the NetworkError the apiClient throws', () => {
   const { __http } = require('@testing/doubles/fetch.js');
 
   const getSession = supabase.auth.getSession as jest.Mock;
@@ -190,7 +190,7 @@ describe('the NetworkError the api-client throws', () => {
     );
   }
 
-  describe('isNetworkError — the NetworkError the api-client actually throws', () => {
+  describe('isNetworkError — the NetworkError the apiClient actually throws', () => {
     it('recognizes a NetworkError(transport) from an unreachable server, whose message names no keyword', async () => {
       __http.fail('GET /v1/library');
 

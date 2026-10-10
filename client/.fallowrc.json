@@ -50,7 +50,7 @@
       { "name": "feature-playback", "patterns": ["src/features/playback/**"] },
       { "name": "feature-settings", "patterns": ["src/features/settings/**"] },
       { "name": "shared-acquisition", "patterns": ["src/shared/acquisition/**"] },
-      { "name": "shared-api-client", "patterns": ["src/shared/api-client/**"] },
+      { "name": "shared-apiClient", "patterns": ["src/shared/apiClient/**"] },
       { "name": "shared-auth", "patterns": ["src/shared/auth/**"] },
       { "name": "shared-timing", "patterns": ["src/shared/timing/**"] },
       { "name": "shared-errors", "patterns": ["src/shared/failure/errors.ts"] },
@@ -80,7 +80,7 @@
           "feature-playback",
           "feature-settings",
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -104,7 +104,7 @@
         "from": "feature-auth",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -128,7 +128,7 @@
         "from": "feature-detail",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -152,7 +152,7 @@
         "from": "feature-discover",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -176,7 +176,7 @@
         "from": "feature-library",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -200,7 +200,7 @@
         "from": "feature-playback",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -224,7 +224,7 @@
         "from": "feature-settings",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-timing",
           "shared-device",
@@ -247,7 +247,7 @@
       {
         "from": "shared-acquisition",
         "allow": [
-          "shared-api-client",
+          "shared-apiClient",
           "shared-errors",
           "shared-query",
           "shared-session",
@@ -256,7 +256,7 @@
         ]
       },
       {
-        "from": "shared-api-client",
+        "from": "shared-apiClient",
         "allow": ["shared-auth", "shared-timing", "shared-device", "shared-errors"]
       },
       {
@@ -275,7 +275,7 @@
         "from": "shared-events",
         "allow": [
           "shared-acquisition",
-          "shared-api-client",
+          "shared-apiClient",
           "shared-auth",
           "shared-errors",
           "shared-killSwitch",
@@ -293,11 +293,11 @@
         "allow": ["shared-timing", "shared-files", "shared-lifecycle"]
       },
       { "from": "shared-lifecycle", "allow": [] },
-      { "from": "shared-navigation", "allow": ["shared-api-client", "shared-session"] },
+      { "from": "shared-navigation", "allow": ["shared-apiClient", "shared-session"] },
       {
         "from": "shared-offline",
         "allow": [
-          "shared-api-client",
+          "shared-apiClient",
           "shared-timing",
           "shared-device",
           "shared-errors",
@@ -307,11 +307,11 @@
           "shared-telemetry"
         ]
       },
-      { "from": "shared-playback", "allow": ["shared-api-client", "shared-device"] },
+      { "from": "shared-playback", "allow": ["shared-apiClient", "shared-device"] },
       {
         "from": "shared-playlists",
         "allow": [
-          "shared-api-client",
+          "shared-apiClient",
           "shared-errors",
           "shared-failure",
           "shared-query",
@@ -322,7 +322,7 @@
       {
         "from": "shared-query",
         "allow": [
-          "shared-api-client",
+          "shared-apiClient",
           "shared-errors",
           "shared-session",
           "shared-telemetry",
@@ -334,7 +334,7 @@
       {
         "from": "shared-telemetry",
         "allow": [
-          "shared-api-client",
+          "shared-apiClient",
           "shared-device",
           "shared-errors",
           "shared-files",

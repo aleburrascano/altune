@@ -1,7 +1,7 @@
-import type * as discovery from '@shared/api-client/discovery';
-import type * as library from '@shared/api-client/library';
-import type * as playlists from '@shared/api-client/playlists';
-import type * as tracks from '@shared/api-client/tracks';
+import type * as discovery from '@shared/apiClient/discovery';
+import type * as library from '@shared/apiClient/library';
+import type * as playlists from '@shared/apiClient/playlists';
+import type * as tracks from '@shared/apiClient/tracks';
 
 export interface LibraryPort {
   getTracks: typeof tracks.getTracks;

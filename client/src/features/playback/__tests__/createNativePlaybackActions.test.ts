@@ -1,6 +1,6 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 

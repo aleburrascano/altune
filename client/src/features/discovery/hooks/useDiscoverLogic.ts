@@ -30,7 +30,7 @@ import type {
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
-} from '@shared/api-client/discovery';
+} from '@shared/apiClient/discovery';
 import type { DiscoverView, SearchCorrection } from '@features/discovery/domain/discoverView';
 import type { ResultsFilter } from '@features/discovery/hooks/useResultsFilter';
 

@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@shared/api-client';
+import { ApiError, NetworkError } from '@shared/apiClient';
 import { failureCopyForAction } from '@features/settings/domain/failureCopyForAction';
 
 describe('failureCopyForAction', () => {

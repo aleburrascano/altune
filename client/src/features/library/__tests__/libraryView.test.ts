@@ -1,4 +1,4 @@
-import type { LibrarySort } from '@shared/api-client/library';
+import type { LibrarySort } from '@shared/apiClient/library';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,

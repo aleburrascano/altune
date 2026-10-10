@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
 import type { usePlayback } from '@shared/playback/usePlayback';
 import { spacing } from '@shared/ui';

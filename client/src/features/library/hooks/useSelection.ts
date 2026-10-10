@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect } from 'react';
-import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 export type Selection = {
   active: boolean;

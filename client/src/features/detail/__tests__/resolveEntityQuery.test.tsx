@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';

@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { withFeaturing } from '@shared/api-client/featuredArtists';
+import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { Text } from '@shared/ui/primitives/Text';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';

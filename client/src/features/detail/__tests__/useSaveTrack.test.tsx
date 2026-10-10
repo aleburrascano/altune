@@ -1,13 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { ApiError } from '@shared/failure/errors';
-import { asTrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { enqueueCritical } from '@shared/telemetry/outbox';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { useSaveTrack, useTrackSave } from '@/features/detail/hooks/useSaveTrack';
 import type { DetailPort } from '@/features/detail/ports/detailPort';

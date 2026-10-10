@@ -24,7 +24,7 @@ import {
 import { startDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
 import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import {
   clearDetailHandoffs,
   detailHref,
@@ -37,7 +37,7 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { supabase } from '@shared/auth/supabaseClient';
 import type * as SupabaseClientModule from '@shared/auth/supabaseClient';
 import type * as UseSessionModule from '@shared/auth/useSession';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
   default: {
@@ -47,7 +47,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
   },
 }));
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
+jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
 const { __http } = require('@testing/doubles/fetch.js');
 const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
@@ -801,7 +801,7 @@ describe('pinned downloads across a killed sign-out', () => {
       session: require('@shared/auth/useSession'),
       supabase: (require('@shared/auth/supabaseClient') as typeof SupabaseClientModule).supabase,
       pinned: require('@shared/offline/pinnedStore'),
-      audio: require('@shared/api-client/audio'),
+      audio: require('@shared/apiClient/audio'),
     };
   }
 

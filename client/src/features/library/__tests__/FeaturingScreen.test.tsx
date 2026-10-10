@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 
 import { createMemoryLibraryPort } from './memoryLibraryPort';
