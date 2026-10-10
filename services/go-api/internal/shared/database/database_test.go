@@ -105,3 +105,33 @@ func TestReadPoolStats_NilPoolReadsAsZero(t *testing.T) {
 		t.Fatalf("ReadPoolStats(nil) = %+v, want zero value", stats)
 	}
 }
+
+const (
+	supabaseSessionPoolSize   = 15
+	goAPIInstancesDuringDrill = 2
+	sessionsKeptFree          = 3
+)
+
+func TestPoolConfig_DefaultLeavesSessionsFreeWhileTwoInstancesRun(t *testing.T) {
+	cfg, err := poolConfig("postgres://u:p@localhost:5432/db?sslmode=disable", 0)
+	if err != nil {
+		t.Fatalf("poolConfig: %v", err)
+	}
+
+	held := goAPIInstancesDuringDrill * int(cfg.MaxConns)
+	if free := supabaseSessionPoolSize - held; free < sessionsKeptFree {
+		t.Fatalf("two go-api at the default %d conns hold %d of %d session slots, leaving %d; want at least %d free for migration psql and an operator",
+			cfg.MaxConns, held, supabaseSessionPoolSize, free, sessionsKeptFree)
+	}
+}
+
+func TestPoolConfig_ReleasesIdleSessionsAfterABurst(t *testing.T) {
+	cfg, err := poolConfig("postgres://u:p@localhost:5432/db?sslmode=disable", 6)
+	if err != nil {
+		t.Fatalf("poolConfig: %v", err)
+	}
+
+	if cfg.MaxConnIdleTime <= 0 || cfg.MaxConnIdleTime > 5*time.Minute {
+		t.Fatalf("MaxConnIdleTime = %s, want a release within 5m so a burst does not pin session slots for pgxpool's 30m default", cfg.MaxConnIdleTime)
+	}
+}

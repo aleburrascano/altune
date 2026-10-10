@@ -79,6 +79,20 @@ var hostSuffixes = []struct {
 
 var counters = newCounters()
 
+var retryCounters = newRetryCounters()
+
+func newRetryCounters() map[string]*expvar.Int {
+	m := make(map[string]*expvar.Int, len(providerNames))
+	for _, p := range providerNames {
+		m[p] = expvar.NewInt("discovery_provider_" + p + "_retry_total")
+	}
+	return m
+}
+
+func RecordRetry(host string) {
+	retryCounters[providerForHost(host)].Add(1)
+}
+
 func newCounters() map[string]map[string]*expvar.Int {
 	m := make(map[string]map[string]*expvar.Int, len(providerNames))
 	for _, p := range providerNames {
@@ -150,9 +164,10 @@ func outcomeFor(resp *http.Response, err error) string {
 }
 
 type Outcomes struct {
-	OK    int64 `json:"ok"`
-	Quota int64 `json:"quota"`
-	Error int64 `json:"error"`
+	OK      int64 `json:"ok"`
+	Quota   int64 `json:"quota"`
+	Error   int64 `json:"error"`
+	Retries int64 `json:"retries"`
 }
 
 type Snapshot map[string]Outcomes
@@ -161,9 +176,10 @@ func ReadSnapshot() Snapshot {
 	s := make(Snapshot, len(providerNames))
 	for _, p := range providerNames {
 		s[p] = Outcomes{
-			OK:    counters[p][outcomeOK].Value(),
-			Quota: counters[p][outcomeQuota].Value(),
-			Error: counters[p][outcomeError].Value(),
+			OK:      counters[p][outcomeOK].Value(),
+			Quota:   counters[p][outcomeQuota].Value(),
+			Error:   counters[p][outcomeError].Value(),
+			Retries: retryCounters[p].Value(),
 		}
 	}
 	return s

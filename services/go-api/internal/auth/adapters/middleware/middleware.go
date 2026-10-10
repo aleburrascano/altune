@@ -9,9 +9,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -114,6 +112,11 @@ func bearerToken(authHeader string) (string, bool) {
 	return token, true
 }
 
+const (
+	codeAuthThrottled   = "auth.throttled"
+	codeAuthUnavailable = "auth.unavailable"
+)
+
 type rejectResponse struct {
 	Detail string `json:"detail"`
 	Reason string `json:"reason"`
@@ -141,7 +144,7 @@ func (rej rejecter) rejectClientCancelled(w http.ResponseWriter, r *http.Request
 		"error", err.Error(),
 		"path", r.URL.Path,
 	)
-	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
+	writeAuthUnavailable(w)
 }
 
 func (rej rejecter) rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
@@ -150,8 +153,18 @@ func (rej rejecter) rejectThrottled(w http.ResponseWriter, r *http.Request, retr
 		"client", clientKey(r),
 		"path", r.URL.Path,
 	)
-	w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(retryAfter.Seconds()))))
-	httputil.WriteError(w, http.StatusTooManyRequests, "too many failed authentication attempts")
+	w.Header().Set("Retry-After", httputil.RetryAfterSeconds(retryAfter))
+	httputil.WriteJSON(w, http.StatusTooManyRequests, httputil.ErrorResponse{
+		Detail: "too many failed authentication attempts",
+		Code:   codeAuthThrottled,
+	})
+}
+
+func writeAuthUnavailable(w http.ResponseWriter) {
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, httputil.ErrorResponse{
+		Detail: "authentication unavailable",
+		Code:   codeAuthUnavailable,
+	})
 }
 
 func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
@@ -160,7 +173,7 @@ func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Req
 		"error", err.Error(),
 		"path", r.URL.Path,
 	)
-	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
+	writeAuthUnavailable(w)
 }
 
 func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {

@@ -5,13 +5,16 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -394,5 +397,123 @@ func TestLiveTransport_PacedHostRetries429ThenSucceeds(t *testing.T) {
 				t.Fatalf("host %q is unpaced", h)
 			}
 		})
+	}
+}
+
+type retryLogRecorder struct {
+	mu    sync.Mutex
+	warns []map[string]string
+}
+
+func (h *retryLogRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *retryLogRecorder) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != slog.LevelWarn {
+		return nil
+	}
+	attrs := map[string]string{"msg": r.Message}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.String()
+		return true
+	})
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.warns = append(h.warns, attrs)
+	return nil
+}
+
+func (h *retryLogRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *retryLogRecorder) WithGroup(string) slog.Handler { return h }
+
+func captureRetryLogs(t *testing.T) *retryLogRecorder {
+	t.Helper()
+	rec := &retryLogRecorder{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(rec))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return rec
+}
+
+const retrySecretQuery = "q=private+search+text"
+
+func secretReq(t *testing.T) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"https://api.deezer.com/search/private-path?"+retrySecretQuery, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req
+}
+
+func roundTripRecordingRetries(t *testing.T, steps []fakeStep) []string {
+	t.Helper()
+	var delays []time.Duration
+	lt := recordDelays(&fakeRT{steps: steps}, &delays)
+	var retried []string
+	lt.onRetry = func(host string) { retried = append(retried, host) }
+	resp, err := lt.RoundTrip(secretReq(t))
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	_ = resp.Body.Close()
+	return retried
+}
+
+func TestLiveTransport_LogsAndCountsEachRetriedAttempt(t *testing.T) {
+	logs := captureRetryLogs(t)
+
+	retried := roundTripRecordingRetries(t, []fakeStep{{status: 503}, {status: 429}, {status: 200}})
+
+	if len(logs.warns) != 2 {
+		t.Fatalf("got %d Warn records, want 2 (one per retried attempt): %v", len(logs.warns), logs.warns)
+	}
+	for i, want := range []struct{ attempt, status string }{{"2", "503"}, {"3", "429"}} {
+		w := logs.warns[i]
+		if w["msg"] != "provider.retry" || w["host"] != "api.deezer.com" || w["attempt"] != want.attempt || w["status"] != want.status || w["delay"] == "" {
+			t.Errorf("warn %d = %v, want provider.retry host=api.deezer.com attempt=%s status=%s with a delay", i, w, want.attempt, want.status)
+		}
+	}
+	if len(retried) != 2 || retried[0] != "api.deezer.com" {
+		t.Errorf("retry recorder saw %v, want two retries on api.deezer.com", retried)
+	}
+}
+
+func TestLiveTransport_RetryAfterTransportErrorNamesTheErrorClass(t *testing.T) {
+	logs := captureRetryLogs(t)
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
+
+	roundTripRecordingRetries(t, []fakeStep{{err: dialErr}, {status: 200}})
+
+	if len(logs.warns) != 1 || logs.warns[0]["error_class"] != "dial" {
+		t.Fatalf("warns = %v, want one with error_class=dial", logs.warns)
+	}
+}
+
+func TestLiveTransport_RetryLogCarriesNoPathOrQuery(t *testing.T) {
+	logs := captureRetryLogs(t)
+
+	roundTripRecordingRetries(t, []fakeStep{{status: 503}, {status: 200}})
+
+	if len(logs.warns) == 0 {
+		t.Fatal("no retry Warn written")
+	}
+	for _, w := range logs.warns {
+		for k, v := range w {
+			if strings.Contains(v, "private") || strings.Contains(v, "/search") {
+				t.Errorf("retry log attr %s=%q leaks the URL path or query", k, v)
+			}
+		}
+	}
+}
+
+func TestLiveTransport_FirstAttemptSuccessLogsNothing(t *testing.T) {
+	logs := captureRetryLogs(t)
+
+	retried := roundTripRecordingRetries(t, []fakeStep{{status: 200}})
+
+	if len(logs.warns) != 0 || len(retried) != 0 {
+		t.Fatalf("first-attempt success wrote %d Warn records and %d retries, want none", len(logs.warns), len(retried))
 	}
 }

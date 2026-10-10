@@ -11,7 +11,13 @@ import (
 
 var errTrailingData = errors.New("trailing data after JSON value")
 
+const codeInvalidID = "request.invalid_id"
+
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return DecodeJSONWithCode(w, r, dst, "request.invalid_body")
+}
+
+func DecodeJSONWithCode(w http.ResponseWriter, r *http.Request, dst any, invalidCode string) bool {
 	err := decodeSingleValue(r, dst)
 	if err == nil {
 		return true
@@ -21,7 +27,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 		WriteJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Detail: "request body too large", Code: "request.too_large"})
 		return false
 	}
-	BadRequestCode(w, "request.invalid_body", "invalid request body")
+	BadRequestCode(w, invalidCode, "invalid request body")
 	return false
 }
 
@@ -39,7 +45,7 @@ func decodeSingleValue(r *http.Request, dst any) error {
 func PathID[T any](w http.ResponseWriter, r *http.Request, name string, parse func(string) (T, error), invalidMsg string) (T, bool) {
 	value, err := parse(chi.URLParam(r, name))
 	if err != nil {
-		BadRequest(w, invalidMsg)
+		BadRequestCode(w, codeInvalidID, invalidMsg)
 		var zero T
 		return zero, false
 	}

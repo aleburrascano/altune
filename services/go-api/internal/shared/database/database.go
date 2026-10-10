@@ -14,7 +14,9 @@ var ErrUnreachable = errors.New("database unreachable")
 
 var connectTimeout = 10 * time.Second
 
-const defaultMaxConns = 20
+const defaultMaxConns = 6
+
+const idleSessionRelease = time.Minute
 
 func NewPool(ctx context.Context, databaseURL string, maxConns int) (*pgxpool.Pool, error) {
 	cfg, err := poolConfig(databaseURL, maxConns)
@@ -52,6 +54,7 @@ func poolConfig(databaseURL string, maxConns int) (*pgxpool.Config, error) {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
 	cfg.MaxConns = poolCeiling(maxConns)
+	cfg.MaxConnIdleTime = idleSessionRelease
 	return cfg, nil
 }
 

@@ -31,7 +31,7 @@ type Config struct {
 
 	DatabaseURL string `env:"DATABASE_URL"`
 
-	DBPoolMaxConns int `env:"DB_POOL_MAX_CONNS" envDefault:"20"`
+	DBPoolMaxConns int `env:"DB_POOL_MAX_CONNS" envDefault:"6"`
 
 	SupabaseProjectURL string `env:"SUPABASE_PROJECT_URL"`
 	SupabaseJWTAud     string `env:"SUPABASE_JWT_AUD" envDefault:"authenticated"`

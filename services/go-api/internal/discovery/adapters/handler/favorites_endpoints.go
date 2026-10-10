@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 )
@@ -100,8 +99,7 @@ func decodeFavorite(w http.ResponseWriter, r *http.Request) (shared.UserId, doma
 	}
 
 	var req FavoriteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidBody, "invalid request body")
+	if !httputil.DecodeJSONWithCode(w, r, &req, requestCodeInvalidBody) {
 		return userId, domain.ResultKindUnknown, req, false
 	}
 	kind, err := domain.ParseResultKind(req.Kind)

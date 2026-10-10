@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -181,5 +183,103 @@ func TestChartProvidersFetchOverTheGivenFactorysTransport(t *testing.T) {
 		if e.Term != stubbedChartTerm {
 			t.Errorf("chart term = %q, want the stub transport's %q", e.Term, stubbedChartTerm)
 		}
+	}
+}
+
+type warnRecorder struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *warnRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *warnRecorder) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+
+func (h *warnRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *warnRecorder) WithGroup(string) slog.Handler { return h }
+
+func (h *warnRecorder) warnsNaming(flag string) []map[string]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []map[string]string
+	for _, r := range h.records {
+		attrs := map[string]string{}
+		r.Attrs(func(a slog.Attr) bool {
+			attrs[a.Key] = a.Value.String()
+			return true
+		})
+		if r.Level == slog.LevelWarn && attrs["flag"] == flag {
+			out = append(out, attrs)
+		}
+	}
+	return out
+}
+
+func recordWarnings(t *testing.T) *warnRecorder {
+	t.Helper()
+	rec := &warnRecorder{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(rec))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return rec
+}
+
+func TestProviderTransport_IgnoredReplayOptInWarnsNamingFlagAndEnv(t *testing.T) {
+	rec := recordWarnings(t)
+
+	rt, err := providerTransport(&config.Config{Env: "production", ProviderReplayOptIn: true, ProviderReplayDir: writeFixture(t)})
+	if err != nil || rt != nil {
+		t.Fatalf("got transport %v err %v, want nil nil", rt, err)
+	}
+
+	warns := rec.warnsNaming("PROVIDER_REPLAY_ENABLED")
+	if len(warns) != 1 {
+		t.Fatalf("got %d PROVIDER_REPLAY_ENABLED warnings, want 1", len(warns))
+	}
+	if warns[0]["env"] != "production" {
+		t.Errorf("warning env = %q, want production", warns[0]["env"])
+	}
+}
+
+func TestProviderTransport_ReplayOptInOffLogsNothing(t *testing.T) {
+	rec := recordWarnings(t)
+
+	if _, err := providerTransport(&config.Config{Env: "production", ProviderReplayDir: writeFixture(t)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := len(rec.records); n != 0 {
+		t.Fatalf("got %d log records with the opt-in off, want 0", n)
+	}
+}
+
+func TestWarnIgnoredStartupOptIns_NamesEachIgnoredHook(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  config.Config
+		flag string
+		want int
+	}{
+		{"test auth in production", config.Config{Env: "production", TestAuthOptIn: true}, "TEST_AUTH_ENABLED", 1},
+		{"fixture in staging", config.Config{Env: "staging", AcquisitionFixtureOptIn: true}, "ACQUISITION_FIXTURE_ENABLED", 1},
+		{"fixture honoured in test", config.Config{Env: "test", AcquisitionFixtureOptIn: true}, "ACQUISITION_FIXTURE_ENABLED", 0},
+		{"test auth off", config.Config{Env: "production"}, "TEST_AUTH_ENABLED", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := recordWarnings(t)
+
+			warnIgnoredStartupOptIns(t.Context(), &tc.cfg)
+
+			if got := len(rec.warnsNaming(tc.flag)); got != tc.want {
+				t.Fatalf("got %d %s warnings, want %d", got, tc.flag, tc.want)
+			}
+		})
 	}
 }

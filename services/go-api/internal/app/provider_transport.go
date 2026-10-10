@@ -4,8 +4,10 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/httptrace"
 	"altune/go-api/internal/shared/providerhttp"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +19,7 @@ import (
 
 func providerTransport(cfg *config.Config) (http.RoundTripper, error) {
 	if !cfg.ProviderReplayEnabled() {
+		warnIgnoredOptIn(context.Background(), cfg, "PROVIDER_REPLAY_ENABLED", cfg.ProviderReplayOptIn)
 		return nil, nil
 	}
 	exchanges, err := loadReplayFixtures(cfg.ProviderReplayDir)
@@ -24,6 +27,23 @@ func providerTransport(cfg *config.Config) (http.RoundTripper, error) {
 		return nil, err
 	}
 	return httptrace.NewStickyReplayer(exchanges), nil
+}
+
+func warnIgnoredStartupOptIns(ctx context.Context, cfg *config.Config) {
+	if !cfg.TestAuthEnabled() {
+		warnIgnoredOptIn(ctx, cfg, "TEST_AUTH_ENABLED", cfg.TestAuthOptIn)
+	}
+	if !cfg.AcquisitionFixtureEnabled() {
+		warnIgnoredOptIn(ctx, cfg, "ACQUISITION_FIXTURE_ENABLED", cfg.AcquisitionFixtureOptIn)
+	}
+}
+
+func warnIgnoredOptIn(ctx context.Context, cfg *config.Config, flag string, optedIn bool) {
+	if !optedIn {
+		return
+	}
+	slog.WarnContext(ctx, "startup opt-in ignored: honoured only when ENV is explicitly development or test",
+		"flag", flag, "env", cfg.Env)
 }
 
 func loadReplayFixtures(dir string) ([]httptrace.Exchange, error) {
@@ -69,7 +89,7 @@ func countedProviderTransport(base http.RoundTripper) http.RoundTripper {
 }
 
 var sharedLiveTransport = sync.OnceValue(func() http.RoundTripper {
-	return countedProviderTransport(providerhttp.NewLiveTransport())
+	return countedProviderTransport(providerhttp.NewLiveTransport(providerhttp.WithRetryRecorder(providermetrics.RecordRetry)))
 })
 
 type clientFactory struct {
