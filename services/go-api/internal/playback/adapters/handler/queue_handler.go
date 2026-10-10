@@ -6,6 +6,9 @@ import (
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
+	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -113,7 +116,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 
 	sourceId, err := domain.FormatQueueSource(sourceFromDTO(body.Source), body.SourceId)
 	if err != nil {
-		httputil.HandleServiceError(w, r, err)
+		writeQueueError(w, r, err)
 		return
 	}
 
@@ -127,7 +130,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		NaturalOrder: body.NaturalOrder,
 	})
 	if err != nil {
-		httputil.HandleServiceError(w, r, err)
+		writeQueueError(w, r, err)
 		return
 	}
 
@@ -151,7 +154,7 @@ func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request
 		PositionMs:     body.PositionMs,
 	})
 	if err != nil {
-		httputil.HandleServiceError(w, r, err)
+		writeQueueError(w, r, err)
 		return
 	}
 
@@ -166,7 +169,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	view, err := h.svc.ResumeView(r.Context(), userId)
 	if err != nil {
-		httputil.HandleServiceError(w, r, err)
+		writeQueueError(w, r, err)
 		return
 	}
 
@@ -182,11 +185,23 @@ func (h *QueueHandler) handleForget(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Forget(r.Context(), userId); err != nil {
-		httputil.HandleServiceError(w, r, err)
+		writeQueueError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+const statusClientClosedRequest = 499
+
+func writeQueueError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+		slog.InfoContext(r.Context(), "playback.queue_state.client_cancelled",
+			"method", r.Method, "path", r.URL.Path, "error", err)
+		w.WriteHeader(statusClientClosedRequest)
+		return
+	}
+	httputil.HandleServiceError(w, r, err)
 }
 
 func toResponse(view *service.ResumeView) queueStateResponse {

@@ -22,38 +22,63 @@ func capPerProvider(perProvider [][]domain.SearchResult) [][]domain.SearchResult
 	return capped
 }
 
+type matchKey struct {
+	title    string
+	subtitle string
+}
+
+func matchKeyOf(r domain.SearchResult) matchKey {
+	return matchKey{
+		title:    textnorm.NormalizeForMatch(r.Title),
+		subtitle: textnorm.NormalizeForMatch(r.Subtitle),
+	}
+}
+
+type keyedResult struct {
+	result domain.SearchResult
+	key    matchKey
+}
+
+func keyed(r domain.SearchResult) keyedResult {
+	return keyedResult{result: r, key: matchKeyOf(r)}
+}
+
 func Merge(perProvider [][]domain.SearchResult) []Entity {
 	perProvider = capPerProvider(perProvider)
 	ambiguous := ambiguousArtistNames(perProvider)
 	entities := make([]Entity, 0)
+	keys := make([]matchKey, 0)
 	for _, group := range perProvider {
 		for rank, c := range group {
 			cProviders := providersOf(c)
-			i, tier, ok := findMergeTarget(entities, c, ambiguous)
+			kc := keyed(c)
+			i, tier, ok := findMergeTarget(entities, keys, kc, ambiguous)
 			if !ok {
 				ranks := make(map[domain.ProviderName]int, len(cProviders))
 				for p := range cProviders {
 					ranks[p] = rank
 				}
 				entities = append(entities, Entity{Result: c, BestRank: ranks})
+				keys = append(keys, kc.key)
 				continue
 			}
 			entities[i].Result = mergeInto(entities[i].Result, c, tier)
+			keys[i] = matchKeyOf(entities[i].Result)
 			recordBestRank(&entities[i], cProviders, rank)
 		}
 	}
 	return entities
 }
 
-func findMergeTarget(entities []Entity, c domain.SearchResult, ambiguous map[string]bool) (int, domain.EntityResolutionTier, bool) {
+func findMergeTarget(entities []Entity, keys []matchKey, c keyedResult, ambiguous map[string]bool) (int, domain.EntityResolutionTier, bool) {
 	for i := range entities {
-		tier, ok := sameEntity(entities[i].Result, c)
+		tier, ok := sameEntity(keyedResult{result: entities[i].Result, key: keys[i]}, c)
 		if !ok {
 			continue
 		}
-		if c.Kind == domain.ResultKindArtist &&
+		if c.result.Kind == domain.ResultKindArtist &&
 			tier == domain.EntityResolutionNone &&
-			ambiguous[textnorm.NormalizeForMatch(c.Title)] {
+			ambiguous[c.key.title] {
 			continue
 		}
 		return i, tier, true
@@ -69,45 +94,42 @@ func recordBestRank(e *Entity, providers map[domain.ProviderName]bool, rank int)
 	}
 }
 
-func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
+func sameEntity(ke, kc keyedResult) (domain.EntityResolutionTier, bool) {
+	e, c := ke.result, kc.result
 	if e.Kind != c.Kind {
 		return domain.EntityResolutionNone, false
 	}
+	if tier, ok, decided := sameIdentity(e, c); decided {
+		return tier, ok
+	}
+	return domain.EntityResolutionNone, sameName(e.Kind, ke.key, kc.key)
+}
 
+func sameIdentity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool, bool) {
 	if e.ISRC != "" && c.ISRC != "" && e.ISRC == c.ISRC {
-		return domain.EntityResolutionISRC, true
+		return domain.EntityResolutionISRC, true, true
 	}
 	if e.Kind == domain.ResultKindAlbum && e.UPC != "" && c.UPC != "" && e.UPC == c.UPC &&
 		(e.MBID == "" || c.MBID == "" || e.MBID == c.MBID) {
-		return domain.EntityResolutionUPC, true
+		return domain.EntityResolutionUPC, true, true
 	}
 	if e.MBID != "" && c.MBID != "" {
 		if e.MBID == c.MBID {
-			return domain.EntityResolutionMBID, true
+			return domain.EntityResolutionMBID, true, true
 		}
-		return domain.EntityResolutionNone, false
+		return domain.EntityResolutionNone, false, true
 	}
-
 	if bridgeMatch(e, c) {
-		return domain.EntityResolutionBridge, true
+		return domain.EntityResolutionBridge, true, true
 	}
+	return domain.EntityResolutionNone, false, false
+}
 
-	if e.Kind == domain.ResultKindArtist {
-		name := textnorm.NormalizeForMatch(e.Title)
-		if name == "" {
-			return domain.EntityResolutionNone, false
-		}
-		return domain.EntityResolutionNone, name == textnorm.NormalizeForMatch(c.Title)
+func sameName(kind domain.ResultKind, e, c matchKey) bool {
+	if kind == domain.ResultKindArtist {
+		return e.title != "" && e.title == c.title
 	}
-
-	if textnorm.NormalizeForMatch(e.Subtitle) != textnorm.NormalizeForMatch(c.Subtitle) {
-		return domain.EntityResolutionNone, false
-	}
-	title := textnorm.NormalizeForMatch(e.Title)
-	if title != "" && title == textnorm.NormalizeForMatch(c.Title) {
-		return domain.EntityResolutionNone, true
-	}
-	return domain.EntityResolutionNone, false
+	return e.subtitle == c.subtitle && e.title != "" && e.title == c.title
 }
 
 func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) domain.SearchResult {

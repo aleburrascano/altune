@@ -1275,6 +1275,7 @@ func TestValidate_AudioKeyPrefixRefusedWhenEnvEmpty(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	cfg.Env = ""
+	cfg.MusicBrainzUserAgent = "altune/1 (a@example.com)"
 	cfg.AudioKeyPrefix = "staging/"
 	if err := cfg.validate(); err == nil || !searchString(err.Error(), "AUDIO_KEY_PREFIX") {
 		t.Fatalf("expected AUDIO_KEY_PREFIX error for empty ENV, got: %v", err)
@@ -1703,5 +1704,99 @@ func TestLoad_PlaybackQueueRateRejectsBadValues(t *testing.T) {
 				t.Fatal("expected Load to fail")
 			}
 		})
+	}
+}
+
+func TestLoad_ProductionAliasEnvRequiresDatabaseTLS(t *testing.T) {
+	for _, env := range []string{"prod", "prd", "live", "Production", " PRODUCTION "} {
+		t.Run(env, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"ENV":                    env,
+				"DATABASE_URL":           "postgres://u:sekret@db.example.com/x?sslmode=disable",
+				"MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)",
+			}))
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
+				t.Fatalf("ENV=%q with plaintext DATABASE_URL: want DATABASE_URL error, got %v", env, err)
+			}
+		})
+	}
+}
+
+func TestLoad_ProductionAliasEnvRejectsPlaintextObjectStorage(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"ENV":                    "prod",
+		"OCI_S3_ENDPOINT":        "http://objects.example.com",
+		"MUSICBRAINZ_USER_AGENT": "altune/1 (a@example.com)",
+	}))
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "OCI_S3_ENDPOINT") {
+		t.Fatalf("ENV=prod with http OCI_S3_ENDPOINT: want OCI_S3_ENDPOINT error, got %v", err)
+	}
+}
+
+func TestLoad_ProductionAliasEnvRequiresMusicBrainzUserAgent(t *testing.T) {
+	for _, env := range []string{"prod", "live", "Production"} {
+		t.Run(env, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{"ENV": env}))
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), "MUSICBRAINZ_USER_AGENT") {
+				t.Fatalf("ENV=%q without MUSICBRAINZ_USER_AGENT: want error naming it, got %v", env, err)
+			}
+		})
+	}
+}
+
+func TestLoad_KnownNonProductionEnvSkipsProductionChecks(t *testing.T) {
+	for _, env := range []string{"development", " Test ", "STAGING"} {
+		t.Run(env, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"ENV":          env,
+				"DATABASE_URL": "postgres://u:sekret@db.example.com/x?sslmode=disable",
+			}))
+
+			if _, err := Load(); err != nil {
+				t.Fatalf("ENV=%q: unexpected error %v", env, err)
+			}
+		})
+	}
+}
+
+func TestLoad_BehavioralCorpusPathReadOnlyDirRejected(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory write permission")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": dir + "/corpus.json"}))
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load accepted BEHAVIORAL_CORPUS_PATH in a read-only directory")
+	}
+	if !strings.Contains(err.Error(), "BEHAVIORAL_CORPUS_PATH") || !strings.Contains(err.Error(), "not writable") {
+		t.Errorf("error = %v, want it to name BEHAVIORAL_CORPUS_PATH and say not writable", err)
+	}
+}
+
+func TestLoad_BehavioralCorpusPathProbeLeavesNoFile(t *testing.T) {
+	dir := t.TempDir()
+	setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": dir + "/corpus.json"}))
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("write probe left %d entries behind", len(entries))
 	}
 }

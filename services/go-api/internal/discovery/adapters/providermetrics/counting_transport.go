@@ -16,6 +16,10 @@ const (
 	providerYouTube     = "youtube"
 	providerMusicBrainz = "musicbrainz"
 	providerLastFM      = "lastfm"
+	providerDiscogs     = "discogs"
+	providerGenius      = "genius"
+	providerTheAudioDB  = "theaudiodb"
+	providerFanart      = "fanart"
 	providerOther       = "other"
 )
 
@@ -35,6 +39,10 @@ var providerNames = []string{
 	providerYouTube,
 	providerMusicBrainz,
 	providerLastFM,
+	providerDiscogs,
+	providerGenius,
+	providerTheAudioDB,
+	providerFanart,
 	providerOther,
 }
 
@@ -63,6 +71,10 @@ var hostSuffixes = []struct {
 	{"last.fm", providerLastFM},
 	{"audioscrobbler.com", providerLastFM},
 	{"lastfm.freetls.fastly.net", providerLastFM},
+	{"discogs.com", providerDiscogs},
+	{"genius.com", providerGenius},
+	{"theaudiodb.com", providerTheAudioDB},
+	{"fanart.tv", providerFanart},
 }
 
 var counters = newCounters()
