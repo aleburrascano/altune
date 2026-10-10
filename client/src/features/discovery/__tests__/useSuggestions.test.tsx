@@ -121,6 +121,26 @@ describe('useAutocompleteSuggestions asks for suggestions once the typing settle
   });
 });
 
+describe('useAutocompleteSuggestions keys a query by its canonical spacing', () => {
+  it('sends one suggest request for "A  b" and "A b"', async () => {
+    const rendered = renderSuggestions();
+
+    act(() => {
+      rendered.rerender({ text: 'A  b' });
+    });
+    settle();
+    await waitFor(() => expect(rendered.result.current.data).toBeDefined());
+    act(() => {
+      rendered.rerender({ text: 'A b' });
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(SUGGEST_DEBOUNCE_MS);
+    });
+
+    expect(suggestRequests().map((request) => request.query)).toEqual(['q=a+b&limit=5']);
+  });
+});
+
 describe('useAutocompleteSuggestions cancels a suggest request its successor supersedes', () => {
   it('aborts the in-flight request when a later query starts', async () => {
     __http.reset();

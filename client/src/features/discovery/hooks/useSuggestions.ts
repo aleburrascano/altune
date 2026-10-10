@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
-import { isSearchableQuery } from '@features/discovery/domain/searchPaging';
+import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import { useDiscoverPort } from '@features/discovery/ports/DiscoverPortProvider';
 
 export const SUGGEST_DEBOUNCE_MS = 150;
@@ -13,7 +13,10 @@ export const SEARCH_DEBOUNCE_MS = 300;
 const SUGGESTION_LIMIT = 5;
 
 export function useAutocompleteSuggestions(inputValue: string) {
-  const debouncedQuery = useSettledValue(inputValue.trim().toLowerCase(), SUGGEST_DEBOUNCE_MS);
+  const debouncedQuery = useSettledValue(
+    normalizeQuery(inputValue).toLowerCase(),
+    SUGGEST_DEBOUNCE_MS,
+  );
   const port = useDiscoverPort();
   const isSuggestEnabled = useDiscoverFetchEnabled();
 

@@ -480,3 +480,80 @@ describe('useDebouncedSearch preserves the search it owns', () => {
     expect(second.result.current.inputValue).toBe('radiohead');
   });
 });
+
+describe('useDebouncedSearch commits one canonical query however the spacing was typed', () => {
+  it('onChangeText commits "A  b" and "A b" as the same query', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('A  b');
+      jest.advanceTimersByTime(OPTIONS.debounceMs);
+    });
+    const spaced = result.current.committedQuery;
+    act(() => {
+      result.current.onChangeText('A b');
+      jest.advanceTimersByTime(OPTIONS.debounceMs);
+    });
+
+    expect(spaced).toBe('A b');
+    expect(result.current.committedQuery).toBe('A b');
+  });
+
+  it('onSubmit commits the inner-whitespace-collapsed query', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText(' A \t  b ');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('A b');
+  });
+
+  it('setQuery commits the inner-whitespace-collapsed query', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('A    b');
+    });
+
+    expect(result.current.committedQuery).toBe('A b');
+  });
+});
+
+describe('useDebouncedSearch keeps an explicit submit when the same query is re-typed', () => {
+  it('stays explicit after re-typing the submitted query and waiting out the debounce', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ab');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+    act(() => {
+      result.current.onChangeText('ab ');
+      jest.advanceTimersByTime(OPTIONS.debounceMs);
+    });
+
+    expect(result.current.committedQuery).toBe('ab');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
+  it('turns non-explicit once a different query is typed', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('ab');
+    });
+    act(() => {
+      result.current.onChangeText('abc');
+      jest.advanceTimersByTime(OPTIONS.debounceMs);
+    });
+
+    expect(result.current.committedQuery).toBe('abc');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+});

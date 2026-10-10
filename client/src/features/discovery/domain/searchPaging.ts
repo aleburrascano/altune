@@ -18,6 +18,12 @@ export const MAX_SEARCH_PAGES = 25;
 
 export const MAX_SEARCH_OFFSET = 200;
 
+const WHITESPACE_RUN = /\s+/g;
+
+export function normalizeQuery(raw: string): string {
+  return raw.trim().replace(WHITESPACE_RUN, ' ');
+}
+
 export function isSearchableQuery(text: string): boolean {
   return text.trim().length >= MIN_QUERY_LENGTH;
 }

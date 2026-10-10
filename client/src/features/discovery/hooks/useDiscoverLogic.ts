@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
-import { isSearchableQuery } from '@features/discovery/domain/searchPaging';
+import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
 import {
   SEARCH_DEBOUNCE_MS,
   useAutocompleteSuggestions,
@@ -117,7 +117,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   };
   const resultsIncomplete = resultsIncompleteForState(hookState);
   const correction = correctionForResponse(searchData);
-  const trimmedInput = search.inputValue.trim();
+  const trimmedInput = normalizeQuery(search.inputValue);
   const isSearchPending = isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
 

@@ -13,6 +13,8 @@ import {
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
 } from '@features/discovery/domain/searchPaging';
+import { setSearchState } from '@features/discovery/domain/searchState';
+import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
@@ -504,15 +506,45 @@ describe('useDiscoverSearch history saving', () => {
     expect(savedFlags()).toEqual([true, false]);
   });
 
-  it('does not resend saveHistory on a react-query retry of an explicit search', async () => {
+  it('resends saveHistory on the retry of an explicit search whose first attempt failed', async () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } },
     });
-    __http.replyOnce(SEARCH, { status: 503, json: { detail: 'lost response' } });
+    __http.replyOnce(SEARCH, { status: 503, json: { detail: 'unavailable' } });
     __http.reply(SEARCH, { json: singlePage() });
     const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
 
     await waitFor(() => expect(result.current.data).toBeDefined());
+
+    expect(savedFlags()).toEqual([true, true]);
+  });
+
+  it('resends saveHistory when a cancelled first page of an explicit search runs again', async () => {
+    __http.hang(SEARCH);
+    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
+    await waitFor(() => expect(searchRequests()).toHaveLength(1));
+
+    await act(async () => {
+      await queryClient.cancelQueries();
+    });
+    __http.reset();
+    __http.reply(SEARCH, { json: singlePage() });
+    await act(async () => {
+      await queryClient.refetchQueries();
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(savedFlags()).toEqual([true]);
+  });
+
+  it('saves once after a successful first page: a later refetch does not resave', async () => {
+    __http.reply(SEARCH, { json: singlePage() });
+    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    await act(async () => {
+      await queryClient.refetchQueries();
+    });
 
     expect(savedFlags()).toEqual([true, false]);
   });
@@ -523,5 +555,90 @@ describe('useDiscoverSearch history saving', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
 
     expect(savedFlags()).toEqual([false]);
+  });
+});
+
+describe('useDiscoverSearch retries only what the shared classifier calls transient', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } },
+    });
+    __http.reset();
+  });
+
+  it('does not re-send a search the server rejected with a 400', async () => {
+    __http.reply(SEARCH, { status: 400, json: { detail: 'bad query' } });
+    const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
+
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(searchRequests()).toHaveLength(1);
+  });
+
+  it('retries a 503 once, then surfaces the error', async () => {
+    __http.reply(SEARCH, { status: 503, json: { detail: 'unavailable' } });
+    const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
+
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+
+    expect(searchRequests()).toHaveLength(TWO_REQUESTS);
+  });
+});
+
+describe('re-typing the submitted query does not re-send the search', () => {
+  const DEBOUNCE_MS = 300;
+
+  function useSearchScreen() {
+    const search = useDebouncedSearch({ debounceMs: DEBOUNCE_MS });
+    const results = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
+    return { search, results };
+  }
+
+  function page(): DiscoverySearchResponse {
+    return { ...endlessPage(0), results: [resultFixture()], has_more: false };
+  }
+
+  async function flush(ms: number): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setSearchState('', '');
+    __http.reset();
+    __http.reply(SEARCH, { json: page() });
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    jest.useRealTimers();
+  });
+
+  it('sends one search when "ab" is submitted and then typed again', async () => {
+    const { result } = renderHook(useSearchScreen, { wrapper });
+    act(() => result.current.search.onChangeText('ab'));
+    act(() => result.current.search.onSubmit());
+    await flush(0);
+
+    act(() => result.current.search.onChangeText('ab'));
+    await flush(DEBOUNCE_MS);
+
+    expect(savedFlags()).toEqual([true]);
+    expect(result.current.results.isLoading).toBe(false);
+  });
+
+  it('still saves history for an explicit submit of a changed query', async () => {
+    const { result } = renderHook(useSearchScreen, { wrapper });
+    act(() => result.current.search.setQuery('ab'));
+    await flush(0);
+
+    act(() => result.current.search.onChangeText('abc'));
+    act(() => result.current.search.onSubmit());
+    await flush(DEBOUNCE_MS);
+
+    expect(savedFlags()).toEqual([true, true]);
   });
 });

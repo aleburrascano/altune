@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -317,5 +318,108 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 	}
 	if got := storedSearchTextsOf(t, pool, owner); len(got) != 0 {
 		t.Errorf("stored search text after an append raced the open erase = %v, want none", got)
+	}
+}
+
+const (
+	resendWithinWindow = 10 * time.Second
+	pastTheWindow      = historyResendWindow + time.Second
+	concurrentResends  = 8
+)
+
+func newResendTestUser(t *testing.T, pool *pgxpool.Pool) shared.UserId {
+	t.Helper()
+	owner := shared.NewUserId(uuid.New())
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM discovery_search_history WHERE user_id = $1`, owner.UUID())
+	})
+	return owner
+}
+
+func historyRowCountOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM discovery_search_history WHERE user_id = $1`, owner.UUID(),
+	).Scan(&count); err != nil {
+		t.Fatalf("count history rows: %v", err)
+	}
+	return count
+}
+
+func TestPgxSearchHistoryRepo_Insert_AResendWithinTheWindowInsertsOnce(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	repo := NewPgxSearchHistoryRepository(pool)
+	owner := newResendTestUser(t, pool)
+	first := time.Now().UTC()
+
+	seedHistoryEntry(t, repo, owner, "resend radiohead", first)
+	seedHistoryEntry(t, repo, owner, "resend radiohead", first.Add(resendWithinWindow))
+
+	if got := historyRowCountOf(t, pool, owner); got != 1 {
+		t.Errorf("rows after a resend within the window = %d, want 1", got)
+	}
+}
+
+func TestPgxSearchHistoryRepo_Insert_TheSameQueryAfterTheWindowInsertsAgain(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	repo := NewPgxSearchHistoryRepository(pool)
+	owner := newResendTestUser(t, pool)
+	first := time.Now().UTC().Add(-pastTheWindow)
+
+	seedHistoryEntry(t, repo, owner, "again radiohead", first)
+	seedHistoryEntry(t, repo, owner, "again radiohead", first.Add(pastTheWindow))
+
+	if got := historyRowCountOf(t, pool, owner); got != 2 {
+		t.Errorf("rows for the same query past the window = %d, want 2", got)
+	}
+}
+
+func TestPgxSearchHistoryRepo_Insert_ADifferentQueryWithinTheWindowInserts(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	repo := NewPgxSearchHistoryRepository(pool)
+	owner := newResendTestUser(t, pool)
+	first := time.Now().UTC()
+
+	seedHistoryEntry(t, repo, owner, "radiohead", first)
+	seedHistoryEntry(t, repo, owner, "the national", first.Add(resendWithinWindow))
+
+	if got := historyRowCountOf(t, pool, owner); got != 2 {
+		t.Errorf("rows for two different queries = %d, want 2", got)
+	}
+}
+
+func TestPgxSearchHistoryRepo_Insert_ConcurrentResendsOfOneQueryLeaveOneRow(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	repo := NewPgxSearchHistoryRepository(pool)
+	owner := newResendTestUser(t, pool)
+	at := time.Now().UTC()
+
+	errs := make(chan error, concurrentResends)
+	var wg sync.WaitGroup
+	for range concurrentResends {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- repo.Insert(context.Background(), &domain.SearchHistoryEntry{
+				ID: uuid.New(), UserId: owner, Query: "race radiohead", QueryNorm: "race radiohead", ExecutedAt: at,
+			})
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent Insert: %v", err)
+		}
+	}
+
+	if got := historyRowCountOf(t, pool, owner); got != 1 {
+		t.Errorf("rows after %d concurrent resends = %d, want 1", concurrentResends, got)
 	}
 }
