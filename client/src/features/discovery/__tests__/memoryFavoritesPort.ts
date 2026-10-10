@@ -1,5 +1,5 @@
-import { asFavoriteKey } from '@shared/api-client/ids';
-import type { Favorite, FavoriteRef } from '@shared/api-client/favorites';
+import { asFavoriteKey } from '@shared/apiClient/ids';
+import type { Favorite, FavoriteRef } from '@shared/apiClient/favorites';
 
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 

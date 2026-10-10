@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 

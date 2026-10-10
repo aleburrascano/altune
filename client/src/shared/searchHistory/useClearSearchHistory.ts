@@ -5,7 +5,7 @@ import { useAppMutation } from '@shared/query/useAppMutation';
 import {
   clearSearchHistory,
   type DiscoverySearchHistoryResponse,
-} from '@shared/api-client/discovery';
+} from '@shared/apiClient/discovery';
 import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { discoveryKeys } from '@shared/query/queryKeys';
 

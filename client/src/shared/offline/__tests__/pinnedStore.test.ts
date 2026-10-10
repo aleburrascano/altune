@@ -1,9 +1,9 @@
 import { act } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
-import type { ResolvedAudioUrl } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 import { ApiError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import {
   createMemoryFileStore,
   type MemoryFileStore,

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 

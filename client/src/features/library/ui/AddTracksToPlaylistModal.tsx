@@ -1,8 +1,8 @@
 import type { ComponentProps, ReactElement } from 'react';
 import { ActivityIndicator, FlatList, Modal, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { Text, spacing, useTheme, type Theme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import type { Selection } from '@features/library/hooks/useSelection';

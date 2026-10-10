@@ -14,7 +14,7 @@ import {
   type MemoryFileStore,
 } from '@shared/files/__tests__/memoryFileStore';
 import type { StoredDirectory } from '@shared/files/fileStore';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
 import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
 

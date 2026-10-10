@@ -5,7 +5,7 @@ import {
 } from '@features/discovery/domain/resultDisplay';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
-import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
 
 describe('kindLabel renders the user-facing kind label', () => {
   const cases: [DiscoveryKind, string, string][] = [

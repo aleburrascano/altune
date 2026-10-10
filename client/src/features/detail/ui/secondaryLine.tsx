@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Pressable } from 'react-native';
 
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
-import { withFeaturing } from '@shared/api-client/featuredArtists';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
+import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { Text } from '@shared/ui/primitives/Text';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';

@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';

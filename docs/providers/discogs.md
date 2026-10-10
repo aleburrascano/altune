@@ -182,7 +182,7 @@ Detail-open album enrichment (caps 3–6, mirroring `musicbrainz-enrichment`):
   `WithDiscogsArtistEnrichment`, non-breaking setters) + DTOs.
 - `internal/app/app.go` — both wired, config-gated by `cfg.HasDiscogs()` (`DISCOGS_TOKEN`); nil
   degrades to an empty DTO.
-- Mobile: `shared/api-client/discovery.ts` (`getDiscogsEnrichment` / `getDiscogsArtistEnrichment` +
+- Mobile: `shared/apiClient/discovery.ts` (`getDiscogsEnrichment` / `getDiscogsArtistEnrichment` +
   types), `features/detail/hooks/useDiscogsEnrichment.ts` (album-gated) +
   `useDiscogsArtistEnrichment.ts` (artist-gated), `features/detail/ui/DiscogsEnrichmentSection.tsx`
   (styles/credits/label/community) + `DiscogsArtistSection.tsx` (bio/aka/groups/links), wired into

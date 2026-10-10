@@ -1,5 +1,5 @@
-import type { Favorite, FavoriteRef } from '@shared/api-client/favorites';
-import { asFavoriteKey } from '@shared/api-client/ids';
+import type { Favorite, FavoriteRef } from '@shared/apiClient/favorites';
+import { asFavoriteKey } from '@shared/apiClient/ids';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpFavoritesPort } from '@features/discovery/adapters/http/httpFavoritesPort';

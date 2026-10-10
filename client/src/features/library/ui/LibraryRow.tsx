@@ -15,7 +15,7 @@ import { LibraryRowPlayback } from '@features/library/ui/LibraryRowPlayback';
 import { LibraryRowSelection } from '@features/library/ui/LibraryRowSelection';
 import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';
 import { libraryRowWideStyle, WIDE_TRACK_COLUMNS } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 type WideRowProps = {
   track: TrackResponse;

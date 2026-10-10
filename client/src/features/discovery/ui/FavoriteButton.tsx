@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Heart } from 'lucide-react-native';
 
-import type { FavoriteTarget } from '@shared/api-client/favorites';
+import type { FavoriteTarget } from '@shared/apiClient/favorites';
 import { tapFeedback } from '@shared/ui/haptics';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui';

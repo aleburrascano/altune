@@ -3,7 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { supabase } from '@shared/auth/supabaseClient';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
 import {

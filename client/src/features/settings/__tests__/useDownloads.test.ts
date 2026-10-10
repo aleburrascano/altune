@@ -8,14 +8,14 @@ import {
   buildDangerZoneActions,
   type ClearHistoryState,
 } from '@features/settings/domain/dangerZoneActions';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 jest.mock('@shared/offline/pinnedStore', () => {
   const actual = jest.requireActual('@shared/offline/pinnedStore');
   return { ...actual, pinnedByteTotal: jest.fn(actual.pinnedByteTotal) };
 });
 
-jest.mock('@shared/api-client/audio', () => ({
+jest.mock('@shared/apiClient/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
 }));
 

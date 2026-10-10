@@ -4,7 +4,7 @@ import {
   readDetailHandoff,
 } from '@shared/navigation/detailHandoff';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 function makeResult(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {

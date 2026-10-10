@@ -5,7 +5,7 @@ import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
 import { spacing, radius } from '@shared/ui/theme/tokens';
-import type { DiscoverySuggestion } from '@shared/api-client/discovery';
+import type { DiscoverySuggestion } from '@shared/apiClient/discovery';
 
 interface SuggestionsListProps {
   suggestions: DiscoverySuggestion[];

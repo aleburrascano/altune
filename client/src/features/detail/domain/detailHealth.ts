@@ -2,7 +2,7 @@ import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { isAbort } from '@shared/failure/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
+import type { DiscoveryProviderStatus } from '@shared/apiClient/discovery';
 
 import { hasDegradedStatus } from '@/features/detail/domain/contentStatus';
 

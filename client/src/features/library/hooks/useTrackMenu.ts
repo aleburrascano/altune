@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';

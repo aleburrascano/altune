@@ -1,7 +1,7 @@
 import { defaultFileStore } from '@shared/files/defaultFileStore';
 import { NetworkError } from '@shared/failure/errors';
 import { startDeadline } from '@shared/timing/deadline';
-import { isSafeId, type TrackId } from '@shared/api-client/ids';
+import { isSafeId, type TrackId } from '@shared/apiClient/ids';
 import {
   createFileStoreSlot,
   type FileStore,

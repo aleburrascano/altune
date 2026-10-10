@@ -1,5 +1,5 @@
-import type { PlaylistId } from '@shared/api-client/ids';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistId } from '@shared/apiClient/ids';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 

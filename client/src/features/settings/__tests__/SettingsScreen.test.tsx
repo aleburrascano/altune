@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/api-client';
-import { clearSearchHistory } from '@shared/api-client/discovery';
+import { ApiError, NetworkError } from '@shared/apiClient';
+import { clearSearchHistory } from '@shared/apiClient/discovery';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
-import { backfillFeaturedArtists } from '@shared/api-client/tracks';
+import { backfillFeaturedArtists } from '@shared/apiClient/tracks';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -19,12 +19,12 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
-jest.mock('@shared/api-client/tracks', () => ({
-  ...jest.requireActual('@shared/api-client/tracks'),
+jest.mock('@shared/apiClient/tracks', () => ({
+  ...jest.requireActual('@shared/apiClient/tracks'),
   backfillFeaturedArtists: jest.fn(),
 }));
-jest.mock('@shared/api-client/discovery', () => ({
-  ...jest.requireActual('@shared/api-client/discovery'),
+jest.mock('@shared/apiClient/discovery', () => ({
+  ...jest.requireActual('@shared/apiClient/discovery'),
   clearSearchHistory: jest.fn(),
 }));
 jest.mock('@shared/auth/useSignOut', () => ({
@@ -121,7 +121,7 @@ describe('settings mutation failures', () => {
     ['updated exceeds scanned', { scanned: 3, updated: 12 }],
     ['missing fields', {}],
   ])('backfill: a malformed response (%s) shows a sane fallback', async (_label, json) => {
-    const actual = jest.requireActual('@shared/api-client/tracks');
+    const actual = jest.requireActual('@shared/apiClient/tracks');
     jest.mocked(backfillFeaturedArtists).mockImplementation(actual.backfillFeaturedArtists);
     __http.reply('POST /v1/tracks/featured-backfill', { status: 200, json });
     render(<SettingsScreen />, { wrapper });

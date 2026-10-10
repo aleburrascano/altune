@@ -20,16 +20,16 @@ import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidatio
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
-import { tryParseTrackResponse } from '@shared/api-client/tracks';
-import type { TrackId } from '@shared/api-client/ids';
+import { tryParseTrackResponse } from '@shared/apiClient/tracks';
+import type { TrackId } from '@shared/apiClient/ids';
 import {
   acquisitionOf,
   toFailed,
   toPending,
   toReady,
   toTrackStatus,
-} from '@shared/api-client/trackAcquisition';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/trackAcquisition';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 
 import {

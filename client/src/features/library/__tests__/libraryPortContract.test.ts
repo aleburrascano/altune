@@ -1,6 +1,6 @@
-import { asTrackId } from '@shared/api-client/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
-import { MAX_ALL_TRACKS } from '@shared/api-client/tracks';
+import { asTrackId } from '@shared/apiClient/ids';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
+import { MAX_ALL_TRACKS } from '@shared/apiClient/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';

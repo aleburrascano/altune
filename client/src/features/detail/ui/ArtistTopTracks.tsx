@@ -5,7 +5,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { formatDuration } from '@shared/ui/displayFormat';
 

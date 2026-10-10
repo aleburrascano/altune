@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { libraryKeys } from '@shared/query/queryKeys';
-import type { AlbumGroup } from '@shared/api-client/library';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { AlbumGroup } from '@shared/apiClient/library';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import type { DetailPort } from '@/features/detail/ports/detailPort';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';

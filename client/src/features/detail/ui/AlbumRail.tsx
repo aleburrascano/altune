@@ -13,7 +13,7 @@ import {
 } from '@shared/ui/primitives/usePressableInteraction';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { albumExtras } from '@/features/detail/domain/trackExtras';
 import { SECTION_CAP } from '@features/detail/hooks/useDiscographyFilter';

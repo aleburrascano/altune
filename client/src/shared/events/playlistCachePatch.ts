@@ -1,12 +1,12 @@
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 
-import type { PlaylistId, TrackId } from '@shared/api-client/ids';
+import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
-} from '@shared/api-client/playlistResponse';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/playlistResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
 
 function revisePlaylistEverywhere(

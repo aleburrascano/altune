@@ -17,7 +17,7 @@ function findRepoRoot(): string {
 
 const SRC_ROOT = path.join(findRepoRoot(), 'client', 'src');
 const TELEMETRY_DIR = path.join(SRC_ROOT, 'shared', 'telemetry');
-const API_CLIENT_DIR = path.join(SRC_ROOT, 'shared', 'api-client');
+const API_CLIENT_DIR = path.join(SRC_ROOT, 'shared', 'apiClient');
 const FEATURES_DIR = path.join(SRC_ROOT, 'features');
 const APP_DIR = path.join(SRC_ROOT, 'app');
 
@@ -141,7 +141,7 @@ describe('dependency direction is one-way', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('nothing in shared/api-client imports from shared/telemetry', () => {
+  it('nothing in shared/apiClient imports from shared/telemetry', () => {
     const offenders: string[] = [];
     for (const file of listSourceFiles(API_CLIENT_DIR)) {
       const source = fs.readFileSync(file, 'utf8');

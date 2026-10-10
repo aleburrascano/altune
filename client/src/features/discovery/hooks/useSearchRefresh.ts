@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 import { useDiscoverFetchEnabled } from '@features/discovery/hooks/useDiscoverFetchGate';
 import type { SearchPageParam, SearchPages } from '@features/discovery/domain/searchPaging';

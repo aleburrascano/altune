@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 
-import { withFeaturing } from '@shared/api-client/featuredArtists';
+import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { usePlayback } from '@shared/playback/usePlayback';

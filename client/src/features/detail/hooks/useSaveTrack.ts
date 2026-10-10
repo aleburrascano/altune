@@ -2,15 +2,15 @@ import { useQueryClient, type QueryClient, type UseMutationResult } from '@tanst
 import { useRef } from 'react';
 
 import { isRetryable } from '@shared/failure/errors';
-import type { TrackId } from '@shared/api-client/ids';
+import type { TrackId } from '@shared/apiClient/ids';
 import {
   acquisitionOf,
   toFailed,
   toReady,
   toTrackStatus,
   type TrackStatus,
-} from '@shared/api-client/trackAcquisition';
-import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/trackAcquisition';
+import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
 import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
 import {
   adoptResponseStatus,
@@ -29,7 +29,7 @@ import {
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { enqueueCritical } from '@shared/telemetry/outbox';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import {
   type SaveFailure,

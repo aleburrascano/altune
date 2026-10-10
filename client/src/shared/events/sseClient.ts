@@ -1,4 +1,4 @@
-import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/correlationId';
 import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
 import { HTTP_UNAUTHORIZED } from '@shared/failure/errors';
 import { isServerEvent, parseChunk } from '@shared/events/sseFrames';

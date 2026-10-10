@@ -1,4 +1,4 @@
-import type { SyncedLine } from '@shared/api-client/lyrics';
+import type { SyncedLine } from '@shared/apiClient/lyrics';
 
 import { activeLineIndex, _lyricsView } from '@features/playback/domain/lyricsSync';
 

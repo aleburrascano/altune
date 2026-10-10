@@ -5,7 +5,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { useSession } from '@shared/auth/useSession';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useQueueStore } from '@shared/playback/queueStore';

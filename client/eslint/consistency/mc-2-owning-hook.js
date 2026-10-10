@@ -43,10 +43,10 @@ function restrictedPatterns(allowed) {
     if (banned.length === 0) return [];
     return [
       {
-        group: [`**/api-client/${module}`],
+        group: [`**/apiClient/${module}`],
         importNames: banned,
         allowTypeImports: true,
-        message: `Call this api-client mutation only from its owning hook (MC-2).`,
+        message: `Call this apiClient mutation only from its owning hook (MC-2).`,
       },
     ];
   });
@@ -58,11 +58,11 @@ function importRule(allowed) {
 
 module.exports = {
   id: 'MC-2',
-  description: 'Each mutating api-client function is imported only by its one owning hook',
+  description: 'Each mutating apiClient function is imported only by its one owning hook',
   exempt: EXEMPT,
   config: [
     {
-      ignores: [...Object.keys(OWNERS), 'src/shared/api-client/**', '**/__tests__/**'],
+      ignores: [...Object.keys(OWNERS), 'src/shared/apiClient/**', '**/__tests__/**'],
       rules: importRule({}),
     },
     ...Object.entries(OWNERS).map(([file, allowed]) => ({
@@ -73,12 +73,12 @@ module.exports = {
   ],
   examples: {
     invalid: [
-      "import { deleteTrack } from '@shared/api-client/tracks';\nexport const d = deleteTrack;\n",
-      "import { createTrack } from '../../shared/api-client/tracks';\nexport const c = createTrack;\n",
+      "import { deleteTrack } from '@shared/apiClient/tracks';\nexport const d = deleteTrack;\n",
+      "import { createTrack } from '../../shared/apiClient/tracks';\nexport const c = createTrack;\n",
     ],
     valid: [
-      "import { getTracks } from '@shared/api-client/tracks';\nexport const g = getTracks;\n",
-      "import { fetchAudioUrls } from '@shared/api-client/audio';\nexport const f = fetchAudioUrls;\n",
+      "import { getTracks } from '@shared/apiClient/tracks';\nexport const g = getTracks;\n",
+      "import { fetchAudioUrls } from '@shared/apiClient/audio';\nexport const f = fetchAudioUrls;\n",
     ],
   },
 };

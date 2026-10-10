@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
 import { Shuffle } from 'lucide-react-native';
-import type { TrackId } from '@shared/api-client/ids';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackId } from '@shared/apiClient/ids';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { Selection } from '@features/library/hooks/useSelection';

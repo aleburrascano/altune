@@ -1,8 +1,8 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { apiBase } from '@shared/api-client/config';
+import { apiBase } from '@shared/apiClient/config';
 import { ContractError } from '@shared/failure/errors';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
 import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
 

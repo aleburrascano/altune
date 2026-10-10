@@ -4,8 +4,8 @@ import { ListPlus, Pause, Play } from 'lucide-react-native';
 
 import { AddToPlaylistSheet } from '@shared/playlists';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 
 import {
   useTrackDetailActions,

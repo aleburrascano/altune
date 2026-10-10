@@ -1,8 +1,8 @@
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';
 import {
   getTrackFromCaches,
@@ -24,7 +24,7 @@ import {
   registerUnfetchedQuery,
   seedTracksPrefix,
 } from '@shared/events/__tests__/trackCacheFixtures';
-import { toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
+import { toReady, toTrackStatus } from '@shared/apiClient/trackAcquisition';
 import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 describe('getTrackFromCaches', () => {

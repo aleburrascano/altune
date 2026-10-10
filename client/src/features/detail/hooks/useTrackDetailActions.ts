@@ -1,8 +1,8 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { TrackId } from '@shared/api-client/ids';
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { TrackId } from '@shared/apiClient/ids';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import type { PlaybackSource } from '@shared/playback/playbackTrack';
 
 import { usePlayback } from '@shared/playback/usePlayback';

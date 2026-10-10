@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { buildImpressionRows } from '@features/discovery/domain/buildImpressionRows';
-import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 export type ImpressionHandlers = {
   viewabilityConfig: { itemVisiblePercentThreshold: number };

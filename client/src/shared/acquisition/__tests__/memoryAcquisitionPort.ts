@@ -1,4 +1,4 @@
-import type { TrackId } from '@shared/api-client/ids';
+import type { TrackId } from '@shared/apiClient/ids';
 import { ApiError } from '@shared/failure/errors';
 
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';

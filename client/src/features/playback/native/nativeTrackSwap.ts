@@ -3,7 +3,7 @@ import TrackPlayer, { type AddTrack, type Track } from 'react-native-track-playe
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
-import type { TrackId } from '@shared/api-client/ids';
+import type { TrackId } from '@shared/apiClient/ids';
 import { currentLoadToken, isStale } from '@features/playback/domain/loadToken';
 import {
   NativeQueueTimeoutError,

@@ -4,10 +4,10 @@ import {
   fetchAudioUrls,
   isAudioPrefetchEnabled,
   recoverAudio,
-} from '@shared/api-client/audio';
-import { getLyrics } from '@shared/api-client/lyrics';
-import { getQueueState, saveQueueState } from '@shared/api-client/playback';
-import { getAllTracks } from '@shared/api-client/tracks';
+} from '@shared/apiClient/audio';
+import { getLyrics } from '@shared/apiClient/lyrics';
+import { getQueueState, saveQueueState } from '@shared/apiClient/playback';
+import { getAllTracks } from '@shared/apiClient/tracks';
 
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 

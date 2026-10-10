@@ -4,7 +4,7 @@ import { Check } from 'lucide-react-native';
 import { Row, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 export function LibraryRowSelection({
   track,

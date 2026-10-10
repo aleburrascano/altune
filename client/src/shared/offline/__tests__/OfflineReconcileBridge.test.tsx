@@ -3,9 +3,9 @@ import * as FileSystem from 'expo-file-system';
 
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
-jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
+jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory';
 

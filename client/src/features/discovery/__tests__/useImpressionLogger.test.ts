@@ -4,7 +4,7 @@ import { useImpressionLogger } from '@features/discovery/hooks/useImpressionLogg
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { ViewToken } from 'react-native';
-import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
 const mockMutate = jest.fn();
 

@@ -1,4 +1,4 @@
-import type { FeaturedArtist } from '@shared/api-client/trackResponse';
+import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 
 import {
   albumExtras,

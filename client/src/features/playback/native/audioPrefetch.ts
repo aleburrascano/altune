@@ -4,7 +4,7 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
 import { playbackPort } from '@features/playback/ports/activePlaybackPort';
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import { deviceFileStore, fileHandle } from '@shared/files/native/deviceFileStore';
 import {
   MAX_PREFETCH_FILE_BYTES,

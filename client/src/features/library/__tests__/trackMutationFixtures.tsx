@@ -1,9 +1,9 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/trackResponse';
-import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
+import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
+import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import type { TrackStatus } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys, playlistKeys } from '@shared/query/queryKeys';

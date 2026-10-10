@@ -2,7 +2,7 @@ import { StyleSheet, Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import type { ReactTestRendererJSON } from 'react-test-renderer';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { AlbumCardsSkeleton } from '../ui/DetailSkeleton';
 import { DetailScaffold } from '../ui/DetailScaffold';

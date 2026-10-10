@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
@@ -42,7 +42,7 @@ const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';
 
 warmUpFirstRender(async () => {
   mockUseLibraryTracksForAlbum.mockImplementation(() => {
-    const { asTrackId } = require('@shared/api-client/ids');
+    const { asTrackId } = require('@shared/apiClient/ids');
     return [
       {
         id: asTrackId('trk-1'),
@@ -131,7 +131,7 @@ warmUpFirstRender(async () => {
 describe('a library album\'s "More from this album" section', () => {
   beforeEach(() => {
     mockUseLibraryTracksForAlbum.mockImplementation(() => {
-      const { asTrackId } = require('@shared/api-client/ids');
+      const { asTrackId } = require('@shared/apiClient/ids');
       return [
         {
           id: asTrackId('trk-1'),

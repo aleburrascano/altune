@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { albumExtras } from '@/features/detail/domain/trackExtras';
 

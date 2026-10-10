@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { BackfillFeaturedResult } from '@shared/api-client/tracks';
+import type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
 import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { detailKeys, libraryKeys } from '@shared/query/queryKeys';
 import { useAppMutation } from '@shared/query/useAppMutation';

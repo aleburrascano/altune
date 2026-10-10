@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
-import type { Favorite, FavoritesResponse, FavoriteTarget } from '@shared/api-client/favorites';
+import type { Favorite, FavoritesResponse, FavoriteTarget } from '@shared/apiClient/favorites';
 import { useFavoritesPort } from '@features/discovery/ports/FavoritesPortProvider';
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 import { RETRY_TAIL } from '@shared/failure/describeError';

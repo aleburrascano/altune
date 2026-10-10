@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 
-import type { DiscoveryKind } from '@shared/api-client/discovery';
+import type { DiscoveryKind } from '@shared/apiClient/discovery';
 
 export type ResultsFilter = 'all' | DiscoveryKind;
 

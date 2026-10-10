@@ -1,7 +1,7 @@
 import { Image } from 'react-native';
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import type { ResolvedAudioUrl } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 import { resolvePinnedUri } from '@shared/offline/pinnedStore';
 import { type PlaybackTrack, trackKey, type TrackKey } from '@shared/playback/playbackTrack';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';

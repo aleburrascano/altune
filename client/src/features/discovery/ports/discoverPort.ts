@@ -1,4 +1,4 @@
-import type * as discovery from '@shared/api-client/discovery';
+import type * as discovery from '@shared/apiClient/discovery';
 
 export interface DiscoverPort {
   searchDiscovery: typeof discovery.searchDiscovery;

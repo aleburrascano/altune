@@ -5,8 +5,8 @@ import { Play } from 'lucide-react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 
 import {
   useArtistDetailState,

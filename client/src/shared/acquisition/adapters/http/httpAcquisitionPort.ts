@@ -1,4 +1,4 @@
-import { retryAcquisition } from '@shared/api-client/tracks';
+import { retryAcquisition } from '@shared/apiClient/tracks';
 
 import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort';
 

@@ -1,12 +1,12 @@
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
-import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import type {
   FeaturedArtist,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/api-client/trackResponse';
-import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
-import { MAX_ALL_TRACKS } from '@shared/api-client/tracks';
+} from '@shared/apiClient/trackResponse';
+import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
+import { MAX_ALL_TRACKS } from '@shared/apiClient/tracks';
 import { ApiError } from '@shared/failure/errors';
 
 import type { LibraryPort } from '@features/library/ports/libraryPort';

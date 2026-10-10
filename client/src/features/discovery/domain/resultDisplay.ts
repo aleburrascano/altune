@@ -1,5 +1,5 @@
-import { featuredArtistsFromExtras, withFeaturing } from '@shared/api-client/featuredArtists';
-import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/apiClient/featuredArtists';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
 
 const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
   artist: ['Artist', 'Artists'],

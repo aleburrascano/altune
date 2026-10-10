@@ -1,6 +1,6 @@
 import { showFailureAlert } from '@shared/ui';
 import { useRef, useState } from 'react';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import type { usePlayback } from '@shared/playback/usePlayback';

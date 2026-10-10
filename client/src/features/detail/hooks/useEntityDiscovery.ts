@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
 
 import {
   contentFailure,

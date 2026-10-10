@@ -227,7 +227,7 @@ Detail-open enrichment (caps 7–8), built 2026-06-22, mirroring the MB/Discogs/
 - `adapters/handler/discovery_handler.go` — `GET /discovery/enrichment/deezer?kind=&title=&subtitle=`
   (`WithDeezerEnrichment` setter) + DTO.
 - `internal/app/app.go` — wired unconditionally (public API needs no key); nil cache degrades to uncached.
-- Mobile: `shared/api-client/discovery.ts` (`getDeezerEnrichment` + `DeezerEnrichmentResponse`),
+- Mobile: `shared/apiClient/discovery.ts` (`getDeezerEnrichment` + `DeezerEnrichmentResponse`),
   `features/detail/hooks/useDeezerEnrichment.ts` (track/album-gated),
   `features/detail/ui/DeezerEnrichmentSection.tsx` (tempo/explicit for tracks, label/genres for albums),
   wired into `DetailScreen` below the track/album bodies.
@@ -249,7 +249,7 @@ Lyrics (cap 6), built 2026-06-22 — distinct from the public-API enrichment (th
 - `adapters/handler/discovery_handler.go` — `GET /discovery/lyrics?title=&subtitle=`
   (`WithLyrics` setter) + `LyricsResponseDTO`/`SyncedLineDTO`.
 - `internal/app/app.go` — wired unconditionally (no key needed); nil cache degrades to uncached.
-- Mobile: `shared/api-client/discovery.ts` (`getLyrics` + `LyricsResponse`/`SyncedLyricLine`),
+- Mobile: `shared/apiClient/discovery.ts` (`getLyrics` + `LyricsResponse`/`SyncedLyricLine`),
   `features/detail/hooks/useLyrics.ts` (track-gated), `features/detail/ui/LyricsSection.tsx` (synced
   lines preferred, plain fallback, writers + copyright), wired into `DetailScreen` below the Deezer
   enrichment for tracks.

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
-import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
+import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';
 import { useLibraryGridLayout, GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
 import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';

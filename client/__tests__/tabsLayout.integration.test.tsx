@@ -5,7 +5,7 @@ import { act, renderRouter, screen, within } from 'expo-router/testing-library';
 
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 import TabsLayout from '../src/app/(tabs)/_layout';
 import DiscoverLayout from '../src/app/(tabs)/discover/_layout';

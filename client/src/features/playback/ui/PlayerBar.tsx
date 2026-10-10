@@ -11,7 +11,7 @@ import {
   SkipForward,
 } from 'lucide-react-native';
 
-import { withFeaturing } from '@shared/api-client/featuredArtists';
+import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { shouldRestartOnPrevious } from '@features/playback/domain/restartOnPrevious';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { Artwork } from '@shared/ui/primitives/Artwork';

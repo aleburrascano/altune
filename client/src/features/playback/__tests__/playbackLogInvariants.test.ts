@@ -4,7 +4,7 @@ import { inspect } from 'util';
 
 import { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { ignoringNativeRejection } from '@features/playback/native/createNativePlaybackActions';

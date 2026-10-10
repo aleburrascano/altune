@@ -1,7 +1,7 @@
-import type { PlaylistId, TrackId } from '@shared/api-client/ids';
-import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { PlaylistId, TrackId } from '@shared/apiClient/ids';
+import { asPlaylistId } from '@shared/apiClient/ids';
+import type { PlaylistDetailResponse, PlaylistResponse } from '@shared/apiClient/playlistResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { ApiError } from '@shared/failure/errors';
 
 import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';

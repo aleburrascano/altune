@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ContractError, LONG_REQUEST_TIMEOUT_MS, NetworkError } from '@shared/api-client';
+import { ContractError, LONG_REQUEST_TIMEOUT_MS, NetworkError } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';

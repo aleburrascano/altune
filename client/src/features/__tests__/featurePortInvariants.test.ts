@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const featuresRoot = path.join(__dirname, '..');
+const API_CLIENT_SOURCE =
+  /(?:^|\/)shared\/apiClient(?:\/([^/]+))?$|^@shared\/apiClient(?:\/([^/]+))?$/;
 const PURE_MODULES = new Set([
   'featuredArtists',
   'ids',
@@ -36,8 +38,7 @@ function apiClientValueImports(text: string): string[] {
   const offenders: string[] = [];
   for (const { groups } of text.matchAll(IMPORT)) {
     const { typeOnly, specifiers = '', source = '' } = groups ?? {};
-    const match =
-      /(?:^|\/)shared\/api-client(?:\/([^/]+))?$|^@shared\/api-client(?:\/([^/]+))?$/.exec(source);
+    const match = API_CLIENT_SOURCE.exec(source);
     if (!match || typeOnly) continue;
     const module = match[1] ?? match[2];
     if (module && PURE_MODULES.has(module)) continue;
@@ -72,13 +73,13 @@ test.each(portedFeatures)('%s has source files to check', (feature) => {
 });
 
 test('the import scan flags a value import and spares type and pure-module imports', () => {
-  expect(apiClientValueImports("import { getTracks } from '@shared/api-client';")).toHaveLength(1);
+  expect(apiClientValueImports("import { getTracks } from '@shared/apiClient';")).toHaveLength(1);
   expect(
-    apiClientValueImports("import { suggestDiscovery } from '@shared/api-client/discovery';"),
+    apiClientValueImports("import { suggestDiscovery } from '@shared/apiClient/discovery';"),
   ).toHaveLength(1);
-  expect(apiClientValueImports("import type { T } from '@shared/api-client';")).toHaveLength(0);
-  expect(apiClientValueImports("import { type T } from '@shared/api-client';")).toHaveLength(0);
-  expect(apiClientValueImports("import { asTrackId } from '@shared/api-client/ids';")).toHaveLength(
+  expect(apiClientValueImports("import type { T } from '@shared/apiClient';")).toHaveLength(0);
+  expect(apiClientValueImports("import { type T } from '@shared/apiClient';")).toHaveLength(0);
+  expect(apiClientValueImports("import { asTrackId } from '@shared/apiClient/ids';")).toHaveLength(
     0,
   );
   expect(apiClientValueImports("import { ApiError } from '@shared/failure/errors';")).toHaveLength(
@@ -87,7 +88,7 @@ test('the import scan flags a value import and spares type and pure-module impor
 });
 
 test.each(files)(
-  '$name takes nothing from the api-client but types and pure modules',
+  '$name takes nothing from the apiClient but types and pure modules',
   ({ name, text }) => {
     expect({ file: name, valueImports: apiClientValueImports(text) }).toEqual({
       file: name,

@@ -1,6 +1,6 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { ApiError } from '@shared/failure/errors';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';

@@ -6,7 +6,7 @@ import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui'
 
 import { sliceCodePoints } from '@features/discovery/domain/searchPaging';
 import { SectionLabel } from '@features/discovery/ui/SectionLabel';
-import type { SearchHistoryItem } from '@shared/api-client/discovery';
+import type { SearchHistoryItem } from '@shared/apiClient/discovery';
 
 const HISTORY_LABEL_MAX_CHARS = 40;
 

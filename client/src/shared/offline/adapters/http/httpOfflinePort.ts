@@ -1,4 +1,4 @@
-import { fetchAudioUrls } from '@shared/api-client/audio';
+import { fetchAudioUrls } from '@shared/apiClient/audio';
 
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 

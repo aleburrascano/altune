@@ -1,4 +1,4 @@
-import type * as tracks from '@shared/api-client/tracks';
+import type * as tracks from '@shared/apiClient/tracks';
 
 export interface SettingsPort {
   backfillFeaturedArtists: typeof tracks.backfillFeaturedArtists;

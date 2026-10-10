@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type { Navigator } from '@shared/navigation';
 import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
 import {
@@ -9,7 +9,7 @@ import {
   usePlaylistOfflineAction,
 } from '@features/library/hooks/usePlaylistMenu';
 import { Alert, type AlertButton } from 'react-native';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { supabase } from '@shared/auth/supabaseClient';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { playlistKeys } from '@shared/query/queryKeys';

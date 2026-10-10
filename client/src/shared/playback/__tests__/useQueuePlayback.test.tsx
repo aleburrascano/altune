@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';

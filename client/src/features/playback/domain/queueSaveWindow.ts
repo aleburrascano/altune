@@ -1,4 +1,4 @@
-import type { SaveQueueStateRequest } from '@shared/api-client/playback';
+import type { SaveQueueStateRequest } from '@shared/apiClient/playback';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { orderedQueueTracks, type QueueStore } from '@shared/playback/queueStore';
 

@@ -144,7 +144,7 @@ After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --ex
 |---|---|
 | M1 | The feature root holds `domain/`, `ports/`, `adapters/`, `hooks/`, `ui/`, `__tests__/`, `native/` and `web/` where needed, and `index.ts`. No other file sits at the root. |
 | M2 | `index.ts` is the feature's public surface. `app/` and other features import `@features/<feature>` only, never a path inside it. |
-| M3 | Imports point inward. `domain/` is pure (no `react`, `react-native`, `expo-*` or `@shared/ui` value import). `ports/` holds interfaces only and imports `domain/` and api-client types. `adapters/` implements a port and is the only folder that imports api-client network calls; the context that supplies the default adapter lives here too. `hooks/` imports `domain/` and `ports/`. `ui/` imports `hooks/` and `domain/`. |
+| M3 | Imports point inward. `domain/` is pure (no `react`, `react-native`, `expo-*` or `@shared/ui` value import). `ports/` holds interfaces only and imports `domain/` and apiClient types. `adapters/` implements a port and is the only folder that imports apiClient network calls; the context that supplies the default adapter lives here too. `hooks/` imports `domain/` and `ports/`. `ui/` imports `hooks/` and `domain/`. |
 | M4 | `hooks/` holds only `use*` files, and every `use*` file is in `hooks/`. `ui/` holds components only. |
 | M5 | Query keys come from the one query-key factory in `@shared/query`. No literal `queryKey: [` elsewhere. |
 | M6 | A failure the user sees goes through the shared failure display (MC-5 in [mobile-consistency.md](mobile-consistency.md)). |

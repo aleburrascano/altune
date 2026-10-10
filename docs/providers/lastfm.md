@@ -198,7 +198,7 @@ Detail-open enrichment (cap 3 + cap-4 similar artists), built 2026-06-22, mirror
 - `adapters/handler/discovery_handler.go` — `GET /discovery/enrichment/lastfm?kind=&title=&subtitle=`
   (`WithLastFmEnrichment` setter) + DTO.
 - `internal/app/app.go` — wired, config-gated by `cfg.HasLastFM()`; nil degrades to an empty DTO.
-- Mobile: `shared/api-client/discovery.ts` (`getLastFmEnrichment` + `LastFmEnrichmentResponse`),
+- Mobile: `shared/apiClient/discovery.ts` (`getLastFmEnrichment` + `LastFmEnrichmentResponse`),
   `features/detail/hooks/useLastFmEnrichment.ts`, `features/detail/ui/LastFmEnrichmentSection.tsx`
   (compact popularity + tag pills + similar-artists line for artists + bio/blurb for tracks/albums —
   the artist bio is left to the Discogs section to avoid duplication), wired into `DetailScreen` below

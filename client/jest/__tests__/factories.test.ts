@@ -4,7 +4,7 @@ import { FAKER_SEED } from '@testing/fakerSeed';
 import { sessionFactory, trackResponseFactory } from '@testing/factories';
 import { expectType, type IsAssignable } from '@testing/typeAssertions';
 import type { Session } from '@supabase/supabase-js';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 describe('factories', () => {
   it('builds values typed as their models', () => {

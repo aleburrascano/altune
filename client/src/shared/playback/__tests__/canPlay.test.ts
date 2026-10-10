@@ -1,4 +1,4 @@
-import type { AcquisitionStatus } from '@shared/api-client/trackResponse';
+import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
 
 import { canPlay } from '@shared/playback/canPlay';
 

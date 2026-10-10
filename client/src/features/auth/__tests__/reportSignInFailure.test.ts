@@ -1,4 +1,4 @@
-import { apiBase } from '@shared/api-client';
+import { apiBase } from '@shared/apiClient';
 import { appVersion } from '@shared/device/device';
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 import { enqueueCritical } from '@shared/telemetry/outbox';

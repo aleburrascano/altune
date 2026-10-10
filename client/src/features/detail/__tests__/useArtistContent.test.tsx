@@ -2,8 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
-import type { DiscoverySource } from '@shared/api-client/discovery';
-import type { ArtistContentResponse } from '@shared/api-client/enrichment';
+import type { DiscoverySource } from '@shared/apiClient/discovery';
+import type { ArtistContentResponse } from '@shared/apiClient/enrichment';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { useArtistContent } from '@/features/detail/hooks/useArtistContent';

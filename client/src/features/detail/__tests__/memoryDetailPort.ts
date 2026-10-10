@@ -1,18 +1,18 @@
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/apiClient/discovery';
 import type {
   ArtistContentResponse,
   ContentFetchResponse,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
   LastFmEnrichmentResponse,
-} from '@shared/api-client/enrichment';
-import type { AlbumGroup } from '@shared/api-client/library';
-import { asTrackId } from '@shared/api-client/ids';
+} from '@shared/apiClient/enrichment';
+import type { AlbumGroup } from '@shared/apiClient/library';
+import { asTrackId } from '@shared/apiClient/ids';
 import type {
   CreateTrackRequest,
   ListTracksResponse,
   TrackResponse,
-} from '@shared/api-client/trackResponse';
+} from '@shared/apiClient/trackResponse';
 
 import type { DetailPort } from '@features/detail/ports/detailPort';
 

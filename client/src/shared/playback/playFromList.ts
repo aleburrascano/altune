@@ -1,4 +1,4 @@
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 import { canPlay } from '@shared/playback/canPlay';
 import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback/playbackTrack';

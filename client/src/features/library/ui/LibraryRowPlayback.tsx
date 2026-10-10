@@ -10,7 +10,7 @@ import {
   LibraryRowPinnedIcon,
 } from '@features/library/ui/libraryRowAccessories';
 import { rowSurfaceStyle } from '@features/library/ui/libraryRowStyle';
-import type { TrackResponse } from '@shared/api-client/trackResponse';
+import type { TrackResponse } from '@shared/apiClient/trackResponse';
 
 export function LibraryRowPlayback({
   track,

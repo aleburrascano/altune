@@ -1,6 +1,6 @@
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 

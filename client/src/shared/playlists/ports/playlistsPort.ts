@@ -1,4 +1,4 @@
-import type * as playlists from '@shared/api-client/playlists';
+import type * as playlists from '@shared/apiClient/playlists';
 
 export interface PlaylistsPort {
   getPlaylists: typeof playlists.getPlaylists;

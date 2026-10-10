@@ -3,11 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { within } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/api-client';
+import { ApiError } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId } from '@shared/apiClient/ids';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useRemoveDownloads } from '@features/settings/hooks/useDownloads';

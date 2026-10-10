@@ -2,8 +2,8 @@ import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 
 import { fireEvent, render, screen, waitFor, act, within } from '@testing-library/react-native';
-import type { CreateTrackRequest } from '@shared/api-client/trackResponse';
-import type { TrackId } from '@shared/api-client/ids';
+import type { CreateTrackRequest } from '@shared/apiClient/trackResponse';
+import type { TrackId } from '@shared/apiClient/ids';
 import { supabase } from '@shared/auth/supabaseClient';
 import {
   linkTrackIdentity,
@@ -11,7 +11,7 @@ import {
   trackIdentityKey,
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import {
   SaveAllPill,

@@ -8,7 +8,7 @@ import {
   type UseMutationResult,
   type QueryClient,
 } from '@tanstack/react-query';
-import { type TrackId, isSafeId } from '@shared/api-client/ids';
+import { type TrackId, isSafeId } from '@shared/apiClient/ids';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { forgetTrack, getTrackFromCaches } from '@shared/events/trackCachePatch';
 import { showFailureAlert } from '@shared/ui';
@@ -16,7 +16,7 @@ import {
   toPending,
   acquisitionOf,
   type AcquisitionTransition,
-} from '@shared/api-client/trackAcquisition';
+} from '@shared/apiClient/trackAcquisition';
 import { patchTrackInCaches } from '@shared/events/trackPatchBatch';
 import { guardedMutationOptions } from '@shared/session/guardedMutation';
 import { useLibraryPort } from '@features/library/ports/LibraryPortProvider';

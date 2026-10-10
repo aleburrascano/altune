@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
-import type { FailedAcquisition, TrackFields } from '@shared/api-client/trackResponse';
-import type { TrackId } from '@shared/api-client/ids';
+import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
+import type { TrackId } from '@shared/apiClient/ids';
 
 type FailedTrack = TrackFields & FailedAcquisition;
 

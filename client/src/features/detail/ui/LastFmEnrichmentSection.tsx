@@ -7,7 +7,7 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
-import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 
 const MAX_SIMILAR = 6;
 const BIO_COLLAPSED_LINES = 4;

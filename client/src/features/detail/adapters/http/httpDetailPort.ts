@@ -1,4 +1,4 @@
-import { searchDiscovery } from '@shared/api-client/discovery';
+import { searchDiscovery } from '@shared/apiClient/discovery';
 import {
   getAlbumTracks,
   getArtistContent,
@@ -6,9 +6,9 @@ import {
   getEnrichment,
   getLastFmEnrichment,
   getRelatedTracks,
-} from '@shared/api-client/enrichment';
-import { getLibraryAlbums } from '@shared/api-client/library';
-import { createTrack, getTracks } from '@shared/api-client/tracks';
+} from '@shared/apiClient/enrichment';
+import { getLibraryAlbums } from '@shared/apiClient/library';
+import { createTrack, getTracks } from '@shared/apiClient/tracks';
 
 import type { DetailPort } from '@features/detail/ports/detailPort';
 

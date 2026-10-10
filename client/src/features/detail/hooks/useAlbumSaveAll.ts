@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { trackIdentityKey } from '@shared/acquisition/trackStatusStore';
 
