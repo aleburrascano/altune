@@ -1,5 +1,3 @@
-import { onSignOut } from '@shared/session/signOutCleanup';
-
 let _lastQuery = '';
 let _lastInputValue = '';
 
@@ -16,5 +14,3 @@ export function resetSearchState(): void {
   _lastQuery = '';
   _lastInputValue = '';
 }
-
-onSignOut(resetSearchState);

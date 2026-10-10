@@ -7,6 +7,12 @@ import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { activeNativeTrackId, toNativeTrack } from '@features/playback/native/nativeTrack';
 
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 const player = TrackPlayer as unknown as Record<string, jest.Mock>;
 

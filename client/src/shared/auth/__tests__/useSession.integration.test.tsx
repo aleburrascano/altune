@@ -23,6 +23,7 @@ import {
 } from '@shared/events/useServerEvents';
 import { startDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
 import { getSearchState, setSearchState } from '@features/discovery/domain/searchState';
+import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import {
   clearDetailHandoffs,
@@ -625,6 +626,16 @@ describe('acquisition and telemetry state across an account switch', () => {
 });
 
 describe('search state across an identity change', () => {
+  let unregisterSearchStateReset: (() => void) | undefined;
+
+  beforeAll(() => {
+    unregisterSearchStateReset = registerSearchStateSignOutReset();
+  });
+
+  afterAll(() => {
+    unregisterSearchStateReset?.();
+  });
+
   type AuthCallback = (event: string, session: Session | null) => void;
 
   function sessionFor(user: Session['user']): Session {

@@ -42,6 +42,11 @@ import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
 } from '@features/playback/__tests__/memoryPlaybackPort';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');

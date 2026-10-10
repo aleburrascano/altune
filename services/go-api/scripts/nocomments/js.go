@@ -22,12 +22,17 @@ var jsKind = kind{
 	same:     jsCommentFreeTokensEqual,
 }
 
-var jsOwnedByOtherTools = []string{"/client/", "/services/overseer/web/", "/node_modules/"}
+var jsOwnedByOtherTools = []string{"/services/overseer/web/", "/node_modules/"}
+
+const jsClientRoot = "client/"
 
 func matchJSFile(path string, _ []byte) bool {
 	switch filepath.Ext(path) {
 	case ".js", ".mjs", ".cjs":
 	default:
+		return false
+	}
+	if isClientPath(path) {
 		return false
 	}
 	slashed := "/" + filepath.ToSlash(path)
@@ -37,6 +42,14 @@ func matchJSFile(path string, _ []byte) bool {
 		}
 	}
 	return true
+}
+
+func isClientPath(path string) bool {
+	rooted := filepath.ToSlash(filepath.Clean(path))
+	for strings.HasPrefix(rooted, "../") {
+		rooted = strings.TrimPrefix(rooted, "../")
+	}
+	return strings.HasPrefix(rooted, jsClientRoot)
 }
 
 func jsSourceBuffer(src []byte) []byte {

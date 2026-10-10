@@ -29,6 +29,12 @@ import {
 } from '@features/playback/native/playbackService';
 
 import { previewTrack, libraryTrackWithId } from '@features/playback/__tests__/fixtures';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');

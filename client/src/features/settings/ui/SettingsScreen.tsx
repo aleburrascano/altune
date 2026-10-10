@@ -7,7 +7,7 @@ import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
-import { useSettingsClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
+import { useClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
 import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
@@ -19,7 +19,7 @@ export function SettingsScreen(): ReactElement {
   const theme = useTheme();
   const email = useAccountEmail();
   const { state: signOutState, signOut } = useSignOut();
-  const clearHistory = useSettingsClearSearchHistory();
+  const clearHistory = useClearSearchHistory();
   const stats = useDownloadStats();
   const downloads = useRemoveDownloads(stats);
 

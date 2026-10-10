@@ -217,7 +217,10 @@ describe('DiscoverScreen tap-to-dismiss-keyboard area', () => {
 });
 
 describe('@features/discovery public surface', () => {
-  it('exports exactly DiscoverScreen', () => {
-    expect(Object.keys(require('@features/discovery')).sort()).toEqual(['DiscoverScreen']);
+  it('exports exactly DiscoverScreen and the search-state sign-out registration', () => {
+    expect(Object.keys(require('@features/discovery')).sort()).toEqual([
+      'DiscoverScreen',
+      'registerSearchStateSignOutReset',
+    ]);
   });
 });

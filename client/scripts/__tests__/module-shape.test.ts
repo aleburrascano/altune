@@ -69,6 +69,14 @@ describe('M1', () => {
     expect(stdout).toContain('M1 src/features/library missing index.ts');
     expect(stdout).toContain('M1 src/features/library missing domain/');
   });
+
+  test('passes a feature with no ports/ folder', () => {
+    const tree = cleanTree();
+    delete tree['src/features/library/ports/thing.ts'];
+    const { status, stdout } = run(tree);
+    expect(status).toBe(0);
+    expect(stdout).not.toContain('missing ports/');
+  });
 });
 
 describe('M2', () => {

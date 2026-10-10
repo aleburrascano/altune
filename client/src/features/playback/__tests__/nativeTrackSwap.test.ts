@@ -37,6 +37,11 @@ import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
 } from '@features/playback/__tests__/memoryPlaybackPort';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn().mockResolvedValue(undefined),
