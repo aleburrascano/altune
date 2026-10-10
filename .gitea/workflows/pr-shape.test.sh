@@ -58,7 +58,7 @@ PR_BODY=$'short\nCloses #7' ISSUE_LABELS="" ISSUE_BODY=$noDone
 t 0 "existing short-body warning still passes" "::warning::.*little or no description"
 
 export PR_AUTHOR=lane-bot; ISSUE_BODY=$withDone ISSUE_LABELS="risk" PR_BODY=$longBody
-t 0 "a harness PR missing DONE-WHEN and Coverage warns and passes" "::warning::.*DONE-WHEN"
+t 0 "a factory PR missing DONE-WHEN and Coverage warns and passes" "::warning::.*DONE-WHEN"
 PR_AUTHOR=""
 
 [ "$fail" = 0 ] && echo "pr-shape tests ok"

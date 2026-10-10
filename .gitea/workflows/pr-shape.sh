@@ -11,7 +11,7 @@ found=0
 errors=0
 warn() { echo "::warning::$1"; found=$((found + 1)); }
 fail() { echo "::error::$1"; errors=$((errors + 1)); }
-require() { if [ "$author" = lane-bot ]; then warn "$1 The harness review gate checks Done-when on its own PRs."; else fail "$1"; fi; }
+require() { if [ "$author" = lane-bot ]; then warn "$1 The factory review gate checks Done-when on its own PRs."; else fail "$1"; fi; }
 [ "$(printf '%s' "$body" | tr -d '[:space:]' | wc -c)" -ge 20 ] \
   || warn "This PR has little or no description. A reviewer needs the why and the shape of the change, not just the diff."
 if grep -qE '^services/go-api/.*\.go$|^client/src/.*\.tsx?$' <<<"$files" \
