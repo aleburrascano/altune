@@ -19,7 +19,8 @@ import {
   SecondaryAction,
   type PrimaryAction,
 } from '@features/detail/ui/DetailActions';
-import { DetailFacts, buildTrackFacts } from '@features/detail/ui/DetailFacts';
+import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { buildTrackFacts } from '@features/detail/ui/buildDetailFacts';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';
 import { RelatedTracksSection } from '@features/detail/ui/RelatedTracksSection';
 import { TrackInfoSection } from '@features/detail/ui/TrackInfoSection';

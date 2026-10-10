@@ -15,7 +15,8 @@ import {
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { albumYear } from '@features/detail/ui/formatters';
-import { buildAlbumFacts, DetailFacts } from '@features/detail/ui/DetailFacts';
+import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { buildAlbumFacts } from '@features/detail/ui/buildDetailFacts';
 import { AlbumTrackList } from '@features/detail/ui/AlbumTrackList';
 import { DetailActions } from '@features/detail/ui/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/ui/DetailScaffold';

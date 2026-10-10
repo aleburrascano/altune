@@ -15,7 +15,8 @@ import {
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
 import { compactCount } from '@features/detail/ui/formatters';
-import { buildArtistFacts, DetailFacts } from '@features/detail/ui/DetailFacts';
+import { DetailFacts } from '@features/detail/ui/DetailFacts';
+import { buildArtistFacts } from '@features/detail/ui/buildDetailFacts';
 import { AsyncListSection, Section } from '@features/detail/ui/Section';
 import { AlbumCardsSkeleton } from '@features/detail/ui/DetailSkeleton';
 import { ArtistExploreDiscography } from '@features/detail/ui/ArtistExploreDiscography';
