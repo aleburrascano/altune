@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpFavoritesPort } from '@features/discovery/adapters/http/httpFavoritesPort';
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 
-const FavoritesPortContext = createContext<FavoritesPort>(httpFavoritesPort);
+const FavoritesPortContext = createContext<FavoritesPort | null>(null);
 
 interface FavoritesPortProviderProps {
   port: FavoritesPort;
@@ -19,5 +18,7 @@ export function FavoritesPortProvider({
 }
 
 export function useFavoritesPort(): FavoritesPort {
-  return use(FavoritesPortContext);
+  const port = use(FavoritesPortContext);
+  if (port === null) throw new Error('no favorites port provided: mount FavoritesPortProvider');
+  return port;
 }

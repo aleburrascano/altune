@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
-const LibraryPortContext = createContext<LibraryPort>(httpLibraryPort);
+const LibraryPortContext = createContext<LibraryPort | null>(null);
 
 interface LibraryPortProviderProps {
   port: LibraryPort;
@@ -16,5 +15,7 @@ export function LibraryPortProvider({ port, children }: LibraryPortProviderProps
 }
 
 export function useLibraryPort(): LibraryPort {
-  return use(LibraryPortContext);
+  const port = use(LibraryPortContext);
+  if (port === null) throw new Error('no library port provided: mount LibraryPortProvider');
+  return port;
 }

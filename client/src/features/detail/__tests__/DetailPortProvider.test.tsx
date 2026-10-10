@@ -1,15 +1,14 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
 import { DetailPortProvider, useDetailPort } from '@features/detail/ports/DetailPortProvider';
 
 describe('useDetailPort', () => {
-  it('hands back the HTTP port when no provider is mounted', () => {
-    const { result } = renderHook(() => useDetailPort());
+  it('throws when no provider is mounted', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(result.current).toBe(httpDetailPort);
+    expect(() => renderHook(() => useDetailPort())).toThrow('no detail port provided');
   });
 
   it('hands back the port the provider was given', () => {

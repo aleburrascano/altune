@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
+import { FeaturePorts } from '../../src/chrome/FeaturePorts';
+import { httpFeaturePorts } from '../../src/chrome/httpFeaturePorts';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
@@ -235,7 +237,15 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     return render(
-      React.createElement(QueryClientProvider, { client }, React.createElement(SettingsScreen)),
+      React.createElement(
+        QueryClientProvider,
+        { client },
+        React.createElement(
+          FeaturePorts,
+          { ports: httpFeaturePorts },
+          React.createElement(SettingsScreen),
+        ),
+      ),
     );
   }
 

@@ -12,6 +12,8 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 jest.mock('@shared/api-client/discovery', () => ({
   searchDiscovery: jest.fn(),
@@ -33,7 +35,11 @@ const mockRecordEvent = recordEvent as jest.Mock;
 let queryClient: QueryClient;
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 function searchResponse(partial: boolean): DiscoverySearchResponse {

@@ -13,6 +13,8 @@ import {
   useAutocompleteSuggestions,
   useSuggestionVisibility,
 } from '@features/discovery/hooks/useSuggestions';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -47,7 +49,11 @@ function serveSuggestions(texts: string[]): void {
 let queryClient: QueryClient;
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 function renderSuggestions() {

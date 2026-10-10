@@ -26,6 +26,8 @@ import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '@shared/ui/theme';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { AppChrome } from '@/chrome/AppChrome';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/chrome/platformExtras';
 
 startPlaybackService();
@@ -86,38 +88,40 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <SafeAreaProvider>
-            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-            <SystemNavigationBar scheme={scheme} />
-            <TestAuthBridge />
-            <AuthDeepLinkBridge />
-            <StagingBanner />
-            <AuthGate>
-              <ServerEventsBridge />
-              <PlaybackProvider>
-                <SleepTimerBridge />
-                <OfflineReconcileBridge />
-                <PlaybackShortcuts />
-                <ScreenBoundary>
-                  <AppChrome isWideWeb={isWideWeb}>
-                    <Stack
-                      screenOptions={{
-                        headerShown: false,
-                        contentStyle: { backgroundColor: activeTheme.color.canvas },
-                      }}
-                    >
-                      <Stack.Screen name="(tabs)" />
-                      <Stack.Screen name="(auth)" />
-                      <Stack.Screen name="reset-password" />
-                      <Stack.Screen name="player" options={playerScreenOptions(isWideWeb)} />
-                    </Stack>
-                  </AppChrome>
-                </ScreenBoundary>
-              </PlaybackProvider>
-            </AuthGate>
-          </SafeAreaProvider>
-        </ThemeProvider>
+        <FeaturePorts ports={httpFeaturePorts}>
+          <ThemeProvider>
+            <SafeAreaProvider>
+              <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+              <SystemNavigationBar scheme={scheme} />
+              <TestAuthBridge />
+              <AuthDeepLinkBridge />
+              <StagingBanner />
+              <AuthGate>
+                <ServerEventsBridge />
+                <PlaybackProvider>
+                  <SleepTimerBridge />
+                  <OfflineReconcileBridge />
+                  <PlaybackShortcuts />
+                  <ScreenBoundary>
+                    <AppChrome isWideWeb={isWideWeb}>
+                      <Stack
+                        screenOptions={{
+                          headerShown: false,
+                          contentStyle: { backgroundColor: activeTheme.color.canvas },
+                        }}
+                      >
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="(auth)" />
+                        <Stack.Screen name="reset-password" />
+                        <Stack.Screen name="player" options={playerScreenOptions(isWideWeb)} />
+                      </Stack>
+                    </AppChrome>
+                  </ScreenBoundary>
+                </PlaybackProvider>
+              </AuthGate>
+            </SafeAreaProvider>
+          </ThemeProvider>
+        </FeaturePorts>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

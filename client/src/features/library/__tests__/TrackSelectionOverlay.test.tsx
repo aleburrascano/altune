@@ -10,6 +10,8 @@ import {
   type TrackSelectionOptions,
 } from '../hooks/useTrackSelection';
 import { TrackSelectionOverlay } from '../ui/TrackSelectionOverlay';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const mockSheetResolvers: { label: string; resolve: () => Promise<TrackId[]> }[] = [];
 
@@ -72,12 +74,14 @@ function renderWith(tracks: TrackResponse[]) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   const ui = (list: TrackResponse[]) => (
     <QueryClientProvider client={client}>
-      <Harness
-        tracks={list}
-        expose={(c) => {
-          controller = c;
-        }}
-      />
+      <FeaturePorts ports={httpFeaturePorts}>
+        <Harness
+          tracks={list}
+          expose={(c) => {
+            controller = c;
+          }}
+        />
+      </FeaturePorts>
     </QueryClientProvider>
   );
   const utils = render(ui(tracks));

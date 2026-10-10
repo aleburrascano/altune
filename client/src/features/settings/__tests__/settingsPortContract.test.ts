@@ -159,7 +159,7 @@ describe('httpSettingsPort on the wire', () => {
   });
 });
 
-describe('useBackfillFeatured with no SettingsPortProvider', () => {
+describe('useBackfillFeatured on the HTTP port the composition root provides', () => {
   function startBackfill() {
     const hook = renderHook(() => useBackfillFeatured(), {
       wrapper: makeWrapper(new QueryClient()),
@@ -213,10 +213,10 @@ describe('useSettingsPort', () => {
     };
   }
 
-  it('returns the HTTP adapter when no provider is mounted', () => {
-    const { result } = renderHook(() => useSettingsPort());
+  it('throws when no provider is mounted', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(result.current).toBe(httpSettingsPort);
+    expect(() => renderHook(() => useSettingsPort())).toThrow('no settings port provided');
   });
 
   it('returns the port a provider supplies', () => {
