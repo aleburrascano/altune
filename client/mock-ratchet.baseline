@@ -1,7 +1,5 @@
 __tests__/authCallbackRoute.integration.test.tsx @shared/auth/supabaseClient
 __tests__/rootLayout.integration.test.tsx @shared/auth/supabaseClient
-__tests__/rootLayoutQueryRetry.integration.test.tsx @features/auth/ui/AuthGate
-__tests__/rootLayoutQueryRetry.integration.test.tsx @shared/killSwitch/killSwitchPoll
 __tests__/tabsLayout.integration.test.tsx ../src/shared/ui/keyboard/useKeyboardShortcuts
 __tests__/tabsLayout.integration.test.tsx @shared/auth/supabaseClient
 __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage

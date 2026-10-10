@@ -3,7 +3,7 @@ import {
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,8 +12,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { appMutationCache, appQueryCache } from '@shared/query/useAppMutation';
-import { transientRetryOptions } from '@shared/query/retryDelay';
+import { createQueryClient } from '@shared/query/createQueryClient';
 import { StagingBanner } from '@/chrome/StagingBanner';
 import { AuthGate, TestAuthBridge, useAuthDeepLink } from '@features/auth';
 import { registerSearchStateSignOutReset } from '@features/discovery';
@@ -34,8 +33,6 @@ startPlaybackService();
 registerSearchStateSignOutReset();
 
 void SplashScreen.preventAutoHideAsync();
-
-startKillSwitchPolling();
 
 installGlobalErrorReporting();
 
@@ -61,19 +58,9 @@ function playerScreenOptions(isWideWeb: boolean) {
 
 export default function RootLayout() {
   const isWideWeb = useWideWebLayout();
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        queryCache: appQueryCache(),
-        mutationCache: appMutationCache(),
-        defaultOptions: {
-          queries: {
-            staleTime: 30_000,
-            ...transientRetryOptions,
-          },
-        },
-      }),
-  );
+  const [queryClient] = useState(createQueryClient);
+
+  useEffect(() => startKillSwitchPolling(), []);
 
   const scheme = useThemePreference((s) => s.scheme);
   const activeTheme = themes[scheme];
