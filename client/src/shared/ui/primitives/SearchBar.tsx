@@ -1,4 +1,4 @@
-import { forwardRef, type ForwardedRef, type ReactElement, type ReactNode } from 'react';
+import type { ReactElement, ReactNode, Ref } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Search, X } from 'lucide-react-native';
 
@@ -28,6 +28,10 @@ export interface SearchBarProps {
   testID?: string;
   children?: ReactNode;
   theme: SearchBarTheme;
+}
+
+interface SearchBarRefProps extends SearchBarProps {
+  ref?: Ref<TextInput>;
 }
 
 function surfaceStyle(theme: SearchBarTheme, focused: boolean, suggestionsOpen: boolean) {
@@ -88,7 +92,7 @@ function ClearButton({ testID, tertiary, onClear }: ClearButtonProps): ReactElem
 
 interface SearchFieldProps {
   props: SearchBarProps;
-  ref: ForwardedRef<TextInput>;
+  ref: Ref<TextInput> | undefined;
 }
 
 function SearchField({ props, ref }: SearchFieldProps): ReactElement {
@@ -112,18 +116,29 @@ function SearchField({ props, ref }: SearchFieldProps): ReactElement {
   );
 }
 
-export const SearchBar = forwardRef(searchBarWithRef);
+interface PendingBarProps {
+  props: SearchBarProps;
+}
 
-function searchBarWithRef(props: SearchBarProps, ref: ForwardedRef<TextInput>): ReactElement {
+function PendingBar({ props }: PendingBarProps): ReactElement | null {
+  if (!props.pending) return null;
+  return <View style={[styles.pendingBar, { backgroundColor: props.theme.color.accent }]} />;
+}
+
+function SearchAnchor({ props, ref }: SearchFieldProps): ReactElement {
+  return (
+    <View style={styles.inputAnchor}>
+      <SearchField props={props} ref={ref} />
+      {props.children}
+    </View>
+  );
+}
+
+export function SearchBar({ ref, ...props }: SearchBarRefProps): ReactElement {
   return (
     <View style={styles.wrapper}>
-      <View style={styles.inputAnchor}>
-        <SearchField props={props} ref={ref} />
-        {props.children}
-      </View>
-      {props.pending ? (
-        <View style={[styles.pendingBar, { backgroundColor: props.theme.color.accent }]} />
-      ) : null}
+      <SearchAnchor props={props} ref={ref} />
+      <PendingBar props={props} />
     </View>
   );
 }
