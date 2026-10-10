@@ -12,7 +12,7 @@ const baselinePath =
 // The tree the CLI scans; tests point it at a temp copy so they never write under src.
 const scanRoot = process.env.CONSISTENCY_ROOT ?? mobileRoot;
 const UPDATE_BASELINE_HINT =
-  'the count went down: run `node scripts/consistency-ratchet.mjs --write` in client/ to update the baseline';
+  'the count went down: run `cd client && node scripts/consistency-ratchet.mjs --write` to update the baseline';
 
 const tsxParsing = {
   files: ['**/*.{ts,tsx}'],

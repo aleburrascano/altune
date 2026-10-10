@@ -24,7 +24,7 @@ const SKIP_DIRS = new Set(['node_modules']);
 const OWN_PREFIXES = ['./', '../', '@shared/', '@features/', '@/', '@testing/'];
 const MOCK_CALL = /jest\.(?:mock|doMock)\(\s*(['"`])([^'"`]*)\1/g;
 const UPDATE_BASELINE_HINT =
-  'the count went down: run `node scripts/mock-ratchet.mjs --write` in client/ to update the baseline';
+  'the count went down: run `cd client && node scripts/mock-ratchet.mjs --write` to update the baseline';
 
 function sourceFiles(dir) {
   if (!fs.existsSync(dir)) return [];

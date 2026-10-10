@@ -86,7 +86,7 @@ test('a removed mock whose baseline line stays fails, so the count cannot creep 
 
   assert.equal(status, 1);
   assert.match(out, /fixed: remove it from the baseline: src\/a\.test\.ts @shared\/api/);
-  assert.match(out, /run `node scripts\/mock-ratchet\.mjs --write` in client\//);
+  assert.match(out, /run `cd client && node scripts\/mock-ratchet\.mjs --write`/);
 });
 
 test('a mock swapped for another fails without the --write hint, so the new one is not baselined', (t) => {

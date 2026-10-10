@@ -1,47 +1,53 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { loadRules } from '../../eslint/consistency';
+
+const ESLINT_SPAWNING_TEST_TIMEOUT_MS = 60_000;
+jest.setTimeout(ESLINT_SPAWNING_TEST_TIMEOUT_MS);
+
+const execFileAsync = promisify(execFile);
 
 const mobileRoot = path.join(__dirname, '..', '..');
 const ratchetScript = path.join(mobileRoot, 'scripts', 'consistency-ratchet.mjs');
 const ratchetUrl = pathToFileURL(ratchetScript).href;
 
-async function lintSnippet(rule: ReturnType<typeof loadRules>[number], source: string) {
+async function lintSnippets(rule: ReturnType<typeof loadRules>[number], sources: string[]) {
   const bridge = [
     `const { lintSource } = await import(${JSON.stringify(ratchetUrl)});`,
-    `const messages = await lintSource(${JSON.stringify(rule)}, ${JSON.stringify(source)}, ${JSON.stringify(`${rule.id}.tsx`)});`,
+    `const sources = ${JSON.stringify(sources)};`,
+    `const messages = await Promise.all(sources.map((source) => lintSource(${JSON.stringify(rule)}, source, ${JSON.stringify(`${rule.id}.tsx`)})));`,
     'process.stdout.write(JSON.stringify(messages));',
   ].join('\n');
-  const output = execFileSync('node', ['--input-type=module', '-e', bridge], {
+  const { stdout } = await execFileAsync('node', ['--input-type=module', '-e', bridge], {
     cwd: mobileRoot,
     encoding: 'utf8',
   });
-  return JSON.parse(output) as { message: string; ruleId?: string | null }[];
+  return JSON.parse(stdout) as { message: string; ruleId?: string | null }[][];
 }
 
-const UPDATE_BASELINE_COMMAND = 'run `node scripts/consistency-ratchet.mjs --write` in client/';
+const UPDATE_BASELINE_COMMAND = 'run `cd client && node scripts/consistency-ratchet.mjs --write`';
 
-function runRatchetCli(env: NodeJS.ProcessEnv = {}, args: string[] = []) {
+async function runRatchetCli(env: NodeJS.ProcessEnv = {}, args: string[] = []) {
   try {
-    const stdout = execFileSync('node', [ratchetScript, ...args], {
+    const { stdout } = await execFileAsync('node', [ratchetScript, ...args], {
       cwd: mobileRoot,
       encoding: 'utf8',
       env: { ...process.env, ...env },
     });
     return { status: 0, stdout };
   } catch (error) {
-    const failure = error as { status: number | null; stdout?: string; stderr?: string };
-    return { status: failure.status, stdout: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
+    const failure = error as { code: number | null; stdout?: string; stderr?: string };
+    return { status: failure.code, stdout: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
   }
 }
 
 type FixtureFiles = Record<string, string>;
 
-// Builds a throwaway tree holding only the given files and baseline, so a fixture never lands in the real src.
-function runRatchetOnFixtureTree(files: FixtureFiles, baselineLines: string[] = []) {
+async function runRatchetOnFixtureTree(files: FixtureFiles, baselineLines: string[] = []) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
   const baselineFile = path.join(root, 'consistency.baseline');
   try {
@@ -51,7 +57,7 @@ function runRatchetOnFixtureTree(files: FixtureFiles, baselineLines: string[] = 
       fs.writeFileSync(filePath, source);
     }
     fs.writeFileSync(baselineFile, baselineLines.map((line) => `${line}\n`).join(''));
-    return runRatchetCli({ CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile });
+    return await runRatchetCli({ CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -59,27 +65,27 @@ function runRatchetOnFixtureTree(files: FixtureFiles, baselineLines: string[] = 
 
 const rules = loadRules();
 
-test('at least one rule module is registered', () => {
+test.concurrent('at least one rule module is registered', () => {
   expect(rules.length).toBeGreaterThan(0);
 });
 
 describe.each(rules)('$id', (rule) => {
-  test('flags every invalid example', async () => {
-    for (const invalid of rule.examples.invalid) {
-      const messages = await lintSnippet(rule, invalid);
+  test.concurrent('flags every invalid example', async () => {
+    const results = await lintSnippets(rule, rule.examples.invalid);
+    for (const messages of results) {
       expect(messages.length).toBeGreaterThan(0);
     }
   });
 
-  test('passes every valid example', async () => {
-    for (const valid of rule.examples.valid) {
-      const messages = await lintSnippet(rule, valid);
+  test.concurrent('passes every valid example', async () => {
+    const results = await lintSnippets(rule, rule.examples.valid);
+    for (const messages of results) {
       expect(messages).toHaveLength(0);
     }
   });
 });
 
-test('checklist doc lists MC-1 through MC-7', () => {
+test.concurrent('checklist doc lists MC-1 through MC-7', () => {
   const doc = fs.readFileSync(
     path.join(__dirname, '..', '..', '..', 'docs', 'conventions', 'mobile-consistency.md'),
     'utf8',
@@ -89,113 +95,138 @@ test('checklist doc lists MC-1 through MC-7', () => {
   }
 });
 
-test('running the real script exits 0 on the current src tree, one line per rule module', () => {
-  const { status, stdout } = runRatchetCli();
+const BASELINED_FETCH_PATH = path.join('src', 'legacy.ts');
+const BASELINED_FETCH_LINE = `MC-1 ${BASELINED_FETCH_PATH} Unexpected use of 'fetch'. Use apiFetch/apiSend from @shared/apiClient, not raw fetch (MC-1).`;
+const BASELINED_FETCH_SOURCE = "export function f() {\n  return fetch('https://example.com');\n}\n";
 
-  expect(status).toBe(0);
-  for (const rule of rules) {
-    expect(stdout).toMatch(new RegExp(`^${rule.id}: \\d+$`, 'm'));
-  }
-});
-
-test('running the real script reports MC-1 at its baselined supabaseClient imports and no raw network', () => {
-  const { status, stdout } = runRatchetCli();
-
-  expect(status).toBe(0);
-  expect(stdout).toMatch(/^MC-1: \d+$/m);
-  expect(stdout).not.toContain('new violation');
-});
-
-test('running the script exits 1 when one violation is fixed and another added, count unchanged', () => {
-  const relativePath = path.join('src', '__consistency_ratchet_swap__.ts');
-  const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
-
-  const { status, stdout } = runRatchetOnFixtureTree(
-    { [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n" },
-    [fixedLine],
-  );
-
-  expect(status).toBe(1);
-  expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
-  expect(stdout).toContain(`fixed: remove it from the baseline: ${fixedLine}`);
-  expect(stdout).not.toContain('--write');
-});
-
-test('running the real script exits 1 for a listed violation that no longer occurs', () => {
-  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
-  const listed = path.join(os.tmpdir(), `consistency-stale-${process.pid}.baseline`);
-  fs.writeFileSync(
-    listed,
-    `${fs.readFileSync(path.join(mobileRoot, 'consistency.baseline'), 'utf8')}${stale}\n`,
-  );
-
-  try {
-    const { status, stdout } = runRatchetCli({ CONSISTENCY_BASELINE_FILE: listed });
-
-    expect(status).toBe(1);
-    expect(stdout).toContain(`fixed: remove it from the baseline: ${stale}`);
-    expect(stdout).toContain(UPDATE_BASELINE_COMMAND);
-  } finally {
-    fs.rmSync(listed, { force: true });
-  }
-});
-
-test('--write drops a fixed line from the baseline, so the next run passes', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
-  const baselineFile = path.join(root, 'consistency.baseline');
-  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
-  const env = { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile };
-  try {
-    fs.mkdirSync(path.join(root, 'src'));
-    fs.writeFileSync(path.join(root, 'src', 'clean.ts'), 'export const clean = true;\n');
-    fs.writeFileSync(baselineFile, `${stale}\n`);
-
-    expect(runRatchetCli(env, ['--write']).status).toBe(0);
-
-    expect(fs.readFileSync(baselineFile, 'utf8')).toBe('');
-    expect(runRatchetCli(env).status).toBe(0);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('--write with a new violation refuses, lists it and leaves the baseline unchanged', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
-  const baselineFile = path.join(root, 'consistency.baseline');
-  const relativePath = path.join('src', '__consistency_ratchet_new__.ts');
-  const baseline = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).\n';
-  try {
-    fs.mkdirSync(path.join(root, 'src'));
-    fs.writeFileSync(
-      path.join(root, relativePath),
-      "export function f() {\n  return fetch('https://example.com');\n}\n",
+test.concurrent(
+  'the script exits 0 on a tree matching its baseline, one line per rule module',
+  async () => {
+    const { status, stdout } = await runRatchetOnFixtureTree(
+      { [BASELINED_FETCH_PATH]: BASELINED_FETCH_SOURCE },
+      [BASELINED_FETCH_LINE],
     );
-    fs.writeFileSync(baselineFile, baseline);
 
-    const { status, stdout } = runRatchetCli(
-      { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile },
-      ['--write'],
+    expect(status).toBe(0);
+    for (const rule of rules) {
+      expect(stdout).toMatch(new RegExp(`^${rule.id}: \\d+$`, 'm'));
+    }
+  },
+);
+
+test.concurrent(
+  'the script reports MC-1 at its baselined raw network call and no new violation',
+  async () => {
+    const { status, stdout } = await runRatchetOnFixtureTree(
+      { [BASELINED_FETCH_PATH]: BASELINED_FETCH_SOURCE },
+      [BASELINED_FETCH_LINE],
+    );
+
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/^MC-1: 1$/m);
+    expect(stdout).not.toContain('new violation');
+  },
+);
+
+test.concurrent(
+  'running the script exits 1 when one violation is fixed and another added, count unchanged',
+  async () => {
+    const relativePath = path.join('src', '__consistency_ratchet_swap__.ts');
+    const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
+
+    const { status, stdout } = await runRatchetOnFixtureTree(
+      { [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n" },
+      [fixedLine],
     );
 
     expect(status).toBe(1);
     expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
-    expect(fs.readFileSync(baselineFile, 'utf8')).toBe(baseline);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
+    expect(stdout).toContain(`fixed: remove it from the baseline: ${fixedLine}`);
+    expect(stdout).not.toContain('--write');
+  },
+);
 
-test('running the script exits 1 and names MC-1 and the file when a raw fetch is added', () => {
-  const relativePath = path.join('src', '__consistency_ratchet_fixture__.ts');
+test.concurrent(
+  'the script exits 1 for a listed violation that no longer occurs, naming the refresh command',
+  async () => {
+    const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
 
-  const { status, stdout } = runRatchetOnFixtureTree({
-    [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n",
-  });
+    const { status, stdout } = await runRatchetOnFixtureTree(
+      { [path.join('src', 'clean.ts')]: 'export const clean = true;\n' },
+      [stale],
+    );
 
-  expect(status).toBe(1);
-  expect(stdout).toContain('MC-1');
-  expect(stdout).toContain(relativePath);
-});
+    expect(status).toBe(1);
+    expect(stdout).toContain(`fixed: remove it from the baseline: ${stale}`);
+    expect(stdout).toContain(UPDATE_BASELINE_COMMAND);
+  },
+);
+
+test.concurrent(
+  '--write drops a fixed line from the baseline, so the next run passes',
+  async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
+    const baselineFile = path.join(root, 'consistency.baseline');
+    const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).';
+    const env = { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile };
+    try {
+      fs.mkdirSync(path.join(root, 'src'));
+      fs.writeFileSync(path.join(root, 'src', 'clean.ts'), 'export const clean = true;\n');
+      fs.writeFileSync(baselineFile, `${stale}\n`);
+
+      expect((await runRatchetCli(env, ['--write'])).status).toBe(0);
+
+      expect(fs.readFileSync(baselineFile, 'utf8')).toBe('');
+      expect((await runRatchetCli(env)).status).toBe(0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test.concurrent(
+  '--write with a new violation refuses, lists it and leaves the baseline unchanged',
+  async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
+    const baselineFile = path.join(root, 'consistency.baseline');
+    const relativePath = path.join('src', '__consistency_ratchet_new__.ts');
+    const baseline = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/apiClient (MC-1).\n';
+    try {
+      fs.mkdirSync(path.join(root, 'src'));
+      fs.writeFileSync(
+        path.join(root, relativePath),
+        "export function f() {\n  return fetch('https://example.com');\n}\n",
+      );
+      fs.writeFileSync(baselineFile, baseline);
+
+      const { status, stdout } = await runRatchetCli(
+        { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile },
+        ['--write'],
+      );
+
+      expect(status).toBe(1);
+      expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
+      expect(fs.readFileSync(baselineFile, 'utf8')).toBe(baseline);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test.concurrent(
+  'running the script exits 1 and names MC-1 and the file when a raw fetch is added',
+  async () => {
+    const relativePath = path.join('src', '__consistency_ratchet_fixture__.ts');
+
+    const { status, stdout } = await runRatchetOnFixtureTree({
+      [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n",
+    });
+
+    expect(status).toBe(1);
+    expect(stdout).toContain('MC-1');
+    expect(stdout).toContain(relativePath);
+  },
+);
 
 describe.each([
   [
@@ -214,8 +245,8 @@ describe.each([
     "export const k = { queryKey: ['x'] };\n",
   ],
 ])('running the script for %s', (ruleId, relativePath, source) => {
-  test(`exits 1 and names ${relativePath} when it is added`, () => {
-    const { status, stdout } = runRatchetOnFixtureTree({ [relativePath]: source });
+  test.concurrent(`exits 1 and names ${relativePath} when it is added`, async () => {
+    const { status, stdout } = await runRatchetOnFixtureTree({ [relativePath]: source });
 
     expect(status).toBe(1);
     expect(stdout).toContain(`new violation: ${ruleId} ${relativePath}`);
@@ -229,18 +260,18 @@ async function lintMc2At(filename: string, source: string) {
     `const messages = await lintSource(${JSON.stringify(mc2)}, ${JSON.stringify(source)}, ${JSON.stringify(filename)});`,
     'process.stdout.write(JSON.stringify(messages));',
   ].join('\n');
-  const output = execFileSync('node', ['--input-type=module', '-e', bridge], {
+  const { stdout } = await execFileAsync('node', ['--input-type=module', '-e', bridge], {
     cwd: mobileRoot,
     encoding: 'utf8',
   });
-  return JSON.parse(output) as { message: string; ruleId?: string | null }[];
+  return JSON.parse(stdout) as { message: string; ruleId?: string | null }[];
 }
 
 describe('MC-2 owner of the library delete and re-acquire calls', () => {
   const importing = (name: string) =>
     `import { ${name} } from '@shared/apiClient/tracks';\nexport const f = ${name};\n`;
 
-  test.each([
+  test.concurrent.each([
     ['useDeleteTracks.ts', 'deleteTrack'],
     ['useReacquireTrack.ts', 'reacquireTrack'],
   ])('flags %s importing %s from the apiClient', async (hook, name) => {
@@ -250,7 +281,7 @@ describe('MC-2 owner of the library delete and re-acquire calls', () => {
     expect(messages[0].message).toContain('MC-2');
   });
 
-  test.each(['deleteTrack', 'reacquireTrack'])(
+  test.concurrent.each(['deleteTrack', 'reacquireTrack'])(
     'allows httpLibraryPort.ts to import %s',
     async (name) => {
       const messages = await lintMc2At(
@@ -267,17 +298,20 @@ describe('MC-2 owner of the settings featured-artist backfill', () => {
   const importing =
     "import { backfillFeaturedArtists } from '@shared/apiClient/tracks';\nexport const f = backfillFeaturedArtists;\n";
 
-  test('flags useBackfillFeatured.ts importing backfillFeaturedArtists from the apiClient', async () => {
-    const messages = await lintMc2At(
-      'src/features/settings/hooks/useBackfillFeatured.ts',
-      importing,
-    );
+  test.concurrent(
+    'flags useBackfillFeatured.ts importing backfillFeaturedArtists from the apiClient',
+    async () => {
+      const messages = await lintMc2At(
+        'src/features/settings/hooks/useBackfillFeatured.ts',
+        importing,
+      );
 
-    expect(messages.length).toBeGreaterThan(0);
-    expect(messages[0].message).toContain('MC-2');
-  });
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages[0].message).toContain('MC-2');
+    },
+  );
 
-  test('allows httpSettingsPort.ts to import backfillFeaturedArtists', async () => {
+  test.concurrent('allows httpSettingsPort.ts to import backfillFeaturedArtists', async () => {
     const messages = await lintMc2At(
       'src/features/settings/adapters/http/httpSettingsPort.ts',
       importing,
@@ -291,7 +325,7 @@ describe('MC-2 keeps backfillFeaturedArtists out of every file but the settings 
   const importing =
     "import { backfillFeaturedArtists } from '@shared/apiClient/tracks';\nexport const f = backfillFeaturedArtists;\n";
 
-  test.each([
+  test.concurrent.each([
     'src/features/settings/components/LibraryCard.tsx',
     'src/features/settings/ports/SettingsPortProvider.tsx',
     'src/features/library/adapters/http/httpLibraryPort.ts',
@@ -303,7 +337,7 @@ describe('MC-2 keeps backfillFeaturedArtists out of every file but the settings 
     expect(messages[0].message).toContain('MC-2');
   });
 
-  test('flags the hook importing it under an alias', async () => {
+  test.concurrent('flags the hook importing it under an alias', async () => {
     const messages = await lintMc2At(
       'src/features/settings/hooks/useBackfillFeatured.ts',
       "import { backfillFeaturedArtists as runBackfill } from '@shared/apiClient/tracks';\nexport const f = runBackfill;\n",
@@ -321,18 +355,18 @@ async function lintMc8At(filename: string, source: string) {
     `const messages = await lintSource(${JSON.stringify(mc8)}, ${JSON.stringify(source)}, ${JSON.stringify(filename)});`,
     'process.stdout.write(JSON.stringify(messages));',
   ].join('\n');
-  const output = execFileSync('node', ['--input-type=module', '-e', bridge], {
+  const { stdout } = await execFileAsync('node', ['--input-type=module', '-e', bridge], {
     cwd: mobileRoot,
     encoding: 'utf8',
   });
-  return JSON.parse(output) as { message: string; ruleId?: string | null }[];
+  return JSON.parse(stdout) as { message: string; ruleId?: string | null }[];
 }
 
 describe('MC-8 features reach the API only through their own adapters', () => {
   const barrelImport =
     "import { getTracks } from '@shared/apiClient';\nexport const g = getTracks;\n";
 
-  test('checklist doc has an MC-8 row', () => {
+  test.concurrent('checklist doc has an MC-8 row', () => {
     const doc = fs.readFileSync(
       path.join(__dirname, '..', '..', '..', 'docs', 'conventions', 'mobile-consistency.md'),
       'utf8',
@@ -340,28 +374,30 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     expect(doc).toMatch(/^\| MC-8 \|/m);
   });
 
-  test('the real script prints MC-8 and exits 0', () => {
-    const { status, stdout } = runRatchetCli();
+  test.concurrent('the script prints MC-8 and exits 0 on a clean tree', async () => {
+    const { status, stdout } = await runRatchetOnFixtureTree({
+      [path.join('src', 'clean.ts')]: 'export const clean = true;\n',
+    });
 
     expect(status).toBe(0);
     expect(stdout).toMatch(/^MC-8: \d+$/m);
   });
 
-  test('flags a value import from the barrel in a feature hook', async () => {
+  test.concurrent('flags a value import from the barrel in a feature hook', async () => {
     const messages = await lintMc8At('src/features/library/hooks/useThing.ts', barrelImport);
 
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].message).toContain('MC-8');
   });
 
-  test.each([
+  test.concurrent.each([
     "import type { TrackResponse } from '@shared/apiClient/types';\nexport type T = TrackResponse;\n",
     "import { asTrackId } from '@shared/apiClient/ids';\nexport const t = asTrackId;\n",
   ])('allows a type or pure-module import in a feature hook', async (source) => {
     expect(await lintMc8At('src/features/library/hooks/useThing.ts', source)).toHaveLength(0);
   });
 
-  test('allows a feature adapter to import the barrel', async () => {
+  test.concurrent('allows a feature adapter to import the barrel', async () => {
     const messages = await lintMc8At(
       'src/features/library/adapters/http/httpLibraryPort.ts',
       barrelImport,
@@ -370,13 +406,16 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     expect(messages).toHaveLength(0);
   });
 
-  test('the script exits 1 and names MC-8 and the file when a hook adds a barrel import', () => {
-    const relativePath = path.join('src', 'features', '__mc8_fixture__', 'hooks', 'x.ts');
+  test.concurrent(
+    'the script exits 1 and names MC-8 and the file when a hook adds a barrel import',
+    async () => {
+      const relativePath = path.join('src', 'features', '__mc8_fixture__', 'hooks', 'x.ts');
 
-    const { status, stdout } = runRatchetOnFixtureTree({ [relativePath]: barrelImport });
+      const { status, stdout } = await runRatchetOnFixtureTree({ [relativePath]: barrelImport });
 
-    expect(status).toBe(1);
-    expect(stdout).toContain('MC-8');
-    expect(stdout).toContain(relativePath);
-  });
+      expect(status).toBe(1);
+      expect(stdout).toContain('MC-8');
+      expect(stdout).toContain(relativePath);
+    },
+  );
 });
