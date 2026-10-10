@@ -1315,6 +1315,22 @@ describe('a queue save the server rejects as a client fault', () => {
     expect(saveQueueState).toHaveBeenCalled();
     expect(reportedMessages()).toEqual([]);
   });
+
+  it('does not report an expired session', async () => {
+    const unauthorized = 401;
+    await saveRejectedWith(new ApiError(unauthorized, 'expired', 'auth.expired'));
+
+    expect(saveQueueState).toHaveBeenCalled();
+    expect(reportedMessages()).toEqual([]);
+  });
+
+  it('does not report throttling', async () => {
+    const tooManyRequests = 429;
+    await saveRejectedWith(new ApiError(tooManyRequests, 'slow down', 'rate.limited'));
+
+    expect(saveQueueState).toHaveBeenCalled();
+    expect(reportedMessages()).toEqual([]);
+  });
 });
 
 describe('resuming through a memory playback port', () => {

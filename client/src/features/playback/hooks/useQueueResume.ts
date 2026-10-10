@@ -3,7 +3,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import { useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/playbackTrack';
-import { ApiError, isServerFaultStatus } from '@shared/failure/errors';
+import { ApiError } from '@shared/failure/errors';
 import { reportClientError } from '@shared/telemetry/clientErrorReporting';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 
@@ -78,8 +78,12 @@ async function readSaveSnapshot(
   return snapshot;
 }
 
-function isClientFaultRejection(err: unknown): err is ApiError {
-  return err instanceof ApiError && err.code !== undefined && !isServerFaultStatus(err.status);
+const HTTP_BAD_REQUEST = 400;
+const HTTP_UNPROCESSABLE = 422;
+const VALIDATION_STATUSES: ReadonlySet<number> = new Set([HTTP_BAD_REQUEST, HTTP_UNPROCESSABLE]);
+
+function isValidationRejection(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code !== undefined && VALIDATION_STATUSES.has(err.status);
 }
 
 interface FingerprintRef {
@@ -93,7 +97,7 @@ function isNewSighting(seen: FingerprintRef, queue: SaveFingerprint): boolean {
 }
 
 function reportRejectedQueueOnce(err: unknown, state: QueueStore, reported: FingerprintRef): void {
-  if (!isClientFaultRejection(err)) return;
+  if (!isValidationRejection(err)) return;
   if (!isNewSighting(reported, fingerprintOf(state, 0))) return;
   reportClientError(new Error(`queue save rejected: ${err.code}`), 'playback');
 }
