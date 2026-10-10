@@ -9,7 +9,6 @@ export type { RowProps } from '@shared/ui/primitives/Row';
 export { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 export { Chip } from '@shared/ui/primitives/Chip';
 export type { ChipProps } from '@shared/ui/primitives/Chip';
-export { Banner } from '@shared/ui/primitives/Banner';
 export type { BannerProps } from '@shared/ui/primitives/Banner';
 export { Wordmark } from '@shared/ui/primitives/Wordmark';
 export type { WordmarkProps } from '@shared/ui/primitives/Wordmark';

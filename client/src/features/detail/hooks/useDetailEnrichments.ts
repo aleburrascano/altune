@@ -28,7 +28,7 @@ export type EnrichmentParams = {
   enabled?: boolean;
 };
 
-export type EnrichmentReturn<T> = {
+type EnrichmentReturn<T> = {
   enrichment: T | null;
   isError: boolean;
 };
@@ -48,7 +48,7 @@ type EnrichmentFetchParams = Required<Pick<EnrichmentParams, 'kind' | 'title'>> 
   Pick<EnrichmentParams, 'subtitle' | 'mbid'> &
   EnrichmentSignal;
 
-export type EnrichmentHookConfig<T> = {
+type EnrichmentHookConfig<T> = {
   keyPrefix: string;
   provider: EnrichmentProvider;
   fetch: (port: DetailPort, params: EnrichmentFetchParams) => Promise<T>;
@@ -120,15 +120,14 @@ function enrichmentQueryOptions<T>(request: EnrichmentRequest<T>, isFetchEnabled
   };
 }
 
-export function useProviderEnrichment<T extends HasContent>(
+function useProviderEnrichment<T extends HasContent>(
   config: EnrichmentHookConfig<T>,
   params: EnrichmentParams,
 ): EnrichmentReturn<T> {
   const port = useDetailPort();
   const isFetchEnabled = useDetailFetchEnabled();
-  const { data: fetched, isError } = useQuery<T>(
-    enrichmentQueryOptions({ config, port, params }, isFetchEnabled),
-  );
+  const options = enrichmentQueryOptions({ config, port, params }, isFetchEnabled);
+  const { data: fetched, isError } = useQuery<T>(options);
   return { enrichment: visibleEnrichment(fetched), isError };
 }
 

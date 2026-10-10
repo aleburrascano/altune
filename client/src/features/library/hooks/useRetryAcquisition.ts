@@ -35,7 +35,7 @@ import {
 } from '@shared/acquisition/acquisitionTelemetry';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
 
-export const trackMutationKeys = {
+const trackMutationKeys = {
   retryAcquisition: ['track', 'retry-acquisition'] as const,
   reacquire: ['track', 'reacquire'] as const,
 };
