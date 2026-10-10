@@ -8,7 +8,10 @@ export function buildPlayableQueue(
   tracks: readonly TrackResponse[],
   targetTrackId: string,
 ): { playable: PlaybackTrack[]; startIndex: number } {
-  const playable = tracks.filter((t) => canPlay(t.acquisition_status)).map(toPlaybackTrack);
+  const playable: PlaybackTrack[] = [];
+  for (const t of tracks) {
+    if (canPlay(t.acquisition_status)) playable.push(toPlaybackTrack(t));
+  }
   const startIndex = playable.findIndex(
     (t) => t.source.kind === 'library' && t.source.trackId === targetTrackId,
   );

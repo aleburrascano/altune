@@ -37,14 +37,13 @@ export function getTrackFromCaches(
   queryClient: QueryClient,
   trackId: TrackId,
 ): TrackResponse | undefined {
-  for (const family of TRACK_CACHE_FAMILY_LIST) {
-    const entries = queryClient.getQueriesData({ queryKey: family.prefix });
-    for (const [, data] of entries) {
-      const found = TRACK_SHAPES[family.shape].items(data).find((t) => t.id === trackId);
-      if (found) return withPatch(found, pendingPatchFor(queryClient, trackId));
-    }
-  }
-  return undefined;
+  const cached = TRACK_CACHE_FAMILY_LIST.flatMap((family) =>
+    queryClient
+      .getQueriesData({ queryKey: family.prefix })
+      .flatMap(([, data]) => TRACK_SHAPES[family.shape].items(data)),
+  );
+  const found = cached.find((t) => t.id === trackId);
+  return found ? withPatch(found, pendingPatchFor(queryClient, trackId)) : undefined;
 }
 
 function mergeTrack(prev: TrackResponse, next: TrackResponse): TrackResponse {

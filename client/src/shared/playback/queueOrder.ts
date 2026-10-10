@@ -75,7 +75,11 @@ export function withAppended(state: QueueState, tracks: TrackList): Partial<Queu
 }
 
 export function withoutTrack(indices: readonly number[], removed: number): number[] {
-  return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
+  const kept: number[] = [];
+  for (const i of indices) {
+    if (i !== removed) kept.push(i > removed ? i - 1 : i);
+  }
+  return kept;
 }
 
 export function currentAfterMove(currentIndex: number, fromIndex: number, toIndex: number): number {
@@ -161,7 +165,10 @@ function nearestKeyPosition(
   key: string,
   preferred: number,
 ): number | null {
-  const hits = ordered.map((t, i) => (t && trackKey(t) === key ? i : -1)).filter((i) => i >= 0);
+  const hits: number[] = [];
+  ordered.forEach((t, i) => {
+    if (t && trackKey(t) === key) hits.push(i);
+  });
   if (hits.length === 0) return null;
   return hits.reduce((a, b) => (Math.abs(b - preferred) < Math.abs(a - preferred) ? b : a));
 }

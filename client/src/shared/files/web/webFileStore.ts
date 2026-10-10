@@ -68,13 +68,21 @@ function fileHandle(storage: Storage, uri: string): StoredFile {
   return handle;
 }
 
+function directChildName(key: string, prefix: string): string | null {
+  if (!key.startsWith(prefix)) return null;
+  const rest = key.slice(prefix.length);
+  return rest !== '.dir' && !rest.includes('/') ? rest : null;
+}
+
 function namesDirectlyUnder(storage: Storage, path: string): readonly string[] {
   const prefix = fileKey(`${path}/`);
   const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i) as string);
-  return keys
-    .filter((key) => key.startsWith(prefix))
-    .map((key) => key.slice(prefix.length))
-    .filter((rest) => rest !== '.dir' && !rest.includes('/'));
+  const names: string[] = [];
+  for (const key of keys) {
+    const name = directChildName(key, prefix);
+    if (name !== null) names.push(name);
+  }
+  return names;
 }
 
 function attachDirGetter(target: object, { storage, marker }: DirCtx): void {

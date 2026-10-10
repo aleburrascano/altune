@@ -281,9 +281,10 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       }
     }
     saveIndex(next);
-    const requeue = Object.values(next)
-      .filter((e) => e.status === 'queued')
-      .map((e) => e.trackId);
+    const requeue: TrackId[] = [];
+    for (const e of Object.values(next)) {
+      if (e.status === 'queued') requeue.push(e.trackId);
+    }
     set({ entries: next, queue: requeue, lastUnpinAll: undefined });
     if (requeue.length > 0) runDownloadQueueIfSupported(set, get);
   },
