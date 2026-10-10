@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 )
 
 const (
 	ownerScanWindow       = 500
+	maxRetryOwners        = 1000
 	DefaultSweepRunBudget = 30 * time.Second
 )
 
@@ -23,9 +25,11 @@ type ForgetDeletedIdentitiesService struct {
 	reaper     ports.ErasedStateReaper
 	scanWindow int
 	runBudget  time.Duration
+	retryCap   int
 
 	mu          sync.Mutex
 	resumeAfter shared.UserId
+	retryOwners []shared.UserId
 }
 
 type ForgetDeletedIdentitiesOption func(*ForgetDeletedIdentitiesService)
@@ -53,6 +57,7 @@ func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, q
 		metrics:    ports.NoopErasureSweepMetrics(),
 		scanWindow: ownerScanWindow,
 		runBudget:  DefaultSweepRunBudget,
+		retryCap:   maxRetryOwners,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -64,21 +69,17 @@ type sweepRun struct {
 	forgotten int
 	failures  []error
 	cursor    shared.UserId
-	retryFrom *shared.UserId
 }
 
-func (r *sweepRun) holdForRetry() {
-	if r.retryFrom == nil {
-		start := r.cursor
-		r.retryFrom = &start
-	}
+type eraseOutcome struct {
+	forgotten   int
+	failures    []error
+	failed      []shared.UserId
+	unattempted []shared.UserId
 }
 
-func (r *sweepRun) resumePoint() shared.UserId {
-	if r.retryFrom != nil {
-		return *r.retryFrom
-	}
-	return r.cursor
+func (o eraseOutcome) interrupted() bool {
+	return len(o.unattempted) > 0
 }
 
 func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, error) {
@@ -90,10 +91,27 @@ func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, erro
 	}
 	runCtx, cancel := context.WithTimeout(ctx, s.runBudget)
 	defer cancel()
-	s.scanOwners(ctx, runCtx, run)
-	s.resumeAfter = run.resumePoint()
+	if s.retryFailedOwners(ctx, runCtx, run) {
+		s.scanOwners(ctx, runCtx, run)
+	}
+	s.resumeAfter = run.cursor
 	logDeletedIdentitySweep(ctx, run.forgotten)
 	return run.forgotten, errors.Join(run.failures...)
+}
+
+func (s *ForgetDeletedIdentitiesService) retryFailedOwners(ctx, runCtx context.Context, run *sweepRun) bool {
+	owners := s.retryOwners
+	s.retryOwners = nil
+	outcome := s.forgetAll(runCtx, owners)
+	run.forgotten += outcome.forgotten
+	run.failures = append(run.failures, outcome.failures...)
+	s.keepForRetry(ctx, outcome.failed)
+	s.keepForRetry(ctx, outcome.unattempted)
+	if outcome.interrupted() {
+		s.recordRunInterrupted(ctx, runCtx, run)
+		return false
+	}
+	return true
 }
 
 func (s *ForgetDeletedIdentitiesService) scanOwners(ctx, runCtx context.Context, run *sweepRun) {
@@ -115,16 +133,29 @@ func (s *ForgetDeletedIdentitiesService) scanOwners(ctx, runCtx context.Context,
 }
 
 func (s *ForgetDeletedIdentitiesService) erasePage(ctx, runCtx context.Context, run *sweepRun, page ports.OwnerScanPage) bool {
-	erased, failures, interrupted := s.forgetAll(runCtx, page.Orphaned)
-	run.forgotten += erased
-	run.failures = append(run.failures, failures...)
-	if len(failures) > 0 || interrupted {
-		run.holdForRetry()
-	}
-	if interrupted {
+	outcome := s.forgetAll(runCtx, page.Orphaned)
+	run.forgotten += outcome.forgotten
+	run.failures = append(run.failures, outcome.failures...)
+	s.keepForRetry(ctx, outcome.failed)
+	if outcome.interrupted() {
 		s.recordRunInterrupted(ctx, runCtx, run)
+		return false
 	}
-	return !interrupted
+	return true
+}
+
+func (s *ForgetDeletedIdentitiesService) keepForRetry(ctx context.Context, owners []shared.UserId) {
+	for _, owner := range owners {
+		if slices.Contains(s.retryOwners, owner) {
+			continue
+		}
+		if len(s.retryOwners) >= s.retryCap {
+			slog.WarnContext(ctx, "playback.deleted_identity_retry_owner_dropped", "user_id", owner.String())
+			s.metrics.RetryOwnerDropped()
+			continue
+		}
+		s.retryOwners = append(s.retryOwners, owner)
+	}
 }
 
 func (s *ForgetDeletedIdentitiesService) recordScanFailure(ctx, runCtx context.Context, run *sweepRun, err error) {
@@ -175,24 +206,26 @@ func (s *ForgetDeletedIdentitiesService) reapErasedStates(ctx context.Context) e
 	return nil
 }
 
-func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) (int, []error, bool) {
-	forgotten := 0
-	var failures []error
-	for _, owner := range owners {
+func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) eraseOutcome {
+	var outcome eraseOutcome
+	for i, owner := range owners {
 		if ctx.Err() != nil {
-			return forgotten, failures, true
+			outcome.unattempted = owners[i:]
+			return outcome
 		}
 		if err := s.queue.ForgetDeletedAccount(ctx, owner); err != nil {
 			if ctx.Err() != nil {
-				return forgotten, failures, true
+				outcome.unattempted = owners[i:]
+				return outcome
 			}
-			failures = append(failures, fmt.Errorf("forget deleted identity: %w", err))
+			outcome.failures = append(outcome.failures, fmt.Errorf("forget deleted identity: %w", err))
+			outcome.failed = append(outcome.failed, owner)
 			continue
 		}
-		forgotten++
+		outcome.forgotten++
 		s.metrics.QueueStateErased(1)
 	}
-	return forgotten, failures, ctx.Err() != nil
+	return outcome
 }
 
 func logDeletedIdentitySweep(ctx context.Context, forgotten int) {

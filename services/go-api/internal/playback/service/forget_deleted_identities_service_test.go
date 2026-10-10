@@ -218,10 +218,14 @@ func TestForgetDeletedIdentities_ErasesABacklogAcrossBatchesInOneRun(t *testing.
 
 type failingOwnersQueueRepo struct {
 	inMemoryQueueRepo
-	failing map[shared.UserId]error
+	failing  map[shared.UserId]error
+	attempts map[shared.UserId]int
 }
 
 func (r *failingOwnersQueueRepo) DeleteForUser(ctx context.Context, userId shared.UserId) error {
+	if r.attempts != nil {
+		r.attempts[userId]++
+	}
 	if err := r.failing[userId]; err != nil {
 		return err
 	}
@@ -358,30 +362,85 @@ func TestForgetDeletedIdentities_RunStopsAtItsDeadlineAndResumes(t *testing.T) {
 	}
 }
 
-func TestForgetDeletedIdentities_FailedEraseIsRetriedNextRun(t *testing.T) {
-	repo := &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: map[shared.UserId]error{}}
+func newFailingOwnersRepo() *failingOwnersQueueRepo {
+	return &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: map[shared.UserId]error{}, attempts: map[shared.UserId]int{}}
+}
+
+func TestForgetDeletedIdentities_PermanentlyFailingOwnerDoesNotBlockTheTable(t *testing.T) {
+	repo := newFailingOwnersRepo()
 	identities := newIdentityStore(&repo.inMemoryQueueRepo)
 	owners := deletedOwnersInKeyOrder(t, NewQueueService(repo, &fakeNowPlaying{}), identities, 5)
-	sweep := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}))
+	sweep := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}),
+		WithSweepRunBudget(50*time.Millisecond))
 	sweep.scanWindow = 2
 	dbDown := errors.New("connection refused")
-	repo.failing[owners[2]] = dbDown
+	repo.failing[owners[0]] = dbDown
+	identities.stallOnScan = 2
 
 	forgotten, _, err := runScans(sweep, identities)
-	if !errors.Is(err, dbDown) || forgotten != 4 {
-		t.Fatalf("first run = (%d, %v), want the 4 healthy owners erased and the failure reported", forgotten, err)
+	if !errors.Is(err, dbDown) || forgotten != 1 || repo.attempts[owners[0]] != 1 {
+		t.Fatalf("first run = (%d, %v) with %d attempts on the failing owner, want 1 erased, the failure reported and 1 attempt",
+			forgotten, err, repo.attempts[owners[0]])
 	}
 
-	delete(repo.failing, owners[2])
+	identities.stallOnScan = 0
 	forgotten, scans, err := runScans(sweep, identities)
-	if err != nil {
-		t.Fatalf("Execute(second run): %v", err)
+	if !errors.Is(err, dbDown) {
+		t.Fatalf("second run = %v, want the failing owner reported again", err)
+	}
+	if repo.attempts[owners[0]] != 2 {
+		t.Errorf("failing owner attempted %d times after two runs, want it retried every run", repo.attempts[owners[0]])
 	}
 	if len(scans) == 0 || scans[0] != owners[1] {
-		t.Fatalf("second run scanned after %v, want it to retry the page holding the failed owner", scans)
+		t.Fatalf("second run scanned after %v, want the cursor past the finished page, after owner 2", scans)
 	}
-	if forgotten != 1 || len(repo.states) != 0 {
-		t.Fatalf("second run forgot %d and left %d, want the failed owner erased on retry", forgotten, len(repo.states))
+	if forgotten != 3 || len(repo.states) != 1 {
+		t.Fatalf("second run forgot %d and left %d, want the 3 owners after the failing one erased", forgotten, len(repo.states))
+	}
+	if !slices.Equal(sweep.retryOwners, []shared.UserId{owners[0]}) {
+		t.Errorf("retry set = %v, want only the failing owner", sweep.retryOwners)
+	}
+}
+
+func TestForgetDeletedIdentities_RetriedOwnerLeavesTheRetrySetOnceErased(t *testing.T) {
+	repo := newFailingOwnersRepo()
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	owners := deletedOwnersInKeyOrder(t, NewQueueService(repo, &fakeNowPlaying{}), identities, 3)
+	sweep := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}))
+	dbDown := errors.New("connection refused")
+	repo.failing[owners[1]] = dbDown
+
+	if forgotten, _, err := runScans(sweep, identities); !errors.Is(err, dbDown) || forgotten != 2 {
+		t.Fatalf("first run = (%d, %v), want the 2 healthy owners erased and the failure reported", forgotten, err)
+	}
+
+	delete(repo.failing, owners[1])
+	forgotten, _, err := runScans(sweep, identities)
+	if err != nil || forgotten != 1 || len(repo.states) != 0 {
+		t.Fatalf("second run = (%d, %v) leaving %d, want the failed owner erased on retry", forgotten, err, len(repo.states))
+	}
+	if len(sweep.retryOwners) != 0 {
+		t.Errorf("retry set = %v after a successful retry, want it empty", sweep.retryOwners)
+	}
+}
+
+func TestForgetDeletedIdentities_FullRetrySetDropsAndCountsTheOverflow(t *testing.T) {
+	repo := newFailingOwnersRepo()
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	owners := deletedOwnersInKeyOrder(t, NewQueueService(repo, &fakeNowPlaying{}), identities, 3)
+	spy := &sweepMetricsSpy{}
+	sweep := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	sweep.retryCap = 2
+	for _, owner := range owners {
+		repo.failing[owner] = errors.New("connection refused")
+	}
+
+	if _, _, err := runScans(sweep, identities); err == nil {
+		t.Fatal("Execute must report the failed erases")
+	}
+
+	if len(sweep.retryOwners) != 2 || spy.retryDropped != 1 {
+		t.Errorf("retry set holds %d with %d drops counted, want it capped at 2 and 1 drop counted", len(sweep.retryOwners), spy.retryDropped)
 	}
 }
 
@@ -389,11 +448,13 @@ type sweepMetricsSpy struct {
 	idle         int
 	erased       int
 	scanTimeouts int
+	retryDropped int
 }
 
 func (m *sweepMetricsSpy) SweepIdle()             { m.idle++ }
 func (m *sweepMetricsSpy) QueueStateErased(n int) { m.erased += n }
 func (m *sweepMetricsSpy) OwnerScanTimedOut()     { m.scanTimeouts++ }
+func (m *sweepMetricsSpy) RetryOwnerDropped()     { m.retryDropped++ }
 
 func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 	repo := newInMemoryQueueRepo()

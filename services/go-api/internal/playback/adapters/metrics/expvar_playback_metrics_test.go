@@ -79,8 +79,12 @@ func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
 	m.SweepIdle()
 	m.QueueStateErased(3)
 	m.OwnerScanTimedOut()
+	m.RetryOwnerDropped()
 
 	after := ReadSnapshot()
+	if after.ErasureRetryOwnersDropped != before.ErasureRetryOwnersDropped+1 {
+		t.Errorf("erasure_retry_owners_dropped_total = %d, want %d", after.ErasureRetryOwnersDropped, before.ErasureRetryOwnersDropped+1)
+	}
 	if after.ErasureOwnerScanTimeouts != before.ErasureOwnerScanTimeouts+1 {
 		t.Errorf("erasure_owner_scan_timeouts_total = %d, want %d", after.ErasureOwnerScanTimeouts, before.ErasureOwnerScanTimeouts+1)
 	}
