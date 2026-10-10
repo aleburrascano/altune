@@ -175,8 +175,6 @@ jobs:
       - name: dependencies
         run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
       - name: react-doctor
-        env:
-          MAX_WARNINGS: 121
         run: cd "$WT/client" && bash "$WT/.github/workflows/test-mobile-react-doctor.sh"
       - name: architecture, dead code and duplication (fallow)
         run: cd "$WT/client" && npm run fallow

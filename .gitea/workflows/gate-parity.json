@@ -93,10 +93,10 @@
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
   },
   "ci.yml#ci-mobile-quality#react-doctor": {
-    "allow": "red on main today (109 warnings over the 106 ceiling, ci run 3551), so gating it turns every mobile PR red; 42s median; follow-up #1505"
+    "gate": "mobile react-doctor"
   },
   "ci.yml#ci-mobile-quality#architecture, dead code and duplication (fallow)": {
-    "allow": "red on main today (4 boundary violations, 1 unused export, 1 duplicate pair), so gating it turns every mobile PR red; 2s; follow-up #1505"
+    "gate": "mobile fallow"
   },
   "ci.yml#ci-mobile-quality#complexity ratchet (fallow)": {
     "allow": "continue-on-error in ci.yml, so it never fails main"
