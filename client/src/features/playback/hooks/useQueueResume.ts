@@ -3,6 +3,8 @@ import TrackPlayer from 'react-native-track-player';
 
 import { useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/playbackTrack';
+import { ApiError } from '@shared/failure/errors';
+import { reportClientError } from '@shared/telemetry/clientErrorReporting';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 
 import { restoreSavedQueue } from '@features/playback/native/restoreSavedQueue';
@@ -76,26 +78,54 @@ async function readSaveSnapshot(
   return snapshot;
 }
 
-async function sendSaveReportingFailure(snapshot: ConsistentSnapshot): Promise<boolean> {
-  try {
-    await sendSave(snapshot.state, snapshot.positionMs);
-    return true;
-  } catch (err) {
-    warnPlayback('failed to save queue state', {}, err);
-    recordQueueSaveFailure();
-    return false;
-  }
+const HTTP_BAD_REQUEST = 400;
+const HTTP_UNPROCESSABLE = 422;
+const VALIDATION_STATUSES: ReadonlySet<number> = new Set([HTTP_BAD_REQUEST, HTTP_UNPROCESSABLE]);
+
+function isValidationRejection(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code !== undefined && VALIDATION_STATUSES.has(err.status);
+}
+
+interface FingerprintRef {
+  current: SaveFingerprint | null;
+}
+
+function isNewSighting(seen: FingerprintRef, queue: SaveFingerprint): boolean {
+  if (sameFingerprint(seen.current, queue)) return false;
+  seen.current = queue;
+  return true;
+}
+
+function reportRejectedQueueOnce(err: unknown, state: QueueStore, reported: FingerprintRef): void {
+  if (!isValidationRejection(err)) return;
+  if (!isNewSighting(reported, fingerprintOf(state, 0))) return;
+  reportClientError(new Error(`queue save rejected: ${err.code}`), 'playback');
+}
+
+function handleSaveFailure(err: unknown, state: QueueStore, reported: FingerprintRef): false {
+  warnPlayback('failed to save queue state', {}, err);
+  recordQueueSaveFailure();
+  reportRejectedQueueOnce(err, state, reported);
+  return false;
+}
+
+function sendSaveReportingFailure(s: ConsistentSnapshot, seen: FingerprintRef): Promise<boolean> {
+  return sendSave(s.state, s.positionMs).then(
+    () => true,
+    (err: unknown) => handleSaveFailure(err, s.state, seen),
+  );
 }
 
 async function saveOnce(
   isSkippable: (state: QueueStore) => boolean,
   lastSaved: { current: SaveFingerprint | null },
+  lastReported: FingerprintRef,
 ): Promise<void> {
   const snapshot = await readSaveSnapshot(isSkippable);
   if (!snapshot) return;
   const fingerprint = fingerprintOf(snapshot.state, snapshot.positionMs);
   if (sameFingerprint(lastSaved.current, fingerprint)) return;
-  if (await sendSaveReportingFailure(snapshot)) lastSaved.current = fingerprint;
+  if (await sendSaveReportingFailure(snapshot, lastReported)) lastSaved.current = fingerprint;
 }
 
 interface SingleFlightState {
@@ -137,12 +167,15 @@ export function useQueueResume() {
   const placeholderGenerationRef = useRef<number | null>(null);
   const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
   const lastSavedRef = useRef<SaveFingerprint | null>(null);
+  const lastReportedRef = useRef<SaveFingerprint | null>(null);
   const save = useCallback((): Promise<void> => {
     const isSkippable = (state: QueueStore): boolean =>
       state.tracks.length === 0 ||
       placeholderGenerationRef.current === state.generation ||
       state.currentTrack()?.source.kind !== 'library';
-    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable, lastSavedRef));
+    singleFlightRef.current ??= createSingleFlight(() =>
+      saveOnce(isSkippable, lastSavedRef, lastReportedRef),
+    );
     return singleFlightRef.current();
   }, []);
 
