@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { parseTrackId, type TrackId } from '@shared/apiClient/ids';
-import { onSignOut } from '@shared/session/signOutCleanup';
+import { onIdentityChange, onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
@@ -304,20 +304,24 @@ onKillSwitchChange((loop, enabled) => {
   }
 });
 
-export function claimPinnedDownloads(userId: string): void {
-  if (readOwner() === userId) {
-    previousUserSurvivors = new Set();
-    return;
-  }
+function unpinPreviousOwnersDownloads(): 'survivors' | 'cleared' {
   const outcome = usePinnedStore.getState().unpinAll();
   usePinnedStore.setState({ lastUnpinAll: undefined });
-  if (outcome === 'partial') {
-    previousUserSurvivors = new Set(Object.keys(usePinnedStore.getState().entries));
-    return;
-  }
-  previousUserSurvivors = new Set();
-  writeOwner(userId);
+  if (outcome !== 'partial') return 'cleared';
+  previousUserSurvivors = new Set(Object.keys(usePinnedStore.getState().entries));
+  return 'survivors';
 }
+
+function claimPinnedDownloads(userId: string): void {
+  const alreadyOwner = readOwner() === userId;
+  if (!alreadyOwner && unpinPreviousOwnersDownloads() === 'survivors') return;
+  previousUserSurvivors = new Set();
+  if (!alreadyOwner) writeOwner(userId);
+}
+
+onIdentityChange((userId) => {
+  if (userId !== null && offlineDownloadsSupported) claimPinnedDownloads(userId);
+});
 
 function versionDisagrees(localVersion?: string, expectedVersion?: string): boolean {
   return (

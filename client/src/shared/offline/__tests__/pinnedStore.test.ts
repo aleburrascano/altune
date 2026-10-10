@@ -10,7 +10,7 @@ import {
 } from '@shared/files/__tests__/memoryFileStore';
 import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { notifyIdentityChange, runSignOutCleanups } from '@shared/session/signOutCleanup';
 import {
   setPinnedFileStore,
   MAX_PINNED_BYTES,
@@ -33,7 +33,6 @@ import {
   type PinnedStatus,
   resolvePinnedUri,
   repinIfPinned,
-  claimPinnedDownloads,
 } from '@shared/offline/pinnedStore';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
@@ -3332,12 +3331,12 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
   });
 
-  describe('claimPinnedDownloads — downloads belong to the account that made them', () => {
+  describe('identity change claims — downloads belong to the account that made them', () => {
     it('keeps downloads the claiming user already owns', () => {
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
 
-      claimPinnedDownloads('user-a');
+      notifyIdentityChange('user-a');
 
       expect(resolvePinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
       expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
@@ -3347,7 +3346,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
 
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
 
       expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
       expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
@@ -3360,7 +3359,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
 
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
 
       expect(usePinnedStore.getState().entries).toEqual({
         t1: { trackId: asTrackId('t1'), status: 'ready', uri: AUDIO_URI },
@@ -3376,7 +3375,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
 
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
 
       expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
       warn.mockRestore();
@@ -3387,7 +3386,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
       const freshUri = 'file:///document/offline-audio/t2.mp3';
       __fs.seedFile(freshUri, 'user-b-bytes');
       usePinnedStore.setState((s) => ({
@@ -3405,7 +3404,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
 
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
 
       expect(usePinnedStore.getState().lastUnpinAll).toBeUndefined();
       warn.mockRestore();
@@ -3441,13 +3440,13 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       seedReadyDownload();
       __fs.failNext('delete', new Error('file is locked'));
 
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
 
       expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
       expect(Object.keys(usePinnedStore.getState().entries)).toEqual(['t1']);
       expect(__fs.readFile(OWNER_URI)).toBe('user-a');
 
-      claimPinnedDownloads('user-b');
+      notifyIdentityChange('user-b');
 
       expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
       expect(usePinnedStore.getState().entries).toEqual({});
@@ -3460,7 +3459,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       seedReadyDownload();
       __fs.failNext('read');
 
-      claimPinnedDownloads('user-a');
+      notifyIdentityChange('user-a');
 
       expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
       expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
@@ -3478,7 +3477,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       });
       seedReadyDownload();
 
-      claimPinnedDownloads('user-a');
+      notifyIdentityChange('user-a');
 
       expect(__fs.readFile(OWNER_URI)).toBeUndefined();
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('pinned owner'));
