@@ -1,6 +1,6 @@
 export { ThemeProvider, ThemeContext } from '@shared/ui/theme/ThemeProvider';
 export { useTheme } from '@shared/ui/theme/useTheme';
-export { darkTheme, lightTheme, themes, palette } from '@shared/ui/theme/theme';
+export { darkTheme, lightTheme, themes } from '@shared/ui/theme/theme';
 export {
   spacing,
   radius,

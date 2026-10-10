@@ -11,6 +11,7 @@ trap 'docker rm -fv "$cid" >/dev/null 2>&1' EXIT
 DATABASE_URL=$(sed -n 's/^DATABASE_URL=//p' <<<"$env")
 export DATABASE_URL INTEGRATION=1
 cd services/go-api
+export GOTOOLCHAIN="go$(awk '/^go /{print $2; exit}' go.mod)"
 bash ../../.github/workflows/test-backend-migrate.sh >/dev/null
 mapfile -t pkgs < <(git grep -lE 'RequireIntegration|DATABASE_URL' -- '*_test.go' | xargs -n1 dirname | sort -u | sed 's#^#./#')
 [ "${#pkgs[@]}" -gt 0 ] || { echo "::error::no integration test packages matched"; exit 1; }

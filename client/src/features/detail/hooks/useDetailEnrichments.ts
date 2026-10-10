@@ -126,8 +126,10 @@ export function useProviderEnrichment<T extends HasContent>(
 ): EnrichmentReturn<T> {
   const port = useDetailPort();
   const isFetchEnabled = useDetailFetchEnabled();
-  const query = useQuery<T>(enrichmentQueryOptions({ config, port, params }, isFetchEnabled));
-  return { enrichment: visibleEnrichment(query.data), isError: query.isError };
+  const { data: fetched, isError } = useQuery<T>(
+    enrichmentQueryOptions({ config, port, params }, isFetchEnabled),
+  );
+  return { enrichment: visibleEnrichment(fetched), isError };
 }
 
 type MusicBrainzEnrichment = Awaited<ReturnType<DetailPort['getEnrichment']>>;

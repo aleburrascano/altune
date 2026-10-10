@@ -1,6 +1,6 @@
 module altune/go-api
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/bogem/id3v2/v2 v2.1.4

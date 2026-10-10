@@ -148,10 +148,11 @@ function listsOf(queryKey: QueryKey, shape: TrackCacheShape, cached: unknown): T
 }
 
 function listsInFamily(queryClient: QueryClient, family: TrackCacheFamily): TrackList[] {
-  return queryClient
-    .getQueriesData({ queryKey: family.prefix })
-    .filter(([, cached]) => cached)
-    .flatMap(([queryKey, cached]) => listsOf(queryKey, family.shape, cached));
+  const lists: TrackList[] = [];
+  for (const [queryKey, cached] of queryClient.getQueriesData({ queryKey: family.prefix })) {
+    if (cached) lists.push(...listsOf(queryKey, family.shape, cached));
+  }
+  return lists;
 }
 
 function placementIn(list: TrackList, trackId: TrackId): TrackCachePlacement | undefined {
@@ -166,9 +167,14 @@ export function captureTrackPlacements(
   trackId: TrackId,
 ): TrackCachePlacement[] {
   flushTrackCachePatches();
-  return TRACK_CACHE_FAMILY_LIST.flatMap((family) => listsInFamily(queryClient, family))
-    .map((list) => placementIn(list, trackId))
-    .filter((placement) => placement !== undefined);
+  const placements: TrackCachePlacement[] = [];
+  for (const family of TRACK_CACHE_FAMILY_LIST) {
+    for (const list of listsInFamily(queryClient, family)) {
+      const placement = placementIn(list, trackId);
+      if (placement) placements.push(placement);
+    }
+  }
+  return placements;
 }
 
 function reinsert(items: TrackResponse[], placement: TrackCachePlacement): TrackResponse[] {

@@ -11,4 +11,5 @@ echo "WT=$wt" >>"$GITHUB_ENV"
 node22=$(ls -d "$HOME"/.nvm/versions/node/v22.*/bin 2>/dev/null | sort -V | tail -1)
 [ -n "$node22" ] && echo "$node22" >>"$GITHUB_PATH"
 echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
+echo "GOTOOLCHAIN=go$(awk '/^go /{print $2; exit}' "$wt/services/go-api/go.mod")" >>"$GITHUB_ENV"
 echo "worktree $wt at $(git -C "$wt" rev-parse HEAD)"
