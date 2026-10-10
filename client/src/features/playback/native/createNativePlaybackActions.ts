@@ -14,6 +14,7 @@ import {
 import { reorderUpcomingNative } from '@features/playback/native/rebuildNativeTail';
 import { claimSessionReset } from '@features/playback/domain/loadToken';
 import { withNativeQueue } from '@features/playback/native/nativeQueueLock';
+import { msToSeconds } from '@features/playback/domain/time';
 import {
   clearPlaybackError,
   reportLoadFailure,
@@ -158,7 +159,7 @@ function stopNativePlayback(): Promise<void> {
 
 function movePlaybackTo(positionMs: number, memory: PlaybackMemory): Promise<void> {
   return withNativeQueue(async () => {
-    await TrackPlayer.seekTo(positionMs / 1000);
+    await TrackPlayer.seekTo(msToSeconds(positionMs));
     if (memory.isPlaying) await TrackPlayer.play();
   });
 }

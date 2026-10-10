@@ -1,6 +1,8 @@
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import type { QueueSource } from '@shared/playback/queueOrder';
 
+import { libraryTrackId } from '@features/playback/domain/playerStatus';
+
 export const LISTEN_THRESHOLD_MS = 30000;
 
 export function listenThresholdMs(durationMs: number): number {
@@ -31,7 +33,7 @@ export function buildTrackPayload(
     title: track.title,
     artist: track.artist,
     source_kind: track.source.kind,
-    track_id: track.source.kind === 'library' ? track.source.trackId : null,
+    track_id: libraryTrackId(track) ?? null,
     surface: queueSource?.kind ?? null,
   };
   if (track.resultSignature != null) payload.result_signature = track.resultSignature;

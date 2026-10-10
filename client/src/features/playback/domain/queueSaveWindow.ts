@@ -2,10 +2,17 @@ import type { SaveQueueStateRequest } from '@shared/api-client/playback';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { orderedQueueTracks, type QueueStore } from '@shared/playback/queueStore';
 
+import { libraryTrackId } from '@features/playback/domain/playerStatus';
+
 export const MAX_SAVED_QUEUE_IDS = 10_000;
 
 function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
-  return tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : '')).filter(Boolean);
+  const ids: string[] = [];
+  for (const t of tracks) {
+    const id = libraryTrackId(t);
+    if (id) ids.push(id);
+  }
+  return ids;
 }
 
 type SaveSource = Pick<QueueStore, 'tracks' | 'playOrder' | 'currentIndex' | 'currentTrack'>;

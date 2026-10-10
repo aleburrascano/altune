@@ -1,6 +1,7 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { clamp } from '@features/playback/domain/clamp';
+import { msToSeconds } from '@features/playback/domain/time';
 import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
 import {
   onNativeQueueTimeout,
@@ -10,7 +11,7 @@ import {
 import { activeNativeTrackId, nativeTrackBuilder } from '@features/playback/native/nativeTrack';
 import {
   rebuildNativeTail,
-  reorderUpcomingApplied,
+  reorderUpcomingPresigned,
 } from '@features/playback/native/rebuildNativeTail';
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
 import {
@@ -44,7 +45,7 @@ export async function loadNativeTrack(
   if (isStale(token)) return;
   await resetNative();
   if (isStale(token)) return;
-  const build = await nativeTrackBuilder([track]);
+  const { build } = await nativeTrackBuilder([track]);
   if (isStale(token)) return;
 
   await withNativeQueue(async () => {
@@ -52,7 +53,7 @@ export async function loadNativeTrack(
     await TrackPlayer.add(build(track));
     if (isStale(token)) return;
     if (startPositionMs > 0) {
-      await TrackPlayer.seekTo(startPositionMs / 1000);
+      await TrackPlayer.seekTo(msToSeconds(startPositionMs));
       if (isStale(token)) return;
     }
     if (autoplay) {
@@ -109,7 +110,7 @@ async function skipTo(idx: number, token: LoadToken, fence: Fence): Promise<bool
 async function seekToStart(ms: number, token: LoadToken, fence: Fence): Promise<boolean> {
   if (ms <= 0) return true;
   fence();
-  await TrackPlayer.seekTo(ms / 1000);
+  await TrackPlayer.seekTo(msToSeconds(ms));
   return !isStale(token);
 }
 
@@ -141,10 +142,10 @@ export async function loadNativeQueue(
   if (tracks.length === 0) return;
 
   const idx = clamp(startIndex, 0, tracks.length - 1);
-  const build = await nativeTrackBuilder(tracks.slice(idx), tracks);
+  const { build, presigned } = await nativeTrackBuilder(tracks.slice(idx), tracks);
   if (isStale(token)) return;
 
-  markPresignedFrom(idx, tracks.length - idx);
+  markPresignedFrom(idx, presigned ? tracks.length - idx : 0);
   const plan: StartPlan = { idx, startPositionMs, autoplay, token };
   await withNativeQueue(async (fence) => {
     if (isStale(token)) return;
@@ -158,7 +159,7 @@ export async function loadNativeQueue(
 }
 
 export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
-  return extendPresignWindow(currentIndex, reorderUpcomingApplied);
+  return extendPresignWindow(currentIndex, reorderUpcomingPresigned);
 }
 
 function isInsideNativeWindow(queuePosition: number): boolean {
@@ -211,6 +212,6 @@ onNativeQueueTimeout(() => {
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {
   await ensurePlayerSetup();
-  const build = await nativeTrackBuilder([track]);
+  const { build } = await nativeTrackBuilder([track]);
   return build(track);
 }
