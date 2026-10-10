@@ -76,6 +76,26 @@ const progressValueFollowsPlaybackPosition = {
   rules: ['react-doctor/no-pass-data-to-parent'],
 };
 
+const closeGuardsClearOnlyOnceTheParentHasClosedTheSurface = {
+  files: ['src/shared/playlists/useSingleFlightAction.ts'],
+  rules: ['react-doctor/no-event-handler'],
+};
+
+const remainingPlaylistsLoadFollowsLoadedPages = {
+  files: ['src/features/library/hooks/usePlaylistsView.tsx'],
+  rules: ['react-doctor/no-event-handler'],
+};
+
+const slateExpiryArrivesAsServerData = {
+  files: ['src/features/discovery/hooks/useSearchRefresh.ts'],
+  rules: ['react-doctor/no-event-handler'],
+};
+
+const screenReaderAnnouncementSyncsAnExternalSystem = {
+  files: ['src/shared/ui/useAnnounceChange.ts'],
+  rules: ['react-doctor/no-event-handler'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -134,6 +154,10 @@ export default {
       rememberTrackSyncsNativeTrackPlayer,
       recordEventIsFireAndForgetAndReadsNoQueryCache,
       progressValueFollowsPlaybackPosition,
+      closeGuardsClearOnlyOnceTheParentHasClosedTheSurface,
+      remainingPlaylistsLoadFollowsLoadedPages,
+      slateExpiryArrivesAsServerData,
+      screenReaderAnnouncementSyncsAnExternalSystem,
     ],
   },
 };
