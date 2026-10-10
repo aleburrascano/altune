@@ -6,11 +6,8 @@ import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { Selection } from '@features/library/hooks/useSelection';
-import {
-  LibraryEmptyMessage,
-  ListLoadingMoreFooter,
-  listContent,
-} from '@features/library/ui/libraryListParts';
+import { LibraryEmptyMessage, ListLoadingMoreFooter } from '@features/library/ui/libraryListParts';
+import { listContent } from '@features/library/ui/listContentStyles';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
 import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
 import type { ListPaging, ListRefresh } from '@features/library/domain/libraryView';

@@ -66,8 +66,3 @@ export function ListLoadingMoreFooter({
 const footerStyles = StyleSheet.create({
   footer: { alignItems: 'center', paddingVertical: spacing.lg },
 });
-
-export const listContent = StyleSheet.create({
-  padded: { paddingBottom: spacing['3xl'] },
-  empty: { flexGrow: 1 },
-});

@@ -9,7 +9,7 @@ import { useRetryAcquisition } from '@features/library/hooks/useRetryAcquisition
 import { usePlaylistTrackRemoval } from '@features/library/hooks/usePlaylistTrackRemoval';
 import type { TrackSelectionController } from '@features/library/hooks/useTrackSelection';
 import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
-import { listContent } from '@features/library/ui/libraryListParts';
+import { listContent } from '@features/library/ui/listContentStyles';
 import type { DetailActions, DetailProps } from '@features/library/ui/playlistDetailTypes';
 import { PlaylistHero } from '@features/library/ui/PlaylistHero';
 import {

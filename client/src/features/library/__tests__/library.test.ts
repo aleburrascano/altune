@@ -20,4 +20,9 @@ describe('@features/library public surface', () => {
     expect(surface.LibraryGrid).toBeUndefined();
     expect(surface.listContent).toBeUndefined();
   });
+
+  it('keeps listContent in its own styles module', () => {
+    expect(require('@features/library/ui/listContentStyles').listContent.padded).toBeDefined();
+    expect(require('@features/library/ui/libraryListParts').listContent).toBeUndefined();
+  });
 });
