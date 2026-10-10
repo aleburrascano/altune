@@ -37,9 +37,9 @@ function windowOf(ordered: readonly string[], currentIndex: number) {
   return { ids: ordered.slice(start, start + MAX_SAVED_QUEUE_IDS), start };
 }
 
-export function savedQueueLists(
-  s: SaveSource,
-): Pick<SaveQueueStateRequest, 'track_ids' | 'natural_order' | 'current_index'> {
+type SavedLists = Pick<SaveQueueStateRequest, 'track_ids' | 'natural_order' | 'current_index'>;
+
+export function savedQueueLists(s: SaveSource): SavedLists {
   const currentIndex = savedCurrentIndex(s);
   const { ids, start } = windowOf(libraryIds(orderedQueueTracks(s)), currentIndex);
   return {
