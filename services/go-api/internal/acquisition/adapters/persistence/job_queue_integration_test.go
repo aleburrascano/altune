@@ -655,27 +655,62 @@ func TestPgxJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunButKeepsTheFence(t *t
 	}
 }
 
+func databaseClock(t *testing.T, pool *pgxpool.Pool) time.Time {
+	t.Helper()
+	var now time.Time
+	if err := pool.QueryRow(context.Background(), `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		t.Fatalf("select database clock: %v", err)
+	}
+	return now
+}
+
+func availableAt(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) time.Time {
+	t.Helper()
+	var at time.Time
+	if err := pool.QueryRow(context.Background(),
+		`SELECT acquisition_available_at FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&at); err != nil {
+		t.Fatalf("select available_at: %v", err)
+	}
+	return at
+}
+
 func TestPgxJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := NewPgxJobQueue(pool)
 	ctx := context.Background()
 
-	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
+	track := insertPendingTrack(t, pool, time.Now())
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_available_at = now() - interval '1 minute' WHERE id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("backdate on the database clock: %v", err)
+	}
 	job, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
 		t.Fatalf("Claim = %v", err)
 	}
 
+	before := databaseClock(t, pool)
 	if err := queue.Release(ctx, track.ID, job.Fence, time.Hour); err != nil {
 		t.Fatalf("Release = %v, want nil", err)
+	}
+	after := databaseClock(t, pool)
+
+	got := availableAt(t, pool, track.ID)
+	if got.Before(before.Add(time.Hour)) || got.After(after.Add(time.Hour)) {
+		t.Errorf("available_at = %v, want within [%v, %v] (database now() plus one hour)", got, before.Add(time.Hour), after.Add(time.Hour))
 	}
 	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, acqdomain.ErrNoJobAvailable) {
 		t.Errorf("Claim inside the delay = %v, want ErrNoJobAvailable", err)
 	}
 
+	before = databaseClock(t, pool)
 	if err := queue.Release(ctx, track.ID, job.Fence, 0); err != nil {
 		t.Fatalf("Release (no delay) = %v, want nil", err)
+	}
+	after = databaseClock(t, pool)
+	if got := availableAt(t, pool, track.ID); got.Before(before) || got.After(after) {
+		t.Errorf("available_at after a zero delay = %v, want within [%v, %v]", got, before, after)
 	}
 	if _, err := queue.Claim(ctx, time.Minute); err != nil {
 		t.Errorf("Claim after a zero delay = %v, want a job", err)
