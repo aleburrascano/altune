@@ -12,10 +12,10 @@
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
   },
   "ci.yml#ci-backend-static#govulncheck": {
-    "allow": "the build sandbox (lane-run on chudbox-run) has no govulncheck, so precheck would exit incomplete on every go-api change; 7s once installed; follow-up #1503"
+    "gate": "go-api govulncheck"
   },
   "ci.yml#ci-backend-static#nilaway ceiling": {
-    "allow": "the build sandbox has no nilaway, and it takes 243s on go-api on top of the go-api block under the 900s precheck cap; follow-up #1503"
+    "allow": "243s on the ci runner and 745s here (472s cpu, load 15) against the 900s precheck cap, before the rest of the go-api block (vet, lint, tests, acquisition gate, govulncheck) is counted; follow-up #1503"
   },
   "ci.yml#ci-backend-static#shellcheck deploy scripts": {
     "gate": "go-api deploy shellcheck"
@@ -60,10 +60,10 @@
     "gate": "overseer tests (race)"
   },
   "ci.yml#ci-overseer#govulncheck": {
-    "allow": "the build sandbox has no govulncheck, so precheck would exit incomplete on every overseer change; 33s once installed; follow-up #1503"
+    "gate": "overseer govulncheck"
   },
   "ci.yml#ci-overseer#nilaway ceiling": {
-    "allow": "the build sandbox has no nilaway, so precheck would exit incomplete on every overseer change; 47s once installed; follow-up #1503"
+    "gate": "overseer nilaway ceiling"
   },
   "ci.yml#ci-overseer#web dependencies": {
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
