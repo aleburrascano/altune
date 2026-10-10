@@ -312,6 +312,7 @@
         "from": "shared-playlists",
         "allow": [
           "shared-api-client",
+          "shared-errors",
           "shared-failure",
           "shared-query",
           "shared-session",

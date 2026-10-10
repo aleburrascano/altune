@@ -20,7 +20,7 @@ import {
 import { parseErrorBody } from '@shared/api-client/wireDecoders';
 import { apiBase, REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
 
-export { ApiError, NetworkError, ContractError, isServerFaultStatus } from '@shared/failure/errors';
+export { ApiError, NetworkError, ContractError } from '@shared/failure/errors';
 export type { NetworkFailure } from '@shared/failure/errors';
 
 export { apiBase, REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@shared/api-client/config';
