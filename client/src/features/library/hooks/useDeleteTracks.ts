@@ -48,7 +48,7 @@ type DeleteTracksResult = {
 };
 
 type OnDeleted = (trackId: TrackId) => void;
-type BatchRun = { stopped: () => boolean; expired: () => boolean };
+type BatchRun = () => boolean;
 type Outcome = { sent: number; failures: DeleteTrackFailure[] };
 type RunHandle = { stopped: () => boolean; inStartingSession: () => boolean; finish: () => void };
 type RemoveTrack = (trackId: TrackId) => Promise<void>;
@@ -57,31 +57,29 @@ export function deleteOne(port: LibraryPort, trackId: TrackId): Promise<void> {
   return port.deleteTrack(trackId);
 }
 
-async function deleteInBatches(
-  trackIds: TrackId[],
-  run: BatchRun,
-  onDeleted: OnDeleted,
-  remove: RemoveTrack,
-): Promise<Outcome> {
-  const failed: DeleteTrackFailure[] = [];
-  const items = trackIds.map((trackId, index) => ({ trackId, index }));
-  const worker = async ({ trackId, index }: (typeof items)[number]): Promise<void> => {
-    try {
-      await remove(trackId);
-    } catch (error) {
-      if (classifyLibraryError(error) !== 'not-found')
-        return void (failed[index] = { trackId, error });
-    }
-    onDeleted(trackId);
+type BulkItem = { trackId: TrackId; index: number };
+type BulkWorker = (item: BulkItem) => Promise<void>;
+
+async function attemptDelete(remove: RemoveTrack, item: BulkItem) {
+  try {
+    await remove(item.trackId);
+  } catch (error) {
+    if (classifyLibraryError(error) !== 'not-found') return { trackId: item.trackId, error };
+  }
+  return undefined;
+}
+
+function bulkWorker(remove: RemoveTrack, onDeleted: OnDeleted, failed: DeleteTrackFailure[]) {
+  return async (item: BulkItem): Promise<void> => {
+    const failure = await attemptDelete(remove, item);
+    if (failure) failed[item.index] = failure;
+    else onDeleted(item.trackId);
   };
-  const proceed = () => !run.stopped() && !run.expired();
-  const { succeeded, failed: finished } = await runBounded(
-    items,
-    BULK_DELETE_CONCURRENCY,
-    worker,
-    proceed,
-  );
-  return { sent: succeeded.length + finished.length, failures: failed.filter(Boolean) };
+}
+
+async function deleteInBatches(items: BulkItem[], proceed: BatchRun, worker: BulkWorker) {
+  const { succeeded, failed } = await runBounded(items, BULK_DELETE_CONCURRENCY, worker, proceed);
+  return succeeded.length + failed.length;
 }
 
 type CleanupState = { failed: boolean };
@@ -110,10 +108,11 @@ function removeTrackEverywhere(
   };
 }
 
-const resyncTrackCaches = (queryClient: QueryClient): void =>
-  Object.values(TRACK_CACHE_FAMILIES).forEach(({ prefix }) => {
+function resyncTrackCaches(queryClient: QueryClient): void {
+  for (const { prefix } of Object.values(TRACK_CACHE_FAMILIES)) {
     void queryClient.invalidateQueries({ queryKey: prefix });
-  });
+  }
+}
 
 function summarizeRun(ids: TrackId[], outcome: Outcome, cancelled: boolean): DeleteTracksResult {
   return {
@@ -129,12 +128,11 @@ function openTimedRun(handle: RunHandle): { run: BatchRun; done: () => void } {
   let expired = false;
   const timer = setTimeout(() => (expired = true), BULK_DELETE_DEADLINE_MS);
   const stopped = () => handle.stopped() || !handle.inStartingSession();
-  const run: BatchRun = { stopped, expired: () => expired };
-  const done = () => {
+  function done(): void {
     clearTimeout(timer);
     handle.finish();
-  };
-  return { run, done };
+  }
+  return { run: () => !stopped() && !expired, done };
 }
 
 async function runBulkDelete(
@@ -146,9 +144,12 @@ async function runBulkDelete(
   const { run, done } = openTimedRun(handle);
   const cleanup: CleanupState = { failed: false };
   const onDeleted = removeTrackEverywhere(queryClient, handle, cleanup);
-  const outcome = await deleteInBatches(trackIds, run, onDeleted, remove).finally(done);
+  const failures: DeleteTrackFailure[] = [];
+  const items = trackIds.map((trackId, index) => ({ trackId, index }));
+  const worker = bulkWorker(remove, onDeleted, failures);
+  const sent = await deleteInBatches(items, run, worker).finally(done);
   if (cleanup.failed && handle.inStartingSession()) resyncTrackCaches(queryClient);
-  return summarizeRun(trackIds, outcome, handle.stopped());
+  return summarizeRun(trackIds, { sent, failures: failures.filter(Boolean) }, handle.stopped());
 }
 
 function createRunHandle(stops: Set<() => void>): RunHandle {
