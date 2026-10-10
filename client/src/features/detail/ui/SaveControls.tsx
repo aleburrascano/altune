@@ -18,27 +18,23 @@ import { sharedStyles } from '@features/detail/ui/detailStyles';
 import type { OwnedTrack } from '@features/detail/domain/ownedTrack';
 import { useResolvedOwnedTrack, type TrackIdentity } from '@features/detail/hooks/useOwnedTrack';
 
-export function SaveGlyph({
-  state,
-  addSize,
-}: {
+type SaveGlyphProps = {
   state: SaveControlState;
   addSize: number;
-}): ReactElement {
-  const theme = useTheme();
-  if (state === 'saving') {
-    return <ActivityIndicator size="small" color={theme.color.accent} />;
-  }
-  if (state === 'ready') {
-    return <Check size={18} color={theme.color.success} />;
-  }
-  if (state === 'failed') {
-    return <RotateCw size={17} color={theme.color.danger} />;
-  }
-  if (state === 'rejected') {
-    return <Ban size={17} color={theme.color.danger} />;
-  }
-  return <Plus size={addSize} color={theme.color.accent} />;
+};
+
+const RESULT_GLYPHS = {
+  ready: { Icon: Check, size: 18, tone: 'success' },
+  failed: { Icon: RotateCw, size: 17, tone: 'danger' },
+  rejected: { Icon: Ban, size: 17, tone: 'danger' },
+} as const;
+
+function SaveGlyph({ state, addSize }: SaveGlyphProps): ReactElement {
+  const { color } = useTheme();
+  if (state === 'saving') return <ActivityIndicator size="small" color={color.accent} />;
+  if (state === 'add') return <Plus size={addSize} color={color.accent} />;
+  const { Icon, size, tone } = RESULT_GLYPHS[state];
+  return <Icon size={size} color={color[tone]} />;
 }
 
 export type SavePillShellProps = {

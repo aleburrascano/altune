@@ -98,14 +98,14 @@ export function TrackInfoSection(props: TrackInfoSectionProps): ReactElement | n
   );
 }
 
-export type TrackNavRowNav = {
+type TrackNavRowNav = {
   overline: string;
   title: string;
   imageUri: string | null;
   imageRadius: number;
 };
 
-export type TrackNavRowInteraction = {
+type TrackNavRowInteraction = {
   onPress: () => void;
   disabled?: boolean;
   testID?: string;
@@ -113,7 +113,7 @@ export type TrackNavRowInteraction = {
   accessibilityHint?: string;
 };
 
-export type TrackNavRowProps = {
+type TrackNavRowProps = {
   nav: TrackNavRowNav;
   interaction: TrackNavRowInteraction;
 };
@@ -126,13 +126,16 @@ function pressableStyle(borderColor: string) {
   ];
 }
 
-export function TrackNavRow({ nav, interaction }: TrackNavRowProps): ReactElement {
-  const theme = useTheme();
+const NAV_ARTWORK_SIZE = 36;
+const NAV_CHEVRON_SIZE = 16;
+
+function TrackNavRow({ nav, interaction }: TrackNavRowProps): ReactElement {
+  const { color } = useTheme();
   return (
-    <Pressable {...interaction} accessibilityRole="link" style={pressableStyle(theme.color.border)}>
-      <Artwork uri={nav.imageUri} size={36} radius={nav.imageRadius} />
+    <Pressable {...interaction} accessibilityRole="link" style={pressableStyle(color.border)}>
+      <Artwork uri={nav.imageUri} size={NAV_ARTWORK_SIZE} radius={nav.imageRadius} />
       <NavRowText overline={nav.overline} title={nav.title} />
-      <ChevronRight size={16} color={theme.color.textTertiary} />
+      <ChevronRight size={NAV_CHEVRON_SIZE} color={color.textTertiary} />
     </Pressable>
   );
 }

@@ -78,23 +78,24 @@ function Chip(props: ChipProps): ReactElement {
   );
 }
 
-export type RecordTypeChipsProps = {
+type RecordTypeChipsProps = {
   present: readonly RecordTypeGroup[];
   active: RecordTypeGroup;
   onSelect: (type: string) => void;
 };
 
-export function RecordTypeChips(props: RecordTypeChipsProps): ReactElement | null {
-  if (props.present.length <= 1) return null;
+const MIN_GROUPS_FOR_CHIPS = 2;
+
+function chipPropsFor(props: RecordTypeChipsProps, group: RecordTypeGroup): ChipProps {
+  return { group, on: group.type === props.active.type, onSelect: props.onSelect };
+}
+
+function RecordTypeChips(props: RecordTypeChipsProps): ReactElement | null {
+  if (props.present.length < MIN_GROUPS_FOR_CHIPS) return null;
   return (
     <View style={styles.chips}>
       {props.present.map((group) => (
-        <Chip
-          key={group.type}
-          group={group}
-          on={group.type === props.active.type}
-          onSelect={props.onSelect}
-        />
+        <Chip key={group.type} {...chipPropsFor(props, group)} />
       ))}
     </View>
   );

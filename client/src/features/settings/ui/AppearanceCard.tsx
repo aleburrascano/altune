@@ -37,39 +37,63 @@ const OPTIONS: { scheme: ColorScheme; label: string }[] = [
   { scheme: 'light', label: 'Light' },
 ];
 
-export function ThemeSegment({ scheme, onSelect }: ThemeSegmentProps): ReactElement {
-  const theme = useTheme();
+type ThemeOptionProps = ThemeSegmentProps & { option: (typeof OPTIONS)[number] };
+
+function isSelected({ option, scheme }: ThemeOptionProps): boolean {
+  return option.scheme === scheme;
+}
+
+function optionStyle(selected: boolean, canvas: string) {
+  return [segmentStyles.option, selected ? { backgroundColor: canvas } : null];
+}
+
+function optionIdentityProps({ option, onSelect }: ThemeOptionProps) {
+  return {
+    testID: `settings-theme-${option.scheme}`,
+    onPress: () => onSelect(option.scheme),
+    accessibilityLabel: `${option.label} theme`,
+  };
+}
+
+function optionPressableProps(props: ThemeOptionProps, canvas: string) {
+  const selected = isSelected(props);
+  return {
+    ...optionIdentityProps(props),
+    accessibilityRole: 'radio' as const,
+    accessibilityState: { selected },
+    style: optionStyle(selected, canvas),
+  };
+}
+
+function ThemeOption(props: ThemeOptionProps): ReactElement {
+  const { color } = useTheme();
   return (
-    <View style={[segmentStyles.track, { backgroundColor: theme.color.surface2 }]}>
-      {OPTIONS.map((option) => {
-        const selected = option.scheme === scheme;
-        return (
-          <Pressable
-            key={option.scheme}
-            testID={`settings-theme-${option.scheme}`}
-            onPress={() => onSelect(option.scheme)}
-            accessibilityRole="radio"
-            accessibilityState={{ selected }}
-            accessibilityLabel={`${option.label} theme`}
-            style={[
-              segmentStyles.option,
-              selected ? { backgroundColor: theme.color.canvas } : null,
-            ]}
-          >
-            <Text variant="caption" tone={selected ? 'primary' : 'tertiary'}>
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <Pressable {...optionPressableProps(props, color.canvas)}>
+      <Text variant="caption" tone={isSelected(props) ? 'primary' : 'tertiary'}>
+        {props.option.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ThemeSegment({ scheme, onSelect }: ThemeSegmentProps): ReactElement {
+  const { color } = useTheme();
+  return (
+    <View style={[segmentStyles.track, { backgroundColor: color.surface2 }]}>
+      {OPTIONS.map((option) => (
+        <ThemeOption key={option.scheme} option={option} scheme={scheme} onSelect={onSelect} />
+      ))}
     </View>
   );
 }
 
+const SEGMENT_PADDING = 2;
+const SEGMENT_MIN_HEIGHT = 32;
+
 const segmentStyles = StyleSheet.create({
-  track: { flexDirection: 'row', borderRadius: radius.sm, padding: 2 },
+  track: { flexDirection: 'row', borderRadius: radius.sm, padding: SEGMENT_PADDING },
   option: {
-    minHeight: 32,
+    minHeight: SEGMENT_MIN_HEIGHT,
     paddingHorizontal: spacing.md,
     borderRadius: radius.sm,
     alignItems: 'center',
