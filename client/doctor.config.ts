@@ -21,6 +21,26 @@ const downloadAwaitedBeforeCancelCheck = {
   rules: ['react-doctor/async-defer-await'],
 };
 
+const queueResumeCoalescesSequentially = {
+  files: ['src/features/playback/hooks/useQueueResume.ts'],
+  rules: ['react-doctor/async-await-in-loop'],
+};
+
+const nativeTailDrainRebuildsInOrder = {
+  files: ['src/features/playback/native/rebuildNativeTail.ts'],
+  rules: ['react-doctor/async-await-in-loop'],
+};
+
+const resetNativeRunsEvenWhenEmpty = {
+  files: ['src/features/playback/native/loadNativeTrack.ts'],
+  rules: ['react-doctor/async-defer-await'],
+};
+
+const imageOnlyResolvesAssetSource = {
+  files: ['src/features/playback/native/nativeTrack.ts'],
+  rules: ['react-doctor/rn-prefer-expo-image'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -69,6 +89,10 @@ export default {
       pagingLoopsAwaitInOrder,
       sequentialByDesignAwaitInLoop,
       downloadAwaitedBeforeCancelCheck,
+      queueResumeCoalescesSequentially,
+      nativeTailDrainRebuildsInOrder,
+      resetNativeRunsEvenWhenEmpty,
+      imageOnlyResolvesAssetSource,
     ],
   },
 };

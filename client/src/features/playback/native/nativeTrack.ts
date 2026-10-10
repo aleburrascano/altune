@@ -107,8 +107,10 @@ export async function nativeTrackBuilder(
   signFor: readonly PlaybackTrack[],
   headersForTracks: readonly PlaybackTrack[] = signFor,
 ): Promise<NativeTrackBuild> {
-  const headers = await headersFor(headersForTracks);
-  const resolved = await resolveLibraryUrls(signFor);
+  const [headers, resolved] = await Promise.all([
+    headersFor(headersForTracks),
+    resolveLibraryUrls(signFor),
+  ]);
   return {
     build: (track) => toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }),
     presigned: resolved.presigned,

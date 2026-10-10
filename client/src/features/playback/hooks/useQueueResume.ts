@@ -55,7 +55,7 @@ function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
 }
 
 function sameFingerprint(a: SaveFingerprint | null, b: SaveFingerprint): boolean {
-  return a !== null && a.every((value, i) => Object.is(value, b[i]));
+  return a !== null && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 }
 
 async function sendSave(s: QueueStore, positionMs: number): Promise<void> {
