@@ -13,10 +13,8 @@ export DATABASE_URL INTEGRATION=1
 cd services/go-api
 export GOTOOLCHAIN="go$(awk '/^go /{print $2; exit}' go.mod)"
 bash ../../.github/workflows/test-backend-migrate.sh >/dev/null
-mapfile -t pkgs < <(git grep -lE 'RequireIntegration|DATABASE_URL' -- '*_test.go' | xargs -n1 dirname | sort -u | sed 's#^#./#')
-[ "${#pkgs[@]}" -gt 0 ] || { echo "::error::no integration test packages matched"; exit 1; }
 log=$(mktemp)
-if go test -count=1 "${pkgs[@]}" 2>&1 | tee "$log"; then
+if go test -shuffle=on -count=1 -coverprofile=coverage.out ./... 2>&1 | tee "$log"; then
   rm -f "$log"
 else
   mapfile -t reruns < <(awk '
@@ -34,4 +32,5 @@ else
     go test -count=1 -run "^($names)\$" "./${pkg#altune/go-api/}"
   done
 fi
+MIN=65 bash ../../.github/workflows/test-backend-coverage.sh
 go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
