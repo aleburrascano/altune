@@ -7,6 +7,8 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useAlbumSaveAll } from '@/features/detail/hooks/useAlbumSaveAll';
 import { SAVE_ALL_CONCURRENCY } from '@/features/detail/domain/saveTrack';
 
+const SENT_TWICE = 2;
+
 const album: DiscoveryResult = {
   kind: 'album',
   title: 'Album',
@@ -242,5 +244,26 @@ describe('useAlbumSaveAll after the library catches up', () => {
     await saveAllAndSettle(result);
 
     expect(recorder.titles).toEqual(['Track 0']);
+  });
+
+  it('saves a track again after it became owned while its batch was in flight, then was deleted', async () => {
+    const dbl = saveDouble();
+    const { result, rerender } = renderSaveAll(dbl.save);
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+    rerender({ candidates: [ownedTrackResult(0)] });
+    await act(async () => {
+      await settleAll(dbl);
+    });
+    rerender({ candidates: [track(0)] });
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+
+    expect(dbl.mutateAsync).toHaveBeenCalledTimes(SENT_TWICE);
   });
 });
