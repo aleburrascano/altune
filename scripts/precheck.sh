@@ -137,7 +137,7 @@ if touches '^services/go-api/deploy/|^\.github/workflows/test-backend-shellcheck
   check "go-api deploy shellcheck" services/go-api bash "$root/.github/workflows/test-backend-shellcheck.sh"
 fi
 
-if touches '^services/go-api/(deploy|migrations)/' && need docker "go-api deploy self-tests"; then
+if touches '^(services/go-api/(deploy|migrations)/|client/src/shared/killSwitch/killSwitchPoll\.ts$)' && need docker "go-api deploy self-tests"; then
   test_check "go-api deploy self-tests" services/go-api bash -c 'for t in deploy/*_test.sh; do bash "$t" || exit 1; done; bash deploy/migration-safety.sh'
 fi
 
