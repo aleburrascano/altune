@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { PlaylistPage } from '@shared/api-client/playlists';
-import type { ListPlaylistsResponse, PlaylistResponse } from '@shared/api-client/playlistResponse';
+import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
+import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
+import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import type { LibraryPort } from '@features/library/ports/libraryPort';
 import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
@@ -11,30 +13,38 @@ import { SortControl } from '@features/library/ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
 const PLAYLIST_COUNT = 20;
+const FITS_IN_ONE_PAGE = 2;
 let mockGroupPageSize = 3;
 
-const playlists: PlaylistResponse[] = Array.from({ length: PLAYLIST_COUNT }, (_unused, i) => ({
-  id: asPlaylistId(`pl-${i}`),
-  name: `Playlist ${i}`,
-  track_count: 0,
-  preview_artwork_urls: [],
-  created_at: new Date(Date.UTC(2026, 0, 1) - i * 1000).toISOString(),
-  updated_at: new Date(Date.UTC(2026, 0, 1) - i * 1000).toISOString(),
-}));
+const playlists: PlaylistDetailResponse[] = Array.from(
+  { length: PLAYLIST_COUNT },
+  (_unused, i) => ({
+    id: asPlaylistId(`pl-${i}`),
+    name: `Playlist ${i}`,
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: new Date(Date.UTC(2026, 0, 1) - i * 1000).toISOString(),
+    updated_at: new Date(Date.UTC(2026, 0, 1) - i * 1000).toISOString(),
+    total_duration_seconds: 0,
+    tracks: [],
+  }),
+);
 
 const servedPlaylistCounts: number[] = [];
 
-function servePage({ limit, offset = 0 }: PlaylistPage = {}): Promise<ListPlaylistsResponse> {
-  const items = playlists.slice(offset, offset + (limit ?? PLAYLIST_COUNT));
-  servedPlaylistCounts.push(items.length);
-  return Promise.resolve({ items, total: items.length });
+function recordingPort(seeded: PlaylistDetailResponse[]) {
+  const memory = createMemoryLibraryPort({ playlists: seeded });
+  async function getPlaylists(
+    ...[page, signal]: Parameters<LibraryPort['getPlaylists']>
+  ): ReturnType<LibraryPort['getPlaylists']> {
+    const served = await memory.getPlaylists(page, signal);
+    servedPlaylistCounts.push(served.items.length);
+    return served;
+  }
+  return { ...memory, getPlaylists: jest.fn(getPlaylists) };
 }
 
-const mockGetPlaylists = jest.fn(servePage);
-
-jest.mock('@shared/api-client/playlists', () => ({
-  getPlaylists: (page?: PlaylistPage) => mockGetPlaylists(page),
-}));
+let port = recordingPort(playlists);
 
 jest.mock('../domain/listPaging', () => {
   const actual = jest.requireActual('../domain/listPaging');
@@ -70,7 +80,11 @@ function PlaylistsScreen(): ReactElement {
 
 let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+    </QueryClientProvider>
+  );
 }
 
 function scrollToEnd(): void {
@@ -89,20 +103,21 @@ function WarmUpPlaylistsScreen(): ReactElement {
 
 warmUpFirstRender(async () => {
   const warmUpClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockGetPlaylists.mockImplementation(servePage);
+  const warmUpPort = recordingPort(playlists);
   render(
     <QueryClientProvider client={warmUpClient}>
-      <WarmUpPlaylistsScreen />
+      <LibraryPortProvider port={warmUpPort}>
+        <WarmUpPlaylistsScreen />
+      </LibraryPortProvider>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(mockGetPlaylists).toHaveBeenCalled());
+  await waitFor(() => expect(warmUpPort.getPlaylists).toHaveBeenCalled());
 });
 
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockGetPlaylists.mockClear();
-  mockGetPlaylists.mockImplementation(servePage);
   servedPlaylistCounts.length = 0;
+  port = recordingPort(playlists);
 });
 
 afterEach(() => client.clear());
@@ -132,22 +147,23 @@ describe('a library holding far more playlists than one page', () => {
     scrollToEnd();
     await showsPlaylistCount(GROUP_PAGE_SIZE * 2);
 
-    expect(mockGetPlaylists.mock.calls.map(([page]) => page?.offset)).toEqual([0, GROUP_PAGE_SIZE]);
+    expect(port.getPlaylists.mock.calls.map(([page]) => page?.offset)).toEqual([
+      0,
+      GROUP_PAGE_SIZE,
+    ]);
   });
 });
 
 describe('a library whose playlists all fit in one page', () => {
   it('stops asking once a page comes back short of a full one', async () => {
-    mockGetPlaylists.mockImplementation(({ offset = 0 } = {}) =>
-      Promise.resolve({ items: playlists.slice(offset, 2), total: 2 }),
-    );
+    port = recordingPort(playlists.slice(0, FITS_IN_ONE_PAGE));
     render(<PlaylistsScreen />, { wrapper });
-    await showsPlaylistCount(2);
+    await showsPlaylistCount(FITS_IN_ONE_PAGE);
 
     scrollToEnd();
     scrollToEnd();
 
-    expect(mockGetPlaylists).toHaveBeenCalledTimes(1);
+    expect(port.getPlaylists).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -176,6 +192,6 @@ describe('sorting playlists A to Z', () => {
 
     await waitFor(() => expect(result.current).toHaveLength(GROUP_PAGE_SIZE));
 
-    expect(mockGetPlaylists).toHaveBeenCalledTimes(1);
+    expect(port.getPlaylists).toHaveBeenCalledTimes(1);
   });
 });
