@@ -69,7 +69,7 @@ export const PINNED_GLYPH: Record<PinnedGlyphKind, LucideIcon> = {
   failed: CircleAlert,
 };
 
-export const PINNED_GLYPH_LABEL: Record<PinnedGlyphKind, string> = {
+const PINNED_GLYPH_LABEL: Record<PinnedGlyphKind, string> = {
   downloaded: 'Downloaded',
   downloading: 'Downloading',
   failed: 'Download failed',
