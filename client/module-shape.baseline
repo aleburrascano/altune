@@ -3,5 +3,3 @@ N3 src/features/playback/native/expoGoPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/native/trackPlayerPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/web/webPlaybackProvider.tsx is not PascalCase
 N3 src/shared/api-client is not camelCase
-N3 src/shared/events/sse-client.ts is not camelCase
-N3 src/shared/search-history is not camelCase

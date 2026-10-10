@@ -5,7 +5,7 @@ import {
   MAX_RESPONSE_BYTES,
   ServerEventHandlerError,
   SSEHttpError,
-} from '@shared/events/sse-client';
+} from '@shared/events/sseClient';
 import { MalformedSSEEventError } from '@shared/events/sseFrames';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import {

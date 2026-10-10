@@ -1,5 +1,5 @@
 const OWNERS = {
-  'src/shared/search-history/useClearSearchHistory.ts': { discovery: ['clearSearchHistory'] },
+  'src/shared/searchHistory/useClearSearchHistory.ts': { discovery: ['clearSearchHistory'] },
   'src/shared/playlists/adapters/http/httpPlaylistsPort.ts': {
     playlists: [
       'createPlaylist',

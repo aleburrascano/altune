@@ -7,7 +7,7 @@ module.exports = {
         'src/shared/api-client/index.ts',
         'src/shared/auth/authDeadline.ts',
         'src/shared/killSwitch/killSwitchPoll.ts',
-        'src/shared/events/sse-client.ts',
+        'src/shared/events/sseClient.ts',
         'src/shared/files/native/deviceFileStore.ts',
         'src/features/auth/adapters/http/testAuth.ts',
         'src/features/auth/adapters/http/reportSignInFailure.ts',

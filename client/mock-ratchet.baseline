@@ -237,7 +237,7 @@ src/shared/auth/__tests__/useSession.integration.test.tsx @shared/api-client/aud
 src/shared/auth/__tests__/useSession.property.test.tsx @shared/auth/supabaseClient
 src/shared/auth/__tests__/useSession.test.tsx @shared/auth/supabaseClient
 src/shared/events/__tests__/applyServerEvent.test.ts @shared/api-client/audio
-src/shared/events/__tests__/sse-client.test.ts @shared/telemetry/recordEvent
+src/shared/events/__tests__/sseClient.test.ts @shared/telemetry/recordEvent
 src/shared/events/__tests__/trackCachePatch.test.ts @shared/telemetry/outbox
 src/shared/events/__tests__/useServerEvents.test.tsx @shared/auth/supabaseClient
 src/shared/events/__tests__/useServerEvents.test.tsx @shared/telemetry/recordEvent
