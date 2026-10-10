@@ -91,6 +91,8 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: bash .github/workflows/pr-gate-test-home.sh
+      - name: Fail when the own-module jest.mock count goes up
+        run: node client/scripts/mock-ratchet.mjs
 
   gate:
     needs: [backend, mobile, overseer, cycles, test-home]
