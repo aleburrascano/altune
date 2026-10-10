@@ -125,21 +125,18 @@ function useOwnedIdentities(
 }
 
 function useOutcomeRecorder(owned: RefObject<ReadonlySet<string>>) {
-  const saved = useRef(new Set<string>());
+  const [saved] = useState(() => new Set<string>());
   const [lastBatch, setLastBatch] = useState<LastBatch | null>(null);
   const record = (outcome: BatchOutcome<DiscoveryResult>): void => {
-    _rememberUnowned(saved.current, outcome.succeeded, owned.current);
+    _rememberUnowned(saved, outcome.succeeded, owned.current);
     setLastBatch({ saved: outcome.succeeded.length, failed: outcome.failed.length });
   };
   return { saved, lastBatch, record, clear: () => setLastBatch(null) };
 }
 
-function useForgetOnceOwned(
-  saved: RefObject<Set<string>>,
-  candidates: readonly DiscoveryResult[],
-): void {
+function useForgetOnceOwned(saved: Set<string>, candidates: readonly DiscoveryResult[]): void {
   useEffect(() => {
-    for (const identity of _identitiesOf(_ownedTracks(candidates))) saved.current.delete(identity);
+    for (const identity of _identitiesOf(_ownedTracks(candidates))) saved.delete(identity);
   }, [saved, candidates]);
 }
 
@@ -176,7 +173,7 @@ export function useAlbumSaveAll(args: AlbumSaveAllArgs): AlbumSaveAll {
   const state = useSaveAllState(args.candidates);
   const onSaveAll = (): void => {
     if (state.activeRef.current || !args.libraryComplete) return;
-    const pending = _notYetSaved(_unownedTracks(args.candidates), state.saved.current);
+    const pending = _notYetSaved(_unownedTracks(args.candidates), state.saved);
     if (pending.length > 0) _startBatch(pending, args, state);
   };
   return {

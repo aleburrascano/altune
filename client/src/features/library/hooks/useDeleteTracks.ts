@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { showFailureAlert } from '@shared/ui';
@@ -162,12 +162,11 @@ function createRunHandle(stops: Set<() => void>): RunHandle {
 }
 
 function useUnmountStop(): () => RunHandle {
-  const stops = useRef(new Set<() => void>());
+  const [stops] = useState(() => new Set<() => void>());
   useEffect(() => {
-    const active = stops.current;
-    return () => active.forEach((stop) => stop());
-  }, []);
-  return useCallback(() => createRunHandle(stops.current), []);
+    return () => stops.forEach((stop) => stop());
+  }, [stops]);
+  return useCallback(() => createRunHandle(stops), [stops]);
 }
 
 function logBulkFailure({ trackId, error }: DeleteTrackFailure): void {

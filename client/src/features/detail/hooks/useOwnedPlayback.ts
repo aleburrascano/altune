@@ -36,6 +36,10 @@ export type OwnedPlayback = {
   onQuickSave: (track: DiscoveryResult) => void;
 };
 
+function ownedFor(track: DiscoveryResult): OwnedTrack | null {
+  return ownedFromExtras(trackExtras(track.extras));
+}
+
 export function useOwnedPlayback(
   tracks: readonly DiscoveryResult[],
   context: OwnedPlaybackContext,
@@ -51,9 +55,6 @@ export function useOwnedPlayback(
     if (playable.length === 0) return;
     queue.playFromList(playable, 0, { kind: 'library' });
   };
-
-  const ownedFor = (track: DiscoveryResult): OwnedTrack | null =>
-    ownedFromExtras(trackExtras(track.extras));
 
   const onQuickSave = (track: DiscoveryResult): void => {
     const enriched = context.enrich(track);
