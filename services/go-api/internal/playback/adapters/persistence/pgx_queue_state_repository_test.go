@@ -401,7 +401,7 @@ func TestDeleteForUser_ErasesStoredState(t *testing.T) {
 
 	state, err := domain.NewQueueState(domain.QueueStateInput{
 		UserId:     user,
-		TrackIds:   []string{"a", "b"},
+		TrackIds:   []string{trk("a"), trk("b")},
 		CurrentIdx: 1,
 		RepeatMode: domain.RepeatOff,
 		SourceId:   "search:mac demarco",
@@ -525,7 +525,7 @@ func (r boolsRow) Scan(dest ...any) error {
 func testPosition(t *testing.T) *domain.QueuePosition {
 	t.Helper()
 	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
-		UserId: testUser(), CurrentIdx: 3, CurrentTrackId: "t4", PositionMs: 61000,
+		UserId: testUser(), CurrentIdx: 3, CurrentTrackId: trk("t4"), PositionMs: 61000,
 	})
 	if err != nil {
 		t.Fatalf("NewQueuePosition: %v", err)
@@ -553,7 +553,7 @@ func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
 	for _, want := range []string{
 		"statement_timestamp() - $4::bigint * interval '1 microsecond'",
 		"q.updated_at <= handled.at",
-		"q.track_ids[$2::int + 1] = $5",
+		"regexp_replace(lower(q.track_ids[$2::int + 1]), '^urn:uuid:|[{}-]', '', 'g') = replace($5::text, '-', '')",
 	} {
 		if !strings.Contains(normalized, want) {
 			t.Errorf("UpdatePosition SQL lacks %q.\nSQL: %s", want, normalized)
@@ -684,7 +684,7 @@ func (q faultingQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row
 func userPosition(t *testing.T, userId shared.UserId) *domain.QueuePosition {
 	t.Helper()
 	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
-		UserId: userId, CurrentIdx: 3, CurrentTrackId: "t4", PositionMs: 61000,
+		UserId: userId, CurrentIdx: 3, CurrentTrackId: trk("t4"), PositionMs: 61000,
 	})
 	if err != nil {
 		t.Fatalf("NewQueuePosition: %v", err)
@@ -785,10 +785,10 @@ func TestUpsert_FailureLogNamesTheUserNotTheQueue(t *testing.T) {
 	logs := captureLogs(t)
 	repo := &PgxQueueStateRepository{pool: faultingQuerier{cause: errors.New("connection refused")}, metrics: ports.NoopQueueStateMetrics()}
 	const privateSourceId = "search:mac demarco"
-	const privateTrackId = "3b9c77e4-private-track-id"
+	const privateTrackId = "3b9c77e4-5d1a-4f0e-9c2b-7a6e1f4d8c30"
 	state, err := domain.NewQueueState(domain.QueueStateInput{
 		UserId:     testUser(),
-		TrackIds:   []string{"a", privateTrackId},
+		TrackIds:   []string{trk("a"), privateTrackId},
 		CurrentIdx: 1,
 		RepeatMode: domain.RepeatOff,
 		SourceId:   privateSourceId,

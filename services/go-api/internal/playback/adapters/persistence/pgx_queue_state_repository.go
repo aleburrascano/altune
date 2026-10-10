@@ -165,6 +165,8 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	return nil
 }
 
+const storedTrackIdMatches = `regexp_replace(lower(q.track_ids[$2::int + 1]), '^urn:uuid:|[{}-]', '', 'g') = replace($5::text, '-', '')`
+
 func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *domain.QueuePosition) error {
 	if err := position.Validate(); err != nil {
 		return err
@@ -185,12 +187,12 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 		   SET current_idx = $2, position_ms = $3, updated_at = handled.at
 		   FROM handled, q
 		   WHERE playback_queue_state.user_id = q.user_id
-		     AND q.track_ids[$2::int + 1] = $5
+		     AND `+storedTrackIdMatches+`
 		     AND q.updated_at <= handled.at
 		   RETURNING 1
 		 )
 		 SELECT EXISTS (SELECT 1 FROM updated),
-		        EXISTS (SELECT 1 FROM q WHERE q.track_ids[$2::int + 1] = $5)`,
+		        EXISTS (SELECT 1 FROM q WHERE `+storedTrackIdMatches+`)`,
 			position.UserId.UUID(),
 			position.CurrentIdx,
 			position.PositionMs,

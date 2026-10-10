@@ -216,11 +216,11 @@ func TestQueueState_ResumedPlaylistWithoutAClientIdKeepsSaving(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHandler(&recordingRepo{saved: &domain.QueueState{
-				TrackIds: []string{"t1"}, NaturalOrder: []string{"t1"}, SourceId: storedSourceId,
+				TrackIds: []string{"00000000-0000-4000-8000-000000000001"}, NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"}, SourceId: storedSourceId,
 			}})
 			rec := httptest.NewRecorder()
 
-			body := `{"track_ids":["t1"],"repeat_mode":"off","natural_order":["t1"],"source":` +
+			body := `{"track_ids":["00000000-0000-4000-8000-000000000001"],"repeat_mode":"off","natural_order":["00000000-0000-4000-8000-000000000001"],"source":` +
 				resavedSource(t, resumedSource(t, h)) + `}`
 			h.Routes().ServeHTTP(rec, savePut(body))
 
@@ -284,9 +284,9 @@ func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*
 func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.QueueServiceOption) (int, map[string]json.RawMessage) {
 	t.Helper()
 	repo := &recordingRepo{saved: &domain.QueueState{
-		TrackIds:     []string{"t1", "t2"},
+		TrackIds:     []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 		CurrentIdx:   1,
-		NaturalOrder: []string{"t1", "t2"},
+		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 	}}
 	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying, opts...))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
@@ -339,7 +339,7 @@ func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *tes
 	if got := string(body["current_index"]); got != "1" {
 		t.Errorf("resume must still return the queue state, current_index=%q", got)
 	}
-	if got := string(body["track_ids"]); got != `["t1","t2"]` {
+	if got := string(body["track_ids"]); got != `["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000002"]` {
 		t.Errorf("resume must still return the queue track ids, got %s", got)
 	}
 	if v, ok := body["current_track"]; ok {
@@ -359,7 +359,7 @@ func TestHandleSavePosition_WritesPositionWithoutTheQueue(t *testing.T) {
 	repo := &recordingRepo{}
 	rec := httptest.NewRecorder()
 
-	newHandler(repo).Routes().ServeHTTP(rec, positionPut(`{"current_index":7,"current_track_id":"t8","position_ms":93000}`))
+	newHandler(repo).Routes().ServeHTTP(rec, positionPut(`{"current_index":7,"current_track_id":"00000000-0000-4000-8000-000000000008","position_ms":93000}`))
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("position save must be 204, got %d body %q", rec.Code, rec.Body.String())
@@ -367,15 +367,15 @@ func TestHandleSavePosition_WritesPositionWithoutTheQueue(t *testing.T) {
 	if repo.upserts != 0 {
 		t.Fatalf("a position-only save ran the full-state Upsert %d time(s)", repo.upserts)
 	}
-	if p := repo.position; p == nil || p.CurrentIdx != 7 || p.CurrentTrackId != "t8" || p.PositionMs != 93000 {
-		t.Fatalf("repository got position %+v, want idx 7, track t8, 93000ms", repo.position)
+	if p := repo.position; p == nil || p.CurrentIdx != 7 || p.CurrentTrackId != "00000000-0000-4000-8000-000000000008" || p.PositionMs != 93000 {
+		t.Fatalf("repository got position %+v, want idx 7, the eighth track, 93000ms", repo.position)
 	}
 }
 
 func TestHandleSavePosition_InvalidBodyIsBadRequest(t *testing.T) {
 	for name, body := range map[string]string{
 		"missing track id":  `{"current_index":0,"position_ms":1}`,
-		"negative position": `{"current_index":0,"current_track_id":"t1","position_ms":-5}`,
+		"negative position": `{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":-5}`,
 		"malformed json":    `{"current_index":`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -402,7 +402,7 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 
-			newHandler(&recordingRepo{positionErr: err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`))
+			newHandler(&recordingRepo{positionErr: err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":1}`))
 
 			if rec.Code != http.StatusConflict {
 				t.Fatalf("got status %d body %q, want 409", rec.Code, rec.Body.String())
@@ -425,7 +425,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 	first := httptest.NewRecorder()
 	h.Routes().ServeHTTP(first, as(savePut(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`)))
 	second := httptest.NewRecorder()
-	h.Routes().ServeHTTP(second, as(positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`)))
+	h.Routes().ServeHTTP(second, as(positionPut(`{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":1}`)))
 
 	if first.Code != http.StatusNoContent || second.Code != http.StatusTooManyRequests {
 		t.Fatalf("full save then position save = %d, %d; want 204, 429 from one shared bucket", first.Code, second.Code)
@@ -434,8 +434,8 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 
 func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 	h := NewQueueHandler(service.NewQueueService(&recordingRepo{saved: &domain.QueueState{
-		TrackIds:     []string{"t1"},
-		NaturalOrder: []string{"t1"},
+		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
+		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
 	}}, nilNowPlaying{}))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(authservice.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
@@ -565,7 +565,7 @@ func recordLogLevels(t *testing.T) *levelRecorder {
 
 func TestHandleSavePosition_ClientCancelIsNotAnErrorOr5xx(t *testing.T) {
 	logs := recordLogLevels(t)
-	req := positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`)
+	req := positionPut(`{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":1}`)
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
 	rec := httptest.NewRecorder()
@@ -583,7 +583,7 @@ func TestHandleSavePosition_ClientCancelIsNotAnErrorOr5xx(t *testing.T) {
 func TestHandleSavePosition_CanceledErrorWithLiveContextStays500(t *testing.T) {
 	rec := httptest.NewRecorder()
 
-	newHandler(&recordingRepo{positionErr: fmt.Errorf("update: %w", context.Canceled)}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`))
+	newHandler(&recordingRepo{positionErr: fmt.Errorf("update: %w", context.Canceled)}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":1}`))
 
 	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"code":"internal"`) {
 		t.Fatalf("a cancel the client did not cause must stay 500 internal, got %d body %q", rec.Code, rec.Body.String())
@@ -603,11 +603,124 @@ func TestHandleSavePosition_LiveContextErrorsKeepTheirStatus(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 
-			newHandler(&recordingRepo{positionErr: tc.err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`))
+			newHandler(&recordingRepo{positionErr: tc.err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":1}`))
 
 			if rec.Code != tc.status || !strings.Contains(rec.Body.String(), `"code":"`+tc.code+`"`) {
 				t.Fatalf("got %d body %q, want %d with code %q", rec.Code, rec.Body.String(), tc.status, tc.code)
 			}
 		})
+	}
+}
+
+type exactPositionRepo struct {
+	recordingRepo
+}
+
+func (r *exactPositionRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
+	stored := r.saved
+	if stored == nil || position.CurrentIdx >= len(stored.TrackIds) || stored.TrackIds[position.CurrentIdx] != position.CurrentTrackId {
+		return domain.ErrQueuePositionMismatch
+	}
+	r.position = position
+	return nil
+}
+
+func asUser(req *http.Request, user shared.UserId) *http.Request {
+	return req.WithContext(authservice.ContextWithUserID(req.Context(), user))
+}
+
+func TestHandleSavePosition_CaseDifferingTrackIdIsNotAConflict(t *testing.T) {
+	h := newHandler(&exactPositionRepo{})
+	user := shared.NewUserId(uuid.New())
+	saved := httptest.NewRecorder()
+	h.Routes().ServeHTTP(saved, asUser(savePut(`{"track_ids":["3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"current_index":0,"repeat_mode":"off"}`), user))
+	if saved.Code != http.StatusNoContent {
+		t.Fatalf("save got status %d body %q, want 204", saved.Code, saved.Body.String())
+	}
+
+	rec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, asUser(positionPut(`{"current_index":0,"current_track_id":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","position_ms":1}`), user))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("a position write for the same track in another case got status %d body %q, want 204", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleSave_GarbageTrackIdsAreRejectedNotStored(t *testing.T) {
+	for name, body := range map[string]string{
+		"unparseable id":           `{"track_ids":["not-a-uuid"],"repeat_mode":"off"}`,
+		"empty elements":           `{"track_ids":["a","",""],"repeat_mode":"off","natural_order":["x"]}`,
+		"natural order of another": `{"track_ids":["3f2504e0-4f89-11d3-9a0c-0305e82c3301"],"repeat_mode":"off","natural_order":["6ba7b810-9dad-11d1-80b4-00c04fd430c8"]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &recordingRepo{}
+			rec := httptest.NewRecorder()
+
+			newHandler(repo).Routes().ServeHTTP(rec, savePut(body))
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("got status %d body %q, want 400", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), `"code":"playback.`) {
+				t.Errorf("want a playback validation code, got %q", rec.Body.String())
+			}
+			if repo.saved != nil {
+				t.Fatalf("a rejected queue was stored: %+v", repo.saved)
+			}
+		})
+	}
+}
+
+func TestHandleSavePosition_GarbageTrackIdIsBadRequest(t *testing.T) {
+	repo := &recordingRepo{}
+	rec := httptest.NewRecorder()
+
+	newHandler(repo).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"not-a-uuid","position_ms":1}`))
+
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"playback.malformed_track_id"`) {
+		t.Fatalf("got status %d body %q, want 400 playback.malformed_track_id", rec.Code, rec.Body.String())
+	}
+	if repo.position != nil {
+		t.Fatalf("a garbage track id reached the repository: %+v", repo.position)
+	}
+}
+
+func TestHandleSave_BadSourceWinsOverBadRepeatMode(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	newHandler(&recordingRepo{}).Routes().ServeHTTP(rec, savePut(`{"track_ids":[],"repeat_mode":"sideways","source_id":"mixtape:7"}`))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("got status %d body %q, want 400", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"playback.unrecognized_source_id"`) {
+		t.Errorf("the source error must win over the repeat-mode error, got %q", rec.Body.String())
+	}
+}
+
+func TestHandleForget_AuditRecordNamesTheSelfServiceTrigger(t *testing.T) {
+	var buf strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	rec := httptest.NewRecorder()
+
+	newHandler(&recordingRepo{}).Routes().ServeHTTP(rec, deleteReq())
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("got status %d body %q, want 204", rec.Code, rec.Body.String())
+	}
+	var audit map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var entry map[string]any
+		if json.Unmarshal([]byte(line), &entry) == nil && entry["msg"] == "playback.queue_state_forgotten" {
+			audit = entry
+		}
+	}
+	if audit == nil {
+		t.Fatalf("no playback.queue_state_forgotten record; logs=%s", buf.String())
+	}
+	if audit["trigger"] != "self" {
+		t.Errorf("trigger = %v, want self; record=%v", audit["trigger"], audit)
 	}
 }

@@ -175,7 +175,74 @@ func NewQueueState(in QueueStateInput) (*QueueState, error) {
 	if err := state.currentTrackIdPresent(); err != nil {
 		return nil, err
 	}
+	if err := state.canonicalizeTrackIds(); err != nil {
+		return nil, err
+	}
 	return state, nil
+}
+
+func (q *QueueState) canonicalizeTrackIds() error {
+	trackIds, err := canonicalTrackIds("trackIds", q.TrackIds)
+	if err != nil {
+		return err
+	}
+	naturalOrder, err := canonicalTrackIds("naturalOrder", q.NaturalOrder)
+	if err != nil {
+		return err
+	}
+	if err := naturalOrderPermutes(trackIds, naturalOrder, q.Shuffled); err != nil {
+		return err
+	}
+	q.TrackIds = trackIds
+	q.NaturalOrder = naturalOrder
+	return nil
+}
+
+func canonicalTrackIds(field string, ids []string) ([]string, error) {
+	canonical := make([]string, len(ids))
+	for i, id := range ids {
+		parsed, err := canonicalTrackId(fmt.Sprintf("%s[%d]", field, i), id)
+		if err != nil {
+			return nil, err
+		}
+		canonical[i] = parsed
+	}
+	return canonical, nil
+}
+
+func canonicalTrackId(field, id string) (string, error) {
+	parsed, err := shared.ParseEntityId(id)
+	if err != nil {
+		return "", newValidationError(codeMalformedTrackId, field+" is not a track id")
+	}
+	return parsed.String(), nil
+}
+
+func naturalOrderPermutes(trackIds, naturalOrder []string, shuffled bool) error {
+	if len(naturalOrder) == 0 && !shuffled {
+		return nil
+	}
+	if !sameTracks(trackIds, naturalOrder) {
+		return newValidationError(codeNaturalOrderMismatch, "naturalOrder must hold exactly the tracks in trackIds")
+	}
+	return nil
+}
+
+func sameTracks(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	remaining := make(map[string]int, len(a))
+	for _, id := range a {
+		remaining[id]++
+	}
+	for _, id := range b {
+		if remaining[id] == 0 {
+			return false
+		}
+		remaining[id]--
+	}
+	return true
 }
 
 func handledNow() time.Time {

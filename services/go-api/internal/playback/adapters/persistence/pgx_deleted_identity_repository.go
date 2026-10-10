@@ -16,6 +16,8 @@ import (
 
 var _ ports.DeletedIdentityLister = (*PgxDeletedIdentityRepository)(nil)
 
+const DefaultOwnerScanPageTimeout = 5 * time.Second
+
 type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
@@ -26,14 +28,14 @@ type PgxDeletedIdentityRepository struct {
 }
 
 func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool, opts ...func(*PgxDeletedIdentityRepository)) *PgxDeletedIdentityRepository {
-	r := &PgxDeletedIdentityRepository{pool: pool, timeout: defaultQueueStateOpTimeout}
+	r := &PgxDeletedIdentityRepository{pool: pool, timeout: DefaultOwnerScanPageTimeout}
 	for _, opt := range opts {
 		opt(r)
 	}
 	return r
 }
 
-func withDeletedIdentityTimeout(d time.Duration) func(*PgxDeletedIdentityRepository) {
+func WithOwnerScanPageTimeout(d time.Duration) func(*PgxDeletedIdentityRepository) {
 	return func(r *PgxDeletedIdentityRepository) {
 		r.timeout = d
 	}
@@ -43,43 +45,56 @@ func (r *PgxDeletedIdentityRepository) opTimeout() time.Duration {
 	if r.timeout > 0 {
 		return r.timeout
 	}
-	return defaultQueueStateOpTimeout
+	return DefaultOwnerScanPageTimeout
 }
 
 const ownersWithoutIdentitySQL = `
-	SELECT q.user_id
-	FROM playback_queue_state q
-	WHERE q.erased_at IS NULL
-	  AND EXISTS (SELECT 1 FROM auth.users)
-	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = q.user_id)
-	ORDER BY q.updated_at
-	LIMIT $1`
+	WITH page AS (
+	  SELECT q.user_id
+	  FROM playback_queue_state q
+	  WHERE q.user_id > $1
+	    AND q.erased_at IS NULL
+	  ORDER BY q.user_id
+	  LIMIT $2
+	)
+	SELECT p.user_id, u.id IS NULL
+	FROM page p
+	LEFT JOIN LATERAL (SELECT a.id FROM auth.users a WHERE a.id = p.user_id) u ON true
+	WHERE EXISTS (SELECT 1 FROM auth.users)
+	ORDER BY p.user_id`
 
-func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Context, limit int) ([]shared.UserId, error) {
+func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.opTimeout())
 	defer cancel()
 
-	rows, err := r.pool.Query(ctx, ownersWithoutIdentitySQL, limit)
+	rows, err := r.pool.Query(ctx, ownersWithoutIdentitySQL, after.UUID(), window)
 	if err != nil {
-		return nil, identityStoreErr(err)
+		return ports.OwnerScanPage{}, identityStoreErr(err)
 	}
 	defer rows.Close()
-	return scanOwners(rows)
+	return scanOwnerPage(rows, after, window)
 }
 
-func scanOwners(rows pgx.Rows) ([]shared.UserId, error) {
-	var owners []shared.UserId
+func scanOwnerPage(rows pgx.Rows, after shared.UserId, window int) (ports.OwnerScanPage, error) {
+	page := ports.OwnerScanPage{Next: after}
+	scanned := 0
 	for rows.Next() {
 		var owner uuid.UUID
-		if err := rows.Scan(&owner); err != nil {
-			return nil, fmt.Errorf("scan queue state owner: %w", err)
+		var orphaned bool
+		if err := rows.Scan(&owner, &orphaned); err != nil {
+			return ports.OwnerScanPage{}, fmt.Errorf("scan queue state owner: %w", err)
 		}
-		owners = append(owners, shared.NewUserId(owner))
+		scanned++
+		page.Next = shared.NewUserId(owner)
+		if orphaned {
+			page.Orphaned = append(page.Orphaned, page.Next)
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, identityStoreErr(err)
+		return ports.OwnerScanPage{}, identityStoreErr(err)
 	}
-	return owners, nil
+	page.Done = scanned < window
+	return page, nil
 }
 
 func identityStoreErr(err error) error {

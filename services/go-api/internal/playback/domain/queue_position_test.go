@@ -42,3 +42,22 @@ func TestQueuePositionValidation_EachCauseHasItsOwnCode(t *testing.T) {
 		})
 	}
 }
+
+func TestNewQueuePosition_CanonicalizesTheTrackId(t *testing.T) {
+	position, err := NewQueuePosition(QueuePositionInput{UserId: testUser(), CurrentTrackId: "3F2504E0-4F89-11D3-9A0C-0305E82C3301"})
+	if err != nil {
+		t.Fatalf("NewQueuePosition: %v", err)
+	}
+
+	if position.CurrentTrackId != "3f2504e0-4f89-11d3-9a0c-0305e82c3301" {
+		t.Errorf("CurrentTrackId = %q, want the canonical lowercase form", position.CurrentTrackId)
+	}
+}
+
+func TestNewQueuePosition_RejectsAnUnparseableTrackId(t *testing.T) {
+	_, err := NewQueuePosition(QueuePositionInput{UserId: testUser(), CurrentTrackId: "not-a-uuid"})
+
+	if got := validationCode(t, err); got != "playback.malformed_track_id" {
+		t.Errorf("code = %q, want playback.malformed_track_id", got)
+	}
+}

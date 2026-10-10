@@ -381,13 +381,13 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 	dropQueueStateOnCleanup(t, wide, userId)
 
 	seeded := stateAt(userId, 60000, time.Now())
-	seeded.TrackIds = []string{"track-a"}
-	seeded.NaturalOrder = []string{"track-a"}
+	seeded.TrackIds = []string{trk("track-a")}
+	seeded.NaturalOrder = []string{trk("track-a")}
 	if err := NewPgxQueueStateRepository(wide).Upsert(ctx, seeded); err != nil {
 		t.Fatalf("Upsert(the queue the user then erases): %v", err)
 	}
 	position, err := domain.NewQueuePosition(domain.QueuePositionInput{
-		UserId: userId, CurrentIdx: 0, CurrentTrackId: "track-a", PositionMs: 65000,
+		UserId: userId, CurrentIdx: 0, CurrentTrackId: trk("track-a"), PositionMs: 65000,
 	})
 	if err != nil {
 		t.Fatalf("NewQueuePosition: %v", err)
@@ -505,6 +505,10 @@ func maxLengthQueue(t *testing.T, userId shared.UserId, trackIds []string, posit
 	return state
 }
 
+func trk(name string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(name)).String()
+}
+
 func uuidTrackIds(n int) []string {
 	ids := make([]string, n)
 	for i := range ids {
@@ -564,7 +568,7 @@ func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, uuidTrackIds(domain.MaxQueueLength), 1000)); err != nil {
 		t.Fatalf("Upsert(initial): %v", err)
 	}
-	replacement := []string{"x", "y", "z", "w", "v", "u"}
+	replacement := uuidTrackIds(6)
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, replacement, 0)); err != nil {
 		t.Fatalf("Upsert(replacement): %v", err)
 	}
@@ -573,7 +577,7 @@ func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("GetForUser: state=%v err=%v", got, err)
 	}
-	if len(got.TrackIds) != len(replacement) || got.TrackIds[5] != "u" || len(got.NaturalOrder) != len(replacement) {
+	if len(got.TrackIds) != len(replacement) || got.TrackIds[5] != replacement[5] || len(got.NaturalOrder) != len(replacement) {
 		t.Fatalf("replacement list not stored: tracks=%v natural=%v", got.TrackIds, got.NaturalOrder)
 	}
 }
@@ -633,12 +637,12 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
-	ids := []string{"a", "b", "c", "d", "e", "f"}
+	ids := []string{trk("a"), trk("b"), trk("c"), trk("d"), trk("e"), trk("f")}
 
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 65000)); err != nil {
 		t.Fatalf("Upsert(newer full save): %v", err)
 	}
-	err := repo.UpdatePosition(ctx, positionAt(t, userId, 1, "b", 1, 5*time.Second))
+	err := repo.UpdatePosition(ctx, positionAt(t, userId, 1, trk("b"), 1, 5*time.Second))
 	if !errors.Is(err, domain.ErrStaleQueueWrite) {
 		t.Fatalf("UpdatePosition(handled before the stored save) = %v, want ErrStaleQueueWrite", err)
 	}
@@ -659,7 +663,7 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
-	ids := []string{"a", "b", "c", "d", "e", "f"}
+	ids := []string{trk("a"), trk("b"), trk("c"), trk("d"), trk("e"), trk("f")}
 
 	if err := repo.Upsert(ctx, stateAt(userId, 0, time.Now().Add(-10*time.Second))); err != nil {
 		t.Fatalf("Upsert(seed): %v", err)
@@ -669,7 +673,7 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 2000)); err != nil {
 		t.Fatalf("Upsert(full): %v", err)
 	}
-	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 5, "f", 30000, 0)); err != nil {
+	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 5, trk("f"), 30000, 0)); err != nil {
 		t.Fatalf("UpdatePosition: %v", err)
 	}
 	if err := repo.Upsert(ctx, delayedFull); !errors.Is(err, domain.ErrStaleQueueWrite) {
@@ -690,19 +694,19 @@ func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
 
-	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 0, "a", 1, 0)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 0, trk("a"), 1, 0)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition with nothing stored = %v, want ErrQueuePositionMismatch", err)
 	}
 	if got, err := repo.GetForUser(ctx, userId); err != nil || got != nil {
 		t.Fatalf("a position-only save created a row: state=%+v err=%v", got, err)
 	}
 
-	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, []string{"x", "y", "z", "w", "v", "u"}, 4000)); err != nil {
+	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, []string{trk("x"), trk("y"), trk("z"), trk("w"), trk("v"), trk("u")}, 4000)); err != nil {
 		t.Fatalf("Upsert(replacement queue): %v", err)
 	}
 	for name, p := range map[string]*domain.QueuePosition{
-		"different track at the index": positionAt(t, userId, 1, "b", 99000, 0),
-		"index past the stored queue":  positionAt(t, userId, 6, "u", 99000, 0),
+		"different track at the index": positionAt(t, userId, 1, trk("b"), 99000, 0),
+		"index past the stored queue":  positionAt(t, userId, 6, trk("u"), 99000, 0),
 	} {
 		if err := repo.UpdatePosition(ctx, p); !errors.Is(err, domain.ErrQueuePositionMismatch) {
 			t.Fatalf("%s: UpdatePosition = %v, want ErrQueuePositionMismatch", name, err)
@@ -762,11 +766,11 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
 
-	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, []string{"a", "b", "c", "d", "e", "f"}, 1000)); err != nil {
+	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, []string{trk("a"), trk("b"), trk("c"), trk("d"), trk("e"), trk("f")}, 1000)); err != nil {
 		t.Fatalf("Upsert(the queue the position is measured against): %v", err)
 	}
-	commitReplacement := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, []string{"x", "y", "z", "w", "v", "u"}, 4000))
-	measuredOnTheOldQueue := positionAt(t, userId, 1, "b", 99000, 0)
+	commitReplacement := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, []string{trk("x"), trk("y"), trk("z"), trk("w"), trk("v"), trk("u")}, 4000))
+	measuredOnTheOldQueue := positionAt(t, userId, 1, trk("b"), 99000, 0)
 
 	raced := make(chan error, 1)
 	go func() { raced <- repo.UpdatePosition(ctx, measuredOnTheOldQueue) }()
@@ -777,7 +781,7 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 		t.Fatalf("UpdatePosition that lost its track while waiting on the lock = %v, want ErrQueuePositionMismatch", err)
 	}
 	got, err := repo.GetForUser(ctx, userId)
-	if err != nil || got == nil || got.PositionMs != 4000 || got.CurrentIdx != 5 || got.TrackIds[1] != "y" {
+	if err != nil || got == nil || got.PositionMs != 4000 || got.CurrentIdx != 5 || got.TrackIds[1] != trk("y") {
 		t.Fatalf("stored state = %+v (err %v), want the replacement queue untouched", got, err)
 	}
 }
@@ -789,13 +793,13 @@ func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
-	ids := []string{"a", "b", "c", "d", "e", "f"}
+	ids := []string{trk("a"), trk("b"), trk("c"), trk("d"), trk("e"), trk("f")}
 
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 1000)); err != nil {
 		t.Fatalf("Upsert(seed): %v", err)
 	}
 	commitSameQueue := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, ids, 4000))
-	position := positionAt(t, userId, 1, "b", 99000, 0)
+	position := positionAt(t, userId, 1, trk("b"), 99000, 0)
 
 	raced := make(chan error, 1)
 	go func() { raced <- repo.UpdatePosition(ctx, position) }()
@@ -822,13 +826,13 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	cleanupUser(t, pool, userId)
-	ids := []string{"a", "b", "c", "d", "e", "f"}
+	ids := []string{trk("a"), trk("b"), trk("c"), trk("d"), trk("e"), trk("f")}
 
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 1000)); err != nil {
 		t.Fatalf("Upsert(seed): %v", err)
 	}
 	commitNewerFull := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, ids, 4000))
-	olderPosition := positionAt(t, userId, 1, "b", 99000, handledBeforeTheFullSave)
+	olderPosition := positionAt(t, userId, 1, trk("b"), 99000, handledBeforeTheFullSave)
 
 	raced := make(chan error, 1)
 	go func() { raced <- repo.UpdatePosition(ctx, olderPosition) }()
@@ -906,5 +910,45 @@ func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
 	}
 	if n := count(recent); n != 1 {
 		t.Errorf("tombstone inside the window has %d rows, want 1", n)
+	}
+}
+
+func TestUpdatePosition_MatchesALegacyNonCanonicalStoredId(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	cleanupUser(t, pool, userId)
+	const canonical = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+	legacy := []string{
+		"3F2504E0-4F89-11D3-9A0C-0305E82C3301",
+		"{3f2504e0-4f89-11d3-9a0c-0305e82c3301}",
+		"urn:uuid:3F2504E0-4F89-11D3-9A0C-0305E82C3301",
+		"3f2504e04f8911d39a0c0305e82c3301",
+		"not-a-uuid",
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO playback_queue_state (user_id, track_ids, updated_at) VALUES ($1, $2, clock_timestamp() - interval '1 minute')`,
+		userId.UUID(), legacy); err != nil {
+		t.Fatalf("store legacy row: %v", err)
+	}
+
+	for idx := range legacy[:4] {
+		if err := repo.UpdatePosition(ctx, positionAt(t, userId, idx, canonical, int64(idx+1)*1000, 0)); err != nil {
+			t.Fatalf("UpdatePosition(idx %d, stored %q): %v, want the canonical id to match the legacy form", idx, legacy[idx], err)
+		}
+	}
+	other := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 4, other, 1, 0)); !errors.Is(err, domain.ErrQueuePositionMismatch) {
+		t.Fatalf("UpdatePosition over a garbage stored id = %v, want ErrQueuePositionMismatch", err)
+	}
+
+	got, err := repo.GetForUser(ctx, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetForUser: state=%v err=%v", got, err)
+	}
+	if !reflect.DeepEqual(got.TrackIds, legacy) || got.CurrentIdx != 3 {
+		t.Fatalf("legacy row read back as tracks=%q idx=%d, want it untouched at idx 3", got.TrackIds, got.CurrentIdx)
 	}
 }
