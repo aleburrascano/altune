@@ -58,7 +58,18 @@ func (c *Config) validateBehavioralCorpusPath() error {
 	if !info.IsDir() {
 		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent %q is not a directory", dir)
 	}
-	return nil
+	return probeWritableDir(dir)
+}
+
+func probeWritableDir(dir string) error {
+	f, err := os.CreateTemp(dir, ".altune-write-probe-*")
+	if err != nil {
+		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent %q is not writable (read-only mount or missing permission): %w", dir, err)
+	}
+	name := f.Name()
+	closeErr := f.Close()
+	removeErr := os.Remove(name)
+	return errors.Join(closeErr, removeErr)
 }
 
 func (c *Config) validateAlerting() error {
@@ -72,7 +83,7 @@ func (c *Config) validateAlerting() error {
 }
 
 func (c *Config) validateTransportSecurity() error {
-	if c.normalizedEnv() != "production" {
+	if c.isKnownNonProductionEnv() {
 		return nil
 	}
 	if err := validateDatabaseTLS(c.DatabaseURL); err != nil {
@@ -93,11 +104,11 @@ func validateDatabaseTLS(databaseURL string) error {
 		return nil
 	}
 	if pgCfg.TLSConfig == nil {
-		return errors.New("DATABASE_URL must require TLS when ENV=production (use sslmode=require, verify-ca or verify-full)")
+		return errors.New("DATABASE_URL must require TLS unless ENV is development, test or staging (use sslmode=require, verify-ca or verify-full)")
 	}
 	for _, fb := range pgCfg.Fallbacks {
 		if fb.TLSConfig == nil {
-			return errors.New("DATABASE_URL must not fall back to plaintext when ENV=production (use sslmode=require, verify-ca or verify-full)")
+			return errors.New("DATABASE_URL must not fall back to plaintext unless ENV is development, test or staging (use sslmode=require, verify-ca or verify-full)")
 		}
 	}
 	return nil
@@ -110,19 +121,13 @@ func validateObjectStorageEndpoint(endpoint string) error {
 	return validateSecureURL("OCI_S3_ENDPOINT", endpoint)
 }
 
-var audioKeyPrefixEnvs = map[string]bool{
-	"development": true,
-	"test":        true,
-	"staging":     true,
-}
-
 var audioKeyPrefixPattern = regexp.MustCompile(`^[a-z0-9-]+/$`)
 
 func (c *Config) validateAudioKeyPrefix() error {
 	if c.AudioKeyPrefix == "" {
 		return nil
 	}
-	if !audioKeyPrefixEnvs[c.normalizedEnv()] {
+	if !c.isKnownNonProductionEnv() {
 		return fmt.Errorf("AUDIO_KEY_PREFIX may be set only when ENV is development, test or staging, got ENV=%q and prefix %q", c.Env, c.AudioKeyPrefix)
 	}
 	if !audioKeyPrefixPattern.MatchString(c.AudioKeyPrefix) {
@@ -142,8 +147,8 @@ func (c *Config) validateRedis() error {
 }
 
 func (c *Config) validateTuning() error {
-	if c.MusicBrainzUserAgent == "" && c.normalizedEnv() == "production" {
-		return fmt.Errorf("MUSICBRAINZ_USER_AGENT must be set when ENV=production")
+	if c.MusicBrainzUserAgent == "" && !c.isKnownNonProductionEnv() {
+		return fmt.Errorf("MUSICBRAINZ_USER_AGENT must be set unless ENV is development, test or staging, got ENV=%q", c.Env)
 	}
 	if c.MusicBrainzUserAgent != "" {
 		if !strings.Contains(c.MusicBrainzUserAgent, "@") && !strings.Contains(strings.ToLower(c.MusicBrainzUserAgent), "http") {

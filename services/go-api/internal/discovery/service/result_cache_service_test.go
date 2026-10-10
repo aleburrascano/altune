@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
@@ -32,6 +33,7 @@ func (p *countingProvider) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 type fakeResultCache struct {
+	mu         sync.Mutex
 	store      map[string][]domain.SearchResult
 	gets, sets int
 }
@@ -41,12 +43,16 @@ func newFakeResultCache() *fakeResultCache {
 }
 
 func (c *fakeResultCache) Get(_ context.Context, key string) ([]domain.SearchResult, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.gets++
 	r, ok := c.store[key]
 	return r, ok
 }
 
 func (c *fakeResultCache) Set(_ context.Context, key string, results []domain.SearchResult) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.sets++
 	c.store[key] = results
 }

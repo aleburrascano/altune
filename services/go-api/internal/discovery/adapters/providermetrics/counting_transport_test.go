@@ -199,3 +199,36 @@ func TestNilBaseDoesNotPanic(t *testing.T) {
 		t.Skip("unexpected success dialing unroutable host; nil-base path still exercised")
 	}
 }
+
+func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
+	cases := []struct {
+		url      string
+		provider string
+	}{
+		{"https://api.discogs.com/database/search", "discogs"},
+		{"https://i.discogs.com/x.jpg", "discogs"},
+		{"https://api.genius.com/search", "genius"},
+		{"https://www.theaudiodb.com/api/v1/json/2/search.php", "theaudiodb"},
+		{"https://theaudiodb.com/api/v1/json/2/search.php", "theaudiodb"},
+		{"https://webservice.fanart.tv/v3/music/x", "fanart"},
+	}
+	for _, c := range cases {
+		t.Run(c.url, func(t *testing.T) {
+			before := ReadSnapshot()
+			if _, ok := before[c.provider]; !ok {
+				t.Fatalf("snapshot has no %q key", c.provider)
+			}
+			resp, _ := roundTrip(t, &stubTransport{status: 200}, c.url)
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			after := ReadSnapshot()
+			if got := delta(before[c.provider], after[c.provider]); got != (Outcomes{OK: 1}) {
+				t.Errorf("provider %q delta = %+v, want {OK:1}", c.provider, got)
+			}
+			if got := delta(before[providerOther], after[providerOther]); got != (Outcomes{}) {
+				t.Errorf("other delta = %+v, want unchanged", got)
+			}
+		})
+	}
+}

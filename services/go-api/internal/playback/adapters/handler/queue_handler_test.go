@@ -10,10 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -508,5 +510,104 @@ func TestHandleSave_LookAlikeUnavailableTextIsNot503(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "playback.unavailable") {
 		t.Errorf("body = %q, must not carry the unavailable code", rec.Body.String())
+	}
+}
+
+type cancelingPositionRepo struct {
+	recordingRepo
+	cancel context.CancelFunc
+}
+
+func (r *cancelingPositionRepo) UpdatePosition(ctx context.Context, _ *domain.QueuePosition) error {
+	r.cancel()
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type levelRecorder struct {
+	mu     sync.Mutex
+	levels []slog.Level
+}
+
+func (l *levelRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (l *levelRecorder) Handle(_ context.Context, rec slog.Record) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.levels = append(l.levels, rec.Level)
+	return nil
+}
+
+func (l *levelRecorder) WithAttrs([]slog.Attr) slog.Handler { return l }
+
+func (l *levelRecorder) WithGroup(string) slog.Handler { return l }
+
+func (l *levelRecorder) errorCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, lv := range l.levels {
+		if lv >= slog.LevelError {
+			n++
+		}
+	}
+	return n
+}
+
+func recordLogLevels(t *testing.T) *levelRecorder {
+	t.Helper()
+	rec := &levelRecorder{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(rec))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return rec
+}
+
+func TestHandleSavePosition_ClientCancelIsNotAnErrorOr5xx(t *testing.T) {
+	logs := recordLogLevels(t)
+	req := positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`)
+	ctx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+	rec := httptest.NewRecorder()
+
+	newHandler(&cancelingPositionRepo{cancel: cancel}).Routes().ServeHTTP(rec, req.WithContext(ctx))
+
+	if rec.Code >= http.StatusInternalServerError {
+		t.Fatalf("a client disconnect returned %d, want no 5xx (body %q)", rec.Code, rec.Body.String())
+	}
+	if n := logs.errorCount(); n != 0 {
+		t.Fatalf("a client disconnect logged %d ERROR record(s), want 0", n)
+	}
+}
+
+func TestHandleSavePosition_CanceledErrorWithLiveContextStays500(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	newHandler(&recordingRepo{positionErr: fmt.Errorf("update: %w", context.Canceled)}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`))
+
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"code":"internal"`) {
+		t.Fatalf("a cancel the client did not cause must stay 500 internal, got %d body %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleSavePosition_LiveContextErrorsKeepTheirStatus(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err    error
+		status int
+		code   string
+	}{
+		"internal":    {errors.New("boom"), http.StatusInternalServerError, "internal"},
+		"unavailable": {fmt.Errorf("update: %w", domain.ErrQueueStateUnavailable), http.StatusServiceUnavailable, "playback.unavailable"},
+		"conflict":    {fmt.Errorf("update: %w", domain.ErrStaleQueueWrite), http.StatusConflict, "playback.stale_queue_write"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+
+			newHandler(&recordingRepo{positionErr: tc.err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`))
+
+			if rec.Code != tc.status || !strings.Contains(rec.Body.String(), `"code":"`+tc.code+`"`) {
+				t.Fatalf("got %d body %q, want %d with code %q", rec.Code, rec.Body.String(), tc.status, tc.code)
+			}
+		})
 	}
 }

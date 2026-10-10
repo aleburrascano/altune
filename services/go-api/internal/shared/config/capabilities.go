@@ -6,6 +6,16 @@ func (c *Config) normalizedEnv() string {
 	return strings.ToLower(strings.TrimSpace(c.Env))
 }
 
+var knownNonProductionEnvs = map[string]bool{
+	"development": true,
+	"test":        true,
+	"staging":     true,
+}
+
+func (c *Config) isKnownNonProductionEnv() bool {
+	return knownNonProductionEnvs[c.normalizedEnv()]
+}
+
 func (c *Config) IsDevelopment() bool {
 	return c.normalizedEnv() == "development"
 }
