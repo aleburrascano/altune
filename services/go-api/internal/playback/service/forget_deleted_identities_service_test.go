@@ -3,9 +3,11 @@ package service
 import (
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +18,7 @@ type identityStore struct {
 	queue *inMemoryQueueRepo
 	live  map[uuid.UUID]bool
 	err   error
+	scans []shared.UserId
 }
 
 func newIdentityStore(queue *inMemoryQueueRepo) *identityStore {
@@ -26,33 +29,44 @@ func (s *identityStore) deleteAccount(userId shared.UserId) {
 	delete(s.live, userId.UUID())
 }
 
-func (s *identityStore) ListOwnersWithoutIdentity(_ context.Context, limit int) ([]shared.UserId, error) {
+func (s *identityStore) ListOwnersWithoutIdentity(_ context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {
+	s.scans = append(s.scans, after)
 	if s.err != nil {
-		return nil, s.err
+		return ports.OwnerScanPage{}, s.err
 	}
-	if limit <= 0 {
-		return nil, fmt.Errorf("limit must be positive, got %d", limit)
+	if window <= 0 {
+		return ports.OwnerScanPage{}, fmt.Errorf("window must be positive, got %d", window)
 	}
-	var owners []shared.UserId
+	var keys []uuid.UUID
 	for id := range s.queue.states {
-		if len(owners) == limit {
-			break
-		}
-		if !s.live[id] {
-			owners = append(owners, shared.NewUserId(id))
+		if bytes.Compare(id[:], afterKey(after)) > 0 {
+			keys = append(keys, id)
 		}
 	}
-	return owners, nil
+	slices.SortFunc(keys, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	page := ports.OwnerScanPage{Next: after, Done: len(keys) < window}
+	for _, id := range keys[:min(window, len(keys))] {
+		page.Next = shared.NewUserId(id)
+		if !s.live[id] {
+			page.Orphaned = append(page.Orphaned, page.Next)
+		}
+	}
+	return page, nil
+}
+
+func afterKey(after shared.UserId) []byte {
+	key := after.UUID()
+	return key[:]
 }
 
 func saveQueueOf(t *testing.T, svc *QueueService, identities *identityStore, sourceId string) shared.UserId {
 	t.Helper()
 	user := testUser()
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{"a", "b"},
-		CurrentIdx: 1,
-		RepeatMode: "off",
-		SourceId:   sourceId,
+		TrackIds:       []string{trk("a"), trk("b")},
+		CurrentIdx:     1,
+		RepeatMode:     "off",
+		LegacySourceId: sourceId,
 	}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -178,7 +192,7 @@ func TestForgetDeletedIdentities_ErasesABacklogAcrossBatchesInOneRun(t *testing.
 	identities := newIdentityStore(repo)
 	svc := NewQueueService(repo, &fakeNowPlaying{})
 	const overflow = 3
-	for range deletedIdentityBatch + overflow {
+	for range ownerScanWindow + overflow {
 		identities.deleteAccount(saveQueueOf(t, svc, identities, "search:pino daniele"))
 	}
 
@@ -187,8 +201,8 @@ func TestForgetDeletedIdentities_ErasesABacklogAcrossBatchesInOneRun(t *testing.
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if forgotten != deletedIdentityBatch+overflow {
-		t.Errorf("run forgot %d accounts, want the whole backlog of %d", forgotten, deletedIdentityBatch+overflow)
+	if forgotten != ownerScanWindow+overflow {
+		t.Errorf("run forgot %d accounts, want the whole backlog of %d", forgotten, ownerScanWindow+overflow)
 	}
 	if len(repo.states) != 0 {
 		t.Errorf("%d deleted accounts still hold queue state after one run", len(repo.states))
@@ -207,14 +221,14 @@ func (r *failingOwnersQueueRepo) DeleteForUser(ctx context.Context, userId share
 	return r.inMemoryQueueRepo.DeleteForUser(ctx, userId)
 }
 
-type fixedListing struct {
-	owners []shared.UserId
-	calls  int
+type endlessListing struct {
+	owner shared.UserId
+	calls int
 }
 
-func (l *fixedListing) ListOwnersWithoutIdentity(_ context.Context, _ int) ([]shared.UserId, error) {
+func (l *endlessListing) ListOwnersWithoutIdentity(_ context.Context, _ shared.UserId, _ int) (ports.OwnerScanPage, error) {
 	l.calls++
-	return l.owners, nil
+	return ports.OwnerScanPage{Orphaned: []shared.UserId{l.owner}, Next: l.owner}, nil
 }
 
 func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T) {
@@ -249,40 +263,64 @@ func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T
 	}
 }
 
-func TestForgetDeletedIdentities_StopsAtTheCapWhenOwnersKeepFailing(t *testing.T) {
-	dbDown := errors.New("connection refused")
-	owners := make([]shared.UserId, deletedIdentityBatch)
-	failing := map[shared.UserId]error{}
-	for i := range owners {
-		owners[i] = shared.NewUserId(uuid.New())
-		if i > 0 {
-			failing[owners[i]] = dbDown
-		}
-	}
-	listing := &fixedListing{owners: owners}
-	repo := &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: failing}
-	sweep := NewForgetDeletedIdentitiesService(listing, NewQueueService(repo, &fakeNowPlaying{}))
+func TestForgetDeletedIdentities_StopsAtThePageCapWhenTheScanNeverEnds(t *testing.T) {
+	listing := &endlessListing{owner: shared.NewUserId(uuid.New())}
+	sweep := NewForgetDeletedIdentitiesService(listing, NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}))
 
 	forgotten, err := sweep.Execute(context.Background())
 
-	if !errors.Is(err, dbDown) {
-		t.Fatalf("Execute = %v, want the failures reported", err)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
 	}
-	if listing.calls != maxDeletedIdentityBatchesPerRun {
-		t.Errorf("listed %d batches, want the cap of %d", listing.calls, maxDeletedIdentityBatchesPerRun)
+	if listing.calls != maxOwnerScanPagesPerRun {
+		t.Errorf("listed %d pages, want the cap of %d", listing.calls, maxOwnerScanPagesPerRun)
 	}
-	if forgotten != maxDeletedIdentityBatchesPerRun {
-		t.Errorf("forgot %d, want one per capped batch (%d)", forgotten, maxDeletedIdentityBatchesPerRun)
+	if forgotten != maxOwnerScanPagesPerRun {
+		t.Errorf("forgot %d, want one per capped page (%d)", forgotten, maxOwnerScanPagesPerRun)
+	}
+}
+
+func TestForgetDeletedIdentities_ResumesTheOwnerScanWhereTheLastRunStopped(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	svc := NewQueueService(repo, &fakeNowPlaying{})
+	var owners []uuid.UUID
+	for range 5 {
+		owners = append(owners, saveQueueOf(t, svc, identities, "search:pino daniele").UUID())
+	}
+	slices.SortFunc(owners, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	sweep := newSweep(repo, identities)
+	sweep.scanWindow, sweep.maxPages = 2, 2
+
+	runScans := func(run string) []shared.UserId {
+		t.Helper()
+		identities.scans = nil
+		if _, err := sweep.Execute(context.Background()); err != nil {
+			t.Fatalf("Execute(%s): %v", run, err)
+		}
+		return identities.scans
+	}
+
+	if got := runScans("first"); !slices.Equal(got, []shared.UserId{{}, shared.NewUserId(owners[1])}) {
+		t.Fatalf("first run scanned after %v, want the start then the second owner", got)
+	}
+	if got := runScans("second"); !slices.Equal(got, []shared.UserId{shared.NewUserId(owners[3])}) {
+		t.Fatalf("second run scanned after %v, want it to resume after the fourth owner and finish the pass", got)
+	}
+	if got := runScans("third"); len(got) == 0 || !got[0].IsZero() {
+		t.Fatalf("the run after a finished pass scanned after %v, want it to start over", got)
 	}
 }
 
 type sweepMetricsSpy struct {
-	idle   int
-	erased int
+	idle         int
+	erased       int
+	scanTimeouts int
 }
 
 func (m *sweepMetricsSpy) SweepIdle()             { m.idle++ }
 func (m *sweepMetricsSpy) QueueStateErased(n int) { m.erased += n }
+func (m *sweepMetricsSpy) OwnerScanTimedOut()     { m.scanTimeouts++ }
 
 func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 	repo := newInMemoryQueueRepo()
@@ -391,5 +429,63 @@ func TestForgetDeletedIdentities_ReapFailureDoesNotStopTheErasure(t *testing.T) 
 	}
 	if !errors.Is(err, dbDown) {
 		t.Errorf("Execute = %v, want the reap failure reported", err)
+	}
+}
+
+func TestForgetDeletedIdentities_OwnerScanDeadlineIsCounted(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	identities.err = fmt.Errorf("list owners without identity: %w", context.DeadlineExceeded)
+	spy := &sweepMetricsSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
+
+	_, err := svc.Execute(context.Background())
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute = %v, want the scan deadline reported", err)
+	}
+	if spy.scanTimeouts != 1 || spy.idle != 0 {
+		t.Errorf("scanTimeouts=%d idle=%d, want 1 and 0", spy.scanTimeouts, spy.idle)
+	}
+}
+
+func TestForgetDeletedIdentities_CancelledRunIsNotAScanTimeout(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	identities.err = context.DeadlineExceeded
+	spy := &sweepMetricsSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := svc.Execute(ctx); err == nil {
+		t.Fatal("Execute on a cancelled run must report the failure")
+	}
+	if spy.scanTimeouts != 0 {
+		t.Errorf("scanTimeouts=%d, want 0 when the run itself was cancelled", spy.scanTimeouts)
+	}
+}
+
+func TestForgetDeletedIdentities_AuditRecordNamesTheSweepTrigger(t *testing.T) {
+	logs := captureLogs(t)
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	const privateSourceId = "search:mac demarco"
+	deleted := saveQueueOf(t, NewQueueService(repo, &fakeNowPlaying{}), identities, privateSourceId)
+	identities.deleteAccount(deleted)
+
+	if _, err := newSweep(repo, identities).Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	rec := auditRecord(t, logs, "playback.queue_state_forgotten")
+	if rec["trigger"] != "sweep" {
+		t.Errorf("trigger = %v, want sweep", rec["trigger"])
+	}
+	if rec["action"] != "queue_state.forget" || rec["user_id"] != deleted.String() || rec["object"] != "playback_queue_state" {
+		t.Errorf("record = %v, want action, user_id and object unchanged", rec)
+	}
+	if out := logs.String(); strings.Contains(out, privateSourceId) {
+		t.Errorf("the audit trail leaks the PII it says was erased; logs=%s", out)
 	}
 }

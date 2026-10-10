@@ -114,20 +114,15 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sourceId, err := domain.FormatQueueSource(sourceFromDTO(body.Source), body.SourceId)
-	if err != nil {
-		writeQueueError(w, r, err)
-		return
-	}
-
-	err = h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
-		TrackIds:     body.TrackIds,
-		CurrentIdx:   body.CurrentIdx,
-		PositionMs:   body.PositionMs,
-		Shuffled:     body.Shuffled,
-		RepeatMode:   body.RepeatMode,
-		SourceId:     sourceId,
-		NaturalOrder: body.NaturalOrder,
+	err := h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
+		TrackIds:       body.TrackIds,
+		CurrentIdx:     body.CurrentIdx,
+		PositionMs:     body.PositionMs,
+		Shuffled:       body.Shuffled,
+		RepeatMode:     body.RepeatMode,
+		Source:         sourceFromDTO(body.Source),
+		LegacySourceId: body.SourceId,
+		NaturalOrder:   body.NaturalOrder,
 	})
 	if err != nil {
 		writeQueueError(w, r, err)

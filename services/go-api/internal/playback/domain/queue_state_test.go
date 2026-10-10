@@ -23,7 +23,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 		wantErr    bool
 		wantIdx    int
 	}{
-		{name: "valid in-range", trackIds: []string{"a", "b", "c"}, currentIdx: 1, positionMs: 5000, wantIdx: 1},
+		{name: "valid in-range", trackIds: []string{canonicalTrackA, canonicalTrackB, canonicalTrackA}, currentIdx: 1, positionMs: 5000, wantIdx: 1},
 		{name: "empty queue normalizes idx to 0", trackIds: []string{}, currentIdx: -1, positionMs: 0, wantIdx: 0},
 		{name: "idx past end rejected", trackIds: []string{"a", "b"}, currentIdx: 2, positionMs: 0, wantErr: true},
 		{name: "negative idx rejected", trackIds: []string{"a"}, currentIdx: -1, positionMs: 0, wantErr: true},
@@ -132,7 +132,7 @@ func TestQueueState_CurrentTrackId_ConstructedEmptyQueueHasNone(t *testing.T) {
 func repeatIds(n int) []string {
 	ids := make([]string, n)
 	for i := range ids {
-		ids[i] = "a"
+		ids[i] = canonicalTrackA
 	}
 	return ids
 }
@@ -146,7 +146,7 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 	}{
 		{name: "trackIds at limit accepted", trackIds: repeatIds(MaxQueueLength)},
 		{name: "trackIds over limit rejected", trackIds: repeatIds(MaxQueueLength + 1), wantErr: true},
-		{name: "naturalOrder at limit accepted", trackIds: repeatIds(1), naturalOrder: repeatIds(MaxQueueLength)},
+		{name: "naturalOrder at limit accepted", trackIds: repeatIds(MaxQueueLength), naturalOrder: repeatIds(MaxQueueLength)},
 		{name: "naturalOrder over limit rejected", trackIds: repeatIds(1), naturalOrder: repeatIds(MaxQueueLength + 1), wantErr: true},
 	}
 
@@ -209,10 +209,10 @@ func TestNewQueueState_BoundsStringLength(t *testing.T) {
 }
 
 func TestNewQueueState_AcceptsStringAtMaxLength(t *testing.T) {
-	atLimit := strings.Repeat("a", MaxQueueStringBytes)
+	atLimit := "search:" + strings.Repeat("a", MaxQueueStringBytes-len("search:"))
 	_, err := NewQueueState(QueueStateInput{
 		UserId:   testUser(),
-		TrackIds: []string{atLimit},
+		SourceId: atLimit,
 	})
 	if err != nil {
 		t.Fatalf("string at max length should be accepted: %v", err)
@@ -354,14 +354,14 @@ func TestQueueState_Validate_RejectsEmptyCurrentTrackId(t *testing.T) {
 func TestNewQueueState_AcceptsRealCurrentTrackId(t *testing.T) {
 	state, err := NewQueueState(QueueStateInput{
 		UserId:     testUser(),
-		TrackIds:   []string{"a", "b"},
+		TrackIds:   []string{canonicalTrackA, canonicalTrackB},
 		CurrentIdx: 1,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id, ok := state.CurrentTrackId(); !ok || id != "b" {
-		t.Errorf("CurrentTrackId() = (%q, %v), want (%q, true)", id, ok, "b")
+	if id, ok := state.CurrentTrackId(); !ok || id != canonicalTrackB {
+		t.Errorf("CurrentTrackId() = (%q, %v), want (%q, true)", id, ok, canonicalTrackB)
 	}
 }
 
@@ -483,5 +483,107 @@ func TestQueueStateValidation_CodedErrorIsStillAValidationError(t *testing.T) {
 	var validationErr *ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("error = %T (%v), want it to unwrap to *ValidationError", err, err)
+	}
+}
+
+const (
+	canonicalTrackA = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+	canonicalTrackB = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+)
+
+func TestNewQueueState_StoresTrackIdsInCanonicalForm(t *testing.T) {
+	state, err := NewQueueState(QueueStateInput{
+		UserId:       testUser(),
+		TrackIds:     []string{"3F2504E0-4F89-11D3-9A0C-0305E82C3301", "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"},
+		NaturalOrder: []string{"urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8", "3f2504e04f8911d39a0c0305e82c3301"},
+		Shuffled:     true,
+	})
+	if err != nil {
+		t.Fatalf("NewQueueState: %v", err)
+	}
+
+	if got := strings.Join(state.TrackIds, ","); got != canonicalTrackA+","+canonicalTrackB {
+		t.Errorf("TrackIds = %s, want the canonical lowercase form", got)
+	}
+	if got := strings.Join(state.NaturalOrder, ","); got != canonicalTrackB+","+canonicalTrackA {
+		t.Errorf("NaturalOrder = %s, want the canonical lowercase form", got)
+	}
+}
+
+func TestNewQueueState_RejectsGarbageTrackIds(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    QueueStateInput
+		wantCode string
+	}{
+		{
+			name:     "unparseable track id",
+			input:    QueueStateInput{TrackIds: []string{"not-a-uuid"}},
+			wantCode: "playback.malformed_track_id",
+		},
+		{
+			name:     "empty element away from currentIdx",
+			input:    QueueStateInput{TrackIds: []string{canonicalTrackA, ""}},
+			wantCode: "playback.malformed_track_id",
+		},
+		{
+			name:     "unparseable naturalOrder element",
+			input:    QueueStateInput{TrackIds: []string{canonicalTrackA}, NaturalOrder: []string{"x"}},
+			wantCode: "playback.malformed_track_id",
+		},
+		{
+			name:     "naturalOrder holding another track",
+			input:    QueueStateInput{TrackIds: []string{canonicalTrackA}, NaturalOrder: []string{canonicalTrackB}},
+			wantCode: "playback.natural_order_mismatch",
+		},
+		{
+			name:     "naturalOrder missing a repeated track",
+			input:    QueueStateInput{TrackIds: []string{canonicalTrackA, canonicalTrackA}, NaturalOrder: []string{canonicalTrackA}},
+			wantCode: "playback.natural_order_mismatch",
+		},
+		{
+			name:     "shuffled queue without a natural order",
+			input:    QueueStateInput{TrackIds: []string{canonicalTrackA}, Shuffled: true},
+			wantCode: "playback.natural_order_mismatch",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := validationCode(t, rejectedState(tt.input)())
+
+			if got != tt.wantCode {
+				t.Errorf("code = %q, want %q", got, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestNewQueueState_UnshuffledQueueMayOmitNaturalOrder(t *testing.T) {
+	state, err := NewQueueState(QueueStateInput{UserId: testUser(), TrackIds: []string{canonicalTrackA, canonicalTrackB}})
+	if err != nil {
+		t.Fatalf("an unshuffled queue with no natural order must still save: %v", err)
+	}
+	if len(state.NaturalOrder) != 0 {
+		t.Errorf("NaturalOrder = %v, want it left empty", state.NaturalOrder)
+	}
+}
+
+func TestRehydrateQueueState_LoadsLegacyNonCanonicalRowUnchanged(t *testing.T) {
+	legacy := []string{"3F2504E0-4F89-11D3-9A0C-0305E82C3301", "not-a-uuid", ""}
+	state, err := RehydrateQueueState(QueueStateInput{
+		UserId:       testUser(),
+		TrackIds:     legacy,
+		NaturalOrder: []string{"x"},
+		Shuffled:     true,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("a legacy stored row must still load: %v", err)
+	}
+
+	if got := strings.Join(state.TrackIds, ","); got != strings.Join(legacy, ",") {
+		t.Errorf("TrackIds = %q, want the stored ids untouched", state.TrackIds)
+	}
+	if err := state.Validate(); err != nil {
+		t.Errorf("the pre-write check must not reject a legacy row: %v", err)
 	}
 }

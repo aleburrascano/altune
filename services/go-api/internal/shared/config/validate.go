@@ -170,6 +170,9 @@ func (c *Config) validateTuning() error {
 	if c.PlaybackQueueRateBurst < 1 {
 		return fmt.Errorf("PLAYBACK_QUEUE_RATE_BURST must be >= 1, got %d", c.PlaybackQueueRateBurst)
 	}
+	if c.PlaybackErasureScanTimeout <= 0 {
+		return fmt.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT must be > 0, got %s", c.PlaybackErasureScanTimeout)
+	}
 	if err := c.validateAudioSources(); err != nil {
 		return err
 	}

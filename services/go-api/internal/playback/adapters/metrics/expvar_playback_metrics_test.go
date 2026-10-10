@@ -78,8 +78,12 @@ func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
 
 	m.SweepIdle()
 	m.QueueStateErased(3)
+	m.OwnerScanTimedOut()
 
 	after := ReadSnapshot()
+	if after.ErasureOwnerScanTimeouts != before.ErasureOwnerScanTimeouts+1 {
+		t.Errorf("erasure_owner_scan_timeouts_total = %d, want %d", after.ErasureOwnerScanTimeouts, before.ErasureOwnerScanTimeouts+1)
+	}
 	if after.ErasureSweepIdle != before.ErasureSweepIdle+1 {
 		t.Errorf("erasure_sweep_idle_total = %d, want %d", after.ErasureSweepIdle, before.ErasureSweepIdle+1)
 	}

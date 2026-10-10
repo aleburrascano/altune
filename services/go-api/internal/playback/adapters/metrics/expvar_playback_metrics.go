@@ -15,6 +15,7 @@ const (
 	QueueStateRateLimitedVar       = "playback_queue_state_rate_limited_total"
 	ErasureSweepIdleVar            = "playback_erasure_sweep_idle_total"
 	QueueStateErasedVar            = "playback_queue_state_erased_total"
+	ErasureOwnerScanTimeoutsVar    = "playback_erasure_owner_scan_timeouts_total"
 
 	EnrichmentBreakerRejectionsVar = "playback_now_playing_enrichment_breaker_rejections_total"
 	EnrichmentBreakerOpenVar       = "playback_now_playing_enrichment_breaker_open"
@@ -30,6 +31,7 @@ var (
 	queueStateRateLimited       = expvar.NewInt(QueueStateRateLimitedVar)
 	erasureSweepIdle            = expvar.NewInt(ErasureSweepIdleVar)
 	queueStateErased            = expvar.NewInt(QueueStateErasedVar)
+	erasureOwnerScanTimeouts    = expvar.NewInt(ErasureOwnerScanTimeoutsVar)
 
 	enrichmentBreakerRejections = expvar.NewInt(EnrichmentBreakerRejectionsVar)
 	enrichmentBreakerOpen       = expvar.NewInt(EnrichmentBreakerOpenVar)
@@ -62,6 +64,7 @@ func (ExpvarPlaybackMetrics) QueueStateRateLimited()       { queueStateRateLimit
 
 func (ExpvarPlaybackMetrics) SweepIdle()             { erasureSweepIdle.Add(1) }
 func (ExpvarPlaybackMetrics) QueueStateErased(n int) { queueStateErased.Add(int64(n)) }
+func (ExpvarPlaybackMetrics) OwnerScanTimedOut()     { erasureOwnerScanTimeouts.Add(1) }
 
 func (ExpvarPlaybackMetrics) EnrichmentBreakerRejected() { enrichmentBreakerRejections.Add(1) }
 func (ExpvarPlaybackMetrics) EnrichmentBreakerOpened()   { enrichmentBreakerOpen.Set(breakerDegraded) }
@@ -77,6 +80,7 @@ type Snapshot struct {
 	QueueStateRateLimited       int64 `json:"queue_state_rate_limited_total"`
 	ErasureSweepIdle            int64 `json:"erasure_sweep_idle_total"`
 	QueueStateErased            int64 `json:"queue_state_erased_total"`
+	ErasureOwnerScanTimeouts    int64 `json:"erasure_owner_scan_timeouts_total"`
 
 	EnrichmentBreakerRejections int64 `json:"now_playing_enrichment_breaker_rejections_total"`
 	EnrichmentBreakerOpen       bool  `json:"now_playing_enrichment_breaker_open"`
@@ -93,6 +97,7 @@ func ReadSnapshot() Snapshot {
 		QueueStateRateLimited:       queueStateRateLimited.Value(),
 		ErasureSweepIdle:            erasureSweepIdle.Value(),
 		QueueStateErased:            queueStateErased.Value(),
+		ErasureOwnerScanTimeouts:    erasureOwnerScanTimeouts.Value(),
 
 		EnrichmentBreakerRejections: enrichmentBreakerRejections.Value(),
 		EnrichmentBreakerOpen:       enrichmentBreakerOpen.Value() == breakerDegraded,

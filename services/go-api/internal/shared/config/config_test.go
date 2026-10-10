@@ -515,7 +515,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"EXPLORATION_RATE",
-		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
+		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "PLAYBACK_ERASURE_SCAN_TIMEOUT", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
@@ -1704,6 +1704,32 @@ func TestLoad_PlaybackQueueRateRejectsBadValues(t *testing.T) {
 				t.Fatal("expected Load to fail")
 			}
 		})
+	}
+}
+
+func TestLoad_PlaybackErasureScanTimeout(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.PlaybackErasureScanTimeout != 30*time.Second {
+		t.Errorf("default = %s, want 30s", cfg.PlaybackErasureScanTimeout)
+	}
+
+	setEnv(t, validConfigEnv(map[string]string{"PLAYBACK_ERASURE_SCAN_TIMEOUT": "2m"}))
+	if cfg, err = Load(); err != nil {
+		t.Fatalf("override: %v", err)
+	}
+	if cfg.PlaybackErasureScanTimeout != 2*time.Minute {
+		t.Errorf("override = %s, want 2m", cfg.PlaybackErasureScanTimeout)
+	}
+
+	for _, bad := range []string{"0s", "-1s", "slow"} {
+		setEnv(t, validConfigEnv(map[string]string{"PLAYBACK_ERASURE_SCAN_TIMEOUT": bad}))
+		if _, err := Load(); err == nil {
+			t.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT=%q loaded, want an error", bad)
+		}
 	}
 }
 

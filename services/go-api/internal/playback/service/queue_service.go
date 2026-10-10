@@ -11,13 +11,14 @@ import (
 )
 
 type SaveQueueStateInput struct {
-	TrackIds     []string
-	CurrentIdx   int
-	PositionMs   int64
-	Shuffled     bool
-	RepeatMode   string
-	SourceId     string
-	NaturalOrder []string
+	TrackIds       []string
+	CurrentIdx     int
+	PositionMs     int64
+	Shuffled       bool
+	RepeatMode     string
+	Source         domain.QueueSource
+	LegacySourceId string
+	NaturalOrder   []string
 }
 
 type QueueService struct {
@@ -41,6 +42,10 @@ func NewQueueService(repo ports.QueueStateRepository, nowPlaying ports.NowPlayin
 }
 
 func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input SaveQueueStateInput) error {
+	sourceId, err := domain.FormatQueueSource(input.Source, input.LegacySourceId)
+	if err != nil {
+		return fmt.Errorf("invalid queue source: %w", err)
+	}
 	rm, err := domain.ParseRepeatMode(input.RepeatMode)
 	if err != nil {
 		return fmt.Errorf("invalid repeat mode: %w", err)
@@ -52,7 +57,7 @@ func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input Sav
 		PositionMs:   input.PositionMs,
 		Shuffled:     input.Shuffled,
 		RepeatMode:   rm,
-		SourceId:     input.SourceId,
+		SourceId:     sourceId,
 		NaturalOrder: input.NaturalOrder,
 	})
 	if err != nil {
@@ -127,17 +132,31 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 
 const forgetQueueStateAction = "queue_state.forget"
 
+const (
+	forgetTriggerSelf  = "self"
+	forgetTriggerSweep = "sweep"
+)
+
 func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
+	return s.forget(ctx, userId, forgetTriggerSelf)
+}
+
+func (s *QueueService) ForgetDeletedAccount(ctx context.Context, userId shared.UserId) error {
+	return s.forget(ctx, userId, forgetTriggerSweep)
+}
+
+func (s *QueueService) forget(ctx context.Context, userId shared.UserId, trigger string) error {
 	if err := s.repo.DeleteForUser(ctx, userId); err != nil {
 		return err
 	}
-	auditQueueStateForgotten(ctx, userId)
+	auditQueueStateForgotten(ctx, userId, trigger)
 	return nil
 }
 
-func auditQueueStateForgotten(ctx context.Context, userId shared.UserId) {
+func auditQueueStateForgotten(ctx context.Context, userId shared.UserId, trigger string) {
 	slog.InfoContext(ctx, "playback.queue_state_forgotten",
 		"action", forgetQueueStateAction,
 		"user_id", userId.String(),
-		"object", "playback_queue_state")
+		"object", "playback_queue_state",
+		"trigger", trigger)
 }

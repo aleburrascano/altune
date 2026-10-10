@@ -14,6 +14,8 @@ const (
 	codeUnknownRepeatMode     = "playback.unknown_repeat_mode"
 	codeUnknownSourceKind     = "playback.unknown_source_kind"
 	codeUnrecognizedSourceId  = "playback.unrecognized_source_id"
+	codeMalformedTrackId      = "playback.malformed_track_id"
+	codeNaturalOrderMismatch  = "playback.natural_order_mismatch"
 )
 
 type QueueValidationError struct {

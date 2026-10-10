@@ -26,7 +26,8 @@ func (a *App) wirePlayback(ctx context.Context, trackRepo *persistence.PgxTrackR
 	return playbackWiring{
 		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
 		forgetDeletedIdentities: playbackService.NewForgetDeletedIdentitiesService(
-			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool), queueSvc,
+			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool,
+				playbackPersistence.WithOwnerScanTimeout(a.cfg.PlaybackErasureScanTimeout)), queueSvc,
 			playbackService.WithErasureSweepMetrics(metrics),
 			playbackService.WithErasedStateReaper(queueStateRepo)),
 	}

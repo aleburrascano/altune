@@ -32,6 +32,11 @@ func NewQueuePosition(in QueuePositionInput) (*QueuePosition, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
+	trackId, err := canonicalTrackId("currentTrackId", p.CurrentTrackId)
+	if err != nil {
+		return nil, err
+	}
+	p.CurrentTrackId = trackId
 	return p, nil
 }
 

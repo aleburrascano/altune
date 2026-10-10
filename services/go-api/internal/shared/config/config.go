@@ -85,6 +85,8 @@ type Config struct {
 	PlaybackQueueRateEvery time.Duration `env:"PLAYBACK_QUEUE_RATE_EVERY" envDefault:"2s"`
 	PlaybackQueueRateBurst int           `env:"PLAYBACK_QUEUE_RATE_BURST" envDefault:"20"`
 
+	PlaybackErasureScanTimeout time.Duration `env:"PLAYBACK_ERASURE_SCAN_TIMEOUT" envDefault:"30s"`
+
 	OverseerPrincipalID string `env:"OVERSEER_PRINCIPAL_ID"`
 
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
