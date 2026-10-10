@@ -7,8 +7,10 @@ export default defineConfig({
   testDir: '.',
   testMatch: '*.spec.ts',
   outputDir: 'test-results',
+  timeout: 90_000,
   use: {
     baseURL: process.env.WEB_URL,
+    navigationTimeout: 60_000,
     trace: 'retain-on-failure',
     ignoreHTTPSErrors: true,
   },

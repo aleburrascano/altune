@@ -39,6 +39,7 @@ YML
 cat >"$repo/scripts/precheck.sh" <<'SH'
 check "unit tests" . true
 test_check "slow tests" . true
+jest_check "jest tests" . true
 SH
 
 manifest() { printf '%s\n' "$1" >"$repo/.gitea/workflows/gate-parity.json"; }
@@ -68,6 +69,9 @@ t 1 "a stale key is named" "gate-parity: ci.yml#build#gone is stale: no main-tri
 
 manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"slow tests"}}'
 t 0 "a test_check name counts as a gate"
+
+manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"jest tests"}}'
+t 0 "a jest_check name counts as a gate"
 
 manifest '{"ci.yml#build#checkout":{"allow":"plumbing"},"ci.yml#build#unit tests":{"gate":"integration.sh"}}'
 t 0 "a script the gate workflow runs counts as a gate"

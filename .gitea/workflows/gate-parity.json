@@ -81,7 +81,7 @@
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"
   },
   "ci.yml#ci-mobile-tests#jest with coverage ratchet": {
-    "allow": "red on main today (2 suites fail, ci run 3551) and 293s median, 891s max on the ci runner; precheck runs the related tests; follow-up #1505"
+    "allow": "green on main (run 4169) but the full suite with coverage takes 293s median, 891s max on the ci runner (427s in run 4169), over what the precheck cap leaves; precheck runs mobile tests (related) instead"
   },
   "ci.yml#ci-mobile-tests#clean up": {
     "allow": "plumbing: checks out, installs or cleans up, and checks nothing"

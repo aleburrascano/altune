@@ -30,7 +30,7 @@ wait_until() {
 }
 
 publish() {
-  echo "$1=$2"
+  echo "$1=$2" >&"${publish_fd:-1}"
   [ -z "${GITHUB_ENV:-}" ] || echo "$1=$2" >>"$GITHUB_ENV"
 }
 
@@ -162,6 +162,7 @@ export_and_serve_web() {
 up() {
   [ ! -e "$state" ] || { echo "e2e-stack: already up ($state exists), run down first" >&2; exit 1; }
   mkdir -p "$state"
+  exec {publish_fd}>&1 1>&2
   trap 'rc=$?; [ "$rc" -eq 0 ] || { tail -n 50 "$state/api.log" 2>/dev/null >&2 || true; down; }; exit "$rc"' EXIT
   bring_up_services
   start_jwks_stub

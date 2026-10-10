@@ -30,6 +30,7 @@ STUB
 cat >"$stubbin/npx" <<'STUB'
 #!/usr/bin/env bash
 echo "npx $* TEST_AUTH=$EXPO_PUBLIC_TEST_AUTH TMPDIR=$TMPDIR" >>"$STUB_LOG"
+echo "Exported: dist"
 mkdir -p dist
 STUB
 cat >"$stubbin/python3" <<'STUB'
@@ -68,6 +69,10 @@ check 0 "up exits 0 once /health is 200"
 for key in API_URL WEB_URL DATABASE_URL; do
   grep -q "^$key=" <<<"$OUT" || { echo "FAIL up should print $key"; fail=1; }
 done
+bad=$(grep -vE '^[A-Z_]+=' <<<"$OUT")
+[ -z "$bad" ] || { echo "FAIL up stdout should hold only KEY=value lines, so it can be sourced; got:"; sed 's/^/    /' <<<"$bad"; fail=1; }
+grep -q "^applying " "$scratch/err.log" || { echo "FAIL migration progress should go to stderr"; fail=1; }
+grep -q "^Exported: dist" "$scratch/err.log" || { echo "FAIL expo export output should go to stderr"; fail=1; }
 grep -q "^API_URL=http://127.0.0.1:[0-9]*$" <<<"$OUT" || { echo "FAIL API_URL should be a loopback URL"; fail=1; }
 grep -q "^DATABASE_URL=postgres://altune:altune_dev@127.0.0.1:5555/altune" <<<"$OUT" || { echo "FAIL DATABASE_URL should use the mapped port"; fail=1; }
 grep -q "expo export -p web --dev TEST_AUTH=1" "$STUB_LOG" || { echo "FAIL web export should run with --dev and test auth"; fail=1; }

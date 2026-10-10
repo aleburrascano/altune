@@ -97,6 +97,30 @@ describe('prettier-changed', () => {
     assert.match(r.stderr, /^src\/new\.ts$/m);
   });
 
+  test('defaults the base to the merge-base with gitea/main', (t) => {
+    const { root, base } = repo(t, {}, { 'src/a.ts': DIRTY });
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git(root, 'update-ref', 'refs/remotes/gitea/main', base);
+    const r = run(root);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /^src\/a\.ts$/m);
+  });
+
+  test('falls back to origin/main when gitea/main is absent', (t) => {
+    const { root, base } = repo(t, {}, { 'src/a.ts': DIRTY });
+    git(root, 'update-ref', 'refs/remotes/origin/main', base);
+    const r = run(root);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /^src\/a\.ts$/m);
+  });
+
+  test('exits 2 naming the defaults when no base is given and none exists', (t) => {
+    const { root } = repo(t, {}, {});
+    const r = run(root);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /gitea\/main, origin\/main/);
+  });
+
   test('exits 2 on an unresolvable base', (t) => {
     const { root } = repo(t, {}, {});
     assert.equal(run(root, 'no-such-ref').status, 2);
