@@ -68,18 +68,23 @@ start_postgres() {
     exit 1
 }
 
+build_schema_template() {
+    local file
+    local applied_versions=()
+    sql postgres -c "CREATE DATABASE schema_template"
+    sql schema_template -c "CREATE SCHEMA auth" -c "CREATE TABLE auth.users (id uuid PRIMARY KEY, email text)" \
+        -c "CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+    for file in $(cd "$WORK/api" && printf '%s\n' migrations/*.sql | sort -V); do
+        sql schema_template -f "/api/$file" >/dev/null || { printf 'FAIL: %s did not apply\n' "$file"; exit 1; }
+        applied_versions+=("$(basename "$file" .sql)")
+    done
+    printf "INSERT INTO schema_migrations (version) VALUES ('%s');\n" "${applied_versions[@]}" | sql schema_template
+}
+
 reset_databases() {
-    local db file
+    local db
     for db in prod staging; do
-        sql postgres -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db"
-        sql "$db" -c "CREATE SCHEMA auth" -c "CREATE TABLE auth.users (id uuid PRIMARY KEY, email text)" \
-            -c "CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
-        local applied_versions=()
-        for file in $(cd "$WORK/api" && printf '%s\n' migrations/*.sql | sort -V); do
-            sql "$db" -f "/api/$file" >/dev/null || { printf 'FAIL: %s did not apply\n' "$file"; exit 1; }
-            applied_versions+=("$(basename "$file" .sql)")
-        done
-        printf "INSERT INTO schema_migrations (version) VALUES ('%s');\n" "${applied_versions[@]}" | sql "$db"
+        sql postgres -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db TEMPLATE schema_template"
     done
     sql prod <<SQL
 INSERT INTO auth.users VALUES ('$P1', 'Op@Example.com'), ('$P2', 'other@example.com');
@@ -524,6 +529,7 @@ test_same_columns_in_a_different_order_copy_by_name() {
 
 start_postgres
 install_docker_stub
+build_schema_template
 test_sync_copies_matched_account
 test_failed_swap_rolls_back
 test_env_gates

@@ -21,7 +21,7 @@
     "gate": "go-api deploy shellcheck"
   },
   "ci.yml#ci-backend-static#deploy script self-tests": {
-    "allow": "624s measured (staging-sync_test.sh starts Postgres and applies every migration), most of the 900s precheck cap; follow-up #1504"
+    "gate": "go-api deploy self-tests"
   },
   "ci.yml#ci-backend-static#uptime probe self-tests": {
     "gate": "uptime probe self-tests"
@@ -42,10 +42,10 @@
     "gate": "integration.sh"
   },
   "ci.yml#ci-backend-tests#go test with integration tests": {
-    "allow": "the full go-api suite takes 274s median, 323s max on the ci runner; precheck runs the changed packages and integration.sh runs every Postgres package; follow-up #1504"
+    "gate": "integration.sh"
   },
   "ci.yml#ci-backend-tests#coverage ratchet": {
-    "allow": "needs the full go-api coverage profile from the step above; follow-up #1504"
+    "gate": "integration.sh"
   },
   "ci.yml#ci-backend-tests#acquisition selection gate": {
     "gate": "go-api acquisition selection gate"
