@@ -5,7 +5,7 @@ import type { QueueStateResponse } from '@shared/api-client/playback';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
 import { canPlay } from '@shared/playback/canPlay';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
-import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
+import { trackKey } from '@shared/playback/playbackTrack';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 
 import { loadNativeQueue } from '@features/playback/native/loadNativeTrack';
@@ -30,13 +30,13 @@ import {
   recordQueueStateRejected,
   type QueueRestoreStage,
 } from '@features/playback/domain/playbackHealth';
+import { savedQueueLists } from '@features/playback/domain/queueSaveWindow';
 import { warnPlayback } from '@features/playback/domain/playbackError';
 import { progressSecondsToRoundedMs } from '@features/playback/domain/time';
 
 import { useAppStateChange } from '@shared/lifecycle';
 
 const SAVE_INTERVAL_MS = 15_000;
-const MAX_SAVED_QUEUE_IDS = 10_000;
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -65,53 +65,6 @@ function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   }).catch(() => null);
 }
 
-function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
-  return tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : '')).filter(Boolean);
-}
-
-function savedCurrentIndex(s: QueueStore): number {
-  const current = s.currentTrack();
-  if (!current || current.source.kind !== 'library') return 0;
-  const before = s.playOrder.slice(0, s.currentIndex);
-  return libraryIds(orderedQueueTracks({ tracks: s.tracks, playOrder: before })).length;
-}
-
-interface SavedLists {
-  track_ids: string[];
-  natural_order: string[];
-  current_index: number;
-}
-
-function windowStart(currentIndex: number, length: number): number {
-  const centered = currentIndex - Math.floor(MAX_SAVED_QUEUE_IDS / 2);
-  return Math.max(Math.min(centered, length - MAX_SAVED_QUEUE_IDS), 0);
-}
-
-function naturalWithin(natural: readonly string[], window: readonly string[]): string[] {
-  const left = new Map<string, number>();
-  for (const id of window) left.set(id, (left.get(id) ?? 0) + 1);
-  return natural.filter((id) => {
-    const count = left.get(id) ?? 0;
-    left.set(id, count - 1);
-    return count > 0;
-  });
-}
-
-function windowOf(ordered: readonly string[], currentIndex: number) {
-  const start = windowStart(currentIndex, ordered.length);
-  return { ids: ordered.slice(start, start + MAX_SAVED_QUEUE_IDS), start };
-}
-
-function cappedSavedLists(s: QueueStore): SavedLists {
-  const currentIndex = savedCurrentIndex(s);
-  const { ids, start } = windowOf(libraryIds(orderedQueueTracks(s)), currentIndex);
-  return {
-    track_ids: ids,
-    natural_order: naturalWithin(libraryIds(s.tracks), ids),
-    current_index: currentIndex - start,
-  };
-}
-
 type SaveFingerprint = readonly unknown[];
 
 function fingerprintOf(s: QueueStore, positionMs: number): SaveFingerprint {
@@ -124,7 +77,7 @@ function sameFingerprint(a: SaveFingerprint | null, b: SaveFingerprint): boolean
 
 async function sendSave(s: QueueStore, positionMs: number): Promise<void> {
   await playbackPort().saveQueueState({
-    ...cappedSavedLists(s),
+    ...savedQueueLists(s),
     position_ms: positionMs,
     shuffled: s.shuffled,
     repeat_mode: s.repeatMode,
