@@ -25,6 +25,9 @@ const RATCHET_RAISE_ONLY = {
   global: { statements: 0, branches: 0, functions: 0, lines: 0 },
 };
 
+const PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE =
+  '/node_modules/react-native/Libraries/Renderer/implementations/';
+
 module.exports = {
   ...preset,
   rootDir: __dirname,
@@ -32,6 +35,10 @@ module.exports = {
   restoreMocks: true,
   forceExit: true,
   workerIdleMemoryLimit: '1GB',
+  transformIgnorePatterns: [
+    ...preset.transformIgnorePatterns,
+    PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE,
+  ],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/__tests__/**', '!src/**/*.d.ts'],
   coverageThreshold: RATCHET_RAISE_ONLY,
