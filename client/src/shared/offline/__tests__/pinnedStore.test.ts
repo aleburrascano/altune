@@ -2806,8 +2806,6 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
 });
 
 describe('unpinMany reports what a bulk removal left downloaded', () => {
-  beforeEach(() => {});
-
   const AUDIO_DIR = 'memory://document/offline-audio';
 
   let memory: MemoryFileStore;

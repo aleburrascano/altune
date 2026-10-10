@@ -13,6 +13,10 @@ const baselinePath =
   process.env.MOCK_RATCHET_BASELINE_FILE ?? path.join(mobileRoot, 'mock-ratchet.baseline');
 
 const SCAN_DIRS = ['src', 'jest'];
+// The other folders jest's testMatch reaches; only its test files are read there,
+// so a node:test file that holds jest.mock text as a fixture is not counted.
+const JEST_TEST_DIRS = ['__tests__', 'scripts'];
+const JEST_TEST_FILE = /(^|\/)__tests__\/(.+\/)?[^/]+\.test\.tsx?$/;
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs']);
 const SKIP_DIRS = new Set(['node_modules']);
 // Mirrors the moduleNameMapper aliases in client/jest.config.js.
@@ -38,11 +42,24 @@ export function ownMocksIn(source) {
     .filter((specifier) => isOwnModule(specifier));
 }
 
+function relativeTo(root, file) {
+  return path.relative(root, file).split(path.sep).join('/');
+}
+
+function jestTestFiles(root) {
+  return JEST_TEST_DIRS.flatMap((dir) => sourceFiles(path.join(root, dir))).filter((file) =>
+    JEST_TEST_FILE.test(relativeTo(root, file)),
+  );
+}
+
 export function findMockLines(root = mobileRoot) {
-  const files = SCAN_DIRS.flatMap((dir) => sourceFiles(path.join(root, dir)));
+  const files = [
+    ...SCAN_DIRS.flatMap((dir) => sourceFiles(path.join(root, dir))),
+    ...jestTestFiles(root),
+  ];
   return files
     .flatMap((file) => {
-      const relative = path.relative(root, file).split(path.sep).join('/');
+      const relative = relativeTo(root, file);
       return ownMocksIn(fs.readFileSync(file, 'utf8')).map(
         (specifier) => `${relative} ${specifier}`,
       );
