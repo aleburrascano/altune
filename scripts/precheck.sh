@@ -126,7 +126,7 @@ if touches '^services/go-api/migrations/|^scripts/migration-prefixes\.sh$'; then
   check "go-api migration numbers are unique" . bash scripts/migration-prefixes.sh services/go-api/migrations "$base_ref"
 fi
 
-script_tests=$(grep -E '^(scripts/(worktree-deps|e2e-stack|web-export-check|migration-prefixes|gate-parity)|\.gitea/workflows/ci-node-deps)(\.test\.sh|\.sh|\.mjs)$' <<<"$changed" | sed -E 's/(\.test\.sh|\.sh|\.mjs)$/.test.sh/' | sort -u)
+script_tests=$(grep -E '^(scripts/(worktree-deps|e2e-stack|web-export-check|migration-prefixes|gate-parity|violations)|\.gitea/workflows/ci-node-deps)(\.test\.sh|\.sh|\.mjs)$' <<<"$changed" | sed -E 's/(\.test\.sh|\.sh|\.mjs)$/.test.sh/' | sort -u)
 if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
   echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1
 elif [ -n "$script_tests" ]; then
