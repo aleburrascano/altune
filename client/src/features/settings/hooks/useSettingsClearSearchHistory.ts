@@ -1,5 +1,5 @@
 import { transientRetryOptions } from '@shared/query/retryDelay';
-import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/search-history/useClearSearchHistory';
+import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory/useClearSearchHistory';
 
 export function useSettingsClearSearchHistory() {
   return useSharedClearSearchHistory({
