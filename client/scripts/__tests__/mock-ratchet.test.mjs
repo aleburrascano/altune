@@ -86,6 +86,21 @@ test('a removed mock whose baseline line stays fails, so the count cannot creep 
 
   assert.equal(status, 1);
   assert.match(out, /fixed: remove it from the baseline: src\/a\.test\.ts @shared\/api/);
+  assert.match(out, /run `node scripts\/mock-ratchet\.mjs --write` in client\//);
+});
+
+test('a mock swapped for another fails without the --write hint, so the new one is not baselined', (t) => {
+  const root = fixture(t, {
+    'src/a.test.ts': ONE_OWN_MOCK,
+    'mock-ratchet.baseline': 'src/a.test.ts @shared/api\n',
+  });
+
+  const { status, out } = ratchet(root);
+
+  assert.equal(status, 1);
+  assert.match(out, /new violation: src\/a\.test\.ts \.\.\/store/);
+  assert.match(out, /fixed: remove it from the baseline: src\/a\.test\.ts @shared\/api/);
+  assert.doesNotMatch(out, /--write/);
 });
 
 test('third-party mocks do not count', (t) => {

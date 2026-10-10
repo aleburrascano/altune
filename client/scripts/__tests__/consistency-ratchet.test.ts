@@ -22,9 +22,11 @@ async function lintSnippet(rule: ReturnType<typeof loadRules>[number], source: s
   return JSON.parse(output) as { message: string; ruleId?: string | null }[];
 }
 
-function runRatchetCli(env: NodeJS.ProcessEnv = {}) {
+const UPDATE_BASELINE_COMMAND = 'run `node scripts/consistency-ratchet.mjs --write` in client/';
+
+function runRatchetCli(env: NodeJS.ProcessEnv = {}, args: string[] = []) {
   try {
-    const stdout = execFileSync('node', [ratchetScript], {
+    const stdout = execFileSync('node', [ratchetScript, ...args], {
       cwd: mobileRoot,
       encoding: 'utf8',
       env: { ...process.env, ...env },
@@ -116,6 +118,7 @@ test('running the script exits 1 when one violation is fixed and another added, 
   expect(status).toBe(1);
   expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
   expect(stdout).toContain(`fixed: remove it from the baseline: ${fixedLine}`);
+  expect(stdout).not.toContain('--write');
 });
 
 test('running the real script exits 1 for a listed violation that no longer occurs', () => {
@@ -131,8 +134,34 @@ test('running the real script exits 1 for a listed violation that no longer occu
 
     expect(status).toBe(1);
     expect(stdout).toContain(`fixed: remove it from the baseline: ${stale}`);
+    expect(stdout).toContain(UPDATE_BASELINE_COMMAND);
   } finally {
     fs.rmSync(listed, { force: true });
+  }
+});
+
+test('--write drops a fixed line from the baseline, so the next run passes', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
+  const baselineFile = path.join(root, 'consistency.baseline');
+  const relativePath = path.join('src', '__consistency_ratchet_kept__.ts');
+  const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
+  const env = { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile };
+  try {
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(
+      path.join(root, relativePath),
+      "export function f() {\n  return fetch('https://example.com');\n}\n",
+    );
+    fs.writeFileSync(baselineFile, `${stale}\n`);
+
+    expect(runRatchetCli(env, ['--write']).status).toBe(0);
+
+    const written = fs.readFileSync(baselineFile, 'utf8');
+    expect(written).not.toContain(stale);
+    expect(written).toContain(`MC-1 ${relativePath}`);
+    expect(runRatchetCli(env).status).toBe(0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

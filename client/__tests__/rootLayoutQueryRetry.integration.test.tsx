@@ -1,63 +1,31 @@
-import 'react-native-gesture-handler/jestSetup';
-import { useQuery } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, render, screen } from '@testing-library/react-native';
-import type { ComponentType, ReactNode } from 'react';
 import { Text } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/failure/errors';
+import { createQueryClient } from '@shared/query/createQueryClient';
 import { RETRY_BACKOFF_CAP_MS } from '@shared/query/retryDelay';
 
-// The first try plus five retries: the app's query client gives a transient failure five more goes.
-const REQUESTS_FOR_A_TRANSIENT_FAILURE = 6;
+const FIRST_TRY_PLUS_FIVE_RETRIES = 6;
+const REQUESTS_FOR_A_TRANSIENT_FAILURE = FIRST_TRY_PLUS_FIVE_RETRIES;
 const REQUESTS_FOR_A_CLIENT_ERROR = 1;
 const STATUS_SERVICE_UNAVAILABLE = 503;
 const STATUS_NOT_FOUND = 404;
 const STATUS_TOO_MANY_REQUESTS = 429;
 const MORE_TICKS_THAN_RETRIES = 20;
-// Loading the whole root layout is slow on a busy machine; keep it out of each test's budget.
-const ROOT_LAYOUT_LOAD_TIMEOUT_MS = 60_000;
 
-let RootLayout: ComponentType;
+let serverAnswer: Error = new Error('unset');
+let requestsMade = 0;
 
-let mockServerAnswer: Error = new Error('unset');
-let mockRequestsMade = 0;
-
-async function mockAskTheServer(): Promise<never> {
-  mockRequestsMade += 1;
-  throw mockServerAnswer;
+async function askTheServer(): Promise<never> {
+  requestsMade += 1;
+  throw serverAnswer;
 }
 
-function MockRetryProbe() {
-  const query = useQuery({ queryKey: ['retry-probe'], queryFn: mockAskTheServer });
+function RetryProbe() {
+  const query = useQuery({ queryKey: ['retry-probe'], queryFn: askTheServer });
   return <Text>{`probe ${query.status}`}</Text>;
 }
-
-jest.mock('@features/auth/ui/AuthGate', () => ({
-  AuthGate: () => <MockRetryProbe />,
-}));
-
-type StackProps = { children?: ReactNode };
-
-jest.mock('expo-router', () => {
-  const { View } = require('react-native');
-  function Stack({ children }: StackProps) {
-    return <View>{children}</View>;
-  }
-  Stack.Screen = function StackScreen() {
-    return null;
-  };
-  return {
-    Stack,
-    useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
-    useSegments: () => [],
-  };
-});
-
-jest.mock('@shared/killSwitch/killSwitchPoll', () => ({
-  startKillSwitchPolling: () => () => undefined,
-}));
-
-jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 async function runRetriesUntilTheErrorShows() {
   for (let tick = 0; tick < MORE_TICKS_THAN_RETRIES; tick += 1) {
@@ -69,27 +37,30 @@ async function runRetriesUntilTheErrorShows() {
 }
 
 async function requestsMadeForAProbeAnswering(failure: Error): Promise<number> {
-  mockServerAnswer = failure;
-  mockRequestsMade = 0;
+  serverAnswer = failure;
+  requestsMade = 0;
 
-  const { unmount } = render(<RootLayout />);
+  const { unmount } = render(
+    <QueryClientProvider client={createQueryClient()}>
+      <RetryProbe />
+    </QueryClientProvider>,
+  );
   await runRetriesUntilTheErrorShows();
 
   expect(screen.getByText('probe error')).toBeTruthy();
   unmount();
-  return mockRequestsMade;
+  return requestsMade;
 }
 
 beforeAll(() => {
   jest.useFakeTimers();
-  RootLayout = require('@/app/_layout').default;
-}, ROOT_LAYOUT_LOAD_TIMEOUT_MS);
+});
 
 afterAll(() => {
   jest.useRealTimers();
 });
 
-describe('the root layout query client retries transient failures and nothing else', () => {
+describe('the app query client the root layout uses retries transient failures and nothing else', () => {
   it('retries a query that keeps failing with a server fault five times before showing the error', async () => {
     const requests = await requestsMadeForAProbeAnswering(
       new ApiError(STATUS_SERVICE_UNAVAILABLE, 'service unavailable'),

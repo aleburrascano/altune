@@ -11,6 +11,8 @@ const baselinePath =
   process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'consistency.baseline');
 // The tree the CLI scans; tests point it at a temp copy so they never write under src.
 const scanRoot = process.env.CONSISTENCY_ROOT ?? mobileRoot;
+const UPDATE_BASELINE_HINT =
+  'the count went down: run `node scripts/consistency-ratchet.mjs --write` in client/ to update the baseline';
 
 const tsxParsing = {
   files: ['**/*.{ts,tsx}'],
@@ -98,9 +100,17 @@ async function main() {
     found.push(...violations.map((violation) => violationLine(rule, violation)));
   }
 
-  const { added, fixed } = diffAgainstBaseline(found.sort(), readBaseline());
+  found.sort();
+  if (process.argv.includes('--write')) {
+    fs.writeFileSync(baselinePath, found.map((line) => `${line}\n`).join(''));
+    console.log(`consistency-ratchet: wrote ${found.length} violations to the baseline`);
+    return;
+  }
+
+  const { added, fixed } = diffAgainstBaseline(found, readBaseline());
   for (const line of added) console.log(`new violation: ${line}`);
   for (const line of fixed) console.log(`fixed: remove it from the baseline: ${line}`);
+  if (fixed.length > 0 && added.length === 0) console.log(UPDATE_BASELINE_HINT);
   const failed = added.length > 0 || fixed.length > 0;
 
   process.exit(failed ? 1 : 0);

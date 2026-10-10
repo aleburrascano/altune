@@ -22,6 +22,8 @@ const SKIP_DIRS = new Set(['node_modules']);
 // Mirrors the moduleNameMapper aliases in client/jest.config.js.
 const OWN_PREFIXES = ['./', '../', '@shared/', '@features/', '@/', '@testing/'];
 const MOCK_CALL = /jest\.(?:mock|doMock)\(\s*(['"`])([^'"`]*)\1/g;
+const UPDATE_BASELINE_HINT =
+  'the count went down: run `node scripts/mock-ratchet.mjs --write` in client/ to update the baseline';
 
 function sourceFiles(dir) {
   if (!fs.existsSync(dir)) return [];
@@ -103,6 +105,7 @@ function main() {
   const { added, fixed } = diffAgainstBaseline(found, baseline);
   for (const line of added) console.log(`new violation: ${line}`);
   for (const line of fixed) console.log(`fixed: remove it from the baseline: ${line}`);
+  if (fixed.length > 0 && added.length === 0) console.log(UPDATE_BASELINE_HINT);
   const failed = added.length > 0 || fixed.length > 0;
 
   process.exit(failed ? 1 : 0);

@@ -20,6 +20,7 @@ import {
   withNativeQueue,
 } from '@features/playback/native/nativeQueueLock';
 import { forgetAllSwaps } from '@features/playback/native/nativeTrackSwap';
+import { toNativeTrack } from '@features/playback/native/nativeTrack';
 import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackErrorStore';
 import { markPresignedFrom, NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
 import {
@@ -44,9 +45,16 @@ import {
 } from '@features/playback/__tests__/memoryPlaybackPort';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 
+const FIRST_TRACK_BUILD_LOADS_IMAGE_AND_ARTWORK_TIMEOUT_MS = 30_000;
+
+function loadImageAndArtworkBeforeAnyTestStartsItsClock(): void {
+  toNativeTrack(previewTrack());
+}
+
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
-});
+  loadImageAndArtworkBeforeAnyTestStartsItsClock();
+}, FIRST_TRACK_BUILD_LOADS_IMAGE_AND_ARTWORK_TIMEOUT_MS);
 
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');
