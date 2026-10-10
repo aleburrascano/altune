@@ -1,7 +1,7 @@
 import { apiFetch } from '@shared/api-client';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
-import { getSessionId } from '@shared/telemetry/session';
+import { getSessionId } from '@shared/telemetry/eventSession';
 
 export type DiscoveryEventType =
   | 'results_shown'

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { getSessionId } from '@shared/telemetry/session';
+import { getSessionId } from '@shared/telemetry/eventSession';
 
 function findRepoRoot(): string | null {
   let dir = __dirname;
@@ -59,7 +59,7 @@ function listMobileSourceFiles(root: string): string[] {
 const EVENTS_GO = 'internal/discovery/domain/events.go';
 const RECORD_EVENT_TS = path.join(TELEMETRY_SRC, 'recordEvent.ts');
 const OUTBOX_TS = path.join(TELEMETRY_SRC, 'outbox.ts');
-const SESSION_TS = path.join(TELEMETRY_SRC, 'session.ts');
+const SESSION_TS = path.join(TELEMETRY_SRC, 'eventSession.ts');
 
 function deriveGoEventTypeNames(eventsSource: string): Map<string, string> {
   const block = extractBlock(eventsSource, 'var eventTypeNames = map[EventType]string{');

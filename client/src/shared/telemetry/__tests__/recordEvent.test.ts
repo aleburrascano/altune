@@ -6,7 +6,7 @@ import {
   type DiscoveryEvent,
   TelemetryGatedError,
 } from '@shared/telemetry/recordEvent';
-import { getSessionId } from '@shared/telemetry/session';
+import { getSessionId } from '@shared/telemetry/eventSession';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '@shared/telemetry/outbox';
@@ -18,7 +18,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
-jest.mock('@shared/telemetry/session', () => ({ getSessionId: jest.fn() }));
+jest.mock('@shared/telemetry/eventSession', () => ({ getSessionId: jest.fn() }));
 
 jest.mock('@shared/telemetry/outboxStore', () => ({
   loadPersistedOutbox: jest.fn(),

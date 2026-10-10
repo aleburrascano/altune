@@ -9,7 +9,7 @@ const OWNERS = {
       'removeTracksFromPlaylist',
     ],
   },
-  'src/shared/favorites/adapters/http/httpFavoritesPort.ts': {
+  'src/features/discovery/adapters/http/httpFavoritesPort.ts': {
     favorites: ['addFavorite', 'removeFavorite'],
   },
   'src/shared/acquisition/adapters/http/httpAcquisitionPort.ts': { tracks: ['retryAcquisition'] },

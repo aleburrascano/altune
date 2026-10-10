@@ -1,6 +1,6 @@
 import { addFavorite, listFavorites, removeFavorite } from '@shared/api-client/favorites';
 
-import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
+import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 
 export const httpFavoritesPort: FavoritesPort = {
   listFavorites: (...args) => listFavorites(...args),

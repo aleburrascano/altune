@@ -2,9 +2,9 @@ import type { Favorite, FavoriteRef } from '@shared/api-client/favorites';
 import { asFavoriteKey } from '@shared/api-client/ids';
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { httpFavoritesPort } from '@shared/favorites/adapters/http/httpFavoritesPort';
-import { createMemoryFavoritesPort } from '@shared/favorites/__tests__/memoryFavoritesPort';
-import type { FavoritesPort } from '@shared/favorites/ports/favoritesPort';
+import { httpFavoritesPort } from '@features/discovery/adapters/http/httpFavoritesPort';
+import { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
+import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

@@ -1,3 +1,3 @@
-import { isExpoGo } from '@shared/playback/isExpoGo';
+import { isExpoGo } from '@features/playback/domain/isExpoGo';
 
 export const playsThroughTrackPlayer = !isExpoGo;

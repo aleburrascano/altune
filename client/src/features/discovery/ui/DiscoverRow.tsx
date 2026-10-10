@@ -5,7 +5,7 @@ import { Pause, Play } from 'lucide-react-native';
 import { Row, Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-import { FavoriteButton } from '@shared/favorites';
+import { FavoriteButton } from '@features/discovery/ui/FavoriteButton';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';

@@ -6,7 +6,7 @@ if (!fs.existsSync(path.join(SRC_ROOT, 'shared', 'playlists'))) {
   throw new Error(`expected ${SRC_ROOT} to be client/src — anchor is __dirname, not the cwd`);
 }
 
-const PORT_MODULES = ['playlists', 'acquisition', 'favorites', 'offline'] as const;
+const PORT_MODULES = ['playlists', 'acquisition', 'offline'] as const;
 const API_CLIENT = '@shared/api-client';
 const IDS_SPECIFIER = '@shared/api-client/ids';
 

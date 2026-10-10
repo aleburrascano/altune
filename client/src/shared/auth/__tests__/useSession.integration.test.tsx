@@ -10,7 +10,7 @@ import {
   trackIdentityKey,
   useTrackStatusStore,
 } from '@shared/acquisition/trackStatusStore';
-import { getSessionId } from '@shared/telemetry/session';
+import { getSessionId } from '@shared/telemetry/eventSession';
 import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telemetry/outbox';
 import { useOwnedTrack } from '@features/detail/hooks/useOwnedTrack';
 import type { TrackExtras } from '@features/detail/domain/trackExtras';

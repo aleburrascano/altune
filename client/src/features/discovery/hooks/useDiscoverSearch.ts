@@ -5,7 +5,7 @@ import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api
 
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
-import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,

@@ -35,7 +35,7 @@ function selectedProviderName(os: string, module = '@features/playback/adapters/
 }
 
 afterEach(() => {
-  jest.dontMock('@shared/playback/isExpoGo');
+  jest.dontMock('@features/playback/domain/isExpoGo');
 });
 
 describe('mh10: the playback provider and session store each platform selects', () => {
@@ -61,7 +61,7 @@ describe('mh10: the playback provider and session store each platform selects', 
 
   it.each(['ios', 'android'])('keeps the no-op provider in Expo Go on %s', (os) => {
     const selected = onPlatform(os, () => {
-      jest.doMock('@shared/playback/isExpoGo', () => ({ isExpoGo: true }));
+      jest.doMock('@features/playback/domain/isExpoGo', () => ({ isExpoGo: true }));
       const { PlaybackProvider } = require('@features/playback/adapters/PlaybackProvider');
       const element: ReactElement<unknown, { name: string }> = PlaybackProvider({ children: null });
       return element.type.name;

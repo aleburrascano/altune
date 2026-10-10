@@ -26,8 +26,8 @@ __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedStore
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedStore
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/session/signOutCleanup
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/telemetry/outbox
+__tests__/webMustHolds/mh10-nativeProvider.test.ts @features/playback/domain/isExpoGo
 __tests__/webMustHolds/mh10-nativeProvider.test.ts @features/playback/native/trackPlayerPlaybackProvider
-__tests__/webMustHolds/mh10-nativeProvider.test.ts @shared/playback/isExpoGo
 jest/__tests__/setup-after-env.test.ts ../../src/shared/telemetry/recordEvent
 src/chrome/__tests__/StagingBanner.test.tsx @features/auth/ui/AuthGate
 src/chrome/__tests__/StagingBanner.test.tsx @shared/killSwitch/killSwitchPoll
@@ -140,6 +140,7 @@ src/features/discovery/__tests__/DiscoverScreen.test.tsx @shared/ui/primitives/S
 src/features/discovery/__tests__/FilteredResults.test.tsx @features/discovery/hooks/usePreviewPlayback
 src/features/discovery/__tests__/SectionLabel.test.tsx @features/discovery/hooks/usePreviewPlayback
 src/features/discovery/__tests__/discoverPortContract.test.ts @shared/auth/supabaseClient
+src/features/discovery/__tests__/favoritesPortContract.test.ts @shared/auth/supabaseClient
 src/features/discovery/__tests__/useDegradedSearchTelemetry.test.tsx @shared/api-client/discovery
 src/features/discovery/__tests__/useDegradedSearchTelemetry.test.tsx @shared/telemetry/recordEvent
 src/features/discovery/__tests__/useDiscoverFetchGate.test.tsx @shared/auth/supabaseClient
@@ -243,7 +244,6 @@ src/shared/events/__tests__/trackCachePatch.test.ts @shared/telemetry/outbox
 src/shared/events/__tests__/useServerEvents.test.tsx @shared/auth/supabaseClient
 src/shared/events/__tests__/useServerEvents.test.tsx @shared/telemetry/recordEvent
 src/shared/failure/__tests__/errors.test.ts @shared/auth/supabaseClient
-src/shared/favorites/__tests__/favoritesPortContract.test.ts @shared/auth/supabaseClient
 src/shared/offline/__tests__/OfflineReconcileBridge.test.tsx @shared/api-client/audio
 src/shared/offline/__tests__/offlinePortContract.test.ts @shared/auth/supabaseClient
 src/shared/offline/__tests__/pinnedDownloadWorker.test.ts @shared/telemetry/recordEvent
@@ -265,8 +265,8 @@ src/shared/telemetry/__tests__/outbox.integration.test.ts @shared/auth/supabaseC
 src/shared/telemetry/__tests__/outbox.test.ts @shared/telemetry/outboxStore
 src/shared/telemetry/__tests__/outbox.test.ts @shared/telemetry/recordEvent
 src/shared/telemetry/__tests__/recordEvent.test.ts @shared/auth/supabaseClient
+src/shared/telemetry/__tests__/recordEvent.test.ts @shared/telemetry/eventSession
 src/shared/telemetry/__tests__/recordEvent.test.ts @shared/telemetry/outboxStore
-src/shared/telemetry/__tests__/recordEvent.test.ts @shared/telemetry/session
 src/shared/telemetry/__tests__/useRecordEvent.test.tsx @shared/telemetry/recordEvent
 src/shared/telemetry/__tests__/userTelemetry.test.ts @shared/auth/supabaseClient
 src/shared/ui/failure/__tests__/showFailure.test.ts @shared/telemetry/userTelemetry

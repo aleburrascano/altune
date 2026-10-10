@@ -5,7 +5,7 @@ import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discover
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/search-history/useClearSearchHistory';
-import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
+import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryFailure';
 import {
   useDiscoverFetchEnabled,
   useGatedDiscoverCall,
