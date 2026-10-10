@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAppMutation } from '@shared/query/useAppMutation';
 import { showFailureAlert } from '@shared/ui';
+import { runBounded } from '@shared/runBounded';
 import type { TrackId } from '@shared/api-client/ids';
 import {
   forgetTrack,
@@ -47,77 +48,43 @@ type DeleteTracksResult = {
 };
 
 type OnDeleted = (trackId: TrackId) => void;
-type DeleteAttempt = DeleteTrackFailure | undefined;
 type BatchRun = { stopped: () => boolean; expired: () => boolean };
 type Outcome = { sent: number; failures: DeleteTrackFailure[] };
 type RunHandle = { stopped: () => boolean; inStartingSession: () => boolean; finish: () => void };
-type Deadline = { expired: () => boolean; clear: () => void };
-type Cursor = { taken: number };
 type RemoveTrack = (trackId: TrackId) => Promise<void>;
-type BatchContext = {
-  cursor: Cursor;
-  trackIds: TrackId[];
-  run: BatchRun;
-  onDeleted: OnDeleted;
-  remove: RemoveTrack;
-  failed: DeleteAttempt[];
-};
 
 export function deleteOne(port: LibraryPort, trackId: TrackId): Promise<void> {
   return port.deleteTrack(trackId);
 }
 
-async function deleteTrackForBulk(trackId: TrackId, ctx: BatchContext): Promise<DeleteAttempt> {
-  try {
-    await ctx.remove(trackId);
-  } catch (error) {
-    if (classifyLibraryError(error) !== 'not-found') return { trackId, error };
-  }
-  ctx.onDeleted(trackId);
-  return undefined;
-}
-
-function takeNextIndex(cursor: Cursor, trackIds: TrackId[], run: BatchRun): number | undefined {
-  if (cursor.taken >= trackIds.length || run.stopped() || run.expired()) return undefined;
-  return cursor.taken++;
-}
-
-async function drainWorker(ctx: BatchContext): Promise<void> {
-  let index = takeNextIndex(ctx.cursor, ctx.trackIds, ctx.run);
-  while (index !== undefined) {
-    const failure = await deleteTrackForBulk(ctx.trackIds[index]!, ctx);
-    if (failure) ctx.failed[index] = failure;
-    index = takeNextIndex(ctx.cursor, ctx.trackIds, ctx.run);
-  }
-}
-
-function collectFailures(failed: DeleteAttempt[]): DeleteTrackFailure[] {
-  return failed.filter((failure): failure is DeleteTrackFailure => failure != null);
-}
-
-function newContext(
+async function deleteInBatches(
   trackIds: TrackId[],
   run: BatchRun,
   onDeleted: OnDeleted,
   remove: RemoveTrack,
-): BatchContext {
-  return { cursor: { taken: 0 }, trackIds, run, onDeleted, remove, failed: [] };
-}
-
-async function deleteInBatches(ctx: BatchContext): Promise<Outcome> {
-  const size = Math.min(BULK_DELETE_CONCURRENCY, ctx.trackIds.length);
-  await Promise.all(Array.from({ length: size }, () => drainWorker(ctx)));
-  return { sent: ctx.cursor.taken, failures: collectFailures(ctx.failed) };
-}
-
-function startDeadline(): Deadline {
-  let expired = false;
-  const timer = setTimeout(() => (expired = true), BULK_DELETE_DEADLINE_MS);
-  return { expired: () => expired, clear: () => clearTimeout(timer) };
+): Promise<Outcome> {
+  const failed: DeleteTrackFailure[] = [];
+  const items = trackIds.map((trackId, index) => ({ trackId, index }));
+  const worker = async ({ trackId, index }: (typeof items)[number]): Promise<void> => {
+    try {
+      await remove(trackId);
+    } catch (error) {
+      if (classifyLibraryError(error) !== 'not-found')
+        return void (failed[index] = { trackId, error });
+    }
+    onDeleted(trackId);
+  };
+  const proceed = () => !run.stopped() && !run.expired();
+  const { succeeded, failed: finished } = await runBounded(
+    items,
+    BULK_DELETE_CONCURRENCY,
+    worker,
+    proceed,
+  );
+  return { sent: succeeded.length + finished.length, failures: failed.filter(Boolean) };
 }
 
 type CleanupState = { failed: boolean };
-
 function guardCleanup(state: CleanupState, trackId: TrackId, step: () => void): void {
   try {
     step();
@@ -143,18 +110,10 @@ function removeTrackEverywhere(
   };
 }
 
-function resyncTrackCaches(queryClient: QueryClient): void {
-  for (const { prefix } of Object.values(TRACK_CACHE_FAMILIES)) {
+const resyncTrackCaches = (queryClient: QueryClient): void =>
+  Object.values(TRACK_CACHE_FAMILIES).forEach(({ prefix }) => {
     void queryClient.invalidateQueries({ queryKey: prefix });
-  }
-}
-
-function finalizeRun(deadline: Deadline, handle: RunHandle): () => void {
-  return () => {
-    deadline.clear();
-    handle.finish();
-  };
-}
+  });
 
 function summarizeRun(ids: TrackId[], outcome: Outcome, cancelled: boolean): DeleteTracksResult {
   return {
@@ -167,10 +126,15 @@ function summarizeRun(ids: TrackId[], outcome: Outcome, cancelled: boolean): Del
 }
 
 function openTimedRun(handle: RunHandle): { run: BatchRun; done: () => void } {
-  const deadline = startDeadline();
+  let expired = false;
+  const timer = setTimeout(() => (expired = true), BULK_DELETE_DEADLINE_MS);
   const stopped = () => handle.stopped() || !handle.inStartingSession();
-  const run: BatchRun = { stopped, expired: deadline.expired };
-  return { run, done: finalizeRun(deadline, handle) };
+  const run: BatchRun = { stopped, expired: () => expired };
+  const done = () => {
+    clearTimeout(timer);
+    handle.finish();
+  };
+  return { run, done };
 }
 
 async function runBulkDelete(
@@ -181,13 +145,8 @@ async function runBulkDelete(
 ): Promise<DeleteTracksResult> {
   const { run, done } = openTimedRun(handle);
   const cleanup: CleanupState = { failed: false };
-  const ctx = newContext(
-    trackIds,
-    run,
-    removeTrackEverywhere(queryClient, handle, cleanup),
-    remove,
-  );
-  const outcome = await deleteInBatches(ctx).finally(done);
+  const onDeleted = removeTrackEverywhere(queryClient, handle, cleanup);
+  const outcome = await deleteInBatches(trackIds, run, onDeleted, remove).finally(done);
   if (cleanup.failed && handle.inStartingSession()) resyncTrackCaches(queryClient);
   return summarizeRun(trackIds, outcome, handle.stopped());
 }
@@ -237,7 +196,6 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
 }
 
 const LOGGED_TRACK_IDS = 20;
-
 function logBulkRunFailure(error: unknown, trackIds: TrackId[]): void {
   console.warn('[library] bulk delete failed', {
     requested: trackIds.length,
