@@ -1,0 +1,44 @@
+{
+  "ratchets": [
+    {
+      "name": "consistency",
+      "baseline": "client/consistency.baseline",
+      "root": "client/",
+      "linePath": "^MC-\\S+ (src/\\S+) ",
+      "rules": "^MC-4b$",
+      "command": "node client/scripts/consistency-ratchet.mjs",
+      "ran": "^MC-4b: ",
+      "rule": "MC-4b: import no raw Pressable or Touchable* from react-native outside src/shared/ui/primitives and src/shared/ui/navigation. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded. If no primitive fits, extend the closest one in src/shared/ui/primitives."
+    },
+    {
+      "name": "module-shape",
+      "baseline": "client/module-shape.baseline",
+      "root": "client/",
+      "linePath": "^\\S+ (src/\\S+) ",
+      "rules": "",
+      "command": "node client/scripts/module-shape.mjs",
+      "ran": "^module-shape: ",
+      "rule": "Listed for coupling only: a file named here is never swept by another ratchet."
+    },
+    {
+      "name": "mock",
+      "baseline": "client/mock-ratchet.baseline",
+      "root": "client/",
+      "linePath": "^(\\S+) ",
+      "rules": "",
+      "command": "node client/scripts/mock-ratchet.mjs",
+      "ran": "^own-module mocks: ",
+      "rule": "Listed for coupling only: a file named here is never swept by another ratchet."
+    },
+    {
+      "name": "go-module-shape",
+      "baseline": "services/go-api/module-shape.baseline",
+      "root": "services/go-api/",
+      "linePath": "^G\\d+ (internal/[^:\\s]+)",
+      "rules": "",
+      "command": "cd services/go-api && go run ./scripts/moduleshape",
+      "ran": ".",
+      "rule": "Listed for coupling only: a file named here is never swept by another ratchet."
+    }
+  ]
+}
