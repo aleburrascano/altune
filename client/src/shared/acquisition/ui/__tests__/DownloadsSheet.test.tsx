@@ -90,4 +90,16 @@ describe('DownloadsSheet', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('virtualizes a long queue instead of mounting every row', () => {
+    const items = Array.from({ length: 200 }, (_, i) =>
+      entry({ trackId: asTrackId(`t${i}`), title: `Queued ${i}` }),
+    );
+
+    render(<DownloadsSheet visible items={items} onClose={jest.fn()} />);
+
+    expect(screen.getByText('Queued 0')).toBeTruthy();
+    expect(screen.queryByText('Queued 199')).toBeNull();
+    expect(screen.getByText('200 in progress')).toBeTruthy();
+  });
 });

@@ -96,6 +96,16 @@ const screenReaderAnnouncementSyncsAnExternalSystem = {
   rules: ['react-doctor/no-event-handler'],
 };
 
+const relatedRailIsCappedAtTwentyTracks = {
+  files: ['src/features/detail/ui/RelatedTracksSection.tsx'],
+  rules: ['react-doctor/rn-no-scrollview-mapped-list'],
+};
+
+const libraryChipsRailIsTheFixedChipsConstant = {
+  files: ['src/features/library/ui/LibraryChips.tsx'],
+  rules: ['react-doctor/rn-no-scrollview-mapped-list'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -158,6 +168,8 @@ export default {
       remainingPlaylistsLoadFollowsLoadedPages,
       slateExpiryArrivesAsServerData,
       screenReaderAnnouncementSyncsAnExternalSystem,
+      relatedRailIsCappedAtTwentyTracks,
+      libraryChipsRailIsTheFixedChipsConstant,
     ],
   },
 };

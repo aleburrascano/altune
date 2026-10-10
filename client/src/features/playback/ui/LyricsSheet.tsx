@@ -1,5 +1,13 @@
-import { useEffect, useRef, type ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, type ReactElement } from 'react';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type ListRenderItemInfo,
+  type PressableProps,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { withFeaturing } from '@shared/apiClient/featuredArtists';
@@ -20,6 +28,8 @@ import {
 
 const SCROLL_LEAD_PX = 140;
 
+type SyncedLine = NonNullable<ReturnType<typeof useLyrics>['data']>['synced_lines'][number];
+
 export function LyricsSheet(): ReactElement {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
@@ -38,14 +48,22 @@ export function LyricsSheet(): ReactElement {
 
   const activeIndex = view === 'synced' ? activeLineIndex(synced, positionMs) : -1;
 
-  const scrollRef = useRef<ScrollView | null>(null);
-  const lineOffsets = useRef<Record<number, number>>({});
+  const listRef = useRef<FlatList<SyncedLine> | null>(null);
   useEffect(() => {
     if (activeIndex < 0) return;
-    const y = lineOffsets.current[activeIndex];
-    if (y === undefined) return;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - SCROLL_LEAD_PX), animated: !reduceMotion });
+    listRef.current?.scrollToIndex({
+      index: activeIndex,
+      viewOffset: SCROLL_LEAD_PX,
+      animated: !reduceMotion,
+    });
   }, [activeIndex, reduceMotion]);
+
+  const renderLine = useCallback(
+    ({ item, index }: ListRenderItemInfo<SyncedLine>) => (
+      <LyricLine line={item} index={index} active={index === activeIndex} onSeek={seekTo} />
+    ),
+    [activeIndex, seekTo],
+  );
 
   return (
     <SheetScreen testID="lyrics-sheet">
@@ -88,35 +106,22 @@ export function LyricsSheet(): ReactElement {
       ) : null}
 
       {view === 'synced' ? (
-        <ScrollView
+        <FlatList
           testID="lyrics-synced"
-          ref={scrollRef}
+          ref={listRef}
+          data={synced}
+          extraData={activeIndex}
+          keyExtractor={(line, index) => `${line.milliseconds}-${index}`}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
-        >
-          {synced.map((line, index) => (
-            <Pressable
-              key={`${line.milliseconds}-${index}`}
-              testID={`lyrics-line-${index}`}
-              onLayout={(e) => {
-                lineOffsets.current[index] = e.nativeEvent.layout.y;
-              }}
-              onPress={() => seekTo(line.milliseconds)}
-              accessibilityRole="button"
-              accessibilityLabel={line.line.length > 0 ? line.line : 'Instrumental'}
-              accessibilityHint="Seeks playback to this line"
-              style={styles.line}
-            >
-              <Text
-                variant="title"
-                tone={index === activeIndex ? 'primary' : 'tertiary'}
-                style={index === activeIndex ? styles.activeLine : undefined}
-              >
-                {line.line.length > 0 ? line.line : '♪'}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+          onScrollToIndexFailed={(info) =>
+            listRef.current?.scrollToOffset({
+              offset: Math.max(0, info.averageItemLength * info.index - SCROLL_LEAD_PX),
+              animated: !reduceMotion,
+            })
+          }
+          renderItem={renderLine}
+        />
       ) : null}
 
       {view === 'plain' ? (
@@ -133,6 +138,42 @@ export function LyricsSheet(): ReactElement {
 
       {view === 'synced' || view === 'plain' ? <Credits query={query} /> : null}
     </SheetScreen>
+  );
+}
+
+interface LyricLineProps {
+  line: SyncedLine;
+  index: number;
+  active: boolean;
+  onSeek: (ms: number) => void;
+}
+
+function lineProps({ line, index, onSeek }: LyricLineProps): PressableProps {
+  return {
+    testID: `lyrics-line-${index}`,
+    onPress: () => onSeek(line.milliseconds),
+    accessibilityRole: 'button',
+    accessibilityLabel: line.line.length > 0 ? line.line : 'Instrumental',
+    accessibilityHint: 'Seeks playback to this line',
+    style: styles.line,
+  };
+}
+
+function LyricLineText({ line, active }: Pick<LyricLineProps, 'line' | 'active'>): ReactElement {
+  const tone = active ? 'primary' : 'tertiary';
+  const style = active ? styles.activeLine : undefined;
+  return (
+    <Text variant="title" tone={tone} style={style}>
+      {line.line.length > 0 ? line.line : '♪'}
+    </Text>
+  );
+}
+
+function LyricLine(props: LyricLineProps): ReactElement {
+  return (
+    <Pressable {...lineProps(props)}>
+      <LyricLineText line={props.line} active={props.active} />
+    </Pressable>
   );
 }
 

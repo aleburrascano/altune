@@ -1,5 +1,12 @@
 import type { ReactElement } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  StyleSheet,
+  View,
+  type ListRenderItemInfo,
+} from 'react-native';
 
 import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
@@ -32,6 +39,14 @@ function DownloadRow({ item }: { item: DownloadEntry }): ReactElement {
   );
 }
 
+function renderDownloadRow({ item }: ListRenderItemInfo<DownloadEntry>): ReactElement {
+  return <DownloadRow item={item} />;
+}
+
+function downloadKey(item: DownloadEntry): string {
+  return item.trackId;
+}
+
 export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps): ReactElement {
   const theme = useTheme();
   return (
@@ -55,11 +70,12 @@ export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps)
             {items.length} in progress
           </Text>
         </View>
-        <ScrollView style={styles.list}>
-          {items.map((item) => (
-            <DownloadRow key={item.trackId} item={item} />
-          ))}
-        </ScrollView>
+        <FlatList
+          style={styles.list}
+          data={items}
+          keyExtractor={downloadKey}
+          renderItem={renderDownloadRow}
+        />
       </View>
     </Modal>
   );
