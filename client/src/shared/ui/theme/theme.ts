@@ -25,7 +25,7 @@ export type Theme = {
   color: ThemeColors;
 };
 
-export const palette = {
+const palette = {
   black: '#121214',
   surface1: '#1C1C20',
   surface2: '#232328',

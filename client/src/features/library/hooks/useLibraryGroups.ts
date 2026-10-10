@@ -68,7 +68,7 @@ function useGroupPages<T>(options: PagedGroupQueryOptions<T>) {
   });
 }
 
-export function usePagedGroupQuery<T>(options: PagedGroupQueryOptions<T>) {
+function usePagedGroupQuery<T>(options: PagedGroupQueryOptions<T>) {
   const { chip, query, sort } = options;
   const pages = useGroupPages(options);
   useLoggedLibraryQueryFailure(pages.error, { chip, sort, isSearching: query !== '' });

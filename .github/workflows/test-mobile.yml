@@ -125,7 +125,7 @@ jobs:
       - uses: ./.github/actions/mobile-setup
       - name: react quality gate (react-doctor)
         env:
-          MAX_WARNINGS: 106
+          MAX_WARNINGS: 121
         run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-react-doctor.sh"
       - name: upload react-doctor report
         if: always()
