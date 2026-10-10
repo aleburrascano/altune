@@ -1,16 +1,11 @@
 import { useRef, type ReactElement } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native';
-import {
-  MoreVertical,
-  ArrowDownCircle,
-  CircleAlert,
-  CircleCheck,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { MoreVertical } from 'lucide-react-native';
 import type { TrackId } from '@shared/api-client/ids';
 import { useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
+import { PINNED_GLYPH, PINNED_GLYPH_LABEL } from '@features/library/ui/pinnedGlyphs';
 import { pinnedStatusDisplay } from '@features/library/domain/pinnedStatusDisplay';
 
 export function LibraryRowMoreButton({
@@ -60,20 +55,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
-type PinnedGlyphKind = 'downloaded' | 'downloading' | 'failed';
-
-export const PINNED_GLYPH: Record<PinnedGlyphKind, LucideIcon> = {
-  downloaded: CircleCheck,
-  downloading: ArrowDownCircle,
-  failed: CircleAlert,
-};
-
-const PINNED_GLYPH_LABEL: Record<PinnedGlyphKind, string> = {
-  downloaded: 'Downloaded',
-  downloading: 'Downloading',
-  failed: 'Download failed',
-};
 
 export function LibraryRowPinnedIcon({
   trackId,

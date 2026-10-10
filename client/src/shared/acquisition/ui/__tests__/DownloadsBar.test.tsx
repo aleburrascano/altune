@@ -2,7 +2,8 @@ import { Animated } from 'react-native';
 
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 
-import { DownloadsBar, deriveBarDisplay } from '@shared/acquisition/ui/DownloadsBar';
+import { DownloadsBar } from '@shared/acquisition/ui/DownloadsBar';
+import { deriveBarDisplay } from '@shared/acquisition/ui/barDisplay';
 import {
   FAILED_HOLD_MS,
   FINISHING_DWELL_MS,

@@ -1,7 +1,8 @@
 import { ArrowDownCircle, CircleAlert, CircleCheck } from 'lucide-react-native';
 import { render } from '@testing-library/react-native';
 import { asTrackId } from '@shared/api-client/ids';
-import { LibraryRowPinnedIcon, PINNED_GLYPH } from '@features/library/ui/libraryRowAccessories';
+import { LibraryRowPinnedIcon } from '@features/library/ui/libraryRowAccessories';
+import { PINNED_GLYPH } from '@features/library/ui/pinnedGlyphs';
 
 const ID = asTrackId('track-1');
 
