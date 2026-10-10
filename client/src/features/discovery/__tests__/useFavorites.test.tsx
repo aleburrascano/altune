@@ -10,6 +10,7 @@ import { FavoritesPortProvider } from '@features/discovery/ports/FavoritesPortPr
 import { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 import { discoveryKeys } from '@shared/query/queryKeys';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;
 let mockedList: jest.MockedFunction<FavoritesPort['listFavorites']>;
@@ -228,12 +229,217 @@ describe('useFavorites(): optimistic toggle', () => {
 
     expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual({ items: [], total: 0 });
     expect(mockedAdd).toHaveBeenCalledTimes(1);
-    expect(mockedRemove).toHaveBeenCalledTimes(1);
+    expect(mockedRemove).not.toHaveBeenCalled();
 
     await act(async () => {
       pendingAdd.resolve();
+      await flush();
+    });
+    expect(mockedRemove).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
       pendingRemove.resolve();
       await flush();
     });
+  });
+});
+
+type HeldRequest = {
+  method: 'PUT' | 'DELETE';
+  arrive: () => Promise<void>;
+  fail: () => void;
+};
+
+type ServerDouble = {
+  port: FavoritesPort;
+  held: HeldRequest[];
+  maxInFlight: () => number;
+  isSaved: () => Promise<boolean>;
+};
+
+const tapped: FavoriteTarget = {
+  kind: 'track',
+  favorite_key: asFavoriteKey('Track One'),
+  title: 'Track One',
+  subtitle: 'Track',
+};
+
+function heldServer(): ServerDouble {
+  const memory = createMemoryFavoritesPort();
+  const held: HeldRequest[] = [];
+  let peak = 0;
+
+  function hold<T>(method: HeldRequest['method'], apply: () => Promise<T>): Promise<T> {
+    const reply = deferred<T>();
+    function settle(): void {
+      held.splice(held.indexOf(request), 1);
+    }
+    const request: HeldRequest = {
+      method,
+      arrive: async () => {
+        settle();
+        reply.resolve(await apply());
+      },
+      fail: () => {
+        settle();
+        reply.reject(new Error('network down'));
+      },
+    };
+    held.push(request);
+    peak = Math.max(peak, held.length);
+    return reply.promise;
+  }
+
+  return {
+    held,
+    maxInFlight: () => peak,
+    isSaved: async () => {
+      const { items } = await memory.listFavorites();
+      return items.some((f) => f.key === tapped.favorite_key);
+    },
+    port: {
+      listFavorites: memory.listFavorites,
+      addFavorite: (ref) => hold('PUT', () => memory.addFavorite(ref)),
+      removeFavorite: (ref) => hold('DELETE', () => memory.removeFavorite(ref)),
+    },
+  };
+}
+
+async function settle(): Promise<void> {
+  await flush();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function deliverNewestFirst(server: ServerDouble): Promise<void> {
+  while (server.held.length > 0) {
+    await act(async () => {
+      await server.held[server.held.length - 1]!.arrive();
+      await settle();
+    });
+  }
+}
+
+describe('useFavorites(): rapid toggles of one target', () => {
+  it('ends in the last tap on the server and on screen when responses arrive reversed', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      await settle();
+    });
+    await deliverNewestFirst(server);
+
+    expect(await server.isSaved()).toBe(false);
+    expect(result.current.isFavorite(tapped)).toBe(false);
+    expect(server.maxInFlight()).toBe(1);
+  });
+
+  it('collapses taps made while a request is in flight into the latest state', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      await settle();
+    });
+    expect(server.held.map((r) => r.method)).toEqual(['PUT']);
+    await deliverNewestFirst(server);
+
+    expect(await server.isSaved()).toBe(true);
+    expect(result.current.isFavorite(tapped)).toBe(true);
+  });
+
+  it('keeps a later tap when the first request fails, and sends it', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      await settle();
+    });
+    await act(async () => {
+      server.held[0]!.fail();
+      await settle();
+    });
+
+    expect(result.current.isFavorite(tapped)).toBe(true);
+    await deliverNewestFirst(server);
+
+    expect(await server.isSaved()).toBe(true);
+    expect(result.current.isFavorite(tapped)).toBe(true);
+    expect(server.maxInFlight()).toBe(1);
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('rolls back to the server state and alerts when the latest request fails', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      await settle();
+    });
+    await deliverNewestFirst(server);
+    await act(async () => {
+      result.current.toggle(tapped);
+      await settle();
+    });
+    expect(result.current.isFavorite(tapped)).toBe(false);
+    await act(async () => {
+      server.held[0]!.fail();
+      await settle();
+    });
+
+    expect(await server.isSaved()).toBe(true);
+    expect(result.current.isFavorite(tapped)).toBe(true);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Update failed',
+      'Could not update your favorites. Please try again.',
+    );
+  });
+
+  it('leaves the next user favorites alone when a request fails after sign-out', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      await settle();
+    });
+    const nextUser: FavoritesResponse = {
+      items: [{ kind: 'track', key: tapped.favorite_key, title: 'Track One' }],
+      total: 1,
+    };
+    runSignOutCleanups();
+    queryClient.setQueryData(discoveryKeys.favorites, nextUser);
+    await act(async () => {
+      server.held[0]!.fail();
+      await settle();
+    });
+
+    expect(server.held).toEqual([]);
+    expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(nextUser);
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 });
