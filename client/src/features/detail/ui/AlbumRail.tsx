@@ -1,12 +1,16 @@
 import { useState, type ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import type { LayoutChangeEvent, PressableStateCallbackType } from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
 import { useWideWebLayout } from '@shared/ui/layout';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
+import {
+  usePressableInteraction,
+  type PressableInteractionState,
+} from '@shared/ui/primitives/usePressableInteraction';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -21,8 +25,6 @@ import {
   gridColumnsFor,
   sharedStyles,
 } from '@features/detail/ui/detailStyles';
-
-type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 
 function railKey(album: DiscoveryResult, index: number): string {
   return `${album.title}-${album.sources[0]?.external_id ?? index}`;
@@ -282,7 +284,7 @@ function albumCardLabel(
 }
 
 function albumCardStyle(theme: ReturnType<typeof useTheme>, cardWidth: number, isGrid: boolean) {
-  return ({ pressed, hovered, focused }: PressableWebState) => [
+  return ({ pressed, hovered, focused }: PressableInteractionState) => [
     styles.card,
     { width: cardWidth },
     isGrid ? styles.gridCard : null,
@@ -296,16 +298,14 @@ type AlbumCardPressableArgs = {
   props: AlbumCardProps;
   year: string | null;
   trackCount: number | null;
-  theme: ReturnType<typeof useTheme>;
 };
 
-function albumCardPressableProps({ props, year, trackCount, theme }: AlbumCardPressableArgs) {
+function albumCardPressableProps({ props, year, trackCount }: AlbumCardPressableArgs) {
   return {
     testID: props.testID,
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
     accessibilityLabel: albumCardLabel(props, year, trackCount),
-    style: albumCardStyle(theme, props.cardWidth ?? DISCOGRAPHY_CARD_SIZE, props.isGrid ?? false),
   };
 }
 
@@ -355,8 +355,11 @@ function AlbumCard(props: AlbumCardProps): ReactElement {
   const year = albumYear(props.album);
   const trackCount = albumExtras(props.album.extras).trackCount;
   const cardWidth = props.cardWidth ?? DISCOGRAPHY_CARD_SIZE;
+  const interaction = usePressableInteraction(
+    albumCardStyle(theme, cardWidth, props.isGrid ?? false),
+  );
   return (
-    <Pressable {...albumCardPressableProps({ props, year, trackCount, theme })}>
+    <Pressable {...albumCardPressableProps({ props, year, trackCount })} {...interaction}>
       <CardBody album={props.album} year={year} trackCount={trackCount} cardWidth={cardWidth} />
     </Pressable>
   );

@@ -6,6 +6,7 @@ import { StyleSheet } from 'react-native';
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse';
 import { Sidebar } from '@shared/ui/navigation/Sidebar';
+import { darkTheme } from '@shared/ui/theme';
 
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
@@ -139,5 +140,31 @@ describe('SidebarPlaylists', () => {
     await screen.findByText('Late Night');
 
     expect(restingStyleOf('sidebar-playlist-1')).toEqual(topLevelItem);
+  });
+
+  it('fills a playlist row with the raised surface while hovered, and clears it on hover-out', async () => {
+    port = createMemoryLibraryPort({ playlists: [playlist('1', 'Late Night')] });
+    renderSidebar();
+    const row = await screen.findByTestId('sidebar-playlist-1');
+
+    fireEvent(row, 'hoverIn');
+    expect(row).toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+    expect(row).toHaveStyle({ borderColor: 'transparent' });
+
+    fireEvent(row, 'hoverOut');
+    expect(row).not.toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+  });
+
+  it('rings a focused playlist row in the accent colour, and clears it on blur', async () => {
+    port = createMemoryLibraryPort({ playlists: [playlist('1', 'Late Night')] });
+    renderSidebar();
+    const row = await screen.findByTestId('sidebar-playlist-1');
+
+    fireEvent(row, 'focus');
+    expect(row).toHaveStyle({ borderWidth: 2, borderColor: darkTheme.color.accent });
+    expect(row).not.toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+
+    fireEvent(row, 'blur');
+    expect(row).toHaveStyle({ borderColor: 'transparent' });
   });
 });
