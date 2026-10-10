@@ -14,7 +14,9 @@
     "react-native-web",
     "fast-check",
     "@stryker-mutator/core",
-    "@stryker-mutator/jest-runner"
+    "@stryker-mutator/jest-runner",
+    "@faker-js/faker",
+    "fishery"
   ],
   "dynamicallyLoaded": ["eslint/consistency/*.js"],
   "ignoreUnresolvedImports": ["@react-navigation/bottom-tabs"],
@@ -261,7 +263,10 @@
           "shared-ui"
         ]
       },
-      { "from": "shared-api-client", "allow": ["shared-auth", "shared-deadline", "shared-errors"] },
+      {
+        "from": "shared-api-client",
+        "allow": ["shared-auth", "shared-deadline", "shared-device", "shared-errors"]
+      },
       {
         "from": "shared-auth",
         "allow": [
@@ -284,6 +289,7 @@
           "shared-killSwitch",
           "shared-lifecycle",
           "shared-offline",
+          "shared-query",
           "shared-session",
           "shared-telemetry"
         ]
@@ -299,12 +305,13 @@
         "allow": ["shared-deadline", "shared-files", "shared-lifecycle"]
       },
       { "from": "shared-lifecycle", "allow": [] },
-      { "from": "shared-navigation", "allow": [] },
+      { "from": "shared-navigation", "allow": ["shared-api-client", "shared-session"] },
       {
         "from": "shared-offline",
         "allow": [
           "shared-api-client",
           "shared-deadline",
+          "shared-device",
           "shared-errors",
           "shared-files",
           "shared-killSwitch",
@@ -312,14 +319,14 @@
           "shared-telemetry"
         ]
       },
-      { "from": "shared-playback", "allow": ["shared-api-client"] },
+      { "from": "shared-playback", "allow": ["shared-api-client", "shared-device"] },
       {
         "from": "shared-playlists",
         "allow": ["shared-api-client", "shared-failure", "shared-query", "shared-session", "shared-ui"]
       },
       {
         "from": "shared-query",
-        "allow": ["shared-errors", "shared-session", "shared-telemetry", "shared-ui"]
+        "allow": ["shared-api-client", "shared-errors", "shared-session", "shared-telemetry", "shared-ui"]
       },
       { "from": "shared-session", "allow": [] },
       {
