@@ -967,4 +967,70 @@ describe('useDeleteTrack', () => {
       expect(mockDeleteTrack).not.toHaveBeenCalled();
     });
   });
+
+  describe('useDeleteTracks — bulk edge cases', () => {
+    const CONFLICT = 409;
+    const TWICE = 2;
+    const THRICE = 3;
+    it('resolves an empty batch without calling the port or alerting', async () => {
+      const { wrapper } = setup(ports);
+      const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+
+      await expect(result.current.mutateAsync([])).resolves.toEqual({
+        deleted: 0,
+        requested: 0,
+        failures: [],
+        skipped: 0,
+        cancelled: false,
+      });
+
+      expect(mockDeleteTrack).not.toHaveBeenCalled();
+      expect(alertSpy).not.toHaveBeenCalled();
+    });
+
+    it('lists failures in input order even when a later track fails first', async () => {
+      const { wrapper } = setup(ports);
+      const slowA = deferred();
+      const errorA = new ApiError(CONFLICT, 'conflict a');
+      const errorC = new ApiError(CONFLICT, 'conflict c');
+      mockDeleteTrack.mockImplementation((id) => {
+        if (id === 'a') return slowA.promise;
+        if (id === 'c') return Promise.reject(errorC);
+        return Promise.resolve();
+      });
+
+      const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+      let settled: ReturnType<typeof result.current.mutateAsync> | undefined;
+      act(() => {
+        settled = result.current.mutateAsync([asTrackId('a'), asTrackId('b'), asTrackId('c')]);
+      });
+      await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalledTimes(THRICE));
+      await act(async () => {
+        slowA.reject(errorA);
+        await Promise.resolve();
+      });
+
+      await expect(settled).resolves.toEqual({
+        deleted: 1,
+        requested: THRICE,
+        failures: [
+          { trackId: 'a', error: errorA },
+          { trackId: 'c', error: errorC },
+        ],
+        skipped: 0,
+        cancelled: false,
+      });
+    });
+
+    it('counts a track id given twice once per occurrence', async () => {
+      const { wrapper } = setup(ports);
+      mockDeleteTrack.mockResolvedValue(undefined);
+      const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+
+      await expect(
+        result.current.mutateAsync([asTrackId('a'), asTrackId('a')]),
+      ).resolves.toMatchObject({ requested: TWICE, deleted: TWICE, skipped: 0 });
+      expect(mockDeleteTrack).toHaveBeenCalledTimes(TWICE);
+    });
+  });
 });
