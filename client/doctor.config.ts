@@ -2,6 +2,8 @@ export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
     'react-doctor/rn-prefer-reanimated': 'off',
+    'react-doctor/no-multi-comp': 'off',
+    'react-doctor/jsx-no-jsx-as-prop': 'off',
     'deslop/unused-dev-dependency': 'off',
   },
   ignore: {
@@ -17,11 +19,21 @@ export default {
           'src/shared/auth/authStorage.ts',
           'src/shared/device/webOrigin.ts',
           'src/shared/files/defaultFileStore.ts',
+          'src/shared/ui/announce.ts',
           'src/shared/ui/dialog/dialog.ts',
           'src/shared/ui/haptics.ts',
           'src/shared/ui/keyboard/keyboard.tsx',
         ],
         rules: ['deslop/unused-export'],
+      },
+      {
+        files: ['eslint/**', 'jest/**', 'src/**/__tests__/**'],
+        rules: [
+          'react-doctor/js-combine-iterations',
+          'react-doctor/no-dynamic-import-path',
+          'react-doctor/js-set-map-lookups',
+          'react-doctor/no-json-parse-stringify-clone',
+        ],
       },
       {
         files: ['eslint/consistency/**'],

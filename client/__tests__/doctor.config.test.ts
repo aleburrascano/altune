@@ -12,22 +12,24 @@ function overridesFor(rule: string): Override[] {
   return overrides.filter((override) => override.rules.includes(rule));
 }
 
-function nativeSiblingsOfWebFiles(directory: string): string[] {
+function defaultFilesOfPlatformPairs(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      return entry.name === '__tests__' ? [] : nativeSiblingsOfWebFiles(path);
+      return entry.name === '__tests__' ? [] : defaultFilesOfPlatformPairs(path);
     }
-    const webMatch = /^(.*)\.web(\.tsx?)$/.exec(entry.name);
-    return webMatch ? [relative(mobileRoot, join(directory, webMatch[1] + webMatch[2]))] : [];
+    const pairMatch = /^(.*)\.(?:web|android|ios)(\.tsx?)$/.exec(entry.name);
+    return pairMatch ? [relative(mobileRoot, join(directory, pairMatch[1] + pairMatch[2]))] : [];
   });
 }
 
 describe('doctor.config', () => {
-  it('silences unused-export on the native file of every platform-split pair', () => {
+  it('silences unused-export on the default file of every platform-split pair', () => {
     const silenced = overridesFor('deslop/unused-export').flatMap((override) => override.files);
 
-    expect(silenced.sort()).toEqual(nativeSiblingsOfWebFiles(join(mobileRoot, 'src')).sort());
+    expect(silenced.sort()).toEqual(
+      [...new Set(defaultFilesOfPlatformPairs(join(mobileRoot, 'src')))].sort(),
+    );
   });
 
   it('silences unused-file on the dynamically loaded eslint consistency rules', () => {
