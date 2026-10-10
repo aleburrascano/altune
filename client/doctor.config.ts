@@ -7,6 +7,20 @@ const pagingLoopsAwaitInOrder = {
   rules: ['react-doctor/async-await-in-loop'],
 };
 
+const sequentialByDesignAwaitInLoop = {
+  files: [
+    'src/shared/offline/pinnedDownloadWorker.ts',
+    'src/shared/offline/pinnedStore.ts',
+    'src/shared/telemetry/outbox.ts',
+  ],
+  rules: ['react-doctor/async-await-in-loop'],
+};
+
+const downloadAwaitedBeforeCancelCheck = {
+  files: ['src/shared/offline/pinnedDownloadWorker.ts'],
+  rules: ['react-doctor/async-defer-await'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -53,6 +67,8 @@ export default {
         rules: ['react-doctor/only-export-components'],
       },
       pagingLoopsAwaitInOrder,
+      sequentialByDesignAwaitInLoop,
+      downloadAwaitedBeforeCancelCheck,
     ],
   },
 };
