@@ -41,10 +41,12 @@ function groupByRecordType(albums: DiscoveryResult[]): Map<string, DiscoveryResu
 }
 
 function presentGroups(grouped: Map<string, DiscoveryResult[]>): RecordTypeGroup[] {
-  return RECORD_TYPES.filter((t) => (grouped.get(t.type)?.length ?? 0) > 0).map((t) => ({
-    ...t,
-    count: grouped.get(t.type)?.length ?? 0,
-  }));
+  const present: RecordTypeGroup[] = [];
+  for (const t of RECORD_TYPES) {
+    const count = grouped.get(t.type)?.length ?? 0;
+    if (count > 0) present.push({ ...t, count });
+  }
+  return present;
 }
 
 function activeGroupOf(present: RecordTypeGroup[], selected: string | null): RecordTypeGroup {
