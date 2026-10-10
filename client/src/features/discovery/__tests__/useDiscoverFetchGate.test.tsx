@@ -16,6 +16,8 @@ import {
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
 import { setSearchState } from '@features/discovery/domain/searchState';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -65,7 +67,11 @@ function searchResponseFixture(): DiscoverySearchResponse {
 let queryClient: QueryClient;
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 function switchDiscoveryFetches(enabled: boolean): void {

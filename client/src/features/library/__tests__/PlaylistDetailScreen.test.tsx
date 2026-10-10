@@ -6,6 +6,8 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { sessionFactory, trackResponseFactory } from '@testing/factories';
 import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -45,7 +47,11 @@ function wrapper({ children }: { children: ReactNode }) {
       mutations: { gcTime: Infinity },
     },
   });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 warmUpFirstRender(async () => {

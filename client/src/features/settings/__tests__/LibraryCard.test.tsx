@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { LibraryCard } from '@features/settings/ui/LibraryCard';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 jest.mock('@shared/api-client/tracks', () => ({
   ...jest.requireActual('@shared/api-client/tracks'),
@@ -15,7 +17,11 @@ function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 const backfillRow = () => within(screen.getByTestId('settings-backfill-featured'));

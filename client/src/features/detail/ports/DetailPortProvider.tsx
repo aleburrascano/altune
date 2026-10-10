@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 
-const DetailPortContext = createContext<DetailPort>(httpDetailPort);
+const DetailPortContext = createContext<DetailPort | null>(null);
 
 interface DetailPortProviderProps {
   port: DetailPort;
@@ -16,5 +15,7 @@ export function DetailPortProvider({ port, children }: DetailPortProviderProps):
 }
 
 export function useDetailPort(): DetailPort {
-  return use(DetailPortContext);
+  const port = use(DetailPortContext);
+  if (port === null) throw new Error('no detail port provided: mount DetailPortProvider');
+  return port;
 }

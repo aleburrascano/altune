@@ -6,6 +6,8 @@ import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort'
 
 import { DetailPortProvider } from '@features/detail/ports/DetailPortProvider';
 import type { DetailPort } from '@features/detail/ports/detailPort';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 export function createTestQueryClient({ mutations = false }: { mutations?: boolean } = {}) {
   return new QueryClient({
@@ -17,7 +19,11 @@ export function createTestQueryClient({ mutations = false }: { mutations?: boole
 
 export function createWrapper(client: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={client}>
+        <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      </QueryClientProvider>
+    );
   };
 }
 

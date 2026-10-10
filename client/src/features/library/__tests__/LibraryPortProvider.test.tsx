@@ -8,10 +8,10 @@ import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibra
 import { LibraryPortProvider, useLibraryPort } from '@features/library/ports/LibraryPortProvider';
 
 describe('useLibraryPort', () => {
-  it('hands back the HTTP port when no provider is mounted', () => {
-    const { result } = renderHook(() => useLibraryPort());
+  it('throws when no provider is mounted', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(result.current).toBe(httpLibraryPort);
+    expect(() => renderHook(() => useLibraryPort())).toThrow('no library port provided');
   });
 
   it('hands back the port the provider was given', () => {

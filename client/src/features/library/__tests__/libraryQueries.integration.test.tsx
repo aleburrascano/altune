@@ -5,6 +5,8 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { sessionFactory } from '@testing/factories';
 import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -14,7 +16,11 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 beforeEach(() => {

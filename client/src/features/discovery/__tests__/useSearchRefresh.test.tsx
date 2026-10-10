@@ -7,6 +7,8 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { useRefreshFromFirstPage } from '@features/discovery/hooks/useSearchRefresh';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -35,7 +37,11 @@ function servePages(...pages: DiscoverySearchResponse[]): void {
 let queryClient: QueryClient;
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 function pageOf(offset: number, searchId: string, titles: string[]): DiscoverySearchResponse {
@@ -130,7 +136,9 @@ describe('useRefreshFromFirstPage', () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(queryKey, pagesOf('old-row'));
     const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      </QueryClientProvider>
     );
     const refetch = jest.fn().mockRejectedValue(new Error('offline'));
     const { result } = renderHook(() => useRefreshFromFirstPage(queryKey, refetch), { wrapper });

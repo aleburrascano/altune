@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpDiscoverPort } from '@features/discovery/adapters/http/httpDiscoverPort';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
-const DiscoverPortContext = createContext<DiscoverPort>(httpDiscoverPort);
+const DiscoverPortContext = createContext<DiscoverPort | null>(null);
 
 interface DiscoverPortProviderProps {
   port: DiscoverPort;
@@ -16,5 +15,7 @@ export function DiscoverPortProvider({ port, children }: DiscoverPortProviderPro
 }
 
 export function useDiscoverPort(): DiscoverPort {
-  return use(DiscoverPortContext);
+  const port = use(DiscoverPortContext);
+  if (port === null) throw new Error('no discover port provided: mount DiscoverPortProvider');
+  return port;
 }

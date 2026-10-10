@@ -1,10 +1,9 @@
 import { createContext, use } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
 
-const SettingsPortContext = createContext<SettingsPort>(httpSettingsPort);
+const SettingsPortContext = createContext<SettingsPort | null>(null);
 
 interface SettingsPortProviderProps {
   port: SettingsPort;
@@ -16,5 +15,7 @@ export function SettingsPortProvider({ port, children }: SettingsPortProviderPro
 }
 
 export function useSettingsPort(): SettingsPort {
-  return use(SettingsPortContext);
+  const port = use(SettingsPortContext);
+  if (port === null) throw new Error('no settings port provided: mount SettingsPortProvider');
+  return port;
 }

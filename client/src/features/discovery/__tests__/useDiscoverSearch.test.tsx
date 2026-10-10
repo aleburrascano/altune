@@ -17,6 +17,8 @@ import { setSearchState } from '@features/discovery/domain/searchState';
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
@@ -72,7 +74,11 @@ function holdSearchesUntilReleased(): () => void {
 let queryClient: QueryClient;
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 function endlessPage(offset: number): DiscoverySearchResponse {

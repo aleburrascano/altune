@@ -210,10 +210,10 @@ function wrapperWith(port: DiscoverPort) {
 }
 
 describe('useDiscoverPort', () => {
-  it('hands back the HTTP port when no provider is mounted', () => {
-    const { result } = renderHook(() => useDiscoverPort());
+  it('throws when no provider is mounted', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    expect(result.current).toBe(httpDiscoverPort);
+    expect(() => renderHook(() => useDiscoverPort())).toThrow('no discover port provided');
   });
 
   it('hands back the port the provider was given', () => {

@@ -10,6 +10,8 @@ import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
+import { FeaturePorts } from '@/chrome/FeaturePorts';
+import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -50,7 +52,11 @@ function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+    </QueryClientProvider>
+  );
 }
 
 const FIVE_ATTEMPTS_OF_BACKOFF_MS = 31 * RETRY_BACKOFF_BASE_MS;

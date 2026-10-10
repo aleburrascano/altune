@@ -15,6 +15,8 @@ import DiscoverLayout from '../src/app/(tabs)/discover/_layout';
 import LibraryLayout from '../src/app/(tabs)/library/_layout';
 import SettingsLayout from '../src/app/(tabs)/settings/_layout';
 import PlayerLayout from '../src/app/player/_layout';
+import { FeaturePorts } from '../src/chrome/FeaturePorts';
+import { httpFeaturePorts } from '../src/chrome/httpFeaturePorts';
 
 const { __http } = require('../jest/doubles/fetch.js');
 
@@ -106,7 +108,9 @@ afterEach(() => {
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <PlaybackContext.Provider value={PLAYING}>{children}</PlaybackContext.Provider>
+      <FeaturePorts ports={httpFeaturePorts}>
+        <PlaybackContext.Provider value={PLAYING}>{children}</PlaybackContext.Provider>
+      </FeaturePorts>
     </QueryClientProvider>
   );
 }
@@ -114,7 +118,9 @@ function wrapper({ children }: { children: ReactNode }) {
 function idleWrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <PlaybackContext.Provider value={IDLE}>{children}</PlaybackContext.Provider>
+      <FeaturePorts ports={httpFeaturePorts}>
+        <PlaybackContext.Provider value={IDLE}>{children}</PlaybackContext.Provider>
+      </FeaturePorts>
     </QueryClientProvider>
   );
 }
@@ -450,7 +456,9 @@ describe('app chrome: the web keyboard shortcuts bridge mounts once at the root'
       initialUrl,
       wrapper: ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>
-          <PlaybackContext.Provider value={playback}>{children}</PlaybackContext.Provider>
+          <FeaturePorts ports={httpFeaturePorts}>
+            <PlaybackContext.Provider value={playback}>{children}</PlaybackContext.Provider>
+          </FeaturePorts>
         </QueryClientProvider>
       ),
     });
