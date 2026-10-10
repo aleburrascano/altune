@@ -475,6 +475,165 @@ run_script
 expect_rc 1
 expect_out "FAIL  gate parity with main"
 
+add_jest_stub() {
+    cat >"$WORK/bin/npx" <<'STUB'
+#!/usr/bin/env bash
+printf 'npx %s\n' "$*" >>"$NPX_LOG"
+case " $* " in *" jest "*) ;; *) exit 0 ;; esac
+case "${STUB_JEST:-pass}" in
+    fail)
+        echo "FAIL src/__tests__/a.test.ts"
+        echo "  ● library rows › shows the artist name"
+        echo ""
+        echo "    expect(received).toBe(expected)"
+        echo ""
+        echo "    Expected: \"Ada Lovelace\""
+        echo "    Received: \"\""
+        for i in $(seq 1 80); do echo "    at frame $i (node_modules/x.js:$i:1)"; done
+        echo "  ● Console"
+        echo "  ● player › resumes after a seek"
+        for i in $(seq 1 80); do echo "    at frame $i (node_modules/y.js:$i:1)"; done
+        echo "Summary of all failing tests"
+        echo "  ● library rows › shows the artist name"
+        echo "Test Suites: 1 failed, 3 passed, 4 total"
+        echo "Tests:       2 failed, 40 passed, 42 total"
+        exit 1
+        ;;
+    hang) exec sleep 60 ;;
+esac
+exit 0
+STUB
+    chmod +x "$WORK/bin/npx"
+}
+
+mobile_src_change() {
+    (
+        cd "$WORK/repo" || exit 1
+        mkdir -p client/src
+        printf 'export const x = 1;\n' >client/src/x.ts
+        git add -A
+        git commit -qm "mobile change"
+    )
+}
+
+CASE="mobile related tests run with --forceExit and --watchman=false"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_npx "--forceExit"
+expect_npx "--watchman=false"
+expect_out "ok    mobile tests (related)"
+
+CASE="a failing jest run prints each failed test name, not the last 40 lines"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+STUB_JEST=fail NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile tests (related)"
+expect_out "failed tests:"
+expect_out "● library rows › shows the artist name"
+expect_out "● player › resumes after a seek"
+expect_out "Tests:       2 failed, 40 passed, 42 total"
+expect_out "first failure:"
+expect_out "expect(received).toBe(expected)"
+expect_out 'Expected: "Ada Lovelace"'
+expect_out 'Received: ""'
+grep -qF "at frame 1 (node_modules/x.js" "$WORK/out.log" && fail "the first failure block should drop stack frames"
+grep -qF "at frame 80 (node_modules/y.js" "$WORK/out.log" && fail "the stack trace tail should not be printed"
+[ "$(grep -cF "● library rows › shows the artist name" "$WORK/out.log")" = 2 ] || fail "the first failed test should be named once in the list and once heading its block"
+[ "$(grep -cF "● player › resumes after a seek" "$WORK/out.log")" = 1 ] || fail "a later failed test should be named once, in the list only"
+grep -qF "● Console" "$WORK/out.log" && fail "console blocks are not failed tests"
+
+CASE="a jest run that never exits is killed at the timeout and fails loud"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+started=$(date +%s)
+PRECHECK_JEST_TIMEOUT=2 STUB_JEST=hang NPX_LOG="$WORK/npx.log" run_script_with_stubs
+[ $(($(date +%s) - started)) -lt 45 ] || fail "the hung jest run should be killed near the 2s timeout"
+expect_rc 1
+expect_out "FAIL  mobile tests (related)"
+expect_out "jest did not exit within 2s and was killed"
+
+add_migrations() {
+    (
+        cd "$WORK/repo" || exit 1
+        cp "$HERE/migration-prefixes.sh" scripts/
+        mkdir -p services/go-api/migrations
+        : >services/go-api/migrations/001_base.sql
+        git add -A
+        git commit -qm "migrations"
+        git update-ref refs/remotes/gitea/main HEAD
+    )
+}
+
+CASE="a new migration taking a number main already used fails precheck"
+new_repo
+add_migrations
+(
+    cd "$WORK/repo" || exit 1
+    git checkout -q -b feature
+    git checkout -q main
+    : >services/go-api/migrations/002_from_main.sql
+    git add -A
+    git commit -qm "main takes 002"
+    git update-ref refs/remotes/gitea/main HEAD
+    git checkout -q feature
+    : >services/go-api/migrations/002_from_feature.sql
+    git add -A
+    git commit -qm "feature takes 002"
+)
+run_script
+expect_rc 1
+expect_out "FAIL  go-api migration numbers are unique"
+expect_out "number 002 is taken by more than one migration"
+
+CASE="a new migration with a free number passes the migration check"
+new_repo
+add_migrations
+(
+    cd "$WORK/repo" || exit 1
+    : >services/go-api/migrations/002_next.sql
+    git add -A
+    git commit -qm "next migration"
+)
+run_script
+expect_out "ok    go-api migration numbers are unique"
+
+CASE="a change to a repo script runs its self-test"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    printf 'exit 0\n' >scripts/worktree-deps.sh
+    printf 'echo ran >"%s/selftest.log"; exit 1\n' "$WORK" >scripts/worktree-deps.test.sh
+    git add -A
+    git commit -qm "script change"
+)
+run_script
+expect_rc 1
+expect_out "FAIL  repo script self-tests"
+[ -f "$WORK/selftest.log" ] || fail "worktree-deps.test.sh should have run"
+
+CASE="repo script self-tests link the root deps before they run, as a fresh ci worktree has none"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    git update-ref refs/remotes/gitea/main HEAD
+    printf 'mkdir -p node_modules/js-yaml\necho "export PATH=$PATH"\n' >scripts/worktree-deps.sh
+    printf 'process.exit(0);\n' >scripts/gate-parity.mjs
+    printf '[ -d node_modules/js-yaml ] || { echo "Cannot find package js-yaml"; exit 1; }\n' >scripts/gate-parity.test.sh
+    git add -A
+    git commit -qm "gate parity change"
+)
+run_script
+expect_out "ok    repo script self-tests"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

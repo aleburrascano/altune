@@ -39,19 +39,54 @@ missing=0
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 
-check() {
-  local name=$1 dir=$2; shift 2
-  if (cd "$dir" && "$@") >"$log" 2>&1; then
+last_rc=0
+run_check() {
+  local show=$1 name=$2 dir=$3; shift 3
+  (cd "$dir" && "$@") >"$log" 2>&1
+  last_rc=$?
+  if [ $last_rc = 0 ]; then
     echo "ok    $name"
   else
     echo "FAIL  $name   ($dir: $*)"
-    tail -n 40 "$log" | sed 's/^/      /'
+    "$show" | sed 's/^/      /'
     failed=1
   fi
 }
 
+log_tail() { tail -n 40 "$log"; }
+
+check() { run_check log_tail "$@"; }
+
 test_check() {
   [ $lint_only = 1 ] || check "$@"
+}
+
+jest_limit=${PRECHECK_JEST_TIMEOUT:-1800}
+
+jest_failures() {
+  if [ "$last_rc" = 124 ] || [ "$last_rc" = 137 ]; then
+    echo "jest did not exit within ${jest_limit}s and was killed (raise PRECHECK_JEST_TIMEOUT if the suite is just slow)"
+  fi
+  local names
+  names=$(sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^[[:space:]]*● ' | grep -vE '● Console$' | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++')
+  if [ -n "$names" ]; then
+    echo "failed tests:"
+    echo "$names"
+    sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^(Test Suites|Tests):'
+    echo "first failure:"
+    sed -E 's/\x1b\[[0-9;]*m//g' "$log" | awk '
+      /^[[:space:]]*● / { if (on) exit; if (!/● Console$/) on = 1 }
+      on && /^[[:space:]]+at / { next }
+      on { print; if (++n >= 25) exit }'
+  else
+    log_tail
+  fi
+}
+
+jest_check() {
+  [ $lint_only = 1 ] && return 0
+  local name=$1 dir=$2; shift 2
+  run_check jest_failures "$name" "$dir" "${heavy[@]}" timeout --kill-after=30 "$jest_limit" "$@"
 }
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "SKIP  $2: $1 not installed"; missing=1; return 1; }; }
@@ -84,6 +119,17 @@ if touches '^services/go-api/'; then
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
     test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
   fi
+fi
+
+if touches '^services/go-api/migrations/|^scripts/migration-prefixes\.sh$'; then
+  check "go-api migration numbers are unique" . bash scripts/migration-prefixes.sh services/go-api/migrations "$base_ref"
+fi
+
+script_tests=$(grep -E '^(scripts/(worktree-deps|e2e-stack|web-export-check|migration-prefixes|gate-parity)|\.gitea/workflows/ci-node-deps)(\.test\.sh|\.sh|\.mjs)$' <<<"$changed" | sed -E 's/(\.test\.sh|\.sh|\.mjs)$/.test.sh/' | sort -u)
+if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
+  echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1
+elif [ -n "$script_tests" ]; then
+  test_check "repo script self-tests" . bash -c 'for t in "$@"; do [ -f "$t" ] || continue; bash "$t" || exit 1; done' _ $script_tests
 fi
 
 if touches '^services/go-api/deploy/|^\.github/workflows/test-backend-shellcheck\.sh$' && need shellcheck "go-api deploy shellcheck"; then
@@ -171,7 +217,7 @@ fi
 
 if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile event contracts"; then
   if link_deps client; then
-    test_check "mobile event contracts (go-api events changed)" client "${heavy[@]}" npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
+    jest_check "mobile event contracts (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" src/shared/events/__tests__/eventContract.test.ts src/shared/telemetry/__tests__/eventContract.test.ts
   else
     echo "SKIP  mobile event contracts: no node_modules here or in $main_tree"; missing=1
   fi
@@ -186,7 +232,7 @@ if touches '^client/'; then
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
-    [ -n "$src" ] && test_check "mobile tests (related)" $m "${heavy[@]}" npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
+    [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile consistency ratchet" $m node scripts/consistency-ratchet.mjs
     check "mobile own-module mock ratchet" $m node scripts/mock-ratchet.mjs
     check "mobile fallow" $m npm run --silent fallow

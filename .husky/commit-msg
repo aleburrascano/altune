@@ -34,5 +34,8 @@ PYEOF
 fi
 
 if [ -d node_modules/@commitlint ]; then
-  npx --no -- commitlint --edit "$MSG_FILE"
+  if ! npx --no -- commitlint --edit "$MSG_FILE"; then
+    echo "commitlint: the header is type(scope): subject, at most 72 characters in all, with an all lower-case subject (no capitals, CamelCase identifiers or acronyms); type and scope come from commitlint.config.js, e.g. tooling(tooling): precheck names failed jest tests" >&2
+    exit 1
+  fi
 fi

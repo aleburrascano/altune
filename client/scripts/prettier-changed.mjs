@@ -2,14 +2,34 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { check, resolveConfig } from 'prettier';
 
-const rawBase = process.argv[2];
-if (!rawBase || rawBase.startsWith('-')) {
-  console.error('usage: prettier-changed.mjs <base-ref>');
+const git = (args) =>
+  execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+const DEFAULT_BASES = ['gitea/main', 'origin/main'];
+
+function defaultBase() {
+  for (const ref of DEFAULT_BASES) {
+    try {
+      git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+      return ref;
+    } catch {
+      continue;
+    }
+  }
+  console.error(
+    `prettier-changed.mjs: no base ref given and none of ${DEFAULT_BASES.join(', ')} exists`,
+  );
   process.exit(2);
 }
 
-const git = (args) =>
-  execFileSync('git', ['-c', 'core.quotePath=false', ...args], { encoding: 'utf8' });
+const rawBase = process.argv[2] ?? defaultBase();
+if (!rawBase || rawBase.startsWith('-')) {
+  console.error('usage: prettier-changed.mjs [base-ref] (default: merge-base with gitea/main)');
+  process.exit(2);
+}
 
 let mergeBase;
 try {
