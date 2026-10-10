@@ -663,7 +663,7 @@ describe('useDeleteTrack', () => {
     mockRetryAcquisition.mockReset();
     mockReacquireTrack.mockReset();
     useTrackStatusStore.getState().reset();
-    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
+    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, unpin: realUnpin });
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
