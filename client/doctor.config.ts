@@ -41,6 +41,26 @@ const imageOnlyResolvesAssetSource = {
   rules: ['react-doctor/rn-prefer-expo-image'],
 };
 
+const failureShownIsAnImpressionLogSyncedInEffect = {
+  files: [
+    'src/features/detail/ui/TrackStatusBanners.tsx',
+    'src/features/library/ui/LibraryRowFailure.tsx',
+    'src/shared/ui/primitives/Banner.tsx',
+    'src/features/discovery/hooks/useReportQueryFailure.ts',
+  ],
+  rules: ['react-doctor/no-event-handler'],
+};
+
+const bannerChildrenOnlyPicksTelemetryMessage = {
+  files: ['src/shared/ui/primitives/Banner.tsx'],
+  rules: ['react-doctor/no-polymorphic-children'],
+};
+
+const recordEventIsFireAndForgetAndReadsNoQueryCache = {
+  files: ['src/shared/telemetry/useRecordEvent.ts'],
+  rules: ['react-doctor/query-mutation-missing-invalidation'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -93,6 +113,9 @@ export default {
       nativeTailDrainRebuildsInOrder,
       resetNativeRunsEvenWhenEmpty,
       imageOnlyResolvesAssetSource,
+      failureShownIsAnImpressionLogSyncedInEffect,
+      bannerChildrenOnlyPicksTelemetryMessage,
+      recordEventIsFireAndForgetAndReadsNoQueryCache,
     ],
   },
 };
