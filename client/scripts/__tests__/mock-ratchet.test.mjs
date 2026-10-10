@@ -111,3 +111,28 @@ test('every alias counts, in src and jest alike', (t) => {
   assert.equal(lines.length, aliases.length + 1);
   assert.ok(lines.includes('jest/setup.js @testing/doubles'));
 });
+
+test('jest test files under the client-root __tests__ and scripts/__tests__ count too', (t) => {
+  const root = fixture(t, {
+    '__tests__/layout.integration.test.tsx': "jest.mock('@features/auth/ui/AuthGate');\n",
+    'scripts/__tests__/tool.test.ts': "jest.mock('../tool');\n",
+  });
+
+  ratchet(root, '--write');
+
+  assert.equal(
+    baselineOf(root),
+    '__tests__/layout.integration.test.tsx @features/auth/ui/AuthGate\n' +
+      'scripts/__tests__/tool.test.ts ../tool\n',
+  );
+});
+
+test('a node:test file holding jest.mock text as a fixture does not count', (t) => {
+  const root = fixture(t, {
+    'scripts/__tests__/tool.test.mjs': `const FIXTURE = "${ONE_OWN_MOCK.trim()}";\n`,
+    'scripts/tool.mjs': "jest.mock('./x');\n",
+    'mock-ratchet.baseline': '',
+  });
+
+  assert.equal(ratchet(root).status, 0);
+});
