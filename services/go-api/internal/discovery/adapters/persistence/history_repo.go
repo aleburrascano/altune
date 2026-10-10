@@ -22,6 +22,8 @@ var (
 	_ ports.DeletedIdentityEraser = (*PgxSearchHistoryRepository)(nil)
 )
 
+const historyResendWindow = time.Minute
+
 const (
 	undefinedTableCode   = "42P01"
 	insufficientPrivCode = "42501"
@@ -59,15 +61,26 @@ func NewPgxSearchHistoryRepository(pool *pgxpool.Pool) *PgxSearchHistoryReposito
 	return &PgxSearchHistoryRepository{pool: pool}
 }
 
+const insertHistoryUnlessResentSQL = `INSERT INTO discovery_search_history (id, user_id, query, query_norm, executed_at, result_clicked_signature)
+	SELECT $1, $2, $3, $4, $5, $6
+	WHERE NOT EXISTS (
+		SELECT 1 FROM discovery_search_history_cleared c
+		WHERE c.user_id = $2 AND c.cleared_at > $5
+	)
+	AND NOT EXISTS (
+		SELECT 1 FROM (
+			SELECT h.query_norm, h.executed_at FROM discovery_search_history h
+			WHERE h.user_id = $2
+			ORDER BY h.executed_at DESC, h.id DESC
+			LIMIT 1
+		) latest
+		WHERE latest.query_norm = $4 AND latest.executed_at > $7
+	)`
+
 func (r *PgxSearchHistoryRepository) Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error {
-	err := execUnderSearchTextLock(ctx, r.pool, entry.UserId.UUID(),
-		`INSERT INTO discovery_search_history (id, user_id, query, query_norm, executed_at, result_clicked_signature)
-		SELECT $1, $2, $3, $4, $5, $6
-		WHERE NOT EXISTS (
-			SELECT 1 FROM discovery_search_history_cleared c
-			WHERE c.user_id = $2 AND c.cleared_at > $5
-		)`,
+	err := execUnderLocks(ctx, r.pool, entry.UserId.UUID(), historyInsertLocks, insertHistoryUnlessResentSQL,
 		entry.ID, entry.UserId.UUID(), entry.Query, entry.QueryNorm, entry.ExecutedAt, entry.ResultClickedSignature,
+		entry.ExecutedAt.Add(-historyResendWindow),
 	)
 	if err != nil {
 		return fmt.Errorf("insert search history: %w", err)
@@ -97,14 +110,24 @@ const lockSearchTextOfUserSQL = `SELECT pg_advisory_xact_lock(hashtextextended($
 
 const shareSearchTextLockOfUserSQL = `SELECT pg_advisory_xact_lock_shared(hashtextextended($1::uuid::text, 0))`
 
+const lockHistoryInsertsOfUserSQL = `SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text, 1))`
+
+var historyInsertLocks = []string{shareSearchTextLockOfUserSQL, lockHistoryInsertsOfUserSQL}
+
 func execUnderSearchTextLock(ctx context.Context, pool *pgxpool.Pool, userId uuid.UUID, sql string, args ...any) error {
+	return execUnderLocks(ctx, pool, userId, []string{shareSearchTextLockOfUserSQL}, sql, args...)
+}
+
+func execUnderLocks(ctx context.Context, pool *pgxpool.Pool, userId uuid.UUID, locks []string, sql string, args ...any) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, shareSearchTextLockOfUserSQL, userId); err != nil {
-		return err
+	for _, lock := range locks {
+		if _, err := tx.Exec(ctx, lock, userId); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(ctx, sql, args...); err != nil {
 		return err

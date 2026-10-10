@@ -13,7 +13,10 @@ export const SEARCH_DEBOUNCE_MS = 300;
 const SUGGESTION_LIMIT = 5;
 
 export function useAutocompleteSuggestions(inputValue: string) {
-  const debouncedQuery = useSettledValue(normalizeQuery(inputValue).toLowerCase(), SUGGEST_DEBOUNCE_MS);
+  const debouncedQuery = useSettledValue(
+    normalizeQuery(inputValue).toLowerCase(),
+    SUGGEST_DEBOUNCE_MS,
+  );
   const port = useDiscoverPort();
   const isSuggestEnabled = useDiscoverFetchEnabled();
 

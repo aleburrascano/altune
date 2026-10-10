@@ -60,7 +60,10 @@ function searchQueryFn(
   return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
     cancelStaleSearches(queryClient, trimmed);
     const saveHistory = pageParam.offset === 0 && historySave.claim();
-    const request = port.searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
+    const request = port.searchDiscovery(
+      searchPageRequest(trimmed, saveHistory, pageParam),
+      signal,
+    );
     if (!saveHistory) return request;
     return request.catch((error: unknown) => {
       historySave.release();
@@ -112,10 +115,7 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
   });
 }
 
-function useHistorySaveOnce(
-  queryKey: readonly unknown[],
-  saveHistory: boolean,
-): HistorySaveClaim {
+function useHistorySaveOnce(queryKey: readonly unknown[], saveHistory: boolean): HistorySaveClaim {
   const savedKey = useRef<string | undefined>(undefined);
   const serialized = JSON.stringify(queryKey);
   function claim(): boolean {
