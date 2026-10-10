@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Navigator } from '@shared/navigation';
 
-import { withAuthDeadline } from '@features/auth/domain/authDeadline';
+import { withAuthDeadline } from '@shared/auth/authDeadline';
 import {
   type SupabaseAuthErrorLike,
   type SupabaseErrorDetail,

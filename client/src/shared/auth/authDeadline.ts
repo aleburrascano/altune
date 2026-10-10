@@ -1,9 +1,12 @@
-import { startDeadline } from '@shared/deadline/deadline';
+import { startDeadline } from '@shared/timing/deadline';
+import type { Deadline } from '@shared/timing/deadline';
 import { NetworkError } from '@shared/failure/errors';
 
 export const AUTH_CALL_TIMEOUT_MS = 15_000;
 
 export const AUTH_FETCH_TIMEOUT_MS = 10_000;
+
+export const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 function timeoutError(what: string, correlationId?: string): NetworkError {
   const message = `${what} timed out after ${AUTH_CALL_TIMEOUT_MS}ms`;
@@ -40,4 +43,24 @@ export function fetchWithinAuthDeadline(input: FetchInput, init?: RequestInit): 
       throw error;
     },
   );
+}
+
+function deadlineExpiry(deadline: Deadline, ms: number): Promise<never> {
+  return new Promise<never>((_, reject) => {
+    deadline.signal.addEventListener('abort', () => {
+      reject(new NetworkError('timeout', `auth call exceeded the ${ms}ms timeout`));
+    });
+  });
+}
+
+export async function withAuthDeadline<T>(
+  work: Promise<T>,
+  ms: number = AUTH_ACTION_TIMEOUT_MS,
+): Promise<T> {
+  const deadline = startDeadline(undefined, ms);
+  try {
+    return await Promise.race([work, deadlineExpiry(deadline, ms)]);
+  } finally {
+    deadline.release();
+  }
 }

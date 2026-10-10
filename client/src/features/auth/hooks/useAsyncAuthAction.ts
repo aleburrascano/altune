@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 
 import { isNetworkError } from '@shared/failure/errors';
 
-import { withAuthDeadline } from '@features/auth/domain/authDeadline';
+import { withAuthDeadline } from '@shared/auth/authDeadline';
 import { thrownErrorDetail } from '@features/auth/domain/authError';
 
 function reportUnrecognizedFailure(err: unknown): void {

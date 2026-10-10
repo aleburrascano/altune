@@ -26,7 +26,7 @@
     "src/features/auth/domain/attemptLockout.ts:recordFailedAttempt",
     "src/features/auth/domain/attemptLockout.ts:clearFailedAttempts",
     "src/features/auth/domain/attemptLockout.ts:_resetLockoutsForTest",
-    "src/features/auth/domain/authDeadline.ts:AUTH_ACTION_TIMEOUT_MS",
+    "src/shared/auth/authDeadline.ts:AUTH_ACTION_TIMEOUT_MS",
     "src/features/auth/domain/completeAuthIntent.ts:_resetConsumedCredentialForTest",
     "src/features/auth/domain/authError.ts:NETWORK_ERROR_COPY",
     "src/features/auth/domain/authError.ts:INVALID_SIGN_IN_COPY",

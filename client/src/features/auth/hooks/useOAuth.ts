@@ -2,7 +2,7 @@ import { NetworkError } from '@shared/failure/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useNavigator } from '@shared/navigation';
 
-import { withAuthDeadline } from '@features/auth/domain/authDeadline';
+import { withAuthDeadline } from '@shared/auth/authDeadline';
 import { authRedirectUrl } from '@features/auth/domain/authRedirect';
 import { completeAuthIntent, type AuthRouter } from '@features/auth/domain/completeAuthIntent';
 import { dismissAuthSession, openAuthSession } from '@features/auth/native/authBrowser';

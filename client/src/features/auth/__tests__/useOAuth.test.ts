@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
-import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
+import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import {

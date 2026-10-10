@@ -10,7 +10,7 @@ import {
   asString,
   nullableString,
 } from '@shared/api-client/wireDecoders';
-import { startDeadline } from '@shared/deadline/deadline';
+import { startDeadline } from '@shared/timing/deadline';
 
 const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';
 

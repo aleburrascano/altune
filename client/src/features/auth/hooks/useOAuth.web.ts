@@ -2,7 +2,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { withAuthDeadline } from '@features/auth/domain/authDeadline';
+import { withAuthDeadline } from '@shared/auth/authDeadline';
 import {
   failureReason,
   thrownFailure,
