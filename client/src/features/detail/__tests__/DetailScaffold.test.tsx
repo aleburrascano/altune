@@ -1,6 +1,6 @@
 import { Text, Platform } from 'react-native';
 
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 
 import { DetailScaffold, DetailBodyLayout } from '@/features/detail/ui/DetailScaffold';
 import { DiscographySections } from '@/features/detail/ui/DiscographySections';
@@ -15,6 +15,21 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
   default: () => ({ width: mockWideScaffoldWindowWidth, height: 800, scale: 2, fontScale: 1 }),
 }));
+
+const ANY_TEXT = /.+/;
+
+function textsIn(testID: string): unknown[] {
+  return within(screen.getByTestId(testID))
+    .getAllByText(ANY_TEXT)
+    .map((node) => node.props.children);
+}
+
+function artworkUris(scope: Pick<typeof screen, 'queryAllByTestId'> = screen): string[] {
+  return scope
+    .queryAllByTestId('detail-artwork')
+    .map((node) => [node.props.source].flat()[0]?.uri)
+    .filter((uri): uri is string => uri != null);
+}
 
 describe('DetailScaffold', () => {
   function renderScaffold(overrides: Partial<Parameters<typeof DetailScaffold>[0]> = {}) {
@@ -51,9 +66,7 @@ describe('DetailScaffold', () => {
 
     it('renders the body in actions, then facts, then children order', () => {
       renderScaffold();
-      const body = screen.getByTestId('detail-body');
-      const texts = body.findAllByType(Text).map((node) => node.props.children);
-      expect(texts).toEqual(['actions-slot', 'facts-slot', 'children-slot']);
+      expect(textsIn('detail-body')).toEqual(['actions-slot', 'facts-slot', 'children-slot']);
     });
 
     it('has no menu button and no detail-menu testID when menuItems is absent', () => {
@@ -87,12 +100,6 @@ describe('DetailScaffold', () => {
   });
 
   describe('DetailScaffold keeps its behaviour through the split', () => {
-    function artworkUris(): string[] {
-      return screen.UNSAFE_root.findAll(
-        (node) => typeof node.type === 'string' && node.props.source != null,
-      ).map((node) => [node.props.source].flat()[0]?.uri);
-    }
-
     it('shows the artwork in the hero when there is one', () => {
       renderScaffold({ artworkUrl: 'https://cdn.altune.test/rand.jpg' });
       expect(artworkUris()).toEqual(['https://cdn.altune.test/rand.jpg']);
@@ -121,9 +128,7 @@ describe('DetailScaffold', () => {
 
     it('renders actions then children when there are no facts', () => {
       renderScaffold({ facts: undefined });
-      const body = screen.getByTestId('detail-body');
-      const texts = body.findAllByType(Text).map((node) => node.props.children);
-      expect(texts).toEqual(['actions-slot', 'children-slot']);
+      expect(textsIn('detail-body')).toEqual(['actions-slot', 'children-slot']);
     });
 
     it('has no menu button when menuItems is empty', () => {
@@ -176,22 +181,14 @@ describe('DetailScaffold', () => {
       renderScaffold();
 
       expect(screen.queryByTestId('detail-body')).toBeNull();
-      const left = screen.getByTestId('detail-body-left');
-      expect(left.findAllByType(Text).map((node) => node.props.children)).toEqual([
-        'Random Access Memories',
-        'actions-slot',
-      ]);
+      expect(textsIn('detail-body-left')).toEqual(['Random Access Memories', 'actions-slot']);
       expect(screen.getByTestId('detail-banner-title')).toBeTruthy();
     });
 
     it('keeps facts and children in the right column', () => {
       renderScaffold();
 
-      const right = screen.getByTestId('detail-body-right');
-      expect(right.findAllByType(Text).map((node) => node.props.children)).toEqual([
-        'facts-slot',
-        'children-slot',
-      ]);
+      expect(textsIn('detail-body-right')).toEqual(['facts-slot', 'children-slot']);
     });
   });
 
@@ -257,27 +254,17 @@ describe('DetailScaffold', () => {
     it('shows the artwork once, in the left column', () => {
       renderScaffold({ artworkUrl: 'https://cdn.altune.test/rand.jpg' });
 
-      const withSource = (node: { type: unknown; props: { source?: unknown } }) =>
-        typeof node.type === 'string' && node.props.source != null;
-      const left = screen.getByTestId('detail-body-left');
-      expect(left.findAll(withSource).map((node) => [node.props.source].flat()[0]?.uri)).toEqual([
+      expect(artworkUris(within(screen.getByTestId('detail-body-left')))).toEqual([
         'https://cdn.altune.test/rand.jpg',
       ]);
-      expect(screen.UNSAFE_root.findAll(withSource)).toHaveLength(1);
+      expect(artworkUris()).toEqual(['https://cdn.altune.test/rand.jpg']);
     });
 
     it('still splits into two columns with the title on the left when there is no artwork or facts', () => {
       renderScaffold({ artworkUrl: null, facts: undefined });
 
-      const left = screen.getByTestId('detail-body-left');
-      const right = screen.getByTestId('detail-body-right');
-      expect(left.findAllByType(Text).map((node) => node.props.children)).toEqual([
-        'Random Access Memories',
-        'actions-slot',
-      ]);
-      expect(right.findAllByType(Text).map((node) => node.props.children)).toEqual([
-        'children-slot',
-      ]);
+      expect(textsIn('detail-body-left')).toEqual(['Random Access Memories', 'actions-slot']);
+      expect(textsIn('detail-body-right')).toEqual(['children-slot']);
     });
 
     it('keeps back and the menu working in the two-column layout', () => {
@@ -311,9 +298,7 @@ describe('DetailScaffold', () => {
       });
 
       const right = screen.getByTestId('detail-body-right');
-      expect(
-        right.findAll((node) => node.props.testID === 'detail-discography-grid').length,
-      ).toBeGreaterThan(0);
+      expect(within(right).getByTestId('detail-discography-grid')).toBeTruthy();
       expect(screen.queryByTestId('detail-discography-rail')).toBeNull();
     });
   });
@@ -380,17 +365,9 @@ describe('DetailBodyLayout', () => {
       renderLayout();
 
       expect(screen.queryByTestId('detail-body')).toBeNull();
-      const left = screen.getByTestId('detail-body-left');
-      const right = screen.getByTestId('detail-body-right');
 
-      expect(left.findAllByType(Text).map((node) => node.props.children)).toEqual([
-        'hero-slot',
-        'actions-slot',
-      ]);
-      expect(right.findAllByType(Text).map((node) => node.props.children)).toEqual([
-        'facts-slot',
-        'children-slot',
-      ]);
+      expect(textsIn('detail-body-left')).toEqual(['hero-slot', 'actions-slot']);
+      expect(textsIn('detail-body-right')).toEqual(['facts-slot', 'children-slot']);
     });
   });
 

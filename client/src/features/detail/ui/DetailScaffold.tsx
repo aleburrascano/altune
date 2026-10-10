@@ -273,6 +273,7 @@ type BannerImageProps = { title: string; artworkUrl: string | null };
 
 function imageProps(props: BannerImageProps) {
   return {
+    testID: 'detail-artwork',
     source: props.artworkUrl != null ? { uri: props.artworkUrl } : null,
     style: StyleSheet.absoluteFill,
     contentFit: 'cover' as const,

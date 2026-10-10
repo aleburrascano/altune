@@ -92,8 +92,8 @@ describe('AlbumRail: grid on the web at a wide width', () => {
       nativeEvent: { layout: { width: 640, height: 400, x: 0, y: 0 } },
     });
 
-    const grid = screen.UNSAFE_getByProps({ testID: 'detail-discography-grid' });
-    expect(grid.props.numColumns).toBe(4);
+    expect(screen.getByTestId('detail-album-0')).toHaveStyle({ width: 151 });
+    expect(screen.getByTestId('detail-album-1')).toHaveStyle({ width: 151 });
   });
 
   it('picks up more columns when its measured width is wider than the window', () => {
@@ -105,32 +105,26 @@ describe('AlbumRail: grid on the web at a wide width', () => {
       nativeEvent: { layout: { width: 1152, height: 400, x: 0, y: 0 } },
     });
 
-    const grid = screen.UNSAFE_getByProps({ testID: 'detail-discography-grid' });
-    expect(grid.props.numColumns).toBe(6);
+    expect(screen.getByTestId('detail-album-0')).toHaveStyle({ width: 182 });
+    expect(screen.getByTestId('detail-album-1')).toHaveStyle({ width: 182 });
   });
 
   it('gives a grid card the same hover and focus ring as the sidebar', () => {
     renderRail();
+    function card() {
+      return screen.getByTestId('detail-album-0');
+    }
+    expect(card()).toHaveStyle({ borderColor: 'transparent' });
 
-    const cards = screen
-      .UNSAFE_getAllByProps({ testID: 'detail-album-0' })
-      .filter((node) => typeof node.props.style === 'function');
-    expect(cards).toHaveLength(1);
-    const resolveStyle = cards[0]!.props.style as (state: {
-      hovered?: boolean;
-      focused?: boolean;
-      pressed?: boolean;
-    }) => unknown[];
+    fireEvent(card(), 'hoverIn');
+    expect(card()).toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+    fireEvent(card(), 'hoverOut');
+    expect(card()).not.toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
 
-    expect(resolveStyle({ hovered: true, focused: false, pressed: false })).toEqual(
-      expect.arrayContaining([{ backgroundColor: darkTheme.color.surface2 }]),
-    );
-    expect(resolveStyle({ hovered: false, focused: true, pressed: false })).toEqual(
-      expect.arrayContaining([{ borderColor: darkTheme.color.accent }]),
-    );
-    expect(resolveStyle({ hovered: false, focused: false, pressed: false })).toEqual(
-      expect.arrayContaining([{ borderColor: 'transparent' }]),
-    );
+    fireEvent(card(), 'focus');
+    expect(card()).toHaveStyle({ borderColor: darkTheme.color.accent });
+    fireEvent(card(), 'blur');
+    expect(card()).toHaveStyle({ borderColor: 'transparent' });
   });
 });
 
