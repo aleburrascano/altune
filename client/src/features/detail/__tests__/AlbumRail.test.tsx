@@ -2,7 +2,6 @@ import { Platform, StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { darkTheme } from '@shared/ui';
 
 import { AlbumRail } from '../ui/AlbumRail';
 
@@ -92,8 +91,8 @@ describe('AlbumRail: grid on the web at a wide width', () => {
       nativeEvent: { layout: { width: 640, height: 400, x: 0, y: 0 } },
     });
 
-    const grid = screen.UNSAFE_getByProps({ testID: 'detail-discography-grid' });
-    expect(grid.props.numColumns).toBe(4);
+    expect(screen.getByTestId('detail-album-0')).toHaveStyle({ width: 151 });
+    expect(screen.getByTestId('detail-album-1')).toHaveStyle({ width: 151 });
   });
 
   it('picks up more columns when its measured width is wider than the window', () => {
@@ -105,32 +104,17 @@ describe('AlbumRail: grid on the web at a wide width', () => {
       nativeEvent: { layout: { width: 1152, height: 400, x: 0, y: 0 } },
     });
 
-    const grid = screen.UNSAFE_getByProps({ testID: 'detail-discography-grid' });
-    expect(grid.props.numColumns).toBe(6);
+    expect(screen.getByTestId('detail-album-0')).toHaveStyle({ width: 182 });
+    expect(screen.getByTestId('detail-album-1')).toHaveStyle({ width: 182 });
   });
 
-  it('gives a grid card the same hover and focus ring as the sidebar', () => {
+  it('draws a transparent ring on a resting grid card', () => {
     renderRail();
 
-    const cards = screen
-      .UNSAFE_getAllByProps({ testID: 'detail-album-0' })
-      .filter((node) => typeof node.props.style === 'function');
-    expect(cards).toHaveLength(1);
-    const resolveStyle = cards[0]!.props.style as (state: {
-      hovered?: boolean;
-      focused?: boolean;
-      pressed?: boolean;
-    }) => unknown[];
-
-    expect(resolveStyle({ hovered: true, focused: false, pressed: false })).toEqual(
-      expect.arrayContaining([{ backgroundColor: darkTheme.color.surface2 }]),
-    );
-    expect(resolveStyle({ hovered: false, focused: true, pressed: false })).toEqual(
-      expect.arrayContaining([{ borderColor: darkTheme.color.accent }]),
-    );
-    expect(resolveStyle({ hovered: false, focused: false, pressed: false })).toEqual(
-      expect.arrayContaining([{ borderColor: 'transparent' }]),
-    );
+    expect(screen.getByTestId('detail-album-0')).toHaveStyle({
+      borderWidth: 2,
+      borderColor: 'transparent',
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Text } from '@shared/ui/primitives/Text';
+import { darkTheme } from '@shared/ui';
 
 import { SectionError } from '@/features/detail/ui/Section';
 
@@ -19,9 +19,9 @@ describe('SectionError', () => {
     it('renders the message in the danger tone', () => {
       render(<SectionError testIDPrefix="x" message="Couldn't load albums." onRetry={jest.fn()} />);
 
-      const message = screen.UNSAFE_getByProps({ children: "Couldn't load albums." });
-      expect(message.type).toBe(Text);
-      expect(message.props.tone).toBe('danger');
+      expect(screen.getByText("Couldn't load albums.")).toHaveStyle({
+        color: darkTheme.color.danger,
+      });
     });
 
     it('calls onRetry when Retry is pressed', () => {
