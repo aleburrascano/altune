@@ -118,6 +118,7 @@ if touches '^services/go-api/'; then
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
     test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
+    need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
   fi
 fi
 
@@ -159,6 +160,8 @@ if touches '^services/overseer/'; then
     check "overseer no new comments" services/go-api go run ./scripts/lintcomments "$base" ../overseer
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
+    need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
+    need nilaway "overseer nilaway ceiling" && check "overseer nilaway ceiling" $m "${heavy[@]}" bash "$root/.github/workflows/nilaway-ceiling.sh"
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
