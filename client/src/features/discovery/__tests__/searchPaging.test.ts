@@ -3,6 +3,7 @@ import {
   MIN_QUERY_LENGTH,
   clampQueryWords,
   isSearchableQuery,
+  normalizeQuery,
   sliceCodePoints,
 } from '@features/discovery/domain/searchPaging';
 
@@ -79,5 +80,29 @@ describe('sliceCodePoints', () => {
 
   it('returns an empty string for empty text', () => {
     expect(sliceCodePoints('', 5)).toBe('');
+  });
+});
+
+describe('normalizeQuery', () => {
+  it('trims leading and trailing whitespace', () => {
+    expect(normalizeQuery('  radiohead  ')).toBe('radiohead');
+  });
+
+  it('collapses a run of inner spaces to one space', () => {
+    expect(normalizeQuery('A  b')).toBe('A b');
+    expect(normalizeQuery('the    national')).toBe('the national');
+  });
+
+  it('collapses tabs and newlines between words to one space', () => {
+    expect(normalizeQuery('a\t\tb\nc')).toBe('a b c');
+  });
+
+  it('keeps the case as typed', () => {
+    expect(normalizeQuery('Radio Head')).toBe('Radio Head');
+  });
+
+  it('returns an empty string for empty or all-whitespace text', () => {
+    expect(normalizeQuery('')).toBe('');
+    expect(normalizeQuery(' \t\n ')).toBe('');
   });
 });

@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
+import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys, isSearchKeyFor } from '@shared/query/queryKeys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import {
@@ -17,6 +18,7 @@ import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,
   SEARCH_PAGE_SIZE,
+  normalizeQuery,
   type SearchPageParam,
   type SearchPages,
 } from '@features/discovery/domain/searchPaging';
@@ -44,16 +46,26 @@ function cancelStaleSearches(queryClient: ReturnType<typeof useQueryClient>, tri
   });
 }
 
+type HistorySaveClaim = {
+  claim: () => boolean;
+  release: () => void;
+};
+
 function searchQueryFn(
   port: DiscoverPort,
   queryClient: ReturnType<typeof useQueryClient>,
   trimmed: string,
-  claimHistorySave: () => boolean,
+  historySave: HistorySaveClaim,
 ) {
   return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
     cancelStaleSearches(queryClient, trimmed);
-    const saveHistory = pageParam.offset === 0 && claimHistorySave();
-    return port.searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
+    const saveHistory = pageParam.offset === 0 && historySave.claim();
+    const request = port.searchDiscovery(searchPageRequest(trimmed, saveHistory, pageParam), signal);
+    if (!saveHistory) return request;
+    return request.catch((error: unknown) => {
+      historySave.release();
+      throw error;
+    });
   };
 }
 
@@ -70,12 +82,16 @@ function nextSearchPageParam(
 
 const SEARCH_RETRY_COUNT = 1;
 
+function retryTransientOnce(failureCount: number, error: Error): boolean {
+  return isRetryable(error) && failureCount < SEARCH_RETRY_COUNT;
+}
+
 type SearchQueryArgs = {
   port: DiscoverPort;
   queryKey: readonly unknown[];
   queryClient: ReturnType<typeof useQueryClient>;
   trimmed: string;
-  claimHistorySave: () => boolean;
+  historySave: HistorySaveClaim;
   isSearchEnabled: boolean;
 };
 
@@ -89,25 +105,32 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
   >({
     queryKey: args.queryKey,
     initialPageParam: firstPageParam,
-    queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed, args.claimHistorySave),
+    queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed, args.historySave),
     getNextPageParam: nextSearchPageParam,
     enabled: args.trimmed.length > 0 && args.isSearchEnabled,
-    retry: SEARCH_RETRY_COUNT,
+    retry: retryTransientOnce,
   });
 }
 
-function useHistorySaveOnce(queryKey: readonly unknown[], saveHistory: boolean) {
+function useHistorySaveOnce(
+  queryKey: readonly unknown[],
+  saveHistory: boolean,
+): HistorySaveClaim {
   const savedKey = useRef<string | undefined>(undefined);
   const serialized = JSON.stringify(queryKey);
-  return () => {
+  function claim(): boolean {
     if (!saveHistory || savedKey.current === serialized) return false;
     savedKey.current = serialized;
     return true;
-  };
+  }
+  function release(): void {
+    if (savedKey.current === serialized) savedKey.current = undefined;
+  }
+  return { claim, release };
 }
 
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
-  const trimmed = query.trim();
+  const trimmed = normalizeQuery(query);
   const port = useDiscoverPort();
   const queryClient = useQueryClient();
   const isSearchEnabled = useDiscoverFetchEnabled();
@@ -116,7 +139,7 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     () => [...discoveryKeys.search(trimmed), saveHistory],
     [trimmed, saveHistory],
   );
-  const claimHistorySave = useHistorySaveOnce(queryKey, saveHistory);
+  const historySave = useHistorySaveOnce(queryKey, saveHistory);
   const {
     data: infiniteData,
     isLoading,
@@ -132,7 +155,7 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     queryKey,
     queryClient,
     trimmed,
-    claimHistorySave,
+    historySave,
     isSearchEnabled,
   });
 
