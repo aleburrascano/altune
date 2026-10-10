@@ -29,7 +29,7 @@ Done looks like this to them:
 - **Dialog port, `src/shared/ui/dialog/`.**
   - Built by the expedite bug: `showAlert` and `confirm`, `.native` on `Alert`, `.web` on `window.alert` / `window.confirm`, with `confirmDestructive` routed through it.
   - The epic moves the remaining callers onto it: library `dropVanishedTrack`, `useDeleteTrack`, `useDeleteTracks`, `useExploreArtist`, `useReacquireTrack`, `useRetryAcquisition`, `pinBatchSummary`, plus `shared/playlists/mutations.ts` and `shared/query/useOptimisticMutation.ts`.
-- **Keyboard port, `src/shared/ui/keyboard/`.** `dismissKeyboard()` (native `Keyboard.dismiss`, web no-op), `DismissKeyboardArea` (native `Pressable`, web `View`) and the keyboard-avoidance props, each with `.native` / `.web` files. Callers: `DiscoverScreen`, `SettingsModal`, `AuthHeroLayout`, `useResultTap`.
+- **Keyboard port, `src/shared/ui/keyboard/`.** `dismissKeyboard()` (native `Keyboard.dismiss`, web no-op), `DismissKeyboardArea` (native `Pressable`, web `View`) and the keyboard-avoidance props, each with `.native` / `.web` files. Callers: `DiscoverScreen`, `ModalFrame`, `AuthHeroLayout`, `useResultTap`.
 - **App lifecycle, `src/shared/lifecycle/`.** Move `useAppStateChange` / `useIsForeground` there from `playback/hooks`. It's one adapter file, because react-native-web implements `AppState`. `detail/detailHealth.ts`, `playback/playbackHealth.ts`, `usePlaybackPosition`, `useQueueResume` and `SleepTimerBridge` use it.
 - **Device info, `src/shared/device/`.** OS and app version, today read in `settings/reportDiagnostics.ts` and `auth/parseAuthLink.ts` through `Platform` and `expo-constants`. One adapter file.
 - **Playback adapter folders.**

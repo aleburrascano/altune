@@ -34,7 +34,7 @@ export function ConfirmModal({
   };
 
   return (
-    <SettingsModal visible={visible} onClose={onClose} testID={testID}>
+    <ModalFrame visible={visible} onClose={onClose} testID={testID}>
       <View style={styles.header}>
         <IconBadge size={34} radius={radius.sm} background={theme.color.surface2}>
           <Icon size={18} color={theme.color.danger} />
@@ -60,7 +60,7 @@ export function ConfirmModal({
           style={[styles.action, { backgroundColor: theme.color.danger }]}
         />
       </View>
-    </SettingsModal>
+    </ModalFrame>
   );
 }
 
@@ -71,57 +71,49 @@ const styles = StyleSheet.create({
   action: { flex: 1 },
 });
 
-type SettingsModalProps = {
+type ModalFrameProps = {
   visible: boolean;
   onClose: () => void;
   testID?: string | undefined;
   children: ReactNode;
 };
 
-export function SettingsModal({
-  visible,
-  onClose,
-  testID,
-  children,
-}: SettingsModalProps): ReactElement {
-  const theme = useTheme();
+export function ModalFrame({ visible, onClose, testID, children }: ModalFrameProps): ReactElement {
   return (
-    <Modal
-      testID={testID}
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        style={[modalStyles.backdrop, { backgroundColor: theme.color.scrim }]}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-      />
-      <KeyboardAvoidingView
-        style={modalStyles.centering}
-        behavior={keyboardAvoidingBehavior}
-        pointerEvents="box-none"
-        testID={testID == null ? undefined : `${testID}-keyboard`}
-      >
-        <ScrollView
-          style={modalStyles.scroll}
-          contentContainerStyle={modalStyles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Pressable
-            style={[
-              modalStyles.card,
-              { backgroundColor: theme.color.surface1, borderColor: theme.color.border },
-            ]}
-          >
-            {children}
-          </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+    <Modal testID={testID} visible={visible} onRequestClose={onClose} {...modalFade}>
+      <ModalBackdrop onClose={onClose} />
+      <ModalCenter testID={testID}>{children}</ModalCenter>
     </Modal>
   );
+}
+
+type ModalBackdropProps = { onClose: () => void };
+
+function ModalBackdrop({ onClose }: ModalBackdropProps): ReactElement {
+  const theme = useTheme();
+  const style = [modalStyles.backdrop, { backgroundColor: theme.color.scrim }];
+  return <Pressable style={style} onPress={onClose} {...closeAccessibility} />;
+}
+
+type ModalCenterProps = { testID: string | undefined; children: ReactNode };
+
+function ModalCenter({ testID, children }: ModalCenterProps): ReactElement {
+  const keyboardTestID = testID == null ? undefined : `${testID}-keyboard`;
+  return (
+    <KeyboardAvoidingView {...centeringProps} testID={keyboardTestID}>
+      <ScrollView {...scrollProps}>
+        <ModalCard>{children}</ModalCard>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+type ModalCardProps = { children: ReactNode };
+
+function ModalCard({ children }: ModalCardProps): ReactElement {
+  const theme = useTheme();
+  const colors = { backgroundColor: theme.color.surface1, borderColor: theme.color.border };
+  return <Pressable style={[modalStyles.card, colors]}>{children}</Pressable>;
 }
 
 const modalStyles = StyleSheet.create({
@@ -131,3 +123,19 @@ const modalStyles = StyleSheet.create({
   scrollContent: { padding: spacing.xl },
   card: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing.xl },
 });
+
+const modalFade = { transparent: true, animationType: 'fade' } as const;
+
+const closeAccessibility = { accessibilityRole: 'button', accessibilityLabel: 'Close' } as const;
+
+const centeringProps = {
+  style: modalStyles.centering,
+  behavior: keyboardAvoidingBehavior,
+  pointerEvents: 'box-none',
+} as const;
+
+const scrollProps = {
+  style: modalStyles.scroll,
+  contentContainerStyle: modalStyles.scrollContent,
+  keyboardShouldPersistTaps: 'handled',
+} as const;
