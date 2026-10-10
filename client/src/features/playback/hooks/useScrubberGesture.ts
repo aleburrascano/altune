@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  type AccessibilityActionEvent,
-  Animated,
-  type GestureResponderEvent,
-  PanResponder,
-  type View,
-} from 'react-native';
+import { type AccessibilityActionEvent, Animated, type View } from 'react-native';
+import { Gesture } from 'react-native-gesture-handler';
 
 import { clamp } from '@features/playback/domain/clamp';
 
@@ -44,12 +39,6 @@ type ScrubFlags = Pick<
   ScrubCtx,
   'layoutRef' | 'isDraggingRef' | 'isHoldingSeek' | 'seekHoldTimer' | 'lastLabelUpdate'
 >;
-
-const ALWAYS_RESPOND = {
-  onStartShouldSetPanResponder: () => true,
-  onMoveShouldSetPanResponder: () => true,
-  onPanResponderTerminationRequest: () => false,
-};
 
 function useLatest<T>(value: T) {
   const ref = useRef(value);
@@ -124,23 +113,23 @@ function syncToPosition(c: ScrubCtx) {
   c.setLabelMs(c.positionRef.current);
 }
 
-function ratioOf(c: ScrubCtx, evt: GestureResponderEvent): number {
-  return ratioFromPageX(evt.nativeEvent.pageX, c.layoutRef.current);
+function ratioOf(c: ScrubCtx, pageX: number): number {
+  return ratioFromPageX(pageX, c.layoutRef.current);
 }
 
-function onGrant(c: ScrubCtx, evt: GestureResponderEvent) {
+function onBegin(c: ScrubCtx, pageX: number) {
   if (c.durationRef.current <= 0) return;
   c.isDraggingRef.current = true;
   c.setIsDragging(true);
   clearHoldTimer(c);
   c.isHoldingSeek.current = false;
-  showRatio(c, ratioOf(c, evt));
+  showRatio(c, ratioOf(c, pageX));
   c.lastLabelUpdate.current = Date.now();
 }
 
-function onMove(c: ScrubCtx, evt: GestureResponderEvent) {
+function onMove(c: ScrubCtx, pageX: number) {
   if (c.durationRef.current <= 0) return;
-  const ratio = ratioOf(c, evt);
+  const ratio = ratioOf(c, pageX);
   c.progress.setValue(ratio);
   const now = Date.now();
   if (now - c.lastLabelUpdate.current <= 80) return;
@@ -156,11 +145,11 @@ function holdSeek(c: ScrubCtx) {
   }, 600);
 }
 
-function onRelease(c: ScrubCtx, evt: GestureResponderEvent) {
+function onRelease(c: ScrubCtx, pageX: number) {
   c.isDraggingRef.current = false;
   c.setIsDragging(false);
   if (c.durationRef.current <= 0) return;
-  const ratio = ratioOf(c, evt);
+  const ratio = ratioOf(c, pageX);
   showRatio(c, ratio);
   c.onSeekRef.current(ratio * c.durationRef.current);
   holdSeek(c);
@@ -173,14 +162,14 @@ function onTerminate(c: ScrubCtx) {
   clearHoldTimer(c);
 }
 
-function createResponder(c: ScrubCtx) {
-  return PanResponder.create({
-    ...ALWAYS_RESPOND,
-    onPanResponderGrant: (evt) => onGrant(c, evt),
-    onPanResponderMove: (evt) => onMove(c, evt),
-    onPanResponderRelease: (evt) => onRelease(c, evt),
-    onPanResponderTerminate: () => onTerminate(c),
-  });
+function createPan(c: ScrubCtx) {
+  return Gesture.Pan()
+    .runOnJS(true)
+    .minDistance(0)
+    .withTestId('scrubber-pan')
+    .onStart((e) => onBegin(c, e.absoluteX))
+    .onUpdate((e) => onMove(c, e.absoluteX))
+    .onEnd((e, success) => (success ? onRelease(c, e.absoluteX) : onTerminate(c)));
 }
 
 function useFollowPosition(c: ScrubCtx, positionMs: number, durationMs: number) {
@@ -190,9 +179,9 @@ function useFollowPosition(c: ScrubCtx, positionMs: number, durationMs: number) 
   }, [c, positionMs, durationMs]);
 }
 
-function usePanHandlers(c: ScrubCtx) {
+function usePanGesture(c: ScrubCtx) {
   useEffect(() => () => clearHoldTimer(c), [c]);
-  return useMemo(() => createResponder(c).panHandlers, [c]);
+  return useMemo(() => createPan(c), [c]);
 }
 
 function useTrackLayout(c: ScrubCtx) {
@@ -217,10 +206,10 @@ function useA11yAction(c: ScrubCtx) {
 }
 
 function useTouch(c: ScrubCtx) {
-  const panHandlers = usePanHandlers(c);
+  const panGesture = usePanGesture(c);
   const { trackRef, onLayout } = useTrackLayout(c);
   const onAccessibilityAction = useA11yAction(c);
-  return { trackRef, panHandlers, onLayout, onAccessibilityAction };
+  return { trackRef, panGesture, onLayout, onAccessibilityAction };
 }
 
 function percentOf(progress: Animated.Value) {

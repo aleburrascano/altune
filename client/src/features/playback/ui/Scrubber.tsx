@@ -1,4 +1,5 @@
 import { Animated, StyleSheet, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
@@ -25,7 +26,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
   const theme = useTheme();
   const {
     trackRef,
-    panHandlers,
+    panGesture,
     isDragging,
     labelMs,
     onLayout,
@@ -36,36 +37,37 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
 
   return (
     <View style={styles.container}>
-      <View
-        ref={trackRef}
-        style={styles.trackOuter}
-        onLayout={onLayout}
-        accessibilityRole="adjustable"
-        accessibilityLabel={`Playback position: ${formatMs(labelMs)} of ${formatMs(durationMs)}`}
-        accessibilityValue={{
-          min: 0,
-          max: 100,
-          now: Math.round(durationMs > 0 ? (labelMs / durationMs) * 100 : 0),
-        }}
-        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-        onAccessibilityAction={onAccessibilityAction}
-        {...panHandlers}
-      >
-        <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />
-        <Animated.View
-          style={[styles.trackFill, { width: fillWidth, backgroundColor: theme.color.accent }]}
-        />
-        <Animated.View
-          style={[
-            styles.thumb,
-            {
-              left: thumbLeft,
-              backgroundColor: theme.color.accent,
-              transform: [{ scale: isDragging ? 1.3 : 1 }],
-            },
-          ]}
-        />
-      </View>
+      <GestureDetector gesture={panGesture}>
+        <View
+          ref={trackRef}
+          style={styles.trackOuter}
+          onLayout={onLayout}
+          accessibilityRole="adjustable"
+          accessibilityLabel={`Playback position: ${formatMs(labelMs)} of ${formatMs(durationMs)}`}
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: Math.round(durationMs > 0 ? (labelMs / durationMs) * 100 : 0),
+          }}
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+          onAccessibilityAction={onAccessibilityAction}
+        >
+          <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />
+          <Animated.View
+            style={[styles.trackFill, { width: fillWidth, backgroundColor: theme.color.accent }]}
+          />
+          <Animated.View
+            style={[
+              styles.thumb,
+              {
+                left: thumbLeft,
+                backgroundColor: theme.color.accent,
+                transform: [{ scale: isDragging ? 1.3 : 1 }],
+              },
+            ]}
+          />
+        </View>
+      </GestureDetector>
       <View style={styles.times}>
         <Text variant="caption" tone="secondary">
           {formatMs(durationMs > 0 ? labelMs : positionMs)}

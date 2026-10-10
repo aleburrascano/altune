@@ -71,6 +71,11 @@ const rememberTrackSyncsNativeTrackPlayer = {
   rules: ['react-doctor/no-event-handler'],
 };
 
+const progressValueFollowsPlaybackPosition = {
+  files: ['src/features/playback/hooks/useScrubberGesture.ts'],
+  rules: ['react-doctor/no-pass-data-to-parent'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -128,6 +133,7 @@ export default {
       mediaSessionEffectsSyncTheBrowserMediaSession,
       rememberTrackSyncsNativeTrackPlayer,
       recordEventIsFireAndForgetAndReadsNoQueryCache,
+      progressValueFollowsPlaybackPosition,
     ],
   },
 };

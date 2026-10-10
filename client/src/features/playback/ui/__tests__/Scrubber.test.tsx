@@ -1,39 +1,20 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import { Scrubber } from '@features/playback/ui/Scrubber';
 
-function touchEvent(pageX: number, timeStamp: number) {
-  const touch = {
-    touchActive: true,
-    startPageX: pageX,
-    startPageY: 0,
-    startTimeStamp: timeStamp,
-    currentPageX: pageX,
-    currentPageY: 0,
-    currentTimeStamp: timeStamp,
-    previousPageX: pageX,
-    previousPageY: 0,
-    previousTimeStamp: timeStamp,
-  };
-  return {
-    nativeEvent: { pageX, pageY: 0, touches: [], changedTouches: [] },
-    touchHistory: {
-      numberActiveTouches: 1,
-      indexOfSingleActiveTouch: 0,
-      mostRecentTimeStamp: timeStamp,
-      touchBank: [touch],
-    },
-  };
-}
-
 function dragAndRelease(pageX: number) {
-  const track = screen.getByLabelText(/^Playback position/);
+  const pan = getByGestureTestId('scrubber-pan');
   act(() => {
-    fireEvent(track, 'responderGrant', touchEvent(pageX, 1));
-    fireEvent(track, 'responderMove', touchEvent(pageX, 2));
-    fireEvent(track, 'responderRelease', touchEvent(pageX, 3));
+    fireGestureHandler(pan, [
+      { state: State.BEGAN, absoluteX: pageX },
+      { state: State.ACTIVE, absoluteX: pageX },
+      { state: State.ACTIVE, absoluteX: pageX },
+      { state: State.END, absoluteX: pageX },
+    ]);
   });
 }
 
