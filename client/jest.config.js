@@ -31,8 +31,6 @@ module.exports = {
   randomize: true,
   restoreMocks: true,
   forceExit: true,
-  // A worker's heap grows suite by suite under --coverage until V8's ~2 GB limit kills it
-  // mid-suite; recycling a worker that idles above 1 GB keeps it under that limit.
   workerIdleMemoryLimit: '1GB',
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/__tests__/**', '!src/**/*.d.ts'],
