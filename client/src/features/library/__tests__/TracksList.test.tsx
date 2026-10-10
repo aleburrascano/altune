@@ -38,7 +38,7 @@ describe('library list shells — pull to refresh', () => {
       const refresh = idleRefresh();
       renderList(refresh);
 
-      fireEvent(screen.UNSAFE_getByProps({ refreshing: false }), 'refresh');
+      fireEvent(screen.getByTestId('library-tracks-list'), 'refresh');
 
       expect(refresh.onRefresh).toHaveBeenCalledTimes(1);
     },
@@ -269,7 +269,7 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
     };
     renderProbeTracksList([probeTrack('a'), probeTrack('b')], { paging });
 
-    fireEvent(screen.UNSAFE_getByProps({ refreshing: false }), 'endReached');
+    fireEvent(screen.getByTestId('library-tracks-list'), 'endReached');
 
     expect(paging.onEndReached).toHaveBeenCalledTimes(1);
   });

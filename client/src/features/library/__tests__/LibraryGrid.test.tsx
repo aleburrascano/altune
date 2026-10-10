@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { FlatList } from 'react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
+import type { AlbumGroup } from '@shared/api-client/library';
 import type { ListRefresh } from '@features/library/domain/libraryView';
 import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
 import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
@@ -54,6 +56,7 @@ describe('library list shells — pull to refresh', () => {
   it.each([
     [
       'albums',
+      'library-albums-grid',
       (refresh: ListRefresh) =>
         render(
           <AlbumsGrid
@@ -66,6 +69,7 @@ describe('library list shells — pull to refresh', () => {
     ],
     [
       'artists',
+      'library-artists-grid',
       (refresh: ListRefresh) =>
         render(
           <ArtistsGrid
@@ -78,6 +82,7 @@ describe('library list shells — pull to refresh', () => {
     ],
     [
       'playlists',
+      'library-playlists-grid',
       (refresh: ListRefresh) =>
         render(
           <PlaylistsGrid
@@ -88,11 +93,11 @@ describe('library list shells — pull to refresh', () => {
           />,
         ),
     ],
-  ])('asks the %s list to refresh when the user pulls it down', (_name, renderList) => {
+  ])('asks the %s list to refresh when the user pulls it down', (_name, gridTestId, renderList) => {
     const refresh = idleRefresh();
     renderList(refresh);
 
-    fireEvent(screen.UNSAFE_getByProps({ refreshing: false }), 'refresh');
+    fireEvent(screen.getByTestId(gridTestId), 'refresh');
 
     expect(refresh.onRefresh).toHaveBeenCalledTimes(1);
   });
@@ -107,8 +112,101 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: mockWideGridWindowWidth, height: 800, scale: 2, fontScale: 1 }),
 }));
 
+const { asPlaylistId: probeAsPlaylistId } = require('@shared/api-client/ids');
+
+const probeAlbumList: AlbumGroup[] = Array.from({ length: 12 }, (_, i) => ({
+  key: `al-${i}`,
+  album: `Album ${i}`,
+  artist: 'Artist',
+  artwork_url: null,
+  year: null,
+  track_count: 1,
+  most_recent_added_at: '2026-01-01T00:00:00Z',
+}));
+
+const probeArtistList = Array.from({ length: 12 }, (_, i) => ({
+  key: `ar-${i}`,
+  artist: `Artist ${i}`,
+  artwork_url: null,
+  track_count: 1,
+  most_recent_added_at: '2026-01-01T00:00:00Z',
+}));
+
+const probePlaylistList = Array.from({ length: 11 }, (_, i) => ({
+  id: probeAsPlaylistId(i === 0 ? 'pl-probe' : `pl-${i}`),
+  name: `Road Trip ${i}`,
+  track_count: 12,
+  preview_artwork_urls: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+}));
+
+function probeAlbums(paging?: unknown) {
+  return render(
+    <AlbumsGrid
+      albums={probeAlbumList}
+      emptyLabel="No albums yet"
+      refresh={idleRefresh()}
+      onAlbumPress={jest.fn()}
+      {...(paging ? { paging: paging as never } : {})}
+    />,
+  );
+}
+
+function probeArtists() {
+  return render(
+    <ArtistsGrid
+      artists={probeArtistList}
+      emptyLabel="No artists yet"
+      refresh={idleRefresh()}
+      onArtistPress={jest.fn()}
+    />,
+  );
+}
+
+function probePlaylists(paging?: unknown) {
+  return render(
+    <PlaylistsGrid
+      playlists={probePlaylistList}
+      refresh={idleRefresh()}
+      onPlaylistPress={jest.fn()}
+      onCreatePress={jest.fn()}
+      {...(paging ? { paging: paging as never } : {})}
+    />,
+  );
+}
+
+const GRID = /^library-(albums|artists|playlists)-grid$/;
+const CELL = /^library-(album-|artist-|playlist-|create-playlist$)/;
+
+function measureGrid(width: number) {
+  fireEvent(screen.getByTestId(GRID), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width, height: 800 } },
+  });
+}
+
+function firstRow(): ReactTestInstance {
+  let row: ReactTestInstance | null = screen.getAllByTestId(CELL)[0]!.parent;
+  while (row != null && typeof row.type !== 'string') row = row.parent;
+  return row!;
+}
+
+function gridColumnCount(): number {
+  return within(firstRow()).getAllByTestId(CELL).length;
+}
+
+function playlistCover(): ReactTestInstance {
+  const cell = screen.getByTestId('library-playlist-pl-probe');
+  return cell.findAll((node) => node !== cell && typeof node.type === 'string')[0]!;
+}
+
+function playlistCoverSize(): number {
+  return StyleSheet.flatten(playlistCover().props.style).width as number;
+}
+
 describe('library grids — wide web layout', () => {
   const originalOS = Platform.OS;
+  const wideWeb = { minColumns: 5 };
 
   beforeEach(() => {
     Platform.OS = 'web';
@@ -121,121 +219,28 @@ describe('library grids — wide web layout', () => {
   });
 
   it('gives the albums grid at least 5 columns at 1440px', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+    probeAlbums();
 
-    const grid = screen.UNSAFE_getByType(FlatList);
-    expect((grid.props.numColumns as number) >= 5).toBe(true);
+    expect(gridColumnCount()).toBeGreaterThanOrEqual(wideWeb.minColumns);
   });
 
   it('gives the playlists grid at least 5 columns at 1440px', () => {
-    render(
-      <PlaylistsGrid
-        playlists={[]}
-        refresh={idleRefresh()}
-        onPlaylistPress={jest.fn()}
-        onCreatePress={jest.fn()}
-      />,
-    );
+    probePlaylists();
 
-    const grid = screen.UNSAFE_getByType(FlatList);
-    expect((grid.props.numColumns as number) >= 5).toBe(true);
+    expect(gridColumnCount()).toBeGreaterThanOrEqual(wideWeb.minColumns);
   });
 
   it('widens the gap between albums-grid columns at a wide width', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
-
-    const grid = screen.UNSAFE_getByType(FlatList);
-    expect(grid.props.columnWrapperStyle).toEqual(
-      expect.objectContaining({ gap: expect.any(Number) }),
-    );
-    const compactGap = (grid.props.columnWrapperStyle as { gap: number }).gap;
+    probeAlbums();
+    expect(firstRow()).toHaveStyle({ gap: 24 });
 
     Platform.OS = 'ios';
     screen.unmount();
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
-    const compactGrid = screen.UNSAFE_getByType(FlatList);
-    const nativeGap = (compactGrid.props.columnWrapperStyle as { gap: number }).gap;
+    probeAlbums();
 
-    expect(compactGap).toBeGreaterThan(nativeGap);
+    expect(firstRow()).toHaveStyle({ gap: 12 });
   });
 });
-
-const { asPlaylistId: probeAsPlaylistId } = require('@shared/api-client/ids');
-const { PlaylistCover: ProbePlaylistCover } = require('../ui/PlaylistCover');
-
-const probePlaylist = {
-  id: probeAsPlaylistId('pl-probe'),
-  name: 'Road Trip',
-  track_count: 12,
-  preview_artwork_urls: [],
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: '2026-01-01T00:00:00Z',
-};
-
-function probeAlbums(paging?: unknown) {
-  return render(
-    <AlbumsGrid
-      albums={[]}
-      emptyLabel="No albums yet"
-      refresh={idleRefresh()}
-      onAlbumPress={jest.fn()}
-      {...(paging ? { paging: paging as never } : {})}
-    />,
-  );
-}
-
-function probeArtists() {
-  return render(
-    <ArtistsGrid
-      artists={[]}
-      emptyLabel="No artists yet"
-      refresh={idleRefresh()}
-      onArtistPress={jest.fn()}
-    />,
-  );
-}
-
-function probePlaylists(paging?: unknown) {
-  return render(
-    <PlaylistsGrid
-      playlists={[probePlaylist]}
-      refresh={idleRefresh()}
-      onPlaylistPress={jest.fn()}
-      onCreatePress={jest.fn()}
-      {...(paging ? { paging: paging as never } : {})}
-    />,
-  );
-}
-
-function measureGrid(width: number) {
-  fireEvent(screen.UNSAFE_getByType(FlatList), 'layout', {
-    nativeEvent: { layout: { x: 0, y: 0, width, height: 800 } },
-  });
-}
-
-const gridColumnCount = () => screen.UNSAFE_getByType(FlatList).props.numColumns as number;
-const playlistCoverSize = () => screen.UNSAFE_getByType(ProbePlaylistCover).props.size as number;
 
 function probePaging(
   overrides: Partial<{ isFetchingNextPage: boolean; nextPageFailed: boolean }> = {},
@@ -314,7 +319,7 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
     probeAlbums(paging);
     measureGrid(MEASURED_AT_1440);
 
-    fireEvent(screen.UNSAFE_getByType(FlatList), 'endReached');
+    fireEvent(screen.getByTestId('library-albums-grid'), 'endReached');
 
     expect(paging.onEndReached).toHaveBeenCalledTimes(1);
   });

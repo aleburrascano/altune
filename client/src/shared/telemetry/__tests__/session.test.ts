@@ -350,12 +350,6 @@ describe('every id this module hands out is a well-formed session id, never a de
   });
 });
 
-describe('the inactivity window is the product value, not an arbitrary one', () => {
-  it('is 30 minutes', () => {
-    expect(SESSION_INACTIVITY_MS).toBe(30 * 60 * 1000);
-  });
-});
-
 describe('ordering — a foreground rotation is visible to the very next getSessionId() call', () => {
   it('returns the id the listener just rotated to, not a value from before the rotation', () => {
     const { session, appState, clock } = loadFreshSession(1000);

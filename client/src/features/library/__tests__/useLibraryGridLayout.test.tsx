@@ -1,12 +1,11 @@
-import { render, screen } from '@testing-library/react-native';
-import { FlatList } from 'react-native';
-import { spacing } from '@shared/ui';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
+import { Platform } from 'react-native';
 import { asPlaylistId } from '@shared/api-client/ids';
+import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
-import { avatarColumns, cellSize, coverColumns } from '@features/library/domain/gridColumns';
 import type { ListRefresh } from '@features/library/domain/libraryView';
 import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
-import { PlaylistCover } from '@features/library/ui/PlaylistCover';
 import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
 
 let mockWindowWidth = 390;
@@ -20,263 +19,242 @@ function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
 }
 
-const playlist: PlaylistResponse = {
-  id: asPlaylistId('pl-1'),
-  name: 'Road Trip',
+const playlists: PlaylistResponse[] = Array.from({ length: 11 }, (_, i) => ({
+  id: asPlaylistId(`pl-${i + 1}`),
+  name: `Road Trip ${i + 1}`,
   track_count: 12,
   preview_artwork_urls: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
-};
+}));
+
+const albums: AlbumGroup[] = Array.from({ length: 12 }, (_, i) => ({
+  key: `al-${i}`,
+  album: `Album ${i}`,
+  artist: 'Artist',
+  artwork_url: null,
+  year: null,
+  track_count: 1,
+  most_recent_added_at: '2026-01-01T00:00:00Z',
+}));
+
+const artists: ArtistGroup[] = Array.from({ length: 12 }, (_, i) => ({
+  key: `ar-${i}`,
+  artist: `Artist ${i}`,
+  artwork_url: null,
+  track_count: 1,
+  most_recent_added_at: '2026-01-01T00:00:00Z',
+}));
+
+const ALBUM_CELL = /^library-album-/;
+const ARTIST_CELL = /^library-artist-/;
+const PLAYLIST_CELL = /^library-(create-playlist|playlist-)/;
+
+function renderAlbums() {
+  render(
+    <AlbumsGrid
+      albums={albums}
+      emptyLabel="No albums yet"
+      refresh={idleRefresh()}
+      onAlbumPress={jest.fn()}
+    />,
+  );
+}
+
+function renderArtists() {
+  render(
+    <ArtistsGrid
+      artists={artists}
+      emptyLabel="No artists yet"
+      refresh={idleRefresh()}
+      onArtistPress={jest.fn()}
+    />,
+  );
+}
+
+function renderPlaylists() {
+  render(
+    <PlaylistsGrid
+      playlists={playlists}
+      refresh={idleRefresh()}
+      onPlaylistPress={jest.fn()}
+      onCreatePress={jest.fn()}
+    />,
+  );
+}
+
+type MeasuredLayout = { width: number };
+
+function measure(gridTestId: string, { width }: MeasuredLayout) {
+  fireEvent(screen.getByTestId(gridTestId), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width, height: 800 } },
+  });
+}
+
+function cellsInFirstRow(cell: RegExp): number {
+  let row: ReactTestInstance | null = screen.getAllByTestId(cell)[0]!.parent;
+  while (row != null && typeof row.type !== 'string') row = row.parent;
+  return within(row!).getAllByTestId(cell).length;
+}
+
+function playlistCover(): ReactTestInstance {
+  const cell = screen.getByTestId('library-playlist-pl-1');
+  return cell.findAll((node) => node !== cell && typeof node.type === 'string')[0]!;
+}
 
 describe.each([
-  ['a narrow phone', 390],
-  ['a tablet', 800],
-  ['a wide screen', 1200],
-])('at %s width (%dpx)', (_label, width) => {
+  { label: 'a narrow phone', width: 390, cover: 2, avatar: 3, coverSide: 173 },
+  { label: 'a tablet', width: 800, cover: 3, avatar: 5, coverSide: 248 },
+  { label: 'a wide screen', width: 1200, cover: 4, avatar: 6, coverSide: 283 },
+])('at $label width ($width px)', (expected) => {
   beforeEach(() => {
-    mockWindowWidth = width;
+    mockWindowWidth = expected.width;
   });
 
-  it('gives AlbumsGrid the same numColumns as coverColumns(width)', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+  it(`lays out ${expected.cover} albums per row`, () => {
+    renderAlbums();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(width));
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(expected.cover);
   });
 
-  it('gives ArtistsGrid the same numColumns as avatarColumns(width)', () => {
-    render(
-      <ArtistsGrid
-        artists={[]}
-        emptyLabel="No artists yet"
-        refresh={idleRefresh()}
-        onArtistPress={jest.fn()}
-      />,
-    );
+  it(`lays out ${expected.avatar} artists per row`, () => {
+    renderArtists();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(avatarColumns(width));
+    expect(cellsInFirstRow(ARTIST_CELL)).toBe(expected.avatar);
   });
 
-  it('gives PlaylistsGrid the same numColumns as coverColumns(width)', () => {
-    render(
-      <PlaylistsGrid
-        playlists={[playlist]}
-        refresh={idleRefresh()}
-        onPlaylistPress={jest.fn()}
-        onCreatePress={jest.fn()}
-      />,
-    );
+  it(`lays out ${expected.cover} playlist cells per row`, () => {
+    renderPlaylists();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(width));
+    expect(cellsInFirstRow(PLAYLIST_CELL)).toBe(expected.cover);
   });
 
-  it("sizes PlaylistsGrid's covers from the window width, screen padding and row gap", () => {
-    render(
-      <PlaylistsGrid
-        playlists={[playlist]}
-        refresh={idleRefresh()}
-        onPlaylistPress={jest.fn()}
-        onCreatePress={jest.fn()}
-      />,
-    );
+  it(`draws ${expected.coverSide}px playlist covers from the window width, screen padding and row gap`, () => {
+    renderPlaylists();
 
-    const columns = coverColumns(width);
-    const expectedSize = cellSize({
-      width,
-      columns,
-      horizontalPadding: spacing.lg,
-      gap: spacing.md,
+    expect(playlistCover()).toHaveStyle({
+      width: expected.coverSide,
+      height: expected.coverSide,
     });
-
-    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
   });
 });
 
 describe('a measured content width narrower than the window overrides the window fallback', () => {
-  const { fireEvent: fire } = require('@testing-library/react-native');
-  const { Platform: widePlatform } = require('react-native');
-  const originalWideOS = widePlatform.OS;
+  const originalWideOS = Platform.OS;
+  const expected = { columnsBeforeLayout: 5, measured: { width: 800 }, columns: 3, coverSide: 258 };
 
   beforeEach(() => {
-    widePlatform.OS = 'web';
+    Platform.OS = 'web';
     mockWindowWidth = 1440;
   });
 
   afterEach(() => {
-    widePlatform.OS = originalWideOS;
+    Platform.OS = originalWideOS;
   });
 
   it("sizes AlbumsGrid's columns from the grid's own measured width, not the window width", () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+    renderAlbums();
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(expected.columnsBeforeLayout);
 
-    const grid = screen.UNSAFE_getByType(FlatList);
-    fire(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 800 } } });
+    measure('library-albums-grid', expected.measured);
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(800));
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).not.toBe(coverColumns(1440));
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(expected.columns);
   });
 
   it("sizes PlaylistsGrid's covers from the grid's own measured width, not the window width", () => {
-    render(
-      <PlaylistsGrid
-        playlists={[playlist]}
-        refresh={idleRefresh()}
-        onPlaylistPress={jest.fn()}
-        onCreatePress={jest.fn()}
-      />,
-    );
+    renderPlaylists();
 
-    const grid = screen.UNSAFE_getByType(FlatList);
-    fire(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 800 } } });
+    measure('library-playlists-grid', expected.measured);
 
-    const columns = coverColumns(800);
-    const expectedSize = cellSize({ width: 800, columns, horizontalPadding: 0, gap: spacing.md });
-
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(columns);
-    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
+    expect(cellsInFirstRow(PLAYLIST_CELL)).toBe(expected.columns);
+    expect(playlistCover()).toHaveStyle({ width: expected.coverSide, height: expected.coverSide });
   });
 });
 
 describe('a native tablet just under the wide breakpoint keeps its column count', () => {
+  const tablet = { coverColumns: 3 };
   beforeEach(() => {
     mockWindowWidth = 999;
   });
 
   it('gives AlbumsGrid 3 cover columns at a 999pt-wide window', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+    renderAlbums();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(3);
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(tablet.coverColumns);
   });
 });
 
 describe('narrow web keeps its pre-#2842 grid once the grid measures itself', () => {
-  const { Platform: probePlatform } = require('react-native');
-  const { fireEvent: probeFire } = require('@testing-library/react-native');
-  const originalOS = probePlatform.OS;
+  const originalOS = Platform.OS;
+  const narrowWeb = { columns: 2, measured: { width: 328 }, coverSide: 158 };
 
   beforeEach(() => {
-    probePlatform.OS = 'web';
+    Platform.OS = 'web';
     mockWindowWidth = 360;
   });
 
   afterEach(() => {
-    probePlatform.OS = originalOS;
+    Platform.OS = originalOS;
     mockWindowWidth = 390;
   });
 
   it('gives AlbumsGrid 2 columns at 360px on web before any layout', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+    renderAlbums();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(narrowWeb.columns);
   });
 
   it('keeps 2 columns and 158px playlist covers at 360px on web once the grid measures 328px', () => {
-    render(
-      <PlaylistsGrid
-        playlists={[playlist]}
-        refresh={idleRefresh()}
-        onPlaylistPress={jest.fn()}
-        onCreatePress={jest.fn()}
-      />,
-    );
+    renderPlaylists();
 
-    probeFire(screen.UNSAFE_getByType(FlatList), 'layout', {
-      nativeEvent: { layout: { x: 0, y: 0, width: 328, height: 800 } },
+    measure('library-playlists-grid', narrowWeb.measured);
+
+    expect(cellsInFirstRow(PLAYLIST_CELL)).toBe(narrowWeb.columns);
+    expect(playlistCover()).toHaveStyle({
+      width: narrowWeb.coverSide,
+      height: narrowWeb.coverSide,
     });
-
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
-    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(158);
   });
 });
 
 describe.each([
-  ['1366pt', 1366],
-  ['1440pt', 1440],
-])('a native window of %s matches origin/main, uncapped and uncropped', (_label, width) => {
+  { width: 1366, coverColumns: 4, coverSide: 324 },
+  { width: 1440, coverColumns: 4, coverSide: 343 },
+])('a native window of $width pt matches origin/main, uncapped and uncropped', (expected) => {
   beforeEach(() => {
-    mockWindowWidth = width;
+    mockWindowWidth = expected.width;
   });
 
-  it('gives AlbumsGrid 4 columns, same as coverColumns(width) on main', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+  it(`gives AlbumsGrid ${expected.coverColumns} columns`, () => {
+    renderAlbums();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(4);
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(expected.coverColumns);
   });
 
-  it('sizes PlaylistsGrid covers from the raw window width, same as main', () => {
-    render(
-      <PlaylistsGrid
-        playlists={[playlist]}
-        refresh={idleRefresh()}
-        onPlaylistPress={jest.fn()}
-        onCreatePress={jest.fn()}
-      />,
-    );
+  it(`draws ${expected.coverSide}px playlist covers from the raw window width`, () => {
+    renderPlaylists();
 
-    const expectedSize = width === 1366 ? 324 : 343;
-    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
+    expect(playlistCover()).toHaveStyle({ width: expected.coverSide, height: expected.coverSide });
   });
 });
 
 describe('web below the wide-web threshold behaves like main, uncapped and uncropped', () => {
-  const { Platform: belowWidePlatform } = require('react-native');
-  const originalBelowWideOS = belowWidePlatform.OS;
+  const originalBelowWideOS = Platform.OS;
+  const belowWide = { coverColumns: 3 };
 
   beforeEach(() => {
-    belowWidePlatform.OS = 'web';
+    Platform.OS = 'web';
     mockWindowWidth = 900;
   });
 
   afterEach(() => {
-    belowWidePlatform.OS = originalBelowWideOS;
+    Platform.OS = originalBelowWideOS;
     mockWindowWidth = 390;
   });
 
-  it('gives AlbumsGrid coverColumns(900), not the wide-web 5-column tier', () => {
-    render(
-      <AlbumsGrid
-        albums={[]}
-        emptyLabel="No albums yet"
-        refresh={idleRefresh()}
-        onAlbumPress={jest.fn()}
-      />,
-    );
+  it('gives AlbumsGrid 3 columns, not the wide-web 5-column tier', () => {
+    renderAlbums();
 
-    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(900));
+    expect(cellsInFirstRow(ALBUM_CELL)).toBe(belowWide.coverColumns);
   });
 });
