@@ -43,16 +43,18 @@ async function signInAfterBootAsSignedOut(app: ReturnType<typeof bootFreshApp>) 
 }
 
 describe('identity change wiring on the real modules', () => {
-  it('forgets, then hands the outbox to the user, then claims downloads, then flags signed-in', async () => {
+  it('forgets, then claims downloads and hands the outbox to the user, then flags signed-in', async () => {
     const app = bootFreshApp();
     const events: string[] = [];
     app.registry.onSignOut(() => events.push('forget'));
     const outboxOwner = jest.spyOn(app.outbox, 'setOutboxOwner');
-    const claim = jest.spyOn(app.pinned, 'claimPinnedDownloads');
+    const claimedOwner = jest.spyOn(require('@shared/offline/pinnedIndex'), 'writeOwner');
+    claimedOwner.mockImplementation((id: unknown) =>
+      events.push(`claim:${String(id)}:${String(app.registry.hasSignedInUser())}`),
+    );
     outboxOwner.mockImplementation(() => events.push('outbox'));
-    claim.mockImplementation(() => events.push(`claim:${String(app.registry.hasSignedInUser())}`));
     await signInAfterBootAsSignedOut(app);
-    expect(events).toEqual(['outbox', 'forget', 'outbox', 'claim:false']);
+    expect(events).toEqual(['outbox', 'forget', `claim:${USER_ID}:false`, 'outbox']);
     expect(app.registry.hasSignedInUser()).toBe(true);
   });
 
