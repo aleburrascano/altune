@@ -9,13 +9,11 @@ import {
 } from '@shared/events/useServerEvents';
 import { SSEClient } from '@shared/events/sse-client';
 import type { ServerEvent } from '@shared/events/sseFrames';
-import { applyServerEvent } from '@shared/events/applyServerEvent';
 import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
-
-jest.mock('@shared/events/applyServerEvent', () => ({ applyServerEvent: jest.fn() }));
+import { playlistKeys } from '@shared/query/queryKeys';
 
 jest.mock('@shared/telemetry/recordEvent', () => ({
   recordEvent: jest.fn(() => Promise.resolve()),
@@ -152,8 +150,9 @@ describe('useServerEvents', () => {
     expect(instanceAt(0).connect).toHaveBeenCalledTimes(1);
   });
 
-  it('forwards a received server event unchanged to applyServerEvent with the active query client', () => {
+  it('applies a received resync event to the active query client, marking its cached playlists stale', () => {
     const queryClient = new QueryClient();
+    queryClient.setQueryData(playlistKeys.list, [{ id: 'playlist-1' }]);
     mount(queryClient);
     const event: ServerEvent = { id: '1', type: 'resync', data: {} };
 
@@ -161,7 +160,7 @@ describe('useServerEvents', () => {
       instanceAt(0).onEvent(event);
     });
 
-    expect(applyServerEvent).toHaveBeenCalledWith(queryClient, event);
+    expect(queryClient.getQueryState(playlistKeys.list)?.isInvalidated).toBe(true);
   });
 
   it('disconnects when the app goes to the background', () => {
@@ -233,11 +232,14 @@ describe('useServerEvents', () => {
     expect(instanceAt(0).dispose).not.toHaveBeenCalled();
   });
 
-  it('swallows a transport error without forwarding it as a server event', () => {
-    mount(new QueryClient());
+  it('swallows a transport error without touching the cache', () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(playlistKeys.list, [{ id: 'playlist-1' }]);
+    mount(queryClient);
 
     expect(() => instanceAt(0).onError(new Error('boom'))).not.toThrow();
-    expect(applyServerEvent).not.toHaveBeenCalled();
+    expect(queryClient.getQueryState(playlistKeys.list)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryData(playlistKeys.list)).toEqual([{ id: 'playlist-1' }]);
   });
 
   describe('token resolution passed to the transport', () => {

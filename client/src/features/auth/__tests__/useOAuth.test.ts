@@ -2,7 +2,13 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
 import { AUTH_ACTION_TIMEOUT_MS } from '@features/auth/domain/authDeadline';
-import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
+import { supabase } from '@shared/auth/supabaseClient';
+
+import {
+  _resetConsumedCredentialForTest,
+  completeAuthIntent,
+} from '@features/auth/domain/completeAuthIntent';
+import { parseAuthLink } from '@features/auth/domain/parseAuthLink';
 import { OAUTH_BROWSER_TIMEOUT_MS, useOAuth } from '@features/auth/hooks/useOAuth';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
@@ -32,14 +38,35 @@ jest.mock('expo-web-browser', () => ({
   dismissAuthSession: jest.fn(),
 }));
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
-const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
+const { signInWithOAuth, exchangeCodeForSession } = createSupabaseAuthMock(
+  'signInWithOAuth',
+  'exchangeCodeForSession',
+);
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
 const dismissAuthSession = WebBrowser.dismissAuthSession as unknown as jest.Mock;
-const mockComplete = completeAuthIntent as jest.Mock;
 
 const REDIRECT_URL = 'altune://auth/callback?code=abc';
+const REDIRECT_CODE = 'abc';
+const CODELESS_REDIRECT_URL = 'altune://auth/callback';
+const NO_SESSION = { session: null, user: null };
+
+function exchangeSucceeds(): void {
+  exchangeCodeForSession.mockResolvedValue({ data: NO_SESSION, error: null });
+}
+
+function exchangeFailsWith(error: unknown): void {
+  exchangeCodeForSession.mockResolvedValue({ data: NO_SESSION, error });
+}
+
+function listenerSpendsTheRedirect(): Promise<unknown> {
+  return completeAuthIntent(parseAuthLink(REDIRECT_URL), { replace: jest.fn() }, supabase.auth);
+}
+
+beforeEach(() => {
+  _resetConsumedCredentialForTest();
+  exchangeSucceeds();
+});
 
 function grantAuthorizationUrl(): void {
   signInWithOAuth.mockResolvedValue({
@@ -60,46 +87,42 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
   beforeEach(() => {
     grantAuthorizationUrl();
     openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
   });
 
-  it('reports ok when completeAuthIntent confirms a successful exchange', async () => {
-    mockComplete.mockResolvedValue({ kind: 'success' });
-
+  it('reports ok when Supabase accepts the code exchange', async () => {
     expect(await signIn()).toEqual({ kind: 'ok' });
+    expect(exchangeCodeForSession).toHaveBeenCalledWith(REDIRECT_CODE);
   });
 
-  it('reports error instead of a false ok when the exchange fails', async () => {
-    mockComplete.mockResolvedValue({ kind: 'failure' });
+  it('reports error instead of a false ok when the redirect carries no code to exchange', async () => {
+    openAuthSessionAsync.mockResolvedValue({ type: 'success', url: CODELESS_REDIRECT_URL });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
   it('reports a network error when the exchange fails with a 503', async () => {
-    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 503 } });
+    exchangeFailsWith({ status: 503 });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
   });
 
   it('reports a network error when the exchange fails with an offline status 0', async () => {
-    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 0 } });
+    exchangeFailsWith({ status: 0 });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
   });
 
   it('reports an unknown error when the exchange fails with invalid_grant', async () => {
-    mockComplete.mockResolvedValue({
-      kind: 'failure',
-      error: { status: 400, code: 'invalid_grant' },
-    });
+    exchangeFailsWith({ status: 400, code: 'invalid_grant' });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
   it('treats a deduped callback as ok because the deep-link listener established the session', async () => {
-    mockComplete.mockResolvedValue({ kind: 'deduped' });
+    await listenerSpendsTheRedirect();
 
     expect(await signIn()).toEqual({ kind: 'ok' });
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
   });
 
   it('reports error when signInWithOAuth returns { error } before the browser opens', async () => {
@@ -113,7 +136,7 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
     openAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
 
     expect(await signIn()).toEqual({ kind: 'cancelled' });
-    expect(mockComplete).not.toHaveBeenCalled();
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
   });
 });
 
@@ -146,7 +169,6 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
     mockStateUpdates.length = 0;
     grantAuthorizationUrl();
     openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
   });
 
   afterEach(() => {
@@ -235,7 +257,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       browserSession.resolve({ type: 'success', url: REDIRECT_URL });
       await call;
     });
-    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledWith(REDIRECT_CODE);
     expect(mockStateUpdates).toEqual([{ kind: 'pending', provider: 'google' }]);
   });
 
@@ -287,7 +309,6 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
   beforeEach(() => {
     grantAuthorizationUrl();
     openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
   });
 
   it('opens one browser session when a second press lands before the first settles', async () => {
@@ -311,7 +332,7 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
       browserSession.resolve({ type: 'success', url: REDIRECT_URL });
       await presses;
     });
-    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
     expect(result.current.state).toEqual({ kind: 'ok' });
   });
 
@@ -339,7 +360,6 @@ describe('useOAuth: a server rate limit is not a network error', () => {
       type: 'success',
       url: 'altune://auth/callback?code=abc',
     });
-    mockComplete.mockReset();
   });
 
   it('maps a 429 on the authorization request to too_many_attempts', async () => {
@@ -352,10 +372,7 @@ describe('useOAuth: a server rate limit is not a network error', () => {
   });
 
   it('maps a 429 on the code exchange to too_many_attempts', async () => {
-    mockComplete.mockResolvedValue({
-      kind: 'failure',
-      error: { status: 429, code: 'over_request_rate_limit' },
-    });
+    exchangeFailsWith({ status: 429, code: 'over_request_rate_limit' });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
   });
@@ -371,7 +388,6 @@ describe('useOAuth: the authorization request on native, precisely (#2837)', () 
   it('asks Supabase for the altune-scheme redirect with skipBrowserRedirect, then hands that same url to the in-app browser', async () => {
     grantAuthorizationUrl();
     openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
 
     await signIn();
 
@@ -405,11 +421,10 @@ describe('useOAuth: reporting a failed sign-in to the anonymous ingest', () => {
   beforeEach(() => {
     grantAuthorizationUrl();
     openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
   });
 
   it('reports the error reason once when the exchange fails', async () => {
-    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 503 } });
+    exchangeFailsWith({ status: 503 });
 
     await signIn();
 
@@ -420,7 +435,7 @@ describe('useOAuth: reporting a failed sign-in to the anonymous ingest', () => {
 describe('useOAuth: a cancelled browser is not a failure to report', () => {
   beforeEach(() => {
     grantAuthorizationUrl();
-    mockComplete.mockReset().mockResolvedValue({ kind: 'failure' });
+    exchangeFailsWith({ status: 400, code: 'invalid_grant' });
   });
 
   it('adds no report for a cancel after an error was reported', async () => {

@@ -5,17 +5,33 @@ import { renderHook, act } from '@testing-library/react-native';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 
 import { useSignOut } from '@shared/auth/useSignOut';
-import { supabase } from '@shared/auth/supabaseClient';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signOut: jest.fn() } },
-  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
+const mockSignOut = jest.fn();
+
+jest.mock('@supabase/supabase-js', () => ({
+  createClient() {
+    return {
+      auth: {
+        signOut(...args: unknown[]) {
+          return mockSignOut(...args);
+        },
+      },
+    };
+  },
 }));
 
-const mockSignOut = supabase.auth.signOut as jest.Mock;
-const mockClearPersistedAuthSession = jest.requireMock('@shared/auth/supabaseClient')
-  .clearPersistedAuthSession as jest.Mock;
+type SecureStoreDouble = {
+  __secureStore: {
+    seed(key: string, value: string): void;
+    read(key: string): string | undefined;
+    failNext(operation: 'delete', error?: Error): void;
+  };
+};
+
+const { __secureStore: secureStore } = jest.requireMock<SecureStoreDouble>('expo-secure-store');
+const SESSION_KEY = 'sb-fixture-auth-token';
+const STORED_SESSION = '{"access_token":"stored"}';
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -35,6 +51,7 @@ let warn: jest.SpyInstance;
 
 beforeEach(() => {
   mockSignOut.mockReset();
+  secureStore.seed(SESSION_KEY, STORED_SESSION);
   warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -71,7 +88,9 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
       expect(result.current.state).toEqual(expectedState);
       expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
       if (expectedState.status === 'error') {
-        expect(mockClearPersistedAuthSession).toHaveBeenCalled();
+        expect(secureStore.read(SESSION_KEY)).toBeUndefined();
+      } else {
+        expect(secureStore.read(SESSION_KEY)).toBe(STORED_SESSION);
       }
     },
   );
@@ -204,10 +223,10 @@ describe('useSignOut(): re-entry is gated by the caller, so loading must be obse
   });
 });
 
-describe('useSignOut(): clearPersistedAuthSession is best-effort — its own rejection never derails sign-out', () => {
-  it('the API-refused branch still reports the sign-out failure and clears the cache when clearPersistedAuthSession rejects', async () => {
+describe('useSignOut(): clearing the stored session is best-effort — a keychain failure never derails sign-out', () => {
+  it('the API-refused branch still reports the sign-out failure and clears the cache when the stored session cannot be deleted', async () => {
     mockSignOut.mockResolvedValue({ error: { message: 'invalid_grant', status: 400 } });
-    mockClearPersistedAuthSession.mockRejectedValueOnce(new Error('storage wipe failed'));
+    secureStore.failNext('delete', new Error('storage wipe failed'));
     const queryClient = new QueryClient();
     queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
 
@@ -224,9 +243,9 @@ describe('useSignOut(): clearPersistedAuthSession is best-effort — its own rej
     expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
   });
 
-  it('the thrown/rejected signOut() branch still reports the sign-out failure and clears the cache when clearPersistedAuthSession also rejects', async () => {
+  it('the thrown/rejected signOut() branch still reports the sign-out failure and clears the cache when the stored session also cannot be deleted', async () => {
     mockSignOut.mockRejectedValue(new Error('network request failed'));
-    mockClearPersistedAuthSession.mockRejectedValueOnce(new Error('storage wipe failed'));
+    secureStore.failNext('delete', new Error('storage wipe failed'));
     const queryClient = new QueryClient();
     queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
 
@@ -256,9 +275,12 @@ describe('useSignOut(): a failed remote sign-out still ends the local session', 
   it.each(remoteFailures)(
     'when the remote call %s, signs out with scope local after the stored session is cleared',
     async (_label, arrange) => {
-      mockClearPersistedAuthSession.mockClear();
       arrange();
-      mockSignOut.mockResolvedValueOnce({ error: null });
+      let storedAtLocalSignOut: string | undefined = STORED_SESSION;
+      mockSignOut.mockImplementationOnce(function captureStoredSession() {
+        storedAtLocalSignOut = secureStore.read(SESSION_KEY);
+        return Promise.resolve({ error: null });
+      });
       const { result } = renderHook(() => useSignOut(), {
         wrapper: createWrapper(new QueryClient()),
       });
@@ -269,9 +291,7 @@ describe('useSignOut(): a failed remote sign-out still ends the local session', 
 
       expect(mockSignOut).toHaveBeenCalledTimes(2);
       expect(mockSignOut).toHaveBeenLastCalledWith({ scope: 'local' });
-      expect(mockClearPersistedAuthSession.mock.invocationCallOrder[0]).toBeLessThan(
-        mockSignOut.mock.invocationCallOrder[1] ?? 0,
-      );
+      expect(storedAtLocalSignOut).toBeUndefined();
     },
   );
 
@@ -307,6 +327,7 @@ describe('auth deadline', () => {
     jest.useFakeTimers();
     mockSignOut.mockReset();
     mockSignOut.mockReturnValue(new Promise(() => undefined));
+    secureStore.seed(SESSION_KEY, STORED_SESSION);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -348,7 +369,7 @@ describe('auth deadline', () => {
       expect(state).toMatchObject({ error: { failure: 'timeout' } });
       expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
       expect(cleanup).toHaveBeenCalledTimes(1);
-      expect(mockClearPersistedAuthSession).toHaveBeenCalled();
+      expect(secureStore.read(SESSION_KEY)).toBeUndefined();
       expect(warn).toHaveBeenCalledWith('[auth] sign out failed', { failure: 'timeout' });
       unregister();
     });

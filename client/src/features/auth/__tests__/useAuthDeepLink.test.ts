@@ -1,41 +1,70 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
-import { showAlert } from '@shared/ui/dialog/dialog';
-import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
+import { _resetConsumedCredentialForTest } from '@features/auth/domain/completeAuthIntent';
 import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const mockRouter = { replace: jest.fn() };
+
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
 jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
-jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
-jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
+
+const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
+  'exchangeCodeForSession',
+  'verifyOtp',
+  'getSession',
+);
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
-const mockComplete = completeAuthIntent as jest.Mock;
+
+const RECOVERING_USER_ID = 'user-recovering';
+const EXPIRED_OTP = {
+  name: 'AuthApiError',
+  code: 'otp_expired',
+  status: 403,
+  message: 'Email link is invalid or has expired',
+};
+
+function verificationRefusedWith(error: unknown): void {
+  verifyOtp.mockResolvedValue({ data: { user: null, session: null }, error });
+}
+
+beforeEach(() => {
+  _resetConsumedCredentialForTest();
+  mockRouter.replace.mockClear();
+  getSession.mockResolvedValue({ data: { session: null }, error: null });
+  verifyOtp.mockResolvedValue({
+    data: { user: { id: RECOVERING_USER_ID }, session: null },
+    error: null,
+  });
+  exchangeCodeForSession.mockResolvedValue({ data: { user: null, session: null }, error: null });
+});
 
 const flushMacrotask = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 describe('useAuthDeepLink: a rejected completeAuthIntent (#657)', () => {
   beforeEach(() => {
     getInitialURL.mockReset().mockResolvedValue(null);
-    mockComplete.mockReset().mockResolvedValue({ kind: 'ignored' });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('swallows a rejected completeAuthIntent rather than leaking an unhandled rejection', async () => {
+  it('swallows a rejected link exchange rather than leaking an unhandled rejection', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const unhandled = jest.fn();
     process.on('unhandledRejection', unhandled);
     getInitialURL.mockResolvedValue('altune://auth/recovery?token_hash=x&type=recovery');
-    mockComplete.mockRejectedValue(new Error('transport blew up'));
+    verifyOtp.mockRejectedValue(new Error('transport blew up'));
 
     renderHook(() => useAuthDeepLink());
     await act(async () => {
@@ -43,12 +72,12 @@ describe('useAuthDeepLink: a rejected completeAuthIntent (#657)', () => {
     });
     await flushMacrotask();
 
-    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(verifyOtp).toHaveBeenCalledWith({ type: 'recovery', token_hash: 'x' });
     expect(unhandled).not.toHaveBeenCalled();
     process.off('unhandledRejection', unhandled);
   });
 
-  it('forwards a delivered auth link to completeAuthIntent', async () => {
+  it('spends the code a delivered auth link carries', async () => {
     getInitialURL.mockResolvedValue('altune://auth/callback?code=abc');
 
     renderHook(() => useAuthDeepLink());
@@ -56,7 +85,7 @@ describe('useAuthDeepLink: a rejected completeAuthIntent (#657)', () => {
       await flushMacrotask();
     });
 
-    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledWith('abc');
   });
 });
 
@@ -76,7 +105,6 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
 
   beforeEach(() => {
     getInitialURL.mockReset().mockResolvedValue(null);
-    mockComplete.mockReset().mockResolvedValue({ kind: 'ignored' });
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -85,23 +113,24 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
   });
 
   it('logs the intent kind and the cause when the exchange reports a failure', async () => {
-    mockComplete.mockResolvedValue({
-      kind: 'failure',
-      cause: 'gotrue_rejected',
-      error: { name: 'AuthApiError', code: 'otp_expired', status: 403 },
-    });
+    verificationRefusedWith(EXPIRED_OTP);
 
     await deliverInitialLink(RECOVERY_LINK);
 
     expect(warn).toHaveBeenCalledWith('[auth] deep link exchange failed', {
       intent: 'recovery',
       cause: 'gotrue_rejected',
-      error: { name: 'AuthApiError', code: 'otp_expired', status: 403 },
+      error: {
+        name: 'AuthApiError',
+        code: 'otp_expired',
+        status: 403,
+        message: 'Email link is invalid or has expired',
+      },
     });
   });
 
   it('logs the intent kind and the thrown error when the exchange rejects', async () => {
-    mockComplete.mockRejectedValue(new Error('transport blew up'));
+    verifyOtp.mockRejectedValue(new Error('transport blew up'));
 
     await deliverInitialLink(RECOVERY_LINK);
 
@@ -113,15 +142,14 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
   });
 
   it('logs nothing for a link that completed', async () => {
-    mockComplete.mockResolvedValue({ kind: 'success' });
-
     await deliverInitialLink(RECOVERY_LINK);
 
+    expect(mockRouter.replace).toHaveBeenCalledWith('/reset-password');
     expect(warn).not.toHaveBeenCalled();
   });
 
   it('never writes the credential the link carried into the log', async () => {
-    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'no_spendable_credential' });
+    verificationRefusedWith(EXPIRED_OTP);
 
     await deliverInitialLink(RECOVERY_LINK);
 
@@ -135,7 +163,6 @@ describe('useAuthDeepLink: native completes a delivered url event (#2924 probe)'
 
   beforeEach(() => {
     getInitialURL.mockReset().mockResolvedValue(null);
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
     addEventListener.mockClear();
   });
 
@@ -157,19 +184,19 @@ describe('useAuthDeepLink: native completes a delivered url event (#2924 probe)'
       await flushMacrotask();
     });
 
-    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledWith('native-event');
   });
 });
 
 describe('useAuthDeepLink: a failed link is shown to the user (#686)', () => {
   const addEventListener = Linking.addEventListener as unknown as jest.Mock;
-  const alert = showAlert as jest.Mock;
+  let alert: jest.SpyInstance;
 
   beforeEach(() => {
     getInitialURL.mockReset().mockResolvedValue(null);
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
     addEventListener.mockClear();
-    alert.mockClear();
+    alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -190,7 +217,7 @@ describe('useAuthDeepLink: a failed link is shown to the user (#686)', () => {
   }
 
   it('alerts that an expired link did not work', async () => {
-    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'gotrue_rejected' });
+    verificationRefusedWith(EXPIRED_OTP);
 
     await deliverUrlEvent(RECOVERY_LINK);
 
@@ -198,7 +225,7 @@ describe('useAuthDeepLink: a failed link is shown to the user (#686)', () => {
   });
 
   it('alerts to try again when the exchange throws', async () => {
-    mockComplete.mockRejectedValue(new Error('timeout'));
+    verifyOtp.mockRejectedValue(new Error('timeout'));
 
     await deliverUrlEvent(RECOVERY_LINK);
 

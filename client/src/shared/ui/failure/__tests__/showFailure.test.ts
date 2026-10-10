@@ -1,18 +1,22 @@
+import { Alert } from 'react-native';
+
 import { recordFailureShown } from '@shared/telemetry/userTelemetry';
-import { showAlert } from '@shared/ui/dialog/dialog';
 
 import { showFailureAlert } from '@shared/ui/failure/showFailure';
 import { showFailureAlert as showFailureAlertFromUi } from '@shared/ui';
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
-jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
 
 const recordMock = jest.mocked(recordFailureShown);
-const showAlertMock = jest.mocked(showAlert);
+let alertSpy: jest.SpyInstance;
 
 beforeEach(() => {
   recordMock.mockClear();
-  showAlertMock.mockClear();
+  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+});
+
+afterEach(() => {
+  alertSpy.mockRestore();
 });
 
 describe('showFailureAlert', () => {
@@ -22,9 +26,9 @@ describe('showFailureAlert', () => {
     expect(recordMock.mock.calls).toEqual([
       [{ surface: 'library.retry', message: 'Nope', track_id: 't1' }],
     ]);
-    expect(showAlertMock.mock.calls).toEqual([['Oops', 'Nope']]);
+    expect(alertSpy.mock.calls).toEqual([['Oops', 'Nope']]);
     expect(recordMock.mock.invocationCallOrder[0]).toBeLessThan(
-      showAlertMock.mock.invocationCallOrder[0] as number,
+      alertSpy.mock.invocationCallOrder[0] as number,
     );
   });
 
@@ -34,7 +38,7 @@ describe('showFailureAlert', () => {
     showFailureAlert({ surface: 's', title: 'T', message });
 
     expect(recordMock.mock.calls[0]?.[0].message).toHaveLength(200);
-    expect(showAlertMock.mock.calls).toEqual([['T', message]]);
+    expect(alertSpy.mock.calls).toEqual([['T', message]]);
   });
 
   it('is exported from @shared/ui', () => {

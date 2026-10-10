@@ -1,8 +1,9 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 
-import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
 import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink.web';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-linking', () => ({
@@ -10,11 +11,19 @@ jest.mock('expo-linking', () => ({
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-jest.mock('@features/auth/domain/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+
+const { exchangeCodeForSession, verifyOtp } = createSupabaseAuthMock(
+  'exchangeCodeForSession',
+  'verifyOtp',
+);
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
 const addEventListener = Linking.addEventListener as unknown as jest.Mock;
-const mockComplete = completeAuthIntent as jest.Mock;
+
+function expectNoCredentialSpent(): void {
+  expect(exchangeCodeForSession).not.toHaveBeenCalled();
+  expect(verifyOtp).not.toHaveBeenCalled();
+}
 
 const flushMacrotask = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -22,7 +31,6 @@ describe('useAuthDeepLink on web leaves the page URL to the route (#2924)', () =
   beforeEach(() => {
     getInitialURL.mockReset().mockResolvedValue('https://app.altune.example/auth/callback?code=x');
     addEventListener.mockClear();
-    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
   });
 
   it('never asks Linking for a URL to complete on web', async () => {
@@ -32,7 +40,7 @@ describe('useAuthDeepLink on web leaves the page URL to the route (#2924)', () =
     });
 
     expect(getInitialURL).not.toHaveBeenCalled();
-    expect(mockComplete).not.toHaveBeenCalled();
+    expectNoCredentialSpent();
   });
 
   it('never subscribes to url events on web', async () => {
@@ -42,7 +50,7 @@ describe('useAuthDeepLink on web leaves the page URL to the route (#2924)', () =
     });
 
     expect(addEventListener).not.toHaveBeenCalled();
-    expect(mockComplete).not.toHaveBeenCalled();
+    expectNoCredentialSpent();
   });
 
   it('does not complete an /auth/callback URL delivered as a url event on web', async () => {
@@ -58,6 +66,6 @@ describe('useAuthDeepLink on web leaves the page URL to the route (#2924)', () =
     }
 
     expect(addEventListener).not.toHaveBeenCalled();
-    expect(mockComplete).not.toHaveBeenCalled();
+    expectNoCredentialSpent();
   });
 });

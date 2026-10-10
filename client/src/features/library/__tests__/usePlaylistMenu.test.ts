@@ -1,4 +1,6 @@
-import { renderHook, act } from '@testing-library/react-native';
+import { createElement, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type { Navigator } from '@shared/navigation';
 import { createMemoryNavigator } from '@shared/navigation/__tests__/memoryNavigator';
@@ -6,81 +8,138 @@ import {
   usePlaylistDelete,
   usePlaylistOfflineAction,
 } from '@features/library/hooks/usePlaylistMenu';
-import { Alert } from 'react-native';
+import { Alert, type AlertButton } from 'react-native';
 import type { TrackResponse } from '@shared/api-client/trackResponse';
+import { supabase } from '@shared/auth/supabaseClient';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { playlistKeys } from '@shared/query/queryKeys';
 import { trackResponseFactory } from '@testing/factories';
 
-const mockDelete = jest.fn();
+const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/playlists', () => ({
-  useDeletePlaylist: () => ({ mutate: mockDelete }),
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 
-const mockConfirm = jest.fn();
+const DELETE_ROUTE = 'DELETE /v1/playlists/pl1';
+const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
+const HTTP_NO_CONTENT = 204;
+const HTTP_ACCEPTED = 202;
+const TITLE_AND_MESSAGE = 2;
 
-jest.mock('@shared/ui/dialog/dialog', () => ({
-  ...jest.requireActual('@shared/ui/dialog/dialog'),
-  confirmDestructive: (opts: unknown) => mockConfirm(opts),
-}));
+type MemoryNavigator = ReturnType<typeof createMemoryNavigator>;
+
+interface WrapperProps {
+  children: ReactNode;
+}
+
+beforeEach(() => {
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
+  __http.reply(TELEMETRY_ROUTE, { status: HTTP_ACCEPTED });
+});
 
 describe('usePlaylistDelete', () => {
   const PLAYLIST_ID = asPlaylistId('pl1');
+  let queryClient: QueryClient;
+  let alertSpy: jest.SpyInstance;
+
+  function wrapper({ children }: WrapperProps) {
+    return createElement(QueryClientProvider, { client: queryClient }, children);
+  }
+
+  function openDeletePrompt(navigator: Navigator): void {
+    const { result } = renderHook(() => usePlaylistDelete(PLAYLIST_ID, navigator), { wrapper });
+    act(() => result.current());
+  }
+
+  function promptButtons(): AlertButton[] {
+    const buttons = alertSpy.mock.calls[0]?.[2];
+    if (buttons === undefined) throw new Error('no delete prompt was shown');
+    return buttons;
+  }
+
+  function pressButton(style: AlertButton['style']): void {
+    act(() =>
+      promptButtons()
+        .find((button) => button.style === style)
+        ?.onPress?.(),
+    );
+  }
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    __http.reply(DELETE_ROUTE, { status: HTTP_NO_CONTENT });
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
-  describe('usePlaylistDelete', () => {
-    function run(canGoBack: boolean) {
-      const router = {
-        canGoBack: () => canGoBack,
-        back: jest.fn(),
-        replace: jest.fn(),
-        push: jest.fn(),
-      };
-      const { result } = renderHook(() => usePlaylistDelete(PLAYLIST_ID, router));
-      result.current();
-      expect(mockConfirm).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Delete Playlist', confirmLabel: 'Delete' }),
-      );
-      expect(mockDelete).not.toHaveBeenCalled();
-      mockConfirm.mock.calls[0][0].onConfirm();
-      mockDelete.mock.calls[0][1].onSuccess();
-      return router;
-    }
+  afterEach(() => {
+    alertSpy.mockRestore();
+    queryClient.clear();
+  });
 
-    it('goes back after deleting when there is history', () => {
-      const router = run(true);
-      expect(router.back).toHaveBeenCalled();
-      expect(router.replace).not.toHaveBeenCalled();
+  describe('the delete prompt', () => {
+    it('asks before deleting and sends nothing until the user confirms', () => {
+      openDeletePrompt(createMemoryNavigator('/library/playlist/pl1'));
+
+      expect(alertSpy.mock.calls[0]?.slice(0, TITLE_AND_MESSAGE)).toEqual([
+        'Delete Playlist',
+        'This cannot be undone.',
+      ]);
+      expect(promptButtons().map((button) => button.text)).toEqual(['Cancel', 'Delete']);
+      expect(__http.countFor(DELETE_ROUTE)).toBe(0);
     });
 
-    it('replaces with the library after deleting when there is no history', () => {
-      const router = run(false);
-      expect(router.replace).toHaveBeenCalledWith('/library');
-      expect(router.back).not.toHaveBeenCalled();
+    it('sends nothing and stays put when the user cancels', () => {
+      const navigator = createMemoryNavigator('/library/playlist/pl1');
+      openDeletePrompt(navigator);
+
+      pressButton('cancel');
+
+      expect(__http.countFor(DELETE_ROUTE)).toBe(0);
+      expect(navigator.current()).toBe('/library/playlist/pl1');
     });
   });
 
-  describe('usePlaylistDelete with a memory navigator', () => {
-    function deleteThrough(navigator: Navigator) {
-      const { result } = renderHook(() => usePlaylistDelete(PLAYLIST_ID, navigator));
-      result.current();
-      mockConfirm.mock.calls[0][0].onConfirm();
-      mockDelete.mock.calls[0][1].onSuccess();
+  describe('confirming the delete', () => {
+    async function deleteThrough(navigator: MemoryNavigator): Promise<void> {
+      openDeletePrompt(navigator);
+      pressButton('destructive');
+      await waitFor(() => expect(navigator.current()).toBe('/library'));
     }
 
-    it('pops back to the previous screen when history exists', () => {
+    it('sends one delete for the playlist', async () => {
+      await deleteThrough(createMemoryNavigator('/library/playlist/pl1'));
+
+      expect(__http.countFor(DELETE_ROUTE)).toBe(1);
+    });
+
+    it('marks the cached playlist list stale so it refetches without the deleted one', async () => {
+      queryClient.setQueryData(playlistKeys.list, { items: [] });
+
+      await deleteThrough(createMemoryNavigator('/library/playlist/pl1'));
+
+      expect(queryClient.getQueryState(playlistKeys.list)?.isInvalidated).toBe(true);
+    });
+
+    it('pops back to the previous screen when history exists', async () => {
       const navigator = createMemoryNavigator('/library');
       navigator.push('/library/playlist/pl1');
-      deleteThrough(navigator);
-      expect(navigator.current()).toBe('/library');
+
+      await deleteThrough(navigator);
+
+      expect(navigator.canGoBack()).toBe(false);
     });
 
-    it('lands on the library when there is no history', () => {
+    it('lands on the library when there is no history', async () => {
       const navigator = createMemoryNavigator('/library/playlist/pl1');
-      deleteThrough(navigator);
+
+      await deleteThrough(navigator);
+
       expect(navigator.current()).toBe('/library');
     });
   });

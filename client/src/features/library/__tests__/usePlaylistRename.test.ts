@@ -1,77 +1,144 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { createElement, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';
+import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
+import { supabase } from '@shared/auth/supabaseClient';
+import { playlistKeys } from '@shared/query/queryKeys';
 
 import { usePlaylistRename } from '../hooks/usePlaylistRename';
 
-const mockRename = jest.fn();
-jest.mock('@shared/playlists', () => ({
-  useRenamePlaylist: () => ({ mutate: mockRename }),
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 const CURRENT_NAME = 'Old';
+const RENAME_ROUTE = 'PATCH /v1/playlists/pl1';
+const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
+const HTTP_OK = 200;
+const HTTP_ACCEPTED = 202;
+
+interface RecordedRequest {
+  method: string;
+  body: string;
+}
+
+interface WrapperProps {
+  children: ReactNode;
+}
+
+interface CachedDetail {
+  name: string;
+  tracks: [];
+}
+
+function renamed(name: string): PlaylistResponse {
+  return {
+    id: PLAYLIST_ID,
+    name,
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  };
+}
+
+let queryClient: QueryClient;
+
+function wrapper({ children }: WrapperProps) {
+  return createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+function renderRename(currentName: string | undefined) {
+  return renderHook(() => usePlaylistRename(PLAYLIST_ID, currentName), { wrapper }).result;
+}
 
 function editingWith(nextName: string) {
-  const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, CURRENT_NAME));
+  const result = renderRename(CURRENT_NAME);
   act(() => result.current.startEditing());
   act(() => result.current.setEditName(nextName));
   return result;
 }
 
-function settleRename(callIndex: number): void {
-  act(() => mockRename.mock.calls[callIndex][1].onSettled());
+function sentNames(): string[] {
+  const requests: RecordedRequest[] = __http.requests;
+  return requests
+    .filter((request) => request.method === 'PATCH')
+    .map((request) => JSON.parse(request.body).name);
+}
+
+function cachedName(): string | undefined {
+  return queryClient.getQueryData<CachedDetail>(playlistKeys.detail(PLAYLIST_ID))?.name;
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  queryClient.setQueryData<CachedDetail>(playlistKeys.detail(PLAYLIST_ID), {
+    name: CURRENT_NAME,
+    tracks: [],
+  });
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
+  __http.reply(RENAME_ROUTE, { status: HTTP_OK, json: renamed('New') });
+  __http.reply(TELEMETRY_ROUTE, { status: HTTP_ACCEPTED });
 });
+
+afterEach(() => queryClient.clear());
 
 describe('usePlaylistRename', () => {
   it('does nothing when the playlist is not loaded', () => {
-    const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, undefined));
+    const result = renderRename(undefined);
     act(() => result.current.startEditing());
     expect(result.current.isEditing).toBe(false);
   });
 
-  it('seeds the edit name and renames with the trimmed value, closing on settle', () => {
-    const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, 'Old'));
+  it('seeds the edit name and renames with the trimmed value, closing on settle', async () => {
+    const result = renderRename(CURRENT_NAME);
     act(() => result.current.startEditing());
     expect(result.current).toMatchObject({ isEditing: true, editName: 'Old' });
 
     act(() => result.current.setEditName('  New  '));
     act(() => result.current.confirmRename());
-    expect(mockRename).toHaveBeenCalledWith('New', expect.any(Object));
     expect(result.current.isEditing).toBe(true);
 
-    act(() => mockRename.mock.calls[0][1].onSettled());
-    expect(result.current.isEditing).toBe(false);
+    await waitFor(() => expect(result.current.isEditing).toBe(false));
+    expect(sentNames()).toEqual(['New']);
+    expect(cachedName()).toBe('New');
   });
 
   it.each([['   '], ['Old'], [' Old ']])('closes without renaming for %j', (name) => {
-    const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, 'Old'));
+    const result = renderRename(CURRENT_NAME);
     act(() => result.current.startEditing());
     act(() => result.current.setEditName(name));
     act(() => result.current.confirmRename());
-    expect(mockRename).not.toHaveBeenCalled();
+    expect(__http.countFor(RENAME_ROUTE)).toBe(0);
+    expect(cachedName()).toBe(CURRENT_NAME);
     expect(result.current.isEditing).toBe(false);
   });
 });
 
 describe('usePlaylistRename — one rename per gesture', () => {
-  it('sends a single rename when Return and the blur it triggers confirm in the same tick', () => {
+  it('sends a single rename when Return and the blur it triggers confirm in the same tick', async () => {
     const result = editingWith('New');
 
     act(() => {
       result.current.confirmRename();
       result.current.confirmRename();
     });
+    await waitFor(() => expect(result.current.isEditing).toBe(false));
 
-    expect(mockRename).toHaveBeenCalledTimes(1);
-    expect(mockRename).toHaveBeenCalledWith('New', expect.any(Object));
+    expect(sentNames()).toEqual(['New']);
   });
 
-  it('keeps the field open on the dropped confirm, so settling still closes it', () => {
+  it('keeps the field open on the dropped confirm, so settling still closes it', async () => {
     const result = editingWith('New');
 
     act(() => {
@@ -80,20 +147,19 @@ describe('usePlaylistRename — one rename per gesture', () => {
     });
 
     expect(result.current.isEditing).toBe(true);
-    settleRename(0);
-    expect(result.current.isEditing).toBe(false);
+    await waitFor(() => expect(result.current.isEditing).toBe(false));
   });
 
-  it('renames again once the in-flight rename settles', () => {
+  it('renames again once the in-flight rename settles', async () => {
     const result = editingWith('New');
     act(() => result.current.confirmRename());
-    settleRename(0);
+    await waitFor(() => expect(result.current.isEditing).toBe(false));
 
     act(() => result.current.startEditing());
     act(() => result.current.setEditName('Newer'));
     act(() => result.current.confirmRename());
+    await waitFor(() => expect(result.current.isEditing).toBe(false));
 
-    expect(mockRename).toHaveBeenCalledTimes(2);
-    expect(mockRename).toHaveBeenLastCalledWith('Newer', expect.any(Object));
+    expect(sentNames()).toEqual(['New', 'Newer']);
   });
 });

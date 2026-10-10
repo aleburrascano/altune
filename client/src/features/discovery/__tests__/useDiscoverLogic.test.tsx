@@ -2,13 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 
-import {
-  clearSearchHistory,
-  listSearchHistory,
-  searchDiscovery,
-  suggestDiscovery,
-} from '@shared/api-client/discovery';
 import { ApiError, NetworkError } from '@shared/failure/errors';
+import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import {
@@ -19,14 +14,13 @@ import {
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
+import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-jest.mock('@shared/api-client/discovery', () => ({
-  searchDiscovery: jest.fn(),
-  suggestDiscovery: jest.fn(),
-  listSearchHistory: jest.fn(),
-  clearSearchHistory: jest.fn(),
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 jest.mock('@shared/telemetry/useRecordEvent', () => ({
   useRecordEvent: () => ({ mutate: mockRecord }),
@@ -38,11 +32,27 @@ jest.mock('expo-router', () => ({
   useFocusEffect: jest.fn(),
 }));
 
+const { __http } = require('@testing/doubles/fetch.js');
+
+const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
+const BAD_REQUEST = 400;
+const SERVER_ERROR = 500;
+const TWO_SEARCHES = 2;
+const FOUR_SEARCHES = 4;
+
+interface PageRequest {
+  offset: number;
+}
+
 const mockRecord = jest.fn();
-const mockSearch = searchDiscovery as jest.Mock;
-const mockSuggest = suggestDiscovery as jest.Mock;
-const mockHistory = listSearchHistory as jest.Mock;
-const mockClearHistory = clearSearchHistory as jest.Mock;
+const portSearch = jest.fn();
+const portSuggest = jest.fn();
+const portHistory = jest.fn();
+const port: DiscoverPort = {
+  searchDiscovery: portSearch,
+  suggestDiscovery: portSuggest,
+  listSearchHistory: portHistory,
+};
 
 function searchResponseFixture(query: string): DiscoverySearchResponse {
   return {
@@ -61,8 +71,20 @@ function searchResponseFixture(query: string): DiscoverySearchResponse {
 
 let queryClient: QueryClient;
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+interface WrapperProps {
+  children: React.ReactNode;
+}
+
+function wrapper({ children }: WrapperProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DiscoverPortProvider port={port}>{children}</DiscoverPortProvider>
+    </QueryClientProvider>
+  );
+}
+
+function clearRequests(): number {
+  return __http.countFor(CLEAR_HISTORY);
 }
 
 beforeEach(() => {
@@ -72,10 +94,13 @@ beforeEach(() => {
       mutations: { retry: false, retryDelay: 0 },
     },
   });
-  mockSearch.mockReset();
-  mockSuggest.mockReset();
-  mockHistory.mockReset();
-  mockClearHistory.mockReset();
+  portSearch.mockReset();
+  portSuggest.mockReset();
+  portHistory.mockReset();
+  jest.mocked(supabase.auth.getSession).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  } as Awaited<ReturnType<typeof supabase.auth.getSession>>);
   setSearchState('', 'rad');
 });
 
@@ -90,11 +115,11 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
 
   beforeEach(() => {
     setSearchState('', '');
-    mockSearch.mockResolvedValue(searchResponseFixture(atMinimum));
-    mockSuggest.mockResolvedValue({
+    portSearch.mockResolvedValue(searchResponseFixture(atMinimum));
+    portSuggest.mockResolvedValue({
       suggestions: [{ text: 'radiohead', kind: 'artist', popularity: 1 }],
     });
-    mockHistory.mockResolvedValue({ items: [] });
+    portHistory.mockResolvedValue({ items: [] });
   });
 
   it('keeps the suggest query, the dropdown and the pending state closed below the minimum', async () => {
@@ -106,7 +131,7 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
     });
 
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    expect(mockSuggest).not.toHaveBeenCalled();
+    expect(portSuggest).not.toHaveBeenCalled();
     expect(result.current.showSuggestions).toBe(false);
     expect(result.current.pending).toBe(false);
   });
@@ -121,11 +146,11 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
 
     expect(result.current.pending).toBe(true);
     await waitFor(() =>
-      expect(mockSuggest).toHaveBeenCalledWith({ q: atMinimum, limit: 5 }, expect.anything()),
+      expect(portSuggest).toHaveBeenCalledWith({ q: atMinimum, limit: 5 }, expect.anything()),
     );
     await waitFor(() => expect(result.current.showSuggestions).toBe(true));
     await waitFor(() =>
-      expect(mockSearch).toHaveBeenCalledWith(
+      expect(portSearch).toHaveBeenCalledWith(
         expect.objectContaining({ q: atMinimum }),
         expect.anything(),
       ),
@@ -135,26 +160,26 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
 
 describe('useDiscoverLogic leaves the suggestion and history lists empty when there is nothing to show', () => {
   it('falls back to empty lists when the suggest and history queries fail', async () => {
-    mockSuggest.mockRejectedValue(new ApiError(500, 'suggest down'));
-    mockHistory.mockRejectedValue(new ApiError(500, 'history down'));
+    portSuggest.mockRejectedValue(new ApiError(SERVER_ERROR, 'suggest down'));
+    portHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
-    await waitFor(() => expect(mockSuggest).toHaveBeenCalled());
-    await waitFor(() => expect(mockHistory).toHaveBeenCalled());
+    await waitFor(() => expect(portSuggest).toHaveBeenCalled());
+    await waitFor(() => expect(portHistory).toHaveBeenCalled());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
     expect(result.current.history.items).toEqual([]);
   });
 
   it('exposes empty lists when the queries succeed with nothing to show', async () => {
-    mockSuggest.mockResolvedValue({ suggestions: [] });
-    mockHistory.mockResolvedValue({ items: [] });
+    portSuggest.mockResolvedValue({ suggestions: [] });
+    portHistory.mockResolvedValue({ items: [] });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
-    await waitFor(() => expect(mockSuggest).toHaveBeenCalled());
-    await waitFor(() => expect(mockHistory).toHaveBeenCalled());
+    await waitFor(() => expect(portSuggest).toHaveBeenCalled());
+    await waitFor(() => expect(portHistory).toHaveBeenCalled());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
     expect(result.current.history.items).toEqual([]);
@@ -163,8 +188,8 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
 
 describe('useDiscoverLogic reports a failed history load', () => {
   it('exposes historyFailed when the history request rejects', async () => {
-    mockSuggest.mockResolvedValue({ suggestions: [] });
-    mockHistory.mockRejectedValue(new ApiError(500, 'history down'));
+    portSuggest.mockResolvedValue({ suggestions: [] });
+    portHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
@@ -172,9 +197,9 @@ describe('useDiscoverLogic reports a failed history load', () => {
   });
 
   it('refetches history and recovers when retry succeeds', async () => {
-    mockSuggest.mockResolvedValue({ suggestions: [] });
-    mockHistory.mockRejectedValueOnce(new ApiError(500, 'history down'));
-    mockHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
+    portSuggest.mockResolvedValue({ suggestions: [] });
+    portHistory.mockRejectedValueOnce(new ApiError(SERVER_ERROR, 'history down'));
+    portHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     await waitFor(() => expect(result.current.history.failed).toBe(true));
@@ -186,8 +211,8 @@ describe('useDiscoverLogic reports a failed history load', () => {
   });
 
   it('does not flag a failure when history loads', async () => {
-    mockSuggest.mockResolvedValue({ suggestions: [] });
-    mockHistory.mockResolvedValue({ items: [] });
+    portSuggest.mockResolvedValue({ suggestions: [] });
+    portHistory.mockResolvedValue({ items: [] });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
@@ -198,23 +223,21 @@ describe('useDiscoverLogic reports a failed history load', () => {
 
 describe('useDiscoverLogic keeps the history list when clearing it fails', () => {
   it('restores the history items after a failed clear', async () => {
-    mockSuggest.mockResolvedValue({ suggestions: [] });
-    mockHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
-    mockClearHistory.mockRejectedValue(new ApiError(500, 'clear down'));
+    portSuggest.mockResolvedValue({ suggestions: [] });
+    portHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
+    __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     await waitFor(() => expect(result.current.history.items).toEqual([{ query: 'radiohead' }]));
 
     act(() => result.current.history.onClear());
 
-    await waitFor(() => expect(mockClearHistory).toHaveBeenCalled());
+    await waitFor(() => expect(clearRequests()).toBe(1));
     await waitFor(() => expect(result.current.history.items).toEqual([{ query: 'radiohead' }]));
   });
 });
 
 describe('useDiscoverLogic recovers from failures', () => {
-  const mockClear = clearSearchHistory as jest.Mock;
-
   function page(offset: number): DiscoverySearchResponse {
     return {
       query: 'radiohead',
@@ -251,10 +274,8 @@ describe('useDiscoverLogic recovers from failures', () => {
         mutations: { retry: false, retryDelay: 0 },
       },
     });
-    [mockSearch, mockSuggest, mockHistory, mockClear, mockRecord].forEach((mock) =>
-      mock.mockReset(),
-    );
-    mockSuggest.mockResolvedValue({ suggestions: [] });
+    [portSearch, portSuggest, portHistory, mockRecord].forEach((mock) => mock.mockReset());
+    portSuggest.mockResolvedValue({ suggestions: [] });
     setSearchState('', '');
   });
 
@@ -264,20 +285,21 @@ describe('useDiscoverLogic recovers from failures', () => {
   });
 
   it('renders the clear-history error and records a clear_history failure when a clear is rejected', async () => {
-    mockHistory.mockResolvedValue({ items: [{ query: 'old', query_norm: 'old' }] });
-    mockClear.mockRejectedValue(new ApiError(400, 'bad request'));
+    portHistory.mockResolvedValue({ items: [{ query: 'old', query_norm: 'old' }] });
+    __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
     render(<Probe />, { wrapper });
 
     fireEvent.press(await screen.findByLabelText('Clear search history'));
 
     expect(await screen.findByTestId('discover-clear-history-error')).toBeTruthy();
     expect(clearFailureEvents()).toHaveLength(1);
+    expect(clearRequests()).toBe(1);
   });
 
   it('retries the next page through fetchNextPage after a failed page 2', async () => {
     setSearchState('radiohead', 'radiohead');
-    mockHistory.mockResolvedValue({ items: [] });
-    mockSearch
+    portHistory.mockResolvedValue({ items: [] });
+    portSearch
       .mockResolvedValueOnce(page(0))
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
@@ -292,7 +314,7 @@ describe('useDiscoverLogic recovers from failures', () => {
     await act(async () => result.current.pagination.onRetryNextPage());
 
     await waitFor(() => expect(result.current.pagination.nextPageFailed).toBe(false));
-    expect(mockSearch).toHaveBeenCalledTimes(4);
+    expect(portSearch).toHaveBeenCalledTimes(FOUR_SEARCHES);
   });
 });
 
@@ -318,11 +340,11 @@ describe('useDiscoverLogic history invalidation', () => {
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     setSearchState('radiohead', 'radiohead');
-    mockSearch
+    portSearch
       .mockReset()
-      .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(page(offset)));
-    mockSuggest.mockReset().mockResolvedValue({ suggestions: [] });
-    mockHistory.mockReset().mockResolvedValue({ items: [] });
+      .mockImplementation(({ offset }: PageRequest) => Promise.resolve(page(offset)));
+    portSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
   });
 
   afterEach(() => {
@@ -333,15 +355,15 @@ describe('useDiscoverLogic history invalidation', () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     await waitFor(() => expect(result.current.results.searchData).toBeDefined());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    const historyCalls = mockHistory.mock.calls.length;
+    const historyCalls = portHistory.mock.calls.length;
 
     await act(async () => {
       result.current.pagination.onEndReached();
     });
-    await waitFor(() => expect(mockSearch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(portSearch).toHaveBeenCalledTimes(TWO_SEARCHES));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    expect(mockHistory).toHaveBeenCalledTimes(historyCalls);
+    expect(portHistory).toHaveBeenCalledTimes(historyCalls);
   });
 });
 
@@ -351,7 +373,7 @@ describe('useDiscoverLogic history tap', () => {
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     setSearchState('', '');
-    mockSearch.mockReset().mockResolvedValue({
+    portSearch.mockReset().mockResolvedValue({
       query: 'ab',
       query_norm: 'ab',
       search_id: 's1',
@@ -364,8 +386,8 @@ describe('useDiscoverLogic history tap', () => {
       offset: 0,
       has_more: false,
     });
-    (suggestDiscovery as jest.Mock).mockReset().mockResolvedValue({ suggestions: [] });
-    (listSearchHistory as jest.Mock).mockReset().mockResolvedValue({ items: [] });
+    portSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
   });
 
   afterEach(() => {
@@ -392,8 +414,8 @@ describe('useDiscoverLogic history tap', () => {
       result.current.onSubmit();
     });
 
-    await waitFor(() => expect(mockSearch).toHaveBeenCalled());
-    for (const [args] of mockSearch.mock.calls) {
+    await waitFor(() => expect(portSearch).toHaveBeenCalled());
+    for (const [args] of portSearch.mock.calls) {
       expect((args as { q: string }).q.length).toBeLessThanOrEqual(MAX_QUERY_LENGTH);
     }
   });
@@ -417,9 +439,9 @@ describe('useDiscoverLogic refresh failure', () => {
   }
 
   async function loadTwoPages() {
-    mockSearch
+    portSearch
       .mockReset()
-      .mockImplementation(({ offset }: { offset: number }) => Promise.resolve(page(offset)));
+      .mockImplementation(({ offset }: PageRequest) => Promise.resolve(page(offset)));
     const hook = renderHook(() => useDiscoverLogic(), { wrapper });
     await waitFor(() => expect(hook.result.current.results.searchData).toBeDefined());
     await act(async () => hook.result.current.pagination.onEndReached());
@@ -434,8 +456,8 @@ describe('useDiscoverLogic refresh failure', () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
-    (suggestDiscovery as jest.Mock).mockReset().mockResolvedValue({ suggestions: [] });
-    (listSearchHistory as jest.Mock).mockReset().mockResolvedValue({ items: [] });
+    portSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
     setSearchState('radiohead', 'radiohead');
   });
 
@@ -446,7 +468,7 @@ describe('useDiscoverLogic refresh failure', () => {
 
   it('keeps loaded pages and flags refreshFailed when a refresh is rejected', async () => {
     const { result } = await loadTwoPages();
-    mockSearch.mockRejectedValue(new NetworkError('transport', 'offline'));
+    portSearch.mockRejectedValue(new NetworkError('transport', 'offline'));
 
     await act(async () => result.current.results.onRefresh());
 
@@ -457,12 +479,12 @@ describe('useDiscoverLogic refresh failure', () => {
 
   it('replaces the list with a fresh first page and clears the flag on a good refresh', async () => {
     const { result } = await loadTwoPages();
-    mockSearch
+    portSearch
       .mockRejectedValueOnce(new NetworkError('transport', 'offline'))
       .mockRejectedValueOnce(new NetworkError('transport', 'offline'));
     await act(async () => result.current.results.onRefresh());
     await waitFor(() => expect(result.current.results.refreshFailed).toBe(true), { timeout: 4000 });
-    mockSearch.mockImplementation(({ offset }: { offset: number }) =>
+    portSearch.mockImplementation(({ offset }: PageRequest) =>
       Promise.resolve(page(offset, 'fresh')),
     );
 
@@ -476,8 +498,8 @@ describe('useDiscoverLogic refresh failure', () => {
   it('does not cancel a refresh when the list end is reached during it', async () => {
     const { result } = await loadTwoPages();
     let release: () => void = () => undefined;
-    mockSearch.mockReset().mockImplementation(
-      ({ offset }: { offset: number }) =>
+    portSearch.mockReset().mockImplementation(
+      ({ offset }: PageRequest) =>
         new Promise((resolve) => {
           release = () => resolve(page(offset, 'fresh'));
         }),
@@ -490,7 +512,7 @@ describe('useDiscoverLogic refresh failure', () => {
     await act(async () => release());
 
     await waitFor(() => expect(result.current.results.isRefreshing).toBe(false));
-    expect(mockSearch).toHaveBeenCalledTimes(1);
+    expect(portSearch).toHaveBeenCalledTimes(1);
     expect(result.current.results.searchData?.results[0]?.title).toBe('fresh');
   });
 });
@@ -517,9 +539,9 @@ describe('a direct account switch with Discover still mounted', () => {
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     setSearchState('', '');
-    mockSearch.mockReset().mockResolvedValue(page());
-    (suggestDiscovery as jest.Mock).mockReset().mockResolvedValue({ suggestions: [] });
-    (listSearchHistory as jest.Mock).mockReset().mockResolvedValue({ items: [] });
+    portSearch.mockReset().mockResolvedValue(page());
+    portSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
   });
 
   afterEach(() => {
@@ -530,7 +552,7 @@ describe('a direct account switch with Discover still mounted', () => {
     const hook = renderHook(() => useDiscoverLogic(), { wrapper });
     act(() => hook.result.current.onChangeText('radiohead'));
     act(() => hook.result.current.onSubmit());
-    await waitFor(() => expect(mockSearch).toHaveBeenCalled());
+    await waitFor(() => expect(portSearch).toHaveBeenCalled());
     return hook;
   }
 
@@ -551,14 +573,14 @@ describe('a direct account switch with Discover still mounted', () => {
 
   it('does not re-run the previous search with saveHistory', async () => {
     await submitRadiohead();
-    mockSearch.mockClear();
+    portSearch.mockClear();
 
     switchAccount();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    const saved = mockSearch.mock.calls.filter(
+    const saved = portSearch.mock.calls.filter(
       ([params]) => (params as { saveHistory?: boolean } | undefined)?.saveHistory === true,
     );
     expect(saved).toHaveLength(0);
@@ -575,6 +597,6 @@ describe('a direct account switch with Discover still mounted', () => {
     });
     jest.useRealTimers();
 
-    expect(mockSearch).not.toHaveBeenCalled();
+    expect(portSearch).not.toHaveBeenCalled();
   });
 });
