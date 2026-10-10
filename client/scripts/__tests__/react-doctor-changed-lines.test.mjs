@@ -271,6 +271,42 @@ describe('react-doctor-changed-lines reads the whole reported range', { concurre
   });
 });
 
+function narrow(filePath, body, line, word) {
+  const offset = body.split('\n').slice(0, line - 1).join('\n').length + (line > 1 ? 1 : 0);
+  const at = offset + body.split('\n')[line - 1].indexOf(word);
+  return { ...warning(filePath, line), rule: 'jsx-no-jsx-as-prop', offset: at, length: word.length };
+}
+
+describe('react-doctor-changed-lines widens to the enclosing node', { concurrency: true }, () => {
+  test('fails a warning on the opening tag name when a later attribute line was edited', (t) => {
+    const { root, base } = repo(
+      t,
+      { 'client/src/a.tsx': JSX_BEFORE },
+      { 'client/src/a.tsx': JSX_AFTER },
+    );
+    const r = check(root, base, { diagnostics: [narrow('src/a.tsx', JSX_AFTER, 2, 'Row')] });
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /src\/a\.tsx:2:1 warning/);
+  });
+
+  test('fails a warning with no offset on the first line of an edited multi-line call', (t) => {
+    const before = lines('export const x = compute(', '  one,', '  two,', ');');
+    const after = lines('export const x = compute(', '  one,', '  three,', ');');
+    const { root, base } = repo(t, { 'client/src/a.ts': before }, { 'client/src/a.ts': after });
+    const r = check(root, base, { diagnostics: [warning('src/a.ts', 1)] });
+    assert.equal(r.status, 1, r.out);
+  });
+
+  test('passes a warning on an unchanged element elsewhere in the edited file', (t) => {
+    const other = ['export const B = () => (', '  <Row', '    left={null}', '  />', ');'];
+    const before = `${JSX_BEFORE}\n${lines(...other)}`;
+    const after = `${JSX_AFTER}\n${lines(...other)}`;
+    const { root, base } = repo(t, { 'client/src/a.tsx': before }, { 'client/src/a.tsx': after });
+    const r = check(root, base, { diagnostics: [narrow('src/a.tsx', after, 9, 'Row')] });
+    assert.equal(r.status, 0, r.out);
+  });
+});
+
 describe('react-doctor-changed-lines survives a deleted file', { concurrency: true }, () => {
   test('passes a stale warning in a file the change deleted', (t) => {
     const { root, base } = repo(

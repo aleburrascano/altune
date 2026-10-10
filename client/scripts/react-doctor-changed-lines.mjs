@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import {
   existsSync,
   mkdirSync,
@@ -21,6 +22,7 @@ const LIST_NEW = '--list-new';
 const BASE_SCAN_TIMEOUT_MS = Number(process.env.REACT_DOCTOR_BASE_TIMEOUT_MS ?? 240_000);
 const FULL_REPORT_HINT =
   'full report: client/doctor-report.json (regenerate with: cd client && npm run --silent doctor:ci > doctor-report.json)';
+const SCRIPT_FILE = /\.[cm]?[jt]sx?$/;
 const DOCTOR_ARGS = ['--no-score', '--json', '--json-compact'];
 
 function git(args, cwd) {
@@ -157,29 +159,86 @@ function lineAt(source, index) {
 function rangeOf(diagnostic, sources) {
   const single = { start: diagnostic.line, end: diagnostic.line };
   if (!Number.isInteger(diagnostic.offset) || !Number.isInteger(diagnostic.length)) return single;
-  if (!sources.has(diagnostic.filePath)) {
-    let source = null;
-    try {
-      source = readFileSync(diagnostic.filePath, 'utf8');
-    } catch {
-      source = null;
-    }
-    sources.set(diagnostic.filePath, source);
-  }
-  const source = sources.get(diagnostic.filePath);
+  const source = sourceOf(diagnostic.filePath, sources);
   if (source === null || lineAt(source, diagnostic.offset) !== diagnostic.line) return single;
   const last = diagnostic.offset + Math.max(diagnostic.length, 1) - 1;
   return { start: diagnostic.line, end: Math.max(diagnostic.line, lineAt(source, last)) };
 }
 
+let tsModule = null;
+
+function typescript() {
+  tsModule ??= createRequire(import.meta.url)('typescript');
+  return tsModule;
+}
+
+function isWideningNode(ts, node) {
+  return (
+    ts.isJsxOpeningElement(node) ||
+    ts.isJsxSelfClosingElement(node) ||
+    ts.isCallExpression(node) ||
+    ts.isNewExpression(node) ||
+    ts.isVariableStatement(node) ||
+    ts.isExpressionStatement(node) ||
+    ts.isReturnStatement(node)
+  );
+}
+
+function enclosingNodeRange(diagnostic, source, parsed) {
+  const ts = typescript();
+  const kind = diagnostic.filePath.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  if (!parsed.has(diagnostic.filePath))
+    parsed.set(
+      diagnostic.filePath,
+      ts.createSourceFile(diagnostic.filePath, source, ts.ScriptTarget.Latest, false, kind),
+    );
+  const file = parsed.get(diagnostic.filePath);
+  if (diagnostic.line < 1 || diagnostic.line > file.getLineStarts().length) return null;
+  const lineStart = file.getPositionOfLineAndCharacter(diagnostic.line - 1, 0);
+  const at = Number.isInteger(diagnostic.offset) ? diagnostic.offset : lineStart;
+  let best = null;
+  const visit = (node) => {
+    if (node.getStart(file) > at || node.end <= at) return;
+    if (isWideningNode(ts, node)) {
+      const start = file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
+      if (start === diagnostic.line)
+        best = { start, end: file.getLineAndCharacterOfPosition(node.end).line + 1 };
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return best;
+}
+
+function sourceOf(filePath, sources) {
+  if (!sources.has(filePath)) {
+    let source = null;
+    try {
+      source = readFileSync(filePath, 'utf8');
+    } catch {
+      source = null;
+    }
+    sources.set(filePath, source);
+  }
+  return sources.get(filePath);
+}
+
+function touches(added, { start, end }) {
+  for (let line = start; line <= end; line += 1) if (added.has(line)) return true;
+  return false;
+}
+
 function onChangedLines(diagnostics, addedByFile) {
   const sources = new Map();
+  const parsed = new Map();
   return diagnostics.filter((d) => {
     const added = addedByFile.get(d.filePath);
     if (!added) return false;
-    const { start, end } = rangeOf(d, sources);
-    for (let line = start; line <= end; line += 1) if (added.has(line)) return true;
-    return false;
+    if (touches(added, rangeOf(d, sources))) return true;
+    if (!SCRIPT_FILE.test(d.filePath) || !Number.isInteger(d.line)) return false;
+    const source = sourceOf(d.filePath, sources);
+    const node = source === null ? null : enclosingNodeRange(d, source, parsed);
+    return node !== null && touches(added, node);
   });
 }
 
