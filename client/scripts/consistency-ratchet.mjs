@@ -80,6 +80,18 @@ export async function lintSource(rule, source, filename) {
   return results.flatMap((result) => result.messages);
 }
 
+function writeBaseline(found, added) {
+  if (added.length > 0) {
+    for (const line of added) console.log(`new violation: ${line}`);
+    console.log(
+      'consistency-ratchet: --write only removes fixed lines; fix the new violations first',
+    );
+    process.exit(1);
+  }
+  fs.writeFileSync(baselinePath, found.map((line) => `${line}\n`).join(''));
+  console.log(`consistency-ratchet: wrote ${found.length} violations to the baseline`);
+}
+
 async function main() {
   const files = srcFiles();
   const rules = loadRules();
@@ -101,13 +113,12 @@ async function main() {
   }
 
   found.sort();
+  const { added, fixed } = diffAgainstBaseline(found, readBaseline());
   if (process.argv.includes('--write')) {
-    fs.writeFileSync(baselinePath, found.map((line) => `${line}\n`).join(''));
-    console.log(`consistency-ratchet: wrote ${found.length} violations to the baseline`);
+    writeBaseline(found, added);
     return;
   }
 
-  const { added, fixed } = diffAgainstBaseline(found, readBaseline());
   for (const line of added) console.log(`new violation: ${line}`);
   for (const line of fixed) console.log(`fixed: remove it from the baseline: ${line}`);
   if (fixed.length > 0 && added.length === 0) console.log(UPDATE_BASELINE_HINT);

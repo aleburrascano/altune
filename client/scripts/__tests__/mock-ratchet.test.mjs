@@ -103,6 +103,20 @@ test('a mock swapped for another fails without the --write hint, so the new one 
   assert.doesNotMatch(out, /--write/);
 });
 
+test('--write with a new mock refuses, lists it and leaves the baseline unchanged', (t) => {
+  const baseline = 'src/a.test.ts ../store\n';
+  const root = fixture(t, {
+    'src/a.test.ts': TWO_OWN_MOCKS,
+    'mock-ratchet.baseline': baseline,
+  });
+
+  const { status, out } = ratchet(root, '--write');
+
+  assert.equal(status, 1);
+  assert.match(out, /new violation: src\/a\.test\.ts @shared\/api/);
+  assert.equal(baselineOf(root), baseline);
+});
+
 test('third-party mocks do not count', (t) => {
   const root = fixture(t, {
     'src/a.test.ts': "jest.mock('expo-router');\njest.mock(\n  '@supabase/supabase-js',\n);\n",

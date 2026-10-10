@@ -31,5 +31,7 @@ Prints one `MC-n: <count>` line per rule module and exits 1 when a violation is 
 `client/consistency.baseline` (`new violation: <line>`), even if the total is unchanged, or
 when a listed violation no longer occurs (`fixed: remove it from the baseline: <line>`). When
 the only change is fixed lines, it also names the command that rewrites the baseline:
-`node scripts/consistency-ratchet.mjs --write`.
+`node scripts/consistency-ratchet.mjs --write`. `--write` only removes fixed lines: while a
+new violation exists it lists it, exits 1 and leaves the baseline unchanged. The same holds
+for `node scripts/mock-ratchet.mjs --write` and `client/mock-ratchet.baseline`.
 `scripts/precheck.sh` runs it on every change under `client/`.

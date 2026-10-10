@@ -143,23 +143,43 @@ test('running the real script exits 1 for a listed violation that no longer occu
 test('--write drops a fixed line from the baseline, so the next run passes', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
   const baselineFile = path.join(root, 'consistency.baseline');
-  const relativePath = path.join('src', '__consistency_ratchet_kept__.ts');
   const stale = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
   const env = { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile };
+  try {
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src', 'clean.ts'), 'export const clean = true;\n');
+    fs.writeFileSync(baselineFile, `${stale}\n`);
+
+    expect(runRatchetCli(env, ['--write']).status).toBe(0);
+
+    expect(fs.readFileSync(baselineFile, 'utf8')).toBe('');
+    expect(runRatchetCli(env).status).toBe(0);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('--write with a new violation refuses, lists it and leaves the baseline unchanged', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
+  const baselineFile = path.join(root, 'consistency.baseline');
+  const relativePath = path.join('src', '__consistency_ratchet_new__.ts');
+  const baseline = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).\n';
   try {
     fs.mkdirSync(path.join(root, 'src'));
     fs.writeFileSync(
       path.join(root, relativePath),
       "export function f() {\n  return fetch('https://example.com');\n}\n",
     );
-    fs.writeFileSync(baselineFile, `${stale}\n`);
+    fs.writeFileSync(baselineFile, baseline);
 
-    expect(runRatchetCli(env, ['--write']).status).toBe(0);
+    const { status, stdout } = runRatchetCli(
+      { CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile },
+      ['--write'],
+    );
 
-    const written = fs.readFileSync(baselineFile, 'utf8');
-    expect(written).not.toContain(stale);
-    expect(written).toContain(`MC-1 ${relativePath}`);
-    expect(runRatchetCli(env).status).toBe(0);
+    expect(status).toBe(1);
+    expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
+    expect(fs.readFileSync(baselineFile, 'utf8')).toBe(baseline);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
