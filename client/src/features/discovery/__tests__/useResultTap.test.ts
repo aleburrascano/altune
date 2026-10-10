@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
 import { useResultTap } from '@features/discovery/hooks/useResultTap';
-import { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
+import { clearDetailHandoffs, readDetailHandoff } from '@shared/navigation/detailHandoff';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -18,11 +18,19 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
   useFocusEffect: (effect: () => void) => mockUseFocusEffect(effect),
 }));
-jest.mock('@features/discovery/domain/stashHandoffForDetail', () => ({
-  stashHandoffForDetail: jest.fn(() => '/discover/detail'),
-}));
 
-const mockStash = stashHandoffForDetail as jest.Mock;
+interface PushedDetailHref {
+  pathname: string;
+  params: { handoff: string };
+}
+
+function pushedHref(call: number): PushedDetailHref {
+  return mockPush.mock.calls[call]![0] as PushedDetailHref;
+}
+
+function pushedHandoff(call: number) {
+  return readDetailHandoff(pushedHref(call).params.handoff);
+}
 
 function responseFixture(
   overrides: Partial<DiscoverySearchResponse> = {},
@@ -45,6 +53,7 @@ function responseFixture(
 
 beforeEach(() => {
   jest.clearAllMocks();
+  clearDetailHandoffs();
 });
 
 describe('useResultTap records result_clicked and hands off to the detail screen', () => {
@@ -70,8 +79,10 @@ describe('useResultTap records result_clicked and hands off to the detail screen
         result_signature: 'sig',
       },
     });
-    expect(mockStash).toHaveBeenCalledWith(tapped, 'search-1');
-    expect(mockPush).toHaveBeenCalledWith('/discover/detail');
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(pushedHref(0).pathname).toBe('/discover/detail');
+    expect(pushedHandoff(0)?.result).toBe(tapped);
+    expect(pushedHandoff(0)?.searchId).toBe('search-1');
   });
 
   it('logs the global rank for a blended-view tap whose object is a parsed copy, not a results[] reference', () => {
@@ -154,14 +165,14 @@ describe('useResultTap records result_clicked and hands off to the detail screen
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockStash).toHaveBeenCalledTimes(1);
-    expect(mockStash).toHaveBeenCalledWith(first, 'search-1');
+    expect(pushedHandoff(0)?.result).toBe(first);
 
     const onFocus = mockUseFocusEffect.mock.calls.at(-1)![0] as () => void;
     act(() => onFocus());
     result.current(second!, 1);
 
     expect(mockPush).toHaveBeenCalledTimes(2);
-    expect(mockStash).toHaveBeenLastCalledWith(second, 'search-1');
+    expect(pushedHandoff(1)?.result).toBe(second);
+    expect(pushedHandoff(1)?.searchId).toBe('search-1');
   });
 });

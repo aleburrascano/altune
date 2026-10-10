@@ -1,6 +1,8 @@
 import { act } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
+import type { ResolvedAudioUrl } from '@shared/api-client/audio';
+import { ApiError } from '@shared/failure/errors';
+import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import {
   createMemoryFileStore,
@@ -34,16 +36,110 @@ import {
   claimPinnedDownloads,
 } from '@shared/offline/pinnedStore';
 
-jest.mock('@shared/api-client/audio', () => ({
-  fetchAudioUrls: jest.fn().mockResolvedValue([]),
+const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 
-const fetchAudioUrlsMock = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
+const AUDIO_URLS_PATH = '/v1/audio-urls';
+const AUDIO_URLS_ROUTE = `POST ${AUDIO_URLS_PATH}`;
+const HTTP_OK = 200;
+const HTTP_NOT_FOUND = 404;
+
+type AudioUrlsReply = ResolvedAudioUrl[] | number;
+type AudioUrlsAnswer = (trackIds: string[]) => AudioUrlsReply | Promise<AudioUrlsReply>;
+type AudioUrlsBody = { track_ids: string[] };
+type WireAudioUrl = { track_id: string; url: string; version: string };
+type WireAudioUrlsReply = { status: number; json: { urls: WireAudioUrl[] } };
+
+let answerAudioUrls: AudioUrlsAnswer = noAudioUrls;
+const onceAnswers: AudioUrlsAnswer[] = [];
+const audioUrlRequests: string[][] = [];
+
+function noAudioUrls(): ResolvedAudioUrl[] {
+  return [];
+}
+
+function serveAudioUrls(answer: AudioUrlsAnswer): void {
+  answerAudioUrls = answer;
+}
+
+function serveAudioUrlsOnce(answer: AudioUrlsAnswer): void {
+  onceAnswers.push(answer);
+}
+
+function wireReply(reply: AudioUrlsReply): WireAudioUrlsReply {
+  if (typeof reply === 'number') return { status: reply, json: { urls: [] } };
+  return {
+    status: HTTP_OK,
+    json: {
+      urls: reply.map((url) => ({ track_id: url.trackId, url: url.url, version: url.version })),
+    },
+  };
+}
+
+async function audioUrlsServer(url: string, init?: RequestInit): Promise<Response> {
+  if (String(url).endsWith(AUDIO_URLS_PATH) && init?.method === 'POST') {
+    const { track_ids: trackIds } = JSON.parse(String(init.body)) as AudioUrlsBody;
+    audioUrlRequests.push(trackIds);
+    const answer = onceAnswers.shift() ?? answerAudioUrls;
+    __http.replyOnce(AUDIO_URLS_ROUTE, wireReply(await answer(trackIds)));
+  }
+  return fakeFetch(url, init);
+}
 
 beforeEach(() => {
-  fetchAudioUrlsMock.mockReset();
-  fetchAudioUrlsMock.mockResolvedValue([]);
+  answerAudioUrls = noAudioUrls;
+  onceAnswers.length = 0;
+  audioUrlRequests.length = 0;
+  global.fetch = audioUrlsServer as typeof fetch;
+  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  });
 });
+
+afterEach(() => {
+  global.fetch = fakeFetch;
+});
+
+const MAX_ARRIVAL_ROUNDS = 200;
+const THIRD_REQUEST = 2;
+const SECOND_GENERATION = 2;
+
+type PendingCall = {
+  ids: readonly string[];
+  resolve: (reply: AudioUrlsReply) => void;
+};
+
+function captureAudioUrlCalls(): PendingCall[] {
+  const calls: PendingCall[] = [];
+  serveAudioUrls(
+    (ids) =>
+      new Promise<AudioUrlsReply>((resolve) => {
+        calls.push({ ids, resolve });
+      }),
+  );
+  return calls;
+}
+
+async function flushMicrotasks(rounds = MAX_ARRIVAL_ROUNDS): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+async function callAt(calls: PendingCall[], index: number): Promise<PendingCall> {
+  for (let i = 0; i < MAX_ARRIVAL_ROUNDS && calls[index] === undefined; i += 1) {
+    await Promise.resolve();
+  }
+  const call = calls[index];
+  if (call === undefined) {
+    throw new Error(`no audio-urls request #${index} reached the network`);
+  }
+  return call;
+}
 
 describe('store actions: pin, pinMany, unpin and unpinAll across every entry state', () => {
   function resetStore(
@@ -339,15 +435,11 @@ describe('pinMany reports a per-batch result', () => {
 
   beforeEach(() => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
   });
 
   describe('pinMany — per-batch result', () => {
     it('resolves once every track in the batch settles, counting the failed ones', async () => {
-      fetchAudioUrlsMock.mockImplementation(async ([id]) => {
-        if (id === 'B') throw new Error('404');
-        return [resolved(id!)];
-      });
+      serveAudioUrls(([id]) => (id === 'B' ? HTTP_NOT_FOUND : [resolved(id!)]));
 
       let result: unknown;
       await act(async () => {
@@ -362,9 +454,7 @@ describe('pinMany reports a per-batch result', () => {
 
     it('stays pending while a batch track is still downloading', async () => {
       let finish!: (urls: ResolvedAudioUrl[]) => void;
-      fetchAudioUrlsMock.mockImplementation(
-        () => new Promise<ResolvedAudioUrl[]>((res) => (finish = res)),
-      );
+      serveAudioUrls(() => new Promise<ResolvedAudioUrl[]>((res) => (finish = res)));
 
       let settled = false;
       const batch = usePinnedStore.getState().pinMany([asTrackId('A')]);
@@ -387,12 +477,11 @@ describe('pinMany reports a per-batch result', () => {
         },
       });
       let finish!: (urls: ResolvedAudioUrl[]) => void;
-      fetchAudioUrlsMock.mockImplementation(
-        () => new Promise<ResolvedAudioUrl[]>((res) => (finish = res)),
-      );
+      serveAudioUrls(() => new Promise<ResolvedAudioUrl[]>((res) => (finish = res)));
 
       const batch = usePinnedStore.getState().pinMany([asTrackId('A'), asTrackId('B')]);
       await act(async () => {
+        await flushMicrotasks();
         usePinnedStore.getState().unpin(asTrackId('B'));
         finish([resolved('B')]);
         await flush();
@@ -977,6 +1066,7 @@ describe('loading, validating and coalescing writes of the pinned index', () => 
     let store: MemoryFileStore;
 
     beforeEach(() => {
+      flushIndex();
       jest.useFakeTimers();
       store = createMemoryFileStore();
       setPinnedIndexFileStore(store);
@@ -1050,27 +1140,6 @@ describe('reconcile squares the index with the files on disk', () => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, ...overrides });
   }
 
-  type PendingCall = {
-    ids: readonly string[];
-    resolve: (urls: ResolvedAudioUrl[]) => void;
-    reject: (err: unknown) => void;
-  };
-
-  function captureAudioUrlCalls(): PendingCall[] {
-    const calls: PendingCall[] = [];
-    fetchAudioUrlsMock.mockImplementation((ids: string[]) => {
-      let resolve!: PendingCall['resolve'];
-      let reject!: PendingCall['reject'];
-      const promise = new Promise<ResolvedAudioUrl[]>((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
-      calls.push({ ids, resolve, reject });
-      return promise;
-    });
-    return calls;
-  }
-
   async function flush(rounds = 20): Promise<void> {
     for (let i = 0; i < rounds; i += 1) {
       await Promise.resolve();
@@ -1079,7 +1148,6 @@ describe('reconcile squares the index with the files on disk', () => {
 
   beforeEach(() => {
     resetStore();
-    fetchAudioUrlsMock.mockReset();
   });
 
   const MATRIX: [PinnedStatus, boolean, 'ready' | 'queued' | 'dropped'][] = [
@@ -1496,7 +1564,7 @@ describe('reconcile squares the index with the files on disk', () => {
   });
 
   describe('reconcile — kicks the download worker for anything it requeues', () => {
-    it('starts a fresh url resolution for a track that was mid-download when the app died', () => {
+    it('starts a fresh url resolution for a track that was mid-download when the app died', async () => {
       const calls = captureAudioUrlCalls();
       resetStore({
         entries: { interrupted: { trackId: asTrackId('interrupted'), status: 'downloading' } },
@@ -1504,6 +1572,7 @@ describe('reconcile squares the index with the files on disk', () => {
 
       usePinnedStore.getState().reconcile();
 
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       expect(calls[0]?.ids).toEqual(['interrupted']);
     });
@@ -1517,7 +1586,7 @@ describe('reconcile squares the index with the files on disk', () => {
       usePinnedStore.getState().reconcile();
 
       await act(async () => {
-        calls[0]?.resolve([]);
+        (await callAt(calls, 0)).resolve([]);
         await flush();
       });
 
@@ -1526,7 +1595,7 @@ describe('reconcile squares the index with the files on disk', () => {
       expect(usePinnedStore.getState().isWorking).toBe(false);
     });
 
-    it('never kicks the worker when reconcile requeues nothing', () => {
+    it('never kicks the worker when reconcile requeues nothing', async () => {
       __fs.seedFile(audioUri('already-ready'), 'audio-bytes');
       const calls = captureAudioUrlCalls();
       resetStore({
@@ -1537,6 +1606,7 @@ describe('reconcile squares the index with the files on disk', () => {
 
       usePinnedStore.getState().reconcile();
 
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(0);
     });
   });
@@ -1621,27 +1691,6 @@ describe('the download worker', () => {
     return { trackId, url: signedUrl(trackId, generation), version: `v${generation}` };
   }
 
-  type PendingCall = {
-    ids: readonly string[];
-    resolve: (urls: ResolvedAudioUrl[]) => void;
-    reject: (err: unknown) => void;
-  };
-
-  function captureAudioUrlCalls(): PendingCall[] {
-    const calls: PendingCall[] = [];
-    fetchAudioUrlsMock.mockImplementation((ids: string[]) => {
-      let resolve!: PendingCall['resolve'];
-      let reject!: PendingCall['reject'];
-      const promise = new Promise<ResolvedAudioUrl[]>((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
-      calls.push({ ids, resolve, reject });
-      return promise;
-    });
-    return calls;
-  }
-
   async function flush(rounds = 20): Promise<void> {
     for (let i = 0; i < rounds; i += 1) {
       await Promise.resolve();
@@ -1650,7 +1699,6 @@ describe('the download worker', () => {
 
   beforeEach(() => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
   });
 
   describe('runQueue — isWorking reentrancy guard', () => {
@@ -1658,15 +1706,17 @@ describe('the download worker', () => {
       const calls = captureAudioUrlCalls();
 
       usePinnedStore.getState().pin(asTrackId('A'));
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       expect(calls[0]?.ids).toEqual(['A']);
 
       usePinnedStore.getState().pin(asTrackId('B'));
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       expect(usePinnedStore.getState().entries['B']?.status).toBe('queued');
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1675,7 +1725,7 @@ describe('the download worker', () => {
       expect(usePinnedStore.getState().entries['A']?.status).toBe('ready');
 
       await act(async () => {
-        calls[1]?.resolve([resolved('B')]);
+        (await callAt(calls, 1)).resolve([resolved('B')]);
         await flush();
       });
 
@@ -1688,27 +1738,29 @@ describe('the download worker', () => {
       const calls = captureAudioUrlCalls();
 
       usePinnedStore.getState().pin(asTrackId('A'));
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
 
       usePinnedStore.getState().pinMany([asTrackId('B'), asTrackId('C')]);
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
       expect(calls).toHaveLength(2);
       expect(calls[1]?.ids).toEqual(['B']);
 
       await act(async () => {
-        calls[1]?.resolve([resolved('B')]);
+        (await callAt(calls, 1)).resolve([resolved('B')]);
         await flush();
       });
       expect(calls).toHaveLength(3);
       expect(calls[2]?.ids).toEqual(['C']);
 
       await act(async () => {
-        calls[2]?.resolve([resolved('C')]);
+        (await callAt(calls, THIRD_REQUEST)).resolve([resolved('C')]);
         await flush();
       });
 
@@ -1728,7 +1780,7 @@ describe('the download worker', () => {
       expect(usePinnedStore.getState().entries['A']).toBeUndefined();
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1741,6 +1793,7 @@ describe('the download worker', () => {
       const calls = captureAudioUrlCalls();
 
       usePinnedStore.getState().pinMany([asTrackId('A'), asTrackId('B')]);
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       expect(calls[0]?.ids).toEqual(['A']);
 
@@ -1749,7 +1802,7 @@ describe('the download worker', () => {
       expect(usePinnedStore.getState().queue).toEqual([]);
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1767,13 +1820,14 @@ describe('the download worker', () => {
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.reject(new Error('network drop'));
+        (await callAt(calls, 0)).resolve(HTTP_NOT_FOUND);
         await flush();
       });
       expect(usePinnedStore.getState().isWorking).toBe(false);
 
       usePinnedStore.getState().pin(asTrackId('B'));
       expect(usePinnedStore.getState().entries['B']?.status).toBe('downloading');
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(2);
     });
   });
@@ -1786,7 +1840,7 @@ describe('the download worker', () => {
       expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1805,7 +1859,7 @@ describe('the download worker', () => {
       usePinnedStore.getState().pin(asTrackId('A'));
 
       await act(async () => {
-        calls[0]?.resolve([]);
+        (await callAt(calls, 0)).resolve([]);
         await flush();
       });
 
@@ -1814,19 +1868,32 @@ describe('the download worker', () => {
       expect(usePinnedStore.getState().queue).toEqual([]);
     });
 
-    it('a rejected url resolution (network drop) marks the entry failed', async () => {
+    it('a refused url resolution (404) marks the entry failed', async () => {
       const calls = captureAudioUrlCalls();
 
       usePinnedStore.getState().pin(asTrackId('A'));
 
       await act(async () => {
-        calls[0]?.reject(new Error('network drop'));
+        (await callAt(calls, 0)).resolve(HTTP_NOT_FOUND);
         await flush();
       });
 
       expect(usePinnedStore.getState().entries['A']?.status).toBe('failed');
       expect(usePinnedStore.getState().isWorking).toBe(false);
     });
+
+    const RETRY_WINDOW_MS = 4_000;
+    const RETRY_STEP_MS = 100;
+
+    async function advanceUntilRequest(calls: PendingCall[], count: number): Promise<void> {
+      for (
+        let waited = 0;
+        calls.length < count && waited < RETRY_WINDOW_MS;
+        waited += RETRY_STEP_MS
+      ) {
+        await jest.advanceTimersByTimeAsync(RETRY_STEP_MS);
+      }
+    }
 
     it('a stream disconnect on every attempt marks the entry failed after the capped retries instead of leaving it stuck downloading', async () => {
       jest.useFakeTimers();
@@ -1837,18 +1904,18 @@ describe('the download worker', () => {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           __fs.failNext('download', new Error('stream disconnected'));
           await act(async () => {
-            calls[attempt]?.resolve([resolved('A')]);
+            (await callAt(calls, attempt)).resolve([resolved('A')]);
             await flush();
           });
           if (attempt < 2) {
             expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
             await act(async () => {
-              await jest.advanceTimersByTimeAsync(4_000);
-              await flush();
+              await advanceUntilRequest(calls, calls.length + 1);
             });
           }
         }
 
+        await act(async () => flushMicrotasks());
         expect(calls).toHaveLength(3);
         expect(usePinnedStore.getState().entries['A']?.status).toBe('failed');
         expect(usePinnedStore.getState().isWorking).toBe(false);
@@ -1862,16 +1929,17 @@ describe('the download worker', () => {
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.resolve([]);
+        (await callAt(calls, 0)).resolve([]);
         await flush();
       });
       expect(usePinnedStore.getState().entries['A']?.status).toBe('failed');
 
       usePinnedStore.getState().pin(asTrackId('A'));
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(2);
 
       await act(async () => {
-        calls[1]?.resolve([resolved('A')]);
+        (await callAt(calls, 1)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1883,7 +1951,7 @@ describe('the download worker', () => {
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1892,7 +1960,7 @@ describe('the download worker', () => {
       __fs.failNext('write', new Error('disk full'));
 
       await act(async () => {
-        calls[1]?.resolve([resolved('B')]);
+        (await callAt(calls, 1)).resolve([resolved('B')]);
         await flush();
       });
 
@@ -1912,7 +1980,7 @@ describe('the download worker', () => {
       usePinnedStore.getState().unpin(asTrackId('A'));
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1928,7 +1996,7 @@ describe('the download worker', () => {
       __fs.seedFile(pinnedUri('A.mp3'), 'partial-bytes-written-during-the-in-flight-attempt');
 
       await act(async () => {
-        calls[0]?.reject(new Error('network drop mid-transfer'));
+        (await callAt(calls, 0)).resolve(HTTP_NOT_FOUND);
         await flush();
       });
 
@@ -1940,11 +2008,12 @@ describe('the download worker', () => {
       const calls = captureAudioUrlCalls();
 
       usePinnedStore.getState().pin(asTrackId('A'));
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       usePinnedStore.setState((s) => ({ queue: [...s.queue, asTrackId('ghost')] }));
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
 
@@ -1961,7 +2030,7 @@ describe('the download worker', () => {
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.resolve([resolved('A')]);
+        (await callAt(calls, 0)).resolve([resolved('A')]);
         await flush();
       });
       const readyEntry = usePinnedStore.getState().entries['A'];
@@ -1969,6 +2038,7 @@ describe('the download worker', () => {
 
       usePinnedStore.getState().pin(asTrackId('A'));
 
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       expect(usePinnedStore.getState().entries['A']).toEqual(readyEntry);
       expect(usePinnedStore.getState().queue).toEqual([]);
@@ -1982,7 +2052,7 @@ describe('the download worker', () => {
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.resolve([{ trackId: 'A', url, version: 'v1' }]);
+        (await callAt(calls, 0)).resolve([{ trackId: 'A', url, version: 'v1' }]);
         await flush();
       });
 
@@ -2029,27 +2099,6 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
     return { trackId, url: signedUrl(trackId, generation), version: `v${generation}` };
   }
 
-  type PendingCall = {
-    ids: readonly string[];
-    resolve: (urls: ResolvedAudioUrl[]) => void;
-    reject: (err: unknown) => void;
-  };
-
-  function captureAudioUrlCalls(): PendingCall[] {
-    const calls: PendingCall[] = [];
-    fetchAudioUrlsMock.mockImplementation((ids: string[]) => {
-      let resolve!: PendingCall['resolve'];
-      let reject!: PendingCall['reject'];
-      const promise = new Promise<ResolvedAudioUrl[]>((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
-      calls.push({ ids, resolve, reject });
-      return promise;
-    });
-    return calls;
-  }
-
   async function flush(rounds = 20): Promise<void> {
     for (let i = 0; i < rounds; i += 1) {
       await Promise.resolve();
@@ -2060,32 +2109,27 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
     const usedUrls: string[] = [];
     let i = nextIndex;
     while (usePinnedStore.getState().isWorking) {
-      const call = calls[i];
-      if (call === undefined) {
-        throw new Error(
-          'worker still marked isWorking with no pending fetchAudioUrls call left to resolve',
-        );
-      }
+      const call = await callAt(calls, i);
       const urls = call.ids.map((id) => resolved(id, i + 1));
       call.resolve(urls);
       usedUrls.push(urls[0]?.url ?? '');
       i += 1;
-      await flush();
+      await flushMicrotasks();
     }
     return usedUrls;
   }
 
   beforeEach(() => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
   });
 
   describe('repinIfPinned — guard arm', () => {
-    it('does nothing for a track that was never pinned: no url resolution is issued and no entry is created', () => {
+    it('does nothing for a track that was never pinned: no url resolution is issued and no entry is created', async () => {
       const calls = captureAudioUrlCalls();
 
       repinIfPinned(asTrackId('never-pinned'));
 
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(0);
       expect(usePinnedStore.getState().entries['never-pinned']).toBeUndefined();
       expect(usePinnedStore.getState().queue).toEqual([]);
@@ -2098,7 +2142,7 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.resolve([resolved('A', 1)]);
+        (await callAt(calls, 0)).resolve([resolved('A', 1)]);
         await flush();
       });
       expect(usePinnedStore.getState().entries['A']?.status).toBe('ready');
@@ -2107,10 +2151,11 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
       repinIfPinned(asTrackId('A'));
       expect(__fs.readFile(pinnedUri('A.mp3'))).toBeUndefined();
       expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(2);
 
       await act(async () => {
-        calls[1]?.resolve([resolved('A', 2)]);
+        (await callAt(calls, 1)).resolve([resolved('A', SECOND_GENERATION)]);
         await flush();
       });
 
@@ -2128,12 +2173,13 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
 
       usePinnedStore.getState().pin(asTrackId('A'));
       await act(async () => {
-        calls[0]?.resolve([resolved('A', 1)]);
+        (await callAt(calls, 0)).resolve([resolved('A', 1)]);
         await flush();
       });
 
       repinIfPinned(asTrackId('A'));
       repinIfPinned(asTrackId('A'));
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(2);
       expect(usePinnedStore.getState().queue).toEqual(['A']);
 
@@ -2153,16 +2199,18 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
 
       usePinnedStore.getState().pin(asTrackId('A'));
       expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
 
       repinIfPinned(asTrackId('A'));
 
+      await act(async () => flushMicrotasks());
       expect(calls).toHaveLength(1);
       expect(usePinnedStore.getState().entries['A']?.status).toBe('queued');
       expect(usePinnedStore.getState().queue).toEqual(['A']);
 
       await act(async () => {
-        calls[0]?.resolve([resolved('A', 1)]);
+        (await callAt(calls, 0)).resolve([resolved('A', 1)]);
         await flush();
       });
 
@@ -2171,7 +2219,7 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
       expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
 
       await act(async () => {
-        calls[1]?.resolve([resolved('A', 2)]);
+        (await callAt(calls, 1)).resolve([resolved('A', SECOND_GENERATION)]);
         await flush();
       });
 
@@ -2195,7 +2243,7 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
 
       let sawStaleReady = false;
       await act(async () => {
-        calls[0]?.resolve([resolved('A', 1)]);
+        (await callAt(calls, 0)).resolve([resolved('A', 1)]);
         for (let i = 0; i < 60; i += 1) {
           await Promise.resolve();
           const entry = usePinnedStore.getState().entries['A'];
@@ -2216,7 +2264,7 @@ describe('repinIfPinned re-downloads a pinned track whose audio changed', () => 
 
       let sawUnexpectedWrite = false;
       await act(async () => {
-        calls[0]?.resolve([resolved('A', 1)]);
+        (await callAt(calls, 0)).resolve([resolved('A', 1)]);
         for (let i = 0; i < 60; i += 1) {
           await Promise.resolve();
           const status = usePinnedStore.getState().entries['A']?.status;
@@ -2257,8 +2305,7 @@ describe('pinned audio is served only at the version the server currently serves
 
   beforeEach(() => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
-    fetchAudioUrlsMock.mockResolvedValue([]);
+    serveAudioUrls(noAudioUrls);
   });
 
   describe('resolvePinnedUri — version gate', () => {
@@ -2304,19 +2351,22 @@ describe('pinned audio is served only at the version the server currently serves
   });
 
   describe('resolvePinnedUri — self-healing on a version mismatch', () => {
-    it('refuses the stale copy and takes it off ready in the same call, so no ordering can serve it', () => {
+    it('refuses the stale copy and takes it off ready in the same call, so no ordering can serve it', async () => {
       usePinnedStore.setState({ entries: readyEntry('v1') });
-      fetchAudioUrlsMock.mockReturnValue(new Promise<ResolvedAudioUrl[]>(() => {}));
+      serveAudioUrls(() => new Promise<ResolvedAudioUrl[]>(() => {}));
 
       expect(resolvePinnedUri(asTrackId('A'), 'v2')).toBeUndefined();
 
       expect(usePinnedStore.getState().entries['A']?.status).not.toBe('ready');
-      expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await flush();
+      });
+      expect(audioUrlRequests).toEqual([['A']]);
     });
 
     it('REGRESSION: a stale pinned file is replaced with the current audio without any acquisition event arriving', async () => {
       usePinnedStore.setState({ entries: readyEntry('v1') });
-      fetchAudioUrlsMock.mockResolvedValue([
+      serveAudioUrls(() => [
         { trackId: 'A', url: 'https://cdn.example/A.mp3?gen=2', version: 'v2' },
       ]);
 
@@ -2341,27 +2391,30 @@ describe('pinned audio is served only at the version the server currently serves
 
       expect(resolvePinnedUri(asTrackId('A'), 'v1')).toBe(PINNED_A);
 
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
       expect(usePinnedStore.getState().queue).toEqual([]);
     });
 
     it('does not re-pin a track that was never pinned', () => {
       expect(resolvePinnedUri(asTrackId('never-pinned'), 'v2')).toBeUndefined();
 
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
       expect(usePinnedStore.getState().entries['never-pinned']).toBeUndefined();
     });
 
-    it('does not stack re-pins while the replacement is already in flight', () => {
+    it('does not stack re-pins while the replacement is already in flight', async () => {
       usePinnedStore.setState({ entries: readyEntry('v1') });
       const pending = new Promise<ResolvedAudioUrl[]>(() => {});
-      fetchAudioUrlsMock.mockReturnValue(pending);
+      serveAudioUrls(() => pending);
 
       resolvePinnedUri(asTrackId('A'), 'v2');
       resolvePinnedUri(asTrackId('A'), 'v2');
       resolvePinnedUri(asTrackId('A'), 'v2');
+      await act(async () => {
+        await flush();
+      });
 
-      expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+      expect(audioUrlRequests).toEqual([['A']]);
       expect(usePinnedStore.getState().queue).toEqual([]);
     });
   });
@@ -2436,7 +2489,7 @@ describe('a download cut off by an app kill is not served as ready', () => {
     usePinnedStore.getState().pin(T1);
     await act(async () => flush());
     expect(usePinnedStore.getState().entries['t1']?.status).toBe('downloading');
-    fetchAudioUrlsMock.mockImplementation(() => new Promise<ResolvedAudioUrl[]>(() => {}));
+    serveAudioUrls(() => new Promise<ResolvedAudioUrl[]>(() => {}));
     usePinnedStore.setState({ queue: [], isWorking: false });
   }
 
@@ -2447,8 +2500,7 @@ describe('a download cut off by an app kill is not served as ready', () => {
     store = createMemoryFileStore();
     setPinnedFileStore(store);
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
-    fetchAudioUrlsMock.mockImplementation(async ([id]) => [resolved(id!)]);
+    serveAudioUrls(async ([id]) => [resolved(id!)]);
   });
 
   afterEach(() => {
@@ -2573,8 +2625,7 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
     store = createMemoryFileStore();
     setPinnedFileStore(store);
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
-    fetchAudioUrlsMock.mockImplementation(async ([id]) => [resolved(id!)]);
+    serveAudioUrls(async ([id]) => [resolved(id!)]);
     warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
@@ -2661,14 +2712,16 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
     });
 
     it('logs a failure to resolve the signed url with no url', async () => {
-      const error = new Error('404');
-      fetchAudioUrlsMock.mockRejectedValue(error);
+      serveAudioUrls(() => HTTP_NOT_FOUND);
 
       await act(async () => {
         await usePinnedStore.getState().pinMany([asTrackId('t1')]);
       });
 
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('t1'), { url: undefined, error });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('t1'), {
+        url: undefined,
+        error: expect.objectContaining({ name: ApiError.name, status: HTTP_NOT_FOUND }),
+      });
     });
   });
 
@@ -2682,7 +2735,7 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
       expect(result).toEqual({ requested: 0, failed: 0, refused: 'storage-full' });
       expect(usePinnedStore.getState().entries).toEqual({});
       expect(usePinnedStore.getState().queue).toEqual([]);
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
     });
 
     it('pin refuses when free disk space is below the reserve', () => {
@@ -2690,7 +2743,7 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
 
       expect(usePinnedStore.getState().pin(asTrackId('a'))).toBe('storage-full');
       expect(usePinnedStore.getState().entries).toEqual({});
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
     });
 
     it('pin accepts when there is room, and when the track needs no download', () => {
@@ -2729,7 +2782,7 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
 
     it('fails a queued track whose turn comes after storage filled up, without downloading it', async () => {
       let download!: () => void;
-      fetchAudioUrlsMock.mockImplementationOnce(
+      serveAudioUrlsOnce(
         ([id]) =>
           new Promise<ResolvedAudioUrl[]>((res) => {
             download = () => res([resolved(id!)]);
@@ -2747,15 +2800,13 @@ describe('pinned download deadlines, failure logging and the storage cap', () =>
       await expect(batch).resolves.toEqual({ requested: 2, failed: 1 });
       expect(usePinnedStore.getState().entries['a']?.status).toBe('ready');
       expect(usePinnedStore.getState().entries['b']?.status).toBe('failed');
-      expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+      expect(audioUrlRequests).toHaveLength(1);
     });
   });
 });
 
 describe('unpinMany reports what a bulk removal left downloaded', () => {
-  beforeEach(() => {
-    fetchAudioUrlsMock.mockReset();
-  });
+  beforeEach(() => {});
 
   const AUDIO_DIR = 'memory://document/offline-audio';
 
@@ -2968,8 +3019,7 @@ describe('work stays bounded on a large pinned library', () => {
     setPinnedFileStore(memory);
     setPinnedIndexFileStore(memory);
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset();
-    fetchAudioUrlsMock.mockImplementation(async ([id]) => [
+    serveAudioUrls(async ([id]) => [
       {
         trackId: id!,
         url: `https://cdn.example.com/${id}.mp3`,
@@ -3152,7 +3202,7 @@ describe('the remote kill switch stops pinned downloads', () => {
   beforeEach(() => {
     setKillSwitchFileStore(createMemoryFileStore());
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    fetchAudioUrlsMock.mockReset().mockImplementation(async (ids) => ids.map(resolved));
+    serveAudioUrls((ids) => ids.map((id) => resolved(id)));
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -3171,7 +3221,7 @@ describe('the remote kill switch stops pinned downloads', () => {
         await flush();
       });
 
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
       expect(statuses()).toEqual({ A: 'queued', B: 'queued' });
       expect(usePinnedStore.getState().queue).toEqual(['A', 'B']);
       expect(usePinnedStore.getState().isWorking).toBe(false);
@@ -3186,13 +3236,13 @@ describe('the remote kill switch stops pinned downloads', () => {
         await flush();
       });
 
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
       expect(statuses()).toEqual({ A: 'queued' });
     });
 
     it('stops the drain before the next track when the switch is turned off mid-batch', async () => {
       let releaseFirst!: () => void;
-      fetchAudioUrlsMock.mockImplementationOnce(
+      serveAudioUrlsOnce(
         (ids) =>
           new Promise((resolve) => {
             releaseFirst = () => resolve(ids.map(resolved));
@@ -3203,7 +3253,7 @@ describe('the remote kill switch stops pinned downloads', () => {
         void usePinnedStore.getState().pinMany([asTrackId('A'), asTrackId('B'), asTrackId('C')]);
         await flush();
       });
-      expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+      expect(audioUrlRequests).toHaveLength(1);
 
       await act(async () => {
         applyKillSwitches({ offline_downloads_enabled: false });
@@ -3211,7 +3261,7 @@ describe('the remote kill switch stops pinned downloads', () => {
         await flush();
       });
 
-      expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+      expect(audioUrlRequests).toHaveLength(1);
       expect(statuses()).toEqual({ A: 'ready', B: 'queued', C: 'queued' });
       expect(usePinnedStore.getState().queue).toEqual(['B', 'C']);
     });
@@ -3230,7 +3280,7 @@ describe('the remote kill switch stops pinned downloads', () => {
       });
 
       await expect(batch).resolves.toEqual({ requested: 2, failed: 0 });
-      expect(fetchAudioUrlsMock.mock.calls.map(([ids]) => ids)).toEqual([['A'], ['B']]);
+      expect(audioUrlRequests).toEqual([['A'], ['B']]);
       expect(statuses()).toEqual({ A: 'ready', B: 'ready' });
     });
 
@@ -3239,7 +3289,7 @@ describe('the remote kill switch stops pinned downloads', () => {
 
       applyKillSwitches({ offline_downloads_enabled: true });
 
-      expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+      expect(audioUrlRequests).toEqual([]);
       expect(usePinnedStore.getState().isWorking).toBe(false);
     });
   });

@@ -1,13 +1,12 @@
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { type QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
+import { QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { ApiError } from '@shared/failure/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/failure/describeError';
 import { TRACK_CACHE_FAMILIES } from '@shared/events/trackCacheShapes';
-import type * as ForgetTrackModule from '@shared/events/trackCachePatch';
 import type { ReactNode } from 'react';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
@@ -40,17 +39,23 @@ import type { PlaylistDetailResponse } from '@shared/api-client/playlistResponse
 import { libraryKeys } from '@shared/query/queryKeys';
 import { recordUserAction } from '@shared/telemetry/userTelemetry';
 
-const actualForgetTrack = jest.requireActual<typeof ForgetTrackModule>(
-  '@shared/events/trackCachePatch',
-).forgetTrack;
+const realUnpin = usePinnedStore.getState().unpin;
 
-const mockForgetTrack = jest.fn<void, [QueryClient, TrackId]>(actualForgetTrack);
+function failCleanupFor(failing: (trackId: TrackId) => boolean): void {
+  function unpin(trackId: TrackId): ReturnType<typeof realUnpin> {
+    if (failing(trackId)) throw new Error('download cleanup failed');
+    return realUnpin(trackId);
+  }
+  usePinnedStore.setState({ unpin });
+}
 
-jest.mock('@shared/events/trackCachePatch', () => ({
-  ...jest.requireActual('@shared/events/trackCachePatch'),
-  forgetTrack: (queryClient: QueryClient, trackId: TrackId) =>
-    mockForgetTrack(queryClient, trackId),
-}));
+function failEveryCleanup(): boolean {
+  return true;
+}
+
+function failCleanupOfB(trackId: TrackId): boolean {
+  return trackId === 'b';
+}
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({
   recordUserAction: jest.fn(),
@@ -80,10 +85,8 @@ describe('useDeleteTracks', () => {
     mockDeleteTrack.mockReset();
     mockRetryAcquisition.mockReset();
     mockReacquireTrack.mockReset();
-    mockForgetTrack.mockReset();
-    mockForgetTrack.mockImplementation(actualForgetTrack);
     useTrackStatusStore.getState().reset();
-    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
+    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, unpin: realUnpin });
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -353,10 +356,7 @@ describe('useDeleteTracks', () => {
       const { queryClient, wrapper } = setup(ports);
       const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockResolvedValue(undefined);
-      mockForgetTrack.mockImplementation((queryClient, trackId) => {
-        if (trackId === 'b') throw new Error('cache patch failed');
-        actualForgetTrack(queryClient, trackId);
-      });
+      failCleanupFor(failCleanupOfB);
 
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
       act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
@@ -379,11 +379,6 @@ describe('useDeleteTracks', () => {
   });
 
   describe('useDeleteTracks — local cleanup failure never loses a deleted track (#218)', () => {
-    const throwForB = () =>
-      mockForgetTrack.mockImplementation((client, trackId) => {
-        if (trackId === 'b') throw new Error('cache patch failed');
-        actualForgetTrack(client, trackId);
-      });
     const seedPinned = (id: string) =>
       usePinnedStore.setState((s) => ({
         entries: {
@@ -401,7 +396,7 @@ describe('useDeleteTracks', () => {
       ['a', 'c'].forEach(seedPinned);
       const spy = jest.spyOn(queryClient, 'invalidateQueries');
       mockDeleteTrack.mockResolvedValue(undefined);
-      throwForB();
+      failCleanupFor(failCleanupOfB);
 
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
       act(() => result.current.mutate(['a', 'b', 'c'].map(asTrackId)));
@@ -409,9 +404,8 @@ describe('useDeleteTracks', () => {
 
       expect(result.current.data).toMatchObject({ deleted: 3, failures: [] });
       expect(alertSpy).not.toHaveBeenCalled();
-      expect(pagedIds(queryClient)).toEqual(['b']);
+      expect(pagedIds(queryClient)).toEqual([]);
       expect(Object.keys(usePinnedStore.getState().entries)).toEqual([]);
-      expect(mockForgetTrack.mock.calls.filter(([, id]) => id === 'b')).toHaveLength(1);
       expect(invalidatedKeys(spy)).toEqual(
         expect.arrayContaining(Object.values(TRACK_CACHE_FAMILIES).map((f) => f.prefix)),
       );
@@ -438,9 +432,7 @@ describe('useDeleteTracks', () => {
       const spy = jest.spyOn(queryClient, 'invalidateQueries');
       const request = deferred();
       mockDeleteTrack.mockImplementation(() => request.promise);
-      mockForgetTrack.mockImplementation(() => {
-        throw new Error('cache patch failed');
-      });
+      failCleanupFor(failEveryCleanup);
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
       act(() => result.current.mutate([asTrackId('a1')]));
       await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalledTimes(1));
@@ -450,7 +442,10 @@ describe('useDeleteTracks', () => {
       await act(async () => request.resolve());
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(mockForgetTrack).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        '[library] delete cleanup failed',
+        expect.anything(),
+      );
       expect(invalidatedKeys(spy)).toEqual([]);
       expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
     });
@@ -462,9 +457,7 @@ describe('useDeleteTracks', () => {
       const spy = jest.spyOn(queryClient, 'invalidateQueries');
       const held = deferred();
       mockDeleteTrack.mockImplementation((id) => (id === 'a1' ? Promise.resolve() : held.promise));
-      mockForgetTrack.mockImplementation(() => {
-        throw new Error('cache patch failed');
-      });
+      failCleanupFor(failEveryCleanup);
       const { result } = renderHook(() => useDeleteTracks(), { wrapper });
       act(() => result.current.mutate(['a1', 'a2'].map(asTrackId)));
       await waitFor(() =>

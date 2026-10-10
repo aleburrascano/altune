@@ -2,40 +2,69 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import {
-  clearSearchHistory,
-  listSearchHistory,
-  searchDiscovery,
-  suggestDiscovery,
-  type DiscoverySearchHistoryResponse,
-} from '@shared/api-client/discovery';
+import type { DiscoverySearchHistoryResponse } from '@shared/api-client/discovery';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
+import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   useDiscoverClearSearchHistory,
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
+import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
+import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
+import { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
 
-jest.mock('@shared/api-client/discovery', () => ({
-  ...jest.requireActual('@shared/api-client/discovery'),
-  searchDiscovery: jest.fn(),
-  suggestDiscovery: jest.fn(),
-  listSearchHistory: jest.fn(),
-  clearSearchHistory: jest.fn(),
-}));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
+}));
 
-const mockSearch = searchDiscovery as jest.Mock;
-const mockSuggest = suggestDiscovery as jest.Mock;
-const mockHistory = listSearchHistory as jest.Mock;
+const { __http } = require('@testing/doubles/fetch.js');
+
+const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
+const NO_CONTENT = 204;
+const BAD_REQUEST = 400;
+const SERVER_ERROR = 500;
+const TWO_CALLS = 2;
+const BAD_GATEWAY = 502;
+
 const mockRecordEvent = recordEvent as jest.Mock;
 
 let queryClient: QueryClient;
+let port: DiscoverPort;
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+function noAnswerYet(): void {}
+
+interface WrapperProps {
+  children: React.ReactNode;
+}
+
+function wrapper({ children }: WrapperProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DiscoverPortProvider port={port}>{children}</DiscoverPortProvider>
+    </QueryClientProvider>
+  );
+}
+
+function portListing(listSearchHistory: DiscoverPort['listSearchHistory']): DiscoverPort {
+  return { ...createMemoryDiscoverPort(), listSearchHistory };
+}
+
+function clearRequests(): number {
+  return __http.countFor(CLEAR_HISTORY);
+}
+
+function holdClearRequestsUntil(gate: Promise<void>): void {
+  const realFetch = globalThis.fetch;
+  async function heldFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const response = realFetch(input, init);
+    if (init?.method === 'DELETE') await gate;
+    return response;
+  }
+  jest.spyOn(globalThis, 'fetch').mockImplementation(heldFetch);
 }
 
 function failureEvents() {
@@ -48,19 +77,23 @@ beforeEach(() => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  mockSearch.mockReset();
-  mockSuggest.mockReset();
-  mockHistory.mockReset();
+  port = createMemoryDiscoverPort();
+  jest.mocked(supabase.auth.getSession).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  } as Awaited<ReturnType<typeof supabase.auth.getSession>>);
   mockRecordEvent.mockReset().mockResolvedValue(undefined);
 });
 
 afterEach(() => {
   queryClient.clear();
+  jest.restoreAllMocks();
 });
 
 describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
   it('a failed history fetch reports the correlation id of a transport failure', async () => {
-    mockHistory.mockRejectedValue(new NetworkError('transport', 'offline', 'f0e1d2c3b4a59687'));
+    const transportFailure = new NetworkError('transport', 'offline', 'f0e1d2c3b4a59687');
+    port = portListing(() => Promise.reject(transportFailure));
     const { result } = renderHook(() => useSearchHistory(), { wrapper });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
@@ -73,26 +106,27 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
   });
 
   it('a failed history fetch fires search_failed with source history', async () => {
-    mockHistory.mockRejectedValue(new ApiError(500, 'boom'));
+    port = portListing(() => Promise.reject(new ApiError(SERVER_ERROR, 'boom')));
     const { result } = renderHook(() => useSearchHistory(), { wrapper });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
 
-    expect(failureEvents()[0]?.payload).toEqual({ source: 'history', status: 500 });
+    expect(failureEvents()[0]?.payload).toEqual({ source: 'history', status: SERVER_ERROR });
   });
 
   it('a successful query emits no failure event', async () => {
-    mockHistory.mockResolvedValue({ items: [] });
+    port = createMemoryDiscoverPort({ history: ['radiohead'] });
     const { result } = renderHook(() => useSearchHistory(), { wrapper });
 
-    await waitFor(() => expect(result.current.data).toEqual({ items: [] }));
+    await waitFor(() => expect(result.current.data?.items[0]?.query).toBe('radiohead'));
 
     expect(failureEvents()).toHaveLength(0);
   });
 
   it('one failure is reported once, across re-renders and a second observer of the same query', async () => {
-    mockHistory.mockRejectedValue(new ApiError(500, 'boom'));
+    const failure = new ApiError(SERVER_ERROR, 'boom');
+    port = portListing(() => Promise.reject(failure));
     const first = renderHook(() => useSearchHistory(), { wrapper });
     await waitFor(() => expect(first.result.current.error).not.toBeNull());
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
@@ -105,31 +139,20 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
   });
 
   it('a later, separate failure of the same query is reported again', async () => {
-    mockHistory.mockRejectedValue(new ApiError(500, 'boom'));
+    let historyFailure = new ApiError(SERVER_ERROR, 'boom');
+    port = portListing(() => Promise.reject(historyFailure));
     renderHook(() => useSearchHistory(), { wrapper });
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
 
-    mockHistory.mockRejectedValue(new ApiError(502, 'bad gateway'));
+    historyFailure = new ApiError(BAD_GATEWAY, 'bad gateway');
     await queryClient.refetchQueries({ queryKey: discoveryKeys.history });
 
     await waitFor(() => expect(failureEvents()).toHaveLength(2));
-    expect(failureEvents()[1]?.payload).toEqual({ source: 'history', status: 502 });
+    expect(failureEvents()[1]?.payload).toEqual({ source: 'history', status: BAD_GATEWAY });
   });
 });
 
-const mockClearSearchHistory = clearSearchHistory as jest.Mock;
-
 describe('useClearSearchHistory empties the cache at once and rolls it back on failure', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  let queryClient: QueryClient;
-
-  afterEach(() => {
-    queryClient.clear();
-  });
-
   function setup() {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -147,32 +170,34 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
   }
 
   it('writes an empty history before the server call and does not refetch on success', async () => {
-    mockClearSearchHistory.mockResolvedValue(undefined);
+    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
     const { queryClient, invalidate, clear } = setup();
 
     act(() => clear());
 
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
-    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toBe(1));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(__http.last().path).toBe('/v1/discovery/search-history');
     expect(invalidate).not.toHaveBeenCalled();
   });
 
   it('rolls the history back, surfaces the error and invalidates when the server call fails', async () => {
-    const failure = new Error('offline');
-    mockClearSearchHistory.mockRejectedValue(failure);
+    __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
     const { queryClient, invalidate, result, clear } = setup();
 
     act(() => clear());
 
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
-    await waitFor(() => expect(result.current.error).toBe(failure));
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(ApiError));
+    expect(result.current.error).toMatchObject({ status: BAD_REQUEST });
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [{ query: 'old' }] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: discoveryKeys.history });
   });
 
   it('leaves the error null on success and clears a previous failure on retry', async () => {
-    mockClearSearchHistory.mockRejectedValueOnce(new Error('offline'));
-    mockClearSearchHistory.mockResolvedValueOnce(undefined);
+    __http.replyOnce(CLEAR_HISTORY, { status: BAD_REQUEST });
+    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
     const { queryClient, result } = setup();
 
     expect(result.current.error).toBeNull();
@@ -180,26 +205,27 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     await waitFor(() => expect(result.current.error).not.toBeNull());
 
     act(() => result.current.clear());
-    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(clearRequests()).toBe(TWO_CALLS));
     await waitFor(() => expect(result.current.error).toBeNull());
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
   });
 
   it('does not restore or refetch history when the failure settles after sign-out', async () => {
-    let reject: (e: Error) => void = () => undefined;
-    mockClearSearchHistory.mockReturnValue(
-      new Promise<void>((_resolve, rej) => {
-        reject = rej;
+    let answer = noAnswerYet;
+    holdClearRequestsUntil(
+      new Promise<void>((resolve) => {
+        answer = resolve;
       }),
     );
+    __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
     const { queryClient, invalidate, clear } = setup();
 
     act(() => clear());
-    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toBe(1));
     runSignOutCleanups();
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'next-user' }] });
     await act(async () => {
-      reject(new Error('offline'));
+      answer();
       await Promise.resolve();
     });
 
@@ -211,20 +237,21 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
   });
 
   it('does not empty the history when the success settles after sign-out', async () => {
-    let resolve: () => void = () => undefined;
-    mockClearSearchHistory.mockReturnValue(
-      new Promise<void>((res) => {
-        resolve = res;
+    let answer = noAnswerYet;
+    holdClearRequestsUntil(
+      new Promise<void>((resolve) => {
+        answer = resolve;
       }),
     );
+    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
     const { queryClient, clear } = setup();
 
     act(() => clear());
-    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toBe(1));
     runSignOutCleanups();
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'next-user' }] });
     await act(async () => {
-      resolve();
+      answer();
       await Promise.resolve();
     });
 
@@ -250,30 +277,34 @@ describe('discover clear-history racing an unrelated history invalidation', () =
     return { promise, resolve };
   }
 
-  function serverHoldingHistory() {
+  function serverHoldingHistory(refetchAnswers: Promise<DiscoverySearchHistoryResponse>[] = []) {
     const commit = deferred<void>();
     let history = PRE_CLEAR_HISTORY;
-    jest.mocked(clearSearchHistory).mockImplementation(() =>
+    let reads = 0;
+    const answers = [...refetchAnswers];
+    holdClearRequestsUntil(
       commit.promise.then(() => {
         history = CLEARED_HISTORY;
       }),
     );
+    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
+    function readHistory(): Promise<DiscoverySearchHistoryResponse> {
+      reads += 1;
+      if (reads > 1 && answers.length > 0) return answers.shift()!;
+      return Promise.resolve(history);
+    }
+    port = portListing(readHistory);
     return {
       commitClear: commit.resolve,
-      readHistory: (): DiscoverySearchHistoryResponse => history,
+      historyReads: (): number => reads,
     };
   }
 
-  function makeWrapper(queryClient: QueryClient) {
-    return function Wrapper({ children }: { children: React.ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    };
-  }
-
-  async function renderHistoryWithClear(queryClient: QueryClient) {
+  async function renderHistoryWithClear(client: QueryClient) {
+    queryClient = client;
     const screen = renderHook(
       () => ({ history: useSearchHistory(), clear: useDiscoverClearSearchHistory() }),
-      { wrapper: makeWrapper(queryClient) },
+      { wrapper },
     );
     await waitFor(() => expect(screen.result.current.history.data).toEqual(PRE_CLEAR_HISTORY));
     return screen;
@@ -289,19 +320,13 @@ describe('discover clear-history racing an unrelated history invalidation', () =
     });
   }
 
-  beforeEach(() => {
-    jest.mocked(clearSearchHistory).mockReset();
-    jest.mocked(listSearchHistory).mockReset();
-  });
-
   it('leaves no history when a search-driven refetch repopulated the cache mid-clear', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const server = serverHoldingHistory();
-    jest.mocked(listSearchHistory).mockImplementation(async () => server.readHistory());
     const screen = await renderHistoryWithClear(queryClient);
 
     act(() => screen.result.current.clear.clear());
-    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toBe(1));
     await act(async () => {
       await queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
     });
@@ -319,19 +344,14 @@ describe('discover clear-history racing an unrelated history invalidation', () =
 
   it('leaves no history when that refetch is still in flight as the clear commits', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const server = serverHoldingHistory();
     const racingRefetch = deferred<DiscoverySearchHistoryResponse>();
-    jest
-      .mocked(listSearchHistory)
-      .mockResolvedValueOnce(PRE_CLEAR_HISTORY)
-      .mockReturnValueOnce(racingRefetch.promise)
-      .mockImplementation(async () => server.readHistory());
+    const server = serverHoldingHistory([racingRefetch.promise]);
     const screen = await renderHistoryWithClear(queryClient);
 
     act(() => screen.result.current.clear.clear());
-    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(clearRequests()).toBe(1));
     void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
-    await waitFor(() => expect(listSearchHistory).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(server.historyReads()).toBe(TWO_CALLS));
     await act(async () => {
       server.commitClear();
     });
@@ -351,49 +371,35 @@ describe('discover clear-history racing an unrelated history invalidation', () =
 describe('discover clear-history retries transient failures', () => {
   const EXISTING_HISTORY = { items: [{ query: 'old' }] };
 
-  let queryClient: QueryClient;
-
   function setup() {
     queryClient = new QueryClient({ defaultOptions: { mutations: { retryDelay: 0 } } });
     queryClient.setQueryData(discoveryKeys.history, EXISTING_HISTORY);
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
     const { result } = renderHook(() => useDiscoverClearSearchHistory(), { wrapper });
     return { queryClient, result };
   }
 
-  beforeEach(() => {
-    mockClearSearchHistory.mockReset();
-  });
-
-  afterEach(() => {
-    queryClient.clear();
-  });
-
   it('keeps the history cleared and the error unset when a 502 is followed by a success', async () => {
-    mockClearSearchHistory
-      .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
-      .mockResolvedValueOnce(undefined);
+    __http.replyOnce(CLEAR_HISTORY, { status: BAD_GATEWAY });
+    __http.reply(CLEAR_HISTORY, { status: NO_CONTENT });
     const { queryClient, result } = setup();
 
     act(() => result.current.clear());
 
-    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(clearRequests()).toBe(TWO_CALLS));
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
     expect(result.current.error).toBeNull();
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
   });
 
   it('rolls back and surfaces a permanent 400 without reattempting it', async () => {
-    const rejection = new ApiError(400, 'bad request');
-    mockClearSearchHistory.mockRejectedValue(rejection);
+    __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
     const { queryClient, result } = setup();
 
     act(() => result.current.clear());
 
-    await waitFor(() => expect(result.current.error).toBe(rejection));
-    expect(mockClearSearchHistory).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(ApiError));
+    expect(result.current.error).toMatchObject({ status: BAD_REQUEST });
+    expect(clearRequests()).toBe(1);
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual(EXISTING_HISTORY);
   });
 });
