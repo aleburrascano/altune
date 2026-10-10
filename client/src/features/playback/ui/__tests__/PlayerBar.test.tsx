@@ -5,6 +5,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { useQueueStore } from '@shared/playback/queueStore';
+import { RESTART_THRESHOLD_MS } from '@shared/playback/restartOnPrevious';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
@@ -183,6 +184,36 @@ describe('PlayerBar — previous, shuffle and repeat, as on the full player', ()
       status: 'playing',
       track: TRACK,
       positionMs: 1000,
+      durationMs: 200000,
+    });
+
+    fireEvent.press(screen.getByLabelText('Previous track'));
+
+    expect(controls.skipPrevious).toHaveBeenCalledTimes(1);
+    expect(controls.seekTo).not.toHaveBeenCalled();
+  });
+
+  it('restarts the track when Previous is pressed a millisecond past the restart threshold', () => {
+    useQueueStore.getState().loadQueue([NEXT_TRACK, TRACK], 1, null);
+    const controls = renderBar({
+      status: 'playing',
+      track: TRACK,
+      positionMs: RESTART_THRESHOLD_MS + 1,
+      durationMs: 200000,
+    });
+
+    fireEvent.press(screen.getByLabelText('Previous track'));
+
+    expect(controls.seekTo).toHaveBeenCalledWith(0);
+    expect(controls.skipPrevious).not.toHaveBeenCalled();
+  });
+
+  it('goes back a track when Previous is pressed exactly at the restart threshold', () => {
+    useQueueStore.getState().loadQueue([NEXT_TRACK, TRACK], 1, null);
+    const controls = renderBar({
+      status: 'playing',
+      track: TRACK,
+      positionMs: RESTART_THRESHOLD_MS,
       durationMs: 200000,
     });
 

@@ -287,37 +287,31 @@ function renderWithPin(entry: PinnedEntry | undefined) {
   render(<LibraryRow track={track} onPress={jest.fn()} onMore={jest.fn()} />);
 }
 
-const OFFLINE_IDS = [
-  `library-row-offline-${ID}`,
-  `library-row-offline-pending-${ID}`,
-  `library-row-offline-failed-${ID}`,
-];
+const PINNED_BADGE_LABELS = ['Downloaded', 'Downloading', 'Download failed'];
 
-function shownOfflineIds(): string[] {
-  return OFFLINE_IDS.filter(
-    (id) => screen.UNSAFE_queryAllByProps({ 'data-testid': id }).length > 0,
-  );
+function shownPinnedBadges(): string[] {
+  return PINNED_BADGE_LABELS.filter((label) => screen.queryAllByLabelText(label).length > 0);
 }
 
 describe('LibraryRow — offline pin indicator', () => {
   it('marks a failed pin with its own indicator and label, distinct from never-pinned', () => {
     renderWithPin({ trackId: ID, status: 'failed' });
-    expect(shownOfflineIds()).toEqual([`library-row-offline-failed-${ID}`]);
+    expect(shownPinnedBadges()).toEqual(['Download failed']);
     expect(rowLabel()).toMatch(/, download failed$/);
   });
 
   it('shows no indicator for a track that was never pinned', () => {
     renderWithPin(undefined);
-    expect(shownOfflineIds()).toEqual([]);
+    expect(shownPinnedBadges()).toEqual([]);
     expect(rowLabel()).not.toMatch(/download/);
   });
 
   it('keeps the ready and pending indicators for their statuses', () => {
     renderWithPin({ trackId: ID, status: 'ready', uri: 'file:///a' });
-    expect(shownOfflineIds()).toEqual([`library-row-offline-${ID}`]);
+    expect(shownPinnedBadges()).toEqual(['Downloaded']);
     screen.unmount();
     renderWithPin({ trackId: ID, status: 'queued' });
-    expect(shownOfflineIds()).toEqual([`library-row-offline-pending-${ID}`]);
+    expect(shownPinnedBadges()).toEqual(['Downloading']);
   });
 });
 

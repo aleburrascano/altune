@@ -7,7 +7,10 @@ import tsParser from '@typescript-eslint/parser';
 import { loadRules } from '../eslint/consistency/index.js';
 
 const mobileRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const baselinePath = process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'consistency.baseline');
+const baselinePath =
+  process.env.CONSISTENCY_BASELINE_FILE ?? path.join(mobileRoot, 'consistency.baseline');
+// The tree the CLI scans; tests point it at a temp copy so they never write under src.
+const scanRoot = process.env.CONSISTENCY_ROOT ?? mobileRoot;
 
 const tsxParsing = {
   files: ['**/*.{ts,tsx}'],
@@ -17,9 +20,9 @@ const tsxParsing = {
   },
 };
 
-function buildLinter(rule) {
+function buildLinter(rule, cwd = mobileRoot) {
   return new ESLint({
-    cwd: mobileRoot,
+    cwd,
     overrideConfigFile: true,
     overrideConfig: [tsxParsing, ...rule.config],
   });
@@ -27,18 +30,18 @@ function buildLinter(rule) {
 
 function srcFiles() {
   return globSync('src/**/*.{ts,tsx}', {
-    cwd: mobileRoot,
+    cwd: scanRoot,
     ignore: ['**/__tests__/**', '**/*.test.*'],
   });
 }
 
 async function lintFiles(rule, files) {
   if (files.length === 0) return [];
-  const linter = buildLinter(rule);
+  const linter = buildLinter(rule, scanRoot);
   const results = await linter.lintFiles(files);
   return results.flatMap((result) =>
     result.messages.map((message) => ({
-      file: path.relative(mobileRoot, result.filePath),
+      file: path.relative(scanRoot, result.filePath),
       message: message.message,
     })),
   );
@@ -49,7 +52,10 @@ export function violationLine(rule, violation) {
 }
 
 export function readBaseline(file = baselinePath) {
-  return fs.readFileSync(file, 'utf8').split('\n').filter((line) => line !== '');
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((line) => line !== '');
 }
 
 // Multiset difference: a line listed once permits one occurrence.

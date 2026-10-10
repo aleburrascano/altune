@@ -36,6 +36,25 @@ function runRatchetCli(env: NodeJS.ProcessEnv = {}) {
   }
 }
 
+type FixtureFiles = Record<string, string>;
+
+// Builds a throwaway tree holding only the given files and baseline, so a fixture never lands in the real src.
+function runRatchetOnFixtureTree(files: FixtureFiles, baselineLines: string[] = []) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'consistency-ratchet-'));
+  const baselineFile = path.join(root, 'consistency.baseline');
+  try {
+    for (const [relativePath, source] of Object.entries(files)) {
+      const filePath = path.join(root, relativePath);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, source);
+    }
+    fs.writeFileSync(baselineFile, baselineLines.map((line) => `${line}\n`).join(''));
+    return runRatchetCli({ CONSISTENCY_ROOT: root, CONSISTENCY_BASELINE_FILE: baselineFile });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 const rules = loadRules();
 
 test('at least one rule module is registered', () => {
@@ -85,31 +104,18 @@ test('running the real script reports MC-1 at its baselined supabaseClient impor
   expect(stdout).not.toContain('new violation');
 });
 
-test('running the real script exits 1 when one violation is fixed and another added, count unchanged', () => {
+test('running the script exits 1 when one violation is fixed and another added, count unchanged', () => {
   const relativePath = path.join('src', '__consistency_ratchet_swap__.ts');
-  const fixturePath = path.join(mobileRoot, relativePath);
-  const baselineLines = fs
-    .readFileSync(path.join(mobileRoot, 'consistency.baseline'), 'utf8')
-    .split('\n')
-    .filter((line) => line !== '');
   const fixedLine = 'MC-1 src/gone.ts Use apiFetch/apiSend from @shared/api-client (MC-1).';
-  const swapped = path.join(os.tmpdir(), `consistency-swap-${process.pid}.baseline`);
-  fs.writeFileSync(swapped, `${[...baselineLines, fixedLine].join('\n')}\n`);
-  fs.writeFileSync(
-    fixturePath,
-    "export function f() {\n  return fetch('https://example.com');\n}\n",
+
+  const { status, stdout } = runRatchetOnFixtureTree(
+    { [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n" },
+    [fixedLine],
   );
 
-  try {
-    const { status, stdout } = runRatchetCli({ CONSISTENCY_BASELINE_FILE: swapped });
-
-    expect(status).toBe(1);
-    expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
-    expect(stdout).toContain(`fixed: remove it from the baseline: ${fixedLine}`);
-  } finally {
-    fs.rmSync(fixturePath, { force: true });
-    fs.rmSync(swapped, { force: true });
-  }
+  expect(status).toBe(1);
+  expect(stdout).toContain(`new violation: MC-1 ${relativePath}`);
+  expect(stdout).toContain(`fixed: remove it from the baseline: ${fixedLine}`);
 });
 
 test('running the real script exits 1 for a listed violation that no longer occurs', () => {
@@ -130,23 +136,16 @@ test('running the real script exits 1 for a listed violation that no longer occu
   }
 });
 
-test('running the real script exits 1 and names MC-1 and the file when a raw fetch is added', () => {
+test('running the script exits 1 and names MC-1 and the file when a raw fetch is added', () => {
   const relativePath = path.join('src', '__consistency_ratchet_fixture__.ts');
-  const fixturePath = path.join(mobileRoot, relativePath);
-  fs.writeFileSync(
-    fixturePath,
-    "export function f() {\n  return fetch('https://example.com');\n}\n",
-  );
 
-  try {
-    const { status, stdout } = runRatchetCli();
+  const { status, stdout } = runRatchetOnFixtureTree({
+    [relativePath]: "export function f() {\n  return fetch('https://example.com');\n}\n",
+  });
 
-    expect(status).toBe(1);
-    expect(stdout).toContain('MC-1');
-    expect(stdout).toContain(relativePath);
-  } finally {
-    fs.rmSync(fixturePath, { force: true });
-  }
+  expect(status).toBe(1);
+  expect(stdout).toContain('MC-1');
+  expect(stdout).toContain(relativePath);
 });
 
 describe.each([
@@ -165,19 +164,12 @@ describe.each([
     path.join('src', 'features', 'library', 'hooks', '__mc10_fixture__.ts'),
     "export const k = { queryKey: ['x'] };\n",
   ],
-])('running the real script for %s', (ruleId, relativePath, source) => {
+])('running the script for %s', (ruleId, relativePath, source) => {
   test(`exits 1 and names ${relativePath} when it is added`, () => {
-    const fixturePath = path.join(mobileRoot, relativePath);
-    fs.writeFileSync(fixturePath, source);
+    const { status, stdout } = runRatchetOnFixtureTree({ [relativePath]: source });
 
-    try {
-      const { status, stdout } = runRatchetCli();
-
-      expect(status).toBe(1);
-      expect(stdout).toContain(`new violation: ${ruleId} ${relativePath}`);
-    } finally {
-      fs.rmSync(fixturePath, { force: true });
-    }
+    expect(status).toBe(1);
+    expect(stdout).toContain(`new violation: ${ruleId} ${relativePath}`);
   });
 });
 
@@ -329,21 +321,13 @@ describe('MC-8 features reach the API only through their own adapters', () => {
     expect(messages).toHaveLength(0);
   });
 
-  test('the real script exits 1 and names MC-8 and the file when a hook adds a barrel import', () => {
-    const fixtureDir = path.join(mobileRoot, 'src', 'features', '__mc8_fixture__');
+  test('the script exits 1 and names MC-8 and the file when a hook adds a barrel import', () => {
     const relativePath = path.join('src', 'features', '__mc8_fixture__', 'hooks', 'x.ts');
-    const fixturePath = path.join(mobileRoot, relativePath);
-    fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
-    fs.writeFileSync(fixturePath, barrelImport);
 
-    try {
-      const { status, stdout } = runRatchetCli();
+    const { status, stdout } = runRatchetOnFixtureTree({ [relativePath]: barrelImport });
 
-      expect(status).toBe(1);
-      expect(stdout).toContain('MC-8');
-      expect(stdout).toContain(relativePath);
-    } finally {
-      fs.rmSync(fixtureDir, { recursive: true, force: true });
-    }
+    expect(status).toBe(1);
+    expect(stdout).toContain('MC-8');
+    expect(stdout).toContain(relativePath);
   });
 });

@@ -69,6 +69,12 @@ export const PINNED_GLYPH: Record<PinnedGlyphKind, LucideIcon> = {
   failed: CircleAlert,
 };
 
+export const PINNED_GLYPH_LABEL: Record<PinnedGlyphKind, string> = {
+  downloaded: 'Downloaded',
+  downloading: 'Downloading',
+  failed: 'Download failed',
+};
+
 export function LibraryRowPinnedIcon({
   trackId,
   status,
@@ -81,6 +87,11 @@ export function LibraryRowPinnedIcon({
   if (icon === null) return null;
   const Glyph = PINNED_GLYPH[icon.kind];
   return (
-    <Glyph testID={`${icon.testIdPrefix}-${trackId}`} size={14} color={theme.color[icon.color]} />
+    <Glyph
+      testID={`${icon.testIdPrefix}-${trackId}`}
+      accessibilityLabel={PINNED_GLYPH_LABEL[icon.kind]}
+      size={14}
+      color={theme.color[icon.color]}
+    />
   );
 }

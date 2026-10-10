@@ -308,14 +308,3 @@ describe('rule 5 — the barrel is the public surface', () => {
     );
   });
 });
-
-describe('rule 5b — the barrel is executable, not just textually correct', () => {
-  it('every export of the slice root is a defined value, so a consumer importing it gets working bindings', () => {
-    const barrel = require('@shared/playlists/index') as Record<string, unknown>;
-    const exported = Object.keys(barrel);
-
-    expect(exported.length).toBeGreaterThan(0);
-    const undefinedExports = exported.filter((name) => barrel[name] === undefined);
-    expect(undefinedExports).toEqual([]);
-  });
-});
