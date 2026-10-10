@@ -259,15 +259,29 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
       ]
     : [];
 
+const localPlugin = {
+  rules: {
+    'no-comments': require('./eslint-rules/no-comments'),
+    'no-banned-noun': require('./eslint-rules/no-banned-noun'),
+  },
+};
+
 const noCommentsAnywhere = {
   files: ['**/*.{ts,tsx,js,jsx,mjs,cjs}'],
   linterOptions: { noInlineConfig: true },
-  plugins: { local: { rules: { 'no-comments': require('./eslint-rules/no-comments') } } },
+  plugins: { local: localPlugin },
   languageOptions: {
     parser: tsParser,
     parserOptions: { ecmaFeatures: { jsx: true } },
   },
   rules: { 'local/no-comments': 'error' },
+};
+
+const theNounIsTrackNeverSong = {
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: TEST_FILES,
+  plugins: { local: localPlugin },
+  rules: { 'local/no-banned-noun': 'error' },
 };
 
 const SRC_ONLY = 'src/**/*';
@@ -312,6 +326,7 @@ const styleRulesConfig = [
 module.exports = [
   ...styleRulesConfig.map(onlyWithinSrc),
   noCommentsAnywhere,
+  theNounIsTrackNeverSong,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

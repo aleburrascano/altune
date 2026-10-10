@@ -170,17 +170,6 @@ describe('no console.log in this slice', () => {
   });
 });
 
-describe('the banned noun never appears in this slice', () => {
-  it('no identifier or string literal in shared/telemetry contains "song"', () => {
-    const offenders: string[] = [];
-    for (const file of listSourceFiles(TELEMETRY_DIR)) {
-      const source = fs.readFileSync(file, 'utf8');
-      if (/\bsong/i.test(source)) offenders.push(path.basename(file));
-    }
-    expect(offenders).toEqual([]);
-  });
-});
-
 describe('security: no auth material reaches this slice or the disk it writes to', () => {
   afterEach(() => {
     jest.restoreAllMocks();
