@@ -11,6 +11,7 @@ import { currentSessionEpoch, isSameSession } from '@shared/session/signOutClean
 import { showFailureAlert } from '@shared/ui';
 
 const ACTION = 'favorites.toggle';
+const FAILURE_MESSAGE = `Could not update your favorites. ${RETRY_TAIL}`;
 
 type FavoritesApi = {
   isFavorite: (target: FavoriteTarget) => boolean;
@@ -21,7 +22,7 @@ type SendRequest = { target: FavoriteTarget; favorite: boolean };
 
 type FavoriteLane = {
   epoch: number;
-  confirmed: boolean;
+  confirmed: boolean | undefined;
   desired: boolean;
   taps: number;
 };
@@ -119,24 +120,26 @@ async function drainLane(run: LaneRun): Promise<void> {
 
 async function sendLatest(run: LaneRun): Promise<void> {
   const { target, lane, send } = run;
-  const { desired, taps } = lane;
+  const sent = { ...lane };
   try {
-    await send({ target, favorite: desired });
-    lane.confirmed = desired;
+    await send({ target, favorite: sent.desired });
+    lane.confirmed = sent.desired;
   } catch {
-    if (lane.taps === taps) rollBack(run);
+    afterFailure(run, sent);
   }
 }
 
-function rollBack({ queryClient, target, lane }: LaneRun): void {
-  lane.desired = lane.confirmed;
+function afterFailure(run: LaneRun, sent: FavoriteLane): void {
+  run.lane.confirmed = undefined;
+  if (run.lane.taps === sent.taps) rollBack(run, sent.confirmed ?? !sent.desired);
+}
+
+function rollBack({ queryClient, target, lane }: LaneRun, lastKnown: boolean): void {
+  lane.confirmed = lastKnown;
+  lane.desired = lastKnown;
   if (!isSameSession(lane.epoch)) return;
-  showFavorite(queryClient, target, lane.confirmed);
-  showFailureAlert({
-    surface: ACTION,
-    title: 'Update failed',
-    message: `Could not update your favorites. ${RETRY_TAIL}`,
-  });
+  showFavorite(queryClient, target, lastKnown);
+  showFailureAlert({ surface: ACTION, title: 'Update failed', message: FAILURE_MESSAGE });
 }
 
 function settleLane({ queryClient, target, lane }: LaneRun): void {

@@ -248,6 +248,7 @@ type HeldRequest = {
   method: 'PUT' | 'DELETE';
   arrive: () => Promise<void>;
   fail: () => void;
+  timeOutAfterApplying: () => Promise<void>;
 };
 
 type ServerDouble = {
@@ -283,6 +284,11 @@ function heldServer(): ServerDouble {
       fail: () => {
         settle();
         reply.reject(new Error('network down'));
+      },
+      timeOutAfterApplying: async () => {
+        settle();
+        await apply();
+        reply.reject(new Error('request timed out'));
       },
     };
     held.push(request);
@@ -442,4 +448,80 @@ describe('useFavorites(): rapid toggles of one target', () => {
     expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(nextUser);
     expect(alertSpy).not.toHaveBeenCalled();
   });
+
+  it('sends the toggle back when the first request timed out after the server applied it', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      await settle();
+    });
+    await act(async () => {
+      await server.held[0]!.timeOutAfterApplying();
+      await settle();
+    });
+    expect(server.held.map((r) => r.method)).toEqual(['DELETE']);
+    await deliverNewestFirst(server);
+
+    expect(await server.isSaved()).toBe(false);
+    expect(result.current.isFavorite(tapped)).toBe(false);
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the server and the cache on the last tap when the button unmounts mid-request', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result, unmount } = renderHook(() => useFavorites(), {
+      wrapper: wrapperFor(queryClient),
+    });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      await settle();
+    });
+    unmount();
+    await deliverNewestFirst(server);
+
+    expect(await server.isSaved()).toBe(false);
+    expect(isCached(queryClient.getQueryData(discoveryKeys.favorites))).toBe(false);
+  });
+
+  it('stops sending and leaves the next user cache alone when a request succeeds after sign-out', async () => {
+    const server = heldServer();
+    port = server.port;
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+
+    await act(async () => {
+      result.current.toggle(tapped);
+      result.current.toggle(tapped);
+      await settle();
+    });
+    const nextUser: FavoritesResponse = {
+      items: [{ kind: 'track', key: tapped.favorite_key, title: 'Track One' }],
+      total: 1,
+    };
+    runSignOutCleanups();
+    queryClient.setQueryData(discoveryKeys.favorites, nextUser);
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    await deliverNewestFirst(server);
+
+    expect(server.held).toEqual([]);
+    expect(await server.isSaved()).toBe(true);
+    expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(nextUser);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
 });
+
+function isCached(response: FavoritesResponse | undefined): boolean {
+  return response !== undefined && response.items.some((f) => f.key === tapped.favorite_key);
+}
