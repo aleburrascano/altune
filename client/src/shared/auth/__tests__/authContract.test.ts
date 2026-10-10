@@ -97,10 +97,12 @@ function apiClientSource(): string {
   );
 }
 
+const GO_WRITE_JSON_STATUS_PATTERN = /httputil\.WriteJSON\(w, (http\.Status\w+),/;
+
 function deriveRejectTokenStatus(source: string): number {
   expect(extractGoFuncBody(source, 'rejectToken')).toContain('writeUnauthorized(w, r,');
   const body = extractGoFuncBody(source, 'writeUnauthorized');
-  const match = /httputil\.WriteJSON\(w, (http\.Status\w+),/.exec(body);
+  const match = GO_WRITE_JSON_STATUS_PATTERN.exec(body);
   expect(match).not.toBeNull();
   const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
   expect(status).toBeDefined();
@@ -108,8 +110,11 @@ function deriveRejectTokenStatus(source: string): number {
 }
 
 function deriveVerifierUnavailableStatus(source: string): number {
-  const body = extractGoFuncBody(source, 'rejectVerifierUnavailable');
-  const match = /httputil\.WriteError\(w, (http\.Status\w+),/.exec(body);
+  expect(extractGoFuncBody(source, 'rejectVerifierUnavailable')).toContain(
+    'writeAuthUnavailable(w)',
+  );
+  const body = extractGoFuncBody(source, 'writeAuthUnavailable');
+  const match = GO_WRITE_JSON_STATUS_PATTERN.exec(body);
   expect(match).not.toBeNull();
   const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
   expect(status).toBeDefined();
@@ -163,10 +168,12 @@ describe('cross-surface 401 contract, derived from services/go-api/internal/auth
     const rejectTokenBody = extractGoFuncBody(source, 'rejectToken');
     const writeUnauthorizedBody = extractGoFuncBody(source, 'writeUnauthorized');
     const rejectVerifierUnavailableBody = extractGoFuncBody(source, 'rejectVerifierUnavailable');
+    const writeAuthUnavailableBody = extractGoFuncBody(source, 'writeAuthUnavailable');
 
     expect(rejectTokenBody).toContain('writeUnauthorized(w, r,');
     expect(writeUnauthorizedBody).toContain('w.Header().Set("WWW-Authenticate", "Bearer")');
     expect(rejectVerifierUnavailableBody).not.toContain('WWW-Authenticate');
+    expect(writeAuthUnavailableBody).not.toContain('WWW-Authenticate');
   });
 });
 
