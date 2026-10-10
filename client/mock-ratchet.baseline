@@ -21,9 +21,7 @@ __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedDownloa
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedIndex
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedIndex
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedStore
-__tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/offline/pinnedStore
 __tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/session/signOutCleanup
-__tests__/webMustHolds/mh09-noOfflineOnWeb.test.ts @shared/telemetry/outbox
 __tests__/webMustHolds/mh10-nativeProvider.test.ts @features/playback/domain/isExpoGo
 __tests__/webMustHolds/mh10-nativeProvider.test.ts @features/playback/native/trackPlayerPlaybackProvider
 jest/__tests__/setup-after-env.test.ts ../../src/shared/telemetry/recordEvent

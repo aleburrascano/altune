@@ -103,18 +103,16 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
 describe('mh09: an identity change never claims pinned downloads on web', () => {
   function claimForSignedInUser(offlineDownloadsSupported: boolean): jest.Mock {
     return withOfflineSupport(offlineDownloadsSupported, () => {
-      const claimPinnedDownloads = jest.fn();
-      Object.assign(mockPinnedStoreDouble, { claimPinnedDownloads });
-      jest.doMock('@shared/offline/pinnedStore', () => mockPinnedStoreDouble);
-      jest.doMock('@shared/telemetry/outbox', () => ({ setOutboxOwner: jest.fn() }));
       const handlers: Array<(userId: string | null) => void> = [];
       jest.doMock('@shared/session/signOutCleanup', () => ({
+        onSignOut: jest.fn(),
         onIdentityChange: (fn: (userId: string | null) => void) => handlers.push(fn),
       }));
-      const { registerIdentityListeners } = require('@shared/auth/userLocalData');
-      registerIdentityListeners();
+      const pinnedIndex = require('@shared/offline/pinnedIndex');
+      const writeOwner = jest.spyOn(pinnedIndex, 'writeOwner').mockImplementation(() => undefined);
+      require('@shared/offline/pinnedStore');
       handlers.forEach((fn) => fn('user-a'));
-      return claimPinnedDownloads;
+      return writeOwner;
     });
   }
 
