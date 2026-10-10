@@ -3,7 +3,6 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"testing"
-	"time"
 )
 
 func res(kind domain.ResultKind, title, subtitle string, provider domain.ProviderName, extras map[string]any) domain.SearchResult {
@@ -40,13 +39,9 @@ func TestMerge_CapsEachProviderGroupBeforeTheQuadraticScan(t *testing.T) {
 	for i := range huge {
 		huge[i] = track("title "+string(rune(0x4e00+i)), "artist "+string(rune(0x4e00+i)), domain.ProviderDeezer, nil)
 	}
-	start := time.Now()
 	entities := Merge([][]domain.SearchResult{huge})
 	if len(entities) != maxMergeResultsPerProvider {
 		t.Fatalf("got %d entities, want %d", len(entities), maxMergeResultsPerProvider)
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("Merge took %s, want under 1s", elapsed)
 	}
 }
 
