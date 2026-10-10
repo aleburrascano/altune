@@ -22,6 +22,11 @@ import { usePlaybackErrorStore } from '@features/playback/hooks/usePlaybackError
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 

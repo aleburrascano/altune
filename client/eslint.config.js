@@ -52,6 +52,11 @@ const featureIsolationZones = [
     from: './src/features',
     message: 'src/shared must not import from src/features.',
   },
+  ...['shared', 'features'].map((layer) => ({
+    target: `./src/${layer}`,
+    from: './src/chrome',
+    message: `src/${layer} must not import from src/chrome: layering is app, chrome, features, shared.`,
+  })),
 ];
 
 const typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig = {

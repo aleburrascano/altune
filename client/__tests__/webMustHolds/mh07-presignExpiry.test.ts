@@ -7,6 +7,12 @@ import { usePlayback } from '@shared/playback/usePlayback';
 
 import { libraryTrack } from '../../src/features/playback/__tests__/fixtures';
 import { WebPlaybackProvider } from '../../src/features/playback/web/webPlaybackProvider';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 

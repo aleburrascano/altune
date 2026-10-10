@@ -11,7 +11,7 @@ import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '@testing/makeWrapper';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
-import { useSettingsClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
+import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
@@ -62,7 +62,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe('useClearSearchHistory racing an in-flight history fetch', () => {
+describe('useSettingsClearSearchHistory racing an in-flight history fetch', () => {
   beforeEach(() => {
     signedIn();
   });
@@ -97,7 +97,7 @@ describe('useClearSearchHistory racing an in-flight history fetch', () => {
   });
 });
 
-describe('useClearSearchHistory when the clear fails', () => {
+describe('useSettingsClearSearchHistory when the clear fails', () => {
   beforeEach(() => {
     signedIn();
   });

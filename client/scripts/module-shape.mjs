@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const defaultRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const FEATURE_FOLDERS = ['domain', 'ports', 'adapters', 'hooks', 'ui'];
-const OPTIONAL_ROOT_FOLDERS = ['__tests__', 'native', 'web'];
+const FEATURE_FOLDERS = ['domain', 'adapters', 'hooks', 'ui'];
+const OPTIONAL_ROOT_FOLDERS = ['ports', '__tests__', 'native', 'web'];
 const FORBIDDEN_NAMES = new Set([
   'util',
   'utils',

@@ -4,6 +4,7 @@ import {
   resetSearchState,
   setSearchState,
 } from '@features/discovery/domain/searchState';
+import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 import type * as SearchStateModule from '@features/discovery/domain/searchState';
 
 beforeEach(() => {
@@ -51,11 +52,21 @@ describe('searchState preserves the last query across a detail round trip', () =
 });
 
 describe('searchState registration with the sign-out registry', () => {
-  it('is reset when the sign-out cleanups run', () => {
+  it('is reset when the sign-out cleanups run once registered', () => {
+    const unregister = registerSearchStateSignOutReset();
+    setSearchState('radiohead', 'radiohead');
+
+    runSignOutCleanups();
+    unregister();
+
+    expect(getSearchState()).toEqual({ query: '', inputValue: '' });
+  });
+
+  it('survives the sign-out cleanups while nothing registered it', () => {
     setSearchState('radiohead', 'radiohead');
 
     runSignOutCleanups();
 
-    expect(getSearchState()).toEqual({ query: '', inputValue: '' });
+    expect(getSearchState()).toEqual({ query: 'radiohead', inputValue: 'radiohead' });
   });
 });

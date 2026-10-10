@@ -5,6 +5,12 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/api-client/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
+import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
+
+beforeAll(() => {
+  installPlaybackPort(httpPlaybackPort);
+});
 
 const { __http } = require('../../jest/doubles/fetch.js');
 

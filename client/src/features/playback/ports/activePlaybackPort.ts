@@ -1,9 +1,9 @@
-import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
 
-let active: PlaybackPort = httpPlaybackPort;
+let active: PlaybackPort | null = null;
 
 export function playbackPort(): PlaybackPort {
+  if (active === null) throw new Error('no playback port installed');
   return active;
 }
 

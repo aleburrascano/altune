@@ -16,6 +16,7 @@ import { appMutationCache, appQueryCache } from '@shared/query/useAppMutation';
 import { transientRetryOptions } from '@shared/query/retryDelay';
 import { StagingBanner } from '@/chrome/StagingBanner';
 import { AuthGate, TestAuthBridge, useAuthDeepLink } from '@features/auth';
+import { registerSearchStateSignOutReset } from '@features/discovery';
 import { useServerEvents } from '@shared/events/useServerEvents';
 import { startKillSwitchPolling } from '@shared/killSwitch/killSwitchPoll';
 import { installGlobalErrorReporting } from '@shared/telemetry/clientErrorReporting';
@@ -29,6 +30,8 @@ import { AppChrome } from '@/chrome/AppChrome';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/chrome/platformExtras';
 
 startPlaybackService();
+
+registerSearchStateSignOutReset();
 
 void SplashScreen.preventAutoHideAsync();
 

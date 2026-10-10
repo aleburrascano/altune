@@ -7,7 +7,7 @@ import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { useAccountEmail } from '@features/settings/hooks/useAccountEmail';
-import { useSettingsClearSearchHistory } from '@features/settings/hooks/useClearSearchHistory';
+import { useSettingsClearSearchHistory } from '@features/settings/hooks/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/hooks/useDownloads';
 import { AppearanceCard } from '@features/settings/ui/AppearanceCard';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
