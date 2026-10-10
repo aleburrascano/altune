@@ -2,6 +2,7 @@ import { Platform, StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { darkTheme } from '@shared/ui/theme';
 
 import { AlbumRail } from '../ui/AlbumRail';
 
@@ -115,6 +116,31 @@ describe('AlbumRail: grid on the web at a wide width', () => {
       borderWidth: 2,
       borderColor: 'transparent',
     });
+  });
+
+  it('fills a grid card with the raised surface while hovered, and clears it on hover-out', () => {
+    renderRail();
+    const card = screen.getByTestId('detail-album-0');
+
+    fireEvent(card, 'hoverIn');
+    expect(card).toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+    expect(card).toHaveStyle({ borderColor: 'transparent' });
+
+    fireEvent(card, 'hoverOut');
+    expect(card).not.toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+  });
+
+  it('rings a focused grid card in the accent colour, and clears it on blur', () => {
+    renderRail();
+    const card = screen.getByTestId('detail-album-0');
+
+    fireEvent(card, 'focus');
+    expect(card).toHaveStyle({ borderWidth: 2, borderColor: darkTheme.color.accent });
+    expect(card).not.toHaveStyle({ backgroundColor: darkTheme.color.surface2 });
+    expect(screen.getByTestId('detail-album-1')).toHaveStyle({ borderColor: 'transparent' });
+
+    fireEvent(card, 'blur');
+    expect(card).toHaveStyle({ borderColor: 'transparent' });
   });
 });
 

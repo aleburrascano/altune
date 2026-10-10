@@ -5,16 +5,16 @@ import type { PlaylistResponse } from '@shared/api-client/playlistResponse';
 import { asyncView } from '@shared/ui/asyncView';
 import { Text, type Theme, useTheme } from '@shared/ui';
 import { sidebarItemStyle } from '@shared/ui/navigation/Sidebar';
+import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
 
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 
-function sidebarPlaylistRowProps(playlist: PlaylistResponse, onPress: () => void, theme: Theme) {
+function sidebarPlaylistRowProps(playlist: PlaylistResponse, onPress: () => void) {
   return {
     testID: `sidebar-playlist-${playlist.id}`,
     onPress,
     accessibilityRole: 'link' as const,
     accessibilityLabel: playlist.name,
-    style: sidebarItemStyle(theme, false),
   };
 }
 
@@ -30,8 +30,9 @@ function SidebarPlaylistRow({ playlist }: { playlist: PlaylistResponse }) {
   const router = useRouter();
   const theme = useTheme();
   const onPress = () => router.push(`/library/playlist/${playlist.id}`);
+  const interaction = usePressableInteraction(sidebarItemStyle(theme, false));
   return (
-    <Pressable {...sidebarPlaylistRowProps(playlist, onPress, theme)}>
+    <Pressable {...sidebarPlaylistRowProps(playlist, onPress)} {...interaction}>
       <SidebarPlaylistLabel name={playlist.name} color={theme.color.textSecondary} />
     </Pressable>
   );
