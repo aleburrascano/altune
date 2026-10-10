@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 )
 
 const (
-	ownerScanWindow         = 500
-	maxOwnerScanPagesPerRun = 200
+	ownerScanWindow       = 500
+	DefaultSweepRunBudget = 30 * time.Second
 )
 
 type ForgetDeletedIdentitiesService struct {
@@ -21,7 +22,7 @@ type ForgetDeletedIdentitiesService struct {
 	metrics    ports.ErasureSweepMetrics
 	reaper     ports.ErasedStateReaper
 	scanWindow int
-	maxPages   int
+	runBudget  time.Duration
 
 	mu          sync.Mutex
 	resumeAfter shared.UserId
@@ -37,13 +38,21 @@ func WithErasedStateReaper(r ports.ErasedStateReaper) ForgetDeletedIdentitiesOpt
 	return func(s *ForgetDeletedIdentitiesService) { s.reaper = r }
 }
 
+func WithSweepRunBudget(d time.Duration) ForgetDeletedIdentitiesOption {
+	return func(s *ForgetDeletedIdentitiesService) {
+		if d > 0 {
+			s.runBudget = d
+		}
+	}
+}
+
 func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, queue *QueueService, opts ...ForgetDeletedIdentitiesOption) *ForgetDeletedIdentitiesService {
 	s := &ForgetDeletedIdentitiesService{
 		identities: identities,
 		queue:      queue,
 		metrics:    ports.NoopErasureSweepMetrics(),
 		scanWindow: ownerScanWindow,
-		maxPages:   maxOwnerScanPagesPerRun,
+		runBudget:  DefaultSweepRunBudget,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -51,41 +60,97 @@ func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, q
 	return s
 }
 
+type sweepRun struct {
+	forgotten int
+	failures  []error
+	cursor    shared.UserId
+	retryFrom *shared.UserId
+}
+
+func (r *sweepRun) holdForRetry() {
+	if r.retryFrom == nil {
+		start := r.cursor
+		r.retryFrom = &start
+	}
+}
+
+func (r *sweepRun) resumePoint() shared.UserId {
+	if r.retryFrom != nil {
+		return *r.retryFrom
+	}
+	return r.cursor
+}
+
 func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	forgotten := 0
-	var failures []error
+	run := &sweepRun{cursor: s.resumeAfter}
 	if err := s.reapErasedStates(ctx); err != nil {
-		failures = append(failures, err)
+		run.failures = append(run.failures, err)
 	}
-	for range s.maxPages {
-		page, err := s.identities.ListOwnersWithoutIdentity(ctx, s.resumeAfter, s.scanWindow)
-		if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
-			slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
-			s.metrics.SweepIdle()
-			failures = append(failures, fmt.Errorf("deleted identity sweep idle: %w", ports.ErrIdentityStoreUnavailable))
-			break
-		}
+	runCtx, cancel := context.WithTimeout(ctx, s.runBudget)
+	defer cancel()
+	s.scanOwners(ctx, runCtx, run)
+	s.resumeAfter = run.resumePoint()
+	logDeletedIdentitySweep(ctx, run.forgotten)
+	return run.forgotten, errors.Join(run.failures...)
+}
+
+func (s *ForgetDeletedIdentitiesService) scanOwners(ctx, runCtx context.Context, run *sweepRun) {
+	for {
+		page, err := s.identities.ListOwnersWithoutIdentity(runCtx, run.cursor, s.scanWindow)
 		if err != nil {
-			s.recordOwnerScanTimeout(ctx, err)
-			failures = append(failures, fmt.Errorf("list deleted identities: %w", err))
-			break
+			s.recordScanFailure(ctx, runCtx, run, err)
+			return
 		}
-		erased, batchFailures := s.forgetAll(ctx, page.Orphaned)
-		forgotten += erased
-		failures = append(failures, batchFailures...)
-		if ctx.Err() != nil {
-			break
+		if !s.erasePage(ctx, runCtx, run, page) {
+			return
 		}
-		s.resumeAfter = page.Next
+		run.cursor = page.Next
 		if page.Done {
-			s.resumeAfter = shared.UserId{}
-			break
+			run.cursor = shared.UserId{}
+			return
 		}
 	}
-	logDeletedIdentitySweep(ctx, forgotten)
-	return forgotten, errors.Join(failures...)
+}
+
+func (s *ForgetDeletedIdentitiesService) erasePage(ctx, runCtx context.Context, run *sweepRun, page ports.OwnerScanPage) bool {
+	erased, failures, interrupted := s.forgetAll(runCtx, page.Orphaned)
+	run.forgotten += erased
+	run.failures = append(run.failures, failures...)
+	if len(failures) > 0 || interrupted {
+		run.holdForRetry()
+	}
+	if interrupted {
+		s.recordRunInterrupted(ctx, runCtx, run)
+	}
+	return !interrupted
+}
+
+func (s *ForgetDeletedIdentitiesService) recordScanFailure(ctx, runCtx context.Context, run *sweepRun, err error) {
+	switch {
+	case errors.Is(err, ports.ErrIdentityStoreUnavailable):
+		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
+		s.metrics.SweepIdle()
+		run.failures = append(run.failures, fmt.Errorf("deleted identity sweep idle: %w", ports.ErrIdentityStoreUnavailable))
+	case ctx.Err() == nil && runCtx.Err() != nil:
+		logRunBudgetSpent(ctx, run)
+	default:
+		s.recordOwnerScanTimeout(ctx, err)
+		run.failures = append(run.failures, fmt.Errorf("list deleted identities: %w", err))
+	}
+}
+
+func (s *ForgetDeletedIdentitiesService) recordRunInterrupted(ctx, runCtx context.Context, run *sweepRun) {
+	if err := ctx.Err(); err != nil {
+		run.failures = append(run.failures, fmt.Errorf("forget deleted identities: %w", err))
+		return
+	}
+	logRunBudgetSpent(ctx, run)
+}
+
+func logRunBudgetSpent(ctx context.Context, run *sweepRun) {
+	slog.InfoContext(ctx, "playback.deleted_identity_sweep_budget_spent", "accounts", run.forgotten)
 }
 
 func (s *ForgetDeletedIdentitiesService) recordOwnerScanTimeout(ctx context.Context, err error) {
@@ -110,21 +175,24 @@ func (s *ForgetDeletedIdentitiesService) reapErasedStates(ctx context.Context) e
 	return nil
 }
 
-func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) (int, []error) {
+func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners []shared.UserId) (int, []error, bool) {
 	forgotten := 0
 	var failures []error
 	for _, owner := range owners {
-		if err := ctx.Err(); err != nil {
-			return forgotten, append(failures, fmt.Errorf("forget deleted identities: %w", err))
+		if ctx.Err() != nil {
+			return forgotten, failures, true
 		}
 		if err := s.queue.ForgetDeletedAccount(ctx, owner); err != nil {
+			if ctx.Err() != nil {
+				return forgotten, failures, true
+			}
 			failures = append(failures, fmt.Errorf("forget deleted identity: %w", err))
 			continue
 		}
 		forgotten++
 		s.metrics.QueueStateErased(1)
 	}
-	return forgotten, failures
+	return forgotten, failures, ctx.Err() != nil
 }
 
 func logDeletedIdentitySweep(ctx context.Context, forgotten int) {

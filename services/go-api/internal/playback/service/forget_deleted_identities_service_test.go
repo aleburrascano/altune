@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -19,6 +20,8 @@ type identityStore struct {
 	live  map[uuid.UUID]bool
 	err   error
 	scans []shared.UserId
+
+	stallOnScan int
 }
 
 func newIdentityStore(queue *inMemoryQueueRepo) *identityStore {
@@ -29,8 +32,12 @@ func (s *identityStore) deleteAccount(userId shared.UserId) {
 	delete(s.live, userId.UUID())
 }
 
-func (s *identityStore) ListOwnersWithoutIdentity(_ context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {
+func (s *identityStore) ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {
 	s.scans = append(s.scans, after)
+	if s.stallOnScan > 0 && len(s.scans) == s.stallOnScan {
+		<-ctx.Done()
+		return ports.OwnerScanPage{}, fmt.Errorf("list owners without identity: %w", ctx.Err())
+	}
 	if s.err != nil {
 		return ports.OwnerScanPage{}, s.err
 	}
@@ -263,52 +270,118 @@ func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T
 	}
 }
 
-func TestForgetDeletedIdentities_StopsAtThePageCapWhenTheScanNeverEnds(t *testing.T) {
+func TestForgetDeletedIdentities_EndlessScanStopsAtTheRunBudget(t *testing.T) {
 	listing := &endlessListing{owner: shared.NewUserId(uuid.New())}
-	sweep := NewForgetDeletedIdentitiesService(listing, NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}))
+	sweep := NewForgetDeletedIdentitiesService(listing, NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}),
+		WithSweepRunBudget(20*time.Millisecond))
 
-	forgotten, err := sweep.Execute(context.Background())
-
+	started := time.Now()
+	_, err := sweep.Execute(context.Background())
 	if err != nil {
-		t.Fatalf("Execute: %v", err)
+		t.Fatalf("Execute = %v, want a spent budget to end the run quietly", err)
 	}
-	if listing.calls != maxOwnerScanPagesPerRun {
-		t.Errorf("listed %d pages, want the cap of %d", listing.calls, maxOwnerScanPagesPerRun)
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Errorf("run took %s, want it bounded by its 20ms budget", elapsed)
 	}
-	if forgotten != maxOwnerScanPagesPerRun {
-		t.Errorf("forgot %d, want one per capped page (%d)", forgotten, maxOwnerScanPagesPerRun)
+	if listing.calls < 2 {
+		t.Errorf("listed %d pages, want the run to keep paging until its budget", listing.calls)
 	}
 }
 
-func TestForgetDeletedIdentities_ResumesTheOwnerScanWhereTheLastRunStopped(t *testing.T) {
+func deletedOwnersInKeyOrder(t *testing.T, svc *QueueService, identities *identityStore, n int) []shared.UserId {
+	t.Helper()
+	var owners []shared.UserId
+	for range n {
+		owner := saveQueueOf(t, svc, identities, "search:pino daniele")
+		identities.deleteAccount(owner)
+		owners = append(owners, owner)
+	}
+	slices.SortFunc(owners, func(a, b shared.UserId) int {
+		ka, kb := a.UUID(), b.UUID()
+		return bytes.Compare(ka[:], kb[:])
+	})
+	return owners
+}
+
+func runScans(sweep *ForgetDeletedIdentitiesService, identities *identityStore) (int, []shared.UserId, error) {
+	identities.scans = nil
+	forgotten, err := sweep.Execute(context.Background())
+	return forgotten, identities.scans, err
+}
+
+func TestForgetDeletedIdentities_OneRunFinishesAMultiPageTable(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
-	svc := NewQueueService(repo, &fakeNowPlaying{})
-	var owners []uuid.UUID
-	for range 5 {
-		owners = append(owners, saveQueueOf(t, svc, identities, "search:pino daniele").UUID())
-	}
-	slices.SortFunc(owners, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	owners := deletedOwnersInKeyOrder(t, NewQueueService(repo, &fakeNowPlaying{}), identities, 5)
 	sweep := newSweep(repo, identities)
-	sweep.scanWindow, sweep.maxPages = 2, 2
+	sweep.scanWindow = 2
 
-	runScans := func(run string) []shared.UserId {
-		t.Helper()
-		identities.scans = nil
-		if _, err := sweep.Execute(context.Background()); err != nil {
-			t.Fatalf("Execute(%s): %v", run, err)
-		}
-		return identities.scans
+	forgotten, scans, err := runScans(sweep, identities)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if forgotten != 5 || len(repo.states) != 0 {
+		t.Fatalf("one run forgot %d accounts and left %d, want all 5 erased in a single pass", forgotten, len(repo.states))
+	}
+	if want := []shared.UserId{{}, owners[1], owners[3]}; !slices.Equal(scans, want) {
+		t.Errorf("run scanned after %v, want every page of the table %v", scans, want)
+	}
+	if _, scans, _ := runScans(sweep, identities); len(scans) == 0 || !scans[0].IsZero() {
+		t.Errorf("the run after a finished pass scanned after %v, want it to start over", scans)
+	}
+}
+
+func TestForgetDeletedIdentities_RunStopsAtItsDeadlineAndResumes(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	owners := deletedOwnersInKeyOrder(t, NewQueueService(repo, &fakeNowPlaying{}), identities, 5)
+	sweep := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}),
+		WithSweepRunBudget(50*time.Millisecond))
+	sweep.scanWindow = 2
+	identities.stallOnScan = 3
+
+	forgotten, _, err := runScans(sweep, identities)
+	if err != nil {
+		t.Fatalf("Execute(first run) = %v, want a spent budget to end the run quietly", err)
+	}
+	if forgotten != 4 {
+		t.Fatalf("first run forgot %d accounts before its deadline, want the 4 on the two pages it finished", forgotten)
 	}
 
-	if got := runScans("first"); !slices.Equal(got, []shared.UserId{{}, shared.NewUserId(owners[1])}) {
-		t.Fatalf("first run scanned after %v, want the start then the second owner", got)
+	identities.stallOnScan = 0
+	forgotten, scans, err := runScans(sweep, identities)
+	if err != nil {
+		t.Fatalf("Execute(second run): %v", err)
 	}
-	if got := runScans("second"); !slices.Equal(got, []shared.UserId{shared.NewUserId(owners[3])}) {
-		t.Fatalf("second run scanned after %v, want it to resume after the fourth owner and finish the pass", got)
+	if !slices.Equal(scans, []shared.UserId{owners[3]}) || forgotten != 1 {
+		t.Fatalf("second run scanned after %v and forgot %d, want it to resume after the fourth owner and erase the last one", scans, forgotten)
 	}
-	if got := runScans("third"); len(got) == 0 || !got[0].IsZero() {
-		t.Fatalf("the run after a finished pass scanned after %v, want it to start over", got)
+}
+
+func TestForgetDeletedIdentities_FailedEraseIsRetriedNextRun(t *testing.T) {
+	repo := &failingOwnersQueueRepo{inMemoryQueueRepo: *newInMemoryQueueRepo(), failing: map[shared.UserId]error{}}
+	identities := newIdentityStore(&repo.inMemoryQueueRepo)
+	owners := deletedOwnersInKeyOrder(t, NewQueueService(repo, &fakeNowPlaying{}), identities, 5)
+	sweep := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}))
+	sweep.scanWindow = 2
+	dbDown := errors.New("connection refused")
+	repo.failing[owners[2]] = dbDown
+
+	forgotten, _, err := runScans(sweep, identities)
+	if !errors.Is(err, dbDown) || forgotten != 4 {
+		t.Fatalf("first run = (%d, %v), want the 4 healthy owners erased and the failure reported", forgotten, err)
+	}
+
+	delete(repo.failing, owners[2])
+	forgotten, scans, err := runScans(sweep, identities)
+	if err != nil {
+		t.Fatalf("Execute(second run): %v", err)
+	}
+	if len(scans) == 0 || scans[0] != owners[1] {
+		t.Fatalf("second run scanned after %v, want it to retry the page holding the failed owner", scans)
+	}
+	if forgotten != 1 || len(repo.states) != 0 {
+		t.Fatalf("second run forgot %d and left %d, want the failed owner erased on retry", forgotten, len(repo.states))
 	}
 }
 

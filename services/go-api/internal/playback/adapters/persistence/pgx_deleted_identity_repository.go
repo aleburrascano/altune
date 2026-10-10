@@ -16,7 +16,7 @@ import (
 
 var _ ports.DeletedIdentityLister = (*PgxDeletedIdentityRepository)(nil)
 
-const DefaultOwnerScanTimeout = 30 * time.Second
+const DefaultOwnerScanPageTimeout = 5 * time.Second
 
 type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -28,14 +28,14 @@ type PgxDeletedIdentityRepository struct {
 }
 
 func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool, opts ...func(*PgxDeletedIdentityRepository)) *PgxDeletedIdentityRepository {
-	r := &PgxDeletedIdentityRepository{pool: pool, timeout: DefaultOwnerScanTimeout}
+	r := &PgxDeletedIdentityRepository{pool: pool, timeout: DefaultOwnerScanPageTimeout}
 	for _, opt := range opts {
 		opt(r)
 	}
 	return r
 }
 
-func WithOwnerScanTimeout(d time.Duration) func(*PgxDeletedIdentityRepository) {
+func WithOwnerScanPageTimeout(d time.Duration) func(*PgxDeletedIdentityRepository) {
 	return func(r *PgxDeletedIdentityRepository) {
 		r.timeout = d
 	}
@@ -45,7 +45,7 @@ func (r *PgxDeletedIdentityRepository) opTimeout() time.Duration {
 	if r.timeout > 0 {
 		return r.timeout
 	}
-	return DefaultOwnerScanTimeout
+	return DefaultOwnerScanPageTimeout
 }
 
 const ownersWithoutIdentitySQL = `
