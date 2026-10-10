@@ -1,3 +1,12 @@
+const pagingLoopsAwaitInOrder = {
+  files: [
+    'src/features/detail/hooks/useLibraryMatches.ts',
+    'src/features/library/hooks/useLibraryTracks.ts',
+    'src/shared/apiClient/tracks.ts',
+  ],
+  rules: ['react-doctor/async-await-in-loop'],
+};
+
 export default {
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
@@ -43,6 +52,7 @@ export default {
         files: ['src/shared/ui/keyboard/keyboard.tsx', 'src/shared/ui/keyboard/keyboard.web.tsx'],
         rules: ['react-doctor/only-export-components'],
       },
+      pagingLoopsAwaitInOrder,
     ],
   },
 };
