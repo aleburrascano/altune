@@ -33,4 +33,8 @@ for (const { path, pattern, prefix, rule, fileGroup } of baselines) {
     out.push(JSON.stringify({ rule: rule ?? m[1], file, baseline: path, entry }))
   }
 }
+process.stdout.on('error', (error) => {
+  if (error.code === 'EPIPE') process.exit(0)
+  throw error
+})
 if (out.length > 0) process.stdout.write(out.join('\n') + '\n')

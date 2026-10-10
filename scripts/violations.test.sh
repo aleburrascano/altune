@@ -42,6 +42,9 @@ expect_eq "$(cat <<'X'
 X
 )" "exact JSON lines, empty lines skipped"
 
+epipe=$( { bash "$script" "$root" | true; } 2>&1 )
+[ -z "$epipe" ] || { echo "FAIL a reader that closes early should leave stderr empty"; sed 's/^/    /' <<<"$epipe"; fail=1; }
+
 printf 'MC-1 src/a/b.ts ok\nbroken line\n' >"$root/client/consistency.baseline"
 run "$root"
 check 1 "a malformed line exits 1"
