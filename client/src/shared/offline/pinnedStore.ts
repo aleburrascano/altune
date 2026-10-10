@@ -233,7 +233,10 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   unpin: (trackId) => {
-    if (!deletePinned(trackId) && get().entries[trackId]?.status === 'ready') return;
+    const fileGone = deletePinned(trackId);
+    const entry = get().entries[trackId];
+    if (entry === undefined) return;
+    if (!fileGone && entry.status === 'ready') return;
     set((s) => {
       const entries = { ...s.entries };
       delete entries[trackId];

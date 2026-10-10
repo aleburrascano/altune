@@ -12,7 +12,10 @@ import {
   useCreatePlaylist,
   useCreatePlaylistWithTracks,
 } from '@shared/playlists/mutations';
-import { ContractError } from '@shared/failure/errors';
+import { ApiError, ContractError, NetworkError } from '@shared/failure/errors';
+import { PlaylistsPortProvider } from '@shared/playlists/ports/PlaylistsPortProvider';
+import type { PlaylistsPort } from '@shared/playlists/ports/playlistsPort';
+import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPlaylistsPort';
 import { asPlaylistId, asTrackId, type TrackId, type PlaylistId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
@@ -27,6 +30,8 @@ import * as playlistsApi from '@shared/api-client/playlists';
 import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+const REFUSED_STATUS = 422;
 
 jest.mock('@shared/telemetry/userTelemetry', () => ({
   ...jest.requireActual('@shared/telemetry/userTelemetry'),
@@ -1265,9 +1270,9 @@ describe('create', () => {
   });
 
   describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPlaylist already landed (:36-43)', () => {
-    it('a dropped connection between the two awaited requests deletes the playlist the create already landed, leaving no empty orphan behind', async () => {
+    it('a definite refusal of the add deletes the playlist the create already landed, leaving no empty orphan behind', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1283,7 +1288,7 @@ describe('create', () => {
 
     it('a rolled-back create resolves the mutation without a dangling playlist, so no caller can act on one that no longer exists', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1299,9 +1304,12 @@ describe('create', () => {
       expect(data).toEqual({ added: 0, addFailed: true });
     });
 
-    it('a transient 5xx from the batch-add endpoint is compensated the same way, not rethrown as a mutation error', async () => {
+    it('a dropped connection on the add never deletes the playlist, since the add may have landed', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p2', 'Chill') });
-      __http.reply('POST /v1/playlists/p2/tracks/batch', { status: 503 });
+      __http.fail('POST /v1/playlists/p2/tracks/batch');
+      __http.reply('GET /v1/playlists/p2', {
+        json: { ...created('p2', 'Chill'), total_duration_seconds: 0, tracks: [] },
+      });
       __http.reply('DELETE /v1/playlists/p2', { status: 204 });
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1318,8 +1326,9 @@ describe('create', () => {
 
       expect(result.current.isError).toBe(false);
       expect(data.addFailed).toBe(true);
-      expect(data.playlist).toBeUndefined();
-      expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(1);
+      expect(data.playlist).toEqual(created('p2', 'Chill'));
+      expect(__http.countFor('GET /v1/playlists/p2')).toBe(1);
+      expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(0);
     });
 
     it('an add that lands never triggers the compensating delete', async () => {
@@ -1342,7 +1351,7 @@ describe('create', () => {
 
     it('the compensating delete failing too keeps the created playlist in the resolved result, the only case a caller is handed one', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.fail('DELETE /v1/playlists/p1');
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1362,7 +1371,7 @@ describe('create', () => {
   describe('useCreatePlaylistWithTracks: onSuccess note after a failed add (:45-54)', () => {
     it('a rolled-back create tells the user nothing was created, never that a playlist is waiting for manual adds', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1398,7 +1407,7 @@ describe('create', () => {
       '%s -> a surviving orphan keeps the manual-add copy, singular/plural on trackIds.length === 1',
       async (_label, trackIds, expectedMessage) => {
         __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-        __http.fail('POST /v1/playlists/p1/tracks/batch');
+        __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
         __http.fail('DELETE /v1/playlists/p1');
         const queryClient = freshClient();
         const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1415,7 +1424,7 @@ describe('create', () => {
 
     it('a surviving orphan suppresses the skip-count alert even though added(0) < trackIds.length', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.fail('DELETE /v1/playlists/p1');
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -1510,7 +1519,7 @@ describe('create', () => {
       expect(alertSpy).not.toHaveBeenCalled();
     });
 
-    it('a batch body missing added is refused by the contract layer, so the skip note can never read "NaN tracks"', async () => {
+    it('a batch body missing added is refused by the contract layer, so the skip note can never read "NaN tracks" and the playlist is kept', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
       __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { skipped: 0 } });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
@@ -1528,9 +1537,10 @@ describe('create', () => {
 
       expect(alertSpy).not.toHaveBeenCalledWith('Note', expect.stringContaining('NaN'));
       expect(alertSpy).toHaveBeenCalledWith(
-        'Error',
-        'Could not create the playlist. Please try again.',
+        'Note',
+        'Playlist created, but the tracks could not be added. Try adding them manually.',
       );
+      expect(__http.countFor('DELETE /v1/playlists/p1')).toBe(0);
     });
 
     it('a malformed server body claiming more added than requested does not produce a lying skip-count note', async () => {
@@ -1642,7 +1652,7 @@ describe('create', () => {
 
     it('useCreatePlaylistWithTracks invalidates playlistKeys.list, and only that key, even when the add step failed and the playlist was rolled back', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
-      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
       const queryClient = freshClient();
       const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -1912,7 +1922,7 @@ describe('failure_shown surfaces recorded by the playlist mutations', () => {
 
   it('records playlist.create_with_tracks when the add fails and the create is rolled back', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: okCreated('p1', 'Focus') });
-    __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
     __http.reply('DELETE /v1/playlists/p1', { status: 204 });
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
       wrapper: createWrapper(newClient()),
@@ -1955,5 +1965,99 @@ describe('failure_shown surfaces recorded by the playlist mutations', () => {
     });
 
     expect(surfacesOf()).toEqual(['playlist.delete']);
+  });
+});
+
+describe('useCreatePlaylistWithTracks: an add that failed without a definite refusal keeps the playlist', () => {
+  const TIMEOUT_TRACKS = [asTrackId('t1'), asTrackId('t2')];
+  const BAD_REQUEST_STATUS = 400;
+  const BAD_GATEWAY_STATUS = 502;
+
+  type AddOutcome = 'lands-then-times-out' | 'times-out-unsent' | Error;
+  type WrapperProps = { children: React.ReactNode };
+
+  function portWhoseAdd(outcome: AddOutcome): PlaylistsPort {
+    const port = createMemoryPlaylistsPort();
+    async function addTracksToPlaylist(
+      ...args: Parameters<PlaylistsPort['addTracksToPlaylist']>
+    ): ReturnType<PlaylistsPort['addTracksToPlaylist']> {
+      if (outcome instanceof Error) throw outcome;
+      if (outcome === 'lands-then-times-out') await port.addTracksToPlaylist(...args);
+      throw new NetworkError('timeout', 'request timed out');
+    }
+    return { ...port, addTracksToPlaylist };
+  }
+
+  function renderWithPort(port: PlaylistsPort) {
+    const queryClient = newClient();
+    function Wrapper({ children }: WrapperProps) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <PlaylistsPortProvider port={port}>{children}</PlaylistsPortProvider>
+        </QueryClientProvider>
+      );
+    }
+    return renderHook(() => useCreatePlaylistWithTracks(), { wrapper: Wrapper });
+  }
+
+  async function storedTrackIds(port: PlaylistsPort): Promise<string[][]> {
+    const { items } = await port.getPlaylists();
+    const details = await Promise.all(items.map((item) => port.getPlaylist(item.id)));
+    return details.map((detail) => detail.tracks.map((track) => track.id));
+  }
+
+  it('a timed-out add the server did apply leaves the filled playlist in place and tells the user nothing failed', async () => {
+    const port = portWhoseAdd('lands-then-times-out');
+    const { result } = renderWithPort(port);
+
+    let data!: Awaited<ReturnType<typeof result.current.mutateAsync>>;
+    await act(async () => {
+      data = await result.current.mutateAsync({ name: 'Focus', trackIds: TIMEOUT_TRACKS });
+    });
+
+    expect(await storedTrackIds(port)).toEqual([['t1', 't2']]);
+    expect(data).toMatchObject({ added: TIMEOUT_TRACKS.length, addFailed: false });
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('a timed-out add the server never applied keeps the empty playlist and says the tracks need adding', async () => {
+    const port = portWhoseAdd('times-out-unsent');
+    const { result } = renderWithPort(port);
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Focus', trackIds: TIMEOUT_TRACKS });
+    });
+
+    expect(await storedTrackIds(port)).toEqual([[]]);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Note',
+      'Playlist created, but the tracks could not be added. Try adding them manually.',
+    );
+  });
+
+  it('a gateway 5xx is as ambiguous as a timeout, so the playlist is kept', async () => {
+    const port = portWhoseAdd(new ApiError(BAD_GATEWAY_STATUS, 'bad gateway'));
+    const { result } = renderWithPort(port);
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Focus', trackIds: TIMEOUT_TRACKS });
+    });
+
+    expect(await storedTrackIds(port)).toEqual([[]]);
+  });
+
+  it('a definite 4xx refusal still rolls the created playlist back', async () => {
+    const port = portWhoseAdd(new ApiError(BAD_REQUEST_STATUS, 'bad track ids'));
+    const { result } = renderWithPort(port);
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Focus', trackIds: TIMEOUT_TRACKS });
+    });
+
+    expect(await storedTrackIds(port)).toEqual([]);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
   });
 });

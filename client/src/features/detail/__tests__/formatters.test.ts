@@ -1,6 +1,11 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { albumYear, compactCount, formatRuntime } from '../ui/formatters';
+import {
+  albumYear,
+  compactCount,
+  formatRuntime,
+  trackSubtitleWithFeaturing,
+} from '@/features/detail/ui/formatters';
 
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {
@@ -75,5 +80,23 @@ describe('albumYear', () => {
 
   it('returns null when neither release date nor year exists', () => {
     expect(albumYear(album({}))).toBeNull();
+  });
+});
+
+describe('trackSubtitleWithFeaturing', () => {
+  function track(title: string, subtitle: string): DiscoveryResult {
+    return { ...album({}), kind: 'track', title, subtitle };
+  }
+
+  it('shows Soft Cell alone, with no phantom featured Cell appended', () => {
+    expect(trackSubtitleWithFeaturing(track('Tainted Love', 'Soft Cell'))).toBe('Soft Cell');
+  });
+
+  it('shows a plain with in the title as no featured artist', () => {
+    expect(trackSubtitleWithFeaturing(track('Dance with Me', 'Artist'))).toBe('Artist');
+  });
+
+  it('appends a real feat. credit to the subtitle', () => {
+    expect(trackSubtitleWithFeaturing(track('Song (feat. Guest)', 'Artist'))).toBe('Artist, Guest');
   });
 });

@@ -185,3 +185,62 @@ describe('useAlbumSaveAll across sign-out', () => {
     expect(dbl.mutateAsync).toHaveBeenCalledTimes(SAVE_ALL_CONCURRENCY);
   });
 });
+
+type SaveAllProps = { candidates: readonly DiscoveryResult[] };
+type SaveRequest = { title: string };
+type SaveAllHandle = { current: { onSaveAll: () => void } };
+
+function recordingSave() {
+  const titles: string[] = [];
+  async function mutateAsync(request: SaveRequest): Promise<void> {
+    titles.push(request.title);
+  }
+  return { save: { mutate: jest.fn(), mutateAsync, isPending: false } as never, titles };
+}
+
+describe('useAlbumSaveAll after the library catches up', () => {
+  function ownedTrackResult(i: number): DiscoveryResult {
+    return {
+      ...track(i),
+      extras: { track_id: `owned-${i}`, acquisition_status: 'ready' },
+    };
+  }
+
+  function renderSaveAll(save: ReturnType<typeof recordingSave>['save']) {
+    return renderHook(
+      ({ candidates }: SaveAllProps) =>
+        useAlbumSaveAll({ album, candidates, libraryComplete: true, save }),
+      { initialProps: { candidates: [track(0)] } },
+    );
+  }
+
+  async function saveAllAndSettle(result: SaveAllHandle): Promise<void> {
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+  }
+
+  it('saves a track again when it was saved, then owned, then deleted from the library', async () => {
+    const recorder = recordingSave();
+    const { result, rerender } = renderSaveAll(recorder.save);
+    await saveAllAndSettle(result);
+
+    rerender({ candidates: [ownedTrackResult(0)] });
+    rerender({ candidates: [track(0)] });
+    await saveAllAndSettle(result);
+
+    expect(recorder.titles).toEqual(['Track 0', 'Track 0']);
+  });
+
+  it('does not save a track again while the library still owns it', async () => {
+    const recorder = recordingSave();
+    const { result, rerender } = renderSaveAll(recorder.save);
+    await saveAllAndSettle(result);
+
+    rerender({ candidates: [ownedTrackResult(0)] });
+    await saveAllAndSettle(result);
+
+    expect(recorder.titles).toEqual(['Track 0']);
+  });
+});

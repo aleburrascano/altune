@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
@@ -30,6 +31,10 @@ export function enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult)
 
 function _unownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
   return tracks.filter((t) => ownedFromExtras(trackExtras(t.extras)) === null);
+}
+
+function _ownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
+  return tracks.filter((t) => ownedFromExtras(trackExtras(t.extras)) !== null);
 }
 
 function _trackIdentity(track: DiscoveryResult): string | null {
@@ -109,9 +114,19 @@ function useOutcomeRecorder() {
   return { saved, lastBatch, record, clear: () => setLastBatch(null) };
 }
 
-function useSaveAllState() {
+function useForgetOnceOwned(
+  saved: RefObject<Set<string>>,
+  candidates: readonly DiscoveryResult[],
+): void {
+  useEffect(() => {
+    for (const identity of _identitiesOf(_ownedTracks(candidates))) saved.current.delete(identity);
+  }, [saved, candidates]);
+}
+
+function useSaveAllState(candidates: readonly DiscoveryResult[]) {
   const batch = useBatchState();
   const outcomes = useOutcomeRecorder();
+  useForgetOnceOwned(outcomes.saved, candidates);
   return { ...batch, ...outcomes };
 }
 
@@ -138,7 +153,7 @@ function _startBatch(
 }
 
 export function useAlbumSaveAll(args: AlbumSaveAllArgs): AlbumSaveAll {
-  const state = useSaveAllState();
+  const state = useSaveAllState(args.candidates);
   const onSaveAll = (): void => {
     if (state.activeRef.current || !args.libraryComplete) return;
     const pending = _notYetSaved(_unownedTracks(args.candidates), state.saved.current);
