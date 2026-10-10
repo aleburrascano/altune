@@ -92,56 +92,101 @@ function reportUnbackedRebuild(rebuiltGeneration: number | null, err: unknown): 
   if (current) reportLoadFailure(current, err);
 }
 
-export async function restoreSavedQueue(
-  markPlaceholderGeneration: (generation: number) => void,
+type MarkPlaceholder = (generation: number) => void;
+type Home = readonly TrackResponse[];
+
+interface RestoreRun {
+  stage: QueueRestoreStage;
+  owned: number;
+  placeholderGeneration: number | null;
+  rebuiltGeneration: number | null;
+}
+
+function startRun(): RestoreRun {
+  const owned = useQueueStore.getState().generation;
+  return { stage: 'fetch', owned, placeholderGeneration: null, rebuiltGeneration: null };
+}
+
+async function readSavedQueue(owned: number): Promise<QueueStateResponse | null> {
+  const parsed = parseQueueState(await playbackPort().getQueueState());
+  if (!parsed.ok) {
+    console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
+    recordQueueStateRejected();
+    return null;
+  }
+  if (!parsed.state.track_ids.length || userTookOver(owned)) return null;
+  return parsed.state;
+}
+
+function showPlaceholder(saved: QueueStateResponse, run: RestoreRun, mark: MarkPlaceholder): void {
+  run.stage = 'placeholder';
+  const generation = showSavedTrackWhileRehydrating(saved);
+  run.placeholderGeneration = generation;
+  if (generation == null) return;
+  run.owned = generation;
+  mark(generation);
+}
+
+function capLosesSavedTracks(saved: QueueStateResponse, home: Home, truncated: boolean): boolean {
+  if (!truncated || !savedTracksMissingFrom(saved, home)) return false;
+  console.warn('[playback] library read hit its cap and lacks saved tracks; not restoring');
+  return true;
+}
+
+async function readLibrary(saved: QueueStateResponse, run: RestoreRun): Promise<Home | null> {
+  run.stage = 'tracks';
+  const { items, truncated } = await playbackPort().getAllTracks({});
+  if (!items.length || userTookOver(run.owned)) return null;
+  return capLosesSavedTracks(saved, items, truncated) ? null : items;
+}
+
+function applyRebuilt(saved: QueueStateResponse, resumeMs: number): void {
+  useQueueStore.getState().setResumePosition(resumeMs);
+  applyRepeatMode(saved.repeat_mode);
+}
+
+function rebuildAndApply(saved: QueueStateResponse, home: Home, run: RestoreRun): number | null {
+  run.stage = 'rebuild';
+  const rebuilt = rebuildSavedQueue(saved, home);
+  if (rebuilt.rung === 'exhausted') return null;
+  const resumeMs = rebuilt.currentFound ? saved.position_ms : 0;
+  applyRebuilt(saved, resumeMs);
+  run.rebuiltGeneration = useQueueStore.getState().generation;
+  return resumeMs;
+}
+
+async function rebuildAndResume(
+  saved: QueueStateResponse,
+  home: Home,
+  run: RestoreRun,
 ): Promise<void> {
-  let stage: QueueRestoreStage = 'fetch';
-  let placeholderGeneration: number | null = null;
-  let rebuiltGeneration: number | null = null;
+  const resumeMs = rebuildAndApply(saved, home, run);
+  if (resumeMs == null) return;
+  run.stage = 'native';
+  await resumeNativeQueue(resumeMs);
+}
+
+async function runRestore(mark: MarkPlaceholder, run: RestoreRun): Promise<void> {
+  const saved = await readSavedQueue(run.owned);
+  if (!saved) return;
+  showPlaceholder(saved, run, mark);
+  const home = await readLibrary(saved, run);
+  if (home) await rebuildAndResume(saved, home, run);
+}
+
+function reportRestoreFailure(run: RestoreRun, err: unknown): void {
+  warnPlayback('failed to restore the saved queue', { stage: run.stage }, err);
+  recordQueueRestoreFailure(run.stage);
+  if (run.stage === 'native') reportUnbackedRebuild(run.rebuiltGeneration, err);
+}
+
+export async function restoreSavedQueue(markPlaceholder: MarkPlaceholder): Promise<void> {
+  const run = startRun();
   try {
-    let owned = useQueueStore.getState().generation;
-
-    const parsed = parseQueueState(await playbackPort().getQueueState());
-    if (!parsed.ok) {
-      console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
-      recordQueueStateRejected();
-      return;
-    }
-    const saved = parsed.state;
-    if (!saved.track_ids.length) return;
-    if (userTookOver(owned)) return;
-
-    stage = 'placeholder';
-    placeholderGeneration = showSavedTrackWhileRehydrating(saved);
-    if (placeholderGeneration != null) {
-      owned = placeholderGeneration;
-      markPlaceholderGeneration(placeholderGeneration);
-    }
-
-    stage = 'tracks';
-    const { items: home, truncated } = await playbackPort().getAllTracks({});
-    if (!home.length) return;
-    if (userTookOver(owned)) return;
-    if (truncated && savedTracksMissingFrom(saved, home)) {
-      console.warn('[playback] library read hit its cap and lacks saved tracks; not restoring');
-      return;
-    }
-
-    stage = 'rebuild';
-    const rebuilt = rebuildSavedQueue(saved, home);
-    if (rebuilt.rung === 'exhausted') return;
-    const resumeMs = rebuilt.currentFound ? saved.position_ms : 0;
-    useQueueStore.getState().setResumePosition(resumeMs);
-    applyRepeatMode(saved.repeat_mode);
-    rebuiltGeneration = useQueueStore.getState().generation;
-
-    stage = 'native';
-    await resumeNativeQueue(resumeMs);
+    await runRestore(markPlaceholder, run);
   } catch (err) {
-    warnPlayback('failed to restore the saved queue', { stage }, err);
-    recordQueueRestoreFailure(stage);
-    if (stage === 'native') reportUnbackedRebuild(rebuiltGeneration, err);
+    reportRestoreFailure(run, err);
   } finally {
-    clearUnbackedPlaceholder(placeholderGeneration, stage);
+    clearUnbackedPlaceholder(run.placeholderGeneration, run.stage);
   }
 }
