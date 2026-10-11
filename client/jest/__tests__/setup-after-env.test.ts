@@ -1,11 +1,13 @@
 const { getConfig } = require('@testing-library/react-native/build/config');
 
-jest.mock('../../src/shared/telemetry/recordEvent', () => ({
-  recordEvent: jest.fn(),
-}));
+const { __http } = require('../doubles/fetch.js');
+const { supabase } = require('../../src/shared/auth/supabaseClient');
 
 beforeEach(() => {
-  require('../../src/shared/telemetry/recordEvent').recordEvent.mockReset();
+  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+    data: { session: { access_token: 'tok', user: { id: 'user-1' } } },
+    error: null,
+  });
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -16,17 +18,16 @@ describe('setup-after-env', () => {
 
   describe('outbox reset between tests', () => {
     const { enqueueCritical } = require('../../src/shared/telemetry/outbox');
-    const { recordEvent } = require('../../src/shared/telemetry/recordEvent');
 
     beforeAll(async () => {
-      recordEvent.mockRejectedValue(new Error('boom'));
+      __http.fail('POST /v1/discovery/events');
       await enqueueCritical({ type: 'user_action' });
     });
 
     it('starts the next test with no backoff suppressing the flush', async () => {
-      recordEvent.mockResolvedValue(undefined);
+      __http.reply('POST /v1/discovery/events', { status: 204 });
       await enqueueCritical({ type: 'user_action' });
-      expect(recordEvent).toHaveBeenCalledTimes(1);
+      expect(__http.countFor('POST /v1/discovery/events')).toBe(1);
     });
   });
 });

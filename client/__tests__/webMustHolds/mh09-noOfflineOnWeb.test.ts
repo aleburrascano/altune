@@ -1,240 +1,151 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react-native';
+import * as React from 'react';
+import { QueryClient } from '@tanstack/react-query';
+import { render, screen } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/apiClient/ids';
-import { FeaturePorts } from '../../src/chrome/FeaturePorts';
-import { httpFeaturePorts } from '../../src/chrome/httpFeaturePorts';
 
-jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
+const INDEX_URI = 'file:///document/offline/pinned.json';
 
-let mockOfflineDownloadsSupported = true;
-const mockPinnedStoreDouble: Record<string, unknown> = {};
-jest.mock('@shared/offline/offlineSupport', () => ({
-  get offlineDownloadsSupported() {
-    return mockOfflineDownloadsSupported;
-  },
-}));
+const sharedReact = jest.requireActual('react');
+const sharedReactNative = jest.requireActual('react-native');
+const sharedReactQuery = jest.requireActual('@tanstack/react-query');
 
-const MODULES_MOCKED_PER_TEST = [
-  '@shared/offline/pinnedIndex',
-  '@shared/offline/pinnedDownloadWorker',
-  '@shared/offline/pinnedStore',
-  '@shared/telemetry/outbox',
-  '@shared/session/signOutCleanup',
-  '@shared/auth/supabaseClient',
-  '@shared/auth/useSignOut',
-  '@features/settings/hooks/useAccountEmail',
-  '@features/settings/hooks/useDownloads',
-  '@shared/apiClient/tracks',
-  '@shared/apiClient/discovery',
-];
-
-afterEach(() => {
-  for (const id of MODULES_MOCKED_PER_TEST) jest.dontMock(id);
-  jest.doMock('@shared/offline/offlineSupport', () => ({
-    get offlineDownloadsSupported() {
-      return mockOfflineDownloadsSupported;
-    },
-  }));
-});
-
-function withOfflineSupport<T>(offlineDownloadsSupported: boolean, load: () => T): T {
-  let loaded: T | undefined;
-  mockOfflineDownloadsSupported = offlineDownloadsSupported;
-  jest.isolateModules(() => {
-    jest.doMock('@shared/offline/offlineSupport', () => ({
-      get offlineDownloadsSupported() {
-        return mockOfflineDownloadsSupported;
-      },
-    }));
-    loaded = load();
-  });
-  return loaded as T;
+function onPlatform<T>(os: 'web' | 'ios', load: () => T): T {
+  const originalOs = sharedReactNative.Platform.OS;
+  let loaded!: T;
+  try {
+    jest.isolateModules(() => {
+      jest.doMock('react', () => sharedReact);
+      jest.doMock('react-native', () => sharedReactNative);
+      jest.doMock('@tanstack/react-query', () => sharedReactQuery);
+      sharedReactNative.Platform.OS = os;
+      loaded = load();
+    });
+  } finally {
+    sharedReactNative.Platform.OS = originalOs;
+  }
+  return loaded;
 }
 
 describe('mh09: the pinned-store machinery never starts on web', () => {
-  it('does not load the pinned index or run the download queue when unsupported', () => {
-    const { usePinnedStore, loadIndexSpy, runDownloadQueue } = withOfflineSupport(false, () => {
-      const loadIndexSpy = jest.fn(() => ({}));
-      jest.doMock('@shared/offline/pinnedIndex', () => ({
-        ...jest.requireActual('@shared/offline/pinnedIndex'),
-        loadIndex: loadIndexSpy,
-      }));
-      const runDownloadQueue = jest.fn().mockResolvedValue(undefined);
-      jest.doMock('@shared/offline/pinnedDownloadWorker', () => ({ runDownloadQueue }));
-      return {
-        usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
-        loadIndexSpy,
-        runDownloadQueue,
-      };
+  function pinOn(os: 'web' | 'ios') {
+    return onPlatform(os, () => {
+      require('expo-file-system').__fs.seedFile(
+        INDEX_URI,
+        JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
+      );
+      const { usePinnedStore } = require('@shared/offline/pinnedStore');
+      const loaded = { ...usePinnedStore.getState().entries };
+      usePinnedStore.getState().pin(asTrackId('t1'));
+      return { loaded, afterPin: usePinnedStore.getState().entries.t1?.status };
     });
+  }
 
-    expect(loadIndexSpy).not.toHaveBeenCalled();
-    expect(usePinnedStore.getState().entries).toEqual({});
+  it('does not load the pinned index or run the download queue when unsupported', () => {
+    const { loaded, afterPin } = pinOn('web');
 
-    usePinnedStore.getState().pin(asTrackId('t1'));
-    expect(runDownloadQueue).not.toHaveBeenCalled();
+    expect(loaded).toEqual({});
+    expect(afterPin).toBe('queued');
   });
 
   it('loads the pinned index and runs the download queue on native, unaffected', () => {
-    const { usePinnedStore, loadIndexSpy, runDownloadQueue } = withOfflineSupport(true, () => {
-      const loadIndexSpy = jest.fn(() => ({}));
-      jest.doMock('@shared/offline/pinnedIndex', () => ({
-        ...jest.requireActual('@shared/offline/pinnedIndex'),
-        loadIndex: loadIndexSpy,
-      }));
-      const runDownloadQueue = jest.fn().mockResolvedValue(undefined);
-      jest.doMock('@shared/offline/pinnedDownloadWorker', () => ({ runDownloadQueue }));
-      return {
-        usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
-        loadIndexSpy,
-        runDownloadQueue,
-      };
-    });
+    const { loaded, afterPin } = pinOn('ios');
 
-    expect(loadIndexSpy).toHaveBeenCalledTimes(1);
-
-    usePinnedStore.getState().pin(asTrackId('t1'));
-    expect(runDownloadQueue).toHaveBeenCalled();
+    expect(Object.keys(loaded)).toEqual(['old']);
+    expect(afterPin).toBe('downloading');
   });
 });
 
 describe('mh09: an identity change never claims pinned downloads on web', () => {
-  function claimForSignedInUser(offlineDownloadsSupported: boolean): jest.Mock {
-    return withOfflineSupport(offlineDownloadsSupported, () => {
-      const handlers: Array<(userId: string | null) => void> = [];
-      jest.doMock('@shared/session/signOutCleanup', () => ({
-        onSignOut: jest.fn(),
-        onIdentityChange: (fn: (userId: string | null) => void) => handlers.push(fn),
-      }));
-      const pinnedIndex = require('@shared/offline/pinnedIndex');
-      const writeOwner = jest.spyOn(pinnedIndex, 'writeOwner').mockImplementation(() => undefined);
+  function ownerAfterSignIn(os: 'web' | 'ios'): string | null {
+    return onPlatform(os, () => {
       require('@shared/offline/pinnedStore');
-      handlers.forEach((fn) => fn('user-a'));
-      return writeOwner;
+      require('@shared/session/signOutCleanup').notifyIdentityChange('user-a');
+      return require('@shared/offline/pinnedIndex').readOwner();
     });
   }
 
   it('does not claim pinned downloads for a signed-in user on web', () => {
-    expect(claimForSignedInUser(false)).not.toHaveBeenCalled();
+    expect(ownerAfterSignIn('web')).toBeNull();
   });
 
   it('claims pinned downloads for a signed-in user on native, unaffected', () => {
-    expect(claimForSignedInUser(true)).toHaveBeenCalledWith('user-a');
+    expect(ownerAfterSignIn('ios')).toBe('user-a');
   });
 });
 
 describe('mh09: an acquisition completing never restarts a stale pin on web', () => {
-  function statusAfterCompletion(offlineDownloadsSupported: boolean): string | undefined {
-    const { usePinnedStore, applyServerEvent } = withOfflineSupport(
-      offlineDownloadsSupported,
-      () => ({
-        usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
-        applyServerEvent: require('@shared/events/applyServerEvent').applyServerEvent,
-      }),
-    );
-    usePinnedStore.setState({
-      entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///stale.mp3' } },
-      queue: [],
-      isWorking: false,
+  function statusAfterCompletion(os: 'web' | 'ios'): string | undefined {
+    return onPlatform(os, () => {
+      const { usePinnedStore } = require('@shared/offline/pinnedStore');
+      const { applyServerEvent } = require('@shared/events/applyServerEvent');
+      const { QueryClient } = require('@tanstack/react-query');
+      usePinnedStore.setState({
+        entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///stale.mp3' } },
+        queue: [],
+        isWorking: false,
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      applyServerEvent(queryClient, {
+        id: '1',
+        type: 'track_acquisition_completed',
+        data: { track_id: 't1', audio_ref: 'ref-1' },
+      });
+      return usePinnedStore.getState().entries.t1?.status;
     });
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    applyServerEvent(queryClient, {
-      id: '1',
-      type: 'track_acquisition_completed',
-      data: { track_id: 't1', audio_ref: 'ref-1' },
-    });
-    return usePinnedStore.getState().entries.t1?.status;
   }
 
   it('leaves the stale download ready, never re-queued, on web', () => {
-    expect(statusAfterCompletion(false)).toBe('ready');
+    expect(statusAfterCompletion('web')).toBe('ready');
   });
 
   it('re-queues the stale download on native, unaffected', () => {
-    expect(statusAfterCompletion(true)).toBe('downloading');
+    expect(statusAfterCompletion('ios')).toBe('downloading');
   });
 });
 
 describe('mh09: the reconcile bridge does nothing on web', () => {
-  let reconcile: jest.Mock;
-  let OfflineReconcileBridge: (props: Record<string, never>) => React.ReactElement | null;
-
-  beforeAll(() => {
-    reconcile = jest.fn();
-    Object.assign(mockPinnedStoreDouble, {
-      usePinnedStore: (selector: (s: { reconcile: () => void }) => unknown) =>
-        selector({ reconcile }),
+  function statusAfterMountOn(os: 'web' | 'ios'): string | undefined {
+    const { usePinnedStore, OfflineReconcileBridge } = onPlatform(os, () => ({
+      usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
+      OfflineReconcileBridge: require('@shared/offline/ui/OfflineReconcileBridge')
+        .OfflineReconcileBridge,
+    }));
+    usePinnedStore.setState({
+      entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///missing.mp3' } },
+      queue: [],
+      isWorking: true,
     });
-    jest.doMock('@shared/offline/pinnedStore', () => mockPinnedStoreDouble);
-    OfflineReconcileBridge =
-      require('@shared/offline/ui/OfflineReconcileBridge').OfflineReconcileBridge;
-  });
-
-  beforeEach(() => {
-    reconcile.mockClear();
-  });
-
-  function renderBridge(offlineDownloadsSupported: boolean) {
-    mockOfflineDownloadsSupported = offlineDownloadsSupported;
     render(React.createElement(OfflineReconcileBridge));
-    return reconcile;
+    return usePinnedStore.getState().entries.t1?.status;
   }
 
-  it('never reconciles on web', () => {
-    expect(renderBridge(false)).not.toHaveBeenCalled();
+  it('leaves a ready entry whose file is missing unchanged on web', () => {
+    expect(statusAfterMountOn('web')).toBe('ready');
   });
 
-  it('reconciles once on mount on native, unaffected', () => {
-    expect(renderBridge(true)).toHaveBeenCalledTimes(1);
+  it('drops a ready entry whose file is missing on native, unaffected', () => {
+    expect(statusAfterMountOn('ios')).toBeUndefined();
   });
 });
 
 describe('mh09: the settings screen omits the offline downloads card on web', () => {
-  let SettingsScreen: () => React.ReactElement;
-
-  beforeAll(() => {
-    jest.doMock('@shared/auth/supabaseClient', () => ({
-      supabase: {
-        auth: { getSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }) },
-      },
-    }));
-    jest.doMock('@shared/auth/useSignOut', () => ({
-      useSignOut: () => ({ state: { status: 'idle' }, signOut: jest.fn() }),
-    }));
-    jest.doMock('@features/settings/hooks/useAccountEmail', () => ({
-      useAccountEmail: () => 'me@example.com',
-    }));
-    jest.doMock('@features/settings/hooks/useDownloads', () => ({
-      ...jest.requireActual('@features/settings/hooks/useDownloads'),
-      useDownloadStats: () => ({
-        downloadCount: 0,
-        downloadBytes: 0,
-        downloadSize: '0 B',
-        usageLabel: 'No downloads on this device',
-        usageDetail: undefined,
+  function hasDownloadsCardOn(os: 'web' | 'ios'): boolean {
+    const { QueryClientProvider, FeaturePorts, httpFeaturePorts, SettingsScreen } = onPlatform(
+      os,
+      () => ({
+        QueryClientProvider: require('@tanstack/react-query').QueryClientProvider,
+        FeaturePorts: require('../../src/chrome/FeaturePorts').FeaturePorts,
+        httpFeaturePorts: require('../../src/chrome/httpFeaturePorts').httpFeaturePorts,
+        SettingsScreen: require('@features/settings/ui/SettingsScreen').SettingsScreen,
       }),
-    }));
-    jest.doMock('@shared/apiClient/tracks', () => ({
-      ...jest.requireActual('@shared/apiClient/tracks'),
-      backfillFeaturedArtists: jest.fn().mockResolvedValue({ updated: 0, scanned: 0 }),
-    }));
-    jest.doMock('@shared/apiClient/discovery', () => ({
-      ...jest.requireActual('@shared/apiClient/discovery'),
-      clearSearchHistory: jest.fn().mockResolvedValue(undefined),
-    }));
-    SettingsScreen = require('@features/settings/ui/SettingsScreen').SettingsScreen;
-  });
-
-  function renderSettingsScreen(offlineDownloadsSupported: boolean) {
-    mockOfflineDownloadsSupported = offlineDownloadsSupported;
+    );
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
-    return render(
+    render(
       React.createElement(
         QueryClientProvider,
         { client },
@@ -245,19 +156,14 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
         ),
       ),
     );
+    return screen.queryByTestId('settings-downloads-usage') !== null;
   }
 
   it('renders no offline downloads card on web', () => {
-    renderSettingsScreen(false);
-    expect(
-      require('@testing-library/react-native').screen.queryByTestId('settings-downloads-usage'),
-    ).toBeNull();
+    expect(hasDownloadsCardOn('web')).toBe(false);
   });
 
   it('renders the offline downloads card on native, unaffected', () => {
-    renderSettingsScreen(true);
-    expect(
-      require('@testing-library/react-native').screen.getByTestId('settings-downloads-usage'),
-    ).toBeTruthy();
+    expect(hasDownloadsCardOn('ios')).toBe(true);
   });
 });

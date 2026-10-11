@@ -2,16 +2,10 @@ import 'react-native-gesture-handler/jestSetup';
 import { render } from '@testing-library/react-native';
 import type { ComponentType, ReactNode } from 'react';
 
+import { supabase } from '@shared/auth/supabaseClient';
 import { ThemeProvider } from '@shared/ui/theme';
 
 import { StagingBanner } from '@/chrome/StagingBanner';
-
-jest.mock('@features/auth/ui/AuthGate', () => ({
-  AuthGate: () => {
-    const { Text } = require('react-native');
-    return <Text testID="gate-own-screen">splash</Text>;
-  },
-}));
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
@@ -24,10 +18,6 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@shared/killSwitch/killSwitchPoll', () => ({
-  startKillSwitchPolling: () => () => undefined,
-}));
-
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 
 const STAGING_URL = 'https://ijyjoyxhwmbmriwzazbx.supabase.co';
@@ -35,6 +25,13 @@ const PROD_URL = 'https://ellvexundmgvbbfqbzau.supabase.co';
 const BANNER_TEXT = 'Staging. Everything here is wiped every night. Use altune.duckdns.org.';
 
 const originalUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+
+const { __http } = require('@testing/doubles/fetch.js');
+
+beforeEach(() => {
+  __http.replyAll({ status: 503 });
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+});
 
 afterEach(() => {
   process.env.EXPO_PUBLIC_SUPABASE_URL = originalUrl;
@@ -79,14 +76,15 @@ describe('the root layout on the staging build', () => {
   it('shows the banner above the auth gate even while the gate shows a screen of its own', () => {
     process.env.EXPO_PUBLIC_SUPABASE_URL = STAGING_URL;
     jest.useFakeTimers();
+    jest.spyOn(supabase.auth, 'getSession').mockReturnValue(new Promise(() => undefined));
     const RootLayout: ComponentType = require('@/app/_layout').default;
 
     const { getByText, getByTestId, toJSON, unmount } = render(<RootLayout />);
 
     expect(getByText(BANNER_TEXT)).toBeTruthy();
-    expect(getByTestId('gate-own-screen')).toBeTruthy();
+    expect(getByTestId('auth-splash')).toBeTruthy();
     const tree = JSON.stringify(toJSON());
-    expect(tree.indexOf(BANNER_TEXT)).toBeLessThan(tree.indexOf('gate-own-screen'));
+    expect(tree.indexOf(BANNER_TEXT)).toBeLessThan(tree.indexOf('auth-splash'));
     unmount();
     jest.useRealTimers();
   });
