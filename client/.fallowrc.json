@@ -3,12 +3,14 @@
   "entry": [
     "src/app/**/*.{ts,tsx}",
     "doctor.config.ts",
+    "fingerprint.config.js",
     "scripts/**/*.mjs",
     "eslint-rules/**/*.js"
   ],
   "ignorePatterns": ["**/*.test.{ts,tsx}", "**/__tests__/**", "**/__mocks__/**", "jest/**"],
   "ignoreDependencies": [
     "react-doctor",
+    "expo-updates",
     "shaka-player",
     "expo-audio",
     "react-native-web",

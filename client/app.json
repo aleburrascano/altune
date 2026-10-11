@@ -3,6 +3,19 @@
     "name": "Altune",
     "slug": "altune",
     "version": "0.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://altune.duckdns.org/updates/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "codeSigningCertificate": "./certs/ota-certificate.crt",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      }
+    },
     "orientation": "portrait",
     "scheme": "altune",
     "icon": "./assets/icon.png",

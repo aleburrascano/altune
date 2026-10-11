@@ -55,6 +55,11 @@ jobs:
         working-directory: client
         run: npm ci
 
+      - name: Resolve the over-the-air runtime
+        id: runtime
+        working-directory: client
+        run: echo "version=$(npx expo-updates runtimeversion:resolve --platform ios | tail -1 | jq -r .runtimeVersion)" >>"$GITHUB_OUTPUT"
+
       - name: Stamp version into app.json
         working-directory: client
         env:
@@ -87,6 +92,8 @@ jobs:
             Unsigned iOS build for sideloading (AltStore / SideStore).
             Add the source once, then install/update from there:
             `https://raw.githubusercontent.com/${{ github.repository }}/altstore/apps.json`
+
+            Over-the-air runtime: `${{ steps.runtime.outputs.version }}`. Updates published for this runtime reach this build.
           files: ${{ runner.temp }}/Altune.ipa
           fail_on_unmatched_files: true
 

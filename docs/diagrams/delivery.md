@@ -49,7 +49,7 @@ flowchart TD
 
 ## Mobile release
 
-How an iOS build reaches phones, and what can change without a release.
+How an iOS build reaches phones, and what can change without a new build.
 
 ```mermaid
 flowchart LR
@@ -71,8 +71,14 @@ flowchart LR
     ks -->|raw.githubusercontent.com<br/>polled every 5 min + on foreground| app(["Installed app"])
     altstore --> app
 
+    subgraph ota [Over-the-air update · release-ota.yml, manual]
+        export["expo export ios<br/>sign the manifest with the key on the runner host"] --> otaship["ota-release.sh on the VM<br/>~/altune-web/updates/prod"]
+    end
+
+    otaship -->|Caddy /updates/manifest<br/>checked on each app launch| app
+
     eas["eas.json profiles<br/>Android APK"] -.->|manual, no workflow| app
 
-    note["No OTA updates: any JS change needs a new .ipa"]
+    note["A JS-only change ships over the air.<br/>A native change bumps the fingerprint runtime and needs a new .ipa"]
     note ~~~ app
 ```

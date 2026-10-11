@@ -1,0 +1,52 @@
+name: release-ota
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release-ota
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  REPO: /home/ubuntu/projects/altune
+  VM: ubuntu@altune.duckdns.org
+  VM_KEY: /home/ubuntu/.ssh/altune-prod.key
+  OTA_KEY_FILE: /home/ubuntu/.config/altune/ota/private-key.pem
+  OTA_BASE_URL: https://altune.duckdns.org
+
+jobs:
+  publish:
+    runs-on: host
+    timeout-minutes: 60
+    steps:
+      - name: checkout
+        run: |
+          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; } || { sleep 5; git -C "$REPO" fetch -q gitea main; }
+          git -C "$REPO" show "${{ github.sha }}:.gitea/workflows/ci-checkout.sh" | bash -s "${{ github.sha }}"
+
+      - name: install dependencies
+        run: bash "$WT/.gitea/workflows/ci-node-deps.sh" client
+
+      - name: build and sign the ios update
+        id: build
+        env:
+          EXPO_PUBLIC_API_URL: https://altune.duckdns.org
+          EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
+        run: bash "$WT/.gitea/workflows/ota-build.sh"
+
+      - name: release to prod
+        run: bash "$WT/.gitea/workflows/ota-ship.sh"
+
+      - name: smoke prod
+        env:
+          RUNTIME: ${{ steps.build.outputs.runtime }}
+        run: bash "$WT/.gitea/workflows/ota-smoke.sh"
+
+      - name: clean up
+        if: always()
+        run: bash "$WT/.gitea/workflows/ci-cleanup.sh"
