@@ -10,7 +10,6 @@ jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { exchangeCodeForSession, verifyOtp } = createSupabaseAuthMock(
   'exchangeCodeForSession',

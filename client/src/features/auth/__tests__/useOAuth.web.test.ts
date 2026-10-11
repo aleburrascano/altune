@@ -4,15 +4,10 @@ import { Platform } from 'react-native';
 
 import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { useOAuth } from '@features/auth/hooks/useOAuth.web';
+import * as nativeWebOrigin from '@shared/device/webOrigin';
+import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
-
-jest.mock('@shared/device/webOrigin', () => ({
-  webOrigin: (): string | null =>
-    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
-      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
-      : null,
-}));
 
 const mockStateUpdates: unknown[] = [];
 
@@ -36,7 +31,6 @@ jest.mock('expo-web-browser', () => ({
   maybeCompleteAuthSession: jest.fn(),
   openAuthSessionAsync: jest.fn(),
 }));
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
@@ -54,7 +48,12 @@ async function signIn(): Promise<{ kind: string }> {
 }
 
 describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
+  beforeEach(() => {
+    jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
+  });
+
   afterEach(() => {
+    jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
     Platform.OS = 'ios';
     Reflect.deleteProperty(globalThis, 'window');
   });

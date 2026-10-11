@@ -37,7 +37,6 @@ jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn(),
   dismissAuthSession: jest.fn(),
 }));
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { signInWithOAuth, exchangeCodeForSession } = createSupabaseAuthMock(
   'signInWithOAuth',

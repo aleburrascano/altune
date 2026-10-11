@@ -2,6 +2,8 @@ import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 import { Alert, Platform } from 'react-native';
 
+import { _resetOutboxForTest } from '@shared/telemetry/outbox';
+
 import { _resetConsumedCredentialForTest } from '@features/auth/domain/completeAuthIntent';
 import { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
 
@@ -14,8 +16,6 @@ jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
-jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
   'exchangeCodeForSession',
@@ -38,6 +38,8 @@ function verificationRefusedWith(error: unknown): void {
 }
 
 beforeEach(() => {
+  jest.spyOn(global, 'fetch').mockResolvedValue({ status: 204 } as Response);
+  _resetOutboxForTest();
   _resetConsumedCredentialForTest();
   mockRouter.replace.mockClear();
   getSession.mockResolvedValue({ data: { session: null }, error: null });
@@ -153,7 +155,8 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
 
     await deliverInitialLink(RECOVERY_LINK);
 
-    expect(warn).toHaveBeenCalledTimes(1);
+    const authLogs = warn.mock.calls.filter(([message]) => String(message).startsWith('[auth]'));
+    expect(authLogs).toHaveLength(1);
     expect(JSON.stringify(warn.mock.calls)).not.toContain('super-secret-hash');
   });
 });
