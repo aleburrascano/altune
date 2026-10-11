@@ -451,58 +451,6 @@ func TestParseBirthYear(t *testing.T) {
 	}
 }
 
-func TestMusicBrainzAdapter_ValidateArtistAlbums(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case strings.HasPrefix(r.URL.Path, "/ws/2/artist"):
-			_, _ = w.Write([]byte(`{"artists": [{"id": "mbid-rh", "name": "Radiohead"}]}`))
-		case strings.HasPrefix(r.URL.Path, "/ws/2/release-group"):
-			_, _ = w.Write([]byte(`{
-				"release-group-count": 2,
-				"release-groups": [
-					` + mbReleaseGroupJSON("rg-1", "OK Computer", "Radiohead", "mbid-rh") + `,
-					` + mbReleaseGroupJSON("rg-2", "Kid A", "Radiohead", "mbid-rh") + `
-				]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
-	albums := []domain.SearchResult{
-		{Title: "OK Computer"},
-		{Title: "Fake Bootleg 2020"},
-	}
-	res, err := adapter.ValidateArtistAlbums(context.Background(), "Radiohead", albums)
-	if err != nil {
-		t.Fatalf("ValidateArtistAlbums: %v", err)
-	}
-	if res.ArtistMBID != "mbid-rh" {
-		t.Errorf("ArtistMBID = %q, want mbid-rh", res.ArtistMBID)
-	}
-	if len(res.Confirmed) != 1 || res.Confirmed[0].Title != "OK Computer" {
-		t.Errorf("Confirmed = %+v, want the MB-matching album only", res.Confirmed)
-	}
-	if len(res.Unconfirmed) != 1 || res.Unconfirmed[0].Title != "Fake Bootleg 2020" {
-		t.Errorf("Unconfirmed = %+v, want the non-matching album", res.Unconfirmed)
-	}
-}
-
-func TestMusicBrainzAdapter_ValidateArtistAlbums_artistNotFoundIsError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"artists": []}`))
-	}))
-	defer server.Close()
-
-	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
-	if _, err := adapter.ValidateArtistAlbums(context.Background(), "Nobody", nil); err == nil {
-		t.Fatal("expected an error when MB has no artist for the name")
-	}
-}
-
 func TestMusicBrainzAdapter_ListArtistDiscography(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

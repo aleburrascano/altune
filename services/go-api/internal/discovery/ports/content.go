@@ -1,7 +1,6 @@
 package ports
 
 import (
-	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"context"
 )
@@ -16,12 +15,6 @@ type ArtistIdentity struct {
 	BirthYear      int
 	Area           string
 	ArtistType     string
-}
-
-type AlbumValidationResult struct {
-	Confirmed   []domain.SearchResult
-	Unconfirmed []domain.SearchResult
-	ArtistMBID  string
 }
 
 type RelatedTrackMatch struct {

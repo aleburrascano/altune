@@ -584,16 +584,11 @@ Per-provider notes worth carrying:
 
 ## 8. Consensus, enrichment, related, featured (off the ranking path)
 
-- **`ConsensusService`** (`consensus.go`) is the album-consensus surface: every
-  album provider is an equal source, gathered via a generic fan-out, clustered by
-  exact canonical title into confirmed/unconfirmed/rejected verdicts.
-  `applyMBAuthority` anchors the union on MusicBrainz's bulk release-group
-  discography — confirmed-by-MB albums kept, everything else **rejected** as
-  same-name contamination. Artist pages no longer use it; only `discoveryeval`
-  (`-mode consensus`, `signal-b`) does. The V2 discography core keeps releases by
-  corroboration instead (§5.2). The per-artist result is cached behind a
-  pluggable name-keyed cache (Redis, 6h; a no-op default that recomputes correctly
-  when unwired).
+- **`consensus.go`** holds only the by-name album providers (`ConsensusProvider`)
+  and their generic fan-out (`FanOutConsensus`). `discoveryeval -mode signal-b`
+  uses them to measure each provider's album coverage. Artist pages do not ask
+  any provider by name; the V2 discography core keeps releases by corroboration
+  (§5.2).
 
 - **Enrichment** (`service/enrich/`) is detail-open only, never on
   the ranking path. Five parallel services (MusicBrainz, Deezer, Discogs, Last.fm,
@@ -722,8 +717,9 @@ spine: run → write JSON → render → gate headline metrics against a committ
 
 Modes: `eval` (library "artist title → top-K"), `merge` (under/over-merge),
 `correction` (synthetic-typo precision/recall), `diversity` (reshaping cost),
-`signal-a`/`signal-b` (coverage / provider-imbalance), `health`/`consensus`
-(report-only gauges), `artwork`, `artist-intent`, `corpus-build`, and `detail`.
+`signal-a`/`signal-b` (coverage / provider-imbalance), `health` (report-only
+gauge), `artwork`, `artist-intent`, `corpus-build`, `detail`, `detail-live`, and
+`prod` (read-only prod search report).
 
 Re-baselining is explicit (`--update-baselines -noise-runs N`): the baseline is the
 mean over N runs and the margin is the *measured* peak-to-peak spread × 1.5 —
@@ -782,12 +778,9 @@ current state → tension → candidate direction.
    it's the natural home for a *personalization / library-aware* signal that
    doesn't exist yet.
 
-2. **MB-authority's double role.** In the detail *fallback* and legacy consensus,
-   MusicBrainz is simultaneously the contamination filter *and* a purger of real
-   releases it simply hasn't catalogued. The V2 core already decoupled these
-   (corroboration-keep + MB-as-vote), but the veto path still lives in the
-   single-provider fallback. Fully retiring the veto everywhere — vs. keeping it as
-   the fallback's only defense — is an open call.
+2. **MB-authority's double role** (closed). The MB veto lived in the detail
+   fallback and the consensus service; both are gone. MusicBrainz now only anchors
+   V2 album groups (§5.2).
 
 3. **Identity fracture from third-party error.** The read-time guards (MB anchor,
    cohesion) are **fail-open** — a transient MB failure or a missing MBID keeps

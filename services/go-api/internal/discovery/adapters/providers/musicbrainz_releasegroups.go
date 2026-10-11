@@ -2,9 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
@@ -12,56 +10,6 @@ import (
 	"net/url"
 	"time"
 )
-
-func (a *MusicBrainzAdapter) ValidateArtistAlbums(
-	ctx context.Context,
-	artistName string,
-	albums []domain.SearchResult,
-) (*ports.AlbumValidationResult, error) {
-	mbid, err := a.resolveArtistMBID(ctx, artistName)
-	if err != nil {
-		slog.WarnContext(ctx, "mb.resolve_mbid_failed", "artist", artistName, "error", err)
-		return nil, fmt.Errorf("mb resolve failed: %w", err)
-	}
-	if mbid == "" {
-		slog.InfoContext(ctx, "mb.no_mbid_found", "artist", artistName)
-		return nil, fmt.Errorf("mb artist not found for %q", artistName)
-	}
-	slog.InfoContext(ctx, "mb.artist_resolved", "artist", artistName, "mbid", mbid)
-
-	releases, err := a.fetchReleaseGroups(ctx, mbid)
-	if err != nil {
-		slog.WarnContext(ctx, "mb.release_groups_failed", "mbid", mbid, "error", err)
-		return nil, fmt.Errorf("mb release-groups unavailable: %w", err)
-	}
-
-	mbTitles := make(map[string]bool, len(releases))
-	for _, rg := range releases {
-		mbTitles[textnorm.NormalizeForMatch(rg.Title)] = true
-	}
-
-	var confirmed, unconfirmed []domain.SearchResult
-	for _, album := range albums {
-		if mbTitles[textnorm.NormalizeForMatch(album.Title)] {
-			confirmed = append(confirmed, album)
-		} else {
-			unconfirmed = append(unconfirmed, album)
-		}
-	}
-
-	slog.InfoContext(ctx, "mb.album_validation",
-		"artist", artistName, "mbid", mbid,
-		"mb_releases", len(releases),
-		"confirmed", len(confirmed),
-		"unconfirmed", len(unconfirmed),
-	)
-
-	return &ports.AlbumValidationResult{
-		Confirmed:   confirmed,
-		Unconfirmed: unconfirmed,
-		ArtistMBID:  mbid,
-	}, nil
-}
 
 func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
 	mbid, err := a.resolveArtistMBID(ctx, artistName)

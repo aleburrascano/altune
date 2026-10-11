@@ -2,7 +2,6 @@ package main
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
@@ -13,8 +12,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
@@ -52,7 +52,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail | detail-live | prod")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail | detail-live | prod")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -95,7 +95,16 @@ func clampSinceDays(notice io.Writer, sinceDays int) int {
 	return aggregateRetentionDays
 }
 
+var knownModes = []string{"eval", "merge", "correction", "correction-seed", "diversity", "health", "signal-a", "signal-b", "artwork", "artist-intent", "corpus-build", "corpus-snapshot", "replay", "report", "detail", "detail-live", "prod"}
+
+func unknownModeError(mode string) error {
+	return fmt.Errorf("unknown mode %q (want %s)", mode, strings.Join(knownModes, " | "))
+}
+
 func run(opts options) error {
+	if !slices.Contains(knownModes, opts.mode) {
+		return unknownModeError(opts.mode)
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
@@ -124,7 +133,7 @@ func run(opts options) error {
 		defer func() { _ = redisClient.Close() }()
 	}
 
-	if opts.query != "" && opts.mode != "consensus" {
+	if opts.query != "" {
 		return runQuery(ctx, cfg, pool, redisClient, opts)
 	}
 
@@ -145,8 +154,6 @@ func run(opts options) error {
 		return runSignalA(ctx, pool, redisClient, opts)
 	case "signal-b":
 		return runSignalB(ctx, cfg, pool, opts)
-	case "consensus":
-		return runConsensus(ctx, cfg, pool, opts)
 	case "artwork":
 		return runArtworkEval(ctx, cfg, pool, redisClient, opts)
 	case "artist-intent":
@@ -162,7 +169,7 @@ func run(opts options) error {
 	case "prod":
 		return runProd(ctx, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail | detail-live | prod)", opts.mode)
+		return unknownModeError(opts.mode)
 	}
 }
 
@@ -589,119 +596,3 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	return runHarness("signal-b", once, human, opts)
 }
 
-func runConsensus(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opts options) error {
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	deezer := providers.NewDeezerAdapter(httpClient)
-
-	var copts []discoveryService.ConsensusOption
-	if cfg.HasMusicBrainz() {
-		mb := providers.NewMusicBrainzAdapter(httpClient, cfg.MusicBrainzUserAgent)
-		copts = append(copts, discoveryService.WithMBAuthority(mb))
-	}
-	svc := discoveryService.NewConsensusService(app.BuildConsensusProviders(cfg, nil), copts...)
-
-	if opts.query != "" {
-		return consensusSingle(ctx, deezer, svc, opts.query)
-	}
-	return consensusCompleteness(ctx, deezer, svc, pool, opts.limit)
-}
-
-func buildArtistConsensus(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, artistName string) ([]discoveryService.ConsensusAlbum, string, error) {
-	artistResults, err := deezer.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
-	if err != nil {
-		return nil, "", fmt.Errorf("deezer artist search: %w", err)
-	}
-	artistID := ""
-	for _, r := range artistResults {
-		for _, s := range r.Sources {
-			if s.Provider == domain.ProviderDeezer {
-				artistID = s.ExternalID
-				break
-			}
-		}
-		if artistID != "" {
-			break
-		}
-	}
-
-	var primaryAlbums []domain.SearchResult
-	if artistID != "" {
-		primaryAlbums, err = deezer.GetArtistAlbums(ctx, domain.ProviderDeezer, artistID)
-		if err != nil {
-			return nil, artistID, fmt.Errorf("deezer artist albums: %w", err)
-		}
-	}
-	return svc.BuildConsensus(ctx, artistName, domain.ProviderDeezer, artistID, primaryAlbums), artistID, nil
-}
-
-func consensusSingle(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, artistName string) error {
-	results, artistID, err := buildArtistConsensus(ctx, deezer, svc, artistName)
-	if err != nil {
-		return err
-	}
-	conf, unconf, rej := tallyConsensus(results)
-	fmt.Printf("\n# Consensus for %q — Deezer id %q\n", artistName, artistID)
-	fmt.Printf("  %d confirmed · %d unconfirmed · %d rejected (of %d total)\n\n", conf, unconf, rej, len(results))
-	for _, r := range results {
-		fmt.Printf("  [%-11s] %-48q %s\n", string(r.Status), r.Album.Title, r.Reason)
-	}
-	return nil
-}
-
-func consensusCompleteness(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, pool *pgxpool.Pool, limit int) error {
-	artists, err := loadDistinctArtists(ctx, pool, limit)
-	if err != nil {
-		return fmt.Errorf("load artists: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "consensus completeness over %d artists...\n", len(artists))
-
-	scanned, totalAlbums, totalConfirmed := 0, 0, 0
-	var sumFraction float64
-	for i, artist := range artists {
-		results, _, err := buildArtistConsensus(ctx, deezer, svc, artist)
-		if err != nil || len(results) == 0 {
-			continue
-		}
-		conf, _, _ := tallyConsensus(results)
-		scanned++
-		totalAlbums += len(results)
-		totalConfirmed += conf
-		sumFraction += float64(conf) / float64(len(results))
-		if (i+1)%10 == 0 {
-			fmt.Fprintf(os.Stderr, "\r  %d/%d", i+1, len(artists))
-		}
-	}
-	fmt.Fprintln(os.Stderr)
-
-	meanFraction := 0.0
-	if scanned > 0 {
-		meanFraction = sumFraction / float64(scanned)
-	}
-	fmt.Printf("# Discovery consensus completeness (report-only) — %s\n\n", time.Now().UTC().Format(time.RFC3339))
-	fmt.Printf("- Artists scanned: %d\n", scanned)
-	fmt.Printf("- Mean confirmed fraction: %.1f%% (per-artist average)\n", meanFraction*100)
-	fmt.Printf("- Pooled: %d confirmed of %d albums (%.1f%%)\n", totalConfirmed, totalAlbums, pooledPct(totalConfirmed, totalAlbums))
-	fmt.Printf("\n_Report-only — provider availability moves this run to run; it never gates._\n")
-	return nil
-}
-
-func tallyConsensus(results []discoveryService.ConsensusAlbum) (conf, unconf, rej int) {
-	for _, r := range results {
-		switch r.Status {
-		case discoveryService.ConsensusConfirmed:
-			conf++
-		case discoveryService.ConsensusUnconfirmed:
-			unconf++
-		case discoveryService.ConsensusRejected:
-			rej++
-		}
-	}
-	return conf, unconf, rej
-}
-
-func pooledPct(n, total int) float64 {
-	if total == 0 {
-		return 0
-	}
-	return float64(n) / float64(total) * 100
-}

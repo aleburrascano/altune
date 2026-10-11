@@ -27,6 +27,16 @@ func TestRun_ReportModeNeverTouchesTheDatabase(t *testing.T) {
 	}
 }
 
+func TestRun_ConsensusModeIsGoneAndFailsBeforeTheDatabase(t *testing.T) {
+	reportModeRequiredEnv(t)
+
+	err := run(options{mode: "consensus"})
+
+	if err == nil || !strings.Contains(err.Error(), `unknown mode "consensus"`) {
+		t.Errorf("run() error = %v, want unknown mode \"consensus\" before any database connection", err)
+	}
+}
+
 func TestClampSinceDays_AboveWindowClampsWithNotice(t *testing.T) {
 	var notice bytes.Buffer
 

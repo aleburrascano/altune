@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"time"
 )
 
 type GetArtistContentService struct {
@@ -94,7 +95,7 @@ func (s *GetArtistContentService) seedTopTracks(ctx context.Context, providerNam
 
 type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 
-var detailFanOutTimeout = consensusTimeout
+var detailFanOutTimeout = 10 * time.Second
 
 type identityJob struct {
 	provider domain.ProviderName
