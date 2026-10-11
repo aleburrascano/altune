@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+
 import { ChevronRight } from 'lucide-react-native';
 
 import { radius, spacing, useTheme } from '@shared/ui/theme';
@@ -7,6 +8,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 import type { TrackDetailActions } from '@features/detail/hooks/useTrackDetailActions';
@@ -132,11 +134,16 @@ const NAV_CHEVRON_SIZE = 16;
 function TrackNavRow({ nav, interaction }: TrackNavRowProps): ReactElement {
   const { color } = useTheme();
   return (
-    <Pressable {...interaction} accessibilityRole="link" style={pressableStyle(color.border)}>
+    <Tappable
+      action="detail.track_nav.open"
+      {...interaction}
+      accessibilityRole="link"
+      style={pressableStyle(color.border)}
+    >
       <Artwork uri={nav.imageUri} size={NAV_ARTWORK_SIZE} radius={nav.imageRadius} />
       <NavRowText overline={nav.overline} title={nav.title} />
       <ChevronRight size={NAV_CHEVRON_SIZE} color={color.textTertiary} />
-    </Pressable>
+    </Tappable>
   );
 }
 

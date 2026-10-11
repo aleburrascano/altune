@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { Pressable } from 'react-native';
 
 import type { FeaturedArtist } from '@shared/apiClient/trackResponse';
 import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { Text } from '@shared/ui/primitives/Text';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
 
@@ -43,7 +43,8 @@ export function secondaryLine({
   }
 
   return (
-    <Pressable
+    <Tappable
+      action="detail.artist_link.open"
       testID="detail-artist-link"
       onPress={() => void lateralNav.navigateTo(artist, 'artist')}
       disabled={lateralNav.state === 'searching'}
@@ -55,6 +56,6 @@ export function secondaryLine({
       <Text variant="body" tone="accent" numberOfLines={1}>
         {withFeaturing(artist, albumCollaborators)}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }

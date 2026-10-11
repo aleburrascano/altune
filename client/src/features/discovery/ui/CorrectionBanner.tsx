@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { spacing } from '@shared/ui/theme/tokens';
 
 interface CorrectionBannerProps {
@@ -23,7 +24,8 @@ export function CorrectionBanner({
           {correctedQuery}
         </Text>
       </Text>
-      <Pressable
+      <Tappable
+        action="discover.correction.search_original"
         onPress={onSearchOriginal}
         accessibilityRole="link"
         accessibilityLabel={`Search instead for ${originalQuery}`}
@@ -33,7 +35,7 @@ export function CorrectionBanner({
         <Text variant="caption" tone="accent">
           Search for “{originalQuery}”
         </Text>
-      </Pressable>
+      </Tappable>
     </View>
   );
 }

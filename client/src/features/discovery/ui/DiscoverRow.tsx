@@ -1,10 +1,11 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
 
 import { Row, Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { FavoriteButton } from '@features/discovery/ui/FavoriteButton';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
@@ -30,7 +31,8 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
   const preview = usePreviewPlayback(result);
 
   return (
-    <Pressable
+    <Tappable
+      action="discover.row.open"
       testID={testId}
       onPress={() => onPress(result, position)}
       accessibilityRole="button"
@@ -86,7 +88,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
           {secondary}
         </Text>
       </Row>
-    </Pressable>
+    </Tappable>
   );
 }
 
