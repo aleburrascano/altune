@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -45,33 +46,37 @@ func WithAlbumFallbackSearcher(sp ports.SearchProvider) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.fallbackSearcher = sp }
 }
 
-func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []domain.SearchResult) {
+func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []domain.SearchResult, answered map[int]bool) {
 	if s.featured == nil {
 		return
 	}
 	var g errgroup.Group
 	g.SetLimit(albumFeaturedConcurrency)
 	for i := range results {
-		if results[i].Kind != domain.ResultKindTrack || len(results[i].Sources) == 0 {
-			continue
-		}
-		src := results[i].Sources[0]
-		if !domain.IsCanonicalContentProvider(src.Provider) || src.ExternalID == "" {
-			continue
-		}
-		g.Go(func() error {
-			defer RecoverGoroutine(ctx, "album_tracks.featured_panic", "external_id", src.ExternalID)
-			feats, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.FeaturedArtist, error) {
-				return s.featured.LookupTrackFeatured(ctx, src.ExternalID)
-			})
-			if err != nil || len(feats) == 0 {
+		if !answered[i] && hasDeezerTrackID(results[i]) {
+			g.Go(func() error {
+				s.lookupFeatured(ctx, &results[i])
 				return nil
-			}
-			results[i].PutExtra(domain.ExtraFeaturedArtists, domain.FeaturedArtistsToExtras(feats))
-			return nil
-		})
+			})
+		}
 	}
 	_ = g.Wait()
+}
+
+func hasDeezerTrackID(r domain.SearchResult) bool {
+	return r.Kind == domain.ResultKindTrack && len(r.Sources) > 0 &&
+		domain.IsCanonicalContentProvider(r.Sources[0].Provider) && r.Sources[0].ExternalID != ""
+}
+
+func (s *GetAlbumTracksService) lookupFeatured(ctx context.Context, track *domain.SearchResult) {
+	trackID := track.Sources[0].ExternalID
+	defer RecoverGoroutine(ctx, "album_tracks.featured_panic", "external_id", trackID)
+	feats, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.FeaturedArtist, error) {
+		return s.featured.LookupTrackFeatured(ctx, trackID)
+	})
+	if err == nil && len(feats) > 0 {
+		track.PutExtra(domain.ExtraFeaturedArtists, domain.FeaturedArtistsToExtras(feats))
+	}
 }
 
 type AlbumTracksRequest struct {
@@ -81,6 +86,7 @@ type AlbumTracksRequest struct {
 	Artist       string
 	MBExternalID string
 	Limit        int
+	Known        map[domain.ProviderName]string
 }
 
 func (s *GetAlbumTracksService) ExecuteRequest(ctx context.Context, req AlbumTracksRequest) (*ContentFetchResponse, error) {
@@ -88,8 +94,81 @@ func (s *GetAlbumTracksService) ExecuteRequest(ctx context.Context, req AlbumTra
 	if err != nil {
 		return nil, err
 	}
+	s.enrichFeatured(ctx, resp.Items, s.featuredFromSpotify(ctx, req.Known, resp))
 	s.mergeMusicBrainzFeaturing(ctx, req.MBExternalID, resp.Items)
 	return resp, nil
+}
+
+func (s *GetAlbumTracksService) featuredFromSpotify(ctx context.Context, known map[domain.ProviderName]string, resp *ContentFetchResponse) (answered map[int]bool) {
+	if resp.ProviderName == domain.ProviderSpotify {
+		return allTracks(resp.Items)
+	}
+	spotify, ok := s.providers[domain.ProviderSpotify]
+	albumID := known[domain.ProviderSpotify]
+	if !ok || albumID == "" || len(resp.Items) == 0 {
+		return nil
+	}
+	tracks, err := guardedFetch(ctx, s.breaker, domain.ProviderSpotify, func() ([]domain.SearchResult, error) {
+		return spotify.GetAlbumTracks(ctx, domain.ProviderSpotify, albumID)
+	})
+	if err != nil {
+		return nil
+	}
+	return copyFeaturedByTitle(tracks, resp.Items)
+}
+
+func allTracks(items []domain.SearchResult) map[int]bool {
+	all := make(map[int]bool, len(items))
+	for i := range items {
+		all[i] = true
+	}
+	return all
+}
+
+func versionlessTitle(title string) string {
+	base, _, _ := strings.Cut(title, " - ")
+	return textnorm.NormalizeForMatch(base)
+}
+
+type featuredByTitle struct {
+	exact       map[string]any
+	versionless map[string]any
+}
+
+func indexFeaturedByTitle(tracks []domain.SearchResult) featuredByTitle {
+	idx := featuredByTitle{exact: map[string]any{}, versionless: map[string]any{}}
+	for _, t := range tracks {
+		feats := t.Extras[domain.ExtraFeaturedArtists]
+		idx.exact[textnorm.NormalizeForMatch(t.Title)] = feats
+		if _, taken := idx.versionless[versionlessTitle(t.Title)]; !taken {
+			idx.versionless[versionlessTitle(t.Title)] = feats
+		}
+	}
+	return idx
+}
+
+func (idx featuredByTitle) lookup(title string) (any, bool) {
+	if feats, found := idx.exact[textnorm.NormalizeForMatch(title)]; found {
+		return feats, true
+	}
+	feats, found := idx.versionless[versionlessTitle(title)]
+	return feats, found
+}
+
+func copyFeaturedByTitle(from, to []domain.SearchResult) (matched map[int]bool) {
+	idx := indexFeaturedByTitle(from)
+	matched = make(map[int]bool, len(to))
+	for i := range to {
+		feats, found := idx.lookup(to[i].Title)
+		if !found {
+			continue
+		}
+		matched[i] = true
+		if _, present := to[i].Extras[domain.ExtraFeaturedArtists]; !present && feats != nil {
+			to[i].PutExtra(domain.ExtraFeaturedArtists, feats)
+		}
+	}
+	return matched
 }
 
 func (s *GetAlbumTracksService) mergeMusicBrainzFeaturing(ctx context.Context, mbExternalID string, items []domain.SearchResult) {
@@ -106,24 +185,7 @@ func (s *GetAlbumTracksService) mergeMusicBrainzFeaturing(ctx context.Context, m
 	if err != nil || len(mbTracks) == 0 {
 		return
 	}
-
-	featuredByTitle := make(map[string]any, len(mbTracks))
-	for _, t := range mbTracks {
-		if feats, present := t.Extras[domain.ExtraFeaturedArtists]; present {
-			featuredByTitle[textnorm.NormalizeForMatch(t.Title)] = feats
-		}
-	}
-
-	for i := range items {
-		if _, present := items[i].Extras[domain.ExtraFeaturedArtists]; present {
-			continue
-		}
-		feats, found := featuredByTitle[textnorm.NormalizeForMatch(items[i].Title)]
-		if !found {
-			continue
-		}
-		items[i].PutExtra(domain.ExtraFeaturedArtists, feats)
-	}
+	_ = copyFeaturedByTitle(mbTracks, items)
 }
 
 func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
@@ -150,7 +212,6 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 
 	resp := okContentResponse(providerName, results, limit)
 	resp.Partial = partial
-	s.enrichFeatured(ctx, resp.Items)
 	return resp, nil
 }
 
@@ -188,7 +249,6 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		return nil
 	}
 	resp := fallbackContentResponse(domain.CanonicalContentProvider, requested, tracks, limit)
-	s.enrichFeatured(ctx, resp.Items)
 	slog.InfoContext(ctx, "album_tracks.deezer_fallback_served",
 		"requested_provider", requested.String(), "query", query, "tracks", len(resp.Items))
 	return resp

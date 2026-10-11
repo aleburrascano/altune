@@ -33,8 +33,13 @@ export function isSearchKeyFor(queryKey: readonly unknown[], query: string): boo
 
 export const detailKeys = {
   albumTracksPrefix: ['album-tracks'] as const,
-  albumTracks: (provider: string, externalId: string, mbExternalId: string | undefined) =>
-    [...detailKeys.albumTracksPrefix, provider, externalId, mbExternalId ?? ''] as const,
+  albumTracks: (
+    provider: string,
+    externalId: string,
+    mbExternalId: string | undefined,
+    knownIds = '',
+  ) =>
+    [...detailKeys.albumTracksPrefix, provider, externalId, mbExternalId ?? '', knownIds] as const,
 };
 
 export const playlistKeys = {

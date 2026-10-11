@@ -9,11 +9,10 @@ import (
 	"net/url"
 )
 
+const deezerMaxAlbumTrackPages = 5
+
 func (a *DeezerAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf(deezerAPIBaseURL+"/album/%s/tracks?limit=50", url.PathEscape(externalID))
-	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
-		return mapDeezerResult(item, domain.ResultKindTrack)
-	})
+	return a.fetchAllPages(ctx, "/album/%s/tracks", externalID, domain.ResultKindTrack, deezerMaxAlbumTrackPages, "deezer.album_tracks_page_failed")
 }
 
 func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
@@ -23,26 +22,33 @@ func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	})
 }
 
-const deezerMaxDiscographyPages = 5
+const (
+	deezerMaxDiscographyPages = 5
+	deezerPageSize            = 100
+)
 
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	return fetchPaged(deezerMaxDiscographyPages,
+	return a.fetchAllPages(ctx, "/artist/%s/albums", externalID, domain.ResultKindAlbum, deezerMaxDiscographyPages, "deezer.artist_albums_page_failed")
+}
+
+func (a *DeezerAdapter) fetchAllPages(ctx context.Context, pathFormat, externalID string, kind domain.ResultKind, maxPages int, failedEvent string) ([]domain.SearchResult, error) {
+	return fetchPaged(maxPages,
 		func(page int) ([]domain.SearchResult, bool, error) {
-			u := fmt.Sprintf(deezerAPIBaseURL+"/artist/%s/albums?limit=100&index=%d",
-				url.PathEscape(externalID), page*100)
+			u := fmt.Sprintf(deezerAPIBaseURL+pathFormat+"?limit=%d&index=%d",
+				url.PathEscape(externalID), deezerPageSize, page*deezerPageSize)
 			var body deezerSearchResponse
 			if err := a.getJSON(ctx, u, &body); err != nil {
 				return nil, false, err
 			}
 			items := make([]domain.SearchResult, 0, len(body.Data))
 			for _, item := range body.Data {
-				items = append(items, mapDeezerResult(item, domain.ResultKindAlbum))
+				items = append(items, mapDeezerResult(item, kind))
 			}
 			return items, body.NextPageURL != "", nil
 		},
 		func(page int, err error) {
-			slog.WarnContext(ctx, "deezer.artist_albums_page_failed",
-				"provider", domain.ProviderDeezer.String(), "artist", externalID, "page", page, "error", redact.Secrets(err.Error()))
+			slog.WarnContext(ctx, failedEvent,
+				"provider", domain.ProviderDeezer.String(), "id", externalID, "page", page, "error", redact.Secrets(err.Error()))
 		})
 }
 

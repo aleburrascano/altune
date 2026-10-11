@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -371,7 +372,7 @@ func TestGetAlbumTracks_enrichFeatured(t *testing.T) {
 			},
 		}))
 		results := []domain.SearchResult{deezerTrackFeat("1", "Singapore"), deezerTrackFeat("2", "Lose It")}
-		svc.enrichFeatured(ctx, results)
+		svc.enrichFeatured(ctx, results, nil)
 
 		raw, ok := results[0].Extras["featured_artists"].([]map[string]any)
 		if !ok || len(raw) != 1 || raw[0]["name"] != "Destroy Lonely" {
@@ -385,7 +386,7 @@ func TestGetAlbumTracks_enrichFeatured(t *testing.T) {
 	t.Run("lookup error degrades to no features", func(t *testing.T) {
 		svc := NewGetAlbumTracksService(nil, WithTrackFeatured(fakeTrackFeatured{err: errors.New("rate limited")}))
 		results := []domain.SearchResult{deezerTrackFeat("1", "X")}
-		svc.enrichFeatured(ctx, results)
+		svc.enrichFeatured(ctx, results, nil)
 		if _, present := results[0].Extras["featured_artists"]; present {
 			t.Errorf("expected no featured on error, got %v", results[0].Extras["featured_artists"])
 		}
@@ -394,7 +395,7 @@ func TestGetAlbumTracks_enrichFeatured(t *testing.T) {
 	t.Run("no lookup configured is a no-op", func(t *testing.T) {
 		svc := NewGetAlbumTracksService(nil)
 		results := []domain.SearchResult{deezerTrackFeat("1", "X")}
-		svc.enrichFeatured(ctx, results)
+		svc.enrichFeatured(ctx, results, nil)
 	})
 }
 
@@ -565,7 +566,7 @@ func TestEnrichFeatured_PanickingLookupIsContained(t *testing.T) {
 	svc := NewGetAlbumTracksService(nil, WithTrackFeatured(panickingTrackFeatured{}))
 	results := []domain.SearchResult{deezerTrackFeat("1", "Singapore")}
 
-	svc.enrichFeatured(context.Background(), results)
+	svc.enrichFeatured(context.Background(), results, nil)
 
 	if _, present := results[0].Extras["featured_artists"]; present {
 		t.Errorf("featured should be unset after a panicking lookup, got %v", results[0].Extras["featured_artists"])
@@ -622,5 +623,163 @@ func TestGetAlbumTracks_fallbackAcceptsTitleEquivalentUnderNormaliser(t *testing
 				t.Errorf("resp = %v/%d items, want OK and the fallback tracklist", resp.Status, len(resp.Items))
 			}
 		})
+	}
+}
+
+type countingTrackFeatured struct {
+	fakeTrackFeatured
+	calls *atomic.Int32
+}
+
+func (c countingTrackFeatured) LookupTrackFeatured(ctx context.Context, id string) ([]domain.FeaturedArtist, error) {
+	c.calls.Add(1)
+	return c.fakeTrackFeatured.LookupTrackFeatured(ctx, id)
+}
+
+func spotifyTrackFeat(title string, featured ...string) domain.SearchResult {
+	r := domain.NewProviderResult(domain.ResultKindTrack, title, "Drake", "",
+		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: "sp-" + title}, map[string]any{})
+	var feats []domain.FeaturedArtist
+	for _, name := range featured {
+		feats = append(feats, domain.FeaturedArtist{Name: name, Role: domain.RoleFeatured})
+	}
+	if len(feats) > 0 {
+		r.Extras[domain.ExtraFeaturedArtists] = domain.FeaturedArtistsToExtras(feats)
+	}
+	return r
+}
+
+func herLossService(spotify *discoverytest.AlbumContentProvider, lookups *atomic.Int32) *GetAlbumTracksService {
+	deezer := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{deezerTrackFeat("1", "Rich Flex"), deezerTrackFeat("2", "Solo")}}
+	return NewGetAlbumTracksService(
+		map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: deezer, domain.ProviderSpotify: spotify},
+		WithTrackFeatured(countingTrackFeatured{
+			fakeTrackFeatured: fakeTrackFeatured{byID: map[string][]domain.FeaturedArtist{"1": {{Name: "21 Savage", DeezerID: 7, Role: domain.RoleFeatured}}}},
+			calls:             lookups,
+		}),
+	)
+}
+
+func TestGetAlbumTracks_featuredComeFromSpotifyWhenTheCardKnowsIt(t *testing.T) {
+	var lookups atomic.Int32
+	spotify := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{spotifyTrackFeat("Rich Flex", "21 Savage"), spotifyTrackFeat("Solo")}}
+	svc := herLossService(spotify, &lookups)
+
+	resp, err := svc.ExecuteRequest(t.Context(), AlbumTracksRequest{
+		Provider: domain.ProviderDeezer, ExternalID: "d-her-loss",
+		Known: map[domain.ProviderName]string{domain.ProviderSpotify: "sp-her-loss"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feats := domain.FeaturedArtistsFromExtras(resp.Items[0].Extras); len(feats) != 1 || feats[0].Name != "21 Savage" {
+		t.Errorf("Rich Flex featured = %+v, want 21 Savage", feats)
+	}
+	if resp.Items[0].Sources[0].Provider != domain.ProviderDeezer {
+		t.Errorf("tracks came from %v, want the Deezer seed", resp.Items[0].Sources[0].Provider)
+	}
+	if n := lookups.Load(); n != 0 {
+		t.Errorf("Deezer per-track lookups = %d, want 0", n)
+	}
+}
+
+func TestGetAlbumTracks_featuredFallBackToDeezerWhenSpotifyFails(t *testing.T) {
+	var lookups atomic.Int32
+	svc := herLossService(&discoverytest.AlbumContentProvider{Err: errors.New("spotify down")}, &lookups)
+
+	resp, err := svc.ExecuteRequest(t.Context(), AlbumTracksRequest{
+		Provider: domain.ProviderDeezer, ExternalID: "d-her-loss",
+		Known: map[domain.ProviderName]string{domain.ProviderSpotify: "sp-her-loss"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feats := domain.FeaturedArtistsFromExtras(resp.Items[0].Extras); len(feats) != 1 || feats[0].DeezerID != 7 {
+		t.Errorf("Rich Flex featured = %+v, want 21 Savage from Deezer", feats)
+	}
+	if n := lookups.Load(); n != 2 {
+		t.Errorf("Deezer per-track lookups = %d, want 2", n)
+	}
+}
+
+func TestGetAlbumTracks_deezerLooksUpOnlyTheTracksSpotifyCouldNotMatch(t *testing.T) {
+	var lookups atomic.Int32
+	deezer := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{
+		deezerTrackFeat("1", "Rich Flex"), deezerTrackFeat("2", "Solo"), deezerTrackFeat("3", "Spin Bout U (Bonus)"),
+	}}
+	spotify := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{spotifyTrackFeat("Rich Flex", "21 Savage"), spotifyTrackFeat("Solo")}}
+	svc := NewGetAlbumTracksService(
+		map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: deezer, domain.ProviderSpotify: spotify},
+		WithTrackFeatured(countingTrackFeatured{
+			fakeTrackFeatured: fakeTrackFeatured{byID: map[string][]domain.FeaturedArtist{"3": {{Name: "21 Savage", DeezerID: 7, Role: domain.RoleFeatured}}}},
+			calls:             &lookups,
+		}),
+	)
+
+	resp, err := svc.ExecuteRequest(t.Context(), AlbumTracksRequest{
+		Provider: domain.ProviderDeezer, ExternalID: "d-her-loss",
+		Known: map[domain.ProviderName]string{domain.ProviderSpotify: "sp-her-loss"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n := lookups.Load(); n != 1 {
+		t.Errorf("Deezer per-track lookups = %d, want 1 (only the bonus track Spotify lacks)", n)
+	}
+	if feats := domain.FeaturedArtistsFromExtras(resp.Items[2].Extras); len(feats) != 1 {
+		t.Errorf("bonus track featured = %+v, want 21 Savage from Deezer", feats)
+	}
+}
+
+func TestGetAlbumTracks_spotifyMatchesTracksAcrossVersionSuffixStyles(t *testing.T) {
+	var lookups atomic.Int32
+	deezer := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{
+		deezerTrackFeat("1", "About A Girl (Live)"), deezerTrackFeat("2", "Mama (2007 Remaster)"),
+	}}
+	spotify := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{spotifyTrackFeat("About A Girl - Live"), spotifyTrackFeat("Mama - 2007 Remaster")}}
+	svc := NewGetAlbumTracksService(
+		map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: deezer, domain.ProviderSpotify: spotify},
+		WithTrackFeatured(countingTrackFeatured{calls: &lookups}),
+	)
+
+	if _, err := svc.ExecuteRequest(t.Context(), AlbumTracksRequest{
+		Provider: domain.ProviderDeezer, ExternalID: "d1",
+		Known: map[domain.ProviderName]string{domain.ProviderSpotify: "sp1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := lookups.Load(); n != 0 {
+		t.Errorf("Deezer per-track lookups = %d, want 0 (Spotify matched both tracks)", n)
+	}
+}
+
+func TestGetAlbumTracks_exactTitleWinsOverTheSuffixlessMatch(t *testing.T) {
+	deezer := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{
+		deezerTrackFeat("1", "Lithium"), deezerTrackFeat("2", "Lithium - Live"),
+	}}
+	spotify := &discoverytest.AlbumContentProvider{Results: []domain.SearchResult{
+		spotifyTrackFeat("Lithium"), spotifyTrackFeat("Lithium - Live", "Pat Smear"),
+	}}
+	svc := NewGetAlbumTracksService(map[domain.ProviderName]ports.AlbumContentProvider{
+		domain.ProviderDeezer: deezer, domain.ProviderSpotify: spotify,
+	})
+
+	resp, err := svc.ExecuteRequest(t.Context(), AlbumTracksRequest{
+		Provider: domain.ProviderDeezer, ExternalID: "d1",
+		Known: map[domain.ProviderName]string{domain.ProviderSpotify: "sp1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feats := domain.FeaturedArtistsFromExtras(resp.Items[0].Extras); len(feats) != 0 {
+		t.Errorf("studio Lithium featured = %+v, want none", feats)
+	}
+	if feats := domain.FeaturedArtistsFromExtras(resp.Items[1].Extras); len(feats) != 1 {
+		t.Errorf("live Lithium featured = %+v, want Pat Smear", feats)
 	}
 }

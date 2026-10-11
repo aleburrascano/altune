@@ -5,8 +5,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -701,5 +703,33 @@ func TestMapDeezerResult_missingOptionalFields(t *testing.T) {
 	}
 	if r.Sources[0].ExternalID != "9" {
 		t.Errorf("ExternalID = %q, want the numeric id stringified", r.Sources[0].ExternalID)
+	}
+}
+
+func TestDeezerAdapter_GetAlbumTracks_readsEveryPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		index, _ := strconv.Atoi(r.URL.Query().Get("index"))
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		const total = 120
+		var items []string
+		for i := index; i < min(index+limit, total); i++ {
+			items = append(items, fmt.Sprintf(`{"id": %d, "title": "Track %d", "artist": {"id": 1, "name": "Nirvana"}}`, 1000+i, i))
+		}
+		next := ""
+		if index+limit < total {
+			next = fmt.Sprintf(`, "next": "%s/album/99/tracks?index=%d"`, "http://deezer.test", index+limit)
+		}
+		fmt.Fprintf(w, `{"data": [%s], "total": %d%s}`, strings.Join(items, ","), total, next)
+	}))
+	defer server.Close()
+
+	results, err := NewDeezerAdapter(newTestClient(server.URL)).GetAlbumTracks(t.Context(), domain.ProviderDeezer, "99")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 120 || results[119].Title != "Track 119" {
+		t.Fatalf("got %d tracks, want all 120 in order", len(results))
 	}
 }

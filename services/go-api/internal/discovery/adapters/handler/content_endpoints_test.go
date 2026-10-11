@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -44,7 +45,7 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 		wantItems int
 	}{
 		{"explicit limit truncates", "?limit=2", 2},
-		{"absent limit uses default 50", "", 3},
+		{"absent limit serves the whole album", "", 3},
 		{"non-positive limit falls back to default", "?limit=-5", 3},
 	}
 	for _, c := range cases {
@@ -388,5 +389,69 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 		if !asked["deezer:d1"] || !asked["spotify:sp1"] {
 			t.Errorf("%s asked %v, want deezer:d1 and spotify:sp1", path, asked)
 		}
+	}
+}
+
+func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
+	var gotSpotifyID string
+	deezer := &discoverytest.AlbumContentProvider{Results: seedTracks(120)}
+	spotify := &discoverytest.AlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+		gotSpotifyID = id
+		return nil, nil
+	}}
+	svc := service.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
+		discdomain.ProviderDeezer:  deezer,
+		discdomain.ProviderSpotify: spotify,
+	})
+	router := chi.NewRouter()
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Album: svc}).Routes())
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/d1/tracks?ids=spotify:sp1", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	if _, items, _ := decodeContentWire(t, rec.Body.Bytes()); items != 120 {
+		t.Errorf("items = %d, want all 120 tracks", items)
+	}
+	if gotSpotifyID != "sp1" {
+		t.Errorf("Spotify asked for %q, want sp1 from ids", gotSpotifyID)
+	}
+}
+
+func numberedAlbums(n int) []discdomain.SearchResult {
+	out := make([]discdomain.SearchResult, n)
+	for i := range out {
+		id := strconv.Itoa(i)
+		out[i] = discdomain.NewProviderResult(discdomain.ResultKindAlbum, "Album "+id, "Artist", "",
+			discdomain.SourceRef{Provider: discdomain.ProviderDeezer, ExternalID: id}, nil)
+	}
+	return out
+}
+
+func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
+	cases := []struct {
+		name      string
+		query     string
+		wantItems int
+	}{
+		{"absent limit uses default 50", "", 50},
+		{"limit above the max clamps to 100", "?limit=500", 100},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			svc := service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+				discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: numberedAlbums(120)},
+			})
+			router := chi.NewRouter()
+			router.Use(middleware.Middleware(discVerifyAsTestUser))
+			router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Artist: svc}).Routes())
+
+			rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/albums"+c.query, nil)
+
+			discAssertStatus(t, rec, http.StatusOK)
+			if _, items, _ := decodeContentWire(t, rec.Body.Bytes()); items != c.wantItems {
+				t.Errorf("items = %d, want %d", items, c.wantItems)
+			}
+		})
 	}
 }

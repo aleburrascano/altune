@@ -109,11 +109,13 @@ func withProvider(
 	call(pn, provider, externalID)
 }
 
+const maxAlbumTracks = 250
+
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.albumSvc != nil,
 		degradeUnserved(w),
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
+			limit, ok := parseLimit(w, r, "limit", maxAlbumTracks, maxAlbumTracks, clampToMax)
 			if !ok {
 				return
 			}
@@ -137,6 +139,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				Artist:       albumArtist,
 				MBExternalID: albumMBID,
 				Limit:        limit,
+				Known:        knownIDsParam(r),
 			})
 			if err != nil {
 				failContentFetch(w, r, err, "get album tracks failed", provider, externalID)

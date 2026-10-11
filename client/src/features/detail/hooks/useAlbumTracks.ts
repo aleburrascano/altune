@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
+import { sourceIdList } from '@shared/apiClient/ids';
 import { detailKeys } from '@shared/query/queryKeys';
 
 import {
@@ -48,7 +49,12 @@ export function useAlbumTracks({
   const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: detailKeys.albumTracks(provider, externalId, mbExternalId),
+    queryKey: detailKeys.albumTracks(
+      provider,
+      externalId,
+      mbExternalId,
+      allSources ? sourceIdList(allSources) : undefined,
+    ),
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
         port.getAlbumTracks({
@@ -58,6 +64,7 @@ export function useAlbumTracks({
           albumTitle,
           albumArtist,
           mbExternalId,
+          knownIds: allSources,
           signal,
         }),
       ),

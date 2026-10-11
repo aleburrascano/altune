@@ -139,6 +139,30 @@ func TestSpotifyAdapter_GetAlbumTracks(t *testing.T) {
 	}
 }
 
+func TestSpotifyAdapter_GetAlbumTracks_namesEveryOtherArtistAsFeatured(t *testing.T) {
+	const tracksJSON = `{"data":{"albumUnion":{"tracksV2":{"items":[
+		{"track":{"uri":"spotify:track:tr1","name":"Rich Flex","artists":{"items":[{"profile":{"name":"Drake"}},{"profile":{"name":"21 Savage"}}]}}},
+		{"track":{"uri":"spotify:track:tr2","name":"Solo","artists":{"items":[{"profile":{"name":"Drake"}}]}}}
+	]}}}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(tracksJSON))
+	}))
+	defer srv.Close()
+
+	tracks, err := newContentSpotifyAdapter(srv).GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	feats := domain.FeaturedArtistsFromExtras(tracks[0].Extras)
+	if len(feats) != 1 || feats[0].Name != "21 Savage" || feats[0].Role != domain.RoleFeatured {
+		t.Errorf("Rich Flex featured = %+v, want 21 Savage", feats)
+	}
+	if _, present := tracks[1].Extras[domain.ExtraFeaturedArtists]; present {
+		t.Errorf("Solo has featured artists %v, want none", tracks[1].Extras[domain.ExtraFeaturedArtists])
+	}
+}
+
 func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"errors":[{"message":"PersistedQueryNotFound"}],"data":null}`))

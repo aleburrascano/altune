@@ -41,6 +41,29 @@ describe('useAlbumTracks bounds the album track fetch', () => {
   });
 });
 
+describe('useAlbumTracks sends the ids the album card knows', () => {
+  it('lists every source so the server can take featured artists from Spotify', async () => {
+    __http.reply(ALBUM_TRACKS_PATH, { status: 200, json: emptyContent });
+
+    const { result } = renderHook(
+      () =>
+        useAlbumTracks({
+          provider: 'spotify',
+          externalId: 'album-1',
+          allSources: [
+            { provider: 'deezer', external_id: 'd-1', url: '' },
+            { provider: 'spotify', external_id: 'album-1', url: '' },
+          ],
+        }),
+      { wrapper: createWrapper(createTestQueryClient()) },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(new URLSearchParams(__http.last().query).get('ids')).toBe('deezer:d-1,spotify:album-1');
+  });
+});
+
 describe('useAlbumTracks cancels in-flight requests when the screen unmounts', () => {
   it('aborts the request on navigate-away instead of letting it run to the timeout', async () => {
     __http.hang(ALBUM_TRACKS_PATH);

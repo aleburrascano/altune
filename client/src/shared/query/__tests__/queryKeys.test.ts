@@ -22,17 +22,19 @@ describe('detailKeys — literal shape', () => {
     expect(detailKeys.albumTracksPrefix).toEqual(['album-tracks']);
   });
 
-  it('albumTracks appends provider, externalId, then mbExternalId (empty when absent)', () => {
-    expect(detailKeys.albumTracks('spotify', 'x1', 'mb1')).toEqual([
+  it('albumTracks appends provider, externalId, mbExternalId, then the known ids (empty when absent)', () => {
+    expect(detailKeys.albumTracks('spotify', 'x1', 'mb1', 'deezer:d1,spotify:x1')).toEqual([
       'album-tracks',
       'spotify',
       'x1',
       'mb1',
+      'deezer:d1,spotify:x1',
     ]);
     expect(detailKeys.albumTracks('spotify', 'x1', undefined)).toEqual([
       'album-tracks',
       'spotify',
       'x1',
+      '',
       '',
     ]);
   });

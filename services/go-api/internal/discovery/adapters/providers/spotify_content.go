@@ -307,9 +307,12 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 	if len(t.Artists.Items) > 0 {
 		artist = t.Artists.Items[0].Profile.Name
 	}
-	var extras map[string]any
+	extras := map[string]any{}
 	if t.ContentRating.Label == "EXPLICIT" {
-		extras = map[string]any{domain.ExtraExplicit: true}
+		extras[domain.ExtraExplicit] = true
+	}
+	if feats := spotifyFeaturedArtists(t); len(feats) > 0 {
+		extras[domain.ExtraFeaturedArtists] = domain.FeaturedArtistsToExtras(feats)
 	}
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist, "",
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/track/" + id},
@@ -318,6 +321,16 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 		r.Duration = int(t.Duration.TotalMilliseconds / 1000)
 	}
 	return r, true
+}
+
+func spotifyFeaturedArtists(t spotifyAlbumTrack) []domain.FeaturedArtist {
+	var feats []domain.FeaturedArtist
+	for i, a := range t.Artists.Items {
+		if name := strings.TrimSpace(a.Profile.Name); i > 0 && name != "" {
+			feats = append(feats, domain.FeaturedArtist{Name: name, Role: domain.RoleFeatured})
+		}
+	}
+	return feats
 }
 
 func spotifyReleaseURL(shareURL, id string) string {

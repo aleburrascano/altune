@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { isAbort } from '@shared/failure/errors';
 import type { ArtistContentOptions, ArtistContentResponse } from '@shared/apiClient/enrichment';
+import { sourceIdList } from '@shared/apiClient/ids';
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
 
 import {
@@ -147,7 +148,7 @@ export function useArtistContent({
       source?.provider ?? '',
       source?.external_id ?? '',
       artistName ?? '',
-      sources.map((s) => `${s.provider}:${s.external_id}`).join(','),
+      sourceIdList(sources),
     ],
     queryFn: ({ signal }) =>
       loadArtistContent(port, [source!, ...sources.slice(1)], artistName, signal),

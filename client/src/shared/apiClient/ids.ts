@@ -71,3 +71,9 @@ export function discoveryEntityPath(
 export function asFavoriteKey(value: string): FavoriteKey {
   return value as FavoriteKey;
 }
+
+export type ProviderIdPair = { provider: string; external_id: string };
+
+export function sourceIdList(sources: readonly ProviderIdPair[]): string {
+  return sources.map((s) => `${s.provider}:${s.external_id}`).join(',');
+}

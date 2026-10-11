@@ -1,5 +1,5 @@
 import { PROVIDER_STATUSES, parseDiscoveryResult } from '@shared/apiClient/discovery';
-import { discoveryEntityPath } from '@shared/apiClient/ids';
+import { discoveryEntityPath, sourceIdList } from '@shared/apiClient/ids';
 import { apiFetch, signalInit, withQuery } from '@shared/apiClient/index';
 import {
   asArray,
@@ -47,6 +47,17 @@ function parseContentFetchResponse(
   };
 }
 
+export type AlbumTracksRequest = {
+  provider: string;
+  externalId: string;
+  limit?: number | undefined;
+  albumTitle?: string | undefined;
+  albumArtist?: string | undefined;
+  mbExternalId?: string | undefined;
+  knownIds?: readonly DiscoverySource[] | undefined;
+  signal?: AbortSignal | undefined;
+};
+
 export async function getAlbumTracks({
   provider,
   externalId,
@@ -54,21 +65,15 @@ export async function getAlbumTracks({
   albumTitle,
   albumArtist,
   mbExternalId,
+  knownIds,
   signal,
-}: {
-  provider: string;
-  externalId: string;
-  limit?: number | undefined;
-  albumTitle?: string | undefined;
-  albumArtist?: string | undefined;
-  mbExternalId?: string | undefined;
-  signal?: AbortSignal | undefined;
-}): Promise<ContentFetchResponse> {
+}: AlbumTracksRequest): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (albumTitle) params.set('title', albumTitle);
   if (albumArtist) params.set('artist', albumArtist);
   if (mbExternalId) params.set('mbid', mbExternalId);
+  if (knownIds?.length) params.set('ids', sourceIdList(knownIds));
   const path = discoveryEntityPath('albums', provider, externalId, 'tracks');
   return parseContentFetchResponse(
     await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
@@ -263,10 +268,6 @@ export type ArtistContentOptions = {
   knownIds?: readonly DiscoverySource[];
 };
 
-function knownIdsParam(sources: readonly DiscoverySource[]): string {
-  return sources.map((s) => `${s.provider}:${s.external_id}`).join(',');
-}
-
 export async function getArtistContent(
   provider: string,
   externalId: string,
@@ -277,7 +278,7 @@ export async function getArtistContent(
   if (opts.artistName) params.set('name', opts.artistName);
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
-  if (opts.knownIds?.length) params.set('ids', knownIdsParam(opts.knownIds));
+  if (opts.knownIds?.length) params.set('ids', sourceIdList(opts.knownIds));
   const path = discoveryEntityPath('artists', provider, externalId, 'content');
   return parseArtistContentResponse(
     await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
