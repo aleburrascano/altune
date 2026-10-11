@@ -4,6 +4,7 @@ import { Text } from 'react-native';
 import type { ReactNode } from 'react';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
+import { supabase } from '@shared/auth/supabaseClient';
 import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { PlaybackContext, usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
@@ -37,16 +38,6 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
 }));
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest.fn(),
-      onAuthStateChange: jest.fn(() => ({ data: { subscription: { unsubscribe: jest.fn() } } })),
-    },
-  },
-}));
-
-const { supabase } = require('@shared/auth/supabaseClient');
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
 
@@ -91,10 +82,13 @@ const PLAYING = {
 let client: QueryClient;
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
     data: { session: { access_token: 'tok' } },
     error: null,
-  });
+  } as never);
+  jest.spyOn(supabase.auth, 'onAuthStateChange').mockReturnValue({
+    data: { subscription: { unsubscribe: jest.fn() } },
+  } as never);
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
 });

@@ -1,4 +1,3 @@
-__tests__/rootLayout.integration.test.tsx @shared/auth/supabaseClient
 __tests__/tabsLayout.integration.test.tsx ../src/shared/ui/keyboard/useKeyboardShortcuts
 __tests__/tabsLayout.integration.test.tsx @shared/auth/supabaseClient
 __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
