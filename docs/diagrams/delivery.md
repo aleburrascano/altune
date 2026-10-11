@@ -54,7 +54,7 @@ How an iOS build reaches phones, and what can change without a new build.
 ```mermaid
 flowchart LR
     subgraph ios [iOS release · tag driven]
-        tag(["git tag v*"]) --> verify["release-ios.yml<br/>runs test-mobile first"]
+        tag(["git tag v*"]) --> verify["release-ios.yml<br/>tag a main commit the Gitea gate passed"]
         verify --> build["macOS runner<br/>expo prebuild · pod install<br/>xcodebuild archive, unsigned"]
         build --> ipa[/"unsigned .ipa"/]
         ipa --> release["GitHub Release"]
