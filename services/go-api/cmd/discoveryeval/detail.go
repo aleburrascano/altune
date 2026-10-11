@@ -99,9 +99,9 @@ func (a detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, n
 	}
 	var resp *discoveryService.ContentFetchResponse
 	if albums {
-		resp, _ = a.svc.GetAlbums(ctx, pn, seedID, nil, name, 100)
+		resp, _ = a.svc.GetAlbums(ctx, pn, seedID, nil, 100)
 	} else {
-		resp, _ = a.svc.GetTopTracks(ctx, pn, seedID, nil, name, 25)
+		resp, _ = a.svc.GetTopTracks(ctx, pn, seedID, nil, 25)
 	}
 	if resp == nil {
 		return nil
@@ -175,7 +175,7 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 		}
 		seed, known := card.Sources[0], cardKnownIDs(card)
 		start := time.Now()
-		albums, err := content.GetAlbums(ctx, seed.Provider, seed.ExternalID, known, card.Title, 100)
+		albums, err := content.GetAlbums(ctx, seed.Provider, seed.ExternalID, known, 100)
 		if err != nil {
 			return fmt.Errorf("albums %q: %w", name, err)
 		}

@@ -96,7 +96,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
-			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, nil, "", tt.limit)
+			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, nil, tt.limit)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -233,7 +233,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
-			resp, err := svc.GetAlbums(context.Background(), tt.providerName, tt.externalID, nil, "", tt.limit)
+			resp, err := svc.GetAlbums(context.Background(), tt.providerName, tt.externalID, nil, tt.limit)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -271,7 +271,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, "", 0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -305,7 +305,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, "", 0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -328,7 +328,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, "", 2)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", nil, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -424,7 +424,7 @@ func TestIdentityFanOut_NoFailureWarnWhenAllAnswer(t *testing.T) {
 	svc := identityFanOutWithErr(func(domain.ProviderName) error { return nil })
 	buf := captureProductionLogs(t)
 
-	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 10); err != nil {
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
 		t.Fatalf("error = %v", err)
 	}
 	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
@@ -444,7 +444,7 @@ func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 	})
 	buf := captureProductionLogs(t)
 
-	if _, err := svc.GetTopTracks(ctx, domain.ProviderDeezer, "id-deezer", nil, "Che", 10); err != nil {
+	if _, err := svc.GetTopTracks(ctx, domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
 		t.Fatalf("error = %v", err)
 	}
 	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
@@ -458,7 +458,7 @@ func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
 	svc := identityFanOutWithErr(func(domain.ProviderName) error { return nil }, WithContentCircuitBreaker(cb))
 	buf := captureProductionLogs(t)
 
-	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 10); err != nil {
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10); err != nil {
 		t.Fatalf("error = %v", err)
 	}
 	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
@@ -510,10 +510,10 @@ type contentFetcher func(*GetArtistContentService) (*ContentFetchResponse, error
 
 var identityContentFetchers = map[string]contentFetcher{
 	"top tracks": func(s *GetArtistContentService) (*ContentFetchResponse, error) {
-		return s.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 10)
+		return s.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10)
 	},
 	"albums": func(s *GetArtistContentService) (*ContentFetchResponse, error) {
-		return s.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 50)
+		return s.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
 	},
 }
 
@@ -555,7 +555,7 @@ func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
 	tripViaSearch(t, cb, domain.ProviderSpotify)
 	svc := identityFanOut(func(domain.ProviderName) bool { return false }, WithContentCircuitBreaker(cb))
 
-	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 10)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -588,7 +588,7 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 		WithContentCircuitBreaker(cb),
 	)
 
-	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -654,7 +654,7 @@ func TestGetArtistContent_LaterPageFailureReportsPartial(t *testing.T) {
 				},
 			},
 		})
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "", 50)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, 50)
 		if err != nil {
 			t.Fatalf("error = %v", err)
 		}

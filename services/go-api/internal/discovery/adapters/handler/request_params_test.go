@@ -89,7 +89,6 @@ func TestEnrichmentRejections_MalformedMBIDAndOversizedNames(t *testing.T) {
 		{"an oversized deezer title", "/discovery/enrichment/deezer?kind=album&title=" + oversizedParam},
 		{"an oversized lyrics title", "/discovery/lyrics?title=" + oversizedParam},
 		{"an oversized album-tracks title", "/discovery/albums/deezer/123/tracks?title=" + oversizedParam},
-		{"an oversized artist name", "/discovery/artists/deezer/123/albums?name=" + oversizedParam},
 		{"a title one rune past the cap", "/discovery/enrichment?kind=artist&title=" + strings.Repeat("a", 201)},
 	}
 	for _, c := range cases {

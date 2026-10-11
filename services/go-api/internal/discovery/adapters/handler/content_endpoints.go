@@ -163,13 +163,9 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 			if !ok {
 				return
 			}
-			artistName, ok := textParam(w, r, "name")
-			if !ok {
-				return
-			}
 			known := knownIDsParam(r)
 
-			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, known, artistName, limit)
+			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, known, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get artist top tracks failed", provider, externalID)
 				return
@@ -187,13 +183,9 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 			if !ok {
 				return
 			}
-			artistName, ok := textParam(w, r, "name")
-			if !ok {
-				return
-			}
 			known := knownIDsParam(r)
 
-			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, known, artistName, limit)
+			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, known, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get artist albums failed", provider, externalID)
 				return
@@ -251,7 +243,7 @@ func runRecovered(ctx context.Context, event string, fetch func() error) (err er
 }
 
 func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
-	ctx context.Context, pn domain.ProviderName, externalID string, known map[domain.ProviderName]string, name string, tracksLimit, albumsLimit int,
+	ctx context.Context, pn domain.ProviderName, externalID string, known map[domain.ProviderName]string, tracksLimit, albumsLimit int,
 ) (tracksResp, albumsResp *service.ContentFetchResponse, tracksErr, albumsErr error) {
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -259,7 +251,7 @@ func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 		defer wg.Done()
 		tracksErr = runRecovered(ctx, "artist_content.top_tracks_panic", func() error {
 			var err error
-			tracksResp, err = h.artistSvc.GetTopTracks(ctx, pn, externalID, known, name, tracksLimit)
+			tracksResp, err = h.artistSvc.GetTopTracks(ctx, pn, externalID, known, tracksLimit)
 			return err
 		})
 	}()
@@ -267,7 +259,7 @@ func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 		defer wg.Done()
 		albumsErr = runRecovered(ctx, "artist_content.albums_panic", func() error {
 			var err error
-			albumsResp, err = h.artistSvc.GetAlbums(ctx, pn, externalID, known, name, albumsLimit)
+			albumsResp, err = h.artistSvc.GetAlbums(ctx, pn, externalID, known, albumsLimit)
 			return err
 		})
 	}()
@@ -285,10 +277,6 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			})
 		},
 		func(pn domain.ProviderName, provider, externalID string) {
-			artistName, ok := textParam(w, r, "name")
-			if !ok {
-				return
-			}
 			known := knownIDsParam(r)
 			tracksLimit, ok := parseLimit(w, r, "tracks_limit", 5, 50, clampToMax)
 			if !ok {
@@ -300,7 +288,7 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			}
 
 			tracksResp, albumsResp, tracksErr, albumsErr := h.fetchTopTracksAndAlbums(
-				r.Context(), pn, externalID, known, artistName, tracksLimit, albumsLimit)
+				r.Context(), pn, externalID, known, tracksLimit, albumsLimit)
 			if tracksErr != nil || albumsErr != nil {
 				slog.ErrorContext(r.Context(), "artist content failed",
 					"tracks_error", tracksErr, "albums_error", albumsErr,

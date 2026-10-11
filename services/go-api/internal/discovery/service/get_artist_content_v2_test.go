@@ -78,7 +78,7 @@ func TestGetAlbums_v2_bestOfMerge(t *testing.T) {
 		WithContentIdentityStore(store),
 	)
 
-	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
-	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "399574001", nil, "Che", 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "399574001", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 	)
 
 	for i := 0; i < 25; i++ {
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 		if err != nil {
 			t.Fatalf("run %d: GetAlbums error = %v", i, err)
 		}
@@ -195,7 +195,7 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	)
 
 	start := time.Now()
-	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -236,7 +236,7 @@ func fallbackPartialService(p *discoverytest.ArtistContentProvider) *GetArtistCo
 }
 
 func TestGetAlbums_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T) {
-	resp, err := fallbackPartialService(failOnceThenEmptyProvider()).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := fallbackPartialService(failOnceThenEmptyProvider()).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -246,7 +246,7 @@ func TestGetAlbums_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T)
 }
 
 func TestGetTopTracks_v2_fallbackKeepsPartialWhenIdentityFanOutFailed(t *testing.T) {
-	resp, err := fallbackPartialService(failOnceThenEmptyProvider()).GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 10)
+	resp, err := fallbackPartialService(failOnceThenEmptyProvider()).GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -264,14 +264,14 @@ func TestGetArtistContent_v2_fallbackNotPartialWhenNoProviderFailed(t *testing.T
 			return nil, nil
 		},
 	})
-	albums, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	albums, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
 	if albums.Partial {
 		t.Errorf("GetAlbums Partial = true, want false when no provider failed")
 	}
-	tracks, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 10)
+	tracks, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -303,7 +303,7 @@ func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 		WithContentIdentityStore(store),
 	)
 
-	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -369,7 +369,7 @@ func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *te
 	for name, svc := range cases {
 		t.Run(name, func(t *testing.T) {
 			buf := captureProductionLogs(t)
-			resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+			resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 			if err != nil {
 				t.Fatalf("GetAlbums error = %v", err)
 			}
@@ -389,7 +389,7 @@ func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *te
 
 func TestGetAlbums_v2_anchorWithNoTitlesIsSilentNoOp(t *testing.T) {
 	buf := captureProductionLogs(t)
-	resp, err := anchoredAlbumsService(stubMBAnchor{}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := anchoredAlbumsService(stubMBAnchor{}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -406,7 +406,7 @@ func TestGetAlbums_v2_anchorErrorAfterCallerLeftIsSilent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := anchoredAlbumsService(stubMBAnchor{err: context.Canceled})
 	cancel()
-	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -447,7 +447,7 @@ func TestGetAlbums_v2_callerLeavingDuringAnchorLookupIsSilentAndNotPartial(t *te
 		cancel()
 		return nil, context.Canceled
 	}))
-	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if !anchorCalled {
 		t.Fatalf("anchor was never consulted, the test did not reach the anchor path")
 	}
@@ -475,7 +475,7 @@ func TestGetAlbums_v2_callerDeadlinePassingDuringAnchorLookupIsSilent(t *testing
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}))
-	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if !anchorCalled {
 		t.Fatalf("anchor was never consulted, the test did not reach the anchor path")
 	}
@@ -505,7 +505,7 @@ func TestGetAlbums_v2_anchorTimeoutWhileCallerStillWaitingIsPartialWithOneWarn(t
 			svc := anchoredAlbumsServiceWith(funcMBAnchor(func(context.Context, string) ([]string, error) {
 				return nil, anchorErr
 			}))
-			resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+			resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 			if err != nil {
 				t.Fatalf("GetAlbums error = %v", err)
 			}
@@ -529,7 +529,7 @@ func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 	svc := anchoredAlbumsServiceWith(funcMBAnchor(func(context.Context, string) ([]string, error) {
 		return nil, errors.New("mb unavailable")
 	}), WithContentCircuitBreaker(openBreaker))
-	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -562,7 +562,7 @@ func TestGetAlbums_v2_openBreakerAfterCallerLeftIsSilent(t *testing.T) {
 		WithMBAnchor(stubMBAnchor{titles: []string{"Fully Loaded"}}),
 		WithContentCircuitBreaker(openBreaker),
 	)
-	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := svc.GetAlbums(ctx, domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -589,7 +589,7 @@ func TestGetAlbums_v2_anchorFailureWarnCarriesNoSecretFromTheErrorURL(t *testing
 		t.Run(name, func(t *testing.T) {
 			buf := captureProductionLogs(t)
 			leaky := &url.Error{Op: "Get", URL: u, Err: errors.New("i/o timeout")}
-			resp, err := anchoredAlbumsService(stubMBAnchor{err: leaky}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+			resp, err := anchoredAlbumsService(stubMBAnchor{err: leaky}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 			if err != nil {
 				t.Fatalf("GetAlbums error = %v", err)
 			}
@@ -610,7 +610,7 @@ func TestGetAlbums_v2_anchorFailureWarnCarriesNoBearerToken(t *testing.T) {
 	const token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl"
 	buf := captureProductionLogs(t)
 	anchorErr := errors.New("mb anchor: 401 for request with Authorization: Bearer " + token)
-	resp, err := anchoredAlbumsService(stubMBAnchor{err: anchorErr}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	resp, err := anchoredAlbumsService(stubMBAnchor{err: anchorErr}).GetAlbums(context.Background(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
@@ -643,7 +643,7 @@ func TestGetAlbums_v2_asksEveryProviderTheSearchCardKnows(t *testing.T) {
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
-	resp, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSpotify: "sp1"}, "Che", 50)
+	resp, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSpotify: "sp1"}, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,7 +668,7 @@ func TestGetAlbums_v2_savedIdentityWinsOverTheSearchCard(t *testing.T) {
 		WithContentIdentityStore(store),
 	)
 
-	if _, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSpotify: "sp-card"}, "Che", 50); err != nil {
+	if _, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSpotify: "sp-card"}, 50); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -682,7 +682,7 @@ func TestGetAlbums_v2_dropsSoundCloudOnlyReleasesWhenACatalogKnowsTheArtist(t *t
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
-	resp, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSoundCloud: "sc1"}, "Nirvana", 50)
+	resp, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSoundCloud: "sc1"}, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,7 +707,7 @@ func TestGetAlbums_v2_keepsSoundCloudReleasesForAnArtistOnlyOnSoundCloud(t *test
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
-	resp, err := svc.GetAlbums(t.Context(), domain.ProviderSoundCloud, "sc1", map[domain.ProviderName]string{domain.ProviderYouTube: "yt1"}, "Underground", 50)
+	resp, err := svc.GetAlbums(t.Context(), domain.ProviderSoundCloud, "sc1", map[domain.ProviderName]string{domain.ProviderYouTube: "yt1"}, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -734,7 +734,7 @@ func TestGetTopTracks_v2_dropsSoundCloudOnlyTracksWhenACatalogKnowsTheArtist(t *
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
-	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSoundCloud: "sc1"}, "Nirvana", 5)
+	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", map[domain.ProviderName]string{domain.ProviderSoundCloud: "sc1"}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,11 +764,11 @@ func TestGetArtistContent_v2_anEmptyAnswerIsNotFoundWithoutAskingAgain(t *testin
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
-	albums, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	albums, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", nil, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracks, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", nil, "Che", 10)
+	tracks, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", nil, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

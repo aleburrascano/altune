@@ -392,6 +392,21 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 	}
 }
 
+func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
+	svc := service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+		discdomain.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
+	})
+	router := chi.NewRouter()
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Artist: svc}).Routes())
+
+	for _, path := range []string{"content", "albums", "top-tracks"} {
+		rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/d1/"+path+"?name="+strings.Repeat("a", 5000), nil)
+
+		discAssertStatus(t, rec, http.StatusOK)
+	}
+}
+
 func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	var gotSpotifyID string
 	deezer := &discoverytest.AlbumContentProvider{Results: seedTracks(120)}

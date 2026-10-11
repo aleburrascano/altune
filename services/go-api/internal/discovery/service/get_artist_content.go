@@ -53,7 +53,7 @@ func WithContentEventStore(eventStore ports.EventStore) ArtistContentOption {
 	}
 }
 
-func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, artistName string, limit int) (*ContentFetchResponse, error) {
+func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, limit int) (*ContentFetchResponse, error) {
 	if s.usesIdentity(known) {
 		tracks, partial := s.v2TopTracks(ctx, s.artistIdentity(ctx, providerName, externalID, known))
 		return s.identityAnswer(providerName, tracks, partial, limit), nil
@@ -197,7 +197,7 @@ func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, 
 	return slog.Group(provider.String(), "external_id", externalID, "error", redact.Secrets(err.Error())), true
 }
 
-func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, artistName string, limit int) (*ContentFetchResponse, error) {
+func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, limit int) (*ContentFetchResponse, error) {
 	if s.usesIdentity(known) {
 		identity := s.artistIdentity(ctx, providerName, externalID, known)
 		albums, partial := s.v2Albums(ctx, identity, release.SourceKey(providerName, externalID))
