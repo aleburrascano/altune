@@ -382,7 +382,7 @@ func TestHandleSearchHistory(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
 			for i := 0; i < tt.seedEntries; i++ {
 				historyRepo.entries = append(historyRepo.entries, &discdomain.SearchHistoryEntry{
-					ID:         uuid.New(),
+					ID:         shared.NewEntityId(),
 					UserId:     discTestUserId,
 					Query:      "test query",
 					QueryNorm:  "test query",
@@ -412,7 +412,7 @@ func TestHandleClearSearchHistory(t *testing.T) {
 	historyRepo := &fakeSearchHistoryRepo{}
 	for i := 0; i < 3; i++ {
 		historyRepo.entries = append(historyRepo.entries, &discdomain.SearchHistoryEntry{
-			ID:         uuid.New(),
+			ID:         shared.NewEntityId(),
 			UserId:     discTestUserId,
 			Query:      "test query",
 			QueryNorm:  "test query",

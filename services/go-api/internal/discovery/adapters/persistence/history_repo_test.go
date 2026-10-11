@@ -18,21 +18,21 @@ func TestPgxSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
 
 	entries := []*domain.SearchHistoryEntry{
 		{
-			ID:         uuid.New(),
+			ID:         shared.NewEntityId(),
 			UserId:     userId,
 			Query:      "Beatles",
 			QueryNorm:  "beatles",
 			ExecutedAt: time.Now().UTC().Add(-3 * time.Minute),
 		},
 		{
-			ID:         uuid.New(),
+			ID:         shared.NewEntityId(),
 			UserId:     userId,
 			Query:      "beatles",
 			QueryNorm:  "beatles",
 			ExecutedAt: time.Now().UTC().Add(-1 * time.Minute),
 		},
 		{
-			ID:         uuid.New(),
+			ID:         shared.NewEntityId(),
 			UserId:     userId,
 			Query:      "Pink Floyd",
 			QueryNorm:  "pink floyd",
@@ -43,7 +43,7 @@ func TestPgxSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
 	for i, e := range entries {
 		t.Cleanup(func() {
 			_, _ = pool.Exec(context.Background(),
-				`DELETE FROM discovery_search_history WHERE id = $1`, e.ID)
+				`DELETE FROM discovery_search_history WHERE id = $1`, e.ID.UUID())
 		})
 		if err := repo.Insert(ctx, e); err != nil {
 			t.Fatalf("Insert entry %d: %v", i, err)
@@ -83,9 +83,9 @@ func TestPgxSearchHistoryRepo_TrimToN(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	ids := make([]uuid.UUID, 5)
+	ids := make([]shared.EntityId, 5)
 	for i := 0; i < 5; i++ {
-		ids[i] = uuid.New()
+		ids[i] = shared.NewEntityId()
 		entry := &domain.SearchHistoryEntry{
 			ID:         ids[i],
 			UserId:     userId,
@@ -95,7 +95,7 @@ func TestPgxSearchHistoryRepo_TrimToN(t *testing.T) {
 		}
 		t.Cleanup(func() {
 			_, _ = pool.Exec(context.Background(),
-				`DELETE FROM discovery_search_history WHERE id = $1`, entry.ID)
+				`DELETE FROM discovery_search_history WHERE id = $1`, entry.ID.UUID())
 		})
 		if err := repo.Insert(ctx, entry); err != nil {
 			t.Fatalf("Insert entry %d: %v", i, err)

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -559,7 +560,7 @@ func TestHandleSearch_AllProvidersFailedReturns503(t *testing.T) {
 func TestHandleSearchHistory_UTCTimestampFormat(t *testing.T) {
 	cest := time.FixedZone("CEST", 2*3600)
 	historyRepo := &fakeSearchHistoryRepo{entries: []*discdomain.SearchHistoryEntry{{
-		ID:         uuid.New(),
+		ID:         shared.NewEntityId(),
 		UserId:     discTestUserId,
 		Query:      "Radiohead",
 		QueryNorm:  "radiohead",
@@ -1349,7 +1350,7 @@ const secretSearchText = "very private query 7f3a"
 
 func seededHistoryRepo() *fakeSearchHistoryRepo {
 	return &fakeSearchHistoryRepo{entries: []*discdomain.SearchHistoryEntry{{
-		ID:         uuid.New(),
+		ID:         shared.NewEntityId(),
 		UserId:     discTestUserId,
 		Query:      secretSearchText,
 		QueryNorm:  secretSearchText,

@@ -39,7 +39,7 @@ func (s *RecordSearchHistoryService) Record(
 		return
 	}
 	entry := &domain.SearchHistoryEntry{
-		ID:         uuid.New(),
+		ID:         shared.EntityIdFromBytes(uuid.New()),
 		UserId:     userId,
 		Query:      query.Raw,
 		QueryNorm:  queryNorm,

@@ -18,7 +18,7 @@ import (
 func seedHistoryEntry(t *testing.T, repo *PgxSearchHistoryRepository, userId shared.UserId, query string, at time.Time) {
 	t.Helper()
 	entry := &domain.SearchHistoryEntry{
-		ID:         uuid.New(),
+		ID:         shared.NewEntityId(),
 		UserId:     userId,
 		Query:      query,
 		QueryNorm:  query,
@@ -287,7 +287,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 	written := make(chan error, 2)
 	go func() {
 		written <- NewPgxSearchHistoryRepository(pool).Insert(ctx, &domain.SearchHistoryEntry{
-			ID: uuid.New(), UserId: owner, Query: "racing " + suffix, QueryNorm: "racing " + suffix, ExecutedAt: began,
+			ID: shared.NewEntityId(), UserId: owner, Query: "racing " + suffix, QueryNorm: "racing " + suffix, ExecutedAt: began,
 		})
 	}()
 	go func() {
@@ -407,7 +407,7 @@ func TestPgxSearchHistoryRepo_Insert_ConcurrentResendsOfOneQueryLeaveOneRow(t *t
 		go func() {
 			defer wg.Done()
 			errs <- repo.Insert(context.Background(), &domain.SearchHistoryEntry{
-				ID: uuid.New(), UserId: owner, Query: "race radiohead", QueryNorm: "race radiohead", ExecutedAt: at,
+				ID: shared.NewEntityId(), UserId: owner, Query: "race radiohead", QueryNorm: "race radiohead", ExecutedAt: at,
 			})
 		}()
 	}

@@ -3,12 +3,10 @@ package domain
 import (
 	"altune/go-api/internal/shared"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type SearchHistoryEntry struct {
-	ID                     uuid.UUID
+	ID                     shared.EntityId
 	UserId                 shared.UserId
 	Query                  string
 	QueryNorm              string

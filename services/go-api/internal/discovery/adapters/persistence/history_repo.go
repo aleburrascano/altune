@@ -79,7 +79,7 @@ const insertHistoryUnlessResentSQL = `INSERT INTO discovery_search_history (id, 
 
 func (r *PgxSearchHistoryRepository) Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error {
 	err := execUnderLocks(ctx, r.pool, entry.UserId.UUID(), historyInsertLocks, insertHistoryUnlessResentSQL,
-		entry.ID, entry.UserId.UUID(), entry.Query, entry.QueryNorm, entry.ExecutedAt, entry.ResultClickedSignature,
+		entry.ID.UUID(), entry.UserId.UUID(), entry.Query, entry.QueryNorm, entry.ExecutedAt, entry.ResultClickedSignature,
 		entry.ExecutedAt.Add(-historyResendWindow),
 	)
 	if err != nil {
@@ -206,7 +206,7 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 			return nil, fmt.Errorf("scan search history: %w", err)
 		}
 		return &domain.SearchHistoryEntry{
-			ID:                     id,
+			ID:                     shared.EntityIdFromBytes(id),
 			UserId:                 shared.NewUserId(uid),
 			Query:                  query,
 			QueryNorm:              queryNorm,

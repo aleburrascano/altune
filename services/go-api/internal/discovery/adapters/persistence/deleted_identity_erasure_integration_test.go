@@ -84,7 +84,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 
 	history := NewPgxSearchHistoryRepository(pool)
 	if err := history.Insert(ctx, &domain.SearchHistoryEntry{
-		ID:         uuid.New(),
+		ID:         shared.NewEntityId(),
 		UserId:     owner,
 		Query:      "Mac DeMarco",
 		QueryNorm:  "mac demarco",
