@@ -1,4 +1,3 @@
-N3 src/features/library/ui/libraryListParts.tsx is not PascalCase
 N3 src/features/library/ui/libraryRowAccessories.tsx is not PascalCase
 N3 src/features/playback/native/expoGoPlaybackProvider.tsx is not PascalCase
 N3 src/features/playback/native/trackPlayerPlaybackProvider.tsx is not PascalCase

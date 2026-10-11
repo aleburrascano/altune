@@ -7,7 +7,7 @@ import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { Selection } from '@features/library/hooks/useSelection';
-import { LibraryEmptyMessage, ListLoadingMoreFooter } from '@features/library/ui/libraryListParts';
+import { LibraryEmptyMessage, ListLoadingMoreFooter } from '@features/library/ui/LibraryListParts';
 import { listContent } from '@features/library/ui/listContentStyles';
 import { LibraryRow } from '@features/library/ui/LibraryRow';
 import { WideTrackHeader } from '@features/library/ui/WideTrackHeader';
