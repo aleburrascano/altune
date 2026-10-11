@@ -10,7 +10,10 @@ const KEYCHAIN_OPTS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
 
 export const authStorage: AuthStorage = {
   getItem: (key: string): Promise<string | null> =>
-    SecureStore.getItemAsync(key, KEYCHAIN_OPTS).catch(() => null),
+    SecureStore.getItemAsync(key, KEYCHAIN_OPTS).catch((error: unknown) => {
+      console.warn('[auth] secure store read failed', error);
+      return null;
+    }),
   setItem: (key: string, value: string): Promise<void> =>
     SecureStore.setItemAsync(key, value, KEYCHAIN_OPTS),
   removeItem: (key: string): Promise<void> => SecureStore.deleteItemAsync(key, KEYCHAIN_OPTS),

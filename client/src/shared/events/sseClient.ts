@@ -259,7 +259,9 @@ export class SSEClient {
     this.clearWatchdog();
     if (!this.episodeReported) {
       this.episodeReported = true;
-      recordEvent({ type: 'sse_reconnect', payload: {} }).catch(() => undefined);
+      recordEvent({ type: 'sse_reconnect', payload: {} }).catch((error: unknown) => {
+        console.warn('[sse] recording reconnect event failed', error);
+      });
     }
     const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs);
     this.reconnectAttempt += 1;

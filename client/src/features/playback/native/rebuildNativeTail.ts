@@ -4,6 +4,7 @@ import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
 import { withNativeQueue, type Fence } from '@features/playback/native/nativeQueueLock';
 import { activeNativeTrackId, nativeTrackBuilder } from '@features/playback/native/nativeTrack';
 import { currentLoadToken, isStale, type LoadToken } from '@features/playback/domain/loadToken';
+import { warnPlayback } from '@features/playback/domain/playbackError';
 import { NATIVE_QUEUE_WINDOW } from '@features/playback/domain/presignWindow';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
@@ -84,7 +85,10 @@ async function upcomingHeldNatively(fence: Fence): Promise<AddTrack[]> {
 
 async function restoreUpcoming(previous: AddTrack[], fence: Fence): Promise<void> {
   fence();
-  if (previous.length > 0) await TrackPlayer.add(previous).catch(() => undefined);
+  if (previous.length > 0)
+    await TrackPlayer.add(previous).catch((error: unknown) => {
+      warnPlayback('restoring upcoming tracks failed', { count: previous.length }, error);
+    });
 }
 
 async function addWindow(window: AddTrack[], previous: AddTrack[], fence: Fence): Promise<boolean> {

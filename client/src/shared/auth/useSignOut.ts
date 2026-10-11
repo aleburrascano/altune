@@ -35,7 +35,9 @@ function signOutFailed(error: unknown): SignOutResult {
 }
 
 async function endLocalSession(): Promise<void> {
-  await clearPersistedAuthSession().catch(() => undefined);
+  await clearPersistedAuthSession().catch((error: unknown) =>
+    console.warn('[auth] clearing persisted session failed', signOutFailureFields(error)),
+  );
   await withinAuthDeadline(supabase.auth.signOut({ scope: 'local' }), 'sign-out-local').catch(
     (error: unknown) => console.warn('[auth] local sign out failed', signOutFailureFields(error)),
   );
