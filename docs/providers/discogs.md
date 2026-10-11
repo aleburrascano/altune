@@ -79,7 +79,7 @@ credits need a `master_id`, resolved by structured search (§5).
 | `GET /masters/{id}/versions` | editions (`title, format, country, released, label, catno`) | 200 | (edition list) |
 | `GET /releases/{id}` | release-level `extraartists[]`, `labels[]` (+catno), `companies[]` (recorded/mastered/copyright), `formats[]`, `identifiers[]` (barcode), `genres/styles`, `community {have, want, rating}`, `notes` | 200 | **edition enrichment + community signal** |
 | `GET /artists/{id}` | `realname`, `profile`, `namevariations[]`, `aliases[]`, `members`/`groups`, `urls[]` (wikipedia/genius/whosampled/imdb/socials) | 200 | artist enrichment ✅ partially built |
-| `GET /artists/{id}/releases?sort=year` | paginated discography (mixed `master`/`release`, `role` incl. "Appearance" for features) | 200 | `ValidateArtistAlbums` / discography ✅ partially built |
+| `GET /artists/{id}/releases?sort=year` | paginated discography (mixed `master`/`release`, `role` incl. "Appearance" for features) | 200 | discography for `signal-b` coverage ✅ partially built |
 | `GET /labels/{id}` | `name`, `profile`, `sublabels[]`, `parent_label`, `urls` | 200 | (label surface) |
 | `GET https://i.discogs.com/...` (`images[].uri`) | 600×600 cover (`uri`) / 150px (`uri150`) | 200 | artwork fallback ✅ built (last, ≤600px) |
 

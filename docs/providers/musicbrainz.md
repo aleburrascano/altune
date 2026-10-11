@@ -66,7 +66,7 @@ MBID and returns the group's chosen front cover, resolving to a `/release/{relea
 | `GET /ws/2/release-group?query=&fmt=json` | release-groups (title, primary-type, first-release-date) | 200 | `SearchProvider` (album) ✅ built |
 | `GET /ws/2/artist/{mbid}?inc=url-rels+genres+tags+ratings&fmt=json` | curated `genres[]`, `tags[]`, `rating`, `relations[]` (Deezer/Spotify/Discogs/Last.fm/Wikidata/AllMusic/Genius/official) | 200 | **new: enrichment + cross-provider bridge** |
 | `GET /ws/2/release-group/{mbid}?inc=genres+ratings&fmt=json` | primary/secondary types, first-release-date, RG-level `genres[]`, `rating` | 200 | **new: album enrichment** |
-| `GET /ws/2/release-group?artist={mbid}&type=album\|ep\|single&limit=100` | an artist's discography | 200 | `ValidateArtistAlbums` ✅ built (consensus) |
+| `GET /ws/2/release-group?artist={mbid}&type=album\|ep\|single&limit=100` | an artist's discography | 200 | `fetchReleaseGroups` ✅ built (V2 album anchor; `ListArtistDiscography` for `signal-b`) |
 | `GET https://coverartarchive.org/release-group/{mbid}` | `images[]` — `front:true`, full `image`, `thumbnails {250,500,1200}` | 200 | **artwork (separate `coverartarchive.go`)** |
 
 ## 5. Capabilities to maximize
@@ -77,12 +77,13 @@ only the thin fields (mbid, title, subtitle, isrc, disambiguation, type, area, t
 `musicbrainz.go`. **Gap:** search does **not** return curated genres or relationships — those need a
 lookup (capability 3).
 
-### 2. Identity resolution + album consensus — ✅ BUILT
-`ResolveArtistIdentity` (name → MBID + disambiguation/birth-year/area/type) and `ValidateArtistAlbums`.
-Off the ranking path; feeds the consensus engine and the identity resolver. This is the only place
+### 2. Identity resolution + album anchor — ✅ BUILT
+`ResolveArtistIdentity` (name → MBID + disambiguation/birth-year/area/type) and the release-group
+discography. Off the ranking path; feeds the identity resolver and the V2 album anchor. This is the only place
 lookups happen today — and they fetch the *thin* projection. A per-album `LookupAlbumArtist`
 contamination check also existed, but nothing ever called it, so it was deleted (#2225); the
-discography spine in `ValidateArtistAlbums` is what rejects foreign albums today.
+release-group anchor on V2 album groups (`FilterGroupsByMBAnchor`) is what rejects foreign albums
+today. The old by-name veto was deleted with the consensus service (#2050).
 
 ### 3. Artist & album enrichment via `inc=` lookup — ✅ BUILT (2026-06-22)
 The single highest-value addition. One lookup per resolved entity yields:
@@ -153,12 +154,12 @@ Built and on `main` (search + identity/consensus), thin projection only:
 
 - `services/go-api/internal/discovery/adapters/providers/musicbrainz.go` — `Search`,
   `SearchStructured`, `searchKind` (artist/recording/release-group, `inc=isrcs` on track),
-  `ResolveArtistIdentity`, `ValidateArtistAlbums`, `fetchReleaseGroups`. Maps
+  `ResolveArtistIdentity`, `fetchReleaseGroups`, `ListArtistDiscography`. Maps
   `mbid` into `extras` on every result — the seed the artwork chain already depends on.
 - `services/go-api/internal/discovery/adapters/providers/coverartarchive.go` — `ArtworkResolver`,
   wired **first** in `buildArtworkChain` (`search_wiring.go`). Already consumes release-group MBIDs.
 - Wired in `internal/app/search_wiring.go`: `sharedMB` as `SearchProvider` + `WithAlbumValidator`;
-  `BuildConsensusProviders` uses `ValidateArtistAlbums`. Config-gated by `cfg.HasMusicBrainz()`
+  `BuildConsensusProviders` (for `discoveryeval -mode signal-b`) uses `ListArtistDiscography`. Config-gated by `cfg.HasMusicBrainz()`
   (`MUSICBRAINZ_USER_AGENT`).
 - `rateLimit()` enforces 1 req/sec across all calls.
 
