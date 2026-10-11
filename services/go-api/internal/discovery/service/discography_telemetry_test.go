@@ -114,7 +114,7 @@ func TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect(t *testing.T) {
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 	svc := identityFanOut(func(domain.ProviderName) bool { return false }, WithContentEventStore(&panickingEventStore{}))
 
-	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 50)
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 50)
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil (emit must never fail the response)", err)
 	}
@@ -129,7 +129,7 @@ func TestDiscographyEmit_NilTelemetryIsNoOp(t *testing.T) {
 	if svc.discographyTelemetry != nil {
 		t.Fatal("discographyTelemetry should be nil when no event store is wired")
 	}
-	if _, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 50); err != nil {
+	if _, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", nil, "Che", 50); err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil", err)
 	}
 }

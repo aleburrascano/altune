@@ -52,7 +52,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail | detail-live")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -131,6 +131,8 @@ func run(opts options) error {
 	switch opts.mode {
 	case "eval":
 		return runEval(ctx, cfg, pool, redisClient, opts)
+	case "detail-live":
+		return runDetailLive(ctx, cfg, pool, redisClient, opts)
 	case "merge":
 		return runMerge(ctx, cfg, pool, redisClient, opts)
 	case "correction":
@@ -158,7 +160,7 @@ func run(opts options) error {
 	case "replay":
 		return runReplay(ctx, cfg, pool, redisClient, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail | detail-live)", opts.mode)
 	}
 }
 

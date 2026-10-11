@@ -6,7 +6,9 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
+	"maps"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -162,5 +164,25 @@ func TestContentIDs_RealProviderIDsStillServe(t *testing.T) {
 
 			discAssertStatus(t, rec, http.StatusOK)
 		})
+	}
+}
+
+func TestKnownIDsParam_KeepsValidEntriesAndSkipsTheRest(t *testing.T) {
+	tooMany := strings.Repeat("deezer:1,", maxKnownIDs) + "spotify:late"
+	cases := []struct {
+		ids  string
+		want map[discdomain.ProviderName]string
+	}{
+		{ids: "", want: nil},
+		{ids: "spotify:sp1, applemusic:123", want: map[discdomain.ProviderName]string{discdomain.ProviderSpotify: "sp1", discdomain.ProviderAppleMusic: "123"}},
+		{ids: "spotify:..,spotify,notaprovider:x,applemusic:a/b,deezer:9", want: map[discdomain.ProviderName]string{discdomain.ProviderDeezer: "9"}},
+		{ids: tooMany, want: map[discdomain.ProviderName]string{discdomain.ProviderDeezer: "1"}},
+	}
+	for _, tc := range cases {
+		r := httptest.NewRequest(http.MethodGet, "/x?ids="+url.QueryEscape(tc.ids), nil)
+
+		if got := knownIDsParam(r); !maps.Equal(got, tc.want) {
+			t.Errorf("ids %q: got %v, want %v", tc.ids, got, tc.want)
+		}
 	}
 }

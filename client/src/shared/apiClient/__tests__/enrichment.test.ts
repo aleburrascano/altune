@@ -246,6 +246,22 @@ describe('getArtistContent', () => {
     expect(__http.last().query).toBe('name=Daft+Punk&tracks_limit=5&albums_limit=8');
   });
 
+  it('sends every id the search card knows as provider:id pairs', async () => {
+    __http.reply('GET /v1/discovery/artists/deezer/art-1/content', {
+      status: 200,
+      json: { top_tracks: emptyContent, albums: emptyContent },
+    });
+
+    await getArtistContent('deezer', 'art-1', {
+      knownIds: [
+        { provider: 'deezer', external_id: 'art-1', url: '' },
+        { provider: 'spotify', external_id: 'sp1', url: '' },
+      ],
+    });
+
+    expect(new URLSearchParams(__http.last().query).get('ids')).toBe('deezer:art-1,spotify:sp1');
+  });
+
   it('sends tracks_limit=0 and albums_limit=0 rather than dropping them (0 must not fall back to the server default)', async () => {
     __http.reply('GET /v1/discovery/artists/deezer/art-1/content', {
       status: 200,

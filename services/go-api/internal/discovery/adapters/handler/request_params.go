@@ -27,6 +27,27 @@ func textParam(w http.ResponseWriter, r *http.Request, param string) (string, bo
 	return value, true
 }
 
+const maxKnownIDs = 16
+
+func knownIDsParam(r *http.Request) map[domain.ProviderName]string {
+	raw := strings.TrimSpace(r.URL.Query().Get("ids"))
+	if raw == "" {
+		return nil
+	}
+	known := make(map[domain.ProviderName]string)
+	for i, entry := range strings.Split(raw, ",") {
+		if i == maxKnownIDs {
+			break
+		}
+		provider, id, found := strings.Cut(strings.TrimSpace(entry), ":")
+		pn, err := domain.ParseProviderName(provider)
+		if found && err == nil && isValidExternalID(pn, id) {
+			known[pn] = id
+		}
+	}
+	return known
+}
+
 func mbidParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	mbid := strings.TrimSpace(r.URL.Query().Get("mbid"))
 	if mbid == "" || isCanonicalUUID(mbid) {

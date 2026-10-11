@@ -15,6 +15,7 @@ import type {
   DiscoveryKind,
   DiscoveryProviderStatus,
   DiscoveryResult,
+  DiscoverySource,
 } from '@shared/apiClient/discovery';
 
 export type ContentFetchResponse = {
@@ -255,16 +256,28 @@ function parseArtistContentResponse(
   };
 }
 
+export type ArtistContentOptions = {
+  artistName?: string;
+  tracksLimit?: number;
+  albumsLimit?: number;
+  knownIds?: readonly DiscoverySource[];
+};
+
+function knownIdsParam(sources: readonly DiscoverySource[]): string {
+  return sources.map((s) => `${s.provider}:${s.external_id}`).join(',');
+}
+
 export async function getArtistContent(
   provider: string,
   externalId: string,
-  opts: { artistName?: string; tracksLimit?: number; albumsLimit?: number } = {},
+  opts: ArtistContentOptions = {},
   signal?: AbortSignal,
 ): Promise<ArtistContentResponse> {
   const params = new URLSearchParams();
   if (opts.artistName) params.set('name', opts.artistName);
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
+  if (opts.knownIds?.length) params.set('ids', knownIdsParam(opts.knownIds));
   const path = discoveryEntityPath('artists', provider, externalId, 'content');
   return parseArtistContentResponse(
     await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),

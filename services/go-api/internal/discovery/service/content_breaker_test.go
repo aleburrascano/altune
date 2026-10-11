@@ -50,7 +50,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 				}}
 				svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 					WithContentCircuitBreaker(cb))
-				return svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", "", 10)
+				return svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", nil, "", 10)
 			},
 		},
 		{
@@ -63,7 +63,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 				}}
 				svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 					WithContentCircuitBreaker(cb))
-				return svc.GetAlbums(context.Background(), domain.ProviderDeezer, "42", "", 10)
+				return svc.GetAlbums(context.Background(), domain.ProviderDeezer, "42", nil, "", 10)
 			},
 		},
 		{
@@ -76,7 +76,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 				}}
 				svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 					WithContentIdentityStore(&fakeIdentityStore{}), WithContentCircuitBreaker(cb))
-				return svc.GetAlbums(context.Background(), domain.ProviderDeezer, "42", "", 10)
+				return svc.GetAlbums(context.Background(), domain.ProviderDeezer, "42", nil, "", 10)
 			},
 		},
 		{
@@ -135,7 +135,7 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 		domain.ProviderDeezer: &discoverytest.ArtistContentProvider{},
 	}, WithContentCircuitBreaker(cb))
 
-	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", "", 10)
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", nil, "", 10)
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
@@ -154,7 +154,7 @@ func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 	content := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 		WithContentCircuitBreaker(cb))
 	for i := 0; i < failureThreshold+2; i++ {
-		if _, err := content.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", "", 10); err != nil {
+		if _, err := content.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", nil, "", 10); err != nil {
 			t.Fatalf("error = %v", err)
 		}
 	}
@@ -232,7 +232,7 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 			svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 				WithContentIdentityStore(&fakeIdentityStore{}), WithContentCircuitBreaker(cb))
 
-			_, _ = svc.GetAlbums(ctx, domain.ProviderDeezer, "42", "", 10)
+			_, _ = svc.GetAlbums(ctx, domain.ProviderDeezer, "42", nil, "", 10)
 
 			cb.mu.Lock()
 			entry := *cb.getOrCreate(domain.ProviderDeezer)
@@ -284,7 +284,7 @@ func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
 			content := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: p},
 				WithContentCircuitBreaker(cb))
 			for i := 0; i < failureThreshold; i++ {
-				_, _ = content.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", "", 10)
+				_, _ = content.GetTopTracks(context.Background(), domain.ProviderDeezer, "42", nil, "", 10)
 			}
 			if open := cb.GetStatus(domain.ProviderDeezer) == domain.ProviderStatusCircuitOpen; open != tc.wantOpen {
 				t.Errorf("circuit open = %v, want %v", open, tc.wantOpen)

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { isAbort } from '@shared/failure/errors';
-import type { ArtistContentResponse } from '@shared/apiClient/enrichment';
+import type { ArtistContentOptions, ArtistContentResponse } from '@shared/apiClient/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
 
 import {
@@ -24,21 +24,27 @@ type ContentFetchContext = {
   provider: string;
   externalId: string;
   artistName: string | null;
+  knownIds: readonly DiscoverySource[];
 };
 
 function logContentStatuses(content: ArtistContentResponse, ctx: ContentFetchContext): void {
+  const where = logContext(ctx);
   if (content.top_tracks.status !== 'ok') {
     console.warn('[detail] artist top_tracks fetch degraded', {
-      ...ctx,
+      ...where,
       status: content.top_tracks.status,
     });
   }
   if (content.albums.status !== 'ok') {
     console.warn('[detail] artist albums fetch degraded', {
-      ...ctx,
+      ...where,
       status: content.albums.status,
     });
   }
+}
+
+function logContext({ provider, externalId, artistName }: ContentFetchContext) {
+  return { provider, externalId, artistName };
 }
 
 function isFullyServed(content: ArtistContentResponse): boolean {
@@ -67,17 +73,19 @@ function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
   if (isAbort(error)) return;
   recordContentFetchOutcome('artist_content', false);
   console.warn('[detail] artist content fetch failed', {
-    ...ctx,
+    ...logContext(ctx),
     error: error instanceof Error ? error.message : String(error),
   });
 }
 
-function contentParams(artistName: string | null) {
-  return {
-    ...(artistName ? { artistName } : {}),
+function contentParams(ctx: ContentFetchContext): ArtistContentOptions {
+  const params: ArtistContentOptions = {
     tracksLimit: TOP_TRACKS_LIMIT,
     albumsLimit: DETAIL_LIST_CAP,
+    knownIds: ctx.knownIds,
   };
+  if (ctx.artistName) params.artistName = ctx.artistName;
+  return params;
 }
 
 function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext): void {
@@ -86,20 +94,22 @@ function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext)
 }
 
 async function fetchContent(port: DetailPort, ctx: ContentFetchContext, signal: AbortSignal) {
-  const params = contentParams(ctx.artistName);
+  const params = contentParams(ctx);
   const content = await port.getArtistContent(ctx.provider, ctx.externalId, params, signal);
   recordContent(content, ctx);
   return content;
 }
 
 function contentContext(
-  source: { provider: string; external_id: string },
+  seed: DiscoverySource,
+  sources: readonly DiscoverySource[],
   artistName: string | undefined,
 ): ContentFetchContext {
   return {
-    provider: source.provider,
-    externalId: source.external_id,
+    provider: seed.provider,
+    externalId: seed.external_id,
     artistName: artistName ?? null,
+    knownIds: sources,
   };
 }
 
@@ -114,11 +124,11 @@ async function fetchReporting(port: DetailPort, ctx: ContentFetchContext, signal
 
 function loadArtistContent(
   port: DetailPort,
-  source: { provider: string; external_id: string },
+  sources: readonly [DiscoverySource, ...DiscoverySource[]],
   artistName: string | undefined,
   signal: AbortSignal,
 ) {
-  return fetchReporting(port, contentContext(source, artistName), signal);
+  return fetchReporting(port, contentContext(sources[0], sources, artistName), signal);
 }
 
 export function useArtistContent({
@@ -137,8 +147,10 @@ export function useArtistContent({
       source?.provider ?? '',
       source?.external_id ?? '',
       artistName ?? '',
+      sources.map((s) => `${s.provider}:${s.external_id}`).join(','),
     ],
-    queryFn: ({ signal }) => loadArtistContent(port, source!, artistName, signal),
+    queryFn: ({ signal }) =>
+      loadArtistContent(port, [source!, ...sources.slice(1)], artistName, signal),
     enabled: enabled && isFetchEnabled && source !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,

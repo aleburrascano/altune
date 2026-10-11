@@ -17,7 +17,7 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	groups, anchorFailed := s.verifyGroupsAgainstMB(ctx, identity, groups)
 	merged := release.MergeReleases(groups)
 	s.discographyTelemetry.emit(ctx, artistRef, merged)
-	kept := release.FilterCohesive(release.FilterKept(merged))
+	kept := dropSoundCloudOnly(identity, release.FilterCohesive(release.FilterKept(merged)))
 	out := make([]domain.SearchResult, 0, len(kept))
 	for i := range kept {
 		r := kept[i].Result
@@ -33,7 +33,7 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 	groups, partial := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
 	})
-	kept := release.FilterCohesive(release.FilterKept(release.MergeReleases(groups)))
+	kept := dropSoundCloudOnly(identity, release.FilterCohesive(release.FilterKept(release.MergeReleases(groups))))
 	sort.SliceStable(kept, func(i, j int) bool {
 		return len(kept[i].Providers) > len(kept[j].Providers)
 	})
@@ -71,6 +71,19 @@ func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, ide
 		return groups, false
 	}
 	return release.FilterGroupsByMBAnchor(release.NormalizeTitleSet(titles), groups), false
+}
+
+func dropSoundCloudOnly(identity ResolvedArtistIdentity, releases []release.MergedRelease) []release.MergedRelease {
+	if !identity.knownToACatalog() {
+		return releases
+	}
+	kept := releases[:0]
+	for _, r := range releases {
+		if len(r.Providers) != 1 || !r.Providers[domain.ProviderSoundCloud] {
+			kept = append(kept, r)
+		}
+	}
+	return kept
 }
 
 func normalizeReleaseYear(r *domain.SearchResult) {

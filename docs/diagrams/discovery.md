@@ -60,7 +60,7 @@ sequenceDiagram
     App->>App: hand result to detail screen in memory
     par detail fetches from the client
         App->>H: GET /enrichment (MusicBrainz)
-        App->>H: artist content / album tracks (fan-out, 10s)
+        App->>H: artist content with every id the card knows, SoundCloud-only releases dropped when a catalog knows the artist / album tracks (fan-out, 10s)
         App->>H: Last.fm / Deezer enrichment · related tracks (SoundCloud)
     end
 ```

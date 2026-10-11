@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	discdomain "altune/go-api/internal/discovery/domain"
@@ -356,5 +357,36 @@ func TestContentRoutes_NoIdentityIs401(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
 		})
+	}
+}
+
+func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) {
+	var mu sync.Mutex
+	asked := map[string]bool{}
+	recording := func(pn discdomain.ProviderName) *discoverytest.ArtistContentProvider {
+		record := func(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+			mu.Lock()
+			asked[pn.String()+":"+id] = true
+			mu.Unlock()
+			return seedTracks(1), nil
+		}
+		return &discoverytest.ArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
+	}
+	svc := service.NewGetArtistContentService(map[discdomain.ProviderName]ports.ArtistContentProvider{
+		discdomain.ProviderDeezer:  recording(discdomain.ProviderDeezer),
+		discdomain.ProviderSpotify: recording(discdomain.ProviderSpotify),
+	})
+	router := chi.NewRouter()
+	router.Use(middleware.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", NewDiscoveryHandler(DiscoveryServices{Artist: svc}).Routes())
+
+	for _, path := range []string{"content", "albums", "top-tracks"} {
+		asked = map[string]bool{}
+		rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/d1/"+path+"?name=Che&ids=spotify:sp1,notaprovider:x", nil)
+
+		discAssertStatus(t, rec, http.StatusOK)
+		if !asked["deezer:d1"] || !asked["spotify:sp1"] {
+			t.Errorf("%s asked %v, want deezer:d1 and spotify:sp1", path, asked)
+		}
 	}
 }

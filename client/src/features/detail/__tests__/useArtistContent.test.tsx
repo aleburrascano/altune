@@ -72,6 +72,31 @@ describe('useArtistContent bounds the artist albums fetch', () => {
   });
 });
 
+describe('useArtistContent sends the ids the search card knows', () => {
+  it('asks with the first source and lists every source', async () => {
+    __http.reply(ARTIST_CONTENT_PATH, {
+      status: 200,
+      json: { top_tracks: emptyContentFetch, albums: emptyContentFetch },
+    });
+
+    const { result } = renderHook(
+      () =>
+        useArtistContent({
+          sources: [
+            { provider: 'spotify', external_id: 'artist-1', url: '' },
+            { provider: 'applemusic', external_id: '42', url: '' },
+          ],
+        }),
+      { wrapper: createWrapper(createTestQueryClient()) },
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const params = new URLSearchParams(__http.last().query);
+    expect(params.get('ids')).toBe('spotify:artist-1,applemusic:42');
+  });
+});
+
 describe('logging degraded content', () => {
   let warnSpy: jest.SpyInstance;
 
