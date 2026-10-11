@@ -30,20 +30,22 @@ func newSearchTelemetry(eventStore ports.EventStore, activity ports.ActivityFeed
 	return &SearchTelemetry{eventStore: eventStore, activity: activity, bg: bg}
 }
 
-func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, startedAt time.Time, shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) {
+func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page firstPage, explorationRate float64) {
 	if t.eventStore == nil {
 		return
 	}
-	if err := shared.GuardNotSystem(userId); err != nil {
+	if err := shared.GuardNotSystem(run.userId); err != nil {
 		return
 	}
+	payload := searchPerformedPayload(page.shown, shownSignatures(page.fullSlate, page.related), page.explored, explorationRate)
+	page.timing.addTo(payload)
 	event := domain.InteractionEvent{
-		OccurredAt: startedAt,
-		UserId:     userId,
+		OccurredAt: run.startedAt,
+		UserId:     run.userId,
 		Type:       domain.EventTypeSearchPerformed,
-		QueryNorm:  queryNorm,
-		SearchId:   searchId,
-		Payload:    searchPerformedPayload(shown, shownSigs, explored, explorationRate),
+		QueryNorm:  run.queryNorm,
+		SearchId:   run.searchId,
+		Payload:    payload,
 	}
 	t.bg.launch(parentCtx, "telemetry.emit", func(ctx context.Context) { t.append(ctx, event) })
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type fakeEventStore struct {
@@ -66,6 +67,31 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	}
 	if e.SearchId == "" {
 		t.Error("search_performed event missing the minted search_id keystone")
+	}
+}
+
+func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
+	store := &fakeEventStore{}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}, delay: 30 * time.Millisecond}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
+
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
+
+	payload := store.snapshot()[0].Payload
+	ms := map[string]int64{}
+	for _, key := range []string{"fanout_ms", "identity_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
+		v, ok := payload[key].(int64)
+		if !ok {
+			t.Fatalf("payload[%q] = %#v, want milliseconds", key, payload[key])
+		}
+		ms[key] = v
+	}
+	if ms["fanout_ms"] < 30 || ms["total_ms"] < ms["fanout_ms"] {
+		t.Errorf("fanout_ms = %d, total_ms = %d, want fan-out at least the 30ms provider wait and total at least that", ms["fanout_ms"], ms["total_ms"])
+	}
+	if payload["cached"] != false || payload["partial"] != false {
+		t.Errorf("cached = %v, partial = %v, want false for a fresh search every provider answered", payload["cached"], payload["partial"])
 	}
 }
 

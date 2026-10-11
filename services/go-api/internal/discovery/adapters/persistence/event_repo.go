@@ -275,7 +275,7 @@ func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) (
 	})
 }
 
-var abandonedSearchesSQL = fmt.Sprintf(`SELECT sp.query_norm, COUNT(*) AS cnt
+const abandonedSearchesSQL = `SELECT sp.query_norm, COUNT(*) AS cnt
 	FROM discovery_events sp
 	WHERE sp.event_type = $3
 		AND sp.occurred_at >= $1
@@ -288,14 +288,15 @@ var abandonedSearchesSQL = fmt.Sprintf(`SELECT sp.query_norm, COUNT(*) AS cnt
 		AND EXISTS (
 			SELECT 1 FROM discovery_events nxt
 			WHERE nxt.event_type = $3
-				AND nxt.payload->>'%[1]s' = sp.payload->>'%[1]s'
-				AND sp.payload->>'%[1]s' IS NOT NULL
+				AND nxt.user_id = sp.user_id
+				AND NOT starts_with(nxt.query_norm, sp.query_norm)
+				AND NOT starts_with(sp.query_norm, nxt.query_norm)
 				AND nxt.occurred_at > sp.occurred_at
 				AND nxt.occurred_at <= sp.occurred_at + interval '60 seconds'
 		)
 	GROUP BY sp.query_norm
 	ORDER BY cnt DESC
-	LIMIT $2`, domain.PayloadKeySessionId)
+	LIMIT $2`
 
 func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx, abandonedSearchesSQL,

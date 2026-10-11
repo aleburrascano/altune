@@ -419,40 +419,52 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
-	userId := newEventTestUser(t, store)
 
 	suffix := uuid.New().String()[:8]
 	base := time.Now().UTC().Add(-10 * time.Minute)
 
-	search := func(queryNorm, sessionID, searchID string, at time.Time) {
+	search := func(userId shared.UserId, queryNorm, searchID string, at time.Time) {
 		appendOrFatal(t, store, domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeSearchPerformed,
 			QueryNorm: queryNorm, SearchId: searchID, OccurredAt: at,
-			Payload: map[string]any{"session_id": sessionID},
 		})
 	}
 
+	userA := newEventTestUser(t, store)
 	qAband := "qa aband " + suffix
-	search(qAband, "sess-a-"+suffix, "", base)
-	search("qa aband next "+suffix, "sess-a-"+suffix, "", base.Add(30*time.Second))
+	search(userA, qAband, "", base)
+	search(userA, "zz retry one "+suffix, "", base.Add(30*time.Second))
 
+	userB := newEventTestUser(t, store)
 	q59 := "qa aband 59s " + suffix
-	search(q59, "sess-b-"+suffix, "", base)
-	search("qa aband 59s next "+suffix, "sess-b-"+suffix, "", base.Add(59*time.Second))
+	search(userB, q59, "", base)
+	search(userB, "zz retry two "+suffix, "", base.Add(59*time.Second))
 
+	userC := newEventTestUser(t, store)
 	q61 := "qa aband 61s " + suffix
-	search(q61, "sess-c-"+suffix, "", base)
-	search("qa aband 61s next "+suffix, "sess-c-"+suffix, "", base.Add(61*time.Second))
+	search(userC, q61, "", base)
+	search(userC, "zz retry three "+suffix, "", base.Add(61*time.Second))
 
+	userD := newEventTestUser(t, store)
 	qClicked := "qa aband clicked " + suffix
 	clickedSearchID := uuid.New().String()
-	search(qClicked, "sess-d-"+suffix, clickedSearchID, base)
+	search(userD, qClicked, clickedSearchID, base)
 	appendOrFatal(t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
+		UserId: userD, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
 		OccurredAt: base.Add(5 * time.Second),
 		Payload:    map[string]any{"result_signature": "s"},
 	})
-	search("qa aband clicked next "+suffix, "sess-d-"+suffix, "", base.Add(30*time.Second))
+	search(userD, "zz retry four "+suffix, "", base.Add(30*time.Second))
+
+	userE, userF := newEventTestUser(t, store), newEventTestUser(t, store)
+	qAlone := "qa aband alone " + suffix
+	search(userE, qAlone, "", base)
+	search(userF, "qa aband other user "+suffix, "", base.Add(10*time.Second))
+
+	userG := newEventTestUser(t, store)
+	qTyping := "qa aband typ " + suffix[:4]
+	search(userG, qTyping, "", base)
+	search(userG, qTyping+suffix[4:], "", base.Add(2*time.Second))
 
 	counts, err := store.AbandonedSearches(ctx, base.Add(-time.Minute), 1000)
 	if err != nil {
@@ -464,7 +476,7 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	}
 
 	if got[qAband] != 1 {
-		t.Errorf("count(%q) = %d, want 1 (no click + 30s reformulation)", qAband, got[qAband])
+		t.Errorf("count(%q) = %d, want 1 (no click + the same user searched again 30s later)", qAband, got[qAband])
 	}
 	if got[q59] != 1 {
 		t.Errorf("count(%q) = %d, want 1 (59s is inside the 60s window)", q59, got[q59])
@@ -474,6 +486,12 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	}
 	if _, present := got[qClicked]; present {
 		t.Errorf("%q counted as abandoned, want excluded (it was clicked)", qClicked)
+	}
+	if _, present := got[qTyping]; present {
+		t.Errorf("%q counted as abandoned, want excluded (the next search only kept typing it)", qTyping)
+	}
+	if _, present := got[qAlone]; present {
+		t.Errorf("%q counted as abandoned, want excluded (only another user searched next)", qAlone)
 	}
 }
 

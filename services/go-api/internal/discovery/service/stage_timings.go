@@ -27,3 +27,19 @@ func (t stageTimings) logAttrs(total time.Duration) []any {
 		"total_ms", total.Milliseconds(),
 	}
 }
+
+type searchTiming struct {
+	stages  stageTimings
+	total   time.Duration
+	cached  bool
+	partial bool
+}
+
+func (t searchTiming) addTo(payload map[string]any) {
+	attrs := t.stages.logAttrs(t.total)
+	for i := 0; i+1 < len(attrs); i += 2 {
+		payload[attrs[i].(string)] = attrs[i+1]
+	}
+	payload["cached"] = t.cached
+	payload["partial"] = t.partial
+}

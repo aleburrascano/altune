@@ -281,6 +281,7 @@ func (s *Service) ExecutePage(
 			fullSlate: fullSlate,
 			related:   related,
 			explored:  explored,
+			timing:    searchTiming{stages: stages, total: time.Since(startedAt), cached: resolution.cached, partial: resolution.partial},
 		})
 	}
 
@@ -421,6 +422,7 @@ type firstPage struct {
 	fullSlate []domain.SearchResult
 	related   []domain.RelatedGroup
 	explored  bool
+	timing    searchTiming
 }
 
 func (s *Service) recordFirstPageSideEffects(
@@ -429,8 +431,7 @@ func (s *Service) recordFirstPageSideEffects(
 	page firstPage,
 ) {
 	s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.saveHistory, run.startedAt)
-	s.telemetry.emit(ctx, run.userId, run.searchId, run.queryNorm, run.startedAt, page.shown,
-		shownSignatures(page.fullSlate, page.related), page.explored, s.ranking.explorationRate)
+	s.telemetry.emit(ctx, run, page, s.ranking.explorationRate)
 	s.vocab.ingest(ctx, page.organic)
 }
 
