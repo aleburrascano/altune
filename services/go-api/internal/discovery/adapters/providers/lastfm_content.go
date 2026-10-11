@@ -8,67 +8,6 @@ import (
 	"net/url"
 )
 
-func looksLikeMBID(s string) bool {
-	if len(s) != 36 {
-		return false
-	}
-	for i, c := range s {
-		if i == 8 || i == 13 || i == 18 || i == 23 {
-			if c != '-' {
-				return false
-			}
-			continue
-		}
-		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
-		if !isHex {
-			return false
-		}
-	}
-	return true
-}
-
-func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistRef string) ([]domain.SearchResult, error) {
-	idParam := "artist=" + url.QueryEscape(artistRef)
-	if looksLikeMBID(artistRef) {
-		idParam = "mbid=" + artistRef
-	}
-	u := fmt.Sprintf(lastfmAPIBaseURL+"?method=artist.gettoptracks&%s&api_key=%s&format=json&limit=10&autocorrect=1",
-		idParam, a.apiKey)
-
-	var body struct {
-		TopTracks struct {
-			Track []struct {
-				Name      string `json:"name"`
-				PlayCount string `json:"playcount"`
-				Listeners string `json:"listeners"`
-				URL       string `json:"url"`
-				Artist    struct {
-					Name string `json:"name"`
-				} `json:"artist"`
-				Image []lastfmImage `json:"image"`
-			} `json:"track"`
-		} `json:"toptracks"`
-	}
-	if err := providerhttp.GetJSON(ctx, a.client, u, &body); err != nil {
-		return nil, err
-	}
-
-	results := make([]domain.SearchResult, 0, len(body.TopTracks.Track))
-	for _, t := range body.TopTracks.Track {
-		extras := make(map[string]any)
-		if t.PlayCount != "" {
-			extras[domain.ExtraPlaycount] = parseListeners(t.PlayCount)
-		}
-		if t.Listeners != "" {
-			extras[domain.ExtraListeners] = parseListeners(t.Listeners)
-		}
-		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist.Name, lastfmExtraLargeImage(t.Image),
-			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
-			extras))
-	}
-	return results, nil
-}
-
 const lastfmAlbumsLimit = 50
 
 func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {

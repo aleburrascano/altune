@@ -74,10 +74,7 @@ func providerContentID(identity ResolvedArtistIdentity, name domain.ProviderName
 	if id := identity.ProviderIDs[name]; id != "" {
 		return id
 	}
-	switch name {
-	case domain.ProviderLastFM:
-		return identity.MBID
-	case domain.ProviderAppleMusic:
+	if name == domain.ProviderAppleMusic {
 		return identity.ProviderIDs[domain.ProviderITunes]
 	}
 	return ""

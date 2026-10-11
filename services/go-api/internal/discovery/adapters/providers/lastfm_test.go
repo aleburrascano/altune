@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -234,85 +233,6 @@ func TestLastFmAdapter_Search_HTTPError(t *testing.T) {
 }
 
 const lastfmTestMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
-
-func TestLooksLikeMBID(t *testing.T) {
-	tests := []struct {
-		in   string
-		want bool
-	}{
-		{lastfmTestMBID, true},
-		{strings.ToUpper(lastfmTestMBID), true},
-		{"the weeknd", false},
-		{"a74b1b7f-71a5-4011-9441-d0b5e412271", false},
-		{"a74b1b7f_71a5_4011_9441_d0b5e4122711", false},
-		{"g74b1b7f-71a5-4011-9441-d0b5e4122711", false},
-	}
-	for _, tt := range tests {
-		if got := looksLikeMBID(tt.in); got != tt.want {
-			t.Errorf("looksLikeMBID(%q) = %v, want %v", tt.in, got, tt.want)
-		}
-	}
-}
-
-func TestLastFmAdapter_GetArtistTopTracks(t *testing.T) {
-	var gotQuery string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.RawQuery
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"toptracks": {"track": [{
-			"name": "Blinding Lights",
-			"playcount": "2900000",
-			"listeners": "1,500,000",
-			"url": "https://www.last.fm/music/The+Weeknd/_/Blinding+Lights",
-			"artist": {"name": "The Weeknd"},
-			"image": [
-				{"#text": "https://img/small.png", "size": "small"},
-				{"#text": "https://img/xl.png", "size": "extralarge"}
-			]
-		}]}}`))
-	}))
-	defer server.Close()
-
-	adapter := NewLastFmAdapter(newTestClient(server.URL), "test-key")
-
-	t.Run("by name uses artist param", func(t *testing.T) {
-		results, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderLastFM, "The Weeknd")
-		if err != nil {
-			t.Fatalf("GetArtistTopTracks: %v", err)
-		}
-		if !strings.Contains(gotQuery, "artist=The+Weeknd") || strings.Contains(gotQuery, "mbid=") {
-			t.Errorf("query = %q, want artist= (not mbid=) for a plain name", gotQuery)
-		}
-		if len(results) != 1 {
-			t.Fatalf("results = %d, want 1", len(results))
-		}
-		r := results[0]
-		if r.Title != "Blinding Lights" || r.Subtitle != "The Weeknd" {
-			t.Errorf("result = %+v", r)
-		}
-		if r.ImageURL != "https://img/xl.png" {
-			t.Errorf("ImageURL = %q, want the extralarge variant", r.ImageURL)
-		}
-		if r.Extras["playcount"] != int64(2900000) {
-			t.Errorf("playcount = %v, want int64(2900000)", r.Extras["playcount"])
-		}
-		if r.Extras["listeners"] != int64(1500000) {
-			t.Errorf("listeners = %v, want commas stripped to 1500000", r.Extras["listeners"])
-		}
-		if r.Sources[0].ExternalID != "The+Weeknd/_/Blinding+Lights" {
-			t.Errorf("ExternalID = %q, want the /music/ URL suffix", r.Sources[0].ExternalID)
-		}
-	})
-
-	t.Run("mbid ref uses mbid param", func(t *testing.T) {
-		if _, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderLastFM, lastfmTestMBID); err != nil {
-			t.Fatalf("GetArtistTopTracks: %v", err)
-		}
-		if !strings.Contains(gotQuery, "mbid="+lastfmTestMBID) {
-			t.Errorf("query = %q, want mbid= for an MBID-shaped ref (identity-safe path)", gotQuery)
-		}
-	})
-}
 
 func TestLastFmAdapter_GetArtistAlbums(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

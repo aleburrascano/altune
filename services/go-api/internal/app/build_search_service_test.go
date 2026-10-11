@@ -242,6 +242,18 @@ func allScrapedProvidersEnabled() config.Config {
 	}
 }
 
+func TestLastFMServesTheByNameFallbackNotArtistPagesByID(t *testing.T) {
+	cfg := allScrapedProvidersEnabled()
+	cfg.LastFMAPIKey = "key"
+
+	if _, ok := buildArtistContentProviders(newClientFactory(nil), &cfg)[discoveryDomain.ProviderLastFM]; ok {
+		t.Error("Last.fm is an artist content provider; its albums lookup takes an artist name, not the MBID it would be given")
+	}
+	if !hasConsensusProvider(&cfg, "lastfm") {
+		t.Error("Last.fm left the by-name consensus fallback")
+	}
+}
+
 func TestScrapedProviderKillSwitch(t *testing.T) {
 	tests := []struct {
 		name          string

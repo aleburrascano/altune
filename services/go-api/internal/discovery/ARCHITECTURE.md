@@ -547,7 +547,7 @@ contamination-prone):
 | iTunes | — | — | ✅ name | ✅ name |
 | Spotify | ✅ | ✅ id | — | ✅ artist img (id) |
 | SoundCloud | ✅ | ⚠️ name-resolved id | ✅ name | ✅ name (last) |
-| Last.fm | ✅ | ✅ (MBID) | ✅ name | — |
+| Last.fm | ✅ | — (its albums lookup takes a name) | ✅ name | — |
 | MusicBrainz | ✅ | spine / anchor | ✅ name + authority | ✅ CAA (id) |
 | YouTube Music | ✅ | ❌ not wired | ✅ name | ✅ artist img (id) |
 | Amazon Music | ✅ | ❌ not wired | — | — |

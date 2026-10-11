@@ -249,7 +249,6 @@ var providerFanOutPriority = []domain.ProviderName{
 	domain.ProviderSpotify,
 	domain.ProviderITunes,
 	domain.ProviderSoundCloud,
-	domain.ProviderLastFM,
 }
 
 func orderedProviderNames(providers map[domain.ProviderName]ports.ArtistContentProvider) []domain.ProviderName {
