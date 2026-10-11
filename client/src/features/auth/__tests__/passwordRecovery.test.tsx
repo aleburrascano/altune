@@ -3,7 +3,6 @@ import React from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
 
@@ -16,12 +15,13 @@ import {
 } from '@features/auth/domain/passwordRecovery';
 import { useRecoveryUnlocked } from '@features/auth/hooks/useRecoveryUnlocked';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: { getSession: jest.fn(), onAuthStateChange: jest.fn(), signOut: jest.fn() },
-  },
-  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
-}));
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(
+  'getSession',
+  'onAuthStateChange',
+  'signOut',
+);
 
 const VERIFIED_USER = 'user-a';
 const OTHER_USER = 'user-b';
@@ -327,12 +327,12 @@ describe('closing the window on sign-out', () => {
 
   function installAuth() {
     const listeners: Listener[] = [];
-    (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback: Listener) => {
+    onAuthStateChange.mockImplementation((callback: Listener) => {
       listeners.push(callback);
       return { data: { subscription: { unsubscribe: jest.fn() } } };
     });
-    (supabase.auth.getSession as jest.Mock).mockReturnValue(new Promise<never>(() => {}));
-    (supabase.auth.signOut as jest.Mock).mockResolvedValue({ error: null });
+    getSession.mockReturnValue(new Promise<never>(() => {}));
+    signOut.mockResolvedValue({ error: null });
 
     return {
       emit(event: AuthChangeEvent, session: Session | null): void {
@@ -391,7 +391,7 @@ describe('closing the window on sign-out', () => {
 
     it('a sign-out that fails server-side still closes the window, because the local session is gone either way', async () => {
       installAuth();
-      (supabase.auth.signOut as jest.Mock).mockRejectedValue(new Error('network down'));
+      signOut.mockRejectedValue(new Error('network down'));
       markRecoveryUnlocked(RECOVERING_USER);
       const { result } = renderHook(() => useSignOut(), { wrapper: Wrapper });
 

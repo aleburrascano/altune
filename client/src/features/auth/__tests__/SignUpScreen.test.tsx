@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { useOAuth } from '@features/auth/hooks/useOAuth';
 import { CheckEmailNotice } from '@features/auth/ui/CheckEmailNotice';
 import { SignUpScreen } from '@features/auth/ui/SignUpScreen';
 import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/domain/validation';
@@ -19,20 +18,11 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-
-jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
-
 const { signUp } = createSupabaseAuthMock('signUp');
 
 warmUpFirstRender(async () => {
-  (useOAuth as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signInWith: jest.fn() });
   render(<SignUpScreen />);
   render(<CheckEmailNotice />);
-});
-
-beforeEach(() => {
-  (useOAuth as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signInWith: jest.fn() });
 });
 
 function renderSignUp(): void {

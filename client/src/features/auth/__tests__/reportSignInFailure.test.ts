@@ -1,13 +1,13 @@
 import { apiBase } from '@shared/apiClient';
 import { appVersion } from '@shared/device/device';
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
-import { enqueueCritical } from '@shared/telemetry/outbox';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry/outbox';
 
 import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
 
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+
+const { getSession } = createSupabaseAuthMock('getSession');
 
 const realFetch = global.fetch;
 const fetchMock = jest.fn();
@@ -15,6 +15,8 @@ const fetchMock = jest.fn();
 beforeEach(() => {
   fetchMock.mockReset().mockResolvedValue({ status: 204 });
   global.fetch = fetchMock as unknown as typeof fetch;
+  getSession.mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null });
+  _resetOutboxForTest();
 });
 
 afterEach(() => {
@@ -47,9 +49,9 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
     expect(() => reportSignInFailure('network')).not.toThrow();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    await flushOutbox();
+
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(recordEvent).not.toHaveBeenCalled();
-    expect(enqueueCritical).not.toHaveBeenCalled();
   });
 
   it('swallows a synchronous throw from fetch', () => {

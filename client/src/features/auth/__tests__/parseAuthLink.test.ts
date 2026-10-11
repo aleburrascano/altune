@@ -2,17 +2,19 @@ import { Platform } from 'react-native';
 
 import appJson from '@/../app.json';
 import { completeAuthIntent } from '@features/auth/domain/completeAuthIntent';
+import * as nativeWebOrigin from '@shared/device/webOrigin';
+import type * as NativeWebOriginModule from '@shared/device/webOrigin';
+import * as browserWebOrigin from '@shared/device/webOrigin.web';
 import type * as AuthRedirectModule from '@features/auth/domain/authRedirect';
 import { authRedirectUrl } from '@features/auth/domain/authRedirect';
 import type * as ParseAuthLinkModule from '@features/auth/domain/parseAuthLink';
 import { parseAuthLink } from '@features/auth/domain/parseAuthLink';
 
-jest.mock('@shared/device/webOrigin', () => ({
-  webOrigin: (): string | null =>
-    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
-      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
-      : null,
-}));
+beforeEach(() => {
+  jest
+    .spyOn(nativeWebOrigin, 'webOrigin')
+    .mockImplementation(() => (Platform.OS === 'web' ? browserWebOrigin.webOrigin() : null));
+});
 
 type LoadedModules = typeof ParseAuthLinkModule & typeof AuthRedirectModule;
 
@@ -377,16 +379,15 @@ describe.each(['ios', 'web'] as const)(
 );
 
 describe('parseAuthLink reads its scheme and web origin through the device port', () => {
-  afterEach(() => {
-    jest.dontMock('@shared/device/device');
-  });
-
   it('builds redirects from the port scheme and origin', () => {
     jest.resetModules();
-    jest.doMock('@shared/device/device', () => ({
-      declaredAppScheme: () => 'portscheme',
-      webOrigin: () => 'https://port.example',
+    jest.doMock('expo-constants', () => ({
+      __esModule: true,
+      default: { expoConfig: { scheme: 'portscheme' } },
     }));
+    jest
+      .spyOn(require('@shared/device/webOrigin') as typeof NativeWebOriginModule, 'webOrigin')
+      .mockReturnValue('https://port.example');
     const loaded = {
       ...(require('@features/auth/domain/authRedirect') as typeof AuthRedirectModule),
       ...(require('@features/auth/domain/parseAuthLink') as typeof ParseAuthLinkModule),

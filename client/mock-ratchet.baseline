@@ -4,13 +4,6 @@ __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
 __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
 __tests__/webMustHolds/mh07-presignExpiry.test.ts @shared/apiClient/audio
 __tests__/webMustHolds/mh08-webSources.test.ts @shared/auth/supabaseClient
-src/features/auth/__tests__/SignUpScreen.test.tsx @features/auth/hooks/useOAuth
-src/features/auth/__tests__/SignUpScreen.test.tsx @shared/auth/supabaseClient
-src/features/auth/__tests__/parseAuthLink.test.ts @shared/device/device
-src/features/auth/__tests__/parseAuthLink.test.ts @shared/device/webOrigin
-src/features/auth/__tests__/passwordRecovery.test.tsx @shared/auth/supabaseClient
-src/features/auth/__tests__/reportSignInFailure.test.ts @shared/telemetry/outbox
-src/features/auth/__tests__/reportSignInFailure.test.ts @shared/telemetry/recordEvent
 src/features/auth/__tests__/useAuthDeepLink.test.ts @shared/auth/supabaseClient
 src/features/auth/__tests__/useAuthDeepLink.test.ts @shared/telemetry/userTelemetry
 src/features/auth/__tests__/useAuthDeepLink.web.test.ts @shared/auth/supabaseClient
