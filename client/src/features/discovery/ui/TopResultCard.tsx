@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Card, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import {
   usePressableInteraction,
   type PressableInteractionState,
@@ -32,7 +33,8 @@ export function TopResultCard({
   return (
     <View style={styles.topResultWrap}>
       <SectionLabel style={styles.sectionHeaderSpacing}>TOP RESULT</SectionLabel>
-      <Pressable
+      <Tappable
+        action="discover.top_result.open"
         testID="discover-top-result"
         onPress={() => onPress(result, 0)}
         {...pressableProps}
@@ -71,7 +73,7 @@ export function TopResultCard({
             </View>
           </Row>
         </Card>
-      </Pressable>
+      </Tappable>
     </View>
   );
 }

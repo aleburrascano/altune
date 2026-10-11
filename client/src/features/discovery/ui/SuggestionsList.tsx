@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
 import { KeepInputFocusArea } from '@shared/ui/keyboard/keyboard';
 import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { useTheme } from '@shared/ui/theme/useTheme';
 import { spacing, radius } from '@shared/ui/theme/tokens';
 import type { DiscoverySuggestion } from '@shared/apiClient/discovery';
@@ -25,7 +26,8 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
       style={[styles.container, { backgroundColor: color.surface1, borderTopColor: color.border }]}
     >
       {suggestions.map((s, i) => (
-        <Pressable
+        <Tappable
+          action="discover.suggestion.select"
           key={`${s.text}-${i}`}
           style={({ pressed }) => [
             styles.row,
@@ -47,7 +49,7 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
           <Text variant="caption" tone="tertiary">
             {s.kind}
           </Text>
-        </Pressable>
+        </Tappable>
       ))}
     </KeepInputFocusArea>
   );

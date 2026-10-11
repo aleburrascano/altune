@@ -1,5 +1,5 @@
-import type { ReactElement, ComponentProps } from 'react';
-import { StyleSheet, View, Pressable, ActivityIndicator } from 'react-native';
+import type { ReactElement } from 'react';
+import { StyleSheet, View, ActivityIndicator } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import {
   Text,
@@ -11,6 +11,7 @@ import {
   radius,
 } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
 import { countLabel } from '@shared/ui/displayFormat';
 
 type AddTracksHeaderProps = {
@@ -85,7 +86,7 @@ type SelectAllButtonProps = {
   onPress: () => void;
 };
 
-function selectAllPressableProps(props: SelectAllButtonProps): ComponentProps<typeof Pressable> {
+function selectAllPressableProps(props: SelectAllButtonProps): Omit<TappableProps, 'action'> {
   return {
     testID: 'add-tracks-select-all',
     onPress: props.onPress,
@@ -107,11 +108,11 @@ function selectAllLabel(allSelected: boolean): string {
 export function SelectAllButton(props: SelectAllButtonProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...selectAllPressableProps(props)}>
+    <Tappable action="library.add_tracks.select_all" {...selectAllPressableProps(props)}>
       <Text variant="label" style={{ color: selectAllColor(theme, props.disabled) }}>
         {selectAllLabel(props.allSelected)}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -125,7 +126,7 @@ type ConfirmButtonProps = {
 };
 
 type PressableA11y = Pick<
-  ComponentProps<typeof Pressable>,
+  TappableProps,
   'onPress' | 'disabled' | 'accessibilityRole' | 'accessibilityLabel' | 'accessibilityState'
 >;
 
@@ -155,7 +156,7 @@ function confirmStyle(theme: Theme, canConfirm: boolean, pressed: boolean) {
 function confirmPressableProps(
   theme: Theme,
   props: ConfirmButtonProps,
-): ComponentProps<typeof Pressable> {
+): Omit<TappableProps, 'action'> {
   return {
     testID: 'add-tracks-confirm',
     ...confirmA11y(props),
@@ -183,9 +184,9 @@ function ConfirmContent(props: ConfirmContentProps): ReactElement {
 export function ConfirmButton(props: ConfirmButtonProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...confirmPressableProps(theme, props)}>
+    <Tappable action="library.add_tracks.confirm" {...confirmPressableProps(theme, props)}>
       <ConfirmContent {...props} theme={theme} />
-    </Pressable>
+    </Tappable>
   );
 }
 

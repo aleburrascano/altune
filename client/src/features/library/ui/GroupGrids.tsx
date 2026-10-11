@@ -1,8 +1,9 @@
 import { memo, useCallback, type ReactElement } from 'react';
 import type { ListRenderItem } from 'react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import type { AlbumGroup, ArtistGroup } from '@shared/apiClient/library';
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';
 import { useLibraryGridLayout, GRID_GAP } from '@features/library/hooks/useLibraryGridLayout';
@@ -60,10 +61,10 @@ function albumTileProps(album: AlbumGroup, onPress: () => void) {
 function AlbumTileImpl({ album, onPress }: AlbumTileProps): ReactElement {
   const press = useCallback(() => onPress(album), [onPress, album]);
   return (
-    <Pressable {...albumTileProps(album, press)} style={albumTileStyle}>
+    <Tappable action="library.album.open" {...albumTileProps(album, press)} style={albumTileStyle}>
       <AlbumCover uri={album.artwork_url} />
       <AlbumCaption album={album} />
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -148,10 +149,10 @@ function artistTileProps(artist: ArtistGroup, onPress: () => void) {
 function ArtistTileImpl({ artist, onPress }: ArtistTileProps): ReactElement {
   const press = useCallback(() => onPress(artist), [onPress, artist]);
   return (
-    <Pressable {...artistTileProps(artist, press)}>
+    <Tappable action="library.artist.open" {...artistTileProps(artist, press)}>
       <ArtistAvatar uri={artist.artwork_url} />
       <Text {...artistNameProps}>{artist.artist}</Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
