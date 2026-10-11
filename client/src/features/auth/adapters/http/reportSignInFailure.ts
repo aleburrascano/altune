@@ -2,7 +2,7 @@ import { apiBase } from '@shared/apiClient/config';
 import { appVersion } from '@shared/device/device';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
-import type { SignInFailureReason } from '@features/auth/domain/authError';
+import { thrownErrorDetail, type SignInFailureReason } from '@features/auth/domain/authError';
 
 const REPORT_TIMEOUT_MS = 5_000;
 
@@ -27,5 +27,10 @@ async function postWithTimeout(reason: SignInFailureReason): Promise<void> {
 
 export function reportSignInFailure(reason: SignInFailureReason): void {
   if (!isLoopEnabled('telemetryFlush')) return;
-  postWithTimeout(reason).catch(() => undefined);
+  postWithTimeout(reason).catch((error: unknown) => {
+    console.warn('[auth] sign-in failure report not delivered', {
+      reason,
+      ...thrownErrorDetail(error),
+    });
+  });
 }
