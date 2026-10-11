@@ -1,35 +1,16 @@
-import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 
 import { apiBase } from '@shared/apiClient/config';
-import { supabase } from '@shared/auth/supabaseClient';
+import { injectTestSession } from '@shared/auth/injectTestSession';
 import { isTestAuthEnabled, markTestAuthBootSettled } from '@shared/auth/testAuthBoot';
 
-export { isTestAuthEnabled };
+export { isTestAuthEnabled, injectTestSession };
 
 const TEST_LOGIN_PATH = '/test/login';
 
 const TEST_REFRESH_TOKEN = 'test-auth-no-refresh';
 
 const NON_EXPIRING_AT_SECONDS = Math.floor(Date.UTC(2100, 0, 1) / 1000);
-
-type SessionStore = {
-  storageKey: string;
-  storage: { setItem: (key: string, value: string) => Promise<void> };
-  stopAutoRefresh?: () => unknown;
-  _notifyAllSubscribers?: (event: AuthChangeEvent, session: Session) => Promise<void>;
-};
-
-function assertSessionStoreShape(store: SessionStore): void {
-  const hasKey = typeof store.storageKey === 'string' && store.storageKey.length > 0;
-  const hasStorage = typeof store.storage?.setItem === 'function';
-  if (!hasKey || !hasStorage) {
-    throw new Error(
-      'test-auth: Supabase auth session-store internals changed ' +
-        '(expected string `storageKey` and `storage.setItem`); the injection ' +
-        'path must be updated for this @supabase/supabase-js version',
-    );
-  }
-}
 
 function assertTestAuthEnabled(): void {
   if (!isTestAuthEnabled()) {
@@ -86,19 +67,6 @@ export function buildTestSession(login: TestLoginResponse): Session {
     expires_in: Math.max(0, NON_EXPIRING_AT_SECONDS - nowSeconds),
     user,
   };
-}
-
-export async function injectTestSession(session: Session): Promise<void> {
-  assertTestAuthEnabled();
-  const store = supabase.auth as unknown as SessionStore;
-  assertSessionStoreShape(store);
-  await store.storage.setItem(store.storageKey, JSON.stringify(session));
-  if (typeof store.stopAutoRefresh === 'function') {
-    void store.stopAutoRefresh();
-  }
-  if (typeof store._notifyAllSubscribers === 'function') {
-    await store._notifyAllSubscribers('SIGNED_IN', session);
-  }
 }
 
 export async function bootstrapTestAuth(): Promise<boolean> {
