@@ -3,13 +3,12 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"strings"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const albumFeaturedConcurrency = 5
@@ -50,17 +49,15 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 	if s.featured == nil {
 		return
 	}
-	var g errgroup.Group
-	g.SetLimit(albumFeaturedConcurrency)
+	g := fanout.New(albumFeaturedConcurrency)
 	for i := range results {
 		if !answered[i] && hasDeezerTrackID(results[i]) {
-			g.Go(func() error {
+			g.Go(func() {
 				s.lookupFeatured(ctx, &results[i])
-				return nil
 			})
 		}
 	}
-	_ = g.Wait()
+	g.Wait()
 }
 
 func hasDeezerTrackID(r domain.SearchResult) bool {

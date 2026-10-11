@@ -10,8 +10,6 @@ import (
 	"log/slog"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const historyRingSize = 100
@@ -39,7 +37,7 @@ func (s *RecordSearchHistoryService) Record(
 		return
 	}
 	entry := &domain.SearchHistoryEntry{
-		ID:         shared.EntityIdFromBytes(uuid.New()),
+		ID:         shared.NewEntityId(),
 		UserId:     userId,
 		Query:      query.Raw,
 		QueryNorm:  queryNorm,

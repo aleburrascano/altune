@@ -1,9 +1,8 @@
 package eval
 
 import (
+	"altune/go-api/internal/shared/fanout"
 	"sync/atomic"
-
-	"golang.org/x/sync/errgroup"
 )
 
 func runParallel[T any](items []T, concurrency int, progress func(done, total int), work func(i int, item T)) {
@@ -17,18 +16,16 @@ func runParallel[T any](items []T, concurrency int, progress func(done, total in
 	}
 
 	var done int32
-	g := new(errgroup.Group)
-	g.SetLimit(concurrency)
+	g := fanout.New(concurrency)
 	for i, item := range items {
 		i, item := i, item
-		g.Go(func() error {
+		g.Go(func() {
 			work(i, item)
 			n := int(atomic.AddInt32(&done, 1))
 			if progress != nil && (n%step == 0 || n == total) {
 				progress(n, total)
 			}
-			return nil
 		})
 	}
-	_ = g.Wait()
+	g.Wait()
 }

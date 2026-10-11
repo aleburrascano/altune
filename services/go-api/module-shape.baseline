@@ -1,8 +1,4 @@
 G1 internal/observe/handler unexpected root entry
-G2 internal/discovery/service/eval/parallel.go:6 service imports golang.org/x/sync/errgroup
-G2 internal/discovery/service/get_album_tracks.go:12 service imports golang.org/x/sync/errgroup
-G2 internal/discovery/service/record_event.go:14 service imports github.com/google/uuid
-G2 internal/discovery/service/record_history.go:14 service imports github.com/google/uuid
 G2 internal/discovery/service/result_cache.go:8 service imports github.com/google/uuid
 G2 internal/discovery/service/search.go:15 service imports github.com/google/uuid
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:5 imports auth outside adapters/authbridge

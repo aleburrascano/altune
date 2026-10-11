@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/google/uuid"
 )
 
 type RecordEventService struct {
@@ -136,7 +134,7 @@ func validateEventID(t domain.EventType, eventID string) error {
 		}
 		return nil
 	}
-	if id, err := uuid.Parse(eventID); err != nil || id == uuid.Nil {
+	if id, err := shared.ParseEntityId(eventID); err != nil || id.IsZero() {
 		return domain.NewInvalidEventError("event_id must be a non-nil UUID")
 	}
 	return nil
