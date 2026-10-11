@@ -212,10 +212,13 @@ describe('detail health metric', () => {
     recordEventMock.mockRejectedValueOnce(new Error('offline'));
     recordContentFetchOutcome('album_tracks', true);
     expect(() => flushDetailHealth()).not.toThrow();
-    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     flushDetailHealth();
 
     expect(recordEventMock).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledWith('[detail] health flush failed', {
+      error: expect.any(Error),
+    });
   });
 });
 

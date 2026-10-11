@@ -80,7 +80,9 @@ export function flushDetailHealth(): void {
   const payload = tally;
   tally = emptyTally();
   outcomes = 0;
-  recordEvent({ type: 'detail_health', payload }).catch(() => undefined);
+  recordEvent({ type: 'detail_health', payload }).catch((error: unknown) => {
+    console.warn('[detail] health flush failed', { error });
+  });
 }
 
 function ensureFlushOnBackground(): void {
