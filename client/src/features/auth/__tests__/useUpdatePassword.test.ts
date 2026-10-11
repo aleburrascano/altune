@@ -7,8 +7,6 @@ import {
   runAsyncAuthHook,
 } from '@features/auth/__tests__/testUtils/authTestUtils';
 
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-
 const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
 
 const updatePassword = () =>

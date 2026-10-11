@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
+import * as nativeWebOrigin from '@shared/device/webOrigin';
+import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
 import { useSignUp } from '@features/auth/hooks/useSignUp';
 
@@ -9,15 +11,6 @@ import {
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/auth/__tests__/testUtils/authTestUtils';
-
-jest.mock('@shared/device/webOrigin', () => ({
-  webOrigin: (): string | null =>
-    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
-      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
-      : null,
-}));
-
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { signUp: supabaseSignUp } = createSupabaseAuthMock('signUp');
 
@@ -238,7 +231,12 @@ describe('a server rate limit', () => {
 });
 
 describe('useSignUp: the confirmation redirect on web (#2837)', () => {
+  beforeEach(() => {
+    jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
+  });
+
   afterEach(() => {
+    jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
     Platform.OS = 'ios';
     Reflect.deleteProperty(globalThis, 'window');
   });

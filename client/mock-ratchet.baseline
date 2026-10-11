@@ -1,9 +1,3 @@
-src/features/auth/__tests__/useSignIn.test.ts @shared/auth/supabaseClient
-src/features/auth/__tests__/useSignUp.test.ts @shared/auth/supabaseClient
-src/features/auth/__tests__/useSignUp.test.ts @shared/device/webOrigin
-src/features/auth/__tests__/useUpdatePassword.test.ts @shared/auth/supabaseClient
-src/features/auth/ui/__tests__/SetNewPasswordScreen.test.tsx @shared/auth/supabaseClient
-src/features/auth/ui/__tests__/SetNewPasswordScreen.test.tsx @shared/telemetry/userTelemetry
 src/features/detail/__tests__/AlbumDetailBody.test.tsx ../hooks/useLibraryMatches
 src/features/detail/__tests__/AlbumDetailBody.test.tsx ../hooks/useOwnedPlayback
 src/features/detail/__tests__/AlbumDetailBody.test.tsx @shared/auth/supabaseClient

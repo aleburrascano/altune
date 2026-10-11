@@ -8,11 +8,6 @@ import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authT
 const mockReplace = jest.fn();
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
-jest.mock('@shared/telemetry/userTelemetry', () => ({
-  recordFailureShown: jest.fn(),
-  recordUserAction: jest.fn(),
-}));
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
 
