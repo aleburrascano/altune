@@ -50,33 +50,10 @@ func (r sharedFeaturedResolver) Resolve(ctx context.Context, artist, title strin
 	return out, nil
 }
 
-func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter, breaker *discoveryService.CircuitBreaker) *discoveryService.ConsensusService {
-	consensusProviders := BuildConsensusProviders(a.cfg, cf.roundTripper())
-
-	consensusOpts := []discoveryService.ConsensusOption{discoveryService.WithConsensusCircuitBreaker(breaker)}
-	if sharedMB != nil {
-		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
-	}
-	if a.redisClient != nil {
-		consensusOpts = append(consensusOpts, discoveryService.WithConsensusCache(
-			discoveryCacheAdapters.NewRedisNameKeyedCache[[]discoveryService.ConsensusAlbum](
-				a.redisClient,
-				"discovery:consensus:v1:",
-				"discovery:consensus:neg:v1:",
-				discoveryService.DefaultConsensusCacheTTL,
-				discoveryService.DefaultConsensusCacheTTL,
-				func() []discoveryService.ConsensusAlbum { return nil },
-			),
-		))
-	}
-	return discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
-}
-
 func (a *App) wireDiscoveryContent(
 	cf clientFactory,
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
-	consensusSvc *discoveryService.ConsensusService,
 	breaker *discoveryService.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) discoveryContentStaging {
@@ -84,7 +61,7 @@ func (a *App) wireDiscoveryContent(
 	return discoveryContentStaging{
 		featuredBridge: buildFeaturedBridge(cf, sharedMB),
 		albumSvc:       albumSvc,
-		artistSvc:      a.buildArtistContentService(cf, sharedMB, consensusSvc, breaker, eventStore),
+		artistSvc:      a.buildArtistContentService(cf, sharedMB, breaker, eventStore),
 		relatedSvc:     relatedSvc,
 		suggestSvc:     discoveryService.NewSuggestService(vocabStore),
 	}
@@ -143,23 +120,20 @@ func (a *App) buildAlbumContentProviders(
 func (a *App) buildArtistContentService(
 	cf clientFactory,
 	sharedMB *providers.MusicBrainzAdapter,
-	consensusSvc *discoveryService.ConsensusService,
 	breaker *discoveryService.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) *discoveryService.GetArtistContentService {
 	artistProviders := buildArtistContentProviders(cf, a.cfg)
-	artistContentOpts := a.buildArtistContentOptions(sharedMB, consensusSvc, breaker, eventStore)
+	artistContentOpts := a.buildArtistContentOptions(sharedMB, breaker, eventStore)
 	return discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 }
 
 func (a *App) buildArtistContentOptions(
 	sharedMB *providers.MusicBrainzAdapter,
-	consensusSvc *discoveryService.ConsensusService,
 	breaker *discoveryService.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) []discoveryService.ArtistContentOption {
 	artistContentOpts := []discoveryService.ArtistContentOption{
-		discoveryService.WithConsensusService(consensusSvc),
 		discoveryService.WithContentCircuitBreaker(breaker),
 	}
 	if eventStore != nil {
@@ -261,8 +235,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		vocabStore,
 		a.searchActivityOptions()...,
 	)
-	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB, searchSvc.CircuitBreaker())
-	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
+	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventActivityOptions()...)
 	favoritesSvc := discoveryService.NewFavoritesService(

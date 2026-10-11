@@ -14,7 +14,6 @@ import (
 
 type GetArtistContentService struct {
 	providers            map[domain.ProviderName]ports.ArtistContentProvider
-	consensus            *ConsensusService
 	identityStore        ports.IdentityStore
 	mbAnchor             ports.MBDiscographyAnchor
 	breaker              *CircuitBreaker
@@ -33,10 +32,6 @@ func NewGetArtistContentService(
 }
 
 type ArtistContentOption func(*GetArtistContentService)
-
-func WithConsensusService(c *ConsensusService) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.consensus = c }
-}
 
 func WithContentIdentityStore(store ports.IdentityStore) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityStore = store }
@@ -59,19 +54,22 @@ func WithContentEventStore(eventStore ports.EventStore) ArtistContentOption {
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, artistName string, limit int) (*ContentFetchResponse, error) {
-	v2Partial := false
 	if s.usesIdentity(known) {
-		var tracks []domain.SearchResult
-		tracks, v2Partial = s.v2TopTracks(ctx, s.artistIdentity(ctx, providerName, externalID, known))
-		if len(tracks) > 0 {
-			return withPartial(okContentResponse(providerName, tracks, limit), v2Partial), nil
-		}
+		tracks, partial := s.v2TopTracks(ctx, s.artistIdentity(ctx, providerName, externalID, known))
+		return s.identityAnswer(providerName, tracks, partial, limit), nil
 	}
-	return s.seedTopTracks(ctx, providerName, externalID, limit, v2Partial), nil
+	return s.seedTopTracks(ctx, providerName, externalID, limit), nil
 }
 
 func (s *GetArtistContentService) usesIdentity(known map[domain.ProviderName]string) bool {
 	return s.identityStore != nil || len(known) > 0
+}
+
+func (s *GetArtistContentService) identityAnswer(providerName domain.ProviderName, items []domain.SearchResult, partial bool, limit int) *ContentFetchResponse {
+	if _, served := s.providers[providerName]; !served && len(items) == 0 {
+		return unservedContentResponse(providerName)
+	}
+	return withPartial(okContentResponse(providerName, items, limit), partial)
 }
 
 func withPartial(resp *ContentFetchResponse, partial bool) *ContentFetchResponse {
@@ -79,7 +77,7 @@ func withPartial(resp *ContentFetchResponse, partial bool) *ContentFetchResponse
 	return resp
 }
 
-func (s *GetArtistContentService) seedTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, limit int, v2Partial bool) *ContentFetchResponse {
+func (s *GetArtistContentService) seedTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) *ContentFetchResponse {
 	provider, ok := s.providers[providerName]
 	if !ok {
 		return unservedContentResponse(providerName)
@@ -91,7 +89,7 @@ func (s *GetArtistContentService) seedTopTracks(ctx context.Context, providerNam
 	if degraded != nil {
 		return degraded
 	}
-	return withPartial(okContentResponse(providerName, results, limit), partial || v2Partial)
+	return withPartial(okContentResponse(providerName, results, limit), partial)
 }
 
 type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
@@ -200,19 +198,15 @@ func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, 
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, artistName string, limit int) (*ContentFetchResponse, error) {
-	v2Partial := false
 	if s.usesIdentity(known) {
 		identity := s.artistIdentity(ctx, providerName, externalID, known)
-		var albums []domain.SearchResult
-		albums, v2Partial = s.v2Albums(ctx, identity, release.SourceKey(providerName, externalID))
-		if len(albums) > 0 {
-			return withPartial(okContentResponse(providerName, albums, limit), v2Partial), nil
-		}
+		albums, partial := s.v2Albums(ctx, identity, release.SourceKey(providerName, externalID))
+		return s.identityAnswer(providerName, albums, partial, limit), nil
 	}
-	return s.seedAlbums(ctx, providerName, externalID, artistName, limit, v2Partial), nil
+	return s.seedAlbums(ctx, providerName, externalID, limit), nil
 }
 
-func (s *GetArtistContentService) seedAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int, v2Partial bool) *ContentFetchResponse {
+func (s *GetArtistContentService) seedAlbums(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) *ContentFetchResponse {
 	provider, ok := s.providers[providerName]
 	if !ok {
 		return unservedContentResponse(providerName)
@@ -224,23 +218,10 @@ func (s *GetArtistContentService) seedAlbums(ctx context.Context, providerName d
 	if degraded != nil {
 		return degraded
 	}
-	results = s.confirmByName(ctx, artistName, providerName, externalID, dedupAlbums(results))
+	results = dedupAlbums(results)
 	normalizeAlbumYears(results)
 	sortByReleaseDateDesc(results, albumReleaseSortKey)
-	return withPartial(okContentResponse(providerName, results, limit), partial || v2Partial)
-}
-
-func (s *GetArtistContentService) confirmByName(ctx context.Context, artistName string, providerName domain.ProviderName, externalID string, results []domain.SearchResult) []domain.SearchResult {
-	if artistName == "" || s.consensus == nil {
-		return results
-	}
-	kept := []domain.SearchResult{}
-	for _, cr := range s.consensus.BuildConsensus(ctx, artistName, providerName, externalID, results) {
-		if cr.Status != ConsensusRejected {
-			kept = append(kept, cr.Album)
-		}
-	}
-	return kept
+	return withPartial(okContentResponse(providerName, results, limit), partial)
 }
 
 var providerFanOutPriority = []domain.ProviderName{

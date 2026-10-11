@@ -369,10 +369,10 @@ top-tracks" or "give me *this* album's tracklist," starting from one
 ```mermaid
 flowchart TD
     SEED["GetAlbums / GetTopTracks<br/>seed provider + id, artistName"] --> STORE{"identity store wired?"}
-    STORE -->|no| FB["single-provider fallback<br/>fetch seed → dedup → consensus MB-veto"]
+    STORE -->|no| FB["seed only<br/>fetch seed → dedup"]
     STORE -->|yes| RID["resolveArtistIdentity<br/>MBID + providerIDs · seed always kept"]
     RID --> FAN["fanOutByIdentity<br/>each provider by ITS OWN id · never a name"]
-    FAN -->|"empty fan-out"| FB
+    FAN -->|"empty fan-out"| NF["empty answer · not found<br/>no second ask, no name search"]
     FAN --> KIND{"albums or tracks?"}
     KIND -->|albums| MBA["FilterGroupsByMBAnchor · PRE-merge<br/>drop provider groups barely overlapping MB · fail-open"]
     KIND -->|tracks| MR2["MergeReleases · field-level best-of"]
@@ -441,14 +441,14 @@ top-tracks get cohesion only.
 4. **`NormalizeRecordType`** (`service/release/merge.go`) — fold
    per-provider `record_type` signals plus a one-track⇒single rule into reliable
    album/single/EP buckets, then normalize a numeric year and sort newest-first
-   (via `albumReleaseSortKey`, shared with the fallback so both agree on order).
+   (via `albumReleaseSortKey`, shared with the seed-only path so both agree on order).
 
 ### 5.3 Fallback and album tracklists
 
-When there is no identity store, or the id fan-out returns empty, `GetAlbums`/
-`GetTopTracks` fall back to a **single-provider path**: fetch the seed provider
-directly, `dedupAlbums`, then the by-name `ConsensusService` union (which *does*
-still apply MB-authority as a veto — §8). `GetAlbumTracks` resolves one album's
+When there is no identity store and the app sent no card ids, `GetAlbums`/
+`GetTopTracks` fetch the seed provider directly (`dedupAlbums` for albums). When
+the id fan-out returns empty, the answer is empty ("not found"): the seed is not
+asked again and nothing is rebuilt by name. `GetAlbumTracks` resolves one album's
 tracklist natively per provider, with an **artist-guarded** Deezer title-search
 fallback that returns empty rather than a same-titled album by a different artist.
 
@@ -540,7 +540,7 @@ can. The capability seams (all in `ports/`):
 Provider participation and *how each is keyed* (by id = identity-safe; by name =
 contamination-prone):
 
-| Provider | Search | Content fan-out (by id) | Consensus (by name) | Artwork |
+| Provider | Search | Content fan-out (by id) | Consensus (by name, eval only) | Artwork |
 |---|:--:|:--:|:--:|:--:|
 | Deezer | ✅ | ✅ id | seed only | ✅ name |
 | Apple Music | ✅ | ✅ (shared iTunes id) | — | — |
@@ -589,9 +589,9 @@ Per-provider notes worth carrying:
   exact canonical title into confirmed/unconfirmed/rejected verdicts.
   `applyMBAuthority` anchors the union on MusicBrainz's bulk release-group
   discography — confirmed-by-MB albums kept, everything else **rejected** as
-  same-name contamination. This MB-*veto* is the legacy path, still used by the
-  detail single-provider fallback; the V2 discography core replaces it with
-  corroboration-based keeping (§5.2). The per-artist result is cached behind a
+  same-name contamination. Artist pages no longer use it; only `discoveryeval`
+  (`-mode consensus`, `signal-b`) does. The V2 discography core keeps releases by
+  corroboration instead (§5.2). The per-artist result is cached behind a
   pluggable name-keyed cache (Redis, 6h; a no-op default that recomputes correctly
   when unwired).
 

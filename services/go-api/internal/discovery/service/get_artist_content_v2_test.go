@@ -53,7 +53,7 @@ func v2Album(provider domain.ProviderName, id, title string, opts ...func(*domai
 	return r
 }
 
-func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
+func TestGetAlbums_v2_bestOfMerge(t *testing.T) {
 	deezer := &discoverytest.ArtistContentProvider{
 		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 			return []domain.SearchResult{
@@ -69,16 +69,12 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 			}, nil
 		},
 	}
-	namesake := consensusProvider("lastfm", "Wrong Che Single")
-	consensus := NewConsensusService([]ConsensusProvider{namesake})
-
 	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: deezer,
 			domain.ProviderITunes: itunes,
 		},
-		WithConsensusService(consensus),
 		WithContentIdentityStore(store),
 	)
 
@@ -87,7 +83,7 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
 	if len(resp.Items) != 1 {
-		t.Fatalf("items = %d, want 1 (Fully Loaded kept, namesake dropped): %+v", len(resp.Items), resp.Items)
+		t.Fatalf("items = %d, want 1 (Fully Loaded, merged across Deezer and iTunes): %+v", len(resp.Items), resp.Items)
 	}
 	a := resp.Items[0]
 	if a.Title != "Fully Loaded" {
@@ -121,10 +117,8 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 			}, nil
 		},
 	}
-	namesake := consensusProvider("lastfm", "Wrong Che Album")
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer},
-		WithConsensusService(NewConsensusService([]ConsensusProvider{namesake})),
 		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
@@ -133,7 +127,7 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 		t.Fatalf("GetAlbums error = %v", err)
 	}
 	if len(resp.Items) != 1 || resp.Items[0].Title != "REST IN BASS: ENCORE" {
-		t.Fatalf("items = %+v, want just the id-verified ENCORE (namesake dropped, V2 ran on seed)", resp.Items)
+		t.Fatalf("items = %+v, want just the id-verified ENCORE (V2 ran on seed)", resp.Items)
 	}
 }
 
@@ -747,5 +741,42 @@ func TestGetTopTracks_v2_dropsSoundCloudOnlyTracksWhenACatalogKnowsTheArtist(t *
 
 	if len(resp.Items) != 1 || resp.Items[0].Title != "Lithium" {
 		t.Fatalf("items = %+v, want only Lithium", resp.Items)
+	}
+}
+
+func countingEmptyProvider(albumCalls, trackCalls *int) *discoverytest.ArtistContentProvider {
+	return &discoverytest.ArtistContentProvider{
+		GetAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			*albumCalls++
+			return nil, nil
+		},
+		GetTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			*trackCalls++
+			return nil, nil
+		},
+	}
+}
+
+func TestGetArtistContent_v2_anEmptyAnswerIsNotFoundWithoutAskingAgain(t *testing.T) {
+	var albumCalls, trackCalls int
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: countingEmptyProvider(&albumCalls, &trackCalls)},
+		WithContentIdentityStore(&fakeIdentityStore{}),
+	)
+
+	albums, err := svc.GetAlbums(t.Context(), domain.ProviderDeezer, "d1", nil, "Che", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracks, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", nil, "Che", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(albums.Items) != 0 || len(tracks.Items) != 0 {
+		t.Errorf("albums = %+v, tracks = %+v, want none", albums.Items, tracks.Items)
+	}
+	if albumCalls != 1 || trackCalls != 1 {
+		t.Errorf("Deezer asked %d times for albums and %d for top tracks, want once each", albumCalls, trackCalls)
 	}
 }

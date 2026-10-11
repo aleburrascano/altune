@@ -242,7 +242,7 @@ func allScrapedProvidersEnabled() config.Config {
 	}
 }
 
-func TestLastFMServesTheByNameFallbackNotArtistPagesByID(t *testing.T) {
+func TestLastFMServesTheByNameConsensusNotArtistPagesByID(t *testing.T) {
 	cfg := allScrapedProvidersEnabled()
 	cfg.LastFMAPIKey = "key"
 
@@ -250,7 +250,7 @@ func TestLastFMServesTheByNameFallbackNotArtistPagesByID(t *testing.T) {
 		t.Error("Last.fm is an artist content provider; its albums lookup takes an artist name, not the MBID it would be given")
 	}
 	if !hasConsensusProvider(&cfg, "lastfm") {
-		t.Error("Last.fm left the by-name consensus fallback")
+		t.Error("Last.fm left the by-name consensus")
 	}
 }
 
