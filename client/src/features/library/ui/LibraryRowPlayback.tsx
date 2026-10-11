@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { formatDuration } from '@shared/ui/displayFormat';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 import { Row, Text, spacing, useTheme } from '@shared/ui';
@@ -46,7 +47,9 @@ export function LibraryRowPlayback({
   };
 
   return (
-    <Pressable
+    <Tappable
+      action="library.row.open"
+      trackId={track.id}
       testID={`library-row-${track.id}`}
       onPress={playOrOpenTrack}
       {...(onLongPress != null ? { onLongPress } : {})}
@@ -72,7 +75,7 @@ export function LibraryRowPlayback({
       >
         {children}
       </Row>
-    </Pressable>
+    </Tappable>
   );
 }
 

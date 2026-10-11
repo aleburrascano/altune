@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Play, Plus, Shuffle } from 'lucide-react-native';
 
 import { countLabel } from '@shared/ui/displayFormat';
@@ -74,7 +75,8 @@ export function PlaylistHero({
             ]}
           />
         ) : (
-          <Pressable
+          <Tappable
+            action="playlist.rename"
             onPress={onStartEditing}
             hitSlop={8}
             accessibilityRole="button"
@@ -84,14 +86,15 @@ export function PlaylistHero({
             <Text variant="displayL" testID="playlist-name" style={styles.name}>
               {playlist.name}
             </Text>
-          </Pressable>
+          </Tappable>
         )}
         <Text variant="caption" tone="secondary">
           {meta}
         </Text>
 
         <View style={styles.buttons}>
-          <Pressable
+          <Tappable
+            action="playlist.play"
             onPress={onPlay}
             style={[styles.playBtn, { backgroundColor: theme.color.accent }]}
             accessibilityRole="button"
@@ -101,8 +104,9 @@ export function PlaylistHero({
             <Text variant="label" style={{ color: theme.color.onAccent }}>
               Play
             </Text>
-          </Pressable>
-          <Pressable
+          </Tappable>
+          <Tappable
+            action="playlist.shuffle"
             onPress={onShuffle}
             style={[
               styles.shuffleBtn,
@@ -113,8 +117,9 @@ export function PlaylistHero({
           >
             <Shuffle size={14} color={theme.color.textPrimary} />
             <Text variant="label">Shuffle</Text>
-          </Pressable>
-          <Pressable
+          </Tappable>
+          <Tappable
+            action="playlist.addTracks"
             testID="playlist-add-tracks"
             onPress={onAddTracks}
             style={[
@@ -125,7 +130,7 @@ export function PlaylistHero({
             accessibilityLabel="Add tracks from your library"
           >
             <Plus size={18} color={theme.color.textPrimary} />
-          </Pressable>
+          </Tappable>
         </View>
       </View>
     </View>

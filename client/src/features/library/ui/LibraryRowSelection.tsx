@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Check } from 'lucide-react-native';
 import { Row, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -24,7 +25,9 @@ export function LibraryRowSelection({
   const theme = useTheme();
   const highlight = selected ? { backgroundColor: `${theme.color.accent}1A` } : null;
   return (
-    <Pressable
+    <Tappable
+      action="library.row.toggleSelect"
+      trackId={track.id}
       testID={`library-row-${track.id}`}
       onPress={onToggle}
       {...(onLongPress != null ? { onLongPress } : {})}
@@ -53,7 +56,7 @@ export function LibraryRowSelection({
       >
         {children}
       </Row>
-    </Pressable>
+    </Tappable>
   );
 }
 

@@ -1,5 +1,6 @@
 import { memo, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type TextStyle } from 'react-native';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { formatDuration } from '@shared/ui/displayFormat';
 import { Text, useWideWebLayout, useTheme, type Theme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -132,11 +133,15 @@ function wideRowPressableProps(props: WideRowProps, theme: Theme) {
 function LibraryRowWide(props: WideRowProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...wideRowPressableProps(props, theme)}>
+    <Tappable
+      action="library.row.open"
+      trackId={props.track.id}
+      {...wideRowPressableProps(props, theme)}
+    >
       <WideRowIdentity track={props.track} isPlaying={props.isPlaying} />
       <WideDuration track={props.track} />
       <WideRowStatus {...props} />
-    </Pressable>
+    </Tappable>
   );
 }
 
