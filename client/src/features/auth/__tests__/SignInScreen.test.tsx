@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { useOAuth } from '@features/auth/hooks/useOAuth';
 import { SignInScreen } from '@features/auth/ui/SignInScreen';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
@@ -18,14 +17,9 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
-
-jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
-
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
 beforeEach(() => {
-  (useOAuth as jest.Mock).mockReturnValue({ state: { kind: 'idle' }, signInWith: jest.fn() });
   __http.reply('POST /v1/public/auth-failures', { status: 204 });
 });
 

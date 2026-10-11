@@ -2,11 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { supabase } from '@shared/auth/supabaseClient';
 import { darkTheme, spacing } from '@shared/ui/theme';
 
 import { AuthGate } from '@features/auth/ui/AuthGate';
 import { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/auth/ui/AuthNotices';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('expo-router', () => ({
   useSegments: () => [],
@@ -14,28 +15,19 @@ jest.mock('expo-router', () => ({
   Redirect: () => null,
 }));
 
-jest.mock('@shared/auth/useSession', () => ({
-  useSession: () => ({ status: 'loading' }),
-}));
-
-jest.mock('@shared/auth/sessionExpired', () => ({
-  useSessionExpired: () => false,
-  clearSessionExpired: () => undefined,
-}));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signOut: jest.fn() } },
-  clearPersistedAuthSession: jest.fn(),
-}));
-
-const { clearPersistedAuthSession } = jest.requireMock('@shared/auth/supabaseClient');
-const supabaseSignOut = supabase.auth.signOut as jest.Mock;
+const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(
+  'getSession',
+  'onAuthStateChange',
+  'signOut',
+);
+const supabaseSignOut = signOut;
 
 const ERROR_COPY = "Couldn't reach the server. You've been signed out on this device.";
 
 beforeEach(() => {
-  supabaseSignOut.mockReset().mockResolvedValue({ error: null });
-  clearPersistedAuthSession.mockReset().mockResolvedValue(undefined);
+  getSession.mockReturnValue(new Promise<never>(() => {}));
+  onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } });
+  supabaseSignOut.mockResolvedValue({ error: null });
 });
 
 type SignOutReply = { error: null };
@@ -72,9 +64,11 @@ function noticeStyle(testID: string) {
 describe('the auth notice screens share one full-screen centered layout', () => {
   it('centers the splash on the canvas with no padding', () => {
     render(
-      <AuthGate>
-        <></>
-      </AuthGate>,
+      <QueryClientProvider client={new QueryClient()}>
+        <AuthGate>
+          <></>
+        </AuthGate>
+      </QueryClientProvider>,
     );
 
     expect(noticeStyle('auth-splash')).toEqual(centered);

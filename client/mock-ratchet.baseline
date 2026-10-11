@@ -4,15 +4,6 @@ __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
 __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
 __tests__/webMustHolds/mh07-presignExpiry.test.ts @shared/apiClient/audio
 __tests__/webMustHolds/mh08-webSources.test.ts @shared/auth/supabaseClient
-src/features/auth/__tests__/AuthGate.test.tsx @shared/auth/sessionExpired
-src/features/auth/__tests__/AuthGate.test.tsx @shared/auth/supabaseClient
-src/features/auth/__tests__/AuthGate.test.tsx @shared/auth/useSession
-src/features/auth/__tests__/AuthNotices.test.tsx @shared/auth/sessionExpired
-src/features/auth/__tests__/AuthNotices.test.tsx @shared/auth/supabaseClient
-src/features/auth/__tests__/AuthNotices.test.tsx @shared/auth/useSession
-src/features/auth/__tests__/OAuthButtons.test.tsx @features/auth/hooks/useOAuth
-src/features/auth/__tests__/SignInScreen.test.tsx @features/auth/hooks/useOAuth
-src/features/auth/__tests__/SignInScreen.test.tsx @shared/auth/supabaseClient
 src/features/auth/__tests__/SignUpScreen.test.tsx @features/auth/hooks/useOAuth
 src/features/auth/__tests__/SignUpScreen.test.tsx @shared/auth/supabaseClient
 src/features/auth/__tests__/parseAuthLink.test.ts @shared/device/device

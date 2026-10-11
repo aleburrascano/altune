@@ -1,4 +1,5 @@
 import { render, screen, act } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Text } from 'react-native';
 
 import { AuthGate } from '@features/auth/ui/AuthGate';
@@ -7,6 +8,8 @@ import {
   markRecoveryUnlocked,
   RECOVERY_UNLOCK_WINDOW_MS,
 } from '@features/auth/domain/passwordRecovery';
+
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 let mockSegments: string[] = [];
 const mockReplace = jest.fn();
@@ -20,22 +23,32 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-let mockSessionStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-in';
-let mockSignedInUserId = 'user-a';
-jest.mock('@shared/auth/useSession', () => ({
-  useSession: () =>
-    mockSessionStatus === 'signed-in'
-      ? { status: 'signed-in', session: { user: { id: mockSignedInUserId } } }
-      : { status: mockSessionStatus },
-}));
+let sessionStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-in';
+let signedInUserId = 'user-a';
 
-jest.mock('@shared/auth/sessionExpired', () => ({
-  useSessionExpired: () => false,
-}));
+const { getSession, onAuthStateChange } = createSupabaseAuthMock('getSession', 'onAuthStateChange');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signOut: jest.fn().mockResolvedValue({ error: null }) } },
-}));
+function stubSupabaseAuth(): void {
+  const session = sessionStatus === 'signed-in' ? { user: { id: signedInUserId } } : null;
+  getSession.mockReturnValue(
+    sessionStatus === 'loading'
+      ? new Promise<never>(() => {})
+      : Promise.resolve({ data: { session } }),
+  );
+  onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } });
+}
+
+async function renderGate(): Promise<void> {
+  stubSupabaseAuth();
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AuthGate>
+        <Children />
+      </AuthGate>
+    </QueryClientProvider>,
+  );
+  await act(async () => {});
+}
 
 function Children() {
   return <Text testID="reset-password-form">choose a new password</Text>;
@@ -43,8 +56,8 @@ function Children() {
 
 beforeEach(() => {
   mockSegments = ['reset-password'];
-  mockSessionStatus = 'signed-in';
-  mockSignedInUserId = 'user-a';
+  sessionStatus = 'signed-in';
+  signedInUserId = 'user-a';
   mockReplace.mockReset();
   act(() => clearRecoveryUnlock());
 });
@@ -54,40 +67,28 @@ afterEach(() => {
 });
 
 describe('AuthGate: reset-password route is gated by a verified recovery exchange (#656)', () => {
-  it('shows the invalid-link notice, not the password form, for a bare deep link with no recovery exchange', () => {
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+  it('shows the invalid-link notice, not the password form, for a bare deep link with no recovery exchange', async () => {
+    await renderGate();
 
     expect(screen.queryByTestId('reset-password-form')).toBeNull();
     expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
   });
 
-  it('renders the password form once a recovery exchange has unlocked it', () => {
+  it('renders the password form once a recovery exchange has unlocked it', async () => {
     act(() => markRecoveryUnlocked('user-a'));
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.getByTestId('reset-password-form')).toBeTruthy();
     expect(screen.queryByTestId('invalid-recovery-link')).toBeNull();
   });
 
-  it('shows the invalid-link notice again once the unlock window has expired', () => {
+  it('shows the invalid-link notice again once the unlock window has expired', async () => {
     const start = 1_000_000;
     act(() => markRecoveryUnlocked('user-a', start));
     jest.spyOn(Date, 'now').mockReturnValue(start + RECOVERY_UNLOCK_WINDOW_MS + 1);
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.queryByTestId('reset-password-form')).toBeNull();
     expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
@@ -97,43 +98,31 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
 });
 
 describe('AuthGate: the unlock belongs to the account it was verified for (#1638)', () => {
-  it('shows the invalid-link notice when the active session is a different account from the one the recovery unlocked', () => {
+  it('shows the invalid-link notice when the active session is a different account from the one the recovery unlocked', async () => {
     act(() => markRecoveryUnlocked('user-a'));
-    mockSignedInUserId = 'user-b';
+    signedInUserId = 'user-b';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.queryByTestId('reset-password-form')).toBeNull();
     expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
   });
 
-  it('shows the invalid-link notice when the recovery was abandoned and nobody is signed in', () => {
+  it('shows the invalid-link notice when the recovery was abandoned and nobody is signed in', async () => {
     act(() => markRecoveryUnlocked('user-a'));
-    mockSessionStatus = 'signed-out';
+    sessionStatus = 'signed-out';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.queryByTestId('reset-password-form')).toBeNull();
     expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
   });
 
-  it('still renders the password form for the account the recovery was verified for', () => {
+  it('still renders the password form for the account the recovery was verified for', async () => {
     act(() => markRecoveryUnlocked('user-b'));
-    mockSignedInUserId = 'user-b';
+    signedInUserId = 'user-b';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.getByTestId('reset-password-form')).toBeTruthy();
     expect(screen.queryByTestId('invalid-recovery-link')).toBeNull();
@@ -141,58 +130,42 @@ describe('AuthGate: the unlock belongs to the account it was verified for (#1638
 });
 
 describe('AuthGate: /auth/* renders for a signed-out visitor (#2924)', () => {
-  it('does not redirect a signed-out visitor on /auth/callback to /sign-in', () => {
+  it('does not redirect a signed-out visitor on /auth/callback to /sign-in', async () => {
     mockSegments = ['auth', 'callback'];
-    mockSessionStatus = 'signed-out';
+    sessionStatus = 'signed-out';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.queryByTestId('redirect')).toBeNull();
     expect(screen.getByTestId('reset-password-form')).toBeTruthy();
   });
 
-  it('still redirects a signed-out visitor outside /auth/* and (auth) to /sign-in', () => {
+  it('still redirects a signed-out visitor outside /auth/* and (auth) to /sign-in', async () => {
     mockSegments = ['library'];
-    mockSessionStatus = 'signed-out';
+    sessionStatus = 'signed-out';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.getByTestId('redirect')).toHaveTextContent('/sign-in');
   });
 });
 
 describe('AuthGate: a signed-out visitor already inside the (auth) group is also exempt (#2924)', () => {
-  it('does not redirect a signed-out visitor already inside the (auth) group', () => {
+  it('does not redirect a signed-out visitor already inside the (auth) group', async () => {
     mockSegments = ['(auth)', 'sign-in'];
-    mockSessionStatus = 'signed-out';
+    sessionStatus = 'signed-out';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.queryByTestId('redirect')).toBeNull();
     expect(screen.getByTestId('reset-password-form')).toBeTruthy();
   });
 
-  it('never redirects a signed-in visitor outside the (auth) group, /auth/* aside', () => {
+  it('never redirects a signed-in visitor outside the (auth) group, /auth/* aside', async () => {
     mockSegments = ['library'];
-    mockSessionStatus = 'signed-in';
+    sessionStatus = 'signed-in';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.queryByTestId('redirect')).toBeNull();
     expect(screen.getByTestId('reset-password-form')).toBeTruthy();
@@ -205,15 +178,11 @@ describe('AuthGate: the /auth/* exemption stops at the segment boundary (#2924 p
     [['auth-something']],
     [['authentication', 'callback']],
     [['library', 'auth', 'callback']],
-  ])('still redirects a signed-out visitor on %j to /sign-in', (segments) => {
+  ])('still redirects a signed-out visitor on %j to /sign-in', async (segments) => {
     mockSegments = segments;
-    mockSessionStatus = 'signed-out';
+    sessionStatus = 'signed-out';
 
-    render(
-      <AuthGate>
-        <Children />
-      </AuthGate>,
-    );
+    await renderGate();
 
     expect(screen.getByTestId('redirect')).toHaveTextContent('/sign-in');
     expect(screen.queryByTestId('reset-password-form')).toBeNull();
@@ -221,15 +190,11 @@ describe('AuthGate: the /auth/* exemption stops at the segment boundary (#2924 p
 
   it.each([[['auth', 'confirm']], [['auth', 'recovery']]])(
     'does not redirect a signed-out visitor on %j to /sign-in',
-    (segments) => {
+    async (segments) => {
       mockSegments = segments;
-      mockSessionStatus = 'signed-out';
+      sessionStatus = 'signed-out';
 
-      render(
-        <AuthGate>
-          <Children />
-        </AuthGate>,
-      );
+      await renderGate();
 
       expect(screen.queryByTestId('redirect')).toBeNull();
       expect(screen.getByTestId('reset-password-form')).toBeTruthy();
@@ -238,15 +203,11 @@ describe('AuthGate: the /auth/* exemption stops at the segment boundary (#2924 p
 
   it.each([[['auth', 'callback']], [['auth', 'recovery']]])(
     'lets an already signed-in visitor on %j reach the completion screen',
-    (segments) => {
+    async (segments) => {
       mockSegments = segments;
-      mockSessionStatus = 'signed-in';
+      sessionStatus = 'signed-in';
 
-      render(
-        <AuthGate>
-          <Children />
-        </AuthGate>,
-      );
+      await renderGate();
 
       expect(screen.queryByTestId('redirect')).toBeNull();
       expect(screen.getByTestId('reset-password-form')).toBeTruthy();

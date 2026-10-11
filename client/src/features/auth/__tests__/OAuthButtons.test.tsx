@@ -1,36 +1,69 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import * as WebBrowser from 'expo-web-browser';
 
 import { NETWORK_ERROR_COPY } from '@features/auth/domain/authError';
-import { useOAuth } from '@features/auth/hooks/useOAuth';
 import { OAuthButtons } from '@features/auth/ui/OAuthButtons';
 
-jest.mock('@features/auth/hooks/useOAuth', () => ({ useOAuth: jest.fn() }));
+import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
 
-const mockUseOAuth = useOAuth as jest.Mock;
+const { __http } = require('@testing/doubles/fetch.js');
 
-function renderWithState(state: unknown): void {
-  mockUseOAuth.mockReturnValue({ state, signInWith: jest.fn() });
+jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
+jest.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: jest.fn(),
+  openAuthSessionAsync: jest.fn(),
+  dismissAuthSession: jest.fn(),
+}));
+
+const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
+const openAuthSessionAsync = jest.mocked(WebBrowser.openAuthSessionAsync);
+
+beforeEach(() => {
+  __http.reply('POST /v1/public/auth-failures', { status: 204 });
+});
+
+function pressGoogle(): void {
   render(<OAuthButtons />);
+  fireEvent.press(screen.getByTestId('oauth-google'));
 }
 
 describe('OAuthButtons: telling the user which failure they hit (#1642)', () => {
-  it('names an unreachable server rather than blaming the provider', () => {
-    renderWithState({ kind: 'error', reason: 'network' });
+  it('names an unreachable server rather than blaming the provider', async () => {
+    signInWithOAuth.mockResolvedValue({
+      data: null,
+      error: { name: 'AuthRetryableFetchError', status: 0, message: 'failed to fetch' },
+    });
 
-    expect(screen.getByTestId('oauth-error')).toHaveTextContent(NETWORK_ERROR_COPY);
+    pressGoogle();
+
+    expect(await screen.findByTestId('oauth-error')).toHaveTextContent(NETWORK_ERROR_COPY);
   });
 
-  it('falls back to the generic provider copy for any other failure', () => {
-    renderWithState({ kind: 'error', reason: 'unknown' });
+  it('falls back to the generic provider copy for any other failure', async () => {
+    signInWithOAuth.mockResolvedValue({ data: { url: null }, error: null });
 
-    expect(screen.getByTestId('oauth-error')).toHaveTextContent(
+    pressGoogle();
+
+    expect(await screen.findByTestId('oauth-error')).toHaveTextContent(
       "Couldn't sign in with that provider. Please try again.",
     );
   });
 
-  it('shows no banner when the user simply dismissed the browser', () => {
-    renderWithState({ kind: 'cancelled' });
+  it('shows no banner when the user simply dismissed the browser', async () => {
+    signInWithOAuth.mockResolvedValue({
+      data: { url: 'https://accounts.google.com/o' },
+      error: null,
+    });
+    openAuthSessionAsync.mockResolvedValue({
+      type: 'cancel' as WebBrowser.WebBrowserResultType.CANCEL,
+    });
 
+    pressGoogle();
+
+    await waitFor(() => expect(openAuthSessionAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('oauth-google').props.accessibilityState.disabled).toBe(false),
+    );
     expect(screen.queryByTestId('oauth-error')).toBeNull();
   });
 });
