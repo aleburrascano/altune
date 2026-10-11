@@ -2,20 +2,13 @@ import { Platform } from 'react-native';
 
 import { LOCKOUT_AFTER_FAILURES } from '@features/auth/domain/attemptLockout';
 import { useResetPassword } from '@features/auth/hooks/useResetPassword';
+import * as nativeWebOrigin from '@shared/device/webOrigin';
+import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
 import {
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/auth/__tests__/testUtils/authTestUtils';
-
-jest.mock('@shared/device/webOrigin', () => ({
-  webOrigin: (): string | null =>
-    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
-      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
-      : null,
-}));
-
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { resetPasswordForEmail } = createSupabaseAuthMock('resetPasswordForEmail');
 
@@ -171,7 +164,12 @@ describe('a server rate limit', () => {
 });
 
 describe('useResetPassword: the recovery redirect on web (#2837)', () => {
+  beforeEach(() => {
+    jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
+  });
+
   afterEach(() => {
+    jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
     Platform.OS = 'ios';
     Reflect.deleteProperty(globalThis, 'window');
   });

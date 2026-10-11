@@ -31,15 +31,6 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
 }));
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest.fn(),
-      onAuthStateChange: jest.fn(() => ({ data: { subscription: { unsubscribe: jest.fn() } } })),
-    },
-  },
-}));
-
 const { supabase } = require('@shared/auth/supabaseClient');
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
@@ -56,7 +47,7 @@ const IDLE = {
 let client: QueryClient;
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
     data: { session: { access_token: 'tok' } },
     error: null,
   });
@@ -240,29 +231,33 @@ describe('tabs layout: hides its own mini player in wide web layout, shows it ot
   });
 });
 
-const mockUseKeyboardShortcuts = jest.fn();
-
-jest.mock('../src/shared/ui/keyboard/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: (...args: unknown[]) => mockUseKeyboardShortcuts(...args),
-}));
+function keydownListenerAdds(addListener: jest.Mock): unknown[][] {
+  return addListener.mock.calls.filter(([type]) => type === 'keydown');
+}
 
 describe('tabs layout: does not mount the web keyboard shortcuts on its own', () => {
+  const addListener = jest.fn();
+
   beforeEach(() => {
-    mockUseKeyboardShortcuts.mockClear();
+    addListener.mockClear();
+    Object.assign(window, { addEventListener: addListener, removeEventListener: jest.fn() });
   });
 
-  it('never calls the shortcut hook on a wide web window', async () => {
-    const playback = playingFixture();
-    await openTabsPlaying('/library', { os: 'web', width: 1440, playback });
-
-    expect(mockUseKeyboardShortcuts).not.toHaveBeenCalled();
+  afterAll(() => {
+    Reflect.deleteProperty(window, 'addEventListener');
+    Reflect.deleteProperty(window, 'removeEventListener');
   });
 
-  it('never calls the shortcut hook on a narrow web window either', async () => {
-    const playback = playingFixture();
-    await openTabsPlaying('/library', { os: 'web', width: 999, playback });
+  it('registers no keydown listener on a wide web window', async () => {
+    await openTabsPlaying('/library', { os: 'web', width: 1440, playback: playingFixture() });
 
-    expect(mockUseKeyboardShortcuts).not.toHaveBeenCalled();
+    expect(keydownListenerAdds(addListener)).toHaveLength(0);
+  });
+
+  it('registers no keydown listener on a narrow web window either', async () => {
+    await openTabsPlaying('/library', { os: 'web', width: 999, playback: playingFixture() });
+
+    expect(keydownListenerAdds(addListener)).toHaveLength(0);
   });
 });
 

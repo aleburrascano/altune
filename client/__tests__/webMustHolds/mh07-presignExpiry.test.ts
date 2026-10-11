@@ -1,7 +1,9 @@
 import { createElement, type ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/apiClient/audio';
+import type { Session } from '@supabase/supabase-js';
+
+import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 
@@ -14,9 +16,9 @@ beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn() }));
+const { __http } = require('../../jest/doubles/fetch.js');
 
-const presign = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
+const PRESIGN_ROUTE = 'POST /v1/audio-urls';
 
 const PRESIGN_TTL_MS = 60 * 60 * 1000;
 const TRACK_ID = asTrackId('trk-1');
@@ -80,12 +82,15 @@ class FakeAudio {
   }
 }
 
-function presignedUrl(attempt: number): ResolvedAudioUrl {
-  return {
-    trackId: TRACK_ID,
-    url: `https://bucket.example/trk-1.mp3?sig=${attempt}`,
-    version: 'v1',
-  };
+function presignedUrl(attempt: number): string {
+  return `https://bucket.example/trk-1.mp3?sig=${attempt}`;
+}
+
+function replyWithPresign(attempt: number): void {
+  __http.replyOnce(PRESIGN_ROUTE, {
+    status: 200,
+    json: { urls: [{ track_id: TRACK_ID, url: presignedUrl(attempt), version: 'v1' }] },
+  });
 }
 
 function renderWebPlayback(now: () => number) {
@@ -101,8 +106,11 @@ function renderWebPlayback(now: () => number) {
 }
 
 beforeEach(() => {
-  presign.mockReset();
-  presign.mockImplementation(async () => [presignedUrl(1)]);
+  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+    data: { session: { access_token: 'tok' } as Session },
+    error: null,
+  });
+  replyWithPresign(1);
 });
 
 describe('mh07: a paused track resumes after its presigned URL expires (un-skipped)', () => {
@@ -117,12 +125,12 @@ describe('mh07: a paused track resumes after its presigned URL expires (un-skipp
     act(() => playback().seekTo(45_000));
     act(() => playback().pause());
 
-    presign.mockResolvedValueOnce([presignedUrl(2)]);
+    replyWithPresign(2);
     clock += PRESIGN_TTL_MS;
     await act(async () => playback().resume());
 
-    expect(presign).toHaveBeenCalledTimes(2);
-    expect(audio.src).toBe(presignedUrl(2).url);
+    expect(__http.countFor(PRESIGN_ROUTE)).toBe(2);
+    expect(audio.src).toBe(presignedUrl(2));
     expect(audio.currentTime).toBe(45);
     expect(playback()).toMatchObject({ status: 'playing', errorMessage: null });
   });

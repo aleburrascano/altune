@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
+import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/apiClient/ids';
@@ -13,10 +14,6 @@ beforeAll(() => {
 });
 
 const { __http } = require('../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const PRESIGNED_URL = 'https://bucket.example/track-1.mp3?X-Amz-Signature=abc';
 
@@ -41,8 +38,8 @@ function fakeAudioElement(): HTMLAudioElement {
 
 describe('mh08: the web provider presigns every library source', () => {
   it('plays a library track without ever requesting GET /v1/tracks/{id}/audio', async () => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
+    jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+      data: { session: { access_token: 'tok' } as Session },
       error: null,
     });
     __http.reply('POST /v1/audio-urls', {
