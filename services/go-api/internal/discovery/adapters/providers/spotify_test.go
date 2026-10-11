@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -391,4 +392,91 @@ func TestSpotifyContentLive_E2E(t *testing.T) {
 	}
 	t.Logf("topTracks: %d; first: %q by %q dur=%ds img=%t",
 		len(tracks), tracks[0].Title, tracks[0].Subtitle, tracks[0].Duration, tracks[0].ImageURL != "")
+}
+
+func TestSpotifyAdapter_Search_marksSpotifysTopResult(t *testing.T) {
+	withTop := strings.Replace(spotifyFixtureResponse, `"searchV2": {`, `"searchV2": {
+      "topResultsV2": {"itemsV2": [
+        {"item": {"data": {"__typename": "Artist", "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"}}},
+        {"item": {"data": {"__typename": "Track", "uri": "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"}}}
+      ]},`, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(withTop))
+	}))
+	defer srv.Close()
+
+	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", allKinds())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range results {
+		picked := domain.BoolExtra(r.Extras, domain.ExtraTopPick)
+		if want := r.Kind == domain.ResultKindArtist; picked != want {
+			t.Errorf("%s %q top pick = %v, want %v (only Spotify's first top result)", r.Kind, r.Title, picked, want)
+		}
+	}
+}
+
+func TestSpotifyAdapter_Search_noTopResultsMarksNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(spotifyFixtureResponse))
+	}))
+	defer srv.Close()
+
+	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", allKinds())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if domain.BoolExtra(r.Extras, domain.ExtraTopPick) {
+			t.Errorf("%q is marked as a top pick with no top results in the response", r.Title)
+		}
+	}
+}
+
+func TestSpotifyAdapter_Search_skipsTopResultsWeDoNotSearch(t *testing.T) {
+	withTop := strings.Replace(spotifyFixtureResponse, `"searchV2": {`, `"searchV2": {
+      "topResultsV2": {"itemsV2": [
+        {"item": {"data": {"__typename": "Podcast", "uri": "spotify:show:01jpwYaJalv5OZN4CcE2Rj"}}},
+        {"item": {"data": {"__typename": "Artist", "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"}}}
+      ]},`, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(withTop))
+	}))
+	defer srv.Close()
+
+	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", allKinds())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range results {
+		if picked := domain.BoolExtra(r.Extras, domain.ExtraTopPick); picked != (r.Kind == domain.ResultKindArtist) {
+			t.Errorf("%s %q top pick = %v, want only the artist after the podcast", r.Kind, r.Title, picked)
+		}
+	}
+}
+
+func TestSpotifyAdapter_Search_skipsTopResultsMissingFromTheResults(t *testing.T) {
+	withTop := strings.Replace(spotifyFixtureResponse, `"searchV2": {`, `"searchV2": {
+      "topResultsV2": {"itemsV2": [
+        {"item": {"data": {"__typename": "Track", "uri": "spotify:track:notInTheResults"}}},
+        {"item": {"data": {"__typename": "Artist", "uri": "spotify:artist:1Xyo4u8uXC1ZmMpatF05PJ"}}}
+      ]},`, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(withTop))
+	}))
+	defer srv.Close()
+
+	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", allKinds())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range results {
+		if picked := domain.BoolExtra(r.Extras, domain.ExtraTopPick); picked != (r.Kind == domain.ResultKindArtist) {
+			t.Errorf("%s %q top pick = %v, want only the artist after the missing track", r.Kind, r.Title, picked)
+		}
+	}
 }

@@ -25,13 +25,18 @@ func capPerProvider(perProvider [][]domain.SearchResult) [][]domain.SearchResult
 type matchKey struct {
 	title    string
 	subtitle string
+	lead     string
 }
 
 func matchKeyOf(r domain.SearchResult) matchKey {
-	return matchKey{
-		title:    textnorm.NormalizeForMatch(r.Title),
-		subtitle: textnorm.NormalizeForMatch(r.Subtitle),
+	key := matchKey{
+		title:    matchName(r.Title),
+		subtitle: matchName(r.Subtitle),
 	}
+	if names := creditNames(r.Subtitle); len(names) > 0 {
+		key.lead = names[0]
+	}
+	return key
 }
 
 type keyedResult struct {
@@ -49,14 +54,14 @@ func Merge(perProvider [][]domain.SearchResult) []Entity {
 
 func mergeObserving(perProvider [][]domain.SearchResult, onCompare func()) []Entity {
 	perProvider = capPerProvider(perProvider)
-	ambiguous := ambiguousArtistNames(perProvider)
+	names := artistNameRulesOf(perProvider)
 	entities := make([]Entity, 0)
 	keys := make([]matchKey, 0)
 	for _, group := range perProvider {
 		for rank, c := range group {
 			cProviders := providersOf(c)
 			kc := keyed(c)
-			i, tier, ok := findMergeTarget(entities, keys, kc, ambiguous, onCompare)
+			i, tier, ok := findMergeTarget(entities, keys, kc, names, onCompare)
 			if !ok {
 				entities = append(entities, newEntity(c, cProviders, rank))
 				keys = append(keys, kc.key)
@@ -78,21 +83,89 @@ func newEntity(c domain.SearchResult, providers map[domain.ProviderName]bool, ra
 	return Entity{Result: c, BestRank: ranks}
 }
 
-func findMergeTarget(entities []Entity, keys []matchKey, c keyedResult, ambiguous map[string]bool, onCompare func()) (int, domain.EntityResolutionTier, bool) {
+func findMergeTarget(entities []Entity, keys []matchKey, c keyedResult, names artistNameRules, onCompare func()) (int, domain.EntityResolutionTier, bool) {
+	byName, found := 0, false
 	for i := range entities {
 		onCompare()
-		tier, ok := sameEntity(keyedResult{result: entities[i].Result, key: keys[i]}, c)
+		e := keyedResult{result: entities[i].Result, key: keys[i]}
+		tier, ok := sameEntity(e, c)
 		if !ok {
 			continue
 		}
-		if c.result.Kind == domain.ResultKindArtist &&
-			tier == domain.EntityResolutionNone &&
-			ambiguous[c.key.title] {
+		if c.result.Kind != domain.ResultKindArtist || tier != domain.EntityResolutionNone {
+			return i, tier, true
+		}
+		if names.blockNameJoin(e, c) {
 			continue
 		}
-		return i, tier, true
+		if !found || entities[i].Result.FanCount > entities[byName].Result.FanCount {
+			byName, found = i, true
+		}
 	}
-	return 0, domain.EntityResolutionNone, false
+	return byName, domain.EntityResolutionNone, found
+}
+
+type artistNameRules struct {
+	ambiguous map[string]bool
+	lesser    map[string]bool
+}
+
+func artistNameRulesOf(perProvider [][]domain.SearchResult) artistNameRules {
+	return artistNameRules{ambiguous: ambiguousArtistNames(perProvider), lesser: lesserSameNameArtists(perProvider)}
+}
+
+func (n artistNameRules) blockNameJoin(e, c keyedResult) bool {
+	return n.ambiguous[c.key.title] || n.lesser[artistSourceKey(c.result)] ||
+		n.lesser[artistSourceKey(e.result)] || claimsAnotherID(e.result, c.result)
+}
+
+func lesserSameNameArtists(perProvider [][]domain.SearchResult) map[string]bool {
+	lesser := make(map[string]bool)
+	for _, group := range perProvider {
+		lead := make(map[string]domain.SearchResult)
+		for _, r := range group {
+			if r.Kind != domain.ResultKindArtist || len(r.Sources) == 0 {
+				continue
+			}
+			name := matchName(r.Title)
+			best, seen := lead[name]
+			if seen && r.FanCount <= best.FanCount {
+				lesser[artistSourceKey(r)] = true
+				continue
+			}
+			if seen {
+				lesser[artistSourceKey(best)] = true
+			}
+			lead[name] = r
+		}
+	}
+	return lesser
+}
+
+func artistSourceKey(r domain.SearchResult) string {
+	if len(r.Sources) == 0 {
+		return ""
+	}
+	return release.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
+}
+
+func claimsAnotherID(e, c domain.SearchResult) bool {
+	for _, cs := range c.Sources {
+		sameProvider, sameID := false, false
+		for _, es := range e.Sources {
+			if es.Provider != cs.Provider {
+				continue
+			}
+			sameProvider = true
+			if es.ExternalID == cs.ExternalID {
+				sameID = true
+			}
+		}
+		if sameProvider && !sameID {
+			return true
+		}
+	}
+	return false
 }
 
 func recordBestRank(e *Entity, providers map[domain.ProviderName]bool, rank int) {
@@ -138,7 +211,8 @@ func sameName(kind domain.ResultKind, e, c matchKey) bool {
 	if kind == domain.ResultKindArtist {
 		return e.title != "" && e.title == c.title
 	}
-	return e.subtitle == c.subtitle && e.title != "" && e.title == c.title
+	sameCredit := e.subtitle == c.subtitle || (e.lead != "" && e.lead == c.lead)
+	return sameCredit && e.title != "" && e.title == c.title
 }
 
 func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) domain.SearchResult {
@@ -149,7 +223,7 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 	merged := domain.SearchResult{
 		Kind:           canonical.Kind,
 		Title:          canonical.Title,
-		Subtitle:       canonical.Subtitle,
+		Subtitle:       mergedCredit(canonical, other),
 		ImageURL:       imageURL,
 		ArtworkSource:  imageSource,
 		Confidence:     confidenceFor(tier, len(sources)),
@@ -161,6 +235,18 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 	carryIdentity(&merged, canonical, other, matchTier)
 	carryFields(&merged, canonical, other)
 	return merged
+}
+
+func mergedCredit(canonical, other domain.SearchResult) string {
+	if onlyFromSoundCloud(canonical) && !onlyFromSoundCloud(other) && other.Subtitle != "" {
+		return other.Subtitle
+	}
+	return canonical.Subtitle
+}
+
+func onlyFromSoundCloud(r domain.SearchResult) bool {
+	provs := providersOf(r)
+	return len(provs) == 1 && provs[domain.ProviderSoundCloud]
 }
 
 func orderByCompleteness(canonical, other domain.SearchResult) (domain.SearchResult, domain.SearchResult) {
@@ -192,8 +278,8 @@ func carryFields(merged *domain.SearchResult, canonical, other domain.SearchResu
 	merged.Year = firstNonZero(canonical.Year, other.Year)
 	merged.ReleaseDate = firstNonEmpty(canonical.ReleaseDate, other.ReleaseDate)
 	merged.TrackCount = firstNonZero(canonical.TrackCount, other.TrackCount)
-	merged.ProviderRank = firstNonZero(canonical.ProviderRank, other.ProviderRank)
-	merged.FanCount = firstNonZero(canonical.FanCount, other.FanCount)
+	merged.ProviderRank = max(canonical.ProviderRank, other.ProviderRank)
+	merged.FanCount = max(canonical.FanCount, other.FanCount)
 	merged.Album = firstNonEmpty(canonical.Album, other.Album)
 	merged.Duration = firstNonZero(canonical.Duration, other.Duration)
 	merged.DeezerAlbumID = firstNonEmpty(canonical.DeezerAlbumID, other.DeezerAlbumID)

@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -21,6 +23,8 @@ type scored struct {
 	rrf        float64
 	multi      bool
 	demoted    bool
+	topPick    bool
+	ofPick     bool
 }
 
 type rankConfig struct {
@@ -51,6 +55,7 @@ func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 	}
 
 	rarity := queryTokenRarity(queryNorm, eligible)
+	pickedArtist := pickedArtistName(eligible)
 
 	results := make([]scored, 0, len(eligible))
 	for _, e := range eligible {
@@ -72,6 +77,8 @@ func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 			rrf:        rrfScore(e.BestRank),
 			multi:      len(providersOf(r)) > 1,
 			demoted:    demoted,
+			topPick:    domain.BoolExtra(r.Extras, domain.ExtraTopPick),
+			ofPick:     pickedArtist != "" && r.Kind != domain.ResultKindArtist && creditsArtist(r, pickedArtist),
 		})
 	}
 
@@ -82,6 +89,12 @@ func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 func rankLess(a, b scored) bool {
 	if a.demoted != b.demoted {
 		return !a.demoted
+	}
+	if a.topPick != b.topPick {
+		return a.topPick
+	}
+	if a.ofPick != b.ofPick {
+		return a.ofPick
 	}
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
@@ -147,6 +160,38 @@ func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {
 		}
 	}
 	return false
+}
+
+func pickedArtistName(eligible []Entity) string {
+	for _, e := range eligible {
+		if e.Result.Kind == domain.ResultKindArtist && domain.BoolExtra(e.Result.Extras, domain.ExtraTopPick) {
+			return matchName(e.Result.Title)
+		}
+	}
+	return ""
+}
+
+var creditSeparatorRe = regexp.MustCompile(`(?i)\s*(?:&|,|\s+x\s+|\b(?:featuring|feat|ft)\b\.?)\s*`)
+
+func matchName(s string) string {
+	if norm := textnorm.NormalizeForMatch(s); norm != "" {
+		return norm
+	}
+	return textnorm.FoldName(s)
+}
+
+func creditNames(credit string) []string {
+	var names []string
+	for _, part := range creditSeparatorRe.Split(credit, -1) {
+		if name := matchName(part); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func creditsArtist(r domain.SearchResult, artistNorm string) bool {
+	return matchName(r.Subtitle) == artistNorm || slices.Contains(creditNames(r.Subtitle), artistNorm)
 }
 
 func hasBrowseableSource(r domain.SearchResult) bool {
@@ -244,7 +289,7 @@ func RankWith(entities []Entity, queryNorm string, opts RankOptions) []domain.Se
 }
 
 func Reshape(ranked []domain.SearchResult) []domain.SearchResult {
-	return CollapseArtistDuplicates(EnforceDiversity(ranked))
+	return CollapseArtistDuplicates(EnforceDiversity(DropCollabArtistCards(ranked)))
 }
 
 func rankPipelineWith(

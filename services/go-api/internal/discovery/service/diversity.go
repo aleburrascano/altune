@@ -40,6 +40,44 @@ func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
 	return out
 }
 
+func DropCollabArtistCards(results []domain.SearchResult) []domain.SearchResult {
+	fans := make(map[string]int64)
+	for _, r := range results {
+		if r.Kind == domain.ResultKindArtist {
+			name := matchName(r.Title)
+			fans[name] = max(fans[name], r.FanCount)
+		}
+	}
+	out := make([]domain.SearchResult, 0, len(results))
+	for _, r := range results {
+		if r.Kind != domain.ResultKindArtist || !isCollabOfListedArtist(r, fans) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func isCollabOfListedArtist(card domain.SearchResult, fans map[string]int64) bool {
+	if domain.BoolExtra(card.Extras, domain.ExtraTopPick) || !onlyFromDeezer(card) {
+		return false
+	}
+	names := creditNames(card.Title)
+	if len(names) < 2 {
+		return false
+	}
+	for _, name := range names {
+		if soloFans, listed := fans[name]; listed && soloFans > card.FanCount {
+			return true
+		}
+	}
+	return false
+}
+
+func onlyFromDeezer(r domain.SearchResult) bool {
+	provs := providersOf(r)
+	return len(provs) == 1 && provs[domain.ProviderDeezer]
+}
+
 func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResult {
 	type group struct {
 		primaryIdx int

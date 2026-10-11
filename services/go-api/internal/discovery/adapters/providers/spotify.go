@@ -110,7 +110,39 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 			results = append(results, r)
 		}
 	}
+	for _, top := range sv2.TopResultsV2.ItemsV2 {
+		if markSpotifyTopPick(results, top.Item.Data.URI) {
+			break
+		}
+	}
 	return results, status, nil
+}
+
+func markSpotifyTopPick(results []domain.SearchResult, uri string) bool {
+	kind, ok := spotifyKindFromURI(uri)
+	if !ok {
+		return false
+	}
+	id := spotifyIDFromURI(uri)
+	for i := range results {
+		if results[i].Kind == kind && results[i].Sources[0].ExternalID == id {
+			results[i].Extras[domain.ExtraTopPick] = true
+			return true
+		}
+	}
+	return false
+}
+
+func spotifyKindFromURI(uri string) (domain.ResultKind, bool) {
+	switch {
+	case strings.HasPrefix(uri, "spotify:artist:"):
+		return domain.ResultKindArtist, true
+	case strings.HasPrefix(uri, "spotify:album:"):
+		return domain.ResultKindAlbum, true
+	case strings.HasPrefix(uri, "spotify:track:"):
+		return domain.ResultKindTrack, true
+	}
+	return domain.ResultKindUnknown, false
 }
 
 func spotifyPathfinderHeaders(sess *spotifySession) []providerhttp.ReqOption {
@@ -162,6 +194,15 @@ type spotifyImage struct {
 type spotifySearchResponse struct {
 	Data struct {
 		SearchV2 struct {
+			TopResultsV2 struct {
+				ItemsV2 []struct {
+					Item struct {
+						Data struct {
+							URI string `json:"uri"`
+						} `json:"data"`
+					} `json:"item"`
+				} `json:"itemsV2"`
+			} `json:"topResultsV2"`
 			TracksV2 struct {
 				Items []struct {
 					Item struct {

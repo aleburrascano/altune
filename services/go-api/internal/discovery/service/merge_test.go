@@ -814,3 +814,184 @@ func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *te
 		t.Errorf("MBID = %q, want mbid-proven kept (the proven side, not the merely more complete candidate)", r.MBID)
 	}
 }
+
+func artistWithID(name string, provider domain.ProviderName, id string, fans int64, image string) domain.SearchResult {
+	return domain.SearchResult{
+		Kind:     domain.ResultKindArtist,
+		Title:    name,
+		ImageURL: image,
+		FanCount: fans,
+		Sources:  []domain.SourceRef{{Provider: provider, ExternalID: id}},
+	}
+}
+
+func entityWithSource(t *testing.T, entities []Entity, provider domain.ProviderName, id string) Entity {
+	t.Helper()
+	for _, e := range entities {
+		for _, s := range e.Result.Sources {
+			if s.Provider == provider && s.ExternalID == id {
+				return e
+			}
+		}
+	}
+	t.Fatalf("no entity holds %s:%s", provider, id)
+	return Entity{}
+}
+
+func TestMerge_SameNameArtistsWithDifferentIDsFromOneProviderStayApart(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{{
+		artistWithID("Michael Jackson", domain.ProviderDeezer, "373427811", 211, "https://img/fan.jpg"),
+		artistWithID("Michael Jackson", domain.ProviderDeezer, "259", 13187101, "https://img/mj.jpg"),
+	}})
+
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want 2: two Deezer ids are two different artists", len(entities))
+	}
+}
+
+func TestMerge_AnotherProviderJoinsTheMostPopularSameNameArtist(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{
+			artistWithID("Michael Jackson", domain.ProviderDeezer, "373427811", 211, "https://img/fan.jpg"),
+			artistWithID("Michael Jackson", domain.ProviderDeezer, "259", 13187101, "https://img/mj.jpg"),
+		},
+		{artistWithID("Michael Jackson", domain.ProviderSpotify, "3fMbdgg4jU18AjLCKBhRSm", 0, "https://img/sp.jpg")},
+	})
+
+	real := entityWithSource(t, entities, domain.ProviderDeezer, "259")
+	if len(real.Result.Sources) != 2 {
+		t.Fatalf("the 13M-fan artist has sources %v, want Spotify to join it", real.Result.Sources)
+	}
+	if fan := entityWithSource(t, entities, domain.ProviderDeezer, "373427811"); len(fan.Result.Sources) != 1 {
+		t.Errorf("the 211-fan account took sources %v, want only its own", fan.Result.Sources)
+	}
+}
+
+func TestMerge_KeepsTheLargestFanCount(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{artistWithID("Drake", domain.ProviderAppleMusic, "271256", 5, "https://img/apple.jpg")},
+		{artistWithID("Drake", domain.ProviderDeezer, "246791", 24104376, "")},
+	})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	if got := entities[0].Result.FanCount; got != 24104376 {
+		t.Errorf("FanCount = %d, want the largest, 24104376", got)
+	}
+}
+
+func TestMerge_ReuploadsOfOneTrackOnOneProviderStillFold(t *testing.T) {
+	first := res(domain.ResultKindTrack, "Smooth Criminal", "Michael Jackson", domain.ProviderSoundCloud, nil)
+	second := res(domain.ResultKindTrack, "Smooth Criminal", "Michael Jackson", domain.ProviderSoundCloud, nil)
+	second.Sources[0].ExternalID = "another-upload"
+
+	if entities := Merge([][]domain.SearchResult{{first, second}}); len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1: the same-provider rule is for artists only", len(entities))
+	}
+}
+
+func TestMerge_TheMergedArtistKeepsSpotifysTopPick(t *testing.T) {
+	picked := artistWithID("Cochise", domain.ProviderSpotify, "sp1", 0, "https://img/sp.jpg")
+	picked.Extras = map[string]any{domain.ExtraTopPick: true}
+
+	entities := Merge([][]domain.SearchResult{
+		{artistWithID("Cochise", domain.ProviderDeezer, "dz1", 500000, "https://img/dz.jpg")},
+		{picked},
+	})
+
+	merged := entityWithSource(t, entities, domain.ProviderDeezer, "dz1")
+	if len(merged.Result.Sources) != 2 || !domain.BoolExtra(merged.Result.Extras, domain.ExtraTopPick) {
+		t.Fatalf("merged artist = sources %v extras %v, want Spotify joined and the top pick kept", merged.Result.Sources, merged.Result.Extras)
+	}
+}
+
+func TestMerge_ASongCreditedWithExtraNamesFoldsIntoTheLeadArtistsSong(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{track("Yacht Club (feat. Juice WRLD)", "Lil Yachty", domain.ProviderDeezer, nil)},
+		{track("Yacht Club (feat. Juice WRLD)", "Lil Yachty, RD, Lil Boat", domain.ProviderSoundCloud, nil)},
+	})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want one Yacht Club", len(entities))
+	}
+}
+
+func TestMerge_AnAlbumWithACoCreditFoldsIntoTheLeadArtistsAlbum(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{res(domain.ResultKindAlbum, "Her Loss", "Drake & 21 Savage", domain.ProviderAppleMusic, nil)},
+		{res(domain.ResultKindAlbum, "Her Loss", "Drake", domain.ProviderSpotify, nil)},
+	})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want one Her Loss", len(entities))
+	}
+}
+
+func TestMerge_SameTitleByADifferentLeadArtistStaysApart(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{track("Cochise", "Audioslave", domain.ProviderDeezer, nil)},
+		{track("Cochise", "Cochise, Audioslave", domain.ProviderSoundCloud, nil)},
+	})
+
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want the two songs apart", len(entities))
+	}
+}
+
+func TestMerge_TheCatalogCreditBeatsASoundCloudAccountName(t *testing.T) {
+	upload := track("Yacht Club (feat. Juice WRLD)", "Lil Yachty, RD, Lil Boat", domain.ProviderSoundCloud, nil)
+	upload.ImageURL, upload.Duration, upload.Album = "https://img/sc.jpg", 180, "Lil Boat"
+
+	for _, order := range [][][]domain.SearchResult{
+		{{track("Yacht Club (feat. Juice WRLD)", "Lil Yachty", domain.ProviderDeezer, nil)}, {upload}},
+		{{upload}, {track("Yacht Club (feat. Juice WRLD)", "Lil Yachty", domain.ProviderDeezer, nil)}},
+	} {
+		entities := Merge(order)
+		if len(entities) != 1 {
+			t.Fatalf("got %d entities, want one Yacht Club", len(entities))
+		}
+		if got := entities[0].Result.Subtitle; got != "Lil Yachty" {
+			t.Errorf("subtitle %q, want the catalog credit Lil Yachty", got)
+		}
+	}
+}
+
+func TestMerge_SymbolOnlyArtistNamesStillMatch(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{artistWithID("¥$", domain.ProviderDeezer, "dz", 900000, "https://img/dz.jpg")},
+		{artistWithID("¥$", domain.ProviderSpotify, "sp", 0, "https://img/sp.jpg")},
+	})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want the Deezer and Spotify ¥$ as one", len(entities))
+	}
+}
+
+func TestMerge_DifferentSymbolOnlyNamesStayApart(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{artistWithID("¥$", domain.ProviderDeezer, "dz", 900000, "")},
+		{artistWithID("$$$", domain.ProviderSpotify, "sp", 0, "")},
+	})
+
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want ¥$ and $$$ apart", len(entities))
+	}
+}
+
+func TestMerge_AnotherProviderJoinsTheMostPopularSameNameArtistWhicheverComesFirst(t *testing.T) {
+	entities := Merge([][]domain.SearchResult{
+		{artistWithID("Michael Jackson", domain.ProviderSpotify, "3fMbdgg4jU18AjLCKBhRSm", 0, "https://img/sp.jpg")},
+		{
+			artistWithID("Michael Jackson", domain.ProviderDeezer, "373427811", 211, "https://img/fan.jpg"),
+			artistWithID("Michael Jackson", domain.ProviderDeezer, "259", 13187101, "https://img/mj.jpg"),
+		},
+	})
+
+	if real := entityWithSource(t, entities, domain.ProviderDeezer, "259"); len(real.Result.Sources) != 2 {
+		t.Fatalf("the 13M-fan artist has sources %v, want Spotify to join it", real.Result.Sources)
+	}
+	if fan := entityWithSource(t, entities, domain.ProviderDeezer, "373427811"); len(fan.Result.Sources) != 1 {
+		t.Errorf("the 211-fan account took sources %v, want only its own", fan.Result.Sources)
+	}
+}

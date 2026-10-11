@@ -607,3 +607,111 @@ func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 		})
 	}
 }
+
+func topPick(r domain.SearchResult) domain.SearchResult {
+	r.Extras = map[string]any{domain.ExtraTopPick: true}
+	return r
+}
+
+func TestRank_ProvidersTopPickOutranksASameTitleSongByAnotherArtist(t *testing.T) {
+	song := deezerTrack("Cochise", "Audioslave", 90)
+	rapper := multiSource(res(domain.ResultKindArtist, "Cochise", "", domain.ProviderSpotify, nil), domain.ProviderDeezer)
+
+	base := Rank([]Entity{ent(rapper), ent(song)}, "cochise")
+	if len(base) != 2 || base[0].Kind != domain.ResultKindTrack {
+		t.Fatalf("baseline precondition: expected the Audioslave song first, got %v", titles(base))
+	}
+
+	got := Rank([]Entity{ent(song), ent(topPick(rapper))}, "cochise")
+	if len(got) != 2 || got[0].Kind != domain.ResultKindArtist {
+		t.Fatalf("ranking = %v, want Spotify's top pick (the artist) first", titles(got))
+	}
+}
+
+func TestRank_TopPickStillHasToShareAQueryWord(t *testing.T) {
+	unrelated := topPick(res(domain.ResultKindArtist, "Someone Else", "", domain.ProviderSpotify, nil))
+	match := deezerTrack("Humble", "Kendrick Lamar", 10)
+
+	got := Rank([]Entity{ent(unrelated), ent(match)}, "humble")
+	if len(got) != 1 || got[0].Title != "Humble" {
+		t.Fatalf("ranking = %v, want only the result that shares a query word", titles(got))
+	}
+}
+
+func TestRankWith_DemotedTopPickStaysBelowCleanResults(t *testing.T) {
+	junk := topPick(track("rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil))
+	clean := deezerTrack("Encore", "Che", 10)
+
+	got := rankWith([]Entity{ent(junk), ent(clean)}, "rest in bass encore", rankConfig{demote: isLowConfidenceTail})
+	if len(got) != 2 || got[0].Subtitle != "Che" {
+		t.Fatalf("ranking = %v, want the clean result above the demoted top pick", titles(got))
+	}
+}
+
+func pickedArtist(name string) domain.SearchResult {
+	return topPick(multiSource(res(domain.ResultKindArtist, name, "", domain.ProviderSpotify, nil), domain.ProviderDeezer))
+}
+
+func TestRank_ThePickedArtistsSongsOutrankSameTitleSongsByOthers(t *testing.T) {
+	other := deezerTrack("Cochise", "Audioslave", 90)
+	own := deezerTrack("Hatchback", "Cochise", 10)
+
+	got := Rank([]Entity{ent(other), ent(own), ent(pickedArtist("Cochise"))}, "cochise")
+
+	want := []string{"Cochise", "Hatchback", "Cochise"}
+	if len(got) != 3 || got[1].Subtitle != "Cochise" || got[2].Subtitle != "Audioslave" {
+		t.Fatalf("ranking = %v by %v, want %v (pick, its song, then Audioslave's)", titles(got), subtitles(got), want)
+	}
+}
+
+func TestRank_ThePickedArtistsSongsOutrankLookalikeArtists(t *testing.T) {
+	lookalike := multiSource(res(domain.ResultKindArtist, "Drake Bell", "", domain.ProviderDeezer, nil), domain.ProviderSpotify)
+	lookalikeSong := deezerTrack("Found a Way", "Drake Bell", 80)
+	own := deezerTrack("One Dance", "Drake", 10)
+
+	got := Rank([]Entity{ent(lookalike), ent(lookalikeSong), ent(own), ent(pickedArtist("Drake"))}, "drake")
+
+	if len(got) != 4 || got[0].Title != "Drake" || got[1].Title != "One Dance" {
+		t.Fatalf("ranking = %v, want Drake then One Dance above Drake Bell", titles(got))
+	}
+}
+
+func TestCreditsArtist(t *testing.T) {
+	tests := []struct {
+		name, artist, credit string
+		want                 bool
+	}{
+		{"main artist", "Drake", "Drake", true},
+		{"different case", "Drake", "DRAKE", true},
+		{"listed with a comma", "Drake", "Future, Drake", true},
+		{"listed with an ampersand", "Drake", "Future & Drake", true},
+		{"featured", "Drake", "Future feat. Drake", true},
+		{"a name with a comma in it", "Tyler, The Creator", "Tyler, The Creator", true},
+		{"a longer name that starts the same", "Drake", "Drake Bell", false},
+		{"someone else", "Drake", "Audioslave", false},
+		{"no credit", "Drake", "", false},
+		{"a name made of symbols", "¥$", "¥$", true},
+		{"a symbol name listed with others", "¥$", "¥$, Kanye West", true},
+		{"another symbol name", "¥$", "$$$", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			song := deezerTrack("Some Song", tt.credit, 10)
+			if got := creditsArtist(song, matchName(tt.artist)); got != tt.want {
+				t.Errorf("creditsArtist(%q, %q) = %v, want %v", tt.credit, tt.artist, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRank_ATrackPickDoesNotLiftItsArtistsOtherSongs(t *testing.T) {
+	pick := topPick(deezerTrack("Humble", "Kendrick Lamar", 10))
+	exact := deezerTrack("Humble", "Someone", 50)
+	sameArtist := deezerTrack("Humble Beginnings", "Kendrick Lamar", 99)
+
+	got := Rank([]Entity{ent(sameArtist), ent(exact), ent(pick)}, "humble")
+
+	if len(got) != 3 || got[0].Subtitle != "Kendrick Lamar" || got[1].Subtitle != "Someone" {
+		t.Fatalf("ranking = %v by %v, want the pick, then the exact title, then the partial", titles(got), subtitles(got))
+	}
+}

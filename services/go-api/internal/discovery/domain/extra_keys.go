@@ -25,7 +25,13 @@ const (
 	ExtraTrackPosition      = "track_position"
 	ExtraRecordType         = "record_type"
 	ExtraResolutionTier     = "resolution_tier"
+	ExtraTopPick            = "top_pick"
 )
+
+func BoolExtra(extras map[string]any, key string) bool {
+	v, _ := extras[key].(bool)
+	return v
+}
 
 func StringExtra(extras map[string]any, key string) string {
 	v, _ := extras[key].(string)

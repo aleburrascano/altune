@@ -1,6 +1,7 @@
 package service
 
 import (
+	"slices"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
@@ -172,4 +173,89 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 			t.Error("single artist should not have collapsed_artists")
 		}
 	})
+}
+
+func withFans(r domain.SearchResult, fans int64) domain.SearchResult {
+	r.FanCount = fans
+	return r
+}
+
+func TestDropCollabArtistCards(t *testing.T) {
+	yachty := withFans(artistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	cochise := withFans(artistResult(domain.ProviderDeezer, "2", "Cochise", nil), 400_000)
+	simon := withFans(artistResult(domain.ProviderDeezer, "3", "Simon", nil), 100)
+
+	tests := []struct {
+		name  string
+		card  domain.SearchResult
+		with  []domain.SearchResult
+		keeps bool
+	}{
+		{"comma collab", withFans(artistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil), 0), []domain.SearchResult{yachty}, false},
+		{"x collab", withFans(artistResult(domain.ProviderDeezer, "11", "BIA x Lil Yachty", nil), 11), []domain.SearchResult{yachty}, false},
+		{"ampersand collab", withFans(artistResult(domain.ProviderDeezer, "12", "Cochise & $NOT", nil), 1233), []domain.SearchResult{cochise}, false},
+		{"feat collab", withFans(artistResult(domain.ProviderDeezer, "13", "Lil Yachty Feat. ian", nil), 0), []domain.SearchResult{yachty}, false},
+		{"a real duo bigger than its namesake", withFans(artistResult(domain.ProviderDeezer, "14", "Simon & Garfunkel", nil), 2_000_000), []domain.SearchResult{simon}, true},
+		{"a collab with none of its artists in the results", withFans(artistResult(domain.ProviderDeezer, "15", "DDG, Lil Yachty", nil), 0), nil, true},
+		{"a name with a comma in it", withFans(artistResult(domain.ProviderDeezer, "16", "Tyler, The Creator", nil), 9_000_000), nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DropCollabArtistCards(append(append([]domain.SearchResult{}, tt.with...), tt.card))
+			kept := false
+			for _, r := range got {
+				kept = kept || r.Title == tt.card.Title
+			}
+			if kept != tt.keeps {
+				t.Errorf("%q kept = %v, want %v", tt.card.Title, kept, tt.keeps)
+			}
+			for _, solo := range tt.with {
+				if !slices.Contains(titles(got), solo.Title) {
+					t.Errorf("dropped the solo artist %q: %v", solo.Title, titles(got))
+				}
+			}
+		})
+	}
+}
+
+func TestDropCollabArtistCards_LeavesSongsWithCollabCreditsAlone(t *testing.T) {
+	yachty := withFans(artistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	song := trackResult(domain.ProviderDeezer, "20", "POP IT", "DDG, Lil Yachty", nil)
+
+	if got := DropCollabArtistCards([]domain.SearchResult{yachty, song}); len(got) != 2 {
+		t.Fatalf("got %v, want the song kept", titles(got))
+	}
+}
+
+func TestReshape_DropsCollabArtistCards(t *testing.T) {
+	yachty := withFans(artistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	collab := artistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil)
+
+	if got := Reshape([]domain.SearchResult{yachty, collab}); len(got) != 1 {
+		t.Fatalf("got %v, want only Lil Yachty", titles(got))
+	}
+}
+
+func TestDropCollabArtistCards_KeepsArtistsAnotherProviderConfirms(t *testing.T) {
+	fire := withFans(artistResult(domain.ProviderDeezer, "1", "Fire", nil), 9_000_000)
+	band := withFans(artistResult(domain.ProviderDeezer, "2", "Earth, Wind & Fire", nil), 3_000_000)
+	band.Sources = append(band.Sources, domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: "sp"})
+
+	got := DropCollabArtistCards([]domain.SearchResult{fire, band})
+
+	if !slices.Equal(titles(got), []string{"Fire", "Earth, Wind & Fire"}) {
+		t.Fatalf("got %v, want the band Spotify also lists kept", titles(got))
+	}
+}
+
+func TestDropCollabArtistCards_KeepsTheTopPick(t *testing.T) {
+	yachty := withFans(artistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
+	picked := artistResult(domain.ProviderDeezer, "2", "Simon & Garfunkel", map[string]any{domain.ExtraTopPick: true})
+	simon := withFans(artistResult(domain.ProviderDeezer, "3", "Simon", nil), 9_000_000)
+
+	got := DropCollabArtistCards([]domain.SearchResult{yachty, simon, picked})
+
+	if !slices.Contains(titles(got), "Simon & Garfunkel") {
+		t.Fatalf("got %v, want the top pick kept", titles(got))
+	}
 }
