@@ -58,11 +58,11 @@ function appStateListeners(): AppStateChangeHandler[] {
   ).__listeners;
 }
 
-function artistResult(): DiscoveryResult {
+function albumResult(): DiscoveryResult {
   return {
-    kind: 'artist',
-    title: 'Radiohead',
-    subtitle: null,
+    kind: 'album',
+    title: 'OK Computer',
+    subtitle: 'Radiohead',
     image_url: null,
     confidence: 'high',
     sources: [],
@@ -130,16 +130,17 @@ describe('detail health metric', () => {
       status: 200,
       json: emptyEnrichmentResponse(),
     });
-    __http.fail('GET /v1/discovery/enrichment/lastfm');
+    __http.fail('GET /v1/discovery/enrichment/deezer');
 
-    const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+    const { result } = renderHook(() => useDetailEnrichments(albumResult()), {
       wrapper: createWrapper(createTestQueryClient()),
     });
-    await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
+    await waitFor(() => expect(result.current.errors.deezer).toBe(true));
+    await waitFor(() => expect(__http.countFor('GET /v1/discovery/enrichment')).toBe(1));
     flushDetailHealth();
 
     expect(sentPayloads()).toEqual([
-      { ...emptyTallyPayload(), enrichment_musicbrainz_ok: 1, enrichment_lastfm_failed: 1 },
+      { ...emptyTallyPayload(), enrichment_musicbrainz_ok: 1, enrichment_deezer_failed: 1 },
     ]);
   });
 

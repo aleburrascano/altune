@@ -22,11 +22,18 @@ jest.mock('expo-router', () => {
     Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
   };
 });
+type ArtistDiscoveryArgs = { artistName: string; enabled: boolean };
+type Resolve = (result: DiscoveryResult) => unknown;
+let mockResolution: Resolve | null = null;
 jest.mock('@/features/detail/hooks/useResolveMissingSources', () => ({
-  useResolveMissingSources: (result: unknown) => ({ resolved: result }),
+  useResolveMissingSources: (result: DiscoveryResult) =>
+    mockResolution ? mockResolution(result) : { resolved: result, isResolving: false },
+}));
+const mockArtistDiscovery = jest.fn((_args: ArtistDiscoveryArgs) => ({
+  imageUrl: null,
 }));
 jest.mock('@/features/detail/hooks/useEntityDiscovery', () => ({
-  useArtistDiscovery: () => ({ imageUrl: null }),
+  useArtistDiscovery: (args: ArtistDiscoveryArgs) => mockArtistDiscovery(args),
 }));
 jest.mock('@/features/detail/hooks/useDetailEnrichments', () => ({
   useDetailEnrichments: () => ({
@@ -61,6 +68,41 @@ function track(title: string): DiscoveryResult {
 beforeEach(() => {
   clearDetailHandoffs();
   mockParams = {};
+  mockResolution = null;
+  mockArtistDiscovery.mockClear();
+});
+
+describe('DetailScreen on a library artist page', () => {
+  const libraryArtist: DiscoveryResult = { ...track('Radiohead'), kind: 'artist', subtitle: null };
+  const found = { provider: 'deezer', external_id: '399' } as DiscoveryResult['sources'][number];
+
+  function renderArtist(resolution: (result: DiscoveryResult) => unknown) {
+    mockResolution = resolution;
+    mockParams = { handoff: detailHref('/discover/detail', libraryArtist).params.handoff };
+    render(<DetailScreen />);
+    return mockArtistDiscovery.mock.calls.map(([args]) => args.enabled);
+  }
+
+  it('does not search again for a photo once the first search found the artist', () => {
+    const enabled = renderArtist((result) => ({
+      resolved: { ...result, sources: [found] },
+      isResolving: false,
+    }));
+
+    expect(enabled).not.toContain(true);
+  });
+
+  it('does not search again while the first search is still running', () => {
+    const enabled = renderArtist((result) => ({ resolved: result, isResolving: true }));
+
+    expect(enabled).not.toContain(true);
+  });
+
+  it('searches for a photo when the first search found nothing', () => {
+    const enabled = renderArtist((result) => ({ resolved: result, isResolving: false }));
+
+    expect(enabled).toContain(true);
+  });
 });
 
 describe('DetailScreen reads the handoff named by its route param', () => {

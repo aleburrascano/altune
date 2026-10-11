@@ -6,6 +6,7 @@ import { featuredArtistsFromExtras } from '@shared/apiClient/featuredArtists';
 import { tabRootFromSegments } from '@shared/navigation';
 
 import { useArtistDiscovery } from '@features/detail/hooks/useEntityDiscovery';
+import { realPhotoUrl } from '@features/detail/domain/artistPhoto';
 import { useDetailEnrichments } from '@features/detail/hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '@features/detail/hooks/useResolveMissingSources';
 import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
@@ -39,34 +40,31 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   const tabRoot = tabRootFromSegments(segments);
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = handoff.result;
-  const { resolved: result } = useResolveMissingSources(rawResult);
+  const { resolved: entity, isResolving } = useResolveMissingSources(rawResult);
   const lateralNav = useLateralNav(detailRoute);
 
-  const isArtist = result.kind === 'artist';
+  const isArtist = entity.kind === 'artist';
   const isLibraryArtist = isArtist && rawResult.sources.length === 0;
   const artistDiscovery = useArtistDiscovery({
-    artistName: result.title,
-    enabled: isLibraryArtist,
+    artistName: entity.title,
+    enabled: isLibraryArtist && !isResolving && entity.sources.length === 0,
   });
-  const enrichments = useDetailEnrichments(result);
+  const enrichments = useDetailEnrichments(entity);
 
-  const artworkUrl =
-    (result.image_url ?? '') !== ''
-      ? result.image_url
-      : isLibraryArtist
-        ? artistDiscovery.imageUrl
-        : result.image_url;
+  const searchedPhoto = isLibraryArtist ? artistDiscovery.imageUrl : null;
+  const artworkUrl = realPhotoUrl(entity.image_url) ?? searchedPhoto;
 
-  const albumCollaborators =
-    result.kind === 'album' ? featuredArtistsFromExtras(enrichments.deezer?.featured_artists) : [];
+  const albumCollaborators = featuredArtistsFromExtras(
+    entity.kind === 'album' ? enrichments.deezer?.featured_artists : null,
+  );
 
   const chrome: DetailChrome = {
-    title: result.title,
+    title: entity.title,
     artworkUrl,
     secondary: secondaryLine({
       isArtist,
       genreTags: enrichments.lastfm?.tags,
-      artist: result.subtitle,
+      artist: entity.subtitle,
       albumCollaborators,
       lateralNav,
     }),
@@ -79,22 +77,22 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
     },
   };
 
-  if (result.kind === 'album') {
+  if (entity.kind === 'album') {
     return (
       <AlbumDetailBody
         chrome={chrome}
-        result={result}
+        result={entity}
         detailRoute={detailRoute}
         mbYear={enrichments.musicbrainz?.year ?? 0}
       />
     );
   }
 
-  if (result.kind === 'artist') {
+  if (entity.kind === 'artist') {
     return (
       <ArtistDetailBody
         chrome={chrome}
-        result={result}
+        result={entity}
         detailRoute={detailRoute}
         lastfm={enrichments.lastfm}
         lastfmError={enrichments.errors.lastfm}
@@ -105,7 +103,7 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   return (
     <TrackDetailBody
       chrome={chrome}
-      result={result}
+      result={entity}
       lateralNav={lateralNav}
       detailRoute={detailRoute}
       deezerFeatured={featuredArtistsFromExtras(enrichments.deezer?.featured_artists)}

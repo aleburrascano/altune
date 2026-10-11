@@ -189,7 +189,7 @@ export function useDetailEnrichments(result: DiscoveryResult): DetailEnrichments
   const isArtist = kind === 'artist';
   const mbid = trackExtras(result.extras).mbid ?? undefined;
 
-  const mb = useEnrichment({ kind, title, subtitle, mbid });
+  const mb = useEnrichment({ kind, title, subtitle, mbid, enabled: isTrack || isAlbum });
   const dz = useDeezerEnrichment({ kind, title, subtitle, enabled: isTrack || isAlbum });
   const lf = useLastFmEnrichment({ kind, title, subtitle, enabled: isArtist });
 

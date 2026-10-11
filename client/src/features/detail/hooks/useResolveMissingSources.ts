@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
 import { normalizeForCompare } from '@/features/detail/domain/normalizeForCompare';
+import { realPhotoUrl } from '@/features/detail/domain/artistPhoto';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
 import { useDetailFetchEnabled } from '@/features/detail/hooks/useDetailFetchGate';
 
@@ -49,7 +50,12 @@ function findMatch(entity: DiscoveryResult, candidates: DiscoveryResult[]): Disc
 
 function withSourcesFrom(entity: DiscoveryResult, match: DiscoveryResult | null): DiscoveryResult {
   if (!match || match.sources.length === 0) return entity;
-  return { ...entity, sources: match.sources, extras: { ...match.extras, ...entity.extras } };
+  return {
+    ...entity,
+    image_url: realPhotoUrl(entity.image_url) ?? realPhotoUrl(match.image_url),
+    sources: match.sources,
+    extras: { ...match.extras, ...entity.extras },
+  };
 }
 
 type Resolution = { resolved: DiscoveryResult; isResolving: boolean };

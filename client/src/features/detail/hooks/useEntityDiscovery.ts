@@ -10,6 +10,7 @@ import {
 } from '@/features/detail/domain/contentStatus';
 import { fetchTallyingOutcome } from '@/features/detail/domain/detailHealth';
 import { resolveEntityQuery } from '@/features/detail/domain/resolveEntityQuery';
+import { realPhotoUrl } from '@/features/detail/domain/artistPhoto';
 import { useDetailPort } from '@/features/detail/ports/DetailPortProvider';
 import {
   useDetailFetchEnabled,
@@ -113,8 +114,6 @@ export function useAlbumDiscovery({
   };
 }
 
-const LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
-
 export function useArtistDiscovery({
   artistName,
   enabled,
@@ -134,9 +133,7 @@ export function useArtistDiscovery({
 
   useLoggedSearchFailure(error, { kind: 'artist', title: artistName, artist: null });
 
-  const rawImageUrl = searchResult?.image_url ?? null;
-  const isPlaceholder = rawImageUrl != null && rawImageUrl.includes(LASTFM_PLACEHOLDER_HASH);
-  const imageUrl = isPlaceholder ? null : rawImageUrl;
+  const imageUrl = realPhotoUrl(searchResult?.image_url);
 
   return {
     imageUrl,

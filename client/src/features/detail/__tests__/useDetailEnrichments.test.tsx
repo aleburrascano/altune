@@ -192,6 +192,21 @@ describe('useDetailEnrichments', () => {
     warnSpy.mockRestore();
   });
 
+  describe('useDetailEnrichments: asking only the providers a page shows', () => {
+    it('does not ask MusicBrainz on an artist page, which shows nothing from it', async () => {
+      __http.reply('GET /v1/discovery/enrichment/lastfm', { status: 200, json: emptyLastFm });
+      const queryClient = createTestQueryClient();
+
+      const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+        wrapper: createWrapper(queryClient),
+      });
+
+      await waitFor(() => expect(__http.countFor('GET /v1/discovery/enrichment/lastfm')).toBe(1));
+      await waitFor(() => expect(result.current.lastfm).toBeNull());
+      expect(__http.countFor('GET /v1/discovery/enrichment')).toBe(0);
+    });
+  });
+
   describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one', () => {
     it('flags the Last.fm error while still leaving its data null, distinguishing it from no content', async () => {
       __http.fail('GET /v1/discovery/enrichment/lastfm');

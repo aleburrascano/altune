@@ -116,6 +116,21 @@ describe('useResolveMissingSources', () => {
     expect(result.current.isResolving).toBe(false);
   });
 
+  it('takes the photo of the match when the result has none, and keeps its own otherwise', async () => {
+    const { port } = seeded([track({ sources: [source], image_url: 'https://img/match.jpg' })]);
+    const { result: bare } = renderHook(() => useResolveMissingSources(track()), {
+      wrapper: wrapperFor(port),
+    });
+    const { result: pictured } = renderHook(
+      () => useResolveMissingSources(track({ image_url: 'https://img/own.jpg' })),
+      { wrapper: wrapperFor(port) },
+    );
+
+    await waitFor(() => expect(bare.current.resolved.image_url).toBe('https://img/match.jpg'));
+    await waitFor(() => expect(pictured.current.resolved.sources).toEqual([source]));
+    expect(pictured.current.resolved.image_url).toBe('https://img/own.jpg');
+  });
+
   it('keeps the original result when no candidate matches', async () => {
     const { port } = seeded([track({ title: 'Paranoid Android', sources: [source] })]);
     const input = track();
