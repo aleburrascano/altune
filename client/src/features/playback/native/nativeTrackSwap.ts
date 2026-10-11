@@ -99,9 +99,15 @@ interface UpcomingSlot {
 }
 
 async function upcomingSlotOf(key: string, fence: Fence): Promise<UpcomingSlot | null> {
-  const queue = await TrackPlayer.getQueue().catch(() => []);
+  const queue = await TrackPlayer.getQueue().catch((err: unknown): Track[] => {
+    warnPlayback('could not read the native queue', {}, err);
+    return [];
+  });
   fence();
-  const activeIndex = await TrackPlayer.getActiveTrackIndex().catch(() => undefined);
+  const activeIndex = await TrackPlayer.getActiveTrackIndex().catch((err: unknown) => {
+    warnPlayback('could not read the active track index', {}, err);
+    return undefined;
+  });
   const after = activeIndex ?? -1;
   const index = queue.findIndex((t, i) => i > after && t.id === key);
   const entry = queue[index];

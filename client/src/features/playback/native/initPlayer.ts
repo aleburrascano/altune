@@ -1,5 +1,7 @@
 import TrackPlayer, { Capability } from 'react-native-track-player';
 
+import { warnPlayback } from '@features/playback/domain/playbackError';
+
 export const PLAYER_SETUP_TIMEOUT_MS = 15_000;
 
 export class PlayerSetupTimeoutError extends Error {
@@ -22,12 +24,15 @@ export function ensurePlayerSetup(): Promise<void> {
 function setupWithinBudget(): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const pending = setup();
-  pending.catch(() => undefined);
+  let hasTimedOut = false;
+  pending.catch((err: unknown) => {
+    if (hasTimedOut) warnPlayback('player setup failed after its deadline', {}, err);
+  });
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new PlayerSetupTimeoutError(PLAYER_SETUP_TIMEOUT_MS)),
-      PLAYER_SETUP_TIMEOUT_MS,
-    );
+    timer = setTimeout(() => {
+      hasTimedOut = true;
+      reject(new PlayerSetupTimeoutError(PLAYER_SETUP_TIMEOUT_MS));
+    }, PLAYER_SETUP_TIMEOUT_MS);
   });
   return Promise.race([pending, deadline]).finally(() => clearTimeout(timer));
 }

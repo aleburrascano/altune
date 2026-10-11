@@ -1,5 +1,6 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
+import { warnPlayback } from '@features/playback/domain/playbackError';
 import { clamp } from '@features/playback/domain/clamp';
 import { msToSeconds } from '@features/playback/domain/time';
 import { ensurePlayerSetup } from '@features/playback/native/initPlayer';
@@ -81,7 +82,9 @@ function tracksNativeHolds(
 async function rollbackUnlessStale(token: LoadToken, fence: Fence): Promise<void> {
   if (isStale(token)) return;
   fence();
-  await clearNativeQueue().catch(() => undefined);
+  await clearNativeQueue().catch((err: unknown) => {
+    warnPlayback('rollback could not clear the native queue', {}, err);
+  });
 }
 
 async function addAllOrRollback(tracks: AddTrack[], token: LoadToken, fence: Fence): Promise<void> {
@@ -207,7 +210,9 @@ async function reconcileUpcomingFromStore(): Promise<void> {
 }
 
 onNativeQueueTimeout(() => {
-  reconcileUpcomingFromStore().catch(() => undefined);
+  reconcileUpcomingFromStore().catch((err: unknown) => {
+    warnPlayback('reconcile after queue timeout failed', {}, err);
+  });
 });
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {

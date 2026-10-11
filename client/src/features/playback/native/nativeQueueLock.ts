@@ -1,3 +1,5 @@
+import { warnPlayback } from '@features/playback/domain/playbackError';
+
 export const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
 export class NativeQueueTimeoutError extends Error {
@@ -53,13 +55,17 @@ function withDeadline<T>(op: (fence: Fence) => Promise<T>): Promise<T> {
     timer = deadlineTimer(state, reject);
   });
   const pending = new Promise<T>((resolve) => resolve(op(fenceOf(state))));
-  pending.catch(() => undefined);
+  pending.catch((err: unknown) => {
+    if (state.hasExpired) warnPlayback('native queue operation failed after its deadline', {}, err);
+  });
   return Promise.race([pending, expired]).finally(() => clearTimeout(timer));
 }
+
+function advanceChain(): void {}
 
 export function withNativeQueue<T>(op: (fence: Fence) => Promise<T>): Promise<T> {
   const start = () => withDeadline(op);
   const run = chain.then(start, start);
-  chain = run.catch(() => undefined);
+  chain = run.then(advanceChain, advanceChain);
   return run;
 }
