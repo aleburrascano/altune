@@ -151,6 +151,18 @@ publish_export_with_inline_script_prod() {
     ln -sfn releases/def5678 "$WORK/web/prod/current"
 }
 
+publish_update() {
+    rm -rf "$WORK/web/updates"
+    mkdir -p "$WORK/web/updates/prod/manifests/$1" "$WORK/web/updates/prod/assets"
+    printf '%s' "$3" >"$WORK/web/updates/prod/manifests/$1/$2"
+}
+
+fetch_update() {
+    curl -sk --max-time 10 -o "$WORK/body" -D "$WORK/headers" -w '%{http_code}' \
+        -H 'expo-protocol-version: 1' -H "expo-runtime-version: $1" -H "expo-platform: $2" \
+        --resolve "$PROD:$EDGE_PORT:127.0.0.1" "https://$PROD:$EDGE_PORT/updates/manifest"
+}
+
 inline_script_digest() {
     printf '%s' "$1" | openssl dgst -sha256 -binary | base64
 }
@@ -349,6 +361,35 @@ printf '%s' "$STAGING_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
     fail "staging script-src '$STAGING_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
 printf '%s' "$PROD_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
     fail "prod script-src '$PROD_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
+
+CASE="ota: a published update is served to the shell of its runtime and platform"
+publish_update 1.0.0 ios 'signed manifest'
+[ "$(fetch_update 1.0.0 ios)" = 200 ] || fail "manifest for 1.0.0/ios answered $(cat "$WORK/body")"
+[ "$(cat "$WORK/body")" = 'signed manifest' ] || fail "manifest body was '$(cat "$WORK/body")'"
+[ "$(header_of Content-Type)" = 'multipart/mixed; boundary=altune-ota' ] ||
+    fail "manifest Content-Type was '$(header_of Content-Type)'"
+[ "$(header_of expo-protocol-version)" = 1 ] || fail "expo-protocol-version was '$(header_of expo-protocol-version)'"
+[ "$(header_of expo-sfv-version)" = 0 ] || fail "expo-sfv-version was '$(header_of expo-sfv-version)'"
+[ "$(header_of Cache-Control)" = 'private, max-age=0' ] || fail "manifest Cache-Control was '$(header_of Cache-Control)'"
+
+CASE="ota: a shell of another runtime gets no update"
+publish_update 1.0.0 ios 'signed manifest'
+[ "$(fetch_update 2.0.0 ios)" = 204 ] || fail "runtime 2.0.0 answered '$(cat "$WORK/body")', expected 204"
+[ "$(fetch_update 1.0.0 android)" = 204 ] || fail "android answered '$(cat "$WORK/body")', expected 204"
+
+CASE="ota: a runtime or platform header that is not a plain name is refused"
+publish_update 1.0.0 ios 'signed manifest'
+[ "$(fetch_update ../manifests/1.0.0 ios)" = 400 ] || fail "a path in the runtime header was not refused"
+[ "$(fetch_update 1.0.0 web)" = 400 ] || fail "platform web was not refused"
+[ "$(fetch_update '' ios)" = 400 ] || fail "a missing runtime header was not refused"
+
+CASE="ota: update assets are served immutable"
+publish_update 1.0.0 ios 'signed manifest'
+printf 'bundle bytes' >"$WORK/web/updates/prod/assets/abc_-123.js"
+expect_body "$PROD" /updates/assets/abc_-123.js 'bundle bytes'
+[ "$(header_of Cache-Control)" = "public, max-age=31536000, immutable" ] ||
+    fail "asset Cache-Control was '$(header_of Cache-Control)'"
+[ "$(fetch_status "$PROD" /updates/assets/missing.js)" = 404 ] || fail "a missing asset did not answer 404"
 
 skip "mh11: the Supabase redirect allow-list after the change is a superset of before" \
     "web sign-in redirects"
