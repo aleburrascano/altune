@@ -1,11 +1,12 @@
 import { useState, type ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import type { LayoutChangeEvent } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
 import { useWideWebLayout } from '@shared/ui/layout';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import {
   usePressableInteraction,
@@ -49,6 +50,7 @@ function seeAllStyle(theme: ReturnType<typeof useTheme>, size: number) {
 
 function seeAllPressableProps(props: SeeAllProps, theme: ReturnType<typeof useTheme>) {
   return {
+    action: 'detail.discography.see_all',
     testID: `detail-see-all-${props.typeKey}`,
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
@@ -71,9 +73,9 @@ function SeeAllContent({ theme }: { theme: ReturnType<typeof useTheme> }): React
 function SeeAllButton(props: SeeAllProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...seeAllPressableProps(props, theme)}>
+    <Tappable {...seeAllPressableProps(props, theme)}>
       <SeeAllContent theme={theme} />
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -302,6 +304,7 @@ type AlbumCardPressableArgs = {
 
 function albumCardPressableProps({ props, year, trackCount }: AlbumCardPressableArgs) {
   return {
+    action: 'detail.discography.album',
     testID: props.testID,
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
@@ -359,9 +362,9 @@ function AlbumCard(props: AlbumCardProps): ReactElement {
     albumCardStyle(theme, cardWidth, props.isGrid ?? false),
   );
   return (
-    <Pressable {...albumCardPressableProps({ props, year, trackCount })} {...pressableProps}>
+    <Tappable {...albumCardPressableProps({ props, year, trackCount })} {...pressableProps}>
       <CardBody album={props.album} year={year} trackCount={trackCount} cardWidth={cardWidth} />
-    </Pressable>
+    </Tappable>
   );
 }
 

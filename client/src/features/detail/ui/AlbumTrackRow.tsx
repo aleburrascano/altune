@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme/tokens';
 
@@ -37,7 +38,8 @@ export function AlbumTrackRow({
   const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
 
   return (
-    <Pressable
+    <Tappable
+      action="detail.album.track"
       testID={`detail-track-${index}`}
       onPress={onPress}
       accessibilityRole="button"
@@ -70,7 +72,7 @@ export function AlbumTrackRow({
         savingInBatch={savingInBatch}
         onPress={onQuickSave}
       />
-    </Pressable>
+    </Tappable>
   );
 }
 

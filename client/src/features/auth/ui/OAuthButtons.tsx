@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { ReactElement } from 'react';
 import Svg, { Path } from 'react-native-svg';
 
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
@@ -64,7 +65,8 @@ export function OAuthButtons(): ReactElement {
         <View style={[styles.rule, { backgroundColor: theme.color.border }]} />
       </View>
       <View style={styles.pillRow}>
-        <Pressable
+        <Tappable
+          action="auth.oauth.google"
           testID="oauth-google"
           onPress={() => void signInWith('google')}
           disabled={pending}
@@ -82,7 +84,7 @@ export function OAuthButtons(): ReactElement {
         >
           <GoogleLogo size={16} />
           <Text variant="label">Google</Text>
-        </Pressable>
+        </Tappable>
       </View>
       <AuthErrorBanner state={state} generic={OAUTH_ERROR} testID="oauth-error" />
     </View>

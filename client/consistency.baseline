@@ -13,10 +13,6 @@ MC-10 src/features/detail/hooks/useArtistContent.ts Query keys come from the que
 MC-10 src/features/detail/hooks/useRelatedTracks.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/domain/resolveEntityQuery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/domain/resolveEntityQuery.ts queryOptions() builds its own key; define it in the query-key factory (MC-10, module-shape M5).
-MC-4b src/features/auth/ui/OAuthButtons.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/AlbumRail.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/AlbumTrackRow.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/features/detail/ui/ArtistTopTracks.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/CollapsibleSectionHeader.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/DetailActions.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-4b src/features/detail/ui/DetailTopBar.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).

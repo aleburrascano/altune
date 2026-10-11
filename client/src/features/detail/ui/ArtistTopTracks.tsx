@@ -1,7 +1,8 @@
 import { useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme';
 
@@ -183,6 +184,7 @@ function TrackDurationLabel({ track }: { track: DiscoveryResult }): ReactElement
 
 function trackRowPressableProps(props: ArtistTopTrackRowProps) {
   return {
+    action: 'detail.artist.top_track',
     testID: `detail-top-track-${props.index}`,
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
@@ -206,12 +208,12 @@ function trackSaveProps(props: ArtistTopTrackRowProps) {
 
 function ArtistTopTrackRow(props: ArtistTopTrackRowProps): ReactElement {
   return (
-    <Pressable {...trackRowPressableProps(props)} style={pressedTrackRowStyle}>
+    <Tappable {...trackRowPressableProps(props)} style={pressedTrackRowStyle}>
       <TrackRank index={props.index} />
       <TrackIdentity track={props.track} />
       <TrackDurationLabel track={props.track} />
       <TrackSaveControl {...trackSaveProps(props)} />
-    </Pressable>
+    </Tappable>
   );
 }
 
