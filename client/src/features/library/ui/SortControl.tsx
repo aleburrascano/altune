@@ -1,7 +1,8 @@
 import { useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { ChevronDown } from 'lucide-react-native';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import type { SortKey } from '@features/library/domain/libraryView';
 
@@ -29,7 +30,8 @@ export function SortControl({
       <Text variant="label" tone="tertiary">
         {count} {count === 1 ? noun : `${noun}s`}
       </Text>
-      <Pressable
+      <Tappable
+        action="library.sort.open"
         testID="library-sort"
         onPress={() => setMenuVisible(true)}
         hitSlop={8}
@@ -39,7 +41,7 @@ export function SortControl({
       >
         <Text variant="label">{activeLabel}</Text>
         <ChevronDown size={14} color={theme.color.textPrimary} />
-      </Pressable>
+      </Tappable>
       <ActionSheet
         visible={menuVisible}
         title="Sort by"

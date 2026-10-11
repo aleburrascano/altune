@@ -1,14 +1,9 @@
 import { memo, useCallback, useMemo, type ReactElement } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  type ListRenderItem,
-} from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, type ListRenderItem } from 'react-native';
 import { Shuffle } from 'lucide-react-native';
 import type { TrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text, pressedStyle, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { Selection } from '@features/library/hooks/useSelection';
@@ -60,6 +55,7 @@ function ShuffleAllIcon({ busy }: { busy: boolean }): ReactElement {
 }
 
 const shuffleAllStatic = {
+  action: 'library.shuffle_all',
   testID: 'library-shuffle-all',
   accessibilityRole: 'button',
   accessibilityLabel: 'Shuffle whole library',
@@ -79,10 +75,10 @@ function useShuffleAllStyle() {
 function ShuffleAllButton({ onPress, busy }: { onPress: () => void; busy: boolean }): ReactElement {
   const style = useShuffleAllStyle();
   return (
-    <Pressable {...shuffleAllProps(onPress, busy)} style={style}>
+    <Tappable {...shuffleAllProps(onPress, busy)} style={style}>
       <ShuffleAllIcon busy={busy} />
       <Text variant="label">Shuffle all</Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

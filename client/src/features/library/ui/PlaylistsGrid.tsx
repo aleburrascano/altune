@@ -1,7 +1,8 @@
 import { useCallback, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { countLabel } from '@shared/ui/displayFormat';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text, pressedStyle, radius, spacing, useTheme } from '@shared/ui';
 import { LibraryGrid } from '@features/library/ui/LibraryGrid';
 import { PlaylistCover } from '@features/library/ui/PlaylistCover';
@@ -37,7 +38,8 @@ export function PlaylistsGrid({
     ({ item }: { item: Cell }) => {
       if (item.kind === 'create') {
         return (
-          <Pressable
+          <Tappable
+            action="library.playlist.create"
             testID="library-create-playlist"
             onPress={onCreatePress}
             style={({ pressed }) => [styles.cell, pressedStyle(pressed)]}
@@ -62,12 +64,13 @@ export function PlaylistsGrid({
             <Text variant="label" tone="secondary" numberOfLines={1}>
               New Playlist
             </Text>
-          </Pressable>
+          </Tappable>
         );
       }
       const { playlist } = item;
       return (
-        <Pressable
+        <Tappable
+          action="library.playlist.open"
           testID={`library-playlist-${playlist.id}`}
           onPress={() => onPlaylistPress(playlist)}
           style={({ pressed }) => [styles.cell, pressedStyle(pressed)]}
@@ -81,7 +84,7 @@ export function PlaylistsGrid({
           <Text variant="caption" tone="secondary" numberOfLines={1}>
             {playlist.track_count} {countLabel(playlist.track_count, 'track')}
           </Text>
-        </Pressable>
+        </Tappable>
       );
     },
     [coverSize, onCreatePress, onPlaylistPress, theme.color.border, theme.color.surface2],

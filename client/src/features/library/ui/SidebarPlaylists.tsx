@@ -1,16 +1,18 @@
 import { useRouter } from 'expo-router';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { asyncView } from '@shared/ui/asyncView';
 import { Text, type Theme, useTheme } from '@shared/ui';
 import { sidebarItemStyle } from '@shared/ui/navigation/sidebarItemStyle';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
 
 import { usePlaylistActions } from '@features/library/hooks/usePlaylistActions';
 
 function sidebarPlaylistRowProps(playlist: PlaylistResponse, onPress: () => void) {
   return {
+    action: 'sidebar.playlist.open',
     testID: `sidebar-playlist-${playlist.id}`,
     onPress,
     accessibilityRole: 'link' as const,
@@ -32,9 +34,9 @@ function SidebarPlaylistRow({ playlist }: { playlist: PlaylistResponse }) {
   const onPress = () => router.push(`/library/playlist/${playlist.id}`);
   const { pressableProps } = usePressableInteraction(sidebarItemStyle(theme, false));
   return (
-    <Pressable {...sidebarPlaylistRowProps(playlist, onPress)} {...pressableProps}>
+    <Tappable {...sidebarPlaylistRowProps(playlist, onPress)} {...pressableProps}>
       <SidebarPlaylistLabel name={playlist.name} color={theme.color.textSecondary} />
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -66,6 +68,7 @@ function SidebarPlaylistsLoadingHint() {
 
 function sidebarPlaylistsRetryProps(onRetry: () => void, theme: Theme) {
   return {
+    action: 'sidebar.playlists.retry',
     testID: 'sidebar-playlists-retry',
     onPress: onRetry,
     accessibilityRole: 'button' as const,
@@ -76,11 +79,11 @@ function sidebarPlaylistsRetryProps(onRetry: () => void, theme: Theme) {
 
 function SidebarPlaylistsRetryButton({ onRetry, theme }: { onRetry: () => void; theme: Theme }) {
   return (
-    <Pressable {...sidebarPlaylistsRetryProps(onRetry, theme)}>
+    <Tappable {...sidebarPlaylistsRetryProps(onRetry, theme)}>
       <Text variant="caption" style={{ color: theme.color.accent }}>
         Retry
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
