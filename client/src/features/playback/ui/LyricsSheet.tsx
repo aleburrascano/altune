@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, type ReactElement } from 'react';
 import {
   FlatList,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -13,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { withFeaturing } from '@shared/apiClient/featuredArtists';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { Text } from '@shared/ui/primitives/Text';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { useReduceMotion } from '@shared/ui/motion/useMotion';
 import { spacing } from '@shared/ui/theme/tokens';
@@ -148,10 +148,9 @@ interface LyricLineProps {
   onSeek: (ms: number) => void;
 }
 
-function lineProps({ line, index, onSeek }: LyricLineProps): PressableProps {
+function lineProps({ line, index }: LyricLineProps): Omit<PressableProps, 'onPress'> {
   return {
     testID: `lyrics-line-${index}`,
-    onPress: () => onSeek(line.milliseconds),
     accessibilityRole: 'button',
     accessibilityLabel: line.line.length > 0 ? line.line : 'Instrumental',
     accessibilityHint: 'Seeks playback to this line',
@@ -171,9 +170,13 @@ function LyricLineText({ line, active }: Pick<LyricLineProps, 'line' | 'active'>
 
 function LyricLine(props: LyricLineProps): ReactElement {
   return (
-    <Pressable {...lineProps(props)}>
+    <Tappable
+      action="playback.lyrics.seek"
+      onPress={() => props.onSeek(props.line.milliseconds)}
+      {...lineProps(props)}
+    >
       <LyricLineText line={props.line} active={props.active} />
-    </Pressable>
+    </Tappable>
   );
 }
 

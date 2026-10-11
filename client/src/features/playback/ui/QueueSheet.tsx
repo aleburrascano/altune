@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactElement } from 'react';
-import { FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, type ListRenderItemInfo, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { EllipsisVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -13,6 +13,7 @@ import { confirmDestructive } from '@shared/ui/dialog/dialog';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import type { Theme } from '@shared/ui/theme';
 import { useTheme } from '@shared/ui/theme';
@@ -78,7 +79,8 @@ export function QueueRow({ item, onSkip, onRemove, onOpenMenu }: QueueRowProps):
       renderRightActions={(_prog, drag) => <RemoveAction drag={drag} theme={theme} />}
       onSwipeableOpen={() => onRemove(item.queueIndex)}
     >
-      <Pressable
+      <Tappable
+        action="playback.queue.skip_to"
         onPress={() => onSkip(item.queueIndex)}
         style={[rowStyles.row, { backgroundColor: theme.color.canvas }]}
         accessibilityRole="button"
@@ -103,7 +105,7 @@ export function QueueRow({ item, onSkip, onRemove, onOpenMenu }: QueueRowProps):
           onPress={() => onOpenMenu(item)}
           accessibilityLabel={`Options for ${item.title}`}
         />
-      </Pressable>
+      </Tappable>
     </ReanimatedSwipeable>
   );
 }
@@ -173,7 +175,8 @@ export function QueueSheet(): ReactElement {
         </SheetHeaderCenter>
         <SheetHeaderTrailing>
           {upNextItems.length > 0 ? (
-            <Pressable
+            <Tappable
+              action="playback.queue.clear"
               onPress={handleClear}
               hitSlop={8}
               accessibilityRole="button"
@@ -182,7 +185,7 @@ export function QueueSheet(): ReactElement {
               <Text variant="caption" style={{ color: theme.color.danger }}>
                 Clear
               </Text>
-            </Pressable>
+            </Tappable>
           ) : null}
         </SheetHeaderTrailing>
       </SheetHeader>

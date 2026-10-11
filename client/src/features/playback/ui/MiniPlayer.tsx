@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 
@@ -11,6 +11,7 @@ import { useWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 import {
@@ -66,7 +67,8 @@ export function MiniPlayer() {
         : { action: 'playback.mini.play_pause', icon: Play, label: 'Play', onPress: resume };
 
   return (
-    <Pressable
+    <Tappable
+      action="playback.mini.open_player"
       testID="mini-player"
       onPress={() => router.push('/player')}
       style={[
@@ -122,7 +124,7 @@ export function MiniPlayer() {
           />
         ) : null}
       </View>
-    </Pressable>
+    </Tappable>
   );
 }
 

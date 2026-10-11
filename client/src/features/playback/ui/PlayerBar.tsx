@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ListMusic,
@@ -17,6 +17,7 @@ import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 import {
@@ -133,6 +134,7 @@ function BarHeaderArt({ track, line }: { track: PlaybackTrack; line: string }) {
 
 function headerPressable(track: PlaybackTrack, onOpenPlayer: () => void) {
   return {
+    action: 'playback.bar.open_player',
     onPress: onOpenPlayer,
     style: styles.header,
     accessibilityRole: 'button' as const,
@@ -142,9 +144,9 @@ function headerPressable(track: PlaybackTrack, onOpenPlayer: () => void) {
 
 function BarHeader({ track, line, onOpenPlayer }: BarHeaderProps) {
   return (
-    <Pressable {...headerPressable(track, onOpenPlayer)}>
+    <Tappable {...headerPressable(track, onOpenPlayer)}>
       <BarHeaderArt track={track} line={line} />
-    </Pressable>
+    </Tappable>
   );
 }
 
