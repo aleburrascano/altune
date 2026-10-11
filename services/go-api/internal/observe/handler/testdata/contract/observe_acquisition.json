@@ -12,8 +12,7 @@
     "ffprobe": false,
     "ffmpeg": false,
     "fpcalc": false,
-    "yt_dlp": false,
-    "streamrip": false
+    "yt_dlp": false
   },
   "jobs": [],
   "recent": []

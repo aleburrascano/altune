@@ -16,7 +16,7 @@ Keep these `.env.staging` keys pointed away from prod, so staging never writes t
 - `OCI_S3_*` with `AUDIO_KEY_PREFIX=staging/`: a key whose IAM policy only allows writes under `staging/` in prod's bucket (policy `altune-staging-s3-prefix`).
 - `MUSICBRAINZ_USER_AGENT`: a real staging contact.
 
-`compose.staging.yml` mounts the shared cookie jar and streamrip config read-only and forces `EVAL_METER_ENABLED=false`. After an env change, recreate the containers it feeds:
+`compose.staging.yml` mounts the shared cookie jar read-only and forces `EVAL_METER_ENABLED=false`. After an env change, recreate the containers it feeds:
 
 ```bash
 docker compose -f deploy/compose.staging.yml up -d --force-recreate

@@ -74,7 +74,7 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 		s.verification = v
 		if !v.FullyArmed() {
 			slog.WarnContext(context.Background(), "acquisition.verification_degraded",
-				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp, "streamrip", v.Streamrip)
+				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp)
 			return
 		}
 		slog.InfoContext(context.Background(), "acquisition.verification_armed")

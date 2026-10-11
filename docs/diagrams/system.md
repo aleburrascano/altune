@@ -14,7 +14,7 @@ flowchart TD
     subgraph ext [External systems]
         supa["Supabase<br/>Auth + hosted Postgres"]
         meta["Metadata providers<br/>Deezer · MusicBrainz · Last.fm · Spotify · Apple Music<br/>SoundCloud · YT Music · Amazon · artwork sources"]
-        sources["Audio sources<br/>YouTube / YT Music / SoundCloud via yt-dlp<br/>Qobuz / Tidal / Deezer via streamrip"]
+        sources["Audio sources<br/>YouTube / YT Music / SoundCloud via yt-dlp"]
         acoustid["AcoustID<br/>fingerprint → recording"]
         github["GitHub<br/>Actions CI/CD · Releases · kill switches"]
         gitea["Gitea · altune-git<br/>CI"]
@@ -57,7 +57,7 @@ flowchart TD
     subgraph vm [OCI VM · one Docker Compose project per env, prod + staging]
         caddy["<b>Caddy</b><br/>TLS · routes · blue/green switch<br/>serves the web build"]
         api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · observe API<br/>+ in-process jobs, leader-elected"]
-        tools[["yt-dlp · streamrip · ffmpeg · fpcalc<br/>subprocesses in the go-api image"]]
+        tools[["yt-dlp · ffmpeg · fpcalc<br/>subprocesses in the go-api image"]]
         overseer["<b>Overseer</b><br/>Go + React SPA<br/>owner control room"]
         redis[("<b>Redis</b><br/>cache only · 256 MB LRU<br/>results · identity · artwork · rate limits")]
         sqlite[("SQLite<br/>Overseer history")]
@@ -124,7 +124,7 @@ flowchart TD
     bucket[("Object Storage")]
     jwks["Supabase Auth · JWKS"]
     providers["Metadata providers"]
-    tools[["yt-dlp · streamrip · ffmpeg · fpcalc<br/>+ AcoustID"]]
+    tools[["yt-dlp · ffmpeg · fpcalc<br/>+ AcoustID"]]
 
     caddy --> app
     app --> auth & catalog & acquisition & discovery & playback & observe

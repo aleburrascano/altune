@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
 	"altune/go-api/internal/acquisition/adapters/fixture"
 	"altune/go-api/internal/acquisition/adapters/id3"
-	"altune/go-api/internal/acquisition/adapters/streamrip"
 	"altune/go-api/internal/acquisition/adapters/tempfs"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
@@ -275,9 +274,7 @@ func (a *App) acquisitionSources(ctx context.Context) ([]acqPorts.AudioSource, a
 	}
 	searcher := a.newYtDlpSearcher()
 	tools := acqPorts.AcquisitionVerification{YtDlp: searcher.Available()}
-	sources, streamripOK := a.audioSourcesFor(ctx, searcher)
-	tools.Streamrip = streamripOK
-	return sources, tools
+	return a.audioSourcesFor(ctx, searcher), tools
 }
 
 func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
@@ -292,50 +289,17 @@ func (a *App) newYtDlpSearcher() *ytdlp.YtDlpAudioSearcher {
 		WithRemoteComponents(a.cfg.YtDLPRemoteComponents)
 }
 
-func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {
+func (a *App) audioSourcesFor(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher) []acqPorts.AudioSource {
 	var sources []acqPorts.AudioSource
 	if a.cfg.YtMusicEnabled {
 		sources = append(sources, ytmusic.NewSource(searcher))
 	} else {
 		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
-	streamripSources, streamripOK := a.buildStreamripSources(ctx)
-	sources = append(sources, streamripSources...)
 	if a.cfg.YtDLPEnabled {
 		sources = append(sources, ytdlp.NewSource(searcher))
 	} else {
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
-	}
-	return sources, streamripOK
-}
-
-func (a *App) buildStreamripSources(ctx context.Context) ([]acqPorts.AudioSource, bool) {
-	sources := a.streamripSourcesFor(ctx, a.cfg.StreamripServices)
-	if len(sources) == 0 {
-		return sources, true
-	}
-	probe := streamrip.NewSource("").WithBinary(a.cfg.StreamripBin)
-	if !probe.Available() {
-		slog.WarnContext(ctx, "acquisition: streamrip binary not runnable, streamrip sources degraded",
-			"bin", probe.Binary(), "sources", len(sources))
-		return sources, false
-	}
-	return sources, true
-}
-
-func (a *App) streamripSourcesFor(ctx context.Context, services []string) []acqPorts.AudioSource {
-	var sources []acqPorts.AudioSource
-	for _, service := range services {
-		service = strings.ToLower(strings.TrimSpace(service))
-		if service == "" {
-			continue
-		}
-		if !streamrip.Supported(service) {
-			slog.WarnContext(ctx, "acquisition: unsupported streamrip service ignored", "service", service)
-			continue
-		}
-		sources = append(sources, streamrip.NewSource(service).WithBinary(a.cfg.StreamripBin))
-		slog.InfoContext(ctx, "acquisition: streamrip source enabled", "service", service)
 	}
 	return sources
 }

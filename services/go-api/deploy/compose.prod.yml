@@ -14,7 +14,6 @@ x-go-api: &go-api
     - EVAL_METER_ENABLED=true
   volumes:
     - ../../../cookies.txt:/data/cookies.txt
-    - ../../../streamrip.toml:/home/altune/.config/streamrip/config.toml
   tmpfs:
     - /tmp:size=1G
   depends_on:

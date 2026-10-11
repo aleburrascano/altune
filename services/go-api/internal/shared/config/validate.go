@@ -226,13 +226,13 @@ func (c *Config) validateTuning() error {
 }
 
 func (c *Config) validateAudioSources() error {
-	if c.YtMusicEnabled || c.YtDLPEnabled || len(c.StreamripServices) > 0 {
+	if c.YtMusicEnabled || c.YtDLPEnabled {
 		return nil
 	}
 	if c.AcquisitionFixtureEnabled() || c.AcquisitionPaused {
 		return nil
 	}
-	return errors.New("no audio source enabled: enable at least one of YTMUSIC_ENABLED, YTDLP_ENABLED or STREAMRIP_SERVICES (or set ACQUISITION_PAUSED=true)")
+	return errors.New("no audio source enabled: enable YTMUSIC_ENABLED or YTDLP_ENABLED (or set ACQUISITION_PAUSED=true)")
 }
 
 func (c *Config) validateCookieFile() error {

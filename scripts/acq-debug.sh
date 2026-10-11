@@ -217,9 +217,9 @@ done' "$*"
 tools)
   need_api
   echo "== $api"
-  docker exec "$api" sh -c 'for b in yt-dlp rip ffprobe ffmpeg; do printf "%-8s %s\n" "$b" "$($b --version 2>&1 | head -1 | cut -c1-60)"; done
+  docker exec "$api" sh -c 'for b in yt-dlp ffprobe ffmpeg; do printf "%-8s %s\n" "$b" "$($b --version 2>&1 | head -1 | cut -c1-60)"; done
     printf "%-8s %s\n" fpcalc "$(fpcalc -version 2>&1 | head -1)"
-    echo "cookie file: ${YTDLP_COOKIE_FILE:-unset}  js runtime: ${YTDLP_JS_RUNTIME:-unset}  streamrip services: ${STREAMRIP_SERVICES:-none}"'
+    echo "cookie file: ${YTDLP_COOKIE_FILE:-unset}  js runtime: ${YTDLP_JS_RUNTIME:-unset}"'
   in_api '
 status=0
 for c in "youtube https://www.youtube.com/watch?v=jNQXAC9IVRw" "ytmusic https://music.youtube.com/watch?v=jNQXAC9IVRw" "soundcloud https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A157015344"; do
@@ -238,7 +238,7 @@ logs)
   need_api
   since=${1:-1h}; pattern=${2:-.}
   docker logs --since "$since" "$api" 2>&1 |
-    grep -iE 'acqui|candidate|download|ytdlp|yt-dlp|streamrip|schedul|reject|verif|stale' |
+    grep -iE 'acqui|candidate|download|ytdlp|yt-dlp|schedul|reject|verif|stale' |
     grep -v '"path":"/observe/acquisition"' |
     grep -E -- "$pattern" | cut -c1-400 | tail -200
   ;;

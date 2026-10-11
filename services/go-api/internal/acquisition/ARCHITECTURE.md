@@ -219,8 +219,6 @@ adapters/
     source.go            Source ("ytdlp") — the text-search AudioSource over the searcher
   ytmusic/
     source.go            Source ("ytmusic") — catalog-resolved by YouTube video id
-  streamrip/
-    source.go            Source ("streamrip:<service>") — catalog-resolved via the `rip` CLI
   id3/
     tagger.go            Tagger — ID3v2.4, MP3-only
   chromaprint/
@@ -537,8 +535,8 @@ audio is offset passes.
 ### 7.5 The source set is two engines wide — partially closed
 
 `searchEngines` is still a two-element slice, but a search-side URL no longer has to
-come from yt-dlp's own search: the source registry also routes `ytmusic`,
-`streamrip:<service>` and resolved candidates (`Resolved`, from the identity's
+come from yt-dlp's own search: the source registry also routes `ytmusic`
+and resolved candidates (`Resolved`, from the identity's
 `Sources`), which rank ahead of anything searched. SoundCloud results are now
 inspected before ranking (§4), so a DRM or preview stub costs no download.
 **Still open:** Bandcamp and Audiomack are not sources; the underground long tail
@@ -657,7 +655,6 @@ flowchart TD
     PROV["ports.Provider* keys"] --> DBR["discoverybridge · providerKey"]
     PROV --> SFOR["RecordingIdentity.SourceFor"]
     SFOR --> YTM["ytmusic · identityKey"]
-    SFOR --> SRIP["streamrip · trackURLs"]
     SRC["source Name() strings"] --> STAMP["stampSource → AudioCandidate.Source"]
     STAMP --> FETCH["SourceRegistry.Fetch routing"]
     STAMP --> RJ["CandidateRejection.Source + candidate logs"]
@@ -679,8 +676,8 @@ flowchart TD
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
 | a stage `Name()` string | `failureReason`'s vocabulary, the `progress` event payload the mobile client renders | rename compiles clean and breaks the client silently |
-| a source's `Name()` (`ytdlp`, `ytmusic`, `streamrip:<service>`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
-| a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`, `tidal`, `qobuz`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey`, `streamrip`'s `trackURLs` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
+| a source's `Name()` (`ytdlp`, `ytmusic`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
+| a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
 | a `RejectionStage` constant | the per-stage counts in `summarizeRejections`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
 | a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), both admissions, and `FallbackCooldownStore`'s in-memory key | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |

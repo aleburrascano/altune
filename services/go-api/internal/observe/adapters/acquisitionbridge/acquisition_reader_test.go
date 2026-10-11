@@ -66,3 +66,26 @@ func TestReadAcquisitionStatusDoesNotCache(t *testing.T) {
 		t.Fatalf("second InFlight = %d", got)
 	}
 }
+
+func TestReadAcquisitionStatusVerificationNamesOnlyLiveTools(t *testing.T) {
+	r := &stubAcquisitionReader{status: func(int) ports.AcquisitionStatus {
+		return ports.AcquisitionStatus{Verification: ports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
+	}}
+	raw, err := json.Marshal(ReadAcquisitionStatus(r).Verification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys map[string]bool
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"ffprobe": true, "ffmpeg": true, "fpcalc": true, "yt_dlp": true}
+	if len(keys) != len(want) {
+		t.Fatalf("verification = %s, want exactly %v", raw, want)
+	}
+	for k, v := range want {
+		if keys[k] != v {
+			t.Fatalf("verification = %s, want %s=%v", raw, k, v)
+		}
+	}
+}

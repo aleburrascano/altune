@@ -67,11 +67,9 @@ type Config struct {
 
 	AcquisitionDrainBudgetSeconds int `env:"ACQUISITION_DRAIN_BUDGET_SECONDS" envDefault:"60"`
 
-	AcoustIDAPIKey    string   `env:"ACOUSTID_API_KEY"`
-	StreamripBin      string   `env:"STREAMRIP_BIN"`
-	StreamripServices []string `env:"STREAMRIP_SERVICES" envSeparator:","`
-	YtMusicEnabled    bool     `env:"YTMUSIC_ENABLED" envDefault:"true"`
-	YtDLPEnabled      bool     `env:"YTDLP_ENABLED" envDefault:"true"`
+	AcoustIDAPIKey string `env:"ACOUSTID_API_KEY"`
+	YtMusicEnabled bool   `env:"YTMUSIC_ENABLED" envDefault:"true"`
+	YtDLPEnabled   bool   `env:"YTDLP_ENABLED" envDefault:"true"`
 
 	SpotifyEnabled     bool `env:"SPOTIFY_ENABLED" envDefault:"true"`
 	SoundCloudEnabled  bool `env:"SOUNDCLOUD_ENABLED" envDefault:"true"`

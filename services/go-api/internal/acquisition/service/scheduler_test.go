@@ -1552,21 +1552,14 @@ func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 }
 
 func TestAcquisitionVerification_FullyArmed_RequiresYtDlp(t *testing.T) {
-	armed := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true, Streamrip: true}
+	armed := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}
 	if !armed.FullyArmed() {
 		t.Error("FullyArmed() = false with every tool present, want true")
 	}
 
-	missingYtDlp := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, Streamrip: true}
+	missingYtDlp := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true}
 	if missingYtDlp.FullyArmed() {
 		t.Error("FullyArmed() = true with yt-dlp unavailable; the startup warning never fires (defect)")
-	}
-}
-
-func TestAcquisitionVerification_FullyArmed_RequiresStreamrip(t *testing.T) {
-	missingStreamrip := acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}
-	if missingStreamrip.FullyArmed() {
-		t.Error("FullyArmed() = true with streamrip unavailable, want degraded")
 	}
 }
 
@@ -1889,7 +1882,7 @@ func TestWithVerificationStatus_LogsDegradedOrArmed(t *testing.T) {
 		wantMsg      string
 	}{
 		{"not fully armed warns", acqports.AcquisitionVerification{Ffprobe: true}, "WARN", "acquisition.verification_degraded"},
-		{"fully armed informs", acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true, Streamrip: true}, "INFO", "acquisition.verification_armed"},
+		{"fully armed informs", acqports.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}, "INFO", "acquisition.verification_armed"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1581,7 +1581,7 @@ func TestValidate_NoAudioSources(t *testing.T) {
 		{name: "paused", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false", "ACQUISITION_PAUSED": "true"}},
 		{name: "ytmusic only", env: map[string]string{"YTMUSIC_ENABLED": "true", "YTDLP_ENABLED": "false"}},
 		{name: "ytdlp only", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "true"}},
-		{name: "streamrip only", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false", "STREAMRIP_SERVICES": "qobuz"}},
+		{name: "leftover streamrip env is no source", env: map[string]string{"YTMUSIC_ENABLED": "false", "YTDLP_ENABLED": "false", "STREAMRIP_SERVICES": "qobuz"}, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1596,7 +1596,7 @@ func TestValidate_NoAudioSources(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected an error when no audio source is enabled")
 			}
-			for _, name := range []string{"YTMUSIC_ENABLED", "YTDLP_ENABLED", "STREAMRIP_SERVICES"} {
+			for _, name := range []string{"YTMUSIC_ENABLED", "YTDLP_ENABLED"} {
 				if !strings.Contains(err.Error(), name) {
 					t.Errorf("error %q does not name %s", err, name)
 				}

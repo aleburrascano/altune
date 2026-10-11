@@ -10,7 +10,6 @@ type AcquisitionVerification struct {
 	Ffmpeg              bool
 	Fpcalc              bool
 	YtDlp               bool
-	Streamrip           bool
 	FingerprintVerified bool
 }
 
@@ -38,7 +37,7 @@ const (
 )
 
 func (v AcquisitionVerification) FullyArmed() bool {
-	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp && v.Streamrip
+	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp
 }
 
 type JobRecord struct {

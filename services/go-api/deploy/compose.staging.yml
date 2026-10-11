@@ -15,7 +15,6 @@ x-go-api: &go-api
     - DB_POOL_MAX_CONNS=6
   volumes:
     - ../../../cookies.txt:/data/cookies.txt:ro
-    - ../../../streamrip.toml:/home/altune/.config/streamrip/config.toml:ro
   tmpfs:
     - /tmp:size=512m
   mem_limit: 1g

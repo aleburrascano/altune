@@ -200,7 +200,7 @@ func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T)
 }
 
 func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixture(t *testing.T) {
-	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true, StreamripServices: []string{"qobuz"}}
+	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true}
 	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
 	if names := sourceNames(sources); len(names) != 1 || names[0] != fixture.SourceName {
 		t.Fatalf("sources = %v, want only %q", names, fixture.SourceName)
@@ -271,7 +271,7 @@ func TestAudioSourcesToggle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp}}
 
-			sources, _ := a.audioSourcesFor(t.Context(), searcher)
+			sources := a.audioSourcesFor(t.Context(), searcher)
 			names := sourceNames(sources)
 
 			if got := containsSource(names, ytmusic.SourceName); got != tt.wantYtMusic {
@@ -404,51 +404,6 @@ func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected the file to be deleted when no prefix is configured, got: %v", err)
-	}
-}
-
-func TestWireCatalogProbesStreamripBinary(t *testing.T) {
-	present := filepath.Join(t.TempDir(), "rip")
-	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatalf("write fake rip: %v", err)
-	}
-	missing := filepath.Join(t.TempDir(), "absent", "rip")
-
-	tests := []struct {
-		name     string
-		services []string
-		bin      string
-		want     bool
-	}{
-		{name: "configured binary missing is degraded", services: []string{"tidal"}, bin: missing, want: false},
-		{name: "configured binary present is armed", services: []string{"tidal"}, bin: present, want: true},
-		{name: "no streamrip service is not degraded", services: nil, bin: missing, want: true},
-		{name: "only unsupported services is not degraded", services: []string{"napster"}, bin: missing, want: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			a := &App{
-				cfg: &config.Config{
-					MusicDir:          t.TempDir(),
-					YtMusicEnabled:    true,
-					StreamripServices: tt.services,
-					StreamripBin:      tt.bin,
-				},
-				sem: make(chan struct{}, 1),
-			}
-
-			wired, err := a.wireCatalog(t.Context(), nil, discoveryWiring{})
-			if err != nil {
-				t.Fatalf("wireCatalog: %v", err)
-			}
-			if wired.scheduler == nil {
-				t.Fatal("scheduler not wired")
-			}
-			if got := wired.scheduler.Status().Verification.Streamrip; got != tt.want {
-				t.Errorf("Verification.Streamrip = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 

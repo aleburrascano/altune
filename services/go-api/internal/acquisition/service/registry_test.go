@@ -263,7 +263,7 @@ func searchFailureCode(t *testing.T, reg *SourceRegistry) domain.FailureCode {
 }
 
 func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *testing.T) {
-	reg := NewSourceRegistry(throttledSource(), &stubSource{name: "streamrip"})
+	reg := NewSourceRegistry(throttledSource(), &stubSource{name: "ytmusic"})
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if !acqdomain.IsSourceUnavailable(err) || len(got) != 0 {
@@ -277,7 +277,7 @@ func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *test
 func TestSourceRegistry_FindPartialFailureWithCandidatesSucceeds(t *testing.T) {
 	reg := NewSourceRegistry(
 		throttledSource(),
-		&stubSource{name: "streamrip", found: []ports.AudioCandidate{candidate("u1")}},
+		&stubSource{name: "ytmusic", found: []ports.AudioCandidate{candidate("u1")}},
 	)
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})

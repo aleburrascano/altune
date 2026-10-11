@@ -11,11 +11,10 @@ type AcquisitionReader interface {
 }
 
 type AcquisitionVerificationDTO struct {
-	Ffprobe   bool `json:"ffprobe"`
-	Ffmpeg    bool `json:"ffmpeg"`
-	Fpcalc    bool `json:"fpcalc"`
-	YtDlp     bool `json:"yt_dlp"`
-	Streamrip bool `json:"streamrip"`
+	Ffprobe bool `json:"ffprobe"`
+	Ffmpeg  bool `json:"ffmpeg"`
+	Fpcalc  bool `json:"fpcalc"`
+	YtDlp   bool `json:"yt_dlp"`
 }
 
 type JobRecordDTO struct {
@@ -60,11 +59,10 @@ func newAcquisitionStatusDTO(s ports.AcquisitionStatus) AcquisitionStatusDTO {
 		OldestPendingAgeMs: s.OldestPendingAge.Milliseconds(),
 		QueueDepthKnown:    s.QueueDepthKnown,
 		Verification: AcquisitionVerificationDTO{
-			Ffprobe:   s.Verification.Ffprobe,
-			Ffmpeg:    s.Verification.Ffmpeg,
-			Fpcalc:    s.Verification.Fpcalc,
-			YtDlp:     s.Verification.YtDlp,
-			Streamrip: s.Verification.Streamrip,
+			Ffprobe: s.Verification.Ffprobe,
+			Ffmpeg:  s.Verification.Ffmpeg,
+			Fpcalc:  s.Verification.Fpcalc,
+			YtDlp:   s.Verification.YtDlp,
 		},
 		ActiveJobs: newJobRecordDTOs(s.ActiveJobs),
 		Recent:     newJobRecordDTOs(s.Recent),

@@ -33,7 +33,7 @@ sequenceDiagram
     participant App as Mobile app
     participant API as go-api (catalog)
     participant W as Acquisition worker<br/>(in-process goroutine)
-    participant Src as yt-dlp / streamrip
+    participant Src as yt-dlp
     participant OS as OCI Object Storage
     participant DB as Postgres
 

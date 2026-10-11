@@ -8,8 +8,6 @@ const (
 	ProviderYouTube    RecordingProvider = "youtube"
 	ProviderDeezer     RecordingProvider = "deezer"
 	ProviderSoundCloud RecordingProvider = "soundcloud"
-	ProviderTidal      RecordingProvider = "tidal"
-	ProviderQobuz      RecordingProvider = "qobuz"
 )
 
 type ProviderRef struct {

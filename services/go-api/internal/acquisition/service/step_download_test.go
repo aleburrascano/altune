@@ -1698,7 +1698,7 @@ func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidat
 func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T) {
 	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[acqdomain.SourceName]int{}}
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{
-		{URL: "u1", Source: "streamrip"},
+		{URL: "u1", Source: "ytmusic"},
 		{URL: "u2", Source: "ytdlp"},
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1716,7 +1716,7 @@ func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T
 
 func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 	fetcher := &scriptedSourceFetcher{hangURL: "u1", calls: map[acqdomain.SourceName]int{}}
-	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "u1", Source: "streamrip"}}}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "u1", Source: "ytmusic"}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
