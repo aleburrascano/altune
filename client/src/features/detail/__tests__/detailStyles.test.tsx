@@ -9,36 +9,27 @@ import { DetailScaffold } from '../ui/DetailScaffold';
 import { DiscographySections } from '../ui/DiscographySections';
 import { RelatedTracksSection } from '../ui/RelatedTracksSection';
 import { gridCellWidthFor } from '@/features/detail/ui/detailStyles';
+import {
+  createTestQueryClient,
+  createWrapper,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
+
+const { __http } = require('../../../../jest/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
-jest.mock('../hooks/useRelatedTracks', () => ({
-  useRelatedTracks: () => ({
-    relatedTracks: [
-      {
-        kind: 'track',
-        title: 'Track A',
-        subtitle: null,
-        image_url: null,
-        confidence: 'high',
-        sources: [{ provider: 'test', external_id: 'Track A', url: 'https://altune.test/Track A' }],
-        extras: {},
-      },
-      {
-        kind: 'track',
-        title: 'Track B',
-        subtitle: null,
-        image_url: null,
-        confidence: 'high',
-        sources: [{ provider: 'test', external_id: 'Track B', url: 'https://altune.test/Track B' }],
-        extras: {},
-      },
-    ],
-    isLoading: false,
-    isError: false,
-    failure: null,
-  }),
-}));
+function relatedTrack(title: string): DiscoveryResult {
+  return {
+    kind: 'track',
+    title,
+    subtitle: null,
+    image_url: null,
+    confidence: 'high',
+    sources: [{ provider: 'test', external_id: title, url: `https://altune.test/${title}` }],
+    extras: {},
+  };
+}
 
 function album(
   title: string,
@@ -141,9 +132,25 @@ describe('detail layout: current rendered widths and margins stay pinned', () =>
     expect(widthsInSubtree(skeletonRail!)).toContain(130);
   });
 
-  it('keeps related-tracks cards at 132px wide', () => {
-    render(<RelatedTracksSection result={album('Seed Album')} detailRoute="/discover/detail" />);
+  it('keeps related-tracks cards at 132px wide', async () => {
+    await signInTestUser();
+    __http.reply('GET /v1/discovery/tracks/soundcloud/sc-1/related', {
+      status: 200,
+      json: {
+        items: [relatedTrack('Track A'), relatedTrack('Track B')],
+        provider_name: 'soundcloud',
+        status: 'ok',
+      },
+    });
+    const seed: DiscoveryResult = {
+      ...album('Seed Album'),
+      sources: [{ provider: 'soundcloud', external_id: 'sc-1', url: 'https://sc/sc-1' }],
+    };
+    render(<RelatedTracksSection result={seed} detailRoute="/discover/detail" />, {
+      wrapper: createWrapper(createTestQueryClient()),
+    });
 
+    await screen.findByTestId('detail-related-0');
     expect(styleOf('detail-related-0').width).toBe(132);
   });
 });

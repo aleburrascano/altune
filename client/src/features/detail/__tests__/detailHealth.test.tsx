@@ -2,8 +2,6 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import {
   DETAIL_HEALTH_BATCH,
@@ -18,7 +16,7 @@ import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
 import {
   createTestQueryClient,
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -40,13 +38,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+const EVENTS = 'POST /v1/discovery/events';
 
 const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
 
@@ -88,10 +80,18 @@ function emptyTallyPayload(): Record<string, number> {
 }
 
 function sentPayloads(): Record<string, unknown>[] {
-  return recordEventMock.mock.calls.map(([event]) => {
-    expect(event.type).toBe('detail_health');
-    return event.payload ?? {};
-  });
+  return (__http.requests as { path: string; method: string; body: string }[])
+    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .map((request) => {
+      const event = JSON.parse(request.body) as {
+        type: string;
+        payload: Record<string, unknown>;
+      };
+      expect(event.type).toBe('detail_health');
+      return Object.fromEntries(
+        Object.entries(event.payload).filter(([key]) => key !== 'session_id'),
+      );
+    });
 }
 
 function albumTracksResponse(status: string): Record<string, unknown> {
@@ -113,10 +113,18 @@ function emptyEnrichmentResponse(): Record<string, unknown> {
   };
 }
 
-beforeEach(() => {
+const SETTLE_TICKS = 5;
+const BATCHES_SENT = 2;
+const PARTIAL_BATCH = 3;
+
+async function settle(): Promise<void> {
+  for (let i = 0; i < SETTLE_TICKS; i++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+beforeEach(async () => {
   _resetDetailHealthForTest();
-  recordEventMock.mockReset().mockResolvedValue(undefined);
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+  __http.reply(EVENTS, { status: 204 });
+  await signInTestUser();
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -139,9 +147,11 @@ describe('detail health metric', () => {
     await waitFor(() => expect(__http.countFor('GET /v1/discovery/enrichment')).toBe(1));
     flushDetailHealth();
 
-    expect(sentPayloads()).toEqual([
-      { ...emptyTallyPayload(), enrichment_musicbrainz_ok: 1, enrichment_deezer_failed: 1 },
-    ]);
+    await waitFor(() =>
+      expect(sentPayloads()).toEqual([
+        { ...emptyTallyPayload(), enrichment_musicbrainz_ok: 1, enrichment_deezer_failed: 1 },
+      ]),
+    );
   });
 
   it('tallies a served content fetch as a success', async () => {
@@ -154,9 +164,11 @@ describe('detail health metric', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     flushDetailHealth();
 
-    expect(sentPayloads()).toEqual([
-      expect.objectContaining({ content_album_tracks_ok: 1, content_album_tracks_failed: 0 }),
-    ]);
+    await waitFor(() =>
+      expect(sentPayloads()).toEqual([
+        expect.objectContaining({ content_album_tracks_ok: 1, content_album_tracks_failed: 0 }),
+      ]),
+    );
   });
 
   it('tallies a degraded provider status as a failed content fetch', async () => {
@@ -169,9 +181,11 @@ describe('detail health metric', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     flushDetailHealth();
 
-    expect(sentPayloads()).toEqual([
-      expect.objectContaining({ content_album_tracks_failed: 1, content_album_tracks_ok: 0 }),
-    ]);
+    await waitFor(() =>
+      expect(sentPayloads()).toEqual([
+        expect.objectContaining({ content_album_tracks_failed: 1, content_album_tracks_ok: 0 }),
+      ]),
+    );
   });
 
   it('tallies neither outcome for a fetch the screen aborted', async () => {
@@ -180,45 +194,56 @@ describe('detail health metric', () => {
     ).rejects.toThrow();
     flushDetailHealth();
 
-    expect(recordEventMock).not.toHaveBeenCalled();
+    await settle();
+    expect(sentPayloads()).toEqual([]);
   });
 
-  it('sends one aggregate event per batch, not one per fetch', () => {
-    for (let i = 0; i < DETAIL_HEALTH_BATCH * 2 + 3; i++) {
+  it('sends one aggregate event per batch, not one per fetch', async () => {
+    for (let i = 0; i < DETAIL_HEALTH_BATCH * BATCHES_SENT + PARTIAL_BATCH; i++) {
       recordContentFetchOutcome('related_tracks', i % 5 !== 0);
     }
 
-    const payloads = sentPayloads();
-    expect(payloads).toHaveLength(2);
-    expect(payloads[0]).toMatchObject({
+    await waitFor(() => expect(sentPayloads()).toHaveLength(BATCHES_SENT));
+    expect(sentPayloads()[0]).toMatchObject({
       content_related_tracks_ok: 20,
       content_related_tracks_failed: 5,
     });
   });
 
-  it('flushes the partial batch when the app goes to the background', () => {
+  it('flushes the partial batch when the app goes to the background', async () => {
     recordContentFetchOutcome('artist_content', false);
-    expect(recordEventMock).not.toHaveBeenCalled();
+    await settle();
+    expect(sentPayloads()).toEqual([]);
 
     for (const listener of appStateListeners()) listener('background');
 
-    expect(sentPayloads()).toEqual([expect.objectContaining({ content_artist_content_failed: 1 })]);
+    await waitFor(() =>
+      expect(sentPayloads()).toEqual([
+        expect.objectContaining({ content_artist_content_failed: 1 }),
+      ]),
+    );
   });
 
   it('sends nothing when there is nothing to report, and swallows a failed send', async () => {
     flushDetailHealth();
-    expect(recordEventMock).not.toHaveBeenCalled();
+    await settle();
+    expect(sentPayloads()).toEqual([]);
 
-    recordEventMock.mockRejectedValueOnce(new Error('offline'));
+    __http.reset();
+    __http.fail(EVENTS);
     recordContentFetchOutcome('album_tracks', true);
     expect(() => flushDetailHealth()).not.toThrow();
     await new Promise((resolve) => setImmediate(resolve));
     flushDetailHealth();
 
-    expect(recordEventMock).toHaveBeenCalledTimes(1);
-    expect(console.warn).toHaveBeenCalledWith('[detail] health flush failed', {
-      error: expect.any(Error),
-    });
+    await waitFor(() => expect(sentPayloads()).toHaveLength(1));
+    await waitFor(() =>
+      expect(console.warn).toHaveBeenCalledWith('[detail] health flush failed', {
+        error: expect.any(Error),
+      }),
+    );
+    await settle();
+    expect(sentPayloads()).toHaveLength(1);
   });
 });
 
@@ -227,10 +252,10 @@ describe('an aborted fetch', () => {
 
   let wrapper: ReturnType<typeof createWrapper>;
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
     _resetDetailHealthForTest();
-    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
+    __http.reply(EVENTS, { status: 204 });
+    await signInTestUser();
     client = createTestQueryClient();
     wrapper = createWrapper(client);
   });
@@ -260,7 +285,8 @@ describe('an aborted fetch', () => {
       );
       flushDetailHealth();
 
-      expect(recordEvent).not.toHaveBeenCalled();
+      await settle();
+      expect(sentPayloads()).toEqual([]);
     });
   });
 });

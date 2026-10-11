@@ -1,41 +1,21 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
+import {
+  createTestQueryClient,
+  createPlaybackWrapper,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
 }));
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn() }),
-}));
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('../hooks/useLibraryMatches', () => ({
-  useLibraryTracksForAlbum: () => [],
-}));
-jest.mock('../hooks/useEntityDiscovery', () => ({
-  useAlbumDiscovery: () => ({
-    tracks: [],
-    isLoading: false,
-    isError: false,
-    failure: null,
-    refetch: jest.fn(),
-  }),
-}));
-
-const mockUseAlbumTracks = jest.fn();
-jest.mock('../hooks/useAlbumTracks', () => ({
-  useAlbumTracks: () => mockUseAlbumTracks(),
-}));
+const ALBUM_TRACK_COUNT = 2;
 
 const albumResult: DiscoveryResult = {
   kind: 'album',
@@ -79,17 +59,16 @@ function savedTrack() {
   };
 }
 
-function renderAlbum(tracks: readonly DiscoveryResult[]) {
-  mockUseAlbumTracks.mockReturnValue({
-    tracks,
-    isLoading: false,
-    isError: false,
-    failure: null,
-    refetch: jest.fn(),
+async function renderAlbum(tracks: readonly DiscoveryResult[]) {
+  __http.reply('GET /v1/discovery/albums/deezer/alb1/tracks', {
+    status: 200,
+    json: { items: tracks, provider_name: 'deezer', status: 'ok' },
   });
-  return renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'), {
-    wrapper: createWrapper(createTestQueryClient({ mutations: true })),
+  const rendered = renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'), {
+    wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })),
   });
+  await waitFor(() => expect(rendered.result.current.tracks).toHaveLength(tracks.length));
+  return rendered;
 }
 
 type SaveWrite = { title: string; key: string };
@@ -109,11 +88,14 @@ function keysFor(title: string): string[] {
     .map((write) => write.key);
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply('GET /v1/tracks', {
+    status: 200,
+    json: { items: [], total: 0, limit: 200, offset: 0, has_more: false },
+  });
   __http.reply('POST /v1/tracks', { status: 201, json: savedTrack() });
   __http.reply('POST /v1/discovery/events', { status: 202 });
-  mockUseAlbumTracks.mockReset();
   useTrackStatusStore.getState().reset();
 });
 
@@ -124,26 +106,27 @@ afterEach(() => {
 describe('a track written by its own row and by "Save all" at once', () => {
   it('presents one idempotency key for both writes, so the server can collapse them', async () => {
     const tracks = [albumTrack('Nude'), albumTrack('Reckoner')];
-    const { result } = renderAlbum(tracks);
+    const { result } = await renderAlbum(tracks);
 
     await act(async () => {
       result.current.onQuickSave(tracks[0]!);
       result.current.onSaveAll();
     });
 
+    await waitFor(() => expect(keysFor('Nude')).toHaveLength(ALBUM_TRACK_COUNT));
     const nudeKeys = keysFor('Nude');
-    expect(nudeKeys).toHaveLength(2);
     expect(nudeKeys[1]).toBe(nudeKeys[0]);
   });
 
   it('leaves another track on its own key, so one save cannot swallow a different track', async () => {
     const tracks = [albumTrack('Nude'), albumTrack('Reckoner')];
-    const { result } = renderAlbum(tracks);
+    const { result } = await renderAlbum(tracks);
 
     await act(async () => {
       result.current.onSaveAll();
     });
 
+    await waitFor(() => expect(saveWrites()).toHaveLength(ALBUM_TRACK_COUNT));
     expect(keysFor('Reckoner')[0]).not.toBe(keysFor('Nude')[0]);
   });
 });

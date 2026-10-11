@@ -4,17 +4,13 @@ import type {
   ListTracksResponse,
   TrackResponse,
 } from '@shared/apiClient/trackResponse';
-import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import { createMemoryDetailPort } from '@features/detail/__tests__/memoryDetailPort';
 import type { DetailPort } from '@features/detail/ports/detailPort';
+import { signInTestUser } from '@features/detail/__tests__/support/queryHarness';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const TRACKS_PATH = '/v1/tracks';
 const PAGE_LIMIT = 10;
@@ -90,11 +86,8 @@ function abortedSignal(): AbortSignal {
   return controller.signal;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {
