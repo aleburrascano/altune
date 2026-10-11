@@ -1,17 +1,11 @@
 import type { ReactElement } from 'react';
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  View,
-  type ListRenderItemInfo,
-} from 'react-native';
+import { FlatList, Modal, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
 
 import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 interface DownloadsSheetProps {
   visible: boolean;
@@ -51,7 +45,8 @@ export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps)
   const theme = useTheme();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
+      <Tappable
+        action="acquisition.downloads_sheet.close"
         style={[styles.scrim, { backgroundColor: theme.color.scrim }]}
         accessibilityRole="button"
         accessibilityLabel="Close downloads"

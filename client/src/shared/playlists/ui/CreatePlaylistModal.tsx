@@ -1,8 +1,9 @@
 import { useState, type ReactElement } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
 
 import { Button, Text, radius, spacing, useTheme } from '@shared/ui';
 import { TextField } from '@shared/ui/primitives/TextField';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 type CreatePlaylistModalProps = {
   visible: boolean;
@@ -42,14 +43,15 @@ export function CreatePlaylistModal({
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <Pressable
+      <Tappable
+        action="playlists.create_playlist.close"
         style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
         onPress={handleClose}
         accessibilityRole="button"
         accessibilityLabel="Close"
       >
         <View />
-      </Pressable>
+      </Tappable>
       <View style={styles.centered}>
         <View style={[styles.card, { backgroundColor: theme.color.surface1 }]}>
           <Text variant="title" style={styles.title}>

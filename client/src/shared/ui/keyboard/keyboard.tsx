@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Keyboard, Platform, Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Keyboard, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 export function dismissKeyboard(): void {
   Keyboard.dismiss();
@@ -14,9 +15,9 @@ export type DismissKeyboardAreaProps = {
 export function DismissKeyboardArea(props: DismissKeyboardAreaProps): ReactElement {
   const { children, testID, style } = props;
   return (
-    <Pressable testID={testID} onPress={dismissKeyboard} style={style}>
+    <Tappable action="ui.dismiss_keyboard" testID={testID} onPress={dismissKeyboard} style={style}>
       {children}
-    </Pressable>
+    </Tappable>
   );
 }
 

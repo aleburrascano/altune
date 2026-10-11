@@ -4,7 +4,6 @@ import {
   FlatList,
   type ListRenderItemInfo,
   Modal,
-  Pressable,
   StyleSheet,
   View,
 } from 'react-native';
@@ -15,6 +14,7 @@ import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import { countLabel } from '@shared/ui/displayFormat';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { CreatePlaylistModal } from '@shared/playlists/ui/CreatePlaylistModal';
 import { usePlaylistsPort } from '@shared/playlists/ports/PlaylistsPortProvider';
@@ -103,7 +103,8 @@ export function AddToPlaylistSheet({
 
   const renderPlaylistItem = useCallback(
     ({ item }: ListRenderItemInfo<PlaylistResponse>) => (
-      <Pressable
+      <Tappable
+        action="playlists.add_to_playlist.pick"
         testID={`add-to-playlist-${item.id}`}
         onPress={() => addToPlaylist(item.id)}
         disabled={busy}
@@ -134,7 +135,7 @@ export function AddToPlaylistSheet({
             Added ✓
           </Text>
         ) : null}
-      </Pressable>
+      </Tappable>
     ),
     [addToPlaylist, addedTo, busy, theme.color.border, theme.color.surface2, theme.color.success],
   );
@@ -154,14 +155,15 @@ export function AddToPlaylistSheet({
         animationType="slide"
         onRequestClose={handleClose}
       >
-        <Pressable
+        <Tappable
+          action="playlists.add_to_playlist.close"
           style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
           onPress={handleClose}
           accessibilityRole="button"
           accessibilityLabel="Close"
         >
           <View />
-        </Pressable>
+        </Tappable>
         <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>
           <View style={[styles.handle, { backgroundColor: theme.color.border }]} />
           <Text variant="title" style={styles.sheetTitle}>
@@ -174,7 +176,8 @@ export function AddToPlaylistSheet({
             {busy ? <ActivityIndicator size="small" testID="add-to-playlist-busy" /> : null}
           </View>
 
-          <Pressable
+          <Tappable
+            action="playlists.add_to_playlist.create_new"
             testID="add-to-playlist-create-new"
             onPress={() => setCreateVisible(true)}
             disabled={busy}
@@ -192,7 +195,7 @@ export function AddToPlaylistSheet({
               </Text>
             </View>
             <Text variant="bodyStrong">Create New Playlist</Text>
-          </Pressable>
+          </Tappable>
 
           <FlatList
             data={playlists}

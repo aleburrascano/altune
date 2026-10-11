@@ -13,10 +13,6 @@ MC-10 src/features/detail/hooks/useArtistContent.ts Query keys come from the que
 MC-10 src/features/detail/hooks/useRelatedTracks.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/domain/resolveEntityQuery.ts Query keys come from the query-key factory, not a literal queryKey array (MC-10, module-shape M5).
 MC-10 src/features/detail/domain/resolveEntityQuery.ts queryOptions() builds its own key; define it in the query-key factory (MC-10, module-shape M5).
-MC-4b src/shared/acquisition/ui/DownloadsSheet.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/shared/playlists/ui/AddToPlaylistSheet.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/shared/playlists/ui/CreatePlaylistModal.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
-MC-4b src/shared/ui/keyboard/keyboard.tsx 'Pressable' import from 'react-native' is restricted. Use a shared/ui primitive (Button, IconButton, Chip, Row) so taps are recorded (MC-4b).
 MC-9 src/features/auth/hooks/useOAuth.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
 MC-9 src/features/auth/hooks/useOAuth.web.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
 MC-9 src/features/auth/hooks/useSignIn.ts Imports point inward: ui/, hooks/ and ports/ do not import adapters/. Reach the adapter through a port; the provider that supplies the default adapter lives in adapters/ (MC-9, module-shape M3).
