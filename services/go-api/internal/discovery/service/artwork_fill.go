@@ -11,9 +11,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -60,24 +59,17 @@ func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult,
 }
 
 func (a *ArtworkFiller) fillFromCache(ctx, fillCtx context.Context, top []domain.SearchResult) ([]domain.SearchResult, []artworkOutcome) {
-	var g errgroup.Group
-	g.SetLimit(artworkFillConcurrency)
-	filled := make([]domain.SearchResult, len(top))
+	filled := slices.Clone(top)
 	live := make([]artworkOutcome, len(top))
-	for i, r := range top {
-		filled[i] = r
-		g.Go(func() error {
-			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", r.Title)
-			outcome, settled := a.runCachedStages(fillCtx, &filled[i])
-			if !settled {
-				live[i] = outcome
-				outcome.stage = artworkStagePending
-			}
-			setArtworkPath(&filled[i], outcome.path())
-			return nil
-		})
-	}
-	_ = g.Wait()
+	forEachBounded(len(top), func(i int) {
+		defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", top[i].Title)
+		outcome, settled := a.runCachedStages(fillCtx, &filled[i])
+		if !settled {
+			live[i] = outcome
+			outcome.stage = artworkStagePending
+		}
+		setArtworkPath(&filled[i], outcome.path())
+	})
 	return filled, live
 }
 
@@ -105,16 +97,25 @@ func liveArtworkJobs(live []artworkOutcome) []int {
 }
 
 func (a *ArtworkFiller) resolveJobs(ctx context.Context, results []domain.SearchResult, live []artworkOutcome, jobs []int) {
-	var g errgroup.Group
-	g.SetLimit(artworkFillConcurrency)
-	for _, i := range jobs {
-		g.Go(func() error {
-			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", results[i].Title)
-			a.resolveLive(ctx, &results[i], live[i].mbid, live[i].fromDurable)
-			return nil
-		})
+	forEachBounded(len(jobs), func(n int) {
+		i := jobs[n]
+		defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", results[i].Title)
+		a.resolveLive(ctx, &results[i], live[i].mbid, live[i].fromDurable)
+	})
+}
+
+func forEachBounded(n int, work func(i int)) {
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, artworkFillConcurrency)
+	for i := range n {
+		slots <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer func() { <-slots; wg.Done() }()
+			work(i)
+		}()
 	}
-	_ = g.Wait()
+	wg.Wait()
 }
 
 func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []domain.SearchResult) *ArtworkFiller {
