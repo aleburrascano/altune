@@ -9,10 +9,6 @@ jest.mock('expo-router', () => ({
   Link: ({ children }: { children: ReactNode }) => children,
 }));
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { updateUser: jest.fn(), signUp: jest.fn(), signInWithOAuth: jest.fn() } },
-}));
-
 const offersAGeneratedPassword = {
   secureTextEntry: true,
   autoCapitalize: 'none',

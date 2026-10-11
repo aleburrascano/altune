@@ -17,7 +17,6 @@ jest.mock('expo-router', () => {
     Redirect: ({ href }: { href: string }) => <View testID={`redirect-${href}`} />,
   };
 });
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
   'exchangeCodeForSession',

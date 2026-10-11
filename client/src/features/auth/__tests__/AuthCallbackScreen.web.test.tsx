@@ -4,15 +4,10 @@ import { Platform } from 'react-native';
 import { AUTH_ACTION_TIMEOUT_MS } from '@shared/auth/authDeadline';
 import { _resetConsumedCredentialForTest } from '@features/auth/domain/completeAuthIntent';
 import { AuthCallbackScreen } from '@features/auth/ui/AuthCallbackScreen.web';
+import * as nativeWebOrigin from '@shared/device/webOrigin';
+import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
 import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
-
-jest.mock('@shared/device/webOrigin', () => ({
-  webOrigin: (): string | null =>
-    (require('react-native') as { Platform: { OS: string } }).Platform.OS === 'web'
-      ? (require('@shared/device/webOrigin.web') as { webOrigin: () => string | null }).webOrigin()
-      : null,
-}));
 
 const mockRouter = { replace: jest.fn() };
 
@@ -25,7 +20,6 @@ jest.mock('expo-router', () => {
     ),
   };
 });
-jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
 const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
   'exchangeCodeForSession',
@@ -69,6 +63,7 @@ function setWebUrl(url: string): { replaceState: jest.Mock } {
 
 beforeEach(() => {
   Platform.OS = 'web';
+  jest.spyOn(nativeWebOrigin, 'webOrigin').mockImplementation(browserWebOrigin.webOrigin);
   mockRouter.replace.mockReset();
   _resetConsumedCredentialForTest();
   exchangeCodeForSession.mockResolvedValue(SIGNED_IN);
@@ -78,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.mocked(nativeWebOrigin.webOrigin).mockRestore();
   Platform.OS = 'ios';
   Reflect.deleteProperty(globalThis, 'window');
 });

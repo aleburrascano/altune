@@ -4,13 +4,6 @@ __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
 __tests__/webMustHolds/mh04-sessionPersists.test.ts @shared/auth/authStorage
 __tests__/webMustHolds/mh07-presignExpiry.test.ts @shared/apiClient/audio
 __tests__/webMustHolds/mh08-webSources.test.ts @shared/auth/supabaseClient
-src/chrome/__tests__/platformExtras.test.tsx @features/library/hooks/usePlaylistActions
-src/chrome/__tests__/platformExtras.test.tsx @shared/playback/usePlayback
-src/chrome/__tests__/platformExtras.test.tsx @shared/ui/keyboard/useKeyboardShortcuts
-src/features/auth/__tests__/AuthCallbackScreen.test.tsx @shared/auth/supabaseClient
-src/features/auth/__tests__/AuthCallbackScreen.web.test.tsx @shared/auth/supabaseClient
-src/features/auth/__tests__/AuthCallbackScreen.web.test.tsx @shared/device/webOrigin
-src/features/auth/__tests__/AuthFields.test.tsx @shared/auth/supabaseClient
 src/features/auth/__tests__/AuthGate.test.tsx @shared/auth/sessionExpired
 src/features/auth/__tests__/AuthGate.test.tsx @shared/auth/supabaseClient
 src/features/auth/__tests__/AuthGate.test.tsx @shared/auth/useSession
