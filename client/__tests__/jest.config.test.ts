@@ -5,8 +5,11 @@ describe('the mobile jest config', () => {
     expect(config.randomize).toBe(true);
   });
 
-  it('restores every mock after each test', () => {
-    expect(config.restoreMocks).toBe(true);
+  it('restores every mock after each test in every project', () => {
+    expect(config.projects).toHaveLength(2);
+    for (const project of config.projects) {
+      expect(project.restoreMocks).toBe(true);
+    }
   });
 
   it('exits when the run ends, even with open handles left behind', () => {

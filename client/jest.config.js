@@ -3,6 +3,7 @@ const { assertSupportedNode } = require('./jest/requireNode22');
 assertSupportedNode(process.versions.node);
 
 const preset = require('jest-expo/jest-preset');
+const webPreset = require('jest-expo/web/jest-preset');
 
 const RATCHET_RAISE_ONLY = {
   'src/shared/events/**': { statements: 94, branches: 78, functions: 100, lines: 100 },
@@ -28,28 +29,56 @@ const RATCHET_RAISE_ONLY = {
 const PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE =
   '/node_modules/react-native/Libraries/Renderer/implementations/';
 
-module.exports = {
+const WEB_INTEGRATION_TESTS = '\\.web\\.integration\\.test\\.tsx?$';
+
+const houseModuleNameMapper = {
+  '^@/(.*)$': '<rootDir>/src/$1',
+  '^@features/(.*)$': '<rootDir>/src/features/$1',
+  '^@shared/(.*)$': '<rootDir>/src/shared/$1',
+  '^@testing/(.*)$': '<rootDir>/jest/$1',
+  '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
+};
+
+const nativeProject = {
   ...preset,
+  displayName: 'native',
   rootDir: __dirname,
-  randomize: true,
   restoreMocks: true,
-  forceExit: true,
   workerIdleMemoryLimit: '1GB',
   transformIgnorePatterns: [
     ...preset.transformIgnorePatterns,
     PREBUILT_COMMONJS_RENDERER_BABEL_WOULD_NOT_CHANGE,
   ],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
-  collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/__tests__/**', '!src/**/*.d.ts'],
-  coverageThreshold: RATCHET_RAISE_ONLY,
+  testPathIgnorePatterns: [...(preset.testPathIgnorePatterns ?? []), WEB_INTEGRATION_TESTS],
   setupFiles: [...(preset.setupFiles ?? []), '<rootDir>/jest/setup-env.js'],
   setupFilesAfterEnv: [...(preset.setupFilesAfterEnv ?? []), '<rootDir>/jest/setup-after-env.js'],
-  moduleNameMapper: {
-    ...(preset.moduleNameMapper ?? {}),
-    '^@/(.*)$': '<rootDir>/src/$1',
-    '^@features/(.*)$': '<rootDir>/src/features/$1',
-    '^@shared/(.*)$': '<rootDir>/src/shared/$1',
-    '^@testing/(.*)$': '<rootDir>/jest/$1',
-    '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
-  },
+  moduleNameMapper: { ...(preset.moduleNameMapper ?? {}), ...houseModuleNameMapper },
+};
+
+const webProject = {
+  ...webPreset,
+  displayName: 'web',
+  rootDir: __dirname,
+  restoreMocks: true,
+  workerIdleMemoryLimit: '1GB',
+  testMatch: [
+    '**/__tests__/**/*.web.integration.test.ts',
+    '**/__tests__/**/*.web.integration.test.tsx',
+  ],
+  setupFiles: [...(webPreset.setupFiles ?? []), '<rootDir>/jest/setup-env.js'],
+  setupFilesAfterEnv: [
+    ...(webPreset.setupFilesAfterEnv ?? []),
+    '<rootDir>/jest/setup-after-env.js',
+  ],
+  moduleNameMapper: { ...(webPreset.moduleNameMapper ?? {}), ...houseModuleNameMapper },
+};
+
+module.exports = {
+  rootDir: __dirname,
+  randomize: true,
+  forceExit: true,
+  collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/__tests__/**', '!src/**/*.d.ts'],
+  coverageThreshold: RATCHET_RAISE_ONLY,
+  projects: [nativeProject, webProject],
 };
