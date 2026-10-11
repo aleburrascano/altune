@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
 import { Text, pressedStyle, spacing, useTheme, useWideWebLayout } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
@@ -51,9 +52,9 @@ function SeeAllLabel({ title }: { title: string }): ReactElement {
 
 function SeeAllLink(props: SeeAllLinkProps): ReactElement {
   return (
-    <Pressable {...seeAllPressableProps(props)}>
+    <Tappable action="discover.section.see_all" {...seeAllPressableProps(props)}>
       <SeeAllLabel title={props.title} />
-    </Pressable>
+    </Tappable>
   );
 }
 

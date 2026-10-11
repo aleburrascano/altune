@@ -1,8 +1,9 @@
 import { useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
 import { Card, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { usePressableInteraction } from '@shared/ui/primitives/usePressableInteraction';
 
 import { kindLabel, resultKey } from '@features/discovery/domain/resultDisplay';
@@ -80,13 +81,17 @@ function GridResultCard({ item, position, grid }: GridResultCardProps): ReactEle
   );
   const testID = `discover-grid-card-body-${item.kind}-${position}`;
   return (
-    <Pressable {...gridCardPressableProps(item, position, grid)} {...pressableProps}>
+    <Tappable
+      action="discover.grid.open"
+      {...gridCardPressableProps(item, position, grid)}
+      {...pressableProps}
+    >
       <GridCardBody
         item={item}
         cardStyle={gridCardStyle(theme, hovered || focused)}
         testID={testID}
       />
-    </Pressable>
+    </Tappable>
   );
 }
 

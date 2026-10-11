@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Text, pressedStyle, spacing, useTheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { sliceCodePoints } from '@features/discovery/domain/searchPaging';
 import { SectionLabel } from '@features/discovery/ui/SectionLabel';
@@ -57,11 +58,11 @@ const CLEAR_A11Y = {
 
 function ClearButton({ onPress }: { onPress: () => void }): ReactElement {
   return (
-    <Pressable onPress={onPress} style={clearStyle} {...CLEAR_A11Y}>
+    <Tappable action="discover.history.clear" onPress={onPress} style={clearStyle} {...CLEAR_A11Y}>
       <Text variant="caption" tone="accent">
         Clear
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

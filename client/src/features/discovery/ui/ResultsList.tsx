@@ -1,9 +1,10 @@
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, StyleSheet, type ListRenderItem, type ListRenderItemInfo } from 'react-native';
 
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
 import { Text, spacing, useTheme, useWideWebLayout } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
 import type { ResultTapHandler } from '@features/discovery/hooks/useResultTap';
@@ -181,9 +182,13 @@ function ResultsFooter({ common }: { common: ResultsCommonProps }): ReactElement
 
 function RetryFooter({ onRetry }: { onRetry: (() => void) | undefined }): ReactElement {
   return (
-    <Pressable {...retryFooterProps} onPress={onRetry}>
+    <Tappable
+      action="discover.results.retry_next_page"
+      {...retryFooterProps}
+      onPress={() => onRetry?.()}
+    >
       <RetryLabel />
-    </Pressable>
+    </Tappable>
   );
 }
 
