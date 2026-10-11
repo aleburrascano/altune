@@ -146,6 +146,7 @@ const (
 	ProviderStatusError
 	ProviderStatusRateLimited
 	ProviderStatusCircuitOpen
+	ProviderStatusPending
 )
 
 func (s ProviderStatus) String() string {
@@ -160,6 +161,8 @@ func (s ProviderStatus) String() string {
 		return "rate_limited"
 	case ProviderStatusCircuitOpen:
 		return "circuit_open"
+	case ProviderStatusPending:
+		return "pending"
 	default:
 		return "unknown"
 	}

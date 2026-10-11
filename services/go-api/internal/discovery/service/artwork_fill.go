@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,15 +43,9 @@ func newArtworkFiller(
 	return &ArtworkFiller{resolver: resolver, cache: cache, identityStore: identityStore, mbidIndex: mbidIndex}
 }
 
-func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
-	if a.resolver == nil {
-		return results
-	}
-	limit := artworkFillLimit
-	if len(results) < limit {
-		limit = len(results)
-	}
-	if limit == 0 {
+func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult, bg *backgroundRunner) []domain.SearchResult {
+	limit := min(artworkFillLimit, len(results))
+	if a.resolver == nil || limit == 0 {
 		return results
 	}
 
@@ -58,23 +53,68 @@ func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult)
 	defer cancel()
 
 	top := results[:limit]
-	rest := results[limit:]
 	filler := a.withPrefetchedIdentities(fillCtx, top)
+	filled, live := filler.fillFromCache(ctx, fillCtx, top)
+	filler.resolveLater(ctx, bg, filled, live)
+	return append(filled, results[limit:]...)
+}
 
+func (a *ArtworkFiller) fillFromCache(ctx, fillCtx context.Context, top []domain.SearchResult) ([]domain.SearchResult, []artworkOutcome) {
 	var g errgroup.Group
 	g.SetLimit(artworkFillConcurrency)
 	filled := make([]domain.SearchResult, len(top))
-
+	live := make([]artworkOutcome, len(top))
 	for i, r := range top {
 		filled[i] = r
 		g.Go(func() error {
 			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", r.Title)
-			filled[i] = filler.fillOne(fillCtx, r)
+			outcome, settled := a.runCachedStages(fillCtx, &filled[i])
+			if !settled {
+				live[i] = outcome
+				outcome.stage = artworkStagePending
+			}
+			setArtworkPath(&filled[i], outcome.path())
 			return nil
 		})
 	}
 	_ = g.Wait()
-	return append(filled, rest...)
+	return filled, live
+}
+
+func (a *ArtworkFiller) resolveLater(ctx context.Context, bg *backgroundRunner, filled []domain.SearchResult, live []artworkOutcome) {
+	jobs := liveArtworkJobs(live)
+	if a.cache == nil || bg == nil || len(jobs) == 0 {
+		return
+	}
+	results := slices.Clone(filled)
+	bg.launch(ctx, "artwork_fill", func(bgCtx context.Context) {
+		bgCtx, cancel := context.WithTimeout(bgCtx, artworkFillTimeout)
+		defer cancel()
+		a.resolveJobs(bgCtx, results, live, jobs)
+	})
+}
+
+func liveArtworkJobs(live []artworkOutcome) []int {
+	var jobs []int
+	for i, outcome := range live {
+		if outcome.stage == artworkStageLive {
+			jobs = append(jobs, i)
+		}
+	}
+	return jobs
+}
+
+func (a *ArtworkFiller) resolveJobs(ctx context.Context, results []domain.SearchResult, live []artworkOutcome, jobs []int) {
+	var g errgroup.Group
+	g.SetLimit(artworkFillConcurrency)
+	for _, i := range jobs {
+		g.Go(func() error {
+			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", results[i].Title)
+			a.resolveLive(ctx, &results[i], live[i].mbid, live[i].fromDurable)
+			return nil
+		})
+	}
+	_ = g.Wait()
 }
 
 func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []domain.SearchResult) *ArtworkFiller {
@@ -126,6 +166,7 @@ const (
 	artworkStageCachedMiss
 	artworkStageDegraded
 	artworkStageLive
+	artworkStagePending
 )
 
 type artworkOutcome struct {
@@ -133,6 +174,7 @@ type artworkOutcome struct {
 	resolved    string
 	confidence  ports.ArtworkConfidence
 	fromDurable bool
+	mbid        string
 }
 
 func (o artworkOutcome) path() string {
@@ -145,6 +187,8 @@ func (o artworkOutcome) path() string {
 		return "none"
 	case artworkStageDegraded:
 		return "degraded"
+	case artworkStagePending:
+		return "pending"
 	default:
 		return artworkPathFor(o.resolved, o.confidence, o.fromDurable)
 	}
@@ -157,15 +201,23 @@ func (a *ArtworkFiller) fillOne(ctx context.Context, result domain.SearchResult)
 }
 
 func (a *ArtworkFiller) runStages(ctx context.Context, result *domain.SearchResult) artworkOutcome {
+	outcome, settled := a.runCachedStages(ctx, result)
+	if settled {
+		return outcome
+	}
+	return a.resolveLive(ctx, result, outcome.mbid, outcome.fromDurable)
+}
+
+func (a *ArtworkFiller) runCachedStages(ctx context.Context, result *domain.SearchResult) (artworkOutcome, bool) {
 	if usableArtwork(result.ImageURL) {
 		defaultArtworkSource(result)
-		return artworkOutcome{stage: artworkStageProvider}
+		return artworkOutcome{stage: artworkStageProvider}, true
 	}
 	mbid, fromDurable := a.lookupMBID(ctx, result)
 	if stage, settled := a.lookupArtworkCache(ctx, result, mbid); settled {
-		return artworkOutcome{stage: stage}
+		return artworkOutcome{stage: stage}, true
 	}
-	return a.resolveLive(ctx, result, mbid, fromDurable)
+	return artworkOutcome{stage: artworkStageLive, mbid: mbid, fromDurable: fromDurable}, false
 }
 
 func usableArtwork(url string) bool {

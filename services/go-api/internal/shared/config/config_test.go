@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1824,5 +1825,66 @@ func TestLoad_BehavioralCorpusPathProbeLeavesNoFile(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("write probe left %d entries behind", len(entries))
+	}
+}
+
+func TestLoad_DiscoverySearchProviders(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     string
+		unset   bool
+		want    []string
+		wantErr bool
+	}{
+		{name: "unset searches the five providers whose cards carry a photo", unset: true, want: []string{"deezer", "applemusic", "spotify", "youtube", "soundcloud"}},
+		{name: "set but empty still searches the five", env: "", want: []string{"deezer", "applemusic", "spotify", "youtube", "soundcloud"}},
+		{name: "trims and lowercases", env: " Deezer, spotify ,YOUTUBE", want: []string{"deezer", "spotify", "youtube"}},
+		{name: "a typo fails startup", env: "deezer,spotfy", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(nil))
+			if !tc.unset {
+				t.Setenv("DISCOVERY_SEARCH_PROVIDERS", tc.env)
+			}
+
+			cfg, err := Load()
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "spotfy") {
+					t.Fatalf("err = %v, want an error naming the unknown provider", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !slices.Equal(cfg.DiscoverySearchProviders, tc.want) {
+				t.Fatalf("DiscoverySearchProviders = %q, want %q", cfg.DiscoverySearchProviders, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoad_DiscoveryDurationsMustBePositive(t *testing.T) {
+	for _, key := range []string{"DISCOVERY_PROVIDER_CACHE_TTL", "DISCOVERY_MUSICBRAINZ_CACHE_TTL"} {
+		for _, value := range []string{"0s", "-1m"} {
+			t.Run(key+"="+value, func(t *testing.T) {
+				setEnv(t, validConfigEnv(nil))
+				t.Setenv(key, value)
+
+				if _, err := Load(); err == nil || !strings.Contains(err.Error(), key) {
+					t.Fatalf("err = %v, want an error naming %s", err, key)
+				}
+			})
+		}
+	}
+}
+
+func TestLoad_DiscoverySearchDeadlineRejectsNegative(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	t.Setenv("DISCOVERY_SEARCH_DEADLINE", "-1s")
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "DISCOVERY_SEARCH_DEADLINE") {
+		t.Fatalf("err = %v, want an error naming DISCOVERY_SEARCH_DEADLINE", err)
 	}
 }

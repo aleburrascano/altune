@@ -272,16 +272,17 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	enrichSvc := a.wireDiscoveryEnrichment(cf, sharedMB)
 
 	discoveryH := a.buildDiscoveryHandler(cf, discoveryHandler.DiscoveryServices{
-		Search:       searchSvc,
-		History:      historySvc,
-		ClearHistory: clearHistorySvc,
-		Album:        content.albumSvc,
-		Artist:       content.artistSvc,
-		Related:      content.relatedSvc,
-		Enrich:       enrichSvc,
-		Suggest:      content.suggestSvc,
-		Event:        eventSvc,
-		Favorites:    favoritesSvc,
+		Search:        searchSvc,
+		History:       historySvc,
+		RecordHistory: discoveryService.NewRecordSearchHistoryService(historyRepo),
+		ClearHistory:  clearHistorySvc,
+		Album:         content.albumSvc,
+		Artist:        content.artistSvc,
+		Related:       content.relatedSvc,
+		Enrich:        enrichSvc,
+		Suggest:       content.suggestSvc,
+		Event:         eventSvc,
+		Favorites:     favoritesSvc,
 	})
 
 	a.startDiscoveryBackgroundJobs(ctx, cf, searchSvc, eventStore, vocabStore)

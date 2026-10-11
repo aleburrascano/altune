@@ -38,8 +38,7 @@ sequenceDiagram
         S-)DB: persist newly learned identity bridges (async)
         S->>S: merge: ISRC › UPC › MBID › bridge › name
         S->>S: rank: relevance › prominence › behavioral › popularity › RRF
-        S->>P: disambiguate artists (MusicBrainz, 2s)
-        S->>S: fill artwork: top 50, 4s, chain of 10 sources (Cover Art Archive first)
+        S->>S: artwork: provider photo or cache now, missing ones resolve in the background (top 50, 4s, 10 sources) for the next search
         opt zero results
             S->>S: spelling correction → second full fan-out
         end

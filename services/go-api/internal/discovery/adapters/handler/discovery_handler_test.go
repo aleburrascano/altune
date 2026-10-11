@@ -176,11 +176,12 @@ func buildDiscoveryRouter(
 	}
 
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search:       searchSvc,
-		History:      historySvc,
-		ClearHistory: clearHistorySvc,
-		Album:        albumSvc,
-		Artist:       artistSvc,
+		Search:        searchSvc,
+		History:       historySvc,
+		RecordHistory: service.NewRecordSearchHistoryService(historyRepo),
+		ClearHistory:  clearHistorySvc,
+		Album:         albumSvc,
+		Artist:        artistSvc,
 	})
 
 	r := chi.NewRouter()
@@ -802,4 +803,57 @@ func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleRecordSearchHistory(t *testing.T) {
+	t.Run("submitted query is saved once", func(t *testing.T) {
+		historyRepo := &fakeSearchHistoryRepo{}
+		router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+
+		rec := discServe(t, router, http.MethodPost, "/discovery/search-history",
+			discJsonBody(t, map[string]string{"query": "  Radiohead "}))
+
+		discAssertStatus(t, rec, http.StatusNoContent)
+		if len(historyRepo.entries) != 1 {
+			t.Fatalf("history entries = %d, want 1", len(historyRepo.entries))
+		}
+		if got := historyRepo.entries[0]; got.Query != "Radiohead" || got.QueryNorm != "radiohead" {
+			t.Errorf("saved query = %q / %q, want %q / %q", got.Query, got.QueryNorm, "Radiohead", "radiohead")
+		}
+	})
+
+	rejected := []struct {
+		name string
+		body any
+	}{
+		{name: "blank query", body: map[string]string{"query": "   "}},
+		{name: "missing query", body: map[string]string{}},
+		{name: "query over the length cap", body: map[string]string{"query": strings.Repeat("a", 201)}},
+		{name: "body is not an object", body: "radiohead"},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name+" is rejected and nothing is saved", func(t *testing.T) {
+			historyRepo := &fakeSearchHistoryRepo{}
+			router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+
+			rec := discServe(t, router, http.MethodPost, "/discovery/search-history", discJsonBody(t, tc.body))
+
+			discAssertStatus(t, rec, http.StatusBadRequest)
+			if len(historyRepo.entries) != 0 {
+				t.Errorf("history entries = %d, want 0", len(historyRepo.entries))
+			}
+		})
+	}
+
+	t.Run("anonymous caller is refused", func(t *testing.T) {
+		historyRepo := &fakeSearchHistoryRepo{}
+		router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+
+		rec := discServeNoAuth(t, router, http.MethodPost, "/discovery/search-history")
+
+		discAssertStatus(t, rec, http.StatusUnauthorized)
+		if len(historyRepo.entries) != 0 {
+			t.Errorf("history entries = %d, want 0", len(historyRepo.entries))
+		}
+	})
 }

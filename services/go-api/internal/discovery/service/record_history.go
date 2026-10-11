@@ -5,8 +5,10 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,4 +57,14 @@ func (s *RecordSearchHistoryService) Record(
 			"user_id", userId.String(),
 			"error", err)
 	}
+}
+
+func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId shared.UserId, raw string) error {
+	query, err := domain.NewSearchQuery(strings.TrimSpace(raw), domain.AllKinds(), 1)
+	if err != nil {
+		return err
+	}
+	queryNorm := textnorm.NormalizeForMatch(CleanQuery(query.Raw))
+	s.Record(ctx, userId, query, queryNorm, true, time.Now())
+	return nil
 }

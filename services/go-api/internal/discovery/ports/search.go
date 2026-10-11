@@ -39,6 +39,11 @@ type ResultCache interface {
 	Set(ctx context.Context, key string, results []domain.SearchResult)
 }
 
+type ProviderResultCache interface {
+	Get(ctx context.Context, provider domain.ProviderName, key string) ([]domain.SearchResult, bool)
+	Set(ctx context.Context, provider domain.ProviderName, key string, results []domain.SearchResult)
+}
+
 type HeldSlateCache interface {
 	Get(ctx context.Context, key string) ([]domain.SearchResult, bool)
 	Set(ctx context.Context, key string, results []domain.SearchResult)

@@ -101,6 +101,11 @@ type Config struct {
 	AlertWebhookURL            string  `env:"ALERT_WEBHOOK_URL"`
 	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 
+	DiscoverySearchProviders     []string      `env:"DISCOVERY_SEARCH_PROVIDERS" envSeparator:"," envDefault:"deezer,applemusic,spotify,youtube,soundcloud"`
+	DiscoverySearchDeadline      time.Duration `env:"DISCOVERY_SEARCH_DEADLINE" envDefault:"1500ms"`
+	DiscoveryProviderCacheTTL    time.Duration `env:"DISCOVERY_PROVIDER_CACHE_TTL" envDefault:"10m"`
+	DiscoveryMusicBrainzCacheTTL time.Duration `env:"DISCOVERY_MUSICBRAINZ_CACHE_TTL" envDefault:"6h"`
+
 	SSEMaxConns int `env:"SSE_MAX_CONNS" envDefault:"2048"`
 
 	AcquisitionPaused bool     `env:"ACQUISITION_PAUSED" envDefault:"false"`
@@ -137,6 +142,10 @@ func (c *Config) normalize() {
 		c.CORSOrigins[i] = strings.TrimSpace(origin)
 	}
 	c.DisabledJobs = trimNonEmpty(c.DisabledJobs)
+	c.DiscoverySearchProviders = trimNonEmpty(c.DiscoverySearchProviders)
+	for i, name := range c.DiscoverySearchProviders {
+		c.DiscoverySearchProviders[i] = strings.ToLower(name)
+	}
 }
 
 func trimNonEmpty(items []string) []string {

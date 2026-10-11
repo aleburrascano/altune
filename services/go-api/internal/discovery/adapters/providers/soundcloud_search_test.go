@@ -53,3 +53,25 @@ func TestSoundCloudAPIAdapter_authRetryReResolveFailureSurfaces(t *testing.T) {
 		t.Fatalf("err = %v, want the re-resolve failure surfaced", err)
 	}
 }
+
+func TestSoundCloudSearch_FailedAlbumsMakeThePartialVisible(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/search/albums") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"collection":[]}`))
+	}))
+	defer srv.Close()
+
+	a := newTestSoundCloudAPI(srv, nil)
+	_, err := a.Search(context.Background(), "humble", allSearchKinds())
+
+	var partial *domain.PartialKindsError
+	if !errors.As(err, &partial) {
+		t.Fatalf("err = %v, want a PartialKindsError for the failed album search", err)
+	}
+	if len(partial.Failed) != 1 || partial.Failed[0] != domain.ResultKindAlbum {
+		t.Errorf("failed kinds = %v, want [album]", partial.Failed)
+	}
+}

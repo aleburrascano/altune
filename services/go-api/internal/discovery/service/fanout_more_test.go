@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,4 +206,170 @@ func TestFanOut_BudgetCutOffUnclassifiedErrorStillCounts(t *testing.T) {
 	if got := breakerFailures(cb, domain.ProviderITunes); got != 1 {
 		t.Errorf("recorded failures = %d, want 1 for a search cut off by its own budget", got)
 	}
+}
+
+type partialKindsProvider struct {
+	countingProvider
+}
+
+func (p *partialKindsProvider) Search(ctx context.Context, q string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	res, _ := p.countingProvider.Search(ctx, q, kinds)
+	return res, &domain.PartialKindsError{Failed: []domain.ResultKind{domain.ResultKindAlbum}, Err: context.DeadlineExceeded}
+}
+
+func TestFanOut_PartialKindsKeepResultsButAreNeverCached(t *testing.T) {
+	p := &partialKindsProvider{countingProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}}
+	breaker := NewCircuitBreaker()
+	slates := newFakeResultCache()
+	svc := NewService([]ports.SearchProvider{p}, breaker,
+		WithResultCache(slates), WithProviderResultCache(newFakeProviderCache()))
+
+	out := runSearch(t, svc, "humble")
+	runSearch(t, svc, "humble")
+
+	if len(out.Results) != 1 {
+		t.Fatalf("results = %v, want the kinds that answered kept", titles(out.Results))
+	}
+	if !out.Partial {
+		t.Error("a missing kind must mark the search partial")
+	}
+	if got := out.ProviderStatuses[0].Status; got != domain.ProviderStatusTimeout {
+		t.Errorf("status = %v, want timeout (the album search timed out)", got)
+	}
+	if slates.sets != 0 || p.calls != 2 {
+		t.Errorf("a partial answer must not be cached: slate sets=%d provider calls=%d", slates.sets, p.calls)
+	}
+	if n := breakerFailures(breaker, domain.ProviderDeezer); n != 0 {
+		t.Errorf("breaker failures = %d, want 0 (the provider answered)", n)
+	}
+}
+
+type lateProvider struct {
+	name      domain.ProviderName
+	results   []domain.SearchResult
+	release   chan struct{}
+	started   chan struct{}
+	cancelled chan struct{}
+	calls     atomic.Int32
+}
+
+func newLateProvider(name domain.ProviderName, results ...domain.SearchResult) *lateProvider {
+	return &lateProvider{
+		name:      name,
+		results:   results,
+		release:   make(chan struct{}),
+		started:   make(chan struct{}, 8),
+		cancelled: make(chan struct{}, 8),
+	}
+}
+
+func (p *lateProvider) Name() domain.ProviderName { return p.name }
+
+func (p *lateProvider) SupportedKinds() map[domain.ResultKind]bool { return domain.AllKinds() }
+
+func (p *lateProvider) SearchTimeout() time.Duration { return 5 * time.Second }
+
+func (p *lateProvider) Search(ctx context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	p.calls.Add(1)
+	p.started <- struct{}{}
+	select {
+	case <-p.release:
+		return p.results, nil
+	case <-ctx.Done():
+		p.cancelled <- struct{}{}
+		return nil, ctx.Err()
+	}
+}
+
+func statusOf(out *SearchOutput, provider domain.ProviderName) domain.ProviderSearchResponse {
+	for _, st := range out.ProviderStatuses {
+		if st.Provider == provider {
+			return st
+		}
+	}
+	return domain.ProviderSearchResponse{}
+}
+
+func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
+	fast := &countingProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	slow := newLateProvider(domain.ProviderSpotify, deezerTrack("Humble", "Skrillex", 70))
+	slates := newFakeResultCache()
+	svc := NewService([]ports.SearchProvider{fast, slow}, NewCircuitBreaker(),
+		WithSearchDeadline(20*time.Millisecond), WithResultCache(slates))
+	t.Cleanup(func() { close(slow.release); svc.WaitForBackground() })
+
+	out := runSearch(t, svc, "humble")
+
+	if len(out.Results) != 1 || out.Results[0].Title != "Humble" {
+		t.Fatalf("results = %v, want only the fast provider's answer", titles(out.Results))
+	}
+	if st := statusOf(out, domain.ProviderSpotify).Status; st != domain.ProviderStatusPending || st.String() != "pending" {
+		t.Errorf("slow provider status = %v, want pending", st)
+	}
+	if out.Partial {
+		t.Error("a provider still answering is not a failure: the search must not be partial")
+	}
+	if slates.sets != 0 {
+		t.Errorf("a slate missing a pending provider must not be cached, sets = %d", slates.sets)
+	}
+}
+
+func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
+	fast := &countingProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	slow := newLateProvider(domain.ProviderSpotify, deezerTrack("Humble", "Skrillex", 70))
+	slates := newFakeResultCache()
+	svc := NewService([]ports.SearchProvider{fast, slow}, NewCircuitBreaker(),
+		WithSearchDeadline(20*time.Millisecond), WithResultCache(slates), WithProviderResultCache(newFakeProviderCache()))
+
+	runSearch(t, svc, "humble")
+	close(slow.release)
+	svc.WaitForBackground()
+	out := runSearch(t, svc, "humble")
+
+	if got := slow.calls.Load(); got != 1 {
+		t.Fatalf("slow provider calls = %d, want 1 (its late answer was cached and reused)", got)
+	}
+	if len(out.Results) != 2 || out.Partial {
+		t.Fatalf("second search: results=%v partial=%v, want both answers and not partial", titles(out.Results), out.Partial)
+	}
+	if slates.sets != 1 {
+		t.Errorf("a slate with every provider answered must be cached, sets = %d", slates.sets)
+	}
+}
+
+func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
+	slow := newLateProvider(domain.ProviderSpotify, deezerTrack("Humble", "Skrillex", 70))
+	svc := NewService([]ports.SearchProvider{slow}, NewCircuitBreaker(), WithSearchDeadline(time.Millisecond))
+	done := make(chan *SearchOutput, 1)
+	go func() { done <- runSearch(t, svc, "humble") }()
+	waitFor(t, slow.started, "the provider call to start")
+
+	select {
+	case <-done:
+		t.Fatal("the search answered with nothing while a provider was still working")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(slow.release)
+
+	select {
+	case out := <-done:
+		if len(out.Results) != 1 {
+			t.Fatalf("results = %v, want the first answer that arrived", titles(out.Results))
+		}
+	case <-time.After(time.Second):
+		t.Fatal("search did not answer once the provider did")
+	}
+}
+
+func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
+	slow := newLateProvider(domain.ProviderSpotify)
+	svc := NewService([]ports.SearchProvider{slow}, NewCircuitBreaker(), WithSearchDeadline(time.Second))
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _, _ = svc.Execute(ctx, newUser(), newQuery(t, "dna"), false) }()
+	waitFor(t, slow.started, "the provider call to start")
+
+	cancel()
+
+	waitFor(t, slow.cancelled, "the abandoned search's provider call to stop")
+	svc.WaitForBackground()
 }

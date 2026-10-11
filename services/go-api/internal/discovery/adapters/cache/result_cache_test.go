@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
@@ -163,5 +164,50 @@ func TestRedisResultCache_NilClient_NoOps(t *testing.T) {
 	c.Set(ctx, "key", []domain.SearchResult{{Title: "x"}})
 	if _, hit := c.Get(ctx, "key"); hit {
 		t.Error("nil-client Set cached something, want no-op")
+	}
+}
+
+func TestRedisProviderResultCache_PerProviderAnswersAndTTLs(t *testing.T) {
+	client := testRedisClient(t)
+	cache := NewRedisProviderResultCache(client, ProviderCacheTTLs{
+		Default:  10 * time.Minute,
+		Provider: map[domain.ProviderName]time.Duration{domain.ProviderMusicBrainz: 6 * time.Hour},
+	})
+	ctx := context.Background()
+	key := fmt.Sprintf("humble|%s", t.Name())
+	cleanKeys(t, client,
+		cache.redisKey(domain.ProviderDeezer, key),
+		cache.redisKey(domain.ProviderMusicBrainz, key),
+		cache.redisKey(domain.ProviderSpotify, key))
+
+	cache.Set(ctx, domain.ProviderDeezer, key, []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Humble"}})
+	cache.Set(ctx, domain.ProviderMusicBrainz, key, nil)
+
+	got, hit := cache.Get(ctx, domain.ProviderDeezer, key)
+	if !hit || len(got) != 1 || got[0].Title != "Humble" {
+		t.Fatalf("deezer answer did not round-trip: hit=%v got=%+v", hit, got)
+	}
+	if got, hit := cache.Get(ctx, domain.ProviderMusicBrainz, key); !hit || len(got) != 0 {
+		t.Fatalf("an empty answer must be a hit with no results: hit=%v got=%+v", hit, got)
+	}
+	if _, hit := cache.Get(ctx, domain.ProviderSpotify, key); hit {
+		t.Fatal("another provider must not see deezer's answer")
+	}
+
+	if ttl := client.TTL(ctx, cache.redisKey(domain.ProviderDeezer, key)).Val(); ttl <= 9*time.Minute || ttl > 10*time.Minute {
+		t.Errorf("deezer TTL = %v, want the 10m default", ttl)
+	}
+	if ttl := client.TTL(ctx, cache.redisKey(domain.ProviderMusicBrainz, key)).Val(); ttl <= 5*time.Hour || ttl > 6*time.Hour {
+		t.Errorf("musicbrainz TTL = %v, want its 6h override", ttl)
+	}
+}
+
+func TestRedisProviderResultCache_UnreachableRedisIsAMiss(t *testing.T) {
+	cache := NewRedisProviderResultCache(unreachableRedisClient(t), ProviderCacheTTLs{Default: time.Minute})
+	ctx := context.Background()
+
+	cache.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{{Title: "Humble"}})
+	if _, hit := cache.Get(ctx, domain.ProviderDeezer, "humble"); hit {
+		t.Fatal("an unreachable Redis must read as a miss, never as an empty answer")
 	}
 }

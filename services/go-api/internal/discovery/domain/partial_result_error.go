@@ -12,3 +12,14 @@ func (e *PartialResultError) Error() string {
 }
 
 func (e *PartialResultError) Unwrap() error { return e.Err }
+
+type PartialKindsError struct {
+	Failed []ResultKind
+	Err    error
+}
+
+func (e *PartialKindsError) Error() string {
+	return fmt.Sprintf("partial result: kinds %v failed: %v", e.Failed, e.Err)
+}
+
+func (e *PartialKindsError) Unwrap() error { return e.Err }

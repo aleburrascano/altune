@@ -6,6 +6,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
+	"time"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
@@ -86,8 +88,9 @@ func contentServiceOptions(
 ) []discoveryService.Option {
 	opts := baseSearchOptions(cfg, pool)
 	opts = append(opts, explorationSearchOptions(cfg)...)
+	opts = append(opts, discoveryService.WithSearchDeadline(cfg.DiscoverySearchDeadline))
 	opts = append(opts, contentSearchOptions(w.cf, cfg, pool, redisClient, w.sharedMB, w.breaker)...)
-	opts = append(opts, resultCacheSearchOptions(redisClient)...)
+	opts = append(opts, resultCacheSearchOptions(cfg, redisClient)...)
 	return append(opts, sharedSearchOptions(w, cfg, redisClient, eventStore, vocabStore)...)
 }
 
@@ -111,9 +114,6 @@ func sharedSearchOptions(
 	opts := cacheSearchOptions(redisClient)
 	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
 	opts = append(opts, eventSearchOptions(cfg, eventStore)...)
-	if w.sharedMB != nil {
-		opts = append(opts, discoveryService.WithAlbumValidator(w.sharedMB))
-	}
 	return opts
 }
 
@@ -177,7 +177,7 @@ func contentSearchOptions(
 	return opts
 }
 
-func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
+func resultCacheSearchOptions(cfg *config.Config, redisClient *goredis.Client) []discoveryService.Option {
 	if redisClient == nil {
 		return nil
 	}
@@ -185,9 +185,19 @@ func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Op
 		discoveryService.WithResultCache(
 			discoveryCacheAdapters.NewRedisResultCache(redisClient, cacheSignalOption()),
 		),
+		discoveryService.WithProviderResultCache(
+			discoveryCacheAdapters.NewRedisProviderResultCache(redisClient, providerCacheTTLs(cfg), cacheSignalOption()),
+		),
 		discoveryService.WithHeldSlateCache(
 			discoveryCacheAdapters.NewRedisHeldSlateCache(redisClient, cacheSignalOption()),
 		),
+	}
+}
+
+func providerCacheTTLs(cfg *config.Config) discoveryCacheAdapters.ProviderCacheTTLs {
+	return discoveryCacheAdapters.ProviderCacheTTLs{
+		Default:  cfg.DiscoveryProviderCacheTTL,
+		Provider: map[domain.ProviderName]time.Duration{domain.ProviderMusicBrainz: cfg.DiscoveryMusicBrainzCacheTTL},
 	}
 }
 
@@ -253,9 +263,19 @@ func buildSearchProviderList(ctx context.Context, cf clientFactory, cfg *config.
 	}
 
 	providerList = append(providerList, buildScrapedSearchProviders(cf, cfg)...)
+	providerList = onlyChosenSearchProviders(providerList, cfg.DiscoverySearchProviders)
 
 	slog.InfoContext(ctx, "discovery providers configured", "count", len(providerList))
 	return providerList
+}
+
+func onlyChosenSearchProviders(list []discoveryPorts.SearchProvider, chosen []string) []discoveryPorts.SearchProvider {
+	if len(chosen) == 0 {
+		return list
+	}
+	return slices.DeleteFunc(list, func(p discoveryPorts.SearchProvider) bool {
+		return !slices.Contains(chosen, p.Name().String())
+	})
 }
 
 func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discoveryPorts.SearchProvider {

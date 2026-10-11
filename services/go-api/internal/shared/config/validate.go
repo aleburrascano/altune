@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -43,7 +45,39 @@ func (c *Config) validate() error {
 	if err := c.validateBehavioralCorpusPath(); err != nil {
 		return err
 	}
+	if err := c.validateDiscoverySearch(); err != nil {
+		return err
+	}
 	return c.validateRedis()
+}
+
+var DiscoverySearchProviderNames = []string{
+	"deezer", "applemusic", "musicbrainz", "lastfm", "soundcloud", "youtube", "amazonmusic", "spotify",
+}
+
+func (c *Config) validateDiscoverySearch() error {
+	if c.DiscoverySearchDeadline < 0 {
+		return fmt.Errorf("DISCOVERY_SEARCH_DEADLINE must not be negative, got %s", c.DiscoverySearchDeadline)
+	}
+	for key, ttl := range map[string]time.Duration{
+		"DISCOVERY_PROVIDER_CACHE_TTL":    c.DiscoveryProviderCacheTTL,
+		"DISCOVERY_MUSICBRAINZ_CACHE_TTL": c.DiscoveryMusicBrainzCacheTTL,
+	} {
+		if ttl <= 0 {
+			return fmt.Errorf("%s must be positive, got %s", key, ttl)
+		}
+	}
+	return c.validateDiscoverySearchProviders()
+}
+
+func (c *Config) validateDiscoverySearchProviders() error {
+	for _, name := range c.DiscoverySearchProviders {
+		if !slices.Contains(DiscoverySearchProviderNames, name) {
+			return fmt.Errorf("DISCOVERY_SEARCH_PROVIDERS: unknown provider %q (known: %s)",
+				name, strings.Join(DiscoverySearchProviderNames, ", "))
+		}
+	}
+	return nil
 }
 
 func (c *Config) validateBehavioralCorpusPath() error {

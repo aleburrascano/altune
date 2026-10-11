@@ -52,3 +52,47 @@ func (c *RedisResultCache) Get(ctx context.Context, key string) ([]domain.Search
 func (c *RedisResultCache) Set(ctx context.Context, key string, results []domain.SearchResult) {
 	_ = c.base.Set(ctx, key, results)
 }
+
+const providerResultPrefix = "discovery:provider:v1:"
+
+type ProviderCacheTTLs struct {
+	Default  time.Duration
+	Provider map[domain.ProviderName]time.Duration
+}
+
+func (t ProviderCacheTTLs) of(provider domain.ProviderName) time.Duration {
+	if ttl, ok := t.Provider[provider]; ok {
+		return ttl
+	}
+	return t.Default
+}
+
+type RedisProviderResultCache struct {
+	redisJSON
+	ttls ProviderCacheTTLs
+}
+
+func NewRedisProviderResultCache(client *goredis.Client, ttls ProviderCacheTTLs, opts ...Option) *RedisProviderResultCache {
+	return &RedisProviderResultCache{redisJSON: newRedisJSON(client, opts), ttls: ttls}
+}
+
+func (c *RedisProviderResultCache) Get(ctx context.Context, provider domain.ProviderName, key string) ([]domain.SearchResult, bool) {
+	if c.disabled() {
+		return nil, false
+	}
+	return getJSON[[]domain.SearchResult](ctx, c.redisJSON, c.redisKey(provider, key))
+}
+
+func (c *RedisProviderResultCache) Set(ctx context.Context, provider domain.ProviderName, key string, results []domain.SearchResult) {
+	if c.disabled() {
+		return
+	}
+	if results == nil {
+		results = []domain.SearchResult{}
+	}
+	_ = c.setJSON(ctx, c.redisKey(provider, key), results, c.ttls.of(provider))
+}
+
+func (c *RedisProviderResultCache) redisKey(provider domain.ProviderName, key string) string {
+	return hashKey(providerResultPrefix, provider.String()+"|"+key)
+}

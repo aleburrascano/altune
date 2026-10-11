@@ -37,7 +37,7 @@ func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) 
 	)
 
 	perProvider, corrStatuses := s.fanOut(ctx, result.Corrected, query.Kinds)
-	results = s.mergeRankEnrich(ctx, perProvider, corrNorm)
+	results = s.mergeRankEnrich(ctx, perProvider, corrNorm, &stageTimings{})
 	if len(results) == 0 {
 		return "", "", nil, nil
 	}

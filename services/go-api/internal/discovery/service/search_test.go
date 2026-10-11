@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -478,19 +479,14 @@ func TestWithExploration_NonPositiveRateIgnored(t *testing.T) {
 func TestOptions_WireTheirDependencies(t *testing.T) {
 	repo := &fakeHistoryWriter{}
 	frs := NewFindRelatedService(nil, nil, nil)
-	validator := &fakeMB{}
 	svc := NewService(nil, NewCircuitBreaker(),
 		WithHistoryRepository(repo),
-		WithAlbumValidator(validator),
 		WithFindRelatedService(frs),
 		WithTailDemotion(),
 		WithCrossKindProminence(),
 	)
 	if svc.history.historyRepo == nil {
 		t.Error("WithHistoryRepository not wired")
-	}
-	if svc.disambiguator.validator == nil {
-		t.Error("WithAlbumValidator not wired")
 	}
 	if svc.findRelatedSvc != frs {
 		t.Error("WithFindRelatedService not wired")
@@ -1104,5 +1100,102 @@ func TestNewPagedSearchQueryRejectsOutOfRangeOffset(t *testing.T) {
 	}
 	if q.Offset != domain.MaxSearchOffset {
 		t.Fatalf("offset = %d, want %d", q.Offset, domain.MaxSearchOffset)
+	}
+}
+
+type stopObservingProvider struct {
+	fakeProvider
+	started chan struct{}
+	stopped chan struct{}
+}
+
+func newStopObservingProvider() *stopObservingProvider {
+	return &stopObservingProvider{
+		fakeProvider: fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}},
+		started:      make(chan struct{}, 8),
+		stopped:      make(chan struct{}, 8),
+	}
+}
+
+func (p *stopObservingProvider) Search(ctx context.Context, q string, k map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	p.started <- struct{}{}
+	<-ctx.Done()
+	p.stopped <- struct{}{}
+	return nil, ctx.Err()
+}
+
+func waitFor(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+func TestService_Search_LastCallerCancelStopsProviderCalls(t *testing.T) {
+	p := newStopObservingProvider()
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_, _ = svc.Execute(ctx, newUser(), newQuery(t, "humble"), false)
+		close(done)
+	}()
+	waitFor(t, p.started, "the provider call to start")
+
+	cancel()
+
+	waitFor(t, done, "the cancelled caller to return")
+	waitFor(t, p.stopped, "the provider call to stop after its only caller left")
+}
+
+func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T) {
+	release := make(chan struct{})
+	svc, p := newCollapseService(release)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_, _ = svc.Execute(ctx, newUser(), newQuery(t, "humble"), false)
+		close(done)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	waitFor(t, done, "the cancelled caller to return")
+
+	close(release)
+	out, err := svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Partial || len(out.Results) != 1 {
+		t.Errorf("caller after an abandoned search got partial=%v results=%d, want a complete answer", out.Partial, len(out.Results))
+	}
+	if got := p.calls.Load(); got != 2 {
+		t.Errorf("provider reached %d times, want 2 (the abandoned run, then a fresh one)", got)
+	}
+}
+
+func TestService_Search_LogsHowLongEachStageTook(t *testing.T) {
+	buf := captureLogs(t)
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}, delay: 30 * time.Millisecond}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
+
+	runSearch(t, svc, "humble")
+
+	var complete map[string]any
+	if err := json.Unmarshal([]byte(loggedEvent(t, buf, "search.v2.complete")), &complete); err != nil {
+		t.Fatal(err)
+	}
+	for _, stage := range []string{"fanout_ms", "identity_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
+		if _, ok := complete[stage].(float64); !ok {
+			t.Errorf("search.v2.complete has no %s: %v", stage, complete)
+		}
+	}
+	if ms, _ := complete["fanout_ms"].(float64); ms < 30 {
+		t.Errorf("fanout_ms = %v, want at least the provider's 30ms", ms)
+	}
+	if total, _ := complete["total_ms"].(float64); total < complete["fanout_ms"].(float64) {
+		t.Errorf("total_ms = %v, want at least fanout_ms", total)
 	}
 }

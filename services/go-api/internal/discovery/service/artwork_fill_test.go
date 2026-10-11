@@ -34,21 +34,6 @@ func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _,
 	return nil
 }
 
-func TestService_EnrichesMissingArtwork(t *testing.T) {
-	resolver := &discoverytest.ArtworkResolver{URL: "https://art/cover.jpg"}
-	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(resolver))
-
-	out := runSearch(t, svc, "humble")
-
-	if len(out.Results) != 1 {
-		t.Fatalf("got %d results, want 1", len(out.Results))
-	}
-	if out.Results[0].ImageURL != "https://art/cover.jpg" {
-		t.Errorf("artwork = %q, want resolved", out.Results[0].ImageURL)
-	}
-}
-
 func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 	resolver := &discoverytest.ArtworkResolver{URL: "https://art/new.jpg"}
 	withArt := deezerTrack("Humble", "Kendrick Lamar", 80)
@@ -110,9 +95,12 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 		[]ports.SearchProvider{p},
 		NewCircuitBreaker(),
 		WithArtworkResolver(resolver),
+		WithArtworkCache(&fakeArtworkCache{store: map[string]string{}}),
 		WithMBIDIndex(idx),
 	)
 
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
 	out := runSearch(t, svc, "humble")
 
 	if out.Results[0].ImageURL != "https://caa/hd.jpg" {
@@ -158,10 +146,12 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 		[]ports.SearchProvider{p},
 		NewCircuitBreaker(),
 		WithArtworkResolver(resolver),
+		WithArtworkCache(&fakeArtworkCache{store: map[string]string{}}),
 		WithIdentityStore(store),
 	)
 
 	out := runSearch(t, svc, "humble")
+	svc.WaitForBackground()
 
 	if atomic.LoadInt32(&store.lookups) == 0 {
 		t.Error("identity store was never consulted")
@@ -187,24 +177,24 @@ func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context,
 	return "", "", nil
 }
 
-func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
+func TestService_BackgroundArtworkUsesTheDurableIdentity(t *testing.T) {
 	resolver := &fakeIdentityAwareResolver{url: "https://caa/right.jpg"}
+	cache := &fakeArtworkCache{store: map[string]string{}}
 	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[domain.ProviderKey]string{"discogs": "123"}}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService(
 		[]ports.SearchProvider{p},
 		NewCircuitBreaker(),
 		WithArtworkResolver(resolver),
+		WithArtworkCache(cache),
 		WithIdentityStore(store),
 	)
 
-	out := runSearch(t, svc, "humble")
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
 
-	if out.Results[0].ImageURL != "https://caa/right.jpg" {
-		t.Errorf("artwork = %q, want the identity-resolved image", out.Results[0].ImageURL)
-	}
-	if got, _ := out.Results[0].Extras["artwork_path"].(string); got != "durable-identity" {
-		t.Errorf("artwork_path = %q, want durable-identity", got)
+	if got := cache.store["Humble"]; got != "https://caa/right.jpg" {
+		t.Errorf("cached artwork = %q, want the identity-resolved image", got)
 	}
 }
 
@@ -327,7 +317,7 @@ func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 	store := &batchingIdentityStore{}
 	f := newArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 
-	got := f.fill(context.Background(), fiftyArtlessResults())
+	got := f.fill(context.Background(), fiftyArtlessResults(), nil)
 
 	if store.batchCalls != 1 {
 		t.Errorf("batch lookups = %d, want 1 for a %d-result slate", store.batchCalls, artworkFillLimit)
@@ -348,7 +338,7 @@ func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 	results[0].ImageURL = "https://provider/art.jpg"
 	results[1].Xref = map[domain.ProviderKey]string{"spotify": "s1"}
 
-	f.fill(context.Background(), results)
+	f.fill(context.Background(), results, nil)
 
 	want := []ports.IdentityRef{{Kind: domain.ResultKindTrack, Provider: domain.ProviderDeezer.Key(), ExternalID: "2"}}
 	if len(store.batchRefs) != 1 || store.batchRefs[0] != want[0] {
@@ -363,7 +353,7 @@ func TestArtworkFiller_FallsBackToPerResultLookupWithoutBatch(t *testing.T) {
 	store := &countingIdentityStore{}
 	f := newArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 
-	got := f.fill(context.Background(), fiftyArtlessResults())
+	got := f.fill(context.Background(), fiftyArtlessResults(), nil)
 
 	if store.singleCalls != artworkFillLimit {
 		t.Errorf("per-result lookups = %d, want %d for a non-batching store", store.singleCalls, artworkFillLimit)
@@ -743,5 +733,60 @@ func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
 
 	if len(out.Results) != 1 || out.Results[0].Title != "Humble" {
 		t.Fatalf("results = %+v, want the original Humble result kept", out.Results)
+	}
+}
+
+type gatedArtworkResolver struct {
+	url     string
+	release chan struct{}
+}
+
+func (r *gatedArtworkResolver) ResolveTagged(ctx context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
+	select {
+	case <-r.release:
+		return r.url, "caa", nil
+	case <-ctx.Done():
+		return "", "", ctx.Err()
+	}
+}
+
+func (r *gatedArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
+	return "", "", nil
+}
+
+func TestService_MissingArtworkIsFetchedAfterTheAnswer(t *testing.T) {
+	resolver := &gatedArtworkResolver{url: "https://caa/cover.jpg", release: make(chan struct{})}
+	cache := &fakeArtworkCache{store: map[string]string{}}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(resolver), WithArtworkCache(cache))
+
+	first := runSearch(t, svc, "humble")
+
+	if first.Results[0].ImageURL != "" {
+		t.Fatalf("first answer ImageURL = %q, want none while the live lookup runs", first.Results[0].ImageURL)
+	}
+	if path, _ := first.Results[0].Extras["artwork_path"].(string); path != "pending" {
+		t.Errorf("artwork_path = %q, want pending", path)
+	}
+
+	close(resolver.release)
+	svc.WaitForBackground()
+
+	second := runSearch(t, svc, "humble")
+	if second.Results[0].ImageURL != "https://caa/cover.jpg" {
+		t.Errorf("next answer ImageURL = %q, want the cover the background found", second.Results[0].ImageURL)
+	}
+}
+
+func TestService_WithoutAnArtworkCacheNoLiveLookupRuns(t *testing.T) {
+	resolver := &discoverytest.ArtworkResolver{URL: "https://art/cover.jpg"}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(resolver))
+
+	runSearch(t, svc, "humble")
+	svc.WaitForBackground()
+
+	if n := resolver.Calls(); n != 0 {
+		t.Errorf("resolver called %d times, want 0 (nowhere to keep the answer)", n)
 	}
 }

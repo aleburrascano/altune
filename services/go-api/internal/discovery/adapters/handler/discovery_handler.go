@@ -14,6 +14,7 @@ import (
 type DiscoveryHandler struct {
 	searchSvc       *service.Service
 	historySvc      *service.ListSearchHistoryService
+	recordHistory   *service.RecordSearchHistoryService
 	clearHistorySvc *service.ClearSearchHistoryService
 	albumSvc        *service.GetAlbumTracksService
 	artistSvc       *service.GetArtistContentService
@@ -47,16 +48,17 @@ func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHand
 }
 
 type DiscoveryServices struct {
-	Search       *service.Service
-	History      *service.ListSearchHistoryService
-	ClearHistory *service.ClearSearchHistoryService
-	Album        *service.GetAlbumTracksService
-	Artist       *service.GetArtistContentService
-	Related      *service.GetRelatedTracksService
-	Enrich       *enrich.EnrichmentService
-	Suggest      *service.SuggestService
-	Event        *service.RecordEventService
-	Favorites    *service.FavoritesService
+	Search        *service.Service
+	History       *service.ListSearchHistoryService
+	RecordHistory *service.RecordSearchHistoryService
+	ClearHistory  *service.ClearSearchHistoryService
+	Album         *service.GetAlbumTracksService
+	Artist        *service.GetArtistContentService
+	Related       *service.GetRelatedTracksService
+	Enrich        *enrich.EnrichmentService
+	Suggest       *service.SuggestService
+	Event         *service.RecordEventService
+	Favorites     *service.FavoritesService
 }
 
 func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
@@ -73,6 +75,7 @@ func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 	h := &DiscoveryHandler{
 		searchSvc:       svcs.Search,
 		historySvc:      svcs.History,
+		recordHistory:   svcs.RecordHistory,
 		clearHistorySvc: svcs.ClearHistory,
 		albumSvc:        svcs.Album,
 		artistSvc:       svcs.Artist,
@@ -89,11 +92,14 @@ const maxEventBodyBytes = 32 << 10
 
 const maxFavoriteBodyBytes = 16 << 10
 
+const maxHistoryBodyBytes = 4 << 10
+
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(noStorePerUser, h.searchLimiter.middleware).Get("/search", h.handleSearch)
 	r.With(h.suggestLimiter.middleware).Get("/suggest", h.handleSuggest)
 	r.With(noStorePerUser, h.historyLimiter.middleware).Get("/search-history", h.handleSearchHistory)
+	r.With(h.historyLimiter.middleware, httputil.MaxBodySize(maxHistoryBodyBytes)).Post("/search-history", h.handleRecordSearchHistory)
 	r.With(h.historyLimiter.middleware).Delete("/search-history", h.handleClearSearchHistory)
 	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
 	r.With(noStorePerUser, h.favoritesLimiter.middleware).Get("/favorites", h.handleListFavorites)

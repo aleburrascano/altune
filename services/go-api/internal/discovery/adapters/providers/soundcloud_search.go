@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,46 +16,47 @@ import (
 
 func (a *SoundCloudAPIAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	var results []domain.SearchResult
-	var firstErr error
+	attempted := 0
+	var failed []domain.ResultKind
+	var errs []error
+	collect := func(kind domain.ResultKind, items []domain.SearchResult, err error) {
+		attempted++
+		if err != nil {
+			failed = append(failed, kind)
+			errs = append(errs, err)
+			return
+		}
+		results = append(results, items...)
+	}
 
 	if kinds[domain.ResultKindTrack] {
-		tracks, err := a.searchTracks(ctx, query)
-		switch {
-		case err == nil:
-			results = append(results, tracks...)
-		case a.fallback != nil && ctx.Err() == nil:
-			slog.WarnContext(ctx, "soundcloud.apiv2_fallback",
-				logging.SearchTextAttr(query), "error", redact.Secrets(logging.ScrubSearchErr(err, query)))
-			if fb, ferr := a.fallback.Search(ctx, query, kinds); ferr == nil {
-				results = append(results, fb...)
-			} else {
-				firstErr = errors.Join(firstErr, err)
-			}
-		default:
-			firstErr = errors.Join(firstErr, err)
-		}
+		tracks, err := a.searchTracksOrFallback(ctx, query, kinds)
+		collect(domain.ResultKindTrack, tracks, err)
 	}
-
 	if kinds[domain.ResultKindAlbum] {
-		if albums, err := a.searchAlbums(ctx, query); err != nil {
-			firstErr = errors.Join(firstErr, err)
-		} else {
-			results = append(results, albums...)
-		}
+		albums, err := a.searchAlbums(ctx, query)
+		collect(domain.ResultKindAlbum, albums, err)
 	}
-
 	if kinds[domain.ResultKindArtist] {
-		if artists, err := a.searchArtists(ctx, query); err != nil {
-			firstErr = errors.Join(firstErr, err)
-		} else {
-			results = append(results, artists...)
-		}
+		artists, err := a.searchArtists(ctx, query)
+		collect(domain.ResultKindArtist, artists, err)
 	}
 
-	if len(results) == 0 && firstErr != nil {
-		return nil, firstErr
+	return results, kindsOutcome(a.Name().String(), attempted, failed, errs)
+}
+
+func (a *SoundCloudAPIAdapter) searchTracksOrFallback(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	tracks, err := a.searchTracks(ctx, query)
+	if err == nil || a.fallback == nil || ctx.Err() != nil {
+		return tracks, err
 	}
-	return results, nil
+	slog.WarnContext(ctx, "soundcloud.apiv2_fallback",
+		logging.SearchTextAttr(query), "error", redact.Secrets(logging.ScrubSearchErr(err, query)))
+	fb, ferr := a.fallback.Search(ctx, query, kinds)
+	if ferr != nil {
+		return nil, err
+	}
+	return fb, nil
 }
 
 func (a *SoundCloudAPIAdapter) searchTracks(ctx context.Context, query string) ([]domain.SearchResult, error) {

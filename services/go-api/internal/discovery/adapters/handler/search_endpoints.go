@@ -168,6 +168,28 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(items))
 }
 
+type RecordSearchHistoryRequest struct {
+	Query string `json:"query"`
+}
+
+func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *http.Request) {
+	userId, ok := authbridge.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req RecordSearchHistoryRequest
+	if !httputil.DecodeJSONWithCode(w, r, &req, requestCodeInvalidBody) {
+		return
+	}
+	if err := h.recordHistory.RecordSubmitted(r.Context(), userId, req.Query); err != nil {
+		httputil.BadRequestCode(w, requestCodeInvalidParam, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *http.Request) {
 	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {

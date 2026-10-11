@@ -1,14 +1,13 @@
 G1 internal/observe/handler unexpected root entry
 G2 internal/discovery/domain/records.go:7 domain imports github.com/google/uuid
-G2 internal/discovery/service/artwork_fill.go:15 service imports golang.org/x/sync/errgroup
+G2 internal/discovery/service/artwork_fill.go:16 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/eval/coverage_signal_b.go:10 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/eval/parallel.go:6 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/get_album_tracks.go:11 service imports golang.org/x/sync/errgroup
 G2 internal/discovery/service/record_event.go:14 service imports github.com/google/uuid
-G2 internal/discovery/service/record_history.go:12 service imports github.com/google/uuid
+G2 internal/discovery/service/record_history.go:14 service imports github.com/google/uuid
 G2 internal/discovery/service/result_cache.go:8 service imports github.com/google/uuid
 G2 internal/discovery/service/search.go:15 service imports github.com/google/uuid
-G2 internal/discovery/service/search.go:16 service imports golang.org/x/sync/singleflight
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:5 imports auth outside adapters/authbridge
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/cooldown_store.go:5 imports catalog outside adapters/catalogbridge

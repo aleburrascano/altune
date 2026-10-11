@@ -2,11 +2,13 @@ package app
 
 import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
+	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
+	"net/http"
 	"reflect"
 	"runtime"
 	"slices"
@@ -43,10 +45,10 @@ func TestSearchServiceOptionSets(t *testing.T) {
 			opts: contentServiceOptions(w, cfg, pool, redisClient, eventStore, nil),
 			want: []string{
 				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence", "WithExploration",
-				"WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",
-				"WithIdentityVerifier", "WithResultCache", "WithHeldSlateCache", "WithArtworkCache",
+				"WithSearchDeadline", "WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",
+				"WithIdentityVerifier", "WithResultCache", "WithProviderResultCache", "WithHeldSlateCache", "WithArtworkCache",
 				"WithIdentityBridge", "WithMBIDIndex", "WithVocabularyStore", "WithEventStore",
-				"WithBehavioralRanking", "WithAlbumValidator",
+				"WithBehavioralRanking",
 			},
 		},
 		{
@@ -54,8 +56,8 @@ func TestSearchServiceOptionSets(t *testing.T) {
 			opts: contentServiceOptions(w, cfg, pool, nil, eventStore, nil),
 			want: []string{
 				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence", "WithExploration",
-				"WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",
-				"WithIdentityVerifier", "WithEventStore", "WithBehavioralRanking", "WithAlbumValidator",
+				"WithSearchDeadline", "WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",
+				"WithIdentityVerifier", "WithEventStore", "WithBehavioralRanking",
 			},
 		},
 		{
@@ -64,14 +66,13 @@ func TestSearchServiceOptionSets(t *testing.T) {
 			want: []string{
 				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence",
 				"WithArtworkCache", "WithIdentityBridge", "WithMBIDIndex", "WithVocabularyStore",
-				"WithAlbumValidator",
 			},
 		},
 		{
 			name: "ranking only without redis",
 			opts: rankingOnlyServiceOptions(w, cfg, pool, nil),
 			want: []string{
-				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence", "WithAlbumValidator",
+				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence",
 			},
 		},
 	}
@@ -335,4 +336,40 @@ func TestAllKeysProviderOrder(t *testing.T) {
 		"*theaudiodb.Adapter", "*providers.DeezerAdapter", "*providers.ITunesAdapter",
 		"*providers.YouTubeMusicArtworkResolver", "*providers.SoundCloudAPIAdapter",
 	})
+}
+
+func TestSearchProviders_EnvListChoosesWhichProvidersSearch(t *testing.T) {
+	cfg := scrapedProvidersConfig(true)
+	cfg.YtMusicEnabled = true
+	cfg.DiscoverySearchProviders = []string{"deezer", "spotify", "youtube"}
+
+	var got []string
+	for _, p := range buildSearchProviderList(context.Background(), newClientFactory(nil), cfg, nil) {
+		got = append(got, p.Name().String())
+	}
+
+	assertEqual(t, "search providers", got, []string{"deezer", "youtube", "spotify"})
+}
+
+func TestSearchProviders_EmptyEnvListKeepsEveryConfiguredProvider(t *testing.T) {
+	cfg := scrapedProvidersConfig(true)
+	cfg.YtMusicEnabled = true
+
+	if !hasSearchProvider(cfg, discoveryDomain.ProviderSoundCloud) || !hasSearchProvider(cfg, discoveryDomain.ProviderDeezer) {
+		t.Fatal("with no DISCOVERY_SEARCH_PROVIDERS, every configured provider must search")
+	}
+}
+
+func TestSearchProviders_EveryProviderCanBeChosenByEnvName(t *testing.T) {
+	cfg := scrapedProvidersConfig(true)
+	cfg.YtMusicEnabled = true
+	cfg.AmazonMusicEnabled = true
+	cfg.LastFMAPIKey = "key"
+	mb := providers.NewMusicBrainzAdapter(http.DefaultClient, "altune-test")
+
+	for _, p := range buildSearchProviderList(context.Background(), newClientFactory(nil), cfg, mb) {
+		if !slices.Contains(config.DiscoverySearchProviderNames, p.Name().String()) {
+			t.Errorf("search provider %q is missing from config.DiscoverySearchProviderNames", p.Name())
+		}
+	}
 }

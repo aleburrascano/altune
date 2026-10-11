@@ -13,15 +13,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/sync/singleflight"
 )
 
 type Service struct {
 	providers      []ports.SearchProvider
 	circuitBreaker *CircuitBreaker
+	providerCache  ports.ProviderResultCache
+	deadline       time.Duration
 
 	identity       *IdentityStamper
-	disambiguator  *artistDisambiguator
 	artwork        *ArtworkFiller
 	ranking        *RankingExperiments
 	favorites      *favoritesLifter
@@ -34,7 +34,7 @@ type Service struct {
 
 	bg *backgroundRunner
 
-	resolveGroup singleflight.Group
+	resolver *sharedResolver
 }
 
 type SearchOutput struct {
@@ -60,18 +60,20 @@ type serviceConfig struct {
 	eventStore     ports.EventStore
 	activityFeed   ports.ActivityFeed
 	resultCache    ports.ResultCache
+	providerCache  ports.ProviderResultCache
 	heldSlateCache ports.HeldSlateCache
 	favoritesRepo  ports.FavoritesRepository
 
 	artworkResolver  ports.TaggingArtworkResolver
 	artworkCache     ports.ArtworkCache
-	albumValidator   ports.ArtistIdentityResolver
 	identityBridge   ports.IdentityBridge
 	mbidIndex        ports.MBIDIndex
 	identityStore    ports.IdentityStore
 	identityVerifier *IdentityVerifier
 
 	findRelatedSvc *FindRelatedService
+
+	searchDeadline time.Duration
 
 	ranking rankingConfig
 }
@@ -102,10 +104,6 @@ func WithArtworkCache(ac ports.ArtworkCache) Option {
 	return func(c *serviceConfig) { c.artworkCache = ac }
 }
 
-func WithAlbumValidator(v ports.ArtistIdentityResolver) Option {
-	return func(c *serviceConfig) { c.albumValidator = v }
-}
-
 func WithIdentityBridge(b ports.IdentityBridge) Option {
 	return func(c *serviceConfig) { c.identityBridge = b }
 }
@@ -128,6 +126,14 @@ func WithFindRelatedService(r *FindRelatedService) Option {
 
 func WithResultCache(rc ports.ResultCache) Option {
 	return func(c *serviceConfig) { c.resultCache = rc }
+}
+
+func WithProviderResultCache(pc ports.ProviderResultCache) Option {
+	return func(c *serviceConfig) { c.providerCache = pc }
+}
+
+func WithSearchDeadline(d time.Duration) Option {
+	return func(c *serviceConfig) { c.searchDeadline = d }
 }
 
 func WithHeldSlateCache(hc ports.HeldSlateCache) Option {
@@ -182,8 +188,9 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 	s := &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
+		providerCache:  cfg.providerCache,
+		deadline:       cfg.searchDeadline,
 		identity:       newIdentityStamper(cfg.identityBridge, cfg.identityStore, cfg.identityVerifier, bg),
-		disambiguator:  newArtistDisambiguator(cfg.albumValidator),
 		artwork:        newArtworkFiller(cfg.artworkResolver, cfg.artworkCache, cfg.identityStore, cfg.mbidIndex),
 		ranking:        newRankingExperiments(cfg.ranking, bg),
 		favorites:      newFavoritesLifter(cfg.favoritesRepo),
@@ -193,6 +200,7 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 		telemetry:      newSearchTelemetry(cfg.eventStore, cfg.activityFeed, bg),
 		vocab:          newVocabularyIngestor(cfg.vocabStore, bg),
 		bg:             bg,
+		resolver:       newSharedResolver(),
 	}
 	if cfg.vocabStore != nil {
 		s.correctionSvc = NewCorrectionService(cfg.vocabStore)
@@ -240,12 +248,17 @@ func (s *Service) ExecutePage(
 		saveHistory: saveHistory,
 		startedAt:   startedAt,
 	}
+	stages := resolution.stages
+	favoritesDone := timeStage(&stages.favorites)
 	ranked := s.favorites.lift(ctx, userId, resolution.ranked)
+	favoritesDone()
 
 	var related []domain.RelatedGroup
+	relatedDone := timeStage(&stages.related)
 	if s.findRelatedSvc != nil && len(ranked) > 0 {
 		related = s.findRelatedSvc.Execute(ctx, userId, ranked)
 	}
+	relatedDone()
 
 	total := len(ranked)
 	fullSlate := ranked
@@ -271,7 +284,7 @@ func (s *Service) ExecutePage(
 		})
 	}
 
-	slog.InfoContext(ctx, "search.v2.complete",
+	slog.InfoContext(ctx, "search.v2.complete", append([]any{
 		logging.SearchTextAttr(query.Raw),
 		"results", len(shown),
 		"partial", resolution.partial,
@@ -282,7 +295,7 @@ func (s *Service) ExecutePage(
 		"offset", query.Offset,
 		"total", total,
 		"tail_noise_top5", TailNoiseInTopK(shown, 5),
-	)
+	}, stages.logAttrs(time.Since(startedAt))...)...)
 
 	return &SearchOutput{
 		SearchId:         run.searchId,
@@ -308,11 +321,13 @@ type rankedResolution struct {
 	correctedQuery string
 	originalQuery  string
 	partial        bool
+	pending        bool
 	cached         bool
+	stages         stageTimings
 }
 
 func (r rankedResolution) isAuthoritative() bool {
-	return len(r.ranked) > 0 && !r.partial && r.correctedQuery == ""
+	return len(r.ranked) > 0 && !r.partial && !r.pending && r.correctedQuery == ""
 }
 
 func (s *Service) slateForPage(
@@ -339,26 +354,19 @@ func (s *Service) resolveRanked(
 		return s.resolveCold(ctx, query, searchQuery, queryNorm)
 	}
 
-	detached := context.WithoutCancel(ctx)
-	call := s.resolveGroup.DoChan(s.cache.key(queryNorm, query.Kinds), func() (answer any, _ error) {
+	resolved := s.resolver.resolve(ctx, s.cache.key(queryNorm, query.Kinds), func(flightCtx context.Context) (answer rankedResolution) {
 		defer func() {
 			if r := recover(); r != nil {
-				slog.ErrorContext(detached, "search.v2.resolve_panic",
+				slog.ErrorContext(flightCtx, "search.v2.resolve_panic",
 					"panic", r, "stack", string(debug.Stack()))
 				answer = rankedResolution{partial: true}
 			}
 		}()
-		return s.resolveCold(detached, query, searchQuery, queryNorm), nil
+		return s.resolveCold(flightCtx, query, searchQuery, queryNorm)
 	})
-	select {
-	case <-ctx.Done():
-		return rankedResolution{partial: true}
-	case res := <-call:
-		shared := res.Val.(rankedResolution)
-		shared.ranked = slices.Clone(shared.ranked)
-		shared.statuses = slices.Clone(shared.statuses)
-		return shared
-	}
+	resolved.ranked = slices.Clone(resolved.ranked)
+	resolved.statuses = slices.Clone(resolved.statuses)
+	return resolved
 }
 
 func (s *Service) resolveCold(
@@ -366,16 +374,21 @@ func (s *Service) resolveCold(
 	query *domain.SearchQuery,
 	searchQuery, queryNorm string,
 ) rankedResolution {
+	var stages stageTimings
+	fanOutDone := timeStage(&stages.fanOut)
 	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
+	fanOutDone()
 	resolution := rankedResolution{
-		ranked:   s.mergeRankEnrich(ctx, perProvider, queryNorm),
+		ranked:   s.mergeRankEnrich(ctx, perProvider, queryNorm, &stages),
 		statuses: statuses,
 	}
 	if len(resolution.ranked) == 0 {
 		resolution = s.correctedResolution(ctx, query, statuses)
 	}
+	resolution.stages = stages
 
 	resolution.partial = anyProviderFailed(resolution.statuses)
+	resolution.pending = anyProviderPending(resolution.statuses)
 	if resolution.isAuthoritative() {
 		s.cache.set(ctx, queryNorm, query.Kinds, resolution.ranked)
 	}
@@ -425,17 +438,23 @@ func (s *Service) mergeRankEnrich(
 	ctx context.Context,
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
+	stages *stageTimings,
 ) []domain.SearchResult {
+	identityDone := timeStage(&stages.identity)
 	s.identity.stamp(ctx, perProvider)
+	identityDone()
 
+	rankDone := timeStage(&stages.rank)
 	ranked := rankPipelineWith(perProvider, queryNorm, s.ranking.rankOptions())
 
 	for i := range ranked {
 		ranked[i].Signature = domain.ResultSignature(ranked[i])
 	}
+	rankDone()
 
-	ranked = s.disambiguator.apply(ctx, ranked)
-	ranked = s.artwork.fill(ctx, ranked)
+	artworkDone := timeStage(&stages.artwork)
+	ranked = s.artwork.fill(ctx, ranked, s.bg)
+	artworkDone()
 	return ranked
 }
 
@@ -445,7 +464,7 @@ func (s *Service) RankVariantsForEval(
 ) (withReshape, withoutReshape []domain.SearchResult) {
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
-	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
+	perProvider, _ := s.fanOutLive(ctx, searchQuery, query.Kinds)
 	s.identity.stamp(ctx, perProvider)
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
 }
@@ -456,8 +475,8 @@ func (s *Service) InspectSearchWithStatuses(
 ) ([]domain.SearchResult, []domain.ProviderSearchResponse) {
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
-	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
-	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
+	perProvider, statuses := s.fanOutLive(ctx, searchQuery, query.Kinds)
+	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm, &stageTimings{})
 	if query.Limit > 0 && len(ranked) > query.Limit {
 		ranked = ranked[:query.Limit]
 	}
