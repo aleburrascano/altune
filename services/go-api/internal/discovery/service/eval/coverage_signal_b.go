@@ -6,8 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const signalBTitleMatchMinTSR = 85
@@ -46,28 +44,17 @@ type artistCoverage struct {
 }
 
 func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, concurrency int) (*CoverageReportB, error) {
-	if concurrency < 1 {
-		concurrency = 1
-	}
-
 	coverage := make([]artistCoverage, len(artists))
-	g := new(errgroup.Group)
-	g.SetLimit(concurrency)
-	for i, artist := range artists {
-		i, artist := i, artist
-		g.Go(func() error {
-			fan := s.fanOut(ctx, artist)
-			responded := []string{}
-			for _, p := range s.providers {
-				if r, ok := fan[p.Name]; ok && r.ok {
-					responded = append(responded, p.Name)
-				}
+	runParallel(artists, concurrency, nil, func(i int, artist string) {
+		fan := s.fanOut(ctx, artist)
+		responded := []string{}
+		for _, p := range s.providers {
+			if r, ok := fan[p.Name]; ok && r.ok {
+				responded = append(responded, p.Name)
 			}
-			coverage[i] = artistCoverage{responded: responded, entities: s.clusterEntities(fan)}
-			return nil
-		})
-	}
-	_ = g.Wait()
+		}
+		coverage[i] = artistCoverage{responded: responded, entities: s.clusterEntities(fan)}
+	})
 
 	missing := map[string]int{}
 	union := map[string]int{}
