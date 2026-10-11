@@ -1,10 +1,11 @@
 import { Moon } from 'lucide-react-native';
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 import type { ColorScheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { SettingsCard, SettingsRow } from '@features/settings/ui/SettingsCard';
 
 export function AppearanceCard(): ReactElement {
@@ -49,6 +50,7 @@ function optionStyle(selected: boolean, canvas: string) {
 
 function optionIdentityProps({ option, onSelect }: ThemeOptionProps) {
   return {
+    action: 'settings.theme.select',
     testID: `settings-theme-${option.scheme}`,
     onPress: () => onSelect(option.scheme),
     accessibilityLabel: `${option.label} theme`,
@@ -68,11 +70,11 @@ function optionPressableProps(props: ThemeOptionProps, canvas: string) {
 function ThemeOption(props: ThemeOptionProps): ReactElement {
   const { color } = useTheme();
   return (
-    <Pressable {...optionPressableProps(props, color.canvas)}>
+    <Tappable {...optionPressableProps(props, color.canvas)}>
       <Text variant="caption" tone={isSelected(props) ? 'primary' : 'tertiary'}>
         {props.option.label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

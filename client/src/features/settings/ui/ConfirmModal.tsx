@@ -1,9 +1,10 @@
 import type { LucideIcon } from 'lucide-react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
 import { keyboardAvoidingBehavior } from '@shared/ui/keyboard/keyboard';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 type ConfirmModalProps = {
   visible: boolean;
@@ -92,7 +93,14 @@ type ModalBackdropProps = { onClose: () => void };
 function ModalBackdrop({ onClose }: ModalBackdropProps): ReactElement {
   const theme = useTheme();
   const style = [modalStyles.backdrop, { backgroundColor: theme.color.scrim }];
-  return <Pressable style={style} onPress={onClose} {...closeAccessibility} />;
+  return (
+    <Tappable
+      action="settings.modal.close"
+      style={style}
+      onPress={onClose}
+      {...closeAccessibility}
+    />
+  );
 }
 
 type ModalCenterProps = { testID: string | undefined; children: ReactNode };
@@ -113,7 +121,7 @@ type ModalCardProps = { children: ReactNode };
 function ModalCard({ children }: ModalCardProps): ReactElement {
   const theme = useTheme();
   const colors = { backgroundColor: theme.color.surface1, borderColor: theme.color.border };
-  return <Pressable style={[modalStyles.card, colors]}>{children}</Pressable>;
+  return <View style={[modalStyles.card, colors]}>{children}</View>;
 }
 
 const modalStyles = StyleSheet.create({

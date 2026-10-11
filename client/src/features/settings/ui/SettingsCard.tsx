@@ -1,8 +1,9 @@
 import type { LucideIcon } from 'lucide-react-native';
 import type { ReactElement, ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { IconBadge, Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 type SettingsCardProps = {
   label?: string;
@@ -108,7 +109,8 @@ export function SettingsRow({
   }
 
   return (
-    <Pressable
+    <Tappable
+      action="settings.row.press"
       testID={testID}
       onPress={onPress}
       disabled={disabled}
@@ -118,7 +120,7 @@ export function SettingsRow({
       style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
     >
       {body}
-    </Pressable>
+    </Tappable>
   );
 }
 

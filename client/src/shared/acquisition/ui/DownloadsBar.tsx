@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 
 import { ChevronUp } from 'lucide-react-native';
 
@@ -10,6 +10,7 @@ import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
 import { Text, pressedStyle, spacing, useTheme } from '@shared/ui';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { radius } from '@shared/ui/theme/tokens';
 
 interface DownloadsBarProps {
@@ -51,7 +52,8 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
         ],
       }}
     >
-      <Pressable
+      <Tappable
+        action="acquisition.downloads_bar.expand"
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`${heading}. ${phaseLabel(phase)}. Tap to expand.`}
@@ -96,7 +98,7 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
             })}
           </View>
         </View>
-      </Pressable>
+      </Tappable>
     </Animated.View>
   );
 }
