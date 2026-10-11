@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { asTrackId } from '@shared/apiClient/ids';
 import type { CreateTrackRequest, TrackResponse } from '@shared/apiClient/trackResponse';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 
@@ -19,15 +20,12 @@ import {
 import {
   createPortWrapper,
   createTestQueryClient,
+  idlePlayback,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
 }));
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn() }),
-}));
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 const albumResult: DiscoveryResult = {
   kind: 'album',
@@ -131,8 +129,13 @@ async function lookupSettled(client: QueryClient): Promise<void> {
 
 async function renderAlbum(port: DetailPort, album: DiscoveryResult = albumResult, count = 0) {
   const client = createTestQueryClient({ mutations: true });
+  const Ports = createPortWrapper(client, { detail: port });
   const hook = renderHook(() => useAlbumDetailState(album, '/discover/detail'), {
-    wrapper: createPortWrapper(client, { detail: port }),
+    wrapper: ({ children }) => (
+      <PlaybackContext.Provider value={idlePlayback}>
+        <Ports>{children}</Ports>
+      </PlaybackContext.Provider>
+    ),
   });
   await waitFor(() => expect(hook.result.current.tracks).toHaveLength(count));
   await lookupSettled(client);

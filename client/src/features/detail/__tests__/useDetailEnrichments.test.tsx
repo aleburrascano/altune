@@ -1,8 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { renderHook, waitFor } from '@testing-library/react-native';
-import { supabase } from '@shared/auth/supabaseClient';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
@@ -15,16 +13,10 @@ import {
 import {
   createTestQueryClient,
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 describe('useEnrichment', () => {
   describe('aborting on unmount', () => {
@@ -32,10 +24,9 @@ describe('useEnrichment', () => {
 
     let wrapper: ReturnType<typeof createWrapper>;
 
-    beforeEach(() => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
       _resetDetailHealthForTest();
-      (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
       client = createTestQueryClient();
       wrapper = createWrapper(client);
     });
@@ -68,10 +59,9 @@ describe('useDeezerEnrichment', () => {
 
     let wrapper: ReturnType<typeof createWrapper>;
 
-    beforeEach(() => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
       _resetDetailHealthForTest();
-      (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
       client = createTestQueryClient();
       wrapper = createWrapper(client);
     });
@@ -108,10 +98,9 @@ describe('useLastFmEnrichment', () => {
 
     let wrapper: ReturnType<typeof createWrapper>;
 
-    beforeEach(() => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
       _resetDetailHealthForTest();
-      (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
       client = createTestQueryClient();
       wrapper = createWrapper(client);
     });
@@ -182,8 +171,8 @@ describe('useDetailEnrichments', () => {
 
   let warnSpy: jest.SpyInstance;
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
     __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });

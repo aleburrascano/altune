@@ -1,10 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import { supabase } from '@shared/auth/supabaseClient';
 import type { DiscoverySource } from '@shared/apiClient/discovery';
 import type { ArtistContentResponse } from '@shared/apiClient/enrichment';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
 import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
@@ -14,16 +12,10 @@ import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetail
 import {
   createTestQueryClient,
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const ARTIST_CONTENT_PATH = 'GET /v1/discovery/artists/spotify/artist-1/content';
 
@@ -45,8 +37,8 @@ const emptyContentFetch = {
   latency_ms: 3,
 };
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 describe('useArtistContent bounds the artist albums fetch', () => {
@@ -207,10 +199,9 @@ describe('aborting on unmount', () => {
 
   let wrapper: ReturnType<typeof createWrapper>;
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
     _resetDetailHealthForTest();
-    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
     client = createTestQueryClient();
     wrapper = createWrapper(client);
   });

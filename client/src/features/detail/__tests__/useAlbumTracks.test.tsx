@@ -1,20 +1,18 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import { supabase } from '@shared/auth/supabaseClient';
-
-import { useAlbumTracks } from '../hooks/useAlbumTracks';
-import { createTestQueryClient, createWrapper, mockSupabaseSession } from './support/queryHarness';
+import { useAlbumTracks } from '@/features/detail/hooks/useAlbumTracks';
+import {
+  createTestQueryClient,
+  createWrapper,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
 const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 const emptyContent = {
