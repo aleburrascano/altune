@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
+import { detailKeys } from '@shared/query/queryKeys';
 import { isAbort } from '@shared/failure/errors';
 import type {
   DeezerEnrichmentResponse,
@@ -49,7 +50,6 @@ type EnrichmentFetchParams = Required<Pick<EnrichmentParams, 'kind' | 'title'>> 
   EnrichmentSignal;
 
 type EnrichmentHookConfig<T> = {
-  keyPrefix: string;
   provider: EnrichmentProvider;
   fetch: (port: DetailPort, params: EnrichmentFetchParams) => Promise<T>;
   mbidAware: boolean;
@@ -113,7 +113,11 @@ function enrichmentQueryFn<T>({ config, port, params }: EnrichmentRequest<T>) {
 function enrichmentQueryOptions<T>(request: EnrichmentRequest<T>, isFetchEnabled: boolean) {
   const { config, params } = request;
   return {
-    queryKey: [config.keyPrefix, params.kind, enrichmentCacheKey(config, params)],
+    queryKey: detailKeys.enrichment(
+      config.provider,
+      params.kind,
+      enrichmentCacheKey(config, params),
+    ),
     queryFn: enrichmentQueryFn(request),
     enabled: (params.enabled ?? true) && isFetchEnabled && hasLookupKey(config, params),
     staleTime: ENRICHMENT_STALE_TIME,
@@ -134,7 +138,6 @@ function useProviderEnrichment<T extends HasContent>(
 type MusicBrainzEnrichment = Awaited<ReturnType<DetailPort['getEnrichment']>>;
 
 const MUSICBRAINZ_CONFIG: EnrichmentHookConfig<MusicBrainzEnrichment> = {
-  keyPrefix: 'enrichment',
   provider: 'musicbrainz',
   fetch: (port, { kind, title, subtitle, mbid, signal }) =>
     port.getEnrichment({ kind, title, subtitle, mbid, signal }),
@@ -148,7 +151,6 @@ export function useEnrichment(params: EnrichmentParams) {
 type DeezerEnrichment = Awaited<ReturnType<DetailPort['getDeezerEnrichment']>>;
 
 const DEEZER_CONFIG: EnrichmentHookConfig<DeezerEnrichment> = {
-  keyPrefix: 'deezer-enrichment',
   provider: 'deezer',
   fetch: (port, { kind, title, subtitle, signal }) =>
     port.getDeezerEnrichment({ kind, title, subtitle, signal }),
@@ -162,7 +164,6 @@ export function useDeezerEnrichment(params: EnrichmentParams) {
 type LastFmEnrichment = Awaited<ReturnType<DetailPort['getLastFmEnrichment']>>;
 
 const LASTFM_CONFIG: EnrichmentHookConfig<LastFmEnrichment> = {
-  keyPrefix: 'lastfm-enrichment',
   provider: 'lastfm',
   fetch: (port, { kind, title, subtitle, signal }) =>
     port.getLastFmEnrichment({ kind, title, subtitle, signal }),

@@ -38,6 +38,14 @@ describe('detailKeys — literal shape', () => {
       '',
     ]);
   });
+
+  it.each([
+    ['musicbrainz', 'enrichment'],
+    ['deezer', 'deezer-enrichment'],
+    ['lastfm', 'lastfm-enrichment'],
+  ] as const)('enrichment for %s is root, kind, then cache key', (provider, root) => {
+    expect(detailKeys.enrichment(provider, 'album', 't|a')).toEqual([root, 'album', 't|a']);
+  });
 });
 
 describe('libraryKeys — literal shape', () => {

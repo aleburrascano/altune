@@ -31,6 +31,12 @@ export function isSearchKeyFor(queryKey: readonly unknown[], query: string): boo
   return queryKey[2] === query;
 }
 
+const ENRICHMENT_ROOTS = {
+  musicbrainz: 'enrichment',
+  deezer: 'deezer-enrichment',
+  lastfm: 'lastfm-enrichment',
+} as const;
+
 export const detailKeys = {
   albumTracksPrefix: ['album-tracks'] as const,
   albumTracks: (
@@ -40,6 +46,8 @@ export const detailKeys = {
     knownIds = '',
   ) =>
     [...detailKeys.albumTracksPrefix, provider, externalId, mbExternalId ?? '', knownIds] as const,
+  enrichment: (provider: keyof typeof ENRICHMENT_ROOTS, kind: string, cacheKey: string) =>
+    [ENRICHMENT_ROOTS[provider], kind, cacheKey] as const,
 };
 
 export const playlistKeys = {
