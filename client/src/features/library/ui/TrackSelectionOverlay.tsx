@@ -8,14 +8,8 @@ import type {
   TrackSelectionController,
   SelectionAction,
 } from '@features/library/hooks/useTrackSelection';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  View,
-  type ListRenderItemInfo,
-  type PressableProps,
-} from 'react-native';
+import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
+import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 
 type TrackSelectionOverlayProps = {
@@ -82,7 +76,9 @@ type BarColors = { backgroundColor: string; borderTopColor: string };
 type CancelProps = Pick<HeaderProps, 'onCancel'>;
 type ActionButtonProps = { action: SelectionAction };
 
-function selectAllProps({ allSelected, onSelectAll }: SelectAllProps): PressableProps {
+type TapProps = Omit<TappableProps, 'action'>;
+
+function selectAllProps({ allSelected, onSelectAll }: SelectAllProps): TapProps {
   return {
     testID: 'selection-select-all',
     onPress: onSelectAll,
@@ -95,15 +91,15 @@ function selectAllProps({ allSelected, onSelectAll }: SelectAllProps): Pressable
 function SelectAllButton(props: SelectAllProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...selectAllProps(props)}>
+    <Tappable action="library.selection.select_all" {...selectAllProps(props)}>
       <Text variant="label" style={{ color: theme.color.accent }}>
         {props.allSelected ? 'Deselect all' : 'Select all'}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
-function cancelProps({ onCancel }: CancelProps): PressableProps {
+function cancelProps({ onCancel }: CancelProps): TapProps {
   return {
     testID: 'selection-cancel',
     onPress: onCancel,
@@ -115,11 +111,11 @@ function cancelProps({ onCancel }: CancelProps): PressableProps {
 
 function CancelButton(props: CancelProps): ReactElement {
   return (
-    <Pressable {...cancelProps(props)}>
+    <Tappable action="library.selection.cancel" {...cancelProps(props)}>
       <Text variant="label" tone="secondary">
         Cancel
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -154,7 +150,7 @@ function actionColor(action: SelectionAction, theme: Theme): string {
   return action.tone === 'danger' ? theme.color.danger : theme.color.textPrimary;
 }
 
-function actionStyle(action: SelectionAction, backgroundColor: string): PressableProps['style'] {
+function actionStyle(action: SelectionAction, backgroundColor: string): TappableProps['style'] {
   return ({ pressed }) => [
     styles.action,
     { backgroundColor },
@@ -162,7 +158,7 @@ function actionStyle(action: SelectionAction, backgroundColor: string): Pressabl
   ];
 }
 
-function actionA11y(action: SelectionAction): PressableProps {
+function actionA11y(action: SelectionAction): Omit<TappableProps, 'action' | 'onPress'> {
   return {
     accessibilityRole: 'button',
     accessibilityLabel: action.label,
@@ -170,7 +166,7 @@ function actionA11y(action: SelectionAction): PressableProps {
   };
 }
 
-function actionProps(action: SelectionAction, backgroundColor: string): PressableProps {
+function actionProps(action: SelectionAction, backgroundColor: string): TapProps {
   return {
     testID: `selection-action-${action.key}`,
     onPress: action.onPress,
@@ -202,9 +198,12 @@ function SelectionActionButton({ action }: ActionButtonProps): ReactElement {
   const theme = useTheme();
   const color = actionColor(action, theme);
   return (
-    <Pressable {...actionProps(action, theme.color.surface2)}>
+    <Tappable
+      action={`library.selection.${action.key}`}
+      {...actionProps(action, theme.color.surface2)}
+    >
       <ActionContent action={action} color={color} />
-    </Pressable>
+    </Tappable>
   );
 }
 

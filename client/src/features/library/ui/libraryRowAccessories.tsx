@@ -1,8 +1,9 @@
 import { useRef, type ReactElement } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native';
+import { StyleSheet, useWindowDimensions, type View } from 'react-native';
 import { MoreVertical } from 'lucide-react-native';
 import type { TrackId } from '@shared/apiClient/ids';
 import { useTheme } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 import { PINNED_GLYPH, PINNED_GLYPH_LABEL } from '@features/library/ui/pinnedGlyphs';
@@ -30,7 +31,9 @@ export function LibraryRowMoreButton({
   };
 
   return (
-    <Pressable
+    <Tappable
+      action="library.row.more"
+      trackId={trackId}
       ref={buttonRef}
       testID={`library-row-more-${trackId}`}
       onPress={(e) => {
@@ -43,7 +46,7 @@ export function LibraryRowMoreButton({
       style={styles.moreBtn}
     >
       <MoreVertical size={18} color={theme.color.textTertiary} />
-    </Pressable>
+    </Tappable>
   );
 }
 

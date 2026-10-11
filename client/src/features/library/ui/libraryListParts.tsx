@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import { StyleSheet, View, Pressable } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text, spacing } from '@shared/ui';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 
 export function LibraryEmptyMessage({ label }: { label: string }): ReactElement {
   return (
@@ -40,9 +41,14 @@ const RETRY_ACCESSIBILITY = {
 
 function RetryFooter({ onRetry }: { onRetry: (() => void) | undefined }): ReactElement {
   return (
-    <Pressable {...RETRY_ACCESSIBILITY} style={footerStyles.footer} onPress={onRetry}>
+    <Tappable
+      action="library.load_more.retry"
+      {...RETRY_ACCESSIBILITY}
+      style={footerStyles.footer}
+      onPress={() => onRetry?.()}
+    >
       <FooterText>{RETRY_LABEL}</FooterText>
-    </Pressable>
+    </Tappable>
   );
 }
 

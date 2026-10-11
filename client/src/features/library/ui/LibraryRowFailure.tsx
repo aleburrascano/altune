@@ -1,13 +1,7 @@
 import { useEffect, type ReactElement } from 'react';
-import {
-  StyleSheet,
-  View,
-  ActivityIndicator,
-  Pressable,
-  type GestureResponderEvent,
-  type PressableProps,
-} from 'react-native';
+import { StyleSheet, View, ActivityIndicator, type GestureResponderEvent } from 'react-native';
 import { Text, spacing, useTheme } from '@shared/ui';
+import { Tappable, type TappableProps } from '@shared/ui/primitives/Tappable';
 import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
 import type { TrackId } from '@shared/apiClient/ids';
@@ -84,7 +78,9 @@ function retryPressHandler(onRetry: () => void): (e: GestureResponderEvent) => v
   };
 }
 
-function retryButtonProps({ trackId, title, onRetry }: RetryButtonProps): PressableProps {
+type TapProps = Omit<TappableProps, 'action'>;
+
+function retryButtonProps({ trackId, title, onRetry }: RetryButtonProps): TapProps {
   return {
     testID: `library-row-retry-${trackId}`,
     onPress: retryPressHandler(onRetry),
@@ -96,11 +92,11 @@ function retryButtonProps({ trackId, title, onRetry }: RetryButtonProps): Pressa
 
 function RetryButton(props: RetryButtonProps): ReactElement {
   return (
-    <Pressable {...retryButtonProps(props)}>
+    <Tappable action="library.row.retry" trackId={props.trackId} {...retryButtonProps(props)}>
       <Text variant="caption" tone="accent">
         Retry
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
