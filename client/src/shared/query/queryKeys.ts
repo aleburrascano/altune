@@ -48,6 +48,13 @@ export const detailKeys = {
     [...detailKeys.albumTracksPrefix, provider, externalId, mbExternalId ?? '', knownIds] as const,
   enrichment: (provider: keyof typeof ENRICHMENT_ROOTS, kind: string, cacheKey: string) =>
     [ENRICHMENT_ROOTS[provider], kind, cacheKey] as const,
+  resolveEntity: (kind: string, query: string, limit: number) =>
+    ['resolve-entity', kind, query, limit] as const,
+  albumDiscoveryTracks: (provider: string | undefined, externalId: string | undefined) =>
+    ['album-discovery-tracks', provider, externalId] as const,
+  artistContent: (provider: string, externalId: string, artistName: string, knownIds: string) =>
+    ['artist-content', provider, externalId, artistName, knownIds] as const,
+  relatedTracks: (externalId: string) => ['related-tracks', externalId] as const,
 };
 
 export const playlistKeys = {

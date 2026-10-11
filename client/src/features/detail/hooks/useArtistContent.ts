@@ -4,6 +4,7 @@ import { isAbort } from '@shared/failure/errors';
 import type { ArtistContentOptions, ArtistContentResponse } from '@shared/apiClient/enrichment';
 import { sourceIdList } from '@shared/apiClient/ids';
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
+import { detailKeys } from '@shared/query/queryKeys';
 
 import {
   contentFailure,
@@ -143,13 +144,12 @@ export function useArtistContent({
   const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: [
-      'artist-content',
+    queryKey: detailKeys.artistContent(
       source?.provider ?? '',
       source?.external_id ?? '',
       artistName ?? '',
       sourceIdList(sources),
-    ],
+    ),
     queryFn: ({ signal }) =>
       loadArtistContent(port, [source!, ...sources.slice(1)], artistName, signal),
     enabled: enabled && isFetchEnabled && source !== null,

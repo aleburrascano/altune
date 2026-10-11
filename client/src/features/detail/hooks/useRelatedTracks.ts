@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult, DiscoverySource } from '@shared/apiClient/discovery';
+import { detailKeys } from '@shared/query/queryKeys';
 
 import {
   contentFailure,
@@ -40,7 +41,7 @@ function useRelatedTracksQuery(scSource: DiscoverySource | null, isFetchEnabled:
   const port = useDetailPort();
   const retry = useContentFetchRetry();
   return useQuery({
-    queryKey: ['related-tracks', scSource?.external_id ?? ''],
+    queryKey: detailKeys.relatedTracks(scSource?.external_id ?? ''),
     queryFn: ({ signal }) => fetchRelated(port, scSource, signal),
     enabled: isFetchEnabled && scSource !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,

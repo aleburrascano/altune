@@ -46,6 +46,23 @@ describe('detailKeys — literal shape', () => {
   ] as const)('enrichment for %s is root, kind, then cache key', (provider, root) => {
     expect(detailKeys.enrichment(provider, 'album', 't|a')).toEqual([root, 'album', 't|a']);
   });
+
+  it('resolveEntity, albumDiscoveryTracks, artistContent and relatedTracks keep their literal shapes', () => {
+    expect(detailKeys.resolveEntity('album', 'q', 1)).toEqual(['resolve-entity', 'album', 'q', 1]);
+    expect(detailKeys.albumDiscoveryTracks('deezer', '9')).toEqual([
+      'album-discovery-tracks',
+      'deezer',
+      '9',
+    ]);
+    expect(detailKeys.artistContent('deezer', '9', 'Name', 'ids')).toEqual([
+      'artist-content',
+      'deezer',
+      '9',
+      'Name',
+      'ids',
+    ]);
+    expect(detailKeys.relatedTracks('42')).toEqual(['related-tracks', '42']);
+  });
 });
 
 describe('libraryKeys — literal shape', () => {

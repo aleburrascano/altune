@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/apiClient/discovery';
+import { detailKeys } from '@shared/query/queryKeys';
 
 import {
   contentFailure,
@@ -78,7 +79,7 @@ export function useAlbumDiscovery({
     error: tracksError,
     refetch: refetchTracks,
   } = useQuery({
-    queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
+    queryKey: detailKeys.albumDiscoveryTracks(source?.provider, source?.external_id),
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
         port.getAlbumTracks({
