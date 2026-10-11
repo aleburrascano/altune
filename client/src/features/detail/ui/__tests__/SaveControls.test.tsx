@@ -226,6 +226,26 @@ describe('TrackSaveControl', () => {
     useTrackStatusStore.getState().reset();
   });
 
+  describe('TrackSaveControl propagation', () => {
+    it('stops the press from reaching the enclosing row', () => {
+      const stopPropagation = jest.fn();
+      const onPress = jest.fn();
+      render(
+        <TrackSaveControl
+          testID="quick-save"
+          owned={null}
+          title={TITLE}
+          artist={ARTIST}
+          onPress={onPress}
+        />,
+        { wrapper: createWrapper(createTestQueryClient()) },
+      );
+      fireEvent.press(screen.getByTestId('quick-save'), { stopPropagation });
+      expect(stopPropagation).toHaveBeenCalledTimes(1);
+      expect(onPress).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('TrackSaveControl quick-save re-entrancy', () => {
     it('fires a single createTrack POST when the save glyph is double-tapped before the mutation settles', async () => {
       __http.reply('POST /v1/tracks', { status: 500 });

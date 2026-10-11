@@ -1,8 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 import { Ban, Check, Plus, RotateCw } from 'lucide-react-native';
 
 import { useTheme, minInteractiveHeight, radius, spacing, type Theme } from '@shared/ui/theme';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 
 import {
@@ -65,6 +66,7 @@ function shellA11y(props: SavePillShellProps) {
 
 function shellProps(props: SavePillShellProps, theme: Theme) {
   return {
+    action: 'detail.save_pill',
     testID: props.testID,
     onPress: props.onPress,
     disabled: props.disabled,
@@ -75,7 +77,7 @@ function shellProps(props: SavePillShellProps, theme: Theme) {
 
 export function SavePillShell(props: SavePillShellProps): ReactElement {
   const theme = useTheme();
-  return <Pressable {...shellProps(props, theme)}>{props.children}</Pressable>;
+  return <Tappable {...shellProps(props, theme)}>{props.children}</Tappable>;
 }
 
 const savePillShellStyles = StyleSheet.create({
@@ -117,11 +119,11 @@ export function TrackSaveControl({
   const interactive = !savingInBatch && saveControlInteractive(effective);
 
   return (
-    <Pressable
+    <Tappable
+      action="detail.track_save"
       testID={testID}
       onPress={(e) => {
-        e.stopPropagation();
-        if (!interactive) return;
+        e.stopPropagation?.();
         onPress();
       }}
       disabled={!interactive}
@@ -137,7 +139,7 @@ export function TrackSaveControl({
       ]}
     >
       <SaveGlyph state={effective} addSize={20} />
-    </Pressable>
+    </Tappable>
   );
 }
 

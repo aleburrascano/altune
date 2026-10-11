@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text, type TextTone } from '@shared/ui/primitives/Text';
 import { spacing, type TypographyVariant } from '@shared/ui/theme';
 import { Button } from '@shared/ui/primitives/Button';
@@ -26,7 +27,8 @@ export function Section({
           {label.toUpperCase()}
         </Text>
         {action != null ? (
-          <Pressable
+          <Tappable
+            action="detail.section.action"
             testID={action.testID}
             onPress={action.onPress}
             hitSlop={8}
@@ -37,7 +39,7 @@ export function Section({
             <Text variant="caption" tone="accent">
               {action.label}
             </Text>
-          </Pressable>
+          </Tappable>
         ) : null}
       </View>
       {children}

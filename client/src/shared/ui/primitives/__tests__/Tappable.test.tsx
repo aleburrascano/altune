@@ -26,6 +26,18 @@ describe('Tappable', () => {
     expect(order).toEqual(['record', 'press']);
   });
 
+  it('passes the press event to onPress', () => {
+    const onPress = jest.fn();
+    render(
+      <Tappable action="a.b" onPress={onPress} testID="t">
+        <Text>x</Text>
+      </Tappable>,
+    );
+    const event = { stopPropagation: jest.fn() };
+    fireEvent.press(screen.getByTestId('t'), event);
+    expect(onPress).toHaveBeenCalledWith(expect.objectContaining(event));
+  });
+
   it('records nothing and does not press when disabled', () => {
     const onPress = jest.fn();
     render(

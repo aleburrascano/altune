@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
@@ -58,6 +59,7 @@ function chipStyle(theme: ReturnType<typeof useTheme>, on: boolean) {
 
 function chipPressableProps(props: ChipProps, theme: ReturnType<typeof useTheme>) {
   return {
+    action: 'detail.discography.select',
     testID: `detail-discography-${props.group.type}`,
     onPress: () => props.onSelect(props.group.type),
     accessibilityRole: 'button' as const,
@@ -70,11 +72,11 @@ function chipPressableProps(props: ChipProps, theme: ReturnType<typeof useTheme>
 function Chip(props: ChipProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...chipPressableProps(props, theme)}>
+    <Tappable {...chipPressableProps(props, theme)}>
       <Text variant="label" tone={props.on ? 'onAccent' : 'secondary'}>
         {props.group.label} {props.group.count}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

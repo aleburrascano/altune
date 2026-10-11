@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
@@ -41,7 +42,8 @@ export function RelatedTracksSection({
         contentContainerStyle={styles.rail}
       >
         {relatedTracks.map((track, index) => (
-          <Pressable
+          <Tappable
+            action="detail.related_track.open"
             key={track.sources[0]?.external_id ?? index}
             testID={`detail-related-${index}`}
             onPress={() => onRelatedPress(track)}
@@ -64,7 +66,7 @@ export function RelatedTracksSection({
                 {track.subtitle}
               </Text>
             ) : null}
-          </Pressable>
+          </Tappable>
         ))}
       </ScrollView>
     </View>
