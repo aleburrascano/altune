@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, spacing, useTheme } from '@shared/ui/theme';
 
@@ -50,10 +51,11 @@ function StaticHeader({ label }: { label: string }): ReactElement {
   );
 }
 
-function headerPressableProps(props: CollapsibleSectionHeaderProps) {
+function headerPressableProps(props: CollapsibleSectionHeaderProps, onToggle: () => void) {
   return {
+    action: 'detail.section.toggle',
     testID: props.testID,
-    onPress: props.onToggle,
+    onPress: onToggle,
     accessibilityRole: 'button' as const,
     accessibilityLabel: props.accessibilityLabel,
   };
@@ -63,11 +65,13 @@ function pressedHeaderStyle({ pressed }: { pressed: boolean }) {
   return [styles.header, pressed ? sharedStyles.pressed : null];
 }
 
-function InteractiveHeader(props: CollapsibleSectionHeaderProps): ReactElement {
+type InteractiveHeaderProps = CollapsibleSectionHeaderProps & { onToggle: () => void };
+
+function InteractiveHeader(props: InteractiveHeaderProps): ReactElement {
   return (
-    <Pressable {...headerPressableProps(props)} style={pressedHeaderStyle}>
+    <Tappable {...headerPressableProps(props, props.onToggle)} style={pressedHeaderStyle}>
       <HeaderContent label={props.label} expanded={props.expanded} />
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -75,7 +79,7 @@ export function CollapsibleSectionHeader(props: CollapsibleSectionHeaderProps): 
   if (props.onToggle == null) {
     return <StaticHeader label={props.label} />;
   }
-  return <InteractiveHeader {...props} />;
+  return <InteractiveHeader {...props} onToggle={props.onToggle} />;
 }
 
 const styles = StyleSheet.create({

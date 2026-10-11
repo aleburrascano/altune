@@ -1,9 +1,10 @@
 import { useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
@@ -54,7 +55,8 @@ function ArtistBio({ bio }: { bio: string }): ReactElement {
         {bio}
       </Text>
       {isLong ? (
-        <Pressable
+        <Tappable
+          action="detail.lastfm.bio_toggle"
           testID="detail-lastfm-bio-toggle"
           onPress={() => setExpanded((v) => !v)}
           accessibilityRole="button"
@@ -64,7 +66,7 @@ function ArtistBio({ bio }: { bio: string }): ReactElement {
           <Text variant="label" tone="accent">
             {expanded ? 'Read less' : 'Read more'}
           </Text>
-        </Pressable>
+        </Tappable>
       ) : null}
     </View>
   );

@@ -1,7 +1,8 @@
 import { useState, type ReactElement } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import { ChevronLeft, MoreHorizontal, type LucideIcon } from 'lucide-react-native';
 
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { spacing, useTheme } from '@shared/ui/theme';
@@ -9,6 +10,7 @@ import { spacing, useTheme } from '@shared/ui/theme';
 import { withAlpha, sharedStyles } from '@features/detail/ui/detailStyles';
 
 type GlassButtonProps = {
+  action: string;
   testID: string;
   onPress: () => void;
   accessibilityLabel: string;
@@ -26,6 +28,7 @@ function glassStyle(canvas: string) {
 
 function glassPressableProps(props: Omit<GlassButtonProps, 'icon'>, canvas: string) {
   return {
+    action: props.action,
     testID: props.testID,
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
@@ -38,13 +41,14 @@ function glassPressableProps(props: Omit<GlassButtonProps, 'icon'>, canvas: stri
 function GlassButton({ icon: Icon, ...props }: GlassButtonProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable {...glassPressableProps(props, theme.color.canvas)}>
+    <Tappable {...glassPressableProps(props, theme.color.canvas)}>
       <Icon size={props.iconSize} color={theme.color.textPrimary} />
-    </Pressable>
+    </Tappable>
   );
 }
 
 const BACK_GLASS = {
+  action: 'detail.back',
   testID: 'detail-back',
   accessibilityLabel: 'Go back',
   icon: ChevronLeft,
@@ -52,6 +56,7 @@ const BACK_GLASS = {
 } as const;
 
 const MENU_GLASS = {
+  action: 'detail.menu_open',
   testID: 'detail-menu',
   accessibilityLabel: 'More options',
   icon: MoreHorizontal,

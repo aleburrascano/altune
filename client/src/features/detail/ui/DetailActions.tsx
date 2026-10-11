@@ -1,7 +1,8 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { tapFeedback } from '@shared/ui/haptics';
+import { Tappable } from '@shared/ui/primitives/Tappable';
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
 
@@ -42,12 +43,10 @@ function PrimaryPill({
   const theme = useTheme();
 
   return (
-    <Pressable
+    <Tappable
+      action="detail.primary_action"
       testID={testID}
       onPress={() => {
-        if (disabled) {
-          return;
-        }
         tapFeedback();
         onPress();
       }}
@@ -74,7 +73,7 @@ function PrimaryPill({
       <Text variant="bodyStrong" tone={disabled ? 'tertiary' : 'onAccent'}>
         {label}
       </Text>
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -91,7 +90,8 @@ export function SecondaryAction({
 }): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable
+    <Tappable
+      action="detail.secondary_action"
       testID={testID}
       onPress={onPress}
       accessibilityRole="button"
@@ -105,7 +105,7 @@ export function SecondaryAction({
       ]}
     >
       <Icon size={20} color={theme.color.textPrimary} />
-    </Pressable>
+    </Tappable>
   );
 }
 
