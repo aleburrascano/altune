@@ -7,27 +7,17 @@ import { ArtistDetailBody } from '../ui/ArtistDetailBody';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 import type { LastFmEnrichmentResponse } from '@shared/apiClient/enrichment';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
-import { createTestQueryClient, createWrapper } from './support/queryHarness';
+import {
+  createTestQueryClient,
+  createPlaybackWrapper,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-}));
-
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn(), enqueue: jest.fn() }),
-}));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue(require('./support/queryHarness').mockSupabaseSession()),
-    },
-  },
 }));
 
 const SEARCH = 'GET /v1/discovery/search';
@@ -51,11 +41,14 @@ function renderBody() {
       result={libraryArtist()}
       detailRoute="/library/detail"
     />,
-    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
+beforeEach(signInTestUser);
+
 warmUpFirstRender(async () => {
+  await signInTestUser();
   __http.replyAll({ status: 200, json: { items: [], total: 0 } });
   renderBody();
   await screen.findByTestId('detail-explore-discography');
@@ -141,7 +134,7 @@ function renderLibraryArtistBody(
       lastfm={options.lastfm}
       lastfmError={options.lastfmError}
     />,
-    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -505,7 +498,7 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
         detailRoute="/library/detail"
         lastfmError
       />,
-      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
     );
 
     await screen.findByTestId('detail-top-track-0');

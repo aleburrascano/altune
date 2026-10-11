@@ -5,7 +5,11 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
-import { createTestQueryClient, createWrapper } from './support/queryHarness';
+import {
+  createTestQueryClient,
+  createPlaybackWrapper,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -13,57 +17,46 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
 }));
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue(require('./support/queryHarness').mockSupabaseSession()),
+const UNOWNED_TRACK_COUNT = 3;
+const LIBRARY_TRACKS = 'GET /v1/tracks';
+
+function replyWithLibrary(items: readonly object[]): void {
+  __http.reply(LIBRARY_TRACKS, {
+    status: 200,
+    json: { items, total: items.length, limit: 200, offset: 0, has_more: false },
+  });
+}
+
+function replyWithLibraryChain(): void {
+  replyWithLibrary([
+    {
+      id: 'trk-1',
+      title: 'The Chain',
+      artist: 'Fleetwood Mac',
+      album: 'Rumours',
+      duration_seconds: 271,
+      added_at: '2024-01-01T00:00:00Z',
+      acquisition_status: 'ready',
+      artwork_url: null,
+      failure_reason: null,
+      year: 1977,
+      genre: null,
+      track_number: 1,
+      album_artist: 'Fleetwood Mac',
+      isrc: null,
+      audio_ref: null,
     },
-  },
-}));
-
-const mockUseLibraryTracksForAlbum = jest.fn();
-jest.mock('../hooks/useLibraryMatches', () => ({
-  useLibraryTracksForAlbum: () => mockUseLibraryTracksForAlbum(),
-}));
-
-jest.mock('../hooks/useOwnedPlayback', () => ({
-  useOwnedPlayback: () => ({
-    owned: { playable: [], unownedCount: 0, acquiringCount: 0 },
-    playButton: { label: 'Play', disabled: true },
-    onPlayOwned: jest.fn(),
-    ownedFor: () => null,
-    onQuickSave: jest.fn(),
-  }),
-}));
+  ]);
+}
 
 const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';
 
+beforeEach(signInTestUser);
+
 warmUpFirstRender(async () => {
-  mockUseLibraryTracksForAlbum.mockImplementation(() => {
-    const { asTrackId } = require('@shared/apiClient/ids');
-    return [
-      {
-        id: asTrackId('trk-1'),
-        title: 'The Chain',
-        artist: 'Fleetwood Mac',
-        album: 'Rumours',
-        duration_seconds: 271,
-        added_at: '2024-01-01T00:00:00Z',
-        acquisition_status: 'ready',
-        artwork_url: null,
-        failure_reason: null,
-        year: 1977,
-        genre: null,
-        track_number: 1,
-        album_artist: 'Fleetwood Mac',
-        isrc: null,
-        audio_ref: null,
-      },
-    ];
-  });
+  await signInTestUser();
   __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
+  replyWithLibraryChain();
   __http.reply('GET /v1/discovery/search', {
     status: 200,
     json: {
@@ -122,7 +115,7 @@ warmUpFirstRender(async () => {
       }}
       detailRoute="/library/detail"
     />,
-    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
   );
 
   await screen.findByTestId('detail-more-from-album');
@@ -130,28 +123,7 @@ warmUpFirstRender(async () => {
 
 describe('a library album\'s "More from this album" section', () => {
   beforeEach(() => {
-    mockUseLibraryTracksForAlbum.mockImplementation(() => {
-      const { asTrackId } = require('@shared/apiClient/ids');
-      return [
-        {
-          id: asTrackId('trk-1'),
-          title: 'The Chain',
-          artist: 'Fleetwood Mac',
-          album: 'Rumours',
-          duration_seconds: 271,
-          added_at: '2024-01-01T00:00:00Z',
-          acquisition_status: 'ready',
-          artwork_url: null,
-          failure_reason: null,
-          year: 1977,
-          genre: null,
-          track_number: 1,
-          album_artist: 'Fleetwood Mac',
-          isrc: null,
-          audio_ref: null,
-        },
-      ];
-    });
+    replyWithLibraryChain();
   });
 
   const SEARCH = 'GET /v1/discovery/search';
@@ -201,7 +173,7 @@ describe('a library album\'s "More from this album" section', () => {
         result={libraryAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
     );
   }
 
@@ -332,10 +304,6 @@ describe('a library album\'s "More from this album" section', () => {
 });
 
 describe('the tracklist error', () => {
-  beforeEach(() => {
-    mockUseLibraryTracksForAlbum.mockImplementation(() => []);
-  });
-
   function sourcedAlbum(): DiscoveryResult {
     return {
       kind: 'album',
@@ -355,7 +323,7 @@ describe('the tracklist error', () => {
         result={sourcedAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
     );
   }
 
@@ -452,29 +420,36 @@ describe('AlbumDetailBody: the Save N pill', () => {
         result={sourcedAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
     );
   }
 
-  function mockUnownedCount(unownedCount: number) {
-    const ownedPlayback = require('../hooks/useOwnedPlayback');
-    jest.spyOn(ownedPlayback, 'useOwnedPlayback').mockReturnValue({
-      owned: { playable: [], unownedCount, acquiringCount: 0 },
-      playButton: { label: 'Play', disabled: true },
-      onPlayOwned: jest.fn(),
-      ownedFor: () => null,
-      onQuickSave: jest.fn(),
+  function replyWithAlbumTracks(count: number, extras: Record<string, string> = {}): void {
+    __http.reset();
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    replyWithLibrary([]);
+    __http.reply(ALBUM_TRACKS, {
+      status: 200,
+      json: {
+        items: Array.from({ length: count }, (_, index) => ({
+          ...ALBUM_TRACKS_ITEMS.json.items[0],
+          title: `Track ${index + 1}`,
+          sources: [{ provider: 'deezer', external_id: `d-${index}`, url: `https://d/${index}` }],
+          extras,
+        })),
+        provider_name: 'deezer',
+        status: 'ok',
+      },
     });
   }
 
   beforeEach(() => {
-    mockUseLibraryTracksForAlbum.mockImplementation(() => []);
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    replyWithLibrary([]);
     __http.reply(ALBUM_TRACKS, {
       status: 200,
       json: { ...ALBUM_TRACKS_ITEMS.json, provider_name: 'deezer', status: 'ok' },
     });
-    __http.reply(ALBUM_TRACKS, ALBUM_TRACKS_ITEMS);
     __http.reply('POST /v1/tracks', saveResponse());
   });
 
@@ -483,6 +458,7 @@ describe('AlbumDetailBody: the Save N pill', () => {
   });
 
   it('hides the pill when nothing is unowned', async () => {
+    replyWithAlbumTracks(1, { track_id: 'trk-owned', acquisition_status: 'ready' });
     renderBody();
 
     await screen.findByTestId('detail-tracklist');
@@ -490,19 +466,20 @@ describe('AlbumDetailBody: the Save N pill', () => {
   });
 
   it('labels the pill and announces it for unowned tracks', async () => {
-    mockUnownedCount(3);
+    replyWithAlbumTracks(UNOWNED_TRACK_COUNT);
     renderBody();
 
     await screen.findByTestId('detail-tracklist');
     const pill = screen.getByTestId('detail-save-all');
 
-    expect(screen.getByLabelText('Save 3 tracks to your library')).toBeTruthy();
-    expect(within(pill).getByText('Save 3')).toBeTruthy();
+    expect(
+      screen.getByLabelText(`Save ${UNOWNED_TRACK_COUNT} tracks to your library`),
+    ).toBeTruthy();
+    expect(within(pill).getByText(`Save ${UNOWNED_TRACK_COUNT}`)).toBeTruthy();
     expect(pill.props.accessibilityState?.disabled).toBe(false);
   });
 
   it('disables the pill and shows "Saving…" once a save-all run starts', async () => {
-    mockUnownedCount(1);
     renderBody();
 
     await screen.findByTestId('detail-tracklist');
@@ -516,12 +493,12 @@ describe('AlbumDetailBody: the Save N pill', () => {
   it('shows how many tracks could not be saved while More is collapsed', async () => {
     __http.reset();
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    replyWithLibrary([]);
     __http.reply(ALBUM_TRACKS, {
       status: 200,
       json: { ...ALBUM_TRACKS_ITEMS.json, provider_name: 'deezer', status: 'ok' },
     });
     __http.reply('POST /v1/tracks', { status: 500, json: { code: 'internal' } });
-    mockUnownedCount(1);
     renderBody();
 
     jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -569,7 +546,6 @@ describe('AlbumDetailBody: the facts row', () => {
   }
 
   beforeEach(() => {
-    mockUseLibraryTracksForAlbum.mockImplementation(() => []);
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     __http.reply(ALBUM_TRACKS, {
       status: 200,
@@ -598,7 +574,7 @@ describe('AlbumDetailBody: the facts row', () => {
         detailRoute="/library/detail"
         mbYear={1977}
       />,
-      { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
     );
 
     await screen.findByTestId('detail-tracklist');

@@ -1,9 +1,14 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { clearDetailHandoffs, detailHref } from '@shared/navigation/detailHandoff';
 
 import { DetailScreen } from '../ui/DetailScreen';
+import {
+  createTestQueryClient,
+  createPlaybackWrapper,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 let mockParams: { handoff?: string } = {};
 jest.mock('expo-router', () => {
@@ -21,104 +26,40 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('../hooks/useResolveMissingSources', () => ({
-  useResolveMissingSources: (result: DiscoveryResult) => ({
-    resolved:
-      result.sources.length === 0
-        ? { ...result, sources: [{ provider: 'deezer', external_id: 'd1', url: 'https://d/1' }] }
-        : result,
-    isResolving: false,
-  }),
-}));
+const { __http } = require('../../../../jest/doubles/fetch.js');
 
-jest.mock('../hooks/useDetailEnrichments', () => ({
-  useDetailEnrichments: () => ({
-    errors: { musicbrainz: false, deezer: false, lastfm: false },
-  }),
-}));
-jest.mock('../hooks/useDetailNavigation', () => ({
-  ...jest.requireActual('../hooks/useDetailNavigation'),
-  useLateralNav: () => ({}),
-}));
-jest.mock('../ui/secondaryLine', () => ({ secondaryLine: () => null }));
-jest.mock('../hooks/useSaveTrack', () => ({
-  useSaveTrack: () => ({ mutate: jest.fn(), mutateAsync: jest.fn(), isPending: false }),
-}));
-jest.mock('../hooks/useOwnedPlayback', () => ({
-  useOwnedPlayback: () => ({
-    owned: { playable: [], unownedCount: 0, acquiringCount: 0 },
-    playButton: { label: 'Play', disabled: true },
-    onPlayOwned: jest.fn(),
-    ownedFor: () => null,
-    onQuickSave: jest.fn(),
-  }),
-}));
+const SEARCH = 'GET /v1/discovery/search';
+const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';
+const ARTIST_CONTENT = 'GET /v1/discovery/artists/deezer/a1/content';
+const LIBRARY_TRACKS = 'GET /v1/tracks';
 
-jest.mock('../hooks/useEntityDiscovery', () => ({
-  useArtistDiscovery: () => ({
-    imageUrl: null,
-    sources: [],
-    isLoading: false,
-    isError: false,
-    refetch: jest.fn(),
-  }),
-  useAlbumDiscovery: () => ({
-    tracks: [],
-    isLoading: false,
-    isError: false,
-    failure: null,
-    refetch: jest.fn(),
-  }),
-}));
-jest.mock('../hooks/useAlbumTracks', () => ({
-  useAlbumTracks: () => ({
-    tracks: [
-      {
-        kind: 'track',
-        title: 'Dreams',
-        subtitle: 'Fleetwood Mac',
-        image_url: null,
-        confidence: 'high',
-        sources: [{ provider: 'deezer', external_id: 'd-dreams', url: 'https://d/dreams' }],
-        extras: {},
-      },
-    ],
-    isLoading: false,
-    isError: false,
-    failure: null,
-    refetch: jest.fn(),
-  }),
-}));
+function resolved(kind: 'album' | 'artist', title: string, subtitle: string | null, id: string) {
+  return {
+    kind,
+    title,
+    subtitle,
+    image_url: null,
+    confidence: 'high',
+    sources: [{ provider: 'deezer', external_id: id, url: `https://d/${id}` }],
+    extras: {},
+  };
+}
 
-jest.mock('../hooks/useArtistContent', () => ({
-  useArtistContent: () => ({
-    topTracks: [
-      {
-        kind: 'track',
-        title: 'Dayvan Cowboy',
-        subtitle: 'Boards of Canada',
-        image_url: null,
-        confidence: 'high',
-        sources: [{ provider: 'deezer', external_id: 'd-dayvan', url: 'https://d/dayvan' }],
-        extras: {},
-      },
-    ],
-    albums: [],
-    isLoadingTracks: false,
-    isLoadingAlbums: false,
-    isErrorTracks: false,
-    isErrorAlbums: false,
-    tracksFailure: null,
-    albumsFailure: null,
-    refetchTracks: jest.fn(),
-    refetchAlbums: jest.fn(),
-  }),
-}));
+function discoveredTrack(title: string, subtitle: string, id: string) {
+  return {
+    kind: 'track',
+    title,
+    subtitle,
+    image_url: null,
+    confidence: 'high',
+    sources: [{ provider: 'deezer', external_id: id, url: `https://d/${id}` }],
+    extras: {},
+  };
+}
 
-jest.mock('../hooks/useLibraryMatches', () => {
-  const { asTrackId } = require('@shared/apiClient/ids');
-  const libraryTrack = (id: string, title: string, artist: string, album: string) => ({
-    id: asTrackId(id),
+function libraryTrack(id: string, title: string, artist: string, album: string) {
+  return {
+    id,
     title,
     artist,
     album,
@@ -133,17 +74,67 @@ jest.mock('../hooks/useLibraryMatches', () => {
     album_artist: artist,
     isrc: null,
     audio_ref: null,
-  });
-  return {
-    useLibraryAlbumsForArtist: () => [],
-    useLibraryTracksForAlbum: () => [
-      libraryTrack('trk-chain', 'The Chain', 'Fleetwood Mac', 'Rumours'),
-    ],
-    useLibraryTracksForArtist: () => [
-      libraryTrack('trk-roygbiv', 'Roygbiv', 'Boards of Canada', 'Music Has the Right to Children'),
-    ],
   };
-});
+}
+
+function replyWithCatalogue(): void {
+  __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+  __http.reply(SEARCH, {
+    status: 200,
+    json: {
+      query: 'q',
+      query_norm: 'q',
+      results: [
+        resolved('album', 'Rumours', 'Fleetwood Mac', 'd1'),
+        resolved('artist', 'Boards of Canada', null, 'a1'),
+      ],
+      sections: [],
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 2,
+      offset: 0,
+      has_more: false,
+    },
+  });
+  __http.reply(ALBUM_TRACKS, {
+    status: 200,
+    json: {
+      items: [discoveredTrack('Dreams', 'Fleetwood Mac', 'd-dreams')],
+      provider_name: 'deezer',
+      status: 'ok',
+    },
+  });
+  __http.reply(ARTIST_CONTENT, {
+    status: 200,
+    json: {
+      top_tracks: {
+        items: [discoveredTrack('Dayvan Cowboy', 'Boards of Canada', 'd-dayvan')],
+        provider_name: 'deezer',
+        status: 'ok',
+      },
+      albums: { items: [], provider_name: 'deezer', status: 'ok' },
+    },
+  });
+  __http.reply(LIBRARY_TRACKS, {
+    status: 200,
+    json: {
+      items: [
+        libraryTrack('trk-chain', 'The Chain', 'Fleetwood Mac', 'Rumours'),
+        libraryTrack(
+          'trk-roygbiv',
+          'Roygbiv',
+          'Boards of Canada',
+          'Music Has the Right to Children',
+        ),
+      ],
+      total: 2,
+      limit: 200,
+      offset: 0,
+      has_more: false,
+    },
+  });
+}
 
 function libraryResult(kind: 'album' | 'artist'): DiscoveryResult {
   return kind === 'album'
@@ -169,27 +160,33 @@ function libraryResult(kind: 'album' | 'artist'): DiscoveryResult {
 
 function renderDetail(result: DiscoveryResult): void {
   mockParams = { handoff: detailHref('/library/detail', result, 'search-1').params.handoff };
-  render(<DetailScreen />);
+  render(<DetailScreen />, {
+    wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })),
+  });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   clearDetailHandoffs();
   mockParams = {};
+  await signInTestUser();
+  replyWithCatalogue();
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('DetailScreen after the resolver backfills a library result its sources', () => {
-  it('lists the resolved album tracks instead of the library-only ones', () => {
+  it('lists the resolved album tracks instead of the library-only ones', async () => {
     renderDetail(libraryResult('album'));
 
-    expect(screen.getByText('Dreams')).toBeTruthy();
+    expect(await screen.findByText('Dreams')).toBeTruthy();
     expect(screen.queryByText('The Chain')).toBeNull();
   });
 
-  it('shows the resolved artist top tracks instead of the library-only ones', () => {
+  it('shows the resolved artist top tracks instead of the library-only ones', async () => {
     renderDetail(libraryResult('artist'));
+    fireEvent.press(await screen.findByTestId('detail-explore-discography'));
 
+    expect(await screen.findByText('Dayvan Cowboy')).toBeTruthy();
     expect(screen.getByText('POPULAR TRACKS')).toBeTruthy();
-    expect(screen.getByText('Dayvan Cowboy')).toBeTruthy();
     expect(screen.queryByText('Roygbiv')).toBeNull();
   });
 });
