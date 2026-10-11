@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryProviderInfo, DiscoverySearchResponse } from '@shared/apiClient/discovery';
@@ -29,12 +29,12 @@ const noPageToFetch = (): Promise<void> => Promise.resolve();
 
 const firstPageParam: SearchPageParam = { offset: 0, searchId: undefined };
 
-function searchPageRequest(trimmed: string, saveHistory: boolean, pageParam: SearchPageParam) {
+function searchPageRequest(trimmed: string, pageParam: SearchPageParam) {
   return {
     q: trimmed,
     limit: SEARCH_PAGE_SIZE,
     offset: pageParam.offset,
-    saveHistory,
+    saveHistory: false,
     ...(pageParam.searchId !== undefined ? { searchId: pageParam.searchId } : {}),
   };
 }
@@ -46,29 +46,14 @@ function cancelStaleSearches(queryClient: ReturnType<typeof useQueryClient>, tri
   });
 }
 
-type HistorySaveClaim = {
-  claim: () => boolean;
-  release: () => void;
-};
-
 function searchQueryFn(
   port: DiscoverPort,
   queryClient: ReturnType<typeof useQueryClient>,
   trimmed: string,
-  historySave: HistorySaveClaim,
 ) {
   return ({ pageParam, signal }: { pageParam: SearchPageParam; signal: AbortSignal }) => {
     cancelStaleSearches(queryClient, trimmed);
-    const saveHistory = pageParam.offset === 0 && historySave.claim();
-    const request = port.searchDiscovery(
-      searchPageRequest(trimmed, saveHistory, pageParam),
-      signal,
-    );
-    if (!saveHistory) return request;
-    return request.catch((error: unknown) => {
-      historySave.release();
-      throw error;
-    });
+    return port.searchDiscovery(searchPageRequest(trimmed, pageParam), signal);
   };
 }
 
@@ -94,7 +79,6 @@ type SearchQueryArgs = {
   queryKey: readonly unknown[];
   queryClient: ReturnType<typeof useQueryClient>;
   trimmed: string;
-  historySave: HistorySaveClaim;
   isSearchEnabled: boolean;
 };
 
@@ -108,38 +92,21 @@ function useSearchInfiniteQuery(args: SearchQueryArgs) {
   >({
     queryKey: args.queryKey,
     initialPageParam: firstPageParam,
-    queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed, args.historySave),
+    queryFn: searchQueryFn(args.port, args.queryClient, args.trimmed),
     getNextPageParam: nextSearchPageParam,
     enabled: args.trimmed.length > 0 && args.isSearchEnabled,
+    placeholderData: (previous) => (args.trimmed.length > 0 ? previous : undefined),
     retry: retryTransientOnce,
   });
 }
 
-function useHistorySaveOnce(queryKey: readonly unknown[], saveHistory: boolean): HistorySaveClaim {
-  const savedKey = useRef<string | undefined>(undefined);
-  const serialized = JSON.stringify(queryKey);
-  function claim(): boolean {
-    if (!saveHistory || savedKey.current === serialized) return false;
-    savedKey.current = serialized;
-    return true;
-  }
-  function release(): void {
-    if (savedKey.current === serialized) savedKey.current = undefined;
-  }
-  return { claim, release };
-}
-
-export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
+export function useDiscoverSearch(query: string) {
   const trimmed = normalizeQuery(query);
   const port = useDiscoverPort();
   const queryClient = useQueryClient();
   const isSearchEnabled = useDiscoverFetchEnabled();
 
-  const queryKey = useMemo(
-    () => [...discoveryKeys.search(trimmed), saveHistory],
-    [trimmed, saveHistory],
-  );
-  const historySave = useHistorySaveOnce(queryKey, saveHistory);
+  const queryKey = useMemo(() => discoveryKeys.search(trimmed), [trimmed]);
   const {
     data: infiniteData,
     isLoading,
@@ -150,12 +117,12 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isPlaceholderData,
   } = useSearchInfiniteQuery({
     port,
     queryKey,
     queryClient,
     trimmed,
-    historySave,
     isSearchEnabled,
   });
 
@@ -173,8 +140,9 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     error,
     isUnavailable: !isSearchEnabled,
     refetch: retrySearch,
-    fetchNextPage: isSearchEnabled ? fetchNextPage : noPageToFetch,
-    hasNextPage,
+    fetchNextPage: isSearchEnabled && !isPlaceholderData ? fetchNextPage : noPageToFetch,
+    hasNextPage: hasNextPage && !isPlaceholderData,
+    isShowingPrevious: isPlaceholderData,
     isFetchingNextPage,
     isFetchNextPageError,
     refreshFailed,

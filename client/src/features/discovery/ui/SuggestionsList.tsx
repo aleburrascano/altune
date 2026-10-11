@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
+import { KeepInputFocusArea } from '@shared/ui/keyboard/keyboard';
 import { pressedStyle } from '@shared/ui/primitives/pressedStyle';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
@@ -20,7 +21,7 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
   }
 
   return (
-    <View
+    <KeepInputFocusArea
       style={[styles.container, { backgroundColor: color.surface1, borderTopColor: color.border }]}
     >
       {suggestions.map((s, i) => (
@@ -48,7 +49,7 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
           </Text>
         </Pressable>
       ))}
-    </View>
+    </KeepInputFocusArea>
   );
 }
 

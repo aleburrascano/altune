@@ -1,7 +1,5 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { type Dispatch, type SetStateAction } from 'react';
 
-import { discoveryKeys } from '@shared/query/queryKeys';
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { isSearchableQuery, normalizeQuery } from '@features/discovery/domain/searchPaging';
@@ -9,6 +7,7 @@ import {
   SEARCH_DEBOUNCE_MS,
   useAutocompleteSuggestions,
   useSuggestionVisibility,
+  visibleSuggestions,
 } from '@features/discovery/hooks/useSuggestions';
 import {
   useImpressionLogger,
@@ -16,6 +15,7 @@ import {
 } from '@features/discovery/hooks/useImpressionLogger';
 import {
   useDiscoverClearSearchHistory,
+  useRecordSearchHistory,
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
 import { useResultsFilter } from '@features/discovery/hooks/useResultsFilter';
@@ -84,9 +84,11 @@ export type DiscoverLogic = {
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
-  const search = useDebouncedSearch({ debounceMs: SEARCH_DEBOUNCE_MS });
-  const queryClient = useQueryClient();
-  const shouldSaveHistory = search.isExplicitSubmit;
+  const recordSearch = useRecordSearchHistory();
+  const search = useDebouncedSearch({
+    debounceMs: SEARCH_DEBOUNCE_MS,
+    onExplicitCommit: recordSearch,
+  });
   const {
     data: searchData,
     isLoading: isSearching,
@@ -99,12 +101,19 @@ export function useDiscoverLogic(): DiscoverLogic {
     isFetchingNextPage,
     isFetchNextPageError,
     refreshFailed,
-  } = useDiscoverSearch(search.committedQuery, shouldSaveHistory);
-  const suggestions = useAutocompleteSuggestions(search.inputValue);
-  const suggestionItems = suggestions.data?.suggestions ?? [];
+    isShowingPrevious,
+  } = useDiscoverSearch(search.committedQuery);
+  const suggestionVisibility = useSuggestionVisibility(search);
+  const suggestions = useAutocompleteSuggestions(
+    search.inputValue,
+    suggestionVisibility.canShowSuggestions,
+  );
+  const suggestionItems = visibleSuggestions(
+    suggestionVisibility.canShowSuggestions,
+    suggestions.data,
+  );
   const history = useSearchHistory();
   const impression = useImpressionLogger(searchData);
-  const suggestionVisibility = useSuggestionVisibility(search, suggestionItems.length);
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
   const clearHistory = useDiscoverClearSearchHistory();
   const onResultTap = useResultTap(searchData);
@@ -118,16 +127,10 @@ export function useDiscoverLogic(): DiscoverLogic {
   const resultsIncomplete = resultsIncompleteForState(hookState);
   const correction = correctionForResponse(searchData);
   const trimmedInput = normalizeQuery(search.inputValue);
-  const isSearchPending = isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
+  const isSearchPending =
+    (isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery) ||
+    isShowingPrevious;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
-
-  const searchId =
-    searchData === undefined ? undefined : (searchData.search_id ?? searchData.query);
-  useEffect(() => {
-    if (searchId !== undefined) {
-      void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
-    }
-  }, [searchId, queryClient]);
 
   const onRetry = (): void => {
     void refetch();
@@ -141,7 +144,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     onClear: search.onClear,
     isFocused: suggestionVisibility.isFocused,
     setIsFocused: suggestionVisibility.setIsFocused,
-    showSuggestions: suggestionVisibility.showSuggestions,
+    showSuggestions: suggestionItems.length > 0,
     suggestionItems,
     onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
     results: {
@@ -179,7 +182,7 @@ export function useDiscoverLogic(): DiscoverLogic {
       failed: history.error !== null && history.data === undefined,
       clearFailed: clearHistory.error !== null,
       onTap: (item: SearchHistoryItem) => {
-        search.setQuery(item.query);
+        suggestionVisibility.onSuggestionSelect(item.query);
       },
       onRetry: () => {
         void history.refetch();

@@ -1020,6 +1020,19 @@ describe('searchDiscovery tolerates additive wire enum values', () => {
     expect(res.results[0]?.confidence).toBe('low');
   });
 
+  it('keeps a provider that is still answering as pending, not error', async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: body({
+        providers: [{ provider: 'musicbrainz', status: 'pending', result_count: 0, latency_ms: 0 }],
+      }),
+    });
+
+    const res = await searchDiscovery({ q: 'q' });
+
+    expect(res.providers[0]?.status).toBe('pending');
+  });
+
   it('drops a section with an unknown kind and unknown-kind items inside kept sections', async () => {
     __http.reply('GET /v1/discovery/search', {
       status: 200,

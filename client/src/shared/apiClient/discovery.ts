@@ -1,5 +1,5 @@
 import { asFavoriteKey, type FavoriteKey } from '@shared/apiClient/ids';
-import { apiFetch, signalInit, withQuery } from '@shared/apiClient/index';
+import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/index';
 import {
   parseArray,
   parseListEnvelope,
@@ -19,6 +19,7 @@ export const PROVIDER_STATUSES = [
   'error',
   'rate_limited',
   'circuit_open',
+  'pending',
 ] as const;
 
 export type DiscoveryKind = (typeof DISCOVERY_KINDS)[number];
@@ -309,6 +310,10 @@ export async function listSearchHistory(params?: {
   }
   const body = await apiFetch<unknown>(withQuery('/v1/discovery/search-history', qs));
   return parseDiscoverySearchHistoryResponse(body);
+}
+
+export async function recordSearchHistory(query: string): Promise<void> {
+  await apiSend<void>('/v1/discovery/search-history', 'POST', { query });
 }
 
 export async function clearSearchHistory(): Promise<void> {

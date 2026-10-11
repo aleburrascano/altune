@@ -5,7 +5,8 @@ import { ApiError, correlationIdOf } from '@shared/failure/errors';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
-export type QueryFailureSource = 'search' | 'suggest' | 'history' | 'clear_history';
+export type QueryFailureSource =
+  'search' | 'suggest' | 'history' | 'record_history' | 'clear_history';
 
 const reported = new WeakSet<Error>();
 

@@ -13,6 +13,7 @@ import {
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;
+  onExplicitCommit?: (query: string) => void;
 };
 
 type UseDebouncedSearchReturn = {
@@ -38,6 +39,7 @@ function clampQuery(text: string): string {
 
 export function useDebouncedSearch({
   debounceMs,
+  onExplicitCommit,
 }: UseDebouncedSearchOptions): UseDebouncedSearchReturn {
   const savedState = getSearchState();
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
@@ -72,8 +74,10 @@ export function useDebouncedSearch({
       dropCommittedQuery();
       return;
     }
+    const isNewCommit = !isExplicitSubmit || query !== committedQuery;
     setIsExplicitSubmit(true);
     setCommittedQuery(query);
+    if (isNewCommit) onExplicitCommit?.(query);
   }
 
   function scheduleCommit(query: string): void {

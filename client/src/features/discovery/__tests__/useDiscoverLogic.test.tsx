@@ -39,6 +39,11 @@ const BAD_REQUEST = 400;
 const SERVER_ERROR = 500;
 const TWO_SEARCHES = 2;
 const FOUR_SEARCHES = 4;
+const SHORT_WAIT_MS = 50;
+
+type SearchParams = { q: string };
+
+type LogicResult = { current: ReturnType<typeof useDiscoverLogic> };
 
 interface PageRequest {
   offset: number;
@@ -48,10 +53,12 @@ const mockRecord = jest.fn();
 const portSearch = jest.fn();
 const portSuggest = jest.fn();
 const portHistory = jest.fn();
+const portRecordHistory = jest.fn();
 const port: DiscoverPort = {
   searchDiscovery: portSearch,
   suggestDiscovery: portSuggest,
   listSearchHistory: portHistory,
+  recordSearchHistory: portRecordHistory,
 };
 
 function searchResponseFixture(query: string): DiscoverySearchResponse {
@@ -97,6 +104,7 @@ beforeEach(() => {
   portSearch.mockReset();
   portSuggest.mockReset();
   portHistory.mockReset();
+  portRecordHistory.mockReset().mockResolvedValue(undefined);
   jest.mocked(supabase.auth.getSession).mockResolvedValue({
     data: { session: { access_token: 'tok' } },
     error: null,
@@ -164,6 +172,7 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     portHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
 
     await waitFor(() => expect(portSuggest).toHaveBeenCalled());
     await waitFor(() => expect(portHistory).toHaveBeenCalled());
@@ -177,11 +186,13 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     portHistory.mockResolvedValue({ items: [] });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
 
     await waitFor(() => expect(portSuggest).toHaveBeenCalled());
     await waitFor(() => expect(portHistory).toHaveBeenCalled());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.suggestionItems).toEqual([]);
+    expect(result.current.showSuggestions).toBe(false);
     expect(result.current.history.items).toEqual([]);
   });
 });
@@ -351,7 +362,7 @@ describe('useDiscoverLogic history invalidation', () => {
     queryClient.clear();
   });
 
-  it('refetches history once per search, not once per landed page', async () => {
+  it('loading another page does not refetch history', async () => {
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
     await waitFor(() => expect(result.current.results.searchData).toBeDefined());
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -571,19 +582,17 @@ describe('a direct account switch with Discover still mounted', () => {
     expect(result.current.inputValue).toBe('');
   });
 
-  it('does not re-run the previous search with saveHistory', async () => {
+  it('does not save the previous query to history again', async () => {
     await submitRadiohead();
-    portSearch.mockClear();
+    await waitFor(() => expect(portRecordHistory).toHaveBeenCalledTimes(1));
+    portRecordHistory.mockClear();
 
     switchAccount();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    const saved = portSearch.mock.calls.filter(
-      ([params]) => (params as { saveHistory?: boolean } | undefined)?.saveHistory === true,
-    );
-    expect(saved).toHaveLength(0);
+    expect(portRecordHistory).not.toHaveBeenCalled();
   });
 
   it('drops a pending debounced commit', () => {
@@ -598,5 +607,357 @@ describe('a direct account switch with Discover still mounted', () => {
     jest.useRealTimers();
 
     expect(portSearch).not.toHaveBeenCalled();
+  });
+});
+
+const DEBOUNCE_SETTLED_MS = 400;
+
+function submitPage(query: string): DiscoverySearchResponse {
+  return {
+    query,
+    query_norm: query,
+    search_id: `search-${query}`,
+    results: [resultFixture({ title: query })],
+    sections: [],
+    providers: [],
+    partial: false,
+    cache: { hit: false, fetched_at: null },
+    total: 1,
+    offset: 0,
+    has_more: false,
+  };
+}
+
+async function settle(ms: number = DEBOUNCE_SETTLED_MS) {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
+}
+function searchedQueries(): string[] {
+  return portSearch.mock.calls.map(([params]) => (params as { q: string }).q);
+}
+
+describe('useDiscoverLogic submit and history', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    setSearchState('', '');
+    portSearch
+      .mockReset()
+      .mockImplementation(({ q }: SearchParams) => Promise.resolve(submitPage(q)));
+    portSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
+    portRecordHistory.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('pressing Enter after the debounced search does not search again', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+
+    act(() => result.current.onSubmit());
+    await settle();
+
+    expect(searchedQueries()).toEqual(['radiohead']);
+    expect(portRecordHistory).toHaveBeenCalledTimes(1);
+    expect(portRecordHistory).toHaveBeenCalledWith('radiohead');
+  });
+
+  it('pressing Enter before the debounce fires searches once and saves once', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    act(() => result.current.onSubmit());
+    await settle();
+
+    expect(searchedQueries()).toEqual(['radiohead']);
+    expect(portRecordHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('pressing Enter twice on the same query saves it once', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    act(() => result.current.onSubmit());
+    await settle();
+    act(() => result.current.onSubmit());
+    await settle();
+
+    expect(portRecordHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('a query searched again after another one is saved again', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    for (const q of ['radiohead', 'portishead', 'radiohead']) {
+      act(() => result.current.onChangeText(q));
+      act(() => result.current.onSubmit());
+      await settle();
+    }
+
+    expect(portRecordHistory.mock.calls.map(([q]) => q)).toEqual([
+      'radiohead',
+      'portishead',
+      'radiohead',
+    ]);
+  });
+
+  it('picking a suggestion searches once and saves once', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onSuggestionSelect('radiohead'));
+    await settle();
+
+    expect(searchedQueries()).toEqual(['radiohead']);
+    expect(portRecordHistory).toHaveBeenCalledWith('radiohead');
+  });
+
+  it('typing without submitting never saves history', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await settle();
+
+    expect(portRecordHistory).not.toHaveBeenCalled();
+  });
+
+  it('never asks the search endpoint to save history', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    act(() => result.current.onSubmit());
+    await settle();
+
+    for (const [params] of portSearch.mock.calls) {
+      expect((params as { saveHistory?: boolean }).saveHistory).toBe(false);
+    }
+  });
+
+  it('a failed history save leaves the results on screen', async () => {
+    portRecordHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    act(() => result.current.onSubmit());
+    await settle();
+
+    expect(result.current.results.searchData?.results).toHaveLength(1);
+    expect(result.current.results.searchError).toBeNull();
+  });
+
+  it('refreshes the history list after a save, not after each search', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    await waitFor(() => expect(portHistory).toHaveBeenCalled());
+    portHistory.mockClear();
+
+    act(() => result.current.onChangeText('radiohead'));
+    await waitFor(() => expect(result.current.results.searchData).toBeDefined());
+    await settle();
+    expect(portHistory).not.toHaveBeenCalled();
+
+    act(() => result.current.onSubmit());
+    await waitFor(() => expect(portHistory).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('useDiscoverLogic keeps the previous results while the next search loads', () => {
+  type Deferred = { resolve: (page: DiscoverySearchResponse) => void; reject: (e: Error) => void };
+  const pending = new Map<string, Deferred>();
+
+  function holdSearches() {
+    portSearch.mockImplementation(
+      ({ q }: SearchParams) =>
+        new Promise<DiscoverySearchResponse>((resolve, reject) => {
+          pending.set(q, { resolve, reject });
+        }),
+    );
+  }
+
+  async function answer(q: string, response: DiscoverySearchResponse | Error) {
+    await waitFor(() => expect(pending.has(q)).toBe(true));
+    const deferred = pending.get(q)!;
+    pending.delete(q);
+    await act(async () => {
+      if (response instanceof Error) deferred.reject(response);
+      else deferred.resolve(response);
+    });
+  }
+
+  function emptyPage(query: string): DiscoverySearchResponse {
+    return { ...submitPage(query), results: [], total: 0 };
+  }
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } },
+    });
+    setSearchState('', '');
+    portSearch
+      .mockReset()
+      .mockImplementation(({ q }: SearchParams) => Promise.resolve(submitPage(q)));
+    portSuggest.mockReset().mockResolvedValue({ suggestions: [] });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
+    portRecordHistory.mockReset().mockResolvedValue(undefined);
+    pending.clear();
+  });
+
+  async function showRadiohead() {
+    holdSearches();
+    const hook = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => hook.result.current.onChangeText('radiohead'));
+    await answer('radiohead', { ...submitPage('radiohead'), has_more: true, total: 40 });
+    await waitFor(() => expect(hook.result.current.results.view).toBe('results'));
+    return hook;
+  }
+
+  function shownTitles(result: LogicResult) {
+    return result.current.results.searchData?.results.map((r) => r.title);
+  }
+
+  it('the first search of a session still shows the loading state', async () => {
+    holdSearches();
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radiohead'));
+    await waitFor(() => expect(pending.has('radiohead')).toBe(true));
+
+    expect(result.current.results.view).toBe('loading');
+  });
+
+  it('a new query keeps the old results on screen and marks them as updating', async () => {
+    const { result } = await showRadiohead();
+
+    act(() => result.current.onChangeText('portishead'));
+    await waitFor(() => expect(pending.has('portishead')).toBe(true));
+
+    expect(result.current.results.view).toBe('results');
+    expect(shownTitles(result)).toEqual(['radiohead']);
+    expect(result.current.pending).toBe(true);
+  });
+
+  it('the new results replace the old ones when they arrive', async () => {
+    const { result } = await showRadiohead();
+    act(() => result.current.onChangeText('portishead'));
+
+    await answer('portishead', submitPage('portishead'));
+
+    await waitFor(() => expect(shownTitles(result)).toEqual(['portishead']));
+    expect(result.current.pending).toBe(false);
+  });
+
+  it('a failed new search shows the error, not the old results', async () => {
+    const { result } = await showRadiohead();
+    act(() => result.current.onChangeText('portishead'));
+
+    await answer('portishead', new ApiError(SERVER_ERROR, 'search down'));
+    await answer('portishead', new ApiError(SERVER_ERROR, 'search down on retry'));
+
+    await waitFor(() => expect(result.current.results.view).toBe('full-error'));
+  });
+
+  it('a new search with no matches shows zero results, not the old results', async () => {
+    const { result } = await showRadiohead();
+    act(() => result.current.onChangeText('zzqx'));
+
+    await answer('zzqx', emptyPage('zzqx'));
+
+    await waitFor(() => expect(result.current.results.view).toBe('zero-results'));
+  });
+
+  it('clearing the box removes the old results', async () => {
+    const { result } = await showRadiohead();
+
+    act(() => result.current.onClear());
+
+    expect(result.current.results.view).toBe('empty-no-query');
+    expect(result.current.results.searchData).toBeUndefined();
+  });
+
+  it('scrolling to the end of the old results does not load more of them', async () => {
+    const { result } = await showRadiohead();
+    act(() => result.current.onChangeText('portishead'));
+    await waitFor(() => expect(pending.has('portishead')).toBe(true));
+    portSearch.mockClear();
+
+    act(() => result.current.pagination.onEndReached());
+    await settle(SHORT_WAIT_MS);
+
+    expect(portSearch).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDiscoverLogic asks for suggestions only while they can be shown', () => {
+  const SUGGEST_SETTLED_MS = 250;
+  function suggestedQueries(): string[] {
+    return portSuggest.mock.calls.map(([p]) => p.q);
+  }
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    setSearchState('', '');
+    portSearch
+      .mockReset()
+      .mockImplementation(({ q }: SearchParams) => Promise.resolve(submitPage(q)));
+    portSuggest.mockReset().mockResolvedValue({
+      suggestions: [{ text: 'radiohead', kind: 'artist', popularity: 1 }],
+    });
+    portHistory.mockReset().mockResolvedValue({ items: [] });
+    portRecordHistory.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('typing in the focused box fetches and shows suggestions', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
+    act(() => result.current.onChangeText('radio'));
+
+    await waitFor(() => expect(result.current.showSuggestions).toBe(true));
+    expect(suggestedQueries()).toEqual(['radio']);
+  });
+
+  it('text set while the box is not focused does not fetch suggestions', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.onChangeText('radio'));
+    await settle(SUGGEST_SETTLED_MS);
+
+    expect(suggestedQueries()).toEqual([]);
+  });
+
+  it('pressing Enter before suggestions settle does not fetch them', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
+    act(() => result.current.onChangeText('radio'));
+    act(() => result.current.onSubmit());
+    await settle(SUGGEST_SETTLED_MS);
+
+    expect(suggestedQueries()).toEqual([]);
+  });
+
+  it('picking a suggestion does not fetch suggestions for the picked text', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
+    act(() => result.current.onChangeText('radio'));
+    await waitFor(() => expect(result.current.showSuggestions).toBe(true));
+
+    act(() => result.current.onSuggestionSelect('radiohead'));
+    await settle(SUGGEST_SETTLED_MS);
+
+    expect(suggestedQueries()).toEqual(['radio']);
+  });
+
+  it('tapping a history item does not fetch suggestions', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
+    act(() => result.current.history.onTap({ query: 'radiohead' } as never));
+    await settle(SUGGEST_SETTLED_MS);
+
+    expect(suggestedQueries()).toEqual([]);
+  });
+
+  it('typing again after a submit fetches suggestions again', async () => {
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    act(() => result.current.setIsFocused(true));
+    act(() => result.current.onChangeText('radio'));
+    act(() => result.current.onSubmit());
+    await settle(SUGGEST_SETTLED_MS);
+
+    act(() => result.current.onChangeText('radioh'));
+
+    await waitFor(() => expect(suggestedQueries()).toEqual(['radioh']));
   });
 });

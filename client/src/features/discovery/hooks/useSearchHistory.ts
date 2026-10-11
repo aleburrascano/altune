@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
 import type { DiscoverySearchHistoryResponse } from '@shared/apiClient/discovery';
 
 import { isRetryable } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
+import { useAppMutation } from '@shared/query/useAppMutation';
 import { useClearSearchHistory as useSharedClearSearchHistory } from '@shared/searchHistory/useClearSearchHistory';
 import { useReportQueryFailure } from '@features/discovery/hooks/useReportQueryFailure';
 import {
@@ -31,6 +32,25 @@ export function useSearchHistory() {
   const refetch = useGatedDiscoverCall(refetchHistory);
 
   return { data: response, error, refetch };
+}
+
+export function useRecordSearchHistory(): (query: string) => void {
+  const isHistoryEnabled = useDiscoverFetchEnabled();
+  const { mutate, error } = useRecordHistoryMutation();
+  useReportQueryFailure(error, 'record_history');
+  return (query) => {
+    if (isHistoryEnabled) mutate(query);
+  };
+}
+
+function useRecordHistoryMutation(): UseMutationResult<void, Error, string, unknown> {
+  const port = useDiscoverPort();
+  const queryClient = useQueryClient();
+  return useAppMutation({
+    action: 'discover.record_search_history',
+    mutationFn: (query: string) => port.recordSearchHistory(query),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: discoveryKeys.history }),
+  });
 }
 
 type ClearSearchHistory = {

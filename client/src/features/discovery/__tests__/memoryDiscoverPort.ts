@@ -106,5 +106,9 @@ export function createMemoryDiscoverPort(seed: MemoryDiscoverSeed = {}): Discove
       resolveOnLaterTick(signal, () => suggestionsFor(suggestions, params)),
     listSearchHistory: (params) =>
       resolveOnLaterTick(undefined, () => historyPage(history, params)),
+    recordSearchHistory: (query) =>
+      resolveOnLaterTick(undefined, () => {
+        history.unshift(query);
+      }),
   };
 }

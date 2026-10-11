@@ -187,48 +187,6 @@ describe('useDiscoverSearch merges its pages once and retains a bounded number o
   });
 });
 
-describe('an explicit submit of a query the debounce just fetched', () => {
-  function singlePage(): DiscoverySearchResponse {
-    return {
-      query: 'radiohead',
-      query_norm: 'radiohead',
-      search_id: 'search-1',
-      results: [],
-      sections: [],
-      providers: [],
-      partial: false,
-      cache: { hit: false, fetched_at: null },
-      total: 0,
-      offset: 0,
-      has_more: false,
-    };
-  }
-
-  beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
-    });
-    __http.reset();
-    __http.reply(SEARCH, { json: singlePage() });
-  });
-
-  it('still sends a request with saveHistory true', async () => {
-    const { result, rerender } = renderHook(
-      ({ saveHistory }: { saveHistory: boolean }) => useDiscoverSearch('radiohead', saveHistory),
-      { wrapper, initialProps: { saveHistory: false } },
-    );
-    await waitFor(() => expect(result.current.data).toBeDefined());
-
-    rerender({ saveHistory: true });
-
-    await waitFor(() => expect(savedFlags()).toEqual([false, true]));
-    expect(searchRequests().map((request) => paramsOf(request).get('q'))).toEqual([
-      'radiohead',
-      'radiohead',
-    ]);
-  });
-});
-
 describe('useDiscoverSearch refresh', () => {
   function page(offset: number): DiscoverySearchResponse {
     return {
@@ -364,13 +322,13 @@ describe('held slate belongs to its query', () => {
     return rendered;
   }
 
-  it('shows none of the old rows and is loading once a new query commits mid-refresh', async () => {
+  it('shows the old rows only as marked previous results once a new query commits mid-refresh', async () => {
     const { result, rerender } = await startSlowRefresh();
 
     rerender({ q: 'new' });
 
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.isLoading).toBe(true);
+    expect(result.current.isShowingPrevious).toBe(true);
+    expect(result.current.hasNextPage).toBe(false);
   });
 });
 
@@ -500,67 +458,20 @@ describe('useDiscoverSearch history saving', () => {
     __http.reset();
   });
 
-  it('saves history on the first request of an explicit submit only, not on a refresh', async () => {
+  it('never asks the search endpoint to save history, on load, refresh or retry', async () => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } },
+    });
+    __http.replyOnce(SEARCH, { status: 503, json: { detail: 'unavailable' } });
     __http.reply(SEARCH, { json: singlePage() });
-    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
+    const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
     await act(async () => {
       await result.current.refetch();
     });
 
-    expect(savedFlags()).toEqual([true, false]);
-  });
-
-  it('resends saveHistory on the retry of an explicit search whose first attempt failed', async () => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } },
-    });
-    __http.replyOnce(SEARCH, { status: 503, json: { detail: 'unavailable' } });
-    __http.reply(SEARCH, { json: singlePage() });
-    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
-
-    await waitFor(() => expect(result.current.data).toBeDefined());
-
-    expect(savedFlags()).toEqual([true, true]);
-  });
-
-  it('resends saveHistory when a cancelled first page of an explicit search runs again', async () => {
-    __http.hang(SEARCH);
-    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
-    await waitFor(() => expect(searchRequests()).toHaveLength(1));
-
-    await act(async () => {
-      await queryClient.cancelQueries();
-    });
-    __http.reset();
-    __http.reply(SEARCH, { json: singlePage() });
-    await act(async () => {
-      await queryClient.refetchQueries();
-    });
-
-    await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(savedFlags()).toEqual([true]);
-  });
-
-  it('saves once after a successful first page: a later refetch does not resave', async () => {
-    __http.reply(SEARCH, { json: singlePage() });
-    const { result } = renderHook(() => useDiscoverSearch('radiohead', true), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-
-    await act(async () => {
-      await queryClient.refetchQueries();
-    });
-
-    expect(savedFlags()).toEqual([true, false]);
-  });
-
-  it('never saves history for a non-explicit search', async () => {
-    __http.reply(SEARCH, { json: singlePage() });
-    const { result } = renderHook(() => useDiscoverSearch('radiohead', false), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-
-    expect(savedFlags()).toEqual([false]);
+    expect(savedFlags()).toEqual([false, false, false]);
   });
 });
 
@@ -597,7 +508,7 @@ describe('re-typing the submitted query does not re-send the search', () => {
 
   function useSearchScreen() {
     const search = useDebouncedSearch({ debounceMs: DEBOUNCE_MS });
-    const results = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
+    const results = useDiscoverSearch(search.committedQuery);
     return { search, results };
   }
 
@@ -632,19 +543,7 @@ describe('re-typing the submitted query does not re-send the search', () => {
     act(() => result.current.search.onChangeText('ab'));
     await flush(DEBOUNCE_MS);
 
-    expect(savedFlags()).toEqual([true]);
+    expect(savedFlags()).toEqual([false]);
     expect(result.current.results.isLoading).toBe(false);
-  });
-
-  it('still saves history for an explicit submit of a changed query', async () => {
-    const { result } = renderHook(useSearchScreen, { wrapper });
-    act(() => result.current.search.setQuery('ab'));
-    await flush(0);
-
-    act(() => result.current.search.onChangeText('abc'));
-    act(() => result.current.search.onSubmit());
-    await flush(DEBOUNCE_MS);
-
-    expect(savedFlags()).toEqual([true, true]);
   });
 });

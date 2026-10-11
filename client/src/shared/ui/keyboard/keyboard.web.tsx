@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 export function dismissKeyboard(): void {}
 
@@ -13,6 +13,23 @@ export function DismissKeyboardArea(props: DismissKeyboardAreaProps): ReactEleme
   const { children, testID, style } = props;
   return (
     <View testID={testID} style={style}>
+      {children}
+    </View>
+  );
+}
+
+type PreventableEvent = { preventDefault: () => void };
+
+type MouseDownProps = ViewProps & { onMouseDown: (event: PreventableEvent) => void };
+
+const keepFocusOnMouseDown: MouseDownProps = {
+  onMouseDown: (event) => event.preventDefault(),
+};
+
+export function KeepInputFocusArea(props: DismissKeyboardAreaProps): ReactElement {
+  const { children, testID, style } = props;
+  return (
+    <View testID={testID} style={style} {...keepFocusOnMouseDown}>
       {children}
     </View>
   );

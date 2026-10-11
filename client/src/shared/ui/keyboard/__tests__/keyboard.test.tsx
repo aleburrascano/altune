@@ -37,6 +37,18 @@ describe('keyboard (native)', () => {
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('KeepInputFocusArea renders its children and does not dismiss the keyboard', () => {
+    const { KeepInputFocusArea } = loadWithOS('ios');
+    render(
+      <KeepInputFocusArea testID="area">
+        <Text>child</Text>
+      </KeepInputFocusArea>,
+    );
+    fireEvent.press(screen.getByText('child'));
+    expect(screen.getByTestId('area')).toBeTruthy();
+    expect(dismiss).not.toHaveBeenCalled();
+  });
+
   it('dismissKeyboard calls Keyboard.dismiss', () => {
     loadWithOS('ios').dismissKeyboard();
     expect(dismiss).toHaveBeenCalledTimes(1);

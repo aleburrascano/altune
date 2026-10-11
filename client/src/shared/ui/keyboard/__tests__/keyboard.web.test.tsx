@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import {
   DismissKeyboardArea,
+  KeepInputFocusArea,
   adjustsKeyboardInsets,
   dismissKeyboard,
   keyboardAvoidingBehavior,
@@ -28,6 +29,17 @@ describe('keyboard (web)', () => {
     fireEvent.press(screen.getByText('child'));
     fireEvent.press(screen.getByTestId('area'));
     expect(dismiss).not.toHaveBeenCalled();
+  });
+
+  it('KeepInputFocusArea stops a mouse press from taking focus away from the input', () => {
+    render(
+      <KeepInputFocusArea testID="area">
+        <Text>child</Text>
+      </KeepInputFocusArea>,
+    );
+    const preventDefault = jest.fn();
+    fireEvent(screen.getByTestId('area'), 'mouseDown', { preventDefault });
+    expect(preventDefault).toHaveBeenCalledTimes(1);
   });
 
   it('dismissKeyboard does nothing', () => {
