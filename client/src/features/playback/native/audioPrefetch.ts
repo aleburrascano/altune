@@ -53,7 +53,9 @@ export const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 function deleteQuietly(file: File): void {
   try {
     file.delete();
-  } catch {}
+  } catch (err) {
+    warnPlayback('failed to delete partial prefetch file', {}, err);
+  }
 }
 
 function boundedDownload(url: string, dest: File, controller: AbortController): Promise<File> {

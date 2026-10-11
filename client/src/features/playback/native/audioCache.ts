@@ -3,6 +3,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import type { TrackId } from '@shared/apiClient/ids';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
+import { warnPlayback } from '@features/playback/domain/playbackError';
 import { libraryTrackId } from '@features/playback/domain/playerStatus';
 
 const CACHE_SUBDIR = 'audio-prefetch';
@@ -66,7 +67,9 @@ function deleteEach(entries: readonly (Directory | File)[]): void {
   for (const entry of entries) {
     try {
       entry.delete();
-    } catch {}
+    } catch (err) {
+      warnPlayback('failed to delete cache entry', {}, err);
+    }
   }
 }
 

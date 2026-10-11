@@ -45,7 +45,10 @@ function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
     const current = state.currentTrack();
     if (!current || activeKey !== trackKey(current)) return null;
     return { state, positionMs };
-  }).catch(() => null);
+  }).catch((err: unknown) => {
+    warnPlayback('failed to read queue snapshot', {}, err);
+    return null;
+  });
 }
 
 type SaveFingerprint = readonly unknown[];

@@ -2,6 +2,8 @@ import { subscribeAppState } from '@shared/lifecycle/appState';
 import type { PlaybackErrorKind } from '@shared/playback/playbackContextValue';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
+import { warnPlayback } from '@features/playback/domain/playbackError';
+
 export type PrefetchFailureStage = 'resolve' | 'download' | 'swap';
 
 export type QueueRestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
@@ -112,7 +114,9 @@ export function flushPlaybackHealth(): void {
   const payload = tally;
   tally = emptyTally();
   outcomes = 0;
-  recordEvent({ type: 'playback_health', payload }).catch(() => undefined);
+  recordEvent({ type: 'playback_health', payload }).catch((err: unknown) => {
+    warnPlayback('failed to record playback health', {}, err);
+  });
 }
 
 function ensureFlushOnBackground(): void {
