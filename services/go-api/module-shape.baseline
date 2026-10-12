@@ -1,4 +1,3 @@
-G3 internal/acquisition/adapters/handler/acquisition_handler.go:5 imports auth outside adapters/authbridge
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/cooldown_store.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/job_queue.go:6 imports catalog outside adapters/catalogbridge
