@@ -11,19 +11,38 @@ import { orderedQueueTracks } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
+import { signInTestUser } from '@testing/signInTestUser';
+
 import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
-import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
+import {
+  _resetPlaybackHealthForTest,
+  flushPlaybackHealth,
+} from '@features/playback/domain/playbackHealth';
 import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
 
-jest.mock('@features/playback/domain/playbackHealth', () => ({
-  ...jest.requireActual('@features/playback/domain/playbackHealth'),
-  recordPlaybackFailure: jest.fn(),
-}));
+const { __http } = require('@testing/doubles/fetch.js');
 
-const recorded = recordPlaybackFailure as jest.MockedFunction<typeof recordPlaybackFailure>;
+const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
+
+async function recordedFailures(): Promise<string[]> {
+  flushPlaybackHealth();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  return (__http.requests as { path: string; body: string }[])
+    .filter((request) => request.path === '/v1/discovery/events')
+    .flatMap((request) => {
+      const { payload } = JSON.parse(request.body) as { payload: Record<string, number> };
+      return Object.entries(payload)
+        .filter(([key, n]) => key.startsWith('playback_failed_') && n > 0)
+        .flatMap(([key, n]) => Array<string>(n).fill(key.slice('playback_failed_'.length)));
+    });
+}
+
 const presign = jest.fn<Promise<ResolvedAudioUrl[]>, [readonly string[]]>();
 let restorePort: () => void;
 beforeAll(() => {
@@ -169,9 +188,12 @@ function renderWebPlaybackWithClock(now: () => number) {
 
 const PRESIGN_TTL_MS = 60 * 60 * 1000;
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reset();
+  __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
+  _resetPlaybackHealthForTest();
   presign.mockReset();
-  recorded.mockClear();
   presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id)));
   useQueueStore.getState().clearQueue();
 });
@@ -1329,7 +1351,7 @@ describe('WebPlaybackProvider failure health', () => {
 
     act(() => audio.failWith(3, 'decode broke'));
 
-    expect(recorded.mock.calls).toEqual([['decode']]);
+    expect(await recordedFailures()).toEqual(['decode']);
   });
 
   it('does not count the automatic re-presign retry, only the failure that finally surfaces', async () => {
@@ -1340,10 +1362,10 @@ describe('WebPlaybackProvider failure health', () => {
 
     clock += PRESIGN_TTL_MS;
     await act(async () => audio.failWith(2));
-    expect(recorded).not.toHaveBeenCalled();
+    expect(await recordedFailures()).toEqual([]);
 
     act(() => audio.failWith(2));
-    expect(recorded.mock.calls).toEqual([['network']]);
+    expect(await recordedFailures()).toEqual(['network']);
   });
 
   it('counts a presign failure surfaced to the UI once', async () => {
@@ -1353,7 +1375,7 @@ describe('WebPlaybackProvider failure health', () => {
     await act(() => view.playback().play(libraryTrack()));
 
     expect(view.playback().status).toBe('error');
-    expect(recorded).toHaveBeenCalledTimes(1);
+    expect(await recordedFailures()).toHaveLength(1);
   });
 
   it('does not count a failed next-track prefetch nobody saw', async () => {
@@ -1364,7 +1386,7 @@ describe('WebPlaybackProvider failure health', () => {
     presign.mockRejectedValue(new ApiError(503, 'unavailable'));
     act(() => audio.bufferEnough());
 
-    expect(recorded).not.toHaveBeenCalled();
+    expect(await recordedFailures()).toEqual([]);
   });
 
   it('logs a redacted warning when play() is rejected and still syncs the phase', async () => {

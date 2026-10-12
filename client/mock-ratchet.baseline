@@ -1,7 +1,3 @@
-src/features/playback/__tests__/usePlaybackPosition.test.ts @shared/lifecycle
-src/features/playback/__tests__/usePlaybackSignals.test.ts @shared/telemetry/useRecordEvent
-src/features/playback/__tests__/useQueueResume.test.ts @shared/telemetry/recordEvent
-src/features/playback/hooks/__tests__/webPlaybackProvider.test.tsx @features/playback/domain/playbackHealth
 src/features/settings/__tests__/DangerZoneCard.test.tsx @shared/auth/supabaseClient
 src/features/settings/__tests__/DangerZoneCard.test.tsx @shared/telemetry/userTelemetry
 src/features/settings/__tests__/LibraryCard.test.tsx @shared/apiClient/tracks

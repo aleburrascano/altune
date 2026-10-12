@@ -7,10 +7,32 @@ import { usePlaybackPosition } from '@features/playback/hooks/usePlaybackPositio
 
 const { __player } = jest.requireMock('react-native-track-player');
 
-let mockForeground = true;
-jest.mock('@shared/lifecycle', () => ({
-  useIsForeground: () => mockForeground,
+type AppStateHandler = (state: string) => void;
+
+const mockAppState = { currentState: 'active', handlers: [] as AppStateHandler[] };
+
+jest.mock('react-native/Libraries/AppState/AppState', () => ({
+  default: {
+    get currentState() {
+      return mockAppState.currentState;
+    },
+    addEventListener: (_type: string, handler: AppStateHandler) => {
+      mockAppState.handlers.push(handler);
+      return {
+        remove: () => {
+          mockAppState.handlers = mockAppState.handlers.filter((h) => h !== handler);
+        },
+      };
+    },
+  },
 }));
+
+function setForeground(foreground: boolean): void {
+  mockAppState.currentState = foreground ? 'active' : 'background';
+  act(() => {
+    for (const handler of [...mockAppState.handlers]) handler(mockAppState.currentState);
+  });
+}
 
 const track: PlaybackTrack = {
   source: { kind: 'preview', previewUrl: 'https://cdn.example/1.mp3' },
@@ -22,7 +44,8 @@ const track: PlaybackTrack = {
 
 beforeEach(() => {
   __player.reset();
-  mockForeground = true;
+  mockAppState.handlers = [];
+  mockAppState.currentState = 'active';
   useQueueStore.getState().setResumePosition(0);
 });
 
@@ -44,16 +67,14 @@ describe('usePlaybackPosition', () => {
     __player.setProgress({ position: 10 });
     const { result, rerender } = renderHook(() => usePlaybackPosition(track));
 
-    mockForeground = false;
-    rerender({});
+    setForeground(false);
     __player.setProgress({ position: 0 });
     rerender({});
 
     expect(result.current.positionMs).toBe(10_000);
     expect(result.current.livePositionMs).toBe(0);
 
-    mockForeground = true;
-    rerender({});
+    setForeground(true);
     expect(result.current.positionMs).toBe(0);
   });
 

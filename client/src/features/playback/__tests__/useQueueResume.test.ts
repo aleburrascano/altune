@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import TrackPlayer from 'react-native-track-player';
 
+import { signInTestUser } from '@testing/signInTestUser';
+
 import { asTrackId } from '@shared/apiClient/ids';
 import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/apiClient/playback';
@@ -9,7 +11,6 @@ import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackRe
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { _resetGlobalErrorReportingForTest } from '@shared/telemetry/clientErrorReporting';
 
@@ -30,7 +31,24 @@ beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+const { __http } = require('@testing/doubles/fetch.js');
+
+const EVENTS_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
+
+interface SentEvent {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+async function sentEvents(): Promise<SentEvent[]> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  return (__http.requests as { path: string; body: string }[])
+    .filter((request) => request.path === '/v1/discovery/events')
+    .map((request) => JSON.parse(request.body));
+}
 
 const getQueueState = jest.fn();
 const saveQueueState = jest.fn(async (_body: SaveQueueStateRequest): Promise<void> => undefined);
@@ -67,9 +85,11 @@ const defaultPlayerImpls = new Map(
   STUBBED_PLAYER_METHODS.map((name) => [name, nativePlayer[name]!.getMockImplementation()]),
 );
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reset();
+  __http.reply(EVENTS_ROUTE, { status: HTTP_ACCEPTED });
   _resetPlaybackHealthForTest();
-  (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
   for (const name of STUBBED_PLAYER_METHODS) {
     nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
   }
@@ -1126,9 +1146,14 @@ describe('queue save and restore failures move playback_health counters', () => 
     });
   }
 
-  function flushedPayloads(): Record<string, unknown>[] {
+  async function flushedPayloads(): Promise<Record<string, unknown>[]> {
     flushPlaybackHealth();
-    return (recordEvent as jest.Mock).mock.calls.map(([event]) => event.payload);
+    const events = await sentEvents();
+    return events.map((event) => {
+      const counts = { ...event.payload };
+      delete counts.session_id;
+      return counts;
+    });
   }
 
   beforeEach(() => {
@@ -1165,7 +1190,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     await settle();
 
     expect(saveQueueState).toHaveBeenCalled();
-    expect(flushedPayloads()).toEqual([expect.objectContaining({ queue_save_failed: 1 })]);
+    expect(await flushedPayloads()).toEqual([expect.objectContaining({ queue_save_failed: 1 })]);
   });
 
   it('counts a failed state fetch as a fetch-stage restore failure', async () => {
@@ -1173,7 +1198,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     renderHook(() => useQueueResume());
     await settle();
 
-    expect(flushedPayloads()).toEqual([
+    expect(await flushedPayloads()).toEqual([
       expect.objectContaining({ queue_restore_failed_fetch: 1, queue_state_rejected: 0 }),
     ]);
   });
@@ -1183,7 +1208,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     renderHook(() => useQueueResume());
     await settle();
 
-    expect(flushedPayloads()).toEqual([
+    expect(await flushedPayloads()).toEqual([
       expect.objectContaining({ queue_restore_failed_tracks: 1 }),
     ]);
   });
@@ -1193,7 +1218,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     renderHook(() => useQueueResume());
     await settle();
 
-    expect(flushedPayloads()).toEqual([
+    expect(await flushedPayloads()).toEqual([
       expect.objectContaining({ queue_restore_failed_native: 1 }),
     ]);
   });
@@ -1203,7 +1228,7 @@ describe('queue save and restore failures move playback_health counters', () => 
     renderHook(() => useQueueResume());
     await settle();
 
-    expect(flushedPayloads()).toEqual([
+    expect(await flushedPayloads()).toEqual([
       expect.objectContaining({ queue_state_rejected: 1, queue_restore_failed_fetch: 0 }),
     ]);
   });
@@ -1229,11 +1254,10 @@ describe('a queue save the server rejects as a client fault', () => {
     await settle();
   }
 
-  function reportedMessages(): string[] {
-    return (recordEvent as jest.Mock).mock.calls
-      .map(([event]) => event as { type: string; payload: { message: string } })
+  async function reportedMessages(): Promise<string[]> {
+    return (await sentEvents())
       .filter((event) => event.type === 'client_error')
-      .map((event) => event.payload.message);
+      .map((event) => event.payload.message as string);
   }
 
   async function saveRejectedWith(error: Error): Promise<void> {
@@ -1273,7 +1297,9 @@ describe('a queue save the server rejects as a client fault', () => {
   it('reports a 400 with the server error code', async () => {
     await saveRejectedWith(new ApiError(BAD_REQUEST, 'bad', 'playback.malformed_track_id'));
 
-    expect(reportedMessages()).toEqual([expect.stringContaining('playback.malformed_track_id')]);
+    expect(await reportedMessages()).toEqual([
+      expect.stringContaining('playback.malformed_track_id'),
+    ]);
   });
 
   it('reports the same queue fingerprint once however often the save retries', async () => {
@@ -1282,7 +1308,7 @@ describe('a queue save the server rejects as a client fault', () => {
     await backgroundApp();
 
     expect(saveQueueState).toHaveBeenCalledTimes(SAVE_ATTEMPTS);
-    expect(reportedMessages()).toHaveLength(1);
+    expect(await reportedMessages()).toHaveLength(1);
   });
 
   it('reports again once the queue changes', async () => {
@@ -1296,7 +1322,7 @@ describe('a queue save the server rejects as a client fault', () => {
     });
     await backgroundApp();
 
-    expect(reportedMessages()).toEqual([
+    expect(await reportedMessages()).toEqual([
       expect.stringContaining('playback.natural_order_mismatch'),
       expect.stringContaining('playback.malformed_track_id'),
     ]);
@@ -1306,14 +1332,14 @@ describe('a queue save the server rejects as a client fault', () => {
     await saveRejectedWith(new ApiError(SERVICE_UNAVAILABLE, 'down', 'server.unavailable'));
 
     expect(saveQueueState).toHaveBeenCalled();
-    expect(reportedMessages()).toEqual([]);
+    expect(await reportedMessages()).toEqual([]);
   });
 
   it('does not report a network failure', async () => {
     await saveRejectedWith(new NetworkError('transport', 'offline'));
 
     expect(saveQueueState).toHaveBeenCalled();
-    expect(reportedMessages()).toEqual([]);
+    expect(await reportedMessages()).toEqual([]);
   });
 
   it('does not report an expired session', async () => {
@@ -1321,7 +1347,7 @@ describe('a queue save the server rejects as a client fault', () => {
     await saveRejectedWith(new ApiError(unauthorized, 'expired', 'auth.expired'));
 
     expect(saveQueueState).toHaveBeenCalled();
-    expect(reportedMessages()).toEqual([]);
+    expect(await reportedMessages()).toEqual([]);
   });
 
   it('does not report throttling', async () => {
@@ -1329,7 +1355,7 @@ describe('a queue save the server rejects as a client fault', () => {
     await saveRejectedWith(new ApiError(tooManyRequests, 'slow down', 'rate.limited'));
 
     expect(saveQueueState).toHaveBeenCalled();
-    expect(reportedMessages()).toEqual([]);
+    expect(await reportedMessages()).toEqual([]);
   });
 });
 
