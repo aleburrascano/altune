@@ -1,9 +1,3 @@
-src/shared/telemetry/__tests__/recordEvent.test.ts @shared/auth/supabaseClient
-src/shared/telemetry/__tests__/recordEvent.test.ts @shared/telemetry/eventSession
-src/shared/telemetry/__tests__/recordEvent.test.ts @shared/telemetry/outboxStore
-src/shared/telemetry/__tests__/useRecordEvent.test.tsx @shared/telemetry/recordEvent
-src/shared/telemetry/__tests__/userTelemetry.test.ts @shared/auth/supabaseClient
-src/shared/ui/failure/__tests__/showFailure.test.ts @shared/telemetry/userTelemetry
 src/shared/ui/primitives/__tests__/Banner.test.tsx @shared/telemetry/userTelemetry
 src/shared/ui/primitives/__tests__/Button.test.tsx @shared/telemetry/userTelemetry
 src/shared/ui/primitives/__tests__/Button.test.tsx @shared/ui/haptics

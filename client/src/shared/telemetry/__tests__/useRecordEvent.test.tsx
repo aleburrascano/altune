@@ -3,11 +3,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
-import { recordEvent, type DiscoveryEvent } from '@shared/telemetry/recordEvent';
+import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
+import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
 
-const mockRecordEvent = recordEvent as jest.Mock;
+const TRACKING_FAILED = '[discovery] event tracking failed';
+
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
@@ -16,8 +21,13 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 let warnSpy: jest.SpyInstance;
 
-beforeEach(() => {
-  mockRecordEvent.mockReset();
+function trackingWarnings(): unknown[][] {
+  return warnSpy.mock.calls.filter(([message]) => message === TRACKING_FAILED);
+}
+
+beforeEach(async () => {
+  await signInTestUser();
+  applyKillSwitches({ telemetry_enabled: true });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -27,7 +37,7 @@ afterEach(() => {
 
 describe('useRecordEvent(): best-effort discovery event tracking', () => {
   it('forwards the mutated event to recordEvent and resolves to no data on success', async () => {
-    mockRecordEvent.mockResolvedValue(undefined);
+    __http.reply('POST /v1/discovery/events', { status: 202 });
     const event: DiscoveryEvent = { type: 'play', search_id: 'search-1' };
     const { result } = renderHook(() => useRecordEvent(), { wrapper });
 
@@ -37,14 +47,13 @@ describe('useRecordEvent(): best-effort discovery event tracking', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(mockRecordEvent.mock.calls[0]?.[0]).toEqual(event);
+    expect(JSON.parse(__http.last().body)).toMatchObject(event);
     expect(result.current.data).toBeUndefined();
-    expect(warnSpy).not.toHaveBeenCalled();
+    expect(trackingWarnings()).toEqual([]);
   });
 
   it('warns with the failed-tracking message and the error, and never rethrows to the caller', async () => {
-    const trackingError = new Error('discovery events unreachable');
-    mockRecordEvent.mockRejectedValue(trackingError);
+    __http.reply('POST /v1/discovery/events', { status: 500, json: { message: 'unreachable' } });
     const { result } = renderHook(() => useRecordEvent(), { wrapper });
 
     expect(() => {
@@ -55,41 +64,24 @@ describe('useRecordEvent(): best-effort discovery event tracking', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith('[discovery] event tracking failed', trackingError);
+    expect(trackingWarnings()).toEqual([
+      [TRACKING_FAILED, expect.objectContaining({ status: 500 })],
+    ]);
   });
 });
 
-describe('kill switch', () => {
-  function gatedError(): Error {
-    const error = new Error('telemetry is switched off');
-    error.name = 'TelemetryGatedError';
-    return error;
-  }
+describe('useRecordEvent(): kill switch off', () => {
+  it('settles quietly when the event is gated, without the failed-tracking warning or a request', async () => {
+    applyKillSwitches({ telemetry_enabled: false });
+    const { result } = renderHook(() => useRecordEvent(), { wrapper });
 
-  let warnSpy: jest.SpyInstance;
-
-  beforeEach(() => {
-    mockRecordEvent.mockReset();
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
-
-  describe('useRecordEvent(): kill switch off', () => {
-    it('settles quietly when the event is gated, without the failed-tracking warning', async () => {
-      mockRecordEvent.mockRejectedValue(gatedError());
-      const { result } = renderHook(() => useRecordEvent(), { wrapper });
-
-      act(() => {
-        result.current.mutate({ type: 'play', search_id: 'search-1' });
-      });
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-
-      expect(warnSpy).not.toHaveBeenCalled();
+    act(() => {
+      result.current.mutate({ type: 'play', search_id: 'search-1' });
     });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(trackingWarnings()).toEqual([]);
+    expect(__http.requests.length).toBe(0);
   });
 });

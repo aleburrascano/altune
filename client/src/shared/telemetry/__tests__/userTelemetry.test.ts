@@ -1,15 +1,12 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 import { applyKillSwitches } from '@shared/killSwitch/killSwitch';
 
 import { recordFailureShown, recordUserAction } from '@shared/telemetry/userTelemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');
+const SecureStore = require('expo-secure-store');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-const getSession = supabase.auth.getSession as jest.Mock;
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 function sentBody(): { type: string; payload: Record<string, unknown> } {
   return JSON.parse(__http.last().body);
@@ -19,11 +16,8 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
 
-beforeEach(() => {
-  getSession.mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
   applyKillSwitches({ telemetry_enabled: true });
 });
 
@@ -345,10 +339,8 @@ describe('user telemetry: errors are swallowed (fire-and-forget, never throws)',
     await new Promise((resolve) => setImmediate(resolve));
   }
 
-  it('does not throw when reading the session throws synchronously', async () => {
-    getSession.mockReset().mockImplementation(() => {
-      throw new Error('session store exploded');
-    });
+  it('does not throw when reading the stored session fails', async () => {
+    SecureStore.__secureStore.failNext('get', new Error('session store exploded'));
     const unhandled = collectUnhandled();
 
     expect(() => recordUserAction({ action: 'library.retry', outcome: 'tapped' })).not.toThrow();

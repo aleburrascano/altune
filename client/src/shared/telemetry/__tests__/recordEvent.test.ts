@@ -1,5 +1,7 @@
 import { ApiError, NetworkError } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
+import * as SecureStore from 'expo-secure-store';
+
+import { signInTestUser } from '@testing/signInTestUser';
 
 import {
   recordEvent,
@@ -10,40 +12,18 @@ import { getSessionId } from '@shared/telemetry/eventSession';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '@shared/telemetry/outbox';
-import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
+import { loadPersistedOutbox, setOutboxFileStore } from '@shared/telemetry/outboxStore';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-jest.mock('@shared/telemetry/eventSession', () => ({ getSessionId: jest.fn() }));
-
-jest.mock('@shared/telemetry/outboxStore', () => ({
-  loadPersistedOutbox: jest.fn(),
-  persistOutbox: jest.fn(),
-}));
-
-const getSession = supabase.auth.getSession as jest.Mock;
-const sessionId = getSessionId as jest.Mock;
-
-function withSession(accessToken: string | null = 'tok') {
-  getSession.mockResolvedValue({
-    data: { session: accessToken == null ? null : { access_token: accessToken } },
-    error: null,
-  });
-}
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 function sentBody(): DiscoveryEvent {
   return JSON.parse(__http.last().body);
 }
 
-beforeEach(() => {
-  getSession.mockReset();
-  sessionId.mockReset();
-  withSession();
-  sessionId.mockReturnValue('stamped-session-1');
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {
@@ -56,7 +36,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
 
     await recordEvent({ type: 'play' });
 
-    expect(sentBody().payload).toEqual({ session_id: 'stamped-session-1' });
+    expect(sentBody().payload).toEqual({ session_id: getSessionId() });
   });
 
   it('stamps session_id alone when payload is explicitly undefined', async () => {
@@ -66,7 +46,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
 
     await recordEvent(event);
 
-    expect(sentBody().payload).toEqual({ session_id: 'stamped-session-1' });
+    expect(sentBody().payload).toEqual({ session_id: getSessionId() });
   });
 
   it('stamps session_id alone when payload is null', async () => {
@@ -75,7 +55,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
 
     await recordEvent(event);
 
-    expect(sentBody().payload).toEqual({ session_id: 'stamped-session-1' });
+    expect(sentBody().payload).toEqual({ session_id: getSessionId() });
   });
 
   it('stamps session_id alone when payload is an empty object', async () => {
@@ -83,7 +63,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
 
     await recordEvent({ type: 'play', payload: {} });
 
-    expect(sentBody().payload).toEqual({ session_id: 'stamped-session-1' });
+    expect(sentBody().payload).toEqual({ session_id: getSessionId() });
   });
 
   it('adds session_id to a populated payload without dropping the caller keys', async () => {
@@ -94,7 +74,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
     expect(sentBody().payload).toEqual({
       video_id: 'abc',
       dwell_ms: 1500,
-      session_id: 'stamped-session-1',
+      session_id: getSessionId(),
     });
   });
 
@@ -103,7 +83,7 @@ describe('recordEvent(): payload merge with the stamped session_id', () => {
 
     await recordEvent({ type: 'play', payload: { session_id: 'caller-supplied' } });
 
-    expect(sentBody().payload).toEqual({ session_id: 'stamped-session-1' });
+    expect(sentBody().payload).toEqual({ session_id: getSessionId() });
   });
 });
 
@@ -197,7 +177,7 @@ describe('recordEvent(): adversarial server responses', () => {
 
 describe('recordEvent(): failure injection — the one I/O call site, apiFetch', () => {
   it('rejects with ApiError(401) and never reaches the wire when there is no active session', async () => {
-    withSession(null);
+    await SecureStore.deleteItemAsync('sb-fixture-auth-token');
 
     await expect(recordEvent({ type: 'play' })).rejects.toBeInstanceOf(ApiError);
     expect(__http.requests.length).toBe(0);
@@ -205,10 +185,8 @@ describe('recordEvent(): failure injection — the one I/O call site, apiFetch',
 });
 
 describe('remote kill switch', () => {
-  const persistOutboxMock = persistOutbox as jest.MockedFunction<typeof persistOutbox>;
-
   function queuedIds(): (string | undefined)[] {
-    return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
+    return loadPersistedOutbox().map((e) => e.search_id);
   }
 
   async function settle(): Promise<void> {
@@ -216,16 +194,15 @@ describe('remote kill switch', () => {
   }
 
   beforeEach(() => {
-    getSession.mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null });
     setKillSwitchFileStore(createMemoryFileStore());
+    setOutboxFileStore(createMemoryFileStore());
     _resetOutboxForTest();
-    (loadPersistedOutbox as jest.Mock).mockReset().mockReturnValue([]);
-    persistOutboxMock.mockReset();
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     _resetOutboxForTest();
+    setOutboxFileStore();
     setKillSwitchFileStore();
     jest.restoreAllMocks();
   });
