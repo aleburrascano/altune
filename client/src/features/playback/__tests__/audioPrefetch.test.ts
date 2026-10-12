@@ -1,12 +1,12 @@
 import * as FileSystem from 'expo-file-system';
 import { posix } from 'path';
+import { act, waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
 import { fetchAudioUrls } from '@shared/apiClient/audio';
 import { asTrackId, parseTrackId, type TrackId } from '@shared/apiClient/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
@@ -37,22 +37,15 @@ import {
   type MemoryPlaybackSeed,
 } from '@features/playback/__tests__/memoryPlaybackPort';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { signInTestUser } from '@testing/signInTestUser';
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
-    },
-  },
-}));
-
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+beforeEach(async () => {
+  await signInTestUser();
+});
 
 const UPCOMING_IDS = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'];
 
@@ -980,12 +973,15 @@ describe('a download left unfinished by a killed app', () => {
 
 describe('prefetch health tally', () => {
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
-  const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+  const { __http } = require('@testing/doubles/fetch.js');
+  const HEALTH_ROUTE = 'POST /v1/discovery/events';
+  const HTTP_ACCEPTED = 202;
 
-  function tally(): Record<string, number> {
+  async function tally(): Promise<Record<string, number>> {
     flushPlaybackHealth();
-    const [event] = recordEventMock.mock.calls[0] ?? [];
-    return (event as { payload: Record<string, number> } | undefined)?.payload ?? {};
+    await waitFor(() => expect(__http.countFor(HEALTH_ROUTE)).toBe(1));
+    const { payload } = JSON.parse(__http.last().body) as { payload: Record<string, number> };
+    return payload;
   }
 
   async function prefetchWithUpcomingSlot(): Promise<void> {
@@ -999,7 +995,7 @@ describe('prefetch health tally', () => {
     forgetAllSwaps();
     _resetPlaybackHealthForTest();
     useQueueStore.getState().clearQueue();
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
     installMemoryPort();
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -1012,7 +1008,7 @@ describe('prefetch health tally', () => {
     it('counts one prefetch_ok when the downloaded file is swapped in', async () => {
       await prefetchWithUpcomingSlot();
 
-      expect(tally()).toMatchObject({ prefetch_ok: 1, prefetch_failed_swap: 0 });
+      expect(await tally()).toMatchObject({ prefetch_ok: 1, prefetch_failed_swap: 0 });
     });
 
     it('counts no prefetch_ok when the upcoming slot is gone', async () => {
@@ -1023,7 +1019,12 @@ describe('prefetch health tally', () => {
 
       await prefetchNext(0);
 
-      expect(tally()).not.toHaveProperty('prefetch_ok', 1);
+      flushPlaybackHealth();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(__http.countFor(HEALTH_ROUTE)).toBe(0);
     });
 
     it('counts a failed swap when the local add fails and it falls back to streaming', async () => {
@@ -1031,7 +1032,7 @@ describe('prefetch health tally', () => {
 
       await prefetchWithUpcomingSlot();
 
-      expect(tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
+      expect(await tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
     });
 
     it('counts a failed swap when the streaming add fails too', async () => {
@@ -1040,7 +1041,7 @@ describe('prefetch health tally', () => {
 
       await prefetchWithUpcomingSlot();
 
-      expect(tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
+      expect(await tally()).toMatchObject({ prefetch_ok: 0, prefetch_failed_swap: 1 });
     });
   });
 });

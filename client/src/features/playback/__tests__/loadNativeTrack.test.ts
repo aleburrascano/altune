@@ -13,6 +13,7 @@ import {
   loadNativeTrack,
   refreshUpcomingPresign,
 } from '@features/playback/native/loadNativeTrack';
+import { signInTestUser } from '@testing/signInTestUser';
 import { reorderUpcomingNative } from '@features/playback/native/rebuildNativeTail';
 import { claimLoad } from '@features/playback/domain/loadToken';
 import {
@@ -58,16 +59,6 @@ beforeAll(() => {
 
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
-    },
-  },
-}));
 
 let restorePort: (() => void) | null = null;
 
@@ -123,7 +114,8 @@ function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): vo
   nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
   for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
   markPresignedFrom(0, 0);
   useQueueStore.getState().clearQueue();

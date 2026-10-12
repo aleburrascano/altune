@@ -1,15 +1,16 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { asTrackId } from '@shared/apiClient/ids';
-import { enqueueCritical } from '@shared/telemetry/outbox';
 import { _resetAcquisitionTelemetryForTest } from '@shared/acquisition/acquisitionTelemetry';
 import type { FailedAcquisition, TrackFields } from '@shared/apiClient/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryRowFailure } from '../LibraryRowFailure';
 
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+const { __http } = require('@testing/doubles/fetch.js');
 
-const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueueCritical>;
+const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
 
 type FailedTrack = TrackFields & FailedAcquisition;
 
@@ -35,42 +36,62 @@ function failedTrack(overrides: Partial<FailedTrack> = {}): FailedTrack {
   }) as FailedTrack;
 }
 
-function lastPayload(): Record<string, unknown> {
-  const call = enqueueCriticalMock.mock.calls.at(-1);
-  return (call?.[0]?.payload ?? {}) as Record<string, unknown>;
+interface SentEvent {
+  type: string;
+  payload: Record<string, unknown>;
 }
 
-beforeEach(() => {
-  enqueueCriticalMock.mockReset().mockResolvedValue(undefined);
+function sentEvents(): SentEvent[] {
+  return (__http.requests as { path: string; body: string }[])
+    .filter((request) => request.path === '/v1/discovery/events')
+    .map((request) => {
+      const { type, payload } = JSON.parse(request.body) as SentEvent;
+      delete payload['session_id'];
+      return { type, payload };
+    });
+}
+
+async function settleTelemetry(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply(TELEMETRY_ROUTE, { status: HTTP_ACCEPTED });
   _resetAcquisitionTelemetryForTest();
 });
 
 describe('LibraryRowFailure — failure_shown telemetry', () => {
-  it('records failure_shown with the displayed message once rendered', () => {
+  it('records failure_shown with the displayed message once rendered', async () => {
     render(<LibraryRowFailure track={failedTrack()} retrying={false} onRetry={jest.fn()} />);
 
-    expect(enqueueCriticalMock).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'acquisition_ui' }),
+    await waitFor(() =>
+      expect(sentEvents()).toEqual([
+        {
+          type: 'acquisition_ui',
+          payload: { track_id: 't-1', action: 'failure_shown', message: 'No source found' },
+        },
+      ]),
     );
-    expect(lastPayload()).toEqual({
-      track_id: 't-1',
-      action: 'failure_shown',
-      message: 'No source found',
-    });
   });
 
-  it('does not record while the row shows its retrying state', () => {
+  it('does not record while the row shows its retrying state', async () => {
     render(<LibraryRowFailure track={failedTrack()} retrying onRetry={jest.fn()} />);
+    await settleTelemetry();
 
-    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+    expect(sentEvents()).toEqual([]);
   });
 
-  it('does not repeat the same message on a re-render', () => {
+  it('does not repeat the same message on a re-render', async () => {
     const { rerender } = render(
       <LibraryRowFailure track={failedTrack()} retrying={false} onRetry={jest.fn()} />,
     );
     rerender(<LibraryRowFailure track={failedTrack()} retrying={false} onRetry={jest.fn()} />);
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+    await settleTelemetry();
+
+    expect(sentEvents()).toHaveLength(1);
   });
 });
