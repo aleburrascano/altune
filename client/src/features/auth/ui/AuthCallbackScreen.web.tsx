@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { authIntentClient } from '@shared/auth/authActions';
 import { NetworkError } from '@shared/failure/errors';
 import { Text } from '@shared/ui/primitives/Text';
 
@@ -54,7 +54,7 @@ function reportRefusal(kind: AuthLinkIntent['kind'], outcome: AuthIntentResult):
 
 async function exchangeUrl(url: string, router: AuthRouter): Promise<'ok' | 'refused'> {
   const intent = parseAuthLink(url);
-  const outcome = await completeAuthIntent(intent, router, supabase.auth);
+  const outcome = await completeAuthIntent(intent, router, authIntentClient());
   if (landed(outcome)) return navigateToLanding(intent, router);
   reportRefusal(intent.kind, outcome);
   return 'refused';

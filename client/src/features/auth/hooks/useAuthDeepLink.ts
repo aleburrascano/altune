@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { authIntentClient } from '@shared/auth/authActions';
 import { useNavigator } from '@shared/navigation';
 import { showFailureAlert } from '@shared/ui/failure/showFailure';
 import {
@@ -56,7 +56,10 @@ export function useAuthDeepLink(): void {
         return;
       }
       const intent = parseAuthLink(url);
-      void reportFailedExchange(intent.kind, completeAuthIntent(intent, router, supabase.auth));
+      void reportFailedExchange(
+        intent.kind,
+        completeAuthIntent(intent, router, authIntentClient()),
+      );
     };
 
     initialUrl()

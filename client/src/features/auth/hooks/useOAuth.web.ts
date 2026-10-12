@@ -1,6 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { startOAuth } from '@shared/auth/authActions';
 
 import { withAuthDeadline } from '@shared/auth/authDeadline';
 import {
@@ -21,7 +21,7 @@ export { OAUTH_BROWSER_TIMEOUT_MS } from '@features/auth/domain/oauthResult';
 
 async function redirectToProvider(provider: OAuthProvider): Promise<OAuthFailure | null> {
   const { error } = await withAuthDeadline(
-    supabase.auth.signInWithOAuth({
+    startOAuth({
       provider,
       options: { redirectTo: authRedirectUrl('callback') },
     }),

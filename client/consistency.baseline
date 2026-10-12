@@ -1,4 +1,0 @@
-MC-1 src/features/auth/hooks/useAuthDeepLink.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
-MC-1 src/features/auth/hooks/useOAuth.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
-MC-1 src/features/auth/hooks/useOAuth.web.ts '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).
-MC-1 src/features/auth/ui/AuthCallbackScreen.web.tsx '@shared/auth/supabaseClient' import is restricted from being used. Reach auth through shared/auth, not supabaseClient directly (MC-1).

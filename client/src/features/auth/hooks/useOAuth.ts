@@ -1,5 +1,5 @@
 import { NetworkError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
+import { authIntentClient, startOAuth } from '@shared/auth/authActions';
 import { useNavigator } from '@shared/navigation';
 
 import { withAuthDeadline } from '@shared/auth/authDeadline';
@@ -26,7 +26,7 @@ type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFa
 
 async function requestAuthorizationUrl(provider: OAuthProvider): Promise<AuthorizationRequest> {
   const { data, error } = await withAuthDeadline(
-    supabase.auth.signInWithOAuth({
+    startOAuth({
       provider,
       options: { redirectTo: authRedirectUrl('callback'), skipBrowserRedirect: true },
     }),
@@ -55,7 +55,7 @@ async function redirectFromBrowser(authorizationUrl: string): Promise<string | n
 
 async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promise<OAuthOutcome> {
   const outcome = await withAuthDeadline(
-    completeAuthIntent(parseAuthLink(redirectUrl), router, supabase.auth),
+    completeAuthIntent(parseAuthLink(redirectUrl), router, authIntentClient()),
   );
   const exchanged = outcome.kind === 'success' || outcome.kind === 'deduped';
   if (exchanged) return { kind: 'ok' };
