@@ -40,12 +40,27 @@ ln -s "$work/gone" "$wt/client/node_modules"
 run || { echo "FAIL a dangling link: exited non-zero"; sed 's/^/    /' "$work/out.log"; fail=1; }
 [ "$(readlink "$wt/client/node_modules")" = "$repo/client/node_modules" ] || { echo "FAIL a dangling node_modules link should be replaced"; fail=1; }
 
+newer='{"lockfileVersion":3,"packages":{"":{"name":"x"},"node_modules/a":{"version":"2.0.0"}}}'
+export ALTUNE_DEPS_CACHE=$work/cache
+
 reset
-echo '{"lockfileVersion":3,"packages":{"":{"name":"x"},"node_modules/a":{"version":"2.0.0"}}}' >"$wt/client/package-lock.json"
-run || { echo "FAIL differing lockfiles: exited non-zero"; fail=1; }
-grep -q "^npm ci .* in $wt/client legacy-peer-deps=legacy-peer-deps=true$" "$NPM_LOG" \
-  || { echo "FAIL differing lockfiles should npm ci inside client, where client/.npmrc applies"; cat "$NPM_LOG" 2>/dev/null | sed 's/^/    /'; fail=1; }
-[ -L "$wt/client/node_modules" ] && { echo "FAIL differing lockfiles must not link"; fail=1; }
+rm -rf "$ALTUNE_DEPS_CACHE"
+echo "$newer" >"$wt/client/package-lock.json"
+run || { echo "FAIL differing lockfiles: exited non-zero"; sed 's/^/    /' "$work/out.log"; fail=1; }
+grep -q "^npm ci .*legacy-peer-deps=legacy-peer-deps=true$" "$NPM_LOG" \
+  || { echo "FAIL differing lockfiles should npm ci with client/.npmrc applied"; sed 's/^/    /' "$NPM_LOG" 2>/dev/null; fail=1; }
+case $(readlink "$wt/client/node_modules") in
+  "$ALTUNE_DEPS_CACHE"/*) ;;
+  *) echo "FAIL differing lockfiles should link an install cached for that lockfile, got '$(readlink "$wt/client/node_modules")'"; fail=1 ;;
+esac
+
+rm -rf "$wt"
+mkdir -p "$wt/client"
+echo "$newer" >"$wt/client/package-lock.json"
+echo legacy-peer-deps=true >"$wt/client/.npmrc"
+run || { echo "FAIL a second worktree with the same lockfile: exited non-zero"; fail=1; }
+[ "$(grep -c '^npm ci' "$NPM_LOG")" = 1 ] || { echo "FAIL the same lockfile installed $(grep -c '^npm ci' "$NPM_LOG") times, want once"; fail=1; }
+[ -d "$wt/client/node_modules/" ] || { echo "FAIL the second worktree has no node_modules"; fail=1; }
 
 [ $fail = 0 ] && echo "ci-node-deps.test.sh: all cases pass"
 exit $fail
