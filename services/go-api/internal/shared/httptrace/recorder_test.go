@@ -190,3 +190,65 @@ func TestReplayer_MatchesFixtureRecordedWithScrubbedRequestBody(t *testing.T) {
 		t.Errorf("replay body = %q, want the recorded response", got)
 	}
 }
+
+func TestRecorder_OversizedResponseIsMarkedTruncatedAndCallerKeepsFullBody(t *testing.T) {
+	body := strings.Repeat("a", maxCaptureBytes+10)
+	rec := NewRecorder(bodyRT{body: body})
+
+	resp := mustGet(t, rec, "http://fixture.local/big")
+	defer resp.Body.Close()
+
+	if got := bodyString(t, resp); got != body {
+		t.Errorf("the caller's response body was cut: got %d bytes, want %d", len(got), len(body))
+	}
+	ex := rec.Exchanges()[0]
+	if ex.RespBody != truncatedBody {
+		t.Errorf("RespBody = %d bytes, want the truncation placeholder", len(ex.RespBody))
+	}
+	if ex.Err == "" {
+		t.Error("a truncated response was not flagged in Err")
+	}
+}
+
+func TestRecorder_OversizedRequestIsMarkedTruncatedAndForwardedWhole(t *testing.T) {
+	body := strings.Repeat("b", maxCaptureBytes+10)
+	var seen int
+	rec := NewRecorder(rtFunc(func(req *http.Request) (*http.Response, error) {
+		b, _ := io.ReadAll(req.Body)
+		seen = len(b)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Request: req}, nil
+	}))
+
+	resp := mustPost(t, rec, "http://fixture.local/big", body)
+	defer resp.Body.Close()
+
+	if seen != len(body) {
+		t.Errorf("transport saw %d request bytes, want %d", seen, len(body))
+	}
+	ex := rec.Exchanges()[0]
+	if ex.ReqBody != truncatedBody || ex.Err == "" {
+		t.Errorf("oversized request not marked truncated: body=%d bytes err=%q", len(ex.ReqBody), ex.Err)
+	}
+}
+
+func TestReplayer_RefusesTruncatedRecording(t *testing.T) {
+	rec := NewRecorder(bodyRT{body: strings.Repeat("a", maxCaptureBytes+1)})
+	resp := mustGet(t, rec, "http://fixture.local/big")
+	defer resp.Body.Close()
+
+	req, err := http.NewRequest(http.MethodGet, "http://fixture.local/big", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := NewReplayer(rec.Exchanges()).RoundTrip(req)
+	if replayed != nil {
+		_ = replayed.Body.Close()
+	}
+	if err == nil {
+		t.Error("a truncated recording was replayed as a complete response")
+	}
+}
+
+type rtFunc func(*http.Request) (*http.Response, error)
+
+func (f rtFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }

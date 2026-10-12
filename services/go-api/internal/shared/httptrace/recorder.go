@@ -9,6 +9,26 @@ import (
 	"time"
 )
 
+const maxCaptureBytes = 1 << 20
+
+type replayBody struct {
+	io.Reader
+	io.Closer
+}
+
+const truncatedBody = "[TRUNCATED: body exceeds capture limit]"
+
+const truncatedErr = "body exceeds capture limit; recording is incomplete"
+
+func capture(body io.ReadCloser) (string, io.ReadCloser, bool, error) {
+	read, err := io.ReadAll(io.LimitReader(body, maxCaptureBytes+1))
+	replay := replayBody{io.MultiReader(bytes.NewReader(read), body), body}
+	if len(read) > maxCaptureBytes {
+		return truncatedBody, replay, true, err
+	}
+	return redact.SecretsInBody(string(read)), replay, false, err
+}
+
 type Exchange struct {
 	Method   string        `json:"method"`
 	URL      string        `json:"url"`
@@ -37,10 +57,12 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	ex := Exchange{Method: req.Method, URL: redact.Secrets(req.URL.String())}
 
 	if req.Body != nil {
-		reqBytes, _ := io.ReadAll(req.Body)
-		_ = req.Body.Close()
-		req.Body = io.NopCloser(bytes.NewReader(reqBytes))
-		ex.ReqBody = redact.SecretsInBody(string(reqBytes))
+		reqBody, replay, reqTruncated, _ := capture(req.Body)
+		req.Body = replay
+		ex.ReqBody = reqBody
+		if reqTruncated {
+			ex.Err = truncatedErr
+		}
 	}
 
 	start := time.Now()
@@ -48,21 +70,30 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	ex.Duration = time.Since(start)
 
 	if err != nil {
-		ex.Err = redact.Secrets(err.Error())
+		ex.Err = joinErr(ex.Err, redact.Secrets(err.Error()))
 		r.record(ex)
 		return resp, err
 	}
 
-	respBytes, readErr := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(respBytes))
+	respBody, replay, respTruncated, readErr := capture(resp.Body)
+	resp.Body = replay
 	ex.Status = resp.StatusCode
-	ex.RespBody = redact.SecretsInBody(string(respBytes))
+	ex.RespBody = respBody
+	if respTruncated {
+		ex.Err = joinErr(ex.Err, truncatedErr)
+	}
 	if readErr != nil {
-		ex.Err = redact.Secrets(readErr.Error())
+		ex.Err = joinErr(ex.Err, redact.Secrets(readErr.Error()))
 	}
 	r.record(ex)
 	return resp, nil
+}
+
+func joinErr(prev, next string) string {
+	if prev == "" {
+		return next
+	}
+	return prev + "; " + next
 }
 
 func (r *Recorder) record(ex Exchange) {
