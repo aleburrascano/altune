@@ -10,7 +10,6 @@
   "ignorePatterns": ["**/*.test.{ts,tsx}", "**/__tests__/**", "**/__mocks__/**", "jest/**"],
   "ignoreDependencies": [
     "react-doctor",
-    "expo-updates",
     "shaka-player",
     "expo-audio",
     "react-native-web",

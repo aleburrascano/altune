@@ -2,7 +2,7 @@ import { ChevronRight, User } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { appVersion } from '@shared/device/device';
+import { appVersionLabel } from '@shared/device/device';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
@@ -57,7 +57,7 @@ export function SettingsScreen(): ReactElement {
 
         <View style={styles.footer}>
           <Text testID="settings-version" variant="caption" tone="tertiary">
-            Altune {appVersion()}
+            Altune {appVersionLabel()}
           </Text>
         </View>
       </ScrollView>

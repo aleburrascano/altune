@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 import {
   appVersion,
+  appVersionLabel,
   declaredAppScheme,
   deviceInfo,
   isExpoGoRuntime,
@@ -23,6 +24,19 @@ jest.mock('expo-constants', () => ({
     },
   },
   ExecutionEnvironment: { Bare: 'bare', Standalone: 'standalone', StoreClient: 'storeClient' },
+}));
+
+let mockUpdates = { isEnabled: false, isEmbeddedLaunch: true, updateId: null as string | null };
+jest.mock('expo-updates', () => ({
+  get isEnabled() {
+    return mockUpdates.isEnabled;
+  },
+  get isEmbeddedLaunch() {
+    return mockUpdates.isEmbeddedLaunch;
+  },
+  get updateId() {
+    return mockUpdates.updateId;
+  },
 }));
 
 const originalOS = Platform.OS;
@@ -56,6 +70,37 @@ describe('appVersion', () => {
   it('returns dev when there is no manifest', () => {
     setConfig(null);
     expect(appVersion()).toBe('dev');
+  });
+});
+
+describe('appVersionLabel', () => {
+  afterEach(() => {
+    mockUpdates = { isEnabled: false, isEmbeddedLaunch: true, updateId: null };
+  });
+
+  it('names the over-the-air update the app is running', () => {
+    setConfig({ version: '2.1.1' });
+    mockUpdates = {
+      isEnabled: true,
+      isEmbeddedLaunch: false,
+      updateId: '1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d',
+    };
+    expect(appVersionLabel()).toBe('2.1.1 · update 1a2b3c4d');
+  });
+
+  it('is the bare version when the app runs the update built into the install', () => {
+    setConfig({ version: '2.1.1' });
+    mockUpdates = {
+      isEnabled: true,
+      isEmbeddedLaunch: true,
+      updateId: '1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d',
+    };
+    expect(appVersionLabel()).toBe('2.1.1');
+  });
+
+  it('is the bare version when updates are off', () => {
+    setConfig({ version: '2.1.1' });
+    expect(appVersionLabel()).toBe('2.1.1');
   });
 });
 

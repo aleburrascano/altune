@@ -45,6 +45,7 @@ jobs:
       - name: smoke prod
         env:
           RUNTIME: ${{ steps.build.outputs.runtime }}
+          RELEASE_VERSION: ${{ steps.build.outputs.version }}
         run: bash "$WT/.gitea/workflows/ota-smoke.sh"
 
       - name: clean up
