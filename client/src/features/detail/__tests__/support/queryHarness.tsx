@@ -93,13 +93,6 @@ export function createPortWrapper(
   };
 }
 
-export function mockSupabaseSession() {
-  return {
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  };
-}
-
 export async function signInTestUser(): Promise<void> {
   const session = {
     access_token: 'tok',

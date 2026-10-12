@@ -4,7 +4,6 @@ import { Text, StyleSheet } from 'react-native';
 import { fireEvent, render, screen, waitFor, act, within } from '@testing-library/react-native';
 import type { CreateTrackRequest } from '@shared/apiClient/trackResponse';
 import type { TrackId } from '@shared/apiClient/ids';
-import { supabase } from '@shared/auth/supabaseClient';
 import {
   linkTrackIdentity,
   patchTrackStatus,
@@ -34,21 +33,11 @@ import {
 } from '@/features/detail/domain/saveTrack';
 import {
   createTestQueryClient,
-  createWrapper,
-  mockSupabaseSession,
+  createPlaybackWrapper,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn(), shuffleFromList: jest.fn() }),
-}));
-
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 describe('SaveAllPill', () => {
   function renderPill(unownedCount: number, saving: boolean): jest.Mock {
@@ -217,8 +206,9 @@ describe('TrackSaveControl', () => {
     );
   }
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
+    __http.replyAll({ status: 204 });
     useTrackStatusStore.getState().reset();
   });
 
@@ -238,7 +228,7 @@ describe('TrackSaveControl', () => {
           artist={ARTIST}
           onPress={onPress}
         />,
-        { wrapper: createWrapper(createTestQueryClient()) },
+        { wrapper: createPlaybackWrapper(createTestQueryClient()) },
       );
       fireEvent.press(screen.getByTestId('quick-save'), { stopPropagation });
       expect(stopPropagation).toHaveBeenCalledTimes(1);
@@ -250,7 +240,7 @@ describe('TrackSaveControl', () => {
     it('fires a single createTrack POST when the save glyph is double-tapped before the mutation settles', async () => {
       __http.reply('POST /v1/tracks', { status: 500 });
       const queryClient = createTestQueryClient({ mutations: true });
-      render(<QuickSaveRow />, { wrapper: createWrapper(queryClient) });
+      render(<QuickSaveRow />, { wrapper: createPlaybackWrapper(queryClient) });
 
       const control = screen.getByTestId('quick-save');
       act(() => {
@@ -295,7 +285,7 @@ describe('TrackSaveControl', () => {
       const queryClient = createTestQueryClient({ mutations: true });
 
       const saved = render(<SaveRow title={SAVED_TITLE} artist={SAVED_ARTIST} />, {
-        wrapper: createWrapper(queryClient),
+        wrapper: createPlaybackWrapper(queryClient),
       });
       await act(async () => {
         fireEvent.press(screen.getByTestId('quick-save'), pressEvent);
@@ -304,7 +294,7 @@ describe('TrackSaveControl', () => {
       saved.unmount();
 
       render(<SaveRow title={OTHER_TITLE} artist={OTHER_ARTIST} />, {
-        wrapper: createWrapper(queryClient),
+        wrapper: createPlaybackWrapper(queryClient),
       });
 
       expect(screen.getByLabelText(`Save ${OTHER_TITLE}`)).toBeTruthy();
@@ -330,7 +320,7 @@ describe('TrackSaveControl', () => {
     it('does not write the track again when its claimed row is pressed', async () => {
       __http.reply('POST /v1/tracks', { status: 500 });
       render(<ClaimedRow />, {
-        wrapper: createWrapper(createTestQueryClient({ mutations: true })),
+        wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })),
       });
 
       await act(async () => {
@@ -342,7 +332,7 @@ describe('TrackSaveControl', () => {
 
     it('reads as already saving rather than as an untouched track', () => {
       render(<ClaimedRow />, {
-        wrapper: createWrapper(createTestQueryClient({ mutations: true })),
+        wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })),
       });
 
       expect(screen.getByLabelText(`${TITLE} downloading`)).toBeTruthy();
@@ -354,7 +344,7 @@ describe('TrackSaveControl', () => {
     it('surfaces a retry/failure state on the row when the save mutation fails', async () => {
       __http.fail('POST /v1/tracks');
       const queryClient = createTestQueryClient({ mutations: true });
-      render(<QuickSaveRow />, { wrapper: createWrapper(queryClient) });
+      render(<QuickSaveRow />, { wrapper: createPlaybackWrapper(queryClient) });
 
       await act(async () => {
         fireEvent.press(screen.getByTestId('quick-save'), pressEvent);

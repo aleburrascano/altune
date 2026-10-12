@@ -1,16 +1,21 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
-import { fireEvent } from '@testing-library/react-native';
+import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
 import { BlendedSection, SECTION_ITEM_CAP } from '@features/discovery/ui/BlendedSection';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoveryResult, ResultSection } from '@shared/apiClient/discovery';
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import { PlaybackContext } from '@shared/playback/usePlayback';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 
-jest.mock('@features/discovery/hooks/usePreviewPlayback', () => ({
-  usePreviewPlayback: () => ({ hasPreview: false }),
-}));
+function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
+  return renderBare(ui, {
+    wrapper: ({ children }) => (
+      <PlaybackContext.Provider value={idlePlayback}>{children}</PlaybackContext.Provider>
+    ),
+  });
+}
 
 function commonProps(): ResultsCommonProps {
   return {

@@ -1,13 +1,14 @@
 import React from 'react';
 import { Platform } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
 import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { DiscoverView } from '@features/discovery/domain/discoverView';
-import { fireEvent } from '@testing-library/react-native';
 import type { ResultSection } from '@shared/apiClient/discovery';
+import { PlaybackContext } from '@shared/playback/usePlayback';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 
 const NATIVE_OS = Platform.OS;
 
@@ -21,9 +22,13 @@ function useWebPlatform() {
   });
 }
 
-jest.mock('@features/discovery/hooks/usePreviewPlayback', () => ({
-  usePreviewPlayback: () => ({ hasPreview: false }),
-}));
+function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
+  return renderBare(ui, {
+    wrapper: ({ children }) => (
+      <PlaybackContext.Provider value={idlePlayback}>{children}</PlaybackContext.Provider>
+    ),
+  });
+}
 
 let mockWindowWidth = 390;
 

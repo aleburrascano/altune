@@ -2,7 +2,6 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/apiClient/ids';
 import {
   linkTrackIdentity,
@@ -13,12 +12,13 @@ import {
 
 import { optimisticTrackId, toCreateTrackRequest } from '@/features/detail/domain/saveTrack';
 import type { LateralNavHandle } from '@/features/detail/hooks/useTrackDetailActions';
+import { RelatedTracksSection } from '@/features/detail/ui/RelatedTracksSection';
 import { TrackDetailBody } from '@/features/detail/ui/TrackDetailBody';
 import { readDetailHandoff } from '@shared/navigation/detailHandoff';
 import {
   createTestQueryClient,
-  createWrapper,
-  mockSupabaseSession,
+  createPlaybackWrapper,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
@@ -29,29 +29,11 @@ function resultCarriedBy(handoffId: string | string[] | undefined): string | nul
   return readDetailHandoff(handoffId)?.result.title ?? null;
 }
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
-jest.mock('@shared/playback/usePlayback', () => ({
-  usePlayback: () => ({ status: 'idle', play: jest.fn(), pause: jest.fn() }),
-}));
-jest.mock('@shared/playlists', () => ({ AddToPlaylistSheet: () => null }));
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('@/features/detail/ui/RelatedTracksSection', () => ({
-  RelatedTracksSection: () => null,
-}));
-jest.mock('@/features/detail/ui/DetailScaffold', () => {
-  const { View } = jest.requireActual('react-native');
-  return {
-    DetailScaffold: ({ actions, children }: { actions: unknown; children: unknown }) => (
-      <View>
-        {actions}
-        {children}
-      </View>
-    ),
-  };
-});
+
+interface RecordedRequest {
+  path: string;
+}
 
 const TITLE = 'Midnight City';
 const ARTIST = 'M83';
@@ -82,7 +64,7 @@ function renderDetail(): void {
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -102,8 +84,9 @@ function saveIsInteractive(): boolean {
 
 let warnSpy: jest.SpyInstance;
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+beforeEach(async () => {
+  await signInTestUser();
+  __http.replyAll({ status: 204 });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   useTrackStatusStore.getState().reset();
 });
@@ -170,7 +153,7 @@ function renderOwnedFailedDetail(): void {
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -203,7 +186,7 @@ function renderDetailOf(result: DiscoveryResult, title: string = result.title): 
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
   );
 }
 
@@ -312,7 +295,7 @@ describe('TrackDetailBody pins its router calls', () => {
         lateralNav={lateralNav}
         detailRoute="/discover/detail"
       />,
-      { wrapper: createWrapper(createTestQueryClient()) },
+      { wrapper: createPlaybackWrapper(createTestQueryClient()) },
     );
 
     fireEvent.press(screen.getByLabelText('Tracks featuring Guest Artist'));
@@ -324,8 +307,6 @@ describe('TrackDetailBody pins its router calls', () => {
   });
 
   it('pushes the exact related track that was tapped', async () => {
-    const { RelatedTracksSection: RealRelatedTracksSection } =
-      jest.requireActual('../RelatedTracksSection');
     const push = jest.fn();
     jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ push });
 
@@ -353,8 +334,8 @@ describe('TrackDetailBody pins its router calls', () => {
       sources: [{ provider: 'soundcloud', external_id: 'sc-1', url: 'https://sc/sc-1' }],
     };
 
-    render(<RealRelatedTracksSection result={result} detailRoute="/discover/detail" />, {
-      wrapper: createWrapper(createTestQueryClient()),
+    render(<RelatedTracksSection result={result} detailRoute="/discover/detail" />, {
+      wrapper: createPlaybackWrapper(createTestQueryClient()),
     });
 
     fireEvent.press(await screen.findByTestId('detail-related-0'));
@@ -370,13 +351,6 @@ describe('TrackDetailBody pins its router calls', () => {
 
 describe('TrackDetailBody add to playlist during a pending save', () => {
   it('resolves to the server-issued id, never the optimistic placeholder', async () => {
-    let resolveTrackIds: (() => Promise<string[]>) | undefined;
-    jest
-      .spyOn(require('@shared/playlists'), 'AddToPlaylistSheet')
-      .mockImplementation((props: unknown) => {
-        resolveTrackIds = (props as { resolveTrackIds: () => Promise<string[]> }).resolveTrackIds;
-        return null;
-      });
     const placeholderId = optimisticTrackId(toCreateTrackRequest(trackResult()));
     patchTrackStatus(
       placeholderId,
@@ -385,10 +359,35 @@ describe('TrackDetailBody add to playlist during a pending save', () => {
     );
     linkTrackIdentity(trackIdentityKey(TITLE, ARTIST), placeholderId);
     __http.reply('POST /v1/tracks', { status: 201, json: savedTrackResponse('pending') });
+    __http.reply('GET /v1/playlists', {
+      status: 200,
+      json: {
+        items: [
+          {
+            id: 'pl-1',
+            name: 'Night Drive',
+            track_count: 0,
+            preview_artwork_urls: [],
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      },
+    });
+    __http.reply('POST /v1/playlists/pl-1/tracks/batch', {
+      status: 200,
+      json: { added: 1, skipped: 0 },
+    });
     renderDetail();
 
-    const ids = await resolveTrackIds!();
+    fireEvent.press(screen.getByTestId('detail-add-to-playlist'));
+    fireEvent.press(await screen.findByTestId('add-to-playlist-pl-1'));
 
-    expect(ids).toEqual(['srv-midnight-city']);
+    await waitFor(() => expect(__http.countFor('POST /v1/playlists/pl-1/tracks/batch')).toBe(1));
+    const batch = __http.requests.find(
+      (request: RecordedRequest) => request.path === '/v1/playlists/pl-1/tracks/batch',
+    );
+    expect(JSON.parse(batch.body)).toEqual({ track_ids: ['srv-midnight-city'] });
   });
 });
