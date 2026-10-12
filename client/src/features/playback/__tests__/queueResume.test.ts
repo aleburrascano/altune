@@ -1,8 +1,11 @@
+import { waitFor } from '@testing-library/react-native';
+
 import { asTrackId } from '@shared/apiClient/ids';
 import type { QueueStateResponse } from '@shared/apiClient/playback';
 import type { AcquisitionStatus, TrackResponse } from '@shared/apiClient/trackResponse';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+
+import { signInTestUser } from '@testing/signInTestUser';
 
 import {
   _resetPlaybackHealthForTest,
@@ -200,9 +203,9 @@ describe('isSavedCurrentResumable — the resolveResumeStartIndex found flag', (
   });
 });
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+const { __http } = require('@testing/doubles/fetch.js');
+const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
 
 const INITIAL_STATE = useQueueStore.getState();
 
@@ -249,10 +252,11 @@ function orderedIds(): string[] {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
   useQueueStore.setState(INITIAL_STATE, true);
   _resetPlaybackHealthForTest();
-  recordEventMock.mockReset().mockResolvedValue(undefined);
+  __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
 });
 
 describe('showSavedTrackWhileRehydrating', () => {
@@ -377,15 +381,15 @@ describe('rebuildOnFirstWorkingRungReportingCurrent', () => {
   const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
     m.get(id)?.acquisition_status === 'ready';
 
-  function reportedTally(): Record<string, unknown> {
+  async function reportedTally(): Promise<Record<string, unknown>> {
     flushPlaybackHealth();
-    expect(recordEventMock).toHaveBeenCalledTimes(1);
-    const event = recordEventMock.mock.calls[0]?.[0];
-    expect(event?.type).toBe('playback_health');
-    return event?.payload ?? {};
+    await waitFor(() => expect(__http.countFor(HEALTH_ROUTE)).toBe(1));
+    const event = JSON.parse(__http.last().body);
+    expect(event.type).toBe('playback_health');
+    return event.payload;
   }
 
-  it('records the natural-order rung when the saved natural order rebuilds', () => {
+  it('records the natural-order rung when the saved natural order rebuilds', async () => {
     const m = mapOf(track('a'), track('b'));
     const s = saved({ natural_order: ['a', 'b'], track_ids: ['b', 'a'], shuffled: true });
 
@@ -394,14 +398,14 @@ describe('rebuildOnFirstWorkingRungReportingCurrent', () => {
     );
 
     expect(orderedIds()).toEqual(['b', 'a']);
-    expect(reportedTally()).toMatchObject({
+    expect(await reportedTally()).toMatchObject({
       queue_rebuild_natural: 1,
       queue_rebuild_play_order: 0,
       queue_rebuild_exhausted: 0,
     });
   });
 
-  it('records the degraded rung when only the play order is left to rebuild from', () => {
+  it('records the degraded rung when only the play order is left to rebuild from', async () => {
     const m = mapOf(track('a'), track('b'));
     const s = saved({ natural_order: [], track_ids: ['b', 'a'] });
 
@@ -410,14 +414,14 @@ describe('rebuildOnFirstWorkingRungReportingCurrent', () => {
     );
 
     expect(orderedIds()).toEqual(['b', 'a']);
-    expect(reportedTally()).toMatchObject({
+    expect(await reportedTally()).toMatchObject({
       queue_rebuild_natural: 0,
       queue_rebuild_play_order: 1,
       queue_rebuild_exhausted: 0,
     });
   });
 
-  it('records an exhausted ladder when no rung can rebuild anything', () => {
+  it('records an exhausted ladder when no rung can rebuild anything', async () => {
     const m = mapOf(track('a', 'pending'));
     const s = saved({ natural_order: ['a'], track_ids: ['a'] });
 
@@ -426,7 +430,7 @@ describe('rebuildOnFirstWorkingRungReportingCurrent', () => {
     );
 
     expect(useQueueStore.getState().tracks).toHaveLength(0);
-    expect(reportedTally()).toMatchObject({
+    expect(await reportedTally()).toMatchObject({
       queue_rebuild_natural: 0,
       queue_rebuild_play_order: 0,
       queue_rebuild_exhausted: 1,

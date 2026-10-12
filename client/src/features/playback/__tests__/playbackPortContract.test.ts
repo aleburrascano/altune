@@ -1,17 +1,13 @@
 import { asTrackId } from '@shared/apiClient/ids';
 import type { QueueStateResponse } from '@shared/apiClient/playback';
-import { supabase } from '@shared/auth/supabaseClient';
 import { ContractError } from '@shared/failure/errors';
 
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 import type { PlaybackPort } from '@features/playback/ports/playbackPort';
+import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const NOT_FOUND_STATUS = 404;
 const NO_CONTENT_STATUS = 204;
@@ -70,12 +66,9 @@ async function restoreHttpPrefetchFlag(): Promise<void> {
   await httpPlaybackPort.fetchAudioUrls(['t1']);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   __http.reset();
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
 });
 
 afterEach(async () => {

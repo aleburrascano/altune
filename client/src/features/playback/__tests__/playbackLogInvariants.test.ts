@@ -5,7 +5,6 @@ import { inspect } from 'util';
 import { Event } from 'react-native-track-player';
 
 import { asTrackId } from '@shared/apiClient/ids';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { ignoringNativeRejection } from '@features/playback/native/createNativePlaybackActions';
 import { playbackService } from '@features/playback/native/playbackService';
@@ -16,21 +15,15 @@ import { redactPlaybackErrorMessage, warnPlayback } from '@features/playback/dom
 
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 
+import { signInTestUser } from '@testing/signInTestUser';
+
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({
-  recordEvent: jest.fn().mockResolvedValue(undefined),
-}));
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
-    },
-  },
-}));
+const { __http } = require('@testing/doubles/fetch.js');
+const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
+
 const leaky = () =>
   new Error(
     'GET https://cdn.example/a.mp3?X-Amz-Signature=deadbeef failed, Authorization: Bearer abc.def.ghi',
@@ -53,10 +46,11 @@ function expectLoggedClean(): void {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
   warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   _resetPlaybackHealthForTest();
-  (recordEvent as jest.Mock).mockClear();
 });
 
 afterEach(() => {

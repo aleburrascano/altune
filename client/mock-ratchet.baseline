@@ -1,8 +1,3 @@
-src/features/playback/__tests__/playbackLogInvariants.test.ts @shared/auth/supabaseClient
-src/features/playback/__tests__/playbackLogInvariants.test.ts @shared/telemetry/recordEvent
-src/features/playback/__tests__/playbackPortContract.test.ts @shared/auth/supabaseClient
-src/features/playback/__tests__/playbackService.test.ts @shared/auth/supabaseClient
-src/features/playback/__tests__/queueResume.test.ts @shared/telemetry/recordEvent
 src/features/playback/__tests__/usePlaybackPosition.test.ts @shared/lifecycle
 src/features/playback/__tests__/usePlaybackSignals.test.ts @shared/telemetry/useRecordEvent
 src/features/playback/__tests__/useQueueResume.test.ts @shared/telemetry/recordEvent

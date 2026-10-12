@@ -30,24 +30,19 @@ import {
 
 import { previewTrack, libraryTrackWithId } from '@features/playback/__tests__/fixtures';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { signInTestUser } from '@testing/signInTestUser';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
+beforeEach(async () => {
+  await signInTestUser();
+});
+
 const { __player } = jest.requireMock('react-native-track-player');
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
-    },
-  },
-}));
 
 describe('the audio cache invalidator the service registers', () => {
   const { __fs } = FileSystem as unknown as {
