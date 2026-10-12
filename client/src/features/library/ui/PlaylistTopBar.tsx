@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,9 +13,8 @@ import {
   usePlaylistOfflineAction,
 } from '@features/library/hooks/usePlaylistMenu';
 import { BackHeader } from '@features/library/ui/BackHeader';
+import { menuItems, type MenuItems } from '@features/library/ui/playlistMenuItems';
 import type { DetailProps } from '@features/library/ui/playlistDetailTypes';
-
-type MenuItems = ComponentProps<typeof ContextMenu>['items'];
 
 function PlaylistGradient(): ReactElement {
   const { color } = useTheme();
@@ -51,27 +50,11 @@ function PlaylistBackHeader(props: BackHeaderProps): ReactElement {
   );
 }
 
-function editItems(props: DetailProps): MenuItems {
-  return [
-    { label: 'Add Tracks', onPress: props.onAddTracks },
-    { label: 'Rename Playlist', onPress: props.rename.startEditing },
-  ];
-}
-
-function menuItems(
-  props: DetailProps,
-  onDelete: () => void,
-  offlineAction: MenuItems[number] | null,
-): MenuItems {
-  const danger: MenuItems[number] = { label: 'Delete Playlist', onPress: onDelete, tone: 'danger' };
-  return [...editItems(props), ...(offlineAction ? [offlineAction] : []), danger];
-}
-
 function useMenuItems(props: DetailProps): MenuItems {
   const onDelete = usePlaylistDelete(props.playlistId, props.router);
   const { supported } = useLibraryOffline();
   const offlineAction = usePlaylistOfflineAction(props.playlist.tracks);
-  return menuItems(props, onDelete, supported ? offlineAction : null);
+  return menuItems(props, onDelete, offlineAction, supported);
 }
 
 function useAnchorTop(): number {

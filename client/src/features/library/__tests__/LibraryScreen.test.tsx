@@ -3,10 +3,12 @@ import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/failure/errors';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import { libraryKeys } from '@shared/query/queryKeys';
 
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { playlist, track } from '@features/library/__tests__/trackMutationFixtures';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
 
@@ -22,12 +24,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
   useSegments: () => ['(tabs)', 'library'],
 }));
-jest.mock('@shared/playback/usePlayback', () => ({
-  usePlayback: () => ({ status: 'idle', source: null }),
-}));
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn() }),
-}));
 
 let client: QueryClient;
 let port: LibraryPort;
@@ -35,7 +31,9 @@ let port: LibraryPort;
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <PlaybackContext.Provider value={idlePlayback}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </PlaybackContext.Provider>
     </QueryClientProvider>
   );
 }
@@ -52,9 +50,11 @@ warmUpFirstRender(async () => {
   const warmUpClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={warmUpClient}>
-      <LibraryPortProvider port={createMemoryLibraryPort()}>
-        <LibraryScreen />
-      </LibraryPortProvider>
+      <PlaybackContext.Provider value={idlePlayback}>
+        <LibraryPortProvider port={createMemoryLibraryPort()}>
+          <LibraryScreen />
+        </LibraryPortProvider>
+      </PlaybackContext.Provider>
     </QueryClientProvider>,
   );
   await waitFor(() => expect(screen.getByTestId('library-empty')).toBeTruthy());

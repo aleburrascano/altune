@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactElement } from 'react';
-import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import { asPlaylistId, asTrackId } from '@shared/apiClient/ids';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { trackResponseFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
 import {
   useTrackSelection,
   type TrackSelectionController,
@@ -13,14 +14,11 @@ import { TrackSelectionOverlay } from '../ui/TrackSelectionOverlay';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-const mockSheetResolvers: { label: string; resolve: () => Promise<TrackId[]> }[] = [];
+const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/playlists', () => ({
-  AddToPlaylistSheet: (props: { label: string; resolveTrackIds: () => Promise<TrackId[]> }) => {
-    mockSheetResolvers.push({ label: props.label, resolve: props.resolveTrackIds });
-    return null;
-  },
-}));
+const EVENTS = 'POST /v1/discovery/events';
+const PLAYLISTS = 'GET /v1/playlists';
+const ADD_TO_P1 = 'POST /v1/playlists/p1/tracks/batch';
 
 function track(id: string): TrackResponse {
   return trackResponseFactory.build({
@@ -94,10 +92,11 @@ function selectAllOf(list: TrackResponse[]): void {
   act(() => controller.selection.selectAll(list.map((t) => t.id)));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   onRemove.mockClear();
   addToQueue.mockClear();
-  mockSheetResolvers.length = 0;
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
 });
 
 describe('track selection reconciles against the live track list (#791)', () => {
@@ -134,9 +133,32 @@ describe('track selection reconciles against the live track list (#791)', () => 
     fireEvent.press(screen.getByText('Remove'));
     expect(onRemove).toHaveBeenCalledWith(['c'], expect.any(Function));
 
-    const sheet = mockSheetResolvers[mockSheetResolvers.length - 1]!;
-    expect(sheet.label).toBe('1 track');
-    await expect(sheet.resolve()).resolves.toEqual(['c']);
+    __http.reply(PLAYLISTS, {
+      status: 200,
+      json: {
+        items: [
+          {
+            id: asPlaylistId('p1'),
+            name: 'Focus',
+            track_count: 0,
+            preview_artwork_urls: [],
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      },
+    });
+    __http.reply(ADD_TO_P1, { status: 200, json: {} });
+    fireEvent.press(screen.getByText('Add to Playlist'));
+    expect(screen.getByText('1 track')).toBeTruthy();
+    fireEvent.press(await screen.findByTestId('add-to-playlist-p1'));
+
+    await waitFor(() => expect(__http.countFor(ADD_TO_P1)).toBe(1));
+    const add = (__http.requests as { path: string; body?: unknown }[]).find(
+      (r) => r.path === '/v1/playlists/p1/tracks/batch',
+    );
+    expect(JSON.parse(String(add?.body))).toEqual(expect.objectContaining({ track_ids: ['c'] }));
   });
 
   it('select all then deselect all toggles against the live list, not the stale count', () => {

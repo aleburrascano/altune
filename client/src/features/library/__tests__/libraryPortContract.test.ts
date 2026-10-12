@@ -1,19 +1,14 @@
 import { asTrackId } from '@shared/apiClient/ids';
 import type { ListTracksResponse, TrackResponse } from '@shared/apiClient/trackResponse';
 import { MAX_ALL_TRACKS } from '@shared/apiClient/tracks';
-import { supabase } from '@shared/auth/supabaseClient';
 
 import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 import { createMemoryLibraryPort } from '@features/library/__tests__/memoryLibraryPort';
 import { track } from '@features/library/__tests__/trackMutationFixtures';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-import { sessionFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const TRACKS_PATH = '/v1/tracks';
 const TRACK_PATH_PATTERN = /^\/v1\/tracks\/([^/]+)$/;
@@ -70,11 +65,8 @@ function abortedSignal(): AbortSignal {
   return controller.signal;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: sessionFactory.build({ access_token: 'tok' }) },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {

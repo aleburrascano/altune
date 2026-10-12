@@ -2,8 +2,10 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { asTrackId } from '@shared/apiClient/ids';
-import { supabase } from '@shared/auth/supabaseClient';
-import { sessionFactory, trackResponseFactory } from '@testing/factories';
+import { PlaybackContext } from '@shared/playback/usePlayback';
+import { trackResponseFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
@@ -23,17 +25,6 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-jest.mock('@shared/playback/usePlayback', () => ({
-  usePlayback: () => ({ status: 'idle', source: null }),
-}));
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({}),
-}));
-
 function playlistRequests(): string[] {
   return (__http.requests as { path: string }[])
     .map((r) => r.path)
@@ -49,17 +40,16 @@ function wrapper({ children }: { children: ReactNode }) {
   });
   return (
     <QueryClientProvider client={client}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      <PlaybackContext.Provider value={idlePlayback}>
+        <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      </PlaybackContext.Provider>
     </QueryClientProvider>
   );
 }
 
 warmUpFirstRender(async () => {
   mockParams = { id: 'p1' };
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: sessionFactory.build({ access_token: 'tok' }) },
-    error: null,
-  });
+  await signInTestUser();
 
   __http.reply('GET /v1/playlists/p1', { status: 500, json: { message: 'warm-up failure' } });
   const failed = render(<PlaylistDetailScreen />, { wrapper });
@@ -74,12 +64,9 @@ warmUpFirstRender(async () => {
 });
 
 describe('PlaylistDetailScreen route param', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mockReplace.mockClear();
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: sessionFactory.build({ access_token: 'tok' }) },
-      error: null,
-    });
+    await signInTestUser();
   });
 
   it.each(['p1/tracks', '../p1', 'p1?x=1', 'p1#frag', 'p1%2Ftracks'])(
@@ -137,12 +124,9 @@ describe('PlaylistDetailScreen — a failed load', () => {
     mockParams = { id: 'p1' };
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: sessionFactory.build({ access_token: 'tok' }) },
-      error: null,
-    });
+    await signInTestUser();
   });
 
   afterEach(() => {
@@ -226,13 +210,6 @@ describe('PlaylistDetailScreen — a failed load', () => {
   });
 });
 
-let mockOfflineDownloadsSupported = true;
-jest.mock('@shared/offline/offlineSupport', () => ({
-  get offlineDownloadsSupported() {
-    return mockOfflineDownloadsSupported;
-  },
-}));
-
 const oneReadyTrackPlaylist = {
   ...playlistBody,
   track_count: 1,
@@ -258,49 +235,27 @@ const oneReadyTrackPlaylist = {
   ],
 };
 
-describe('PlaylistDetailScreen — offline download controls follow platform support', () => {
-  beforeEach(() => {
+describe('PlaylistDetailScreen — offline download controls on native', () => {
+  beforeEach(async () => {
     mockParams = { id: 'p1' };
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: sessionFactory.build({ access_token: 'tok' }) },
-      error: null,
-    });
+    await signInTestUser();
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
   });
 
-  afterEach(() => {
-    mockOfflineDownloadsSupported = true;
-  });
-
-  async function renderLoaded(offlineDownloadsSupported: boolean) {
-    mockOfflineDownloadsSupported = offlineDownloadsSupported;
+  async function renderLoaded() {
     const screen = render(<PlaylistDetailScreen />, { wrapper });
     await screen.findByText('Road Trip');
     return screen;
   }
 
-  it('offers no playlist download action in the playlist options on web', async () => {
-    const screen = await renderLoaded(false);
-    fireEvent.press(screen.getByLabelText('Playlist options'));
-    expect(screen.getByLabelText('Delete Playlist')).toBeTruthy();
-    expect(screen.queryByLabelText(/download/i)).toBeNull();
-  }, 60000);
-
   it('still offers Download all in the playlist options on native', async () => {
-    const screen = await renderLoaded(true);
+    const screen = await renderLoaded();
     fireEvent.press(screen.getByLabelText('Playlist options'));
     expect(screen.getByLabelText('Download all (1)')).toBeTruthy();
   }, 60000);
 
-  it('offers no Download action in the selection bar on web', async () => {
-    const screen = await renderLoaded(false);
-    fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
-    expect(screen.getByText('Add to Queue')).toBeTruthy();
-    expect(screen.queryByText(/download/i)).toBeNull();
-  }, 60000);
-
   it('still offers Download in the selection bar on native', async () => {
-    const screen = await renderLoaded(true);
+    const screen = await renderLoaded();
     fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
     expect(screen.getByText('Download')).toBeTruthy();
   }, 60000);
@@ -318,12 +273,9 @@ jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
 describe('PlaylistDetailScreen — wide web layout', () => {
   const originalOS = RNPlatform.OS;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockParams = { id: 'p1' };
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: sessionFactory.build({ access_token: 'tok' }) },
-      error: null,
-    });
+    await signInTestUser();
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
     RNPlatform.OS = 'web';
     mockDetailWindowWidth = 1440;
@@ -356,12 +308,9 @@ describe('PlaylistDetailScreen — wide web layout', () => {
 describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   const originalOS = RNPlatform.OS;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockParams = { id: 'p1' };
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: sessionFactory.build({ access_token: 'tok' }) },
-      error: null,
-    });
+    await signInTestUser();
     RNPlatform.OS = 'web';
     mockDetailWindowWidth = 1440;
   });
@@ -369,7 +318,6 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   afterEach(() => {
     RNPlatform.OS = originalOS;
     mockDetailWindowWidth = 390;
-    mockOfflineDownloadsSupported = true;
   });
 
   function serveOneTrackPlaylist() {
@@ -427,7 +375,6 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('enters selection mode from a long press on a track in the wide layout', async () => {
     serveOneTrackPlaylist();
-    mockOfflineDownloadsSupported = false;
     const screen = render(<PlaylistDetailScreen />, { wrapper });
     await screen.findByText('Road Trip');
 
