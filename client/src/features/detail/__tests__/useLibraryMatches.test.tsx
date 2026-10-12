@@ -1,7 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { renderHook, waitFor } from '@testing-library/react-native';
-import { supabase } from '@shared/auth/supabaseClient';
 import { libraryKeys } from '@shared/query/queryKeys';
 
 import {
@@ -14,14 +13,10 @@ import {
 import {
   createTestQueryClient,
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 describe('useLibraryTracks', () => {
   const TRACKS = 'GET /v1/tracks';
@@ -59,11 +54,11 @@ describe('useLibraryTracks', () => {
 
   let wrapper: ReturnType<typeof createWrapper>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     __http.reset();
     client = createTestQueryClient();
     wrapper = createWrapper(client);
-    (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+    await signInTestUser();
   });
 
   describe('useLibraryTracksForAlbum pages the lookup', () => {
@@ -88,8 +83,8 @@ describe('useLibraryTracks', () => {
 
     let wrapper: ReturnType<typeof createWrapper>;
 
-    beforeEach(() => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
       client = createTestQueryClient();
       wrapper = createWrapper(client);
     });
@@ -141,8 +136,8 @@ describe('useLibraryTracks', () => {
 describe('useLibraryAlbumsForArtist', () => {
   const LIBRARY_ALBUMS_PATH = 'GET /v1/library/albums';
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
   });
 
   describe('useLibraryAlbumsForArtist bounds the library albums fetch', () => {
@@ -178,8 +173,8 @@ describe('useLibraryAlbumsForArtist', () => {
 
     let wrapper: ReturnType<typeof createWrapper>;
 
-    beforeEach(() => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
       client = createTestQueryClient();
       wrapper = createWrapper(client);
     });

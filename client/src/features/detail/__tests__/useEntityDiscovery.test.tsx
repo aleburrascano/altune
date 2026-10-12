@@ -1,24 +1,13 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
-import { supabase } from '@shared/auth/supabaseClient';
 
 import { useAlbumDiscovery, useArtistDiscovery } from '@/features/detail/hooks/useEntityDiscovery';
 import {
   createTestQueryClient,
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-const mockResolveEntityQuery = jest.fn();
-
-jest.mock('@/features/detail/domain/resolveEntityQuery', () => ({
-  resolveEntityQuery: (...args: unknown[]) => mockResolveEntityQuery(...args),
-}));
 
 describe('useAlbumDiscovery', () => {
   describe('bounding the fetch', () => {
@@ -31,14 +20,8 @@ describe('useAlbumDiscovery', () => {
       latency_ms: 3,
     };
 
-    beforeEach(() => {
-      mockResolveEntityQuery.mockImplementation(
-        jest.requireActual('@/features/detail/domain/resolveEntityQuery').resolveEntityQuery,
-      );
-    });
-
-    beforeEach(() => {
-      (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
     });
 
     describe('useAlbumDiscovery bounds the album track fetch', () => {
@@ -93,8 +76,9 @@ describe('useAlbumDiscovery', () => {
   describe('logging a failed search', () => {
     let warnSpy: jest.SpyInstance;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       jest.clearAllMocks();
+      await signInTestUser();
       warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
@@ -104,10 +88,7 @@ describe('useAlbumDiscovery', () => {
 
     describe('useAlbumDiscovery logs the album its search step was looking for', () => {
       it('logs the title, artist and reason when the search step fails', async () => {
-        mockResolveEntityQuery.mockReturnValue({
-          queryKey: ['resolve-entity', 'album', 'Rumours Fleetwood Mac', 1],
-          queryFn: () => Promise.reject(new Error('search transport failed')),
-        });
+        __http.fail('GET /v1/discovery/search');
 
         const { result } = renderHook(
           () =>
@@ -123,10 +104,12 @@ describe('useAlbumDiscovery', () => {
             kind: 'album',
             title: 'Rumours',
             artist: 'Fleetwood Mac',
-            error: 'search transport failed',
+            error: 'API /v1/discovery/search is unreachable',
           }),
         );
-        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(
+          warnSpy.mock.calls.filter(([message]) => message === '[detail] discovery search failed'),
+        ).toHaveLength(1);
       });
     });
   });
@@ -135,11 +118,8 @@ describe('useAlbumDiscovery', () => {
     const DISCOVERED_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-cache/tracks';
     const { act } = require('@testing-library/react-native');
 
-    beforeEach(() => {
-      mockResolveEntityQuery.mockImplementation(
-        jest.requireActual('@/features/detail/domain/resolveEntityQuery').resolveEntityQuery,
-      );
-      (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+    beforeEach(async () => {
+      await signInTestUser();
     });
 
     it.each([
@@ -203,8 +183,9 @@ describe('useArtistDiscovery', () => {
   describe('logging a failed search', () => {
     let warnSpy: jest.SpyInstance;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       jest.clearAllMocks();
+      await signInTestUser();
       warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
@@ -214,10 +195,7 @@ describe('useArtistDiscovery', () => {
 
     describe('useArtistDiscovery logs the artist its search step was looking for', () => {
       it('logs the artist name and reason when the search fails', async () => {
-        mockResolveEntityQuery.mockReturnValue({
-          queryKey: ['resolve-entity', 'artist', 'Boards of Canada', 1],
-          queryFn: () => Promise.reject(new Error('search transport failed')),
-        });
+        __http.fail('GET /v1/discovery/search');
 
         const { result } = renderHook(
           () => useArtistDiscovery({ artistName: 'Boards of Canada', enabled: true }),
@@ -232,7 +210,7 @@ describe('useArtistDiscovery', () => {
             kind: 'artist',
             title: 'Boards of Canada',
             artist: null,
-            error: 'search transport failed',
+            error: 'API /v1/discovery/search is unreachable',
           }),
         );
       });

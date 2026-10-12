@@ -1,9 +1,3 @@
-src/features/detail/__tests__/useDetailFetchGate.test.tsx @shared/auth/supabaseClient
-src/features/detail/__tests__/useEntityDiscovery.test.tsx @/features/detail/domain/resolveEntityQuery
-src/features/detail/__tests__/useEntityDiscovery.test.tsx @shared/auth/supabaseClient
-src/features/detail/__tests__/useLibraryMatches.test.tsx @shared/auth/supabaseClient
-src/features/detail/__tests__/useOwnedPlayback.test.tsx @shared/playback/useQueuePlayback
-src/features/detail/__tests__/useOwnedPlayback.test.tsx @shared/telemetry/outbox
 src/features/detail/__tests__/useRelatedTracks.test.tsx @shared/auth/supabaseClient
 src/features/detail/__tests__/useRelatedTracks.test.tsx @shared/telemetry/recordEvent
 src/features/detail/__tests__/useReportWrongAlbum.test.ts @shared/telemetry/outbox

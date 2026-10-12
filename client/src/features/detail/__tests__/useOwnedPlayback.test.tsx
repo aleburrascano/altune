@@ -2,27 +2,40 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { asTrackId } from '@shared/apiClient/ids';
+import { PlaybackContext } from '@shared/playback/usePlayback';
 import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 import { useOwnedPlayback, type OwnedPlaybackContext } from '../hooks/useOwnedPlayback';
 import { useSaveTrack, type SaveTrack } from '../hooks/useSaveTrack';
 import { createMemoryDetailPort } from './memoryDetailPort';
-import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
+import {
+  createPortWrapper,
+  createTestQueryClient,
+  idlePlayback,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 const mockCreateTrack = jest.fn<Promise<never>, []>();
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn(), shuffleFromList: jest.fn() }),
-}));
+
+const { __http } = require('../../../../jest/doubles/fetch.js');
 
 let wrapper: ReturnType<typeof createPortWrapper>;
 
-beforeEach(() => {
-  wrapper = createPortWrapper(createTestQueryClient({ mutations: true }), {
+beforeEach(async () => {
+  await signInTestUser();
+  __http.replyAll({ status: 204 });
+  const PortWrapper = createPortWrapper(createTestQueryClient({ mutations: true }), {
     detail: { ...createMemoryDetailPort(), createTrack: () => mockCreateTrack() },
     acquisition: { retryAcquisition: (trackId) => mockRetryAcquisition(trackId) },
   });
+  wrapper = function Wrapper({ children }) {
+    return (
+      <PlaybackContext.Provider value={idlePlayback}>
+        <PortWrapper>{children}</PortWrapper>
+      </PlaybackContext.Provider>
+    );
+  };
 });
 
 const context: OwnedPlaybackContext = {

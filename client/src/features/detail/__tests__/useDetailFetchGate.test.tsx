@@ -2,7 +2,6 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { isRetryable } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
 import type { DiscoverySource } from '@shared/apiClient/discovery';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
@@ -12,7 +11,7 @@ import { useArtistContent } from '@/features/detail/hooks/useArtistContent';
 import { useRelatedTracks } from '@/features/detail/hooks/useRelatedTracks';
 import {
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
   createTestQueryClient,
 } from '@/features/detail/__tests__/support/queryHarness';
 import { useAlbumDiscovery, useArtistDiscovery } from '@/features/detail/hooks/useEntityDiscovery';
@@ -25,10 +24,6 @@ import { useLateralNav } from '@/features/detail/hooks/useDetailNavigation';
 import { useResolveMissingSources } from '@/features/detail/hooks/useResolveMissingSources';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -101,10 +96,10 @@ describe('useContentFetchRetry', () => {
 
   let warn: jest.SpyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.useFakeTimers();
     warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+    await signInTestUser();
   });
 
   afterEach(() => {
@@ -168,8 +163,8 @@ describe('detail fetch gate', () => {
     });
   }
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
     setKillSwitchFileStore(createMemoryFileStore());
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     __http.replyAll({
