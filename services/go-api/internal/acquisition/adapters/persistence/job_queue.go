@@ -3,7 +3,6 @@ package persistence
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -53,7 +52,7 @@ WHERE id = $1
 
 const jobKindForLeasedTrackSQL = `SELECT acquisition_job_kind FROM tracks WHERE id = $1`
 
-func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind ports.JobKind, delay time.Duration) error {
+func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
@@ -71,7 +70,7 @@ func (q *PgxJobQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind 
 	return nil
 }
 
-func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID domain.TrackId, kind ports.JobKind) error {
+func (q *PgxJobQueue) resolveEnqueueNoop(ctx context.Context, trackID shared.TrackId, kind ports.JobKind) error {
 	var runningKind string
 	err := q.pool.QueryRow(ctx, jobKindForLeasedTrackSQL, trackID.UUID()).Scan(&runningKind)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -138,7 +137,7 @@ func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job
 	defer cancel()
 
 	var (
-		trackID  domain.TrackId
+		trackID  shared.TrackId
 		userID   shared.UserId
 		kind     string
 		attempts int
@@ -155,17 +154,17 @@ func (q *PgxJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job
 	return ports.Job{TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Attempts: attempts, Run: run, Fence: ports.Fence(attempts)}, nil
 }
 
-func scanTrackClaim(row pgx.Row, trackID *domain.TrackId, userID *shared.UserId, kind *string, attempts, run *int) error {
+func scanTrackClaim(row pgx.Row, trackID *shared.TrackId, userID *shared.UserId, kind *string, attempts, run *int) error {
 	var rawTrackID, rawUserID uuid.UUID
 	if err := row.Scan(&rawTrackID, &rawUserID, kind, attempts, run); err != nil {
 		return err
 	}
-	*trackID = domain.TrackIdFromUUID(rawTrackID)
+	*trackID = shared.TrackIdFromUUID(rawTrackID)
 	*userID = shared.NewUserId(rawUserID)
 	return nil
 }
 
-func (q *PgxJobQueue) execFenced(ctx context.Context, trackID domain.TrackId, op, sql string, args ...any) error {
+func (q *PgxJobQueue) execFenced(ctx context.Context, trackID shared.TrackId, op, sql string, args ...any) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
@@ -184,7 +183,7 @@ UPDATE tracks
 SET acquisition_lease_until = now() + make_interval(secs => $3)
 WHERE id = $1 AND acquisition_attempts = $2 AND acquisition_available_at IS NOT NULL AND acquisition_lease_until >= now()`
 
-func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID domain.TrackId, fence ports.Fence, lease time.Duration) error {
+func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID shared.TrackId, fence ports.Fence, lease time.Duration) error {
 	return q.execFenced(ctx, trackID, "heartbeat", heartbeatJobSQL, trackID.UUID(), int(fence), lease.Seconds())
 }
 
@@ -193,7 +192,7 @@ UPDATE tracks
 SET acquisition_lease_until = NULL, acquisition_available_at = now() + make_interval(secs => $3)
 WHERE id = $1 AND acquisition_attempts = $2`
 
-func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, fence ports.Fence, delay time.Duration) error {
+func (q *PgxJobQueue) Release(ctx context.Context, trackID shared.TrackId, fence ports.Fence, delay time.Duration) error {
 	return q.execFenced(ctx, trackID, "release", releaseJobSQL, trackID.UUID(), int(fence), delay.Seconds())
 }
 
@@ -205,7 +204,7 @@ SET acquisition_lease_until = NULL,
 	END
 WHERE id = $1 AND acquisition_attempts = $2`
 
-func (q *PgxJobQueue) Settle(ctx context.Context, trackID domain.TrackId, fence ports.Fence) error {
+func (q *PgxJobQueue) Settle(ctx context.Context, trackID shared.TrackId, fence ports.Fence) error {
 	return q.execFenced(ctx, trackID, "settle", settleJobSQL, trackID.UUID(), int(fence))
 }
 

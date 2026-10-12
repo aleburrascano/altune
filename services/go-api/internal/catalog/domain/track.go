@@ -10,23 +10,13 @@ import (
 	"time"
 )
 
-type TrackId struct{ shared.EntityId }
+type TrackId = shared.TrackId
 
-func NewTrackId() TrackId {
-	return TrackId{shared.NewEntityId()}
-}
+func NewTrackId() TrackId { return shared.NewTrackId() }
 
-func ParseTrackId(s string) (TrackId, error) {
-	id, err := shared.ParseEntityId(s)
-	if err != nil {
-		return TrackId{}, err
-	}
-	return TrackId{id}, nil
-}
+func ParseTrackId(s string) (TrackId, error) { return shared.ParseTrackId(s) }
 
-func TrackIdFromUUID(id [16]byte) TrackId {
-	return TrackId{shared.EntityIdFromBytes(id)}
-}
+func TrackIdFromUUID(id [16]byte) TrackId { return shared.TrackIdFromUUID(id) }
 
 type AcquisitionStatus int
 

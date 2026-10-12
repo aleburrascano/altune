@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"time"
 )
@@ -14,6 +14,6 @@ const (
 )
 
 type CooldownStore interface {
-	Reserve(ctx context.Context, trackID domain.TrackId, kind CooldownKind, cooldown time.Duration) (at time.Time, ok bool, wait time.Duration, err error)
-	Release(ctx context.Context, trackID domain.TrackId, kind CooldownKind, at time.Time) error
+	Reserve(ctx context.Context, trackID shared.TrackId, kind CooldownKind, cooldown time.Duration) (at time.Time, ok bool, wait time.Duration, err error)
+	Release(ctx context.Context, trackID shared.TrackId, kind CooldownKind, at time.Time) error
 }

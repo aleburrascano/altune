@@ -1,7 +1,6 @@
 package ports
 
 import (
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"time"
@@ -15,7 +14,7 @@ const (
 )
 
 type Job struct {
-	TrackID  domain.TrackId
+	TrackID  shared.TrackId
 	UserID   shared.UserId
 	Kind     JobKind
 	Attempts int
@@ -26,11 +25,11 @@ type Job struct {
 type Fence int
 
 type JobQueue interface {
-	Enqueue(ctx context.Context, trackID domain.TrackId, kind JobKind, delay time.Duration) error
+	Enqueue(ctx context.Context, trackID shared.TrackId, kind JobKind, delay time.Duration) error
 	Claim(ctx context.Context, lease time.Duration) (Job, error)
-	Heartbeat(ctx context.Context, trackID domain.TrackId, fence Fence, lease time.Duration) error
-	Release(ctx context.Context, trackID domain.TrackId, fence Fence, delay time.Duration) error
-	Settle(ctx context.Context, trackID domain.TrackId, fence Fence) error
+	Heartbeat(ctx context.Context, trackID shared.TrackId, fence Fence, lease time.Duration) error
+	Release(ctx context.Context, trackID shared.TrackId, fence Fence, delay time.Duration) error
+	Settle(ctx context.Context, trackID shared.TrackId, fence Fence) error
 }
 
 type QueueDepthReader interface {

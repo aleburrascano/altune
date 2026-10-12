@@ -2,7 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
@@ -41,7 +41,7 @@ UNION ALL
 SELECT c.admitted_at, false, EXTRACT(EPOCH FROM c.admitted_at + make_interval(secs => $3) - clock_timestamp())::float8
 FROM acquisition_cooldowns c WHERE c.track_id = $1 AND c.kind = $2 AND NOT EXISTS (SELECT 1 FROM up)`
 
-func (s *PgxCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+func (s *PgxCooldownStore) Reserve(ctx context.Context, trackID shared.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
@@ -63,7 +63,7 @@ func (s *PgxCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, 
 	return at, true, 0, nil
 }
 
-func (s *PgxCooldownStore) Release(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
+func (s *PgxCooldownStore) Release(ctx context.Context, trackID shared.TrackId, kind ports.CooldownKind, at time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
@@ -92,7 +92,7 @@ func NewFallbackCooldownStore(primary ports.CooldownStore) *FallbackCooldownStor
 	return &FallbackCooldownStore{primary: primary, mem: newMemoryCooldowns(time.Now)}
 }
 
-func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID shared.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	if wait, active := s.mem.active(trackID, kind, cooldown); active {
 		return time.Time{}, false, wait, nil
 	}
@@ -108,7 +108,7 @@ func (s *FallbackCooldownStore) Reserve(ctx context.Context, trackID domain.Trac
 	return at, ok, wait, err
 }
 
-func (s *FallbackCooldownStore) Release(ctx context.Context, trackID domain.TrackId, kind ports.CooldownKind, at time.Time) error {
+func (s *FallbackCooldownStore) Release(ctx context.Context, trackID shared.TrackId, kind ports.CooldownKind, at time.Time) error {
 	if s.mem.release(trackID, kind, at) {
 		return nil
 	}
@@ -144,7 +144,7 @@ type memoryCooldowns struct {
 }
 
 type memoryCooldownKey struct {
-	track domain.TrackId
+	track shared.TrackId
 	kind  ports.CooldownKind
 }
 
@@ -152,7 +152,7 @@ func newMemoryCooldowns(now func() time.Time) *memoryCooldowns {
 	return &memoryCooldowns{now: now, lastAt: make(map[memoryCooldownKey]time.Time)}
 }
 
-func (m *memoryCooldowns) active(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Duration, bool) {
+func (m *memoryCooldowns) active(trackID shared.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Duration, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	last, ok := m.lastAt[memoryCooldownKey{trackID, kind}]
@@ -163,7 +163,7 @@ func (m *memoryCooldowns) active(trackID domain.TrackId, kind ports.CooldownKind
 	return cooldown - elapsed, elapsed < cooldown
 }
 
-func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration) {
+func (m *memoryCooldowns) reserve(trackID shared.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now, key := m.now(), memoryCooldownKey{trackID, kind}
@@ -179,7 +179,7 @@ func (m *memoryCooldowns) reserve(trackID domain.TrackId, kind ports.CooldownKin
 	return now, true, 0
 }
 
-func (m *memoryCooldowns) release(trackID domain.TrackId, kind ports.CooldownKind, at time.Time) bool {
+func (m *memoryCooldowns) release(trackID shared.TrackId, kind ports.CooldownKind, at time.Time) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := memoryCooldownKey{trackID, kind}
