@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
@@ -51,7 +51,7 @@ func (h *StreamHandler) Routes(r chi.Router) {
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	w = httputil.ExtendWriteDeadlineOnWrite(w, h.writeIdleTimeout)
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
@@ -139,7 +139,7 @@ func (b *countedAudioBody) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}
