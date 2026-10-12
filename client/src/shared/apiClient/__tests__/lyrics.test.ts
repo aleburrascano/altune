@@ -4,9 +4,9 @@ import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+type LooseSession = { getSession: () => Promise<unknown> };
 
 const filledResponse: LyricsResponse = {
   plain: 'Now here you go again\nYou say you want your freedom',
@@ -18,10 +18,13 @@ const filledResponse: LyricsResponse = {
 };
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockReset().mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  jest
+    .spyOn(supabase.auth as LooseSession, 'getSession')
+    .mockReset()
+    .mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
 });
 
 describe('getLyrics query construction (subtitle guard: null | undefined | "" all omit, only a real string is sent)', () => {
