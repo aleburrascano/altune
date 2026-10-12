@@ -4,14 +4,13 @@ import (
 	"altune/go-api/internal/discovery/adapters/authbridge"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -264,15 +263,15 @@ func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {
 	return http.StatusServiceUnavailable, searchCodeAllProvidersFailed
 }
 
-func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (shared.EntityId, bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("search_id"))
 	if raw == "" {
-		return uuid.Nil, true
+		return shared.EntityId{}, true
 	}
-	id, err := uuid.Parse(raw)
+	id, err := shared.ParseEntityId(raw)
 	if err != nil {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "search_id must be a uuid")
-		return uuid.Nil, false
+		return shared.EntityId{}, false
 	}
 	return id, true
 }

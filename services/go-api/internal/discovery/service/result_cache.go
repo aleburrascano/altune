@@ -3,9 +3,8 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
-
-	"github.com/google/uuid"
 )
 
 type searchResultCache struct {
@@ -46,11 +45,11 @@ func (c *searchResultCache) set(
 
 func (c *searchResultCache) heldSlate(
 	ctx context.Context,
-	searchId uuid.UUID,
+	searchId shared.EntityId,
 	queryNorm string,
 	kinds domain.ResultKindSet,
 ) ([]domain.SearchResult, bool) {
-	if c.heldSlates == nil || searchId == uuid.Nil {
+	if c.heldSlates == nil || searchId.IsZero() {
 		return nil, false
 	}
 	return c.heldSlates.Get(ctx, c.heldSlateKey(searchId, queryNorm, kinds))
@@ -58,19 +57,19 @@ func (c *searchResultCache) heldSlate(
 
 func (c *searchResultCache) holdSlate(
 	ctx context.Context,
-	searchId uuid.UUID,
+	searchId shared.EntityId,
 	queryNorm string,
 	kinds domain.ResultKindSet,
 	ranked []domain.SearchResult,
 ) {
-	if c.heldSlates == nil || searchId == uuid.Nil || len(ranked) == 0 {
+	if c.heldSlates == nil || searchId.IsZero() || len(ranked) == 0 {
 		return
 	}
 	c.heldSlates.Set(ctx, c.heldSlateKey(searchId, queryNorm, kinds), ranked)
 }
 
 func (c *searchResultCache) heldSlateKey(
-	searchId uuid.UUID,
+	searchId shared.EntityId,
 	queryNorm string,
 	kinds domain.ResultKindSet,
 ) string {

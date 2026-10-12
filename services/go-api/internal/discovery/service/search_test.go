@@ -540,7 +540,7 @@ func searchPage(
 	userId shared.UserId,
 	raw string,
 	offset, limit int,
-	continues uuid.UUID,
+	continues shared.EntityId,
 ) *SearchOutput {
 	t.Helper()
 	query, err := domain.NewPagedSearchQuery(raw, map[domain.ResultKind]bool{domain.ResultKindTrack: true}, limit, offset)
@@ -554,9 +554,9 @@ func searchPage(
 	return out
 }
 
-func searchIdOf(t *testing.T, out *SearchOutput) uuid.UUID {
+func searchIdOf(t *testing.T, out *SearchOutput) shared.EntityId {
 	t.Helper()
-	id, err := uuid.Parse(out.SearchId)
+	id, err := shared.ParseEntityId(out.SearchId)
 	if err != nil {
 		t.Fatalf("SearchId %q is not a uuid: %v", out.SearchId, err)
 	}
@@ -568,11 +568,11 @@ func TestService_PagesOfOneSearchComeFromOneRanking(t *testing.T) {
 	reference, _ := pagingService(t, artistRun("Humble", "Alpha", 12))
 	userId := newUser()
 
-	first := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	second := searchPage(t, svc, userId, "humble", 5, 5, searchIdOf(t, first))
 
 	paged := append(subtitles(first.Results), subtitles(second.Results)...)
-	unpaged := subtitles(searchPage(t, reference, newUser(), "humble", 0, 10, uuid.Nil).Results)
+	unpaged := subtitles(searchPage(t, reference, newUser(), "humble", 0, 10, shared.EntityId{}).Results)
 	if len(paged) != len(unpaged) {
 		t.Fatalf("paged through %d results, want the %d of one ranking: %v", len(paged), len(unpaged), paged)
 	}
@@ -593,8 +593,8 @@ func TestService_PageAskedForWithoutASearchIdRanksAfresh(t *testing.T) {
 	svc, drifting := pagingService(t, artistRun("Humble", "Alpha", 12), artistRun("Humble", "Bravo", 12))
 	userId := newUser()
 
-	first := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
-	second := searchPage(t, svc, userId, "humble", 5, 5, uuid.Nil)
+	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
+	second := searchPage(t, svc, userId, "humble", 5, 5, shared.EntityId{})
 
 	if drifting.calls != 2 {
 		t.Errorf("provider calls = %d, want 2: a page naming no search fans out as before", drifting.calls)
@@ -611,7 +611,7 @@ func TestService_SearchIdReplayedAgainstAnotherQueryServesThatQuery(t *testing.T
 	svc, _ := pagingService(t, artistRun("Humble", "Alpha", 12), artistRun("Loyalty", "Bravo", 12))
 	userId := newUser()
 
-	humble := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	humble := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	loyalty := searchPage(t, svc, userId, "loyalty", 0, 5, searchIdOf(t, humble))
 
 	if len(loyalty.Results) == 0 {
@@ -825,7 +825,7 @@ func TestService_PagingSurvivesAHeldSlateExpiring(t *testing.T) {
 	)
 	userId := newUser()
 
-	first := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if drifting.calls != 1 {
 		t.Fatalf("provider calls after page one = %d, want 1", drifting.calls)
 	}
@@ -879,11 +879,11 @@ func TestService_ExecutePageReportsWhetherTheSlateCameFromCache(t *testing.T) {
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithResultCache(newFakeResultCache()))
 	userId := newUser()
 
-	fresh := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	fresh := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if fresh.Cached {
 		t.Error("a fresh fan-out reported Cached = true")
 	}
-	repeated := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	repeated := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if !repeated.Cached {
 		t.Error("a repeat answered from the result cache reported Cached = false")
 	}
@@ -893,7 +893,7 @@ func TestService_ExecutePageReportsCachedForAHeldSlate(t *testing.T) {
 	svc, _, _ := expiringSlateService(t, artistRun("Humble", "Alpha", 12))
 	userId := newUser()
 
-	first := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	first := searchPage(t, svc, userId, "humble", 0, 5, shared.EntityId{})
 	if first.Cached {
 		t.Error("the first page reported Cached = true")
 	}

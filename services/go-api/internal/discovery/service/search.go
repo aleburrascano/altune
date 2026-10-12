@@ -11,8 +11,6 @@ import (
 	"runtime/debug"
 	"slices"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -223,7 +221,7 @@ func (s *Service) Execute(
 	query *domain.SearchQuery,
 	saveHistory bool,
 ) (*SearchOutput, error) {
-	return s.ExecutePage(ctx, userId, query, saveHistory, uuid.Nil)
+	return s.ExecutePage(ctx, userId, query, saveHistory, shared.EntityId{})
 }
 
 func (s *Service) ExecutePage(
@@ -231,7 +229,7 @@ func (s *Service) ExecutePage(
 	userId shared.UserId,
 	query *domain.SearchQuery,
 	saveHistory bool,
-	continues uuid.UUID,
+	continues shared.EntityId,
 ) (*SearchOutput, error) {
 	startedAt := time.Now().UTC()
 	searchQuery := CleanQuery(query.Raw)
@@ -335,12 +333,12 @@ func (s *Service) slateForPage(
 	ctx context.Context,
 	query *domain.SearchQuery,
 	searchQuery, queryNorm string,
-	continues uuid.UUID,
-) (rankedResolution, uuid.UUID) {
+	continues shared.EntityId,
+) (rankedResolution, shared.EntityId) {
 	if held, ok := s.cache.heldSlate(ctx, continues, queryNorm, query.Kinds); ok {
 		return rankedResolution{ranked: held, cached: true}, continues
 	}
-	return s.resolveRanked(ctx, query, searchQuery, queryNorm), uuid.New()
+	return s.resolveRanked(ctx, query, searchQuery, queryNorm), shared.NewEntityId()
 }
 
 func (s *Service) resolveRanked(
