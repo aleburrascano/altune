@@ -21,11 +21,8 @@ describe('@features/playback public surface', () => {
   });
 
   it('does not load the native playback service when required', () => {
-    const factory = jest.fn(() => ({ registerPlaybackService: jest.fn() }));
-    jest.isolateModules(() => {
-      jest.doMock('@features/playback/native/playbackService', factory);
-      require('@features/playback');
-    });
-    expect(factory).not.toHaveBeenCalled();
+    const servicePath = require.resolve('@features/playback/native/playbackService');
+    require('@features/playback');
+    expect(Object.keys(require.cache)).not.toContain(servicePath);
   });
 });

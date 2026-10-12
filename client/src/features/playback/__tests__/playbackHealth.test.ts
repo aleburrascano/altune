@@ -1,8 +1,10 @@
+import { act } from '@testing-library/react-native';
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/playbackTrack';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+
+import { signInTestUser } from '@testing/signInTestUser';
 
 import { prefetchNext } from '@features/playback/native/audioPrefetch';
 import { reportQueueFailure } from '@features/playback/native/queueFailureReport';
@@ -50,18 +52,6 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
-    },
-  },
-}));
-
 const player = TrackPlayer as unknown as { getQueue: jest.Mock };
 const { __player } = jest.requireMock('react-native-track-player') as {
   __player: { calls: (method: string) => unknown[][] };
@@ -82,7 +72,9 @@ afterEach(() => {
   restorePort?.();
   restorePort = null;
 });
-const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+const { __http } = require('@testing/doubles/fetch.js');
+const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
 
 function appStateListeners(): AppStateChangeHandler[] {
   return (
@@ -92,18 +84,31 @@ function appStateListeners(): AppStateChangeHandler[] {
   ).__listeners;
 }
 
-function sentPayloads(): Record<string, unknown>[] {
-  return recordEventMock.mock.calls.map(([event]) => {
-    expect(event.type).toBe('playback_health');
-    return event.payload ?? {};
+async function settleRequests(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 
-beforeEach(() => {
+async function sentPayloads(): Promise<Record<string, unknown>[]> {
+  await settleRequests();
+  return (__http.requests as { path: string; body: string }[])
+    .filter((request) => request.path === '/v1/discovery/events')
+    .map((request) => {
+      const event = JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> };
+      expect(event.type).toBe('playback_health');
+      const counts = { ...event.payload };
+      delete counts.session_id;
+      return counts;
+    });
+}
+
+beforeEach(async () => {
+  await signInTestUser();
   _resetPlaybackHealthForTest();
   forgetAllSwaps();
   useQueueStore.getState().clearQueue();
-  recordEventMock.mockReset().mockResolvedValue(undefined);
+  __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
   installMemoryPort({ audioUrls: cdnAudioUrls(['t0', 't1', 't2', 't3']) });
   player.getQueue.mockResolvedValue([]);
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -123,8 +128,8 @@ describe('playback health metric', () => {
     await prefetchNext(0);
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([expect.objectContaining({ prefetch_failed_resolve: 1 })]);
-    expect(sentPayloads()[0]).toMatchObject({ prefetch_ok: 0 });
+    expect(await sentPayloads()).toEqual([expect.objectContaining({ prefetch_failed_resolve: 1 })]);
+    expect((await sentPayloads())[0]).toMatchObject({ prefetch_ok: 0 });
   });
 
   it('records a successful prefetch', async () => {
@@ -135,7 +140,7 @@ describe('playback health metric', () => {
     await prefetchNext(0);
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([
+    expect(await sentPayloads()).toEqual([
       {
         prefetch_ok: 1,
         prefetch_failed_resolve: 0,
@@ -174,36 +179,41 @@ describe('playback health metric', () => {
     await loadNativeQueue(tracks, 0, { autoplay: false });
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([expect.objectContaining({ presign_ok: 1, presign_failed: 1 })]);
+    expect(await sentPayloads()).toEqual([
+      expect.objectContaining({ presign_ok: 1, presign_failed: 1 }),
+    ]);
   });
 
-  it('sends one aggregate event per batch, not one per outcome', () => {
+  it('sends one aggregate event per batch, not one per outcome', async () => {
     for (let i = 0; i < PLAYBACK_HEALTH_BATCH * 2 + 3; i++) recordPresignOutcome(i % 5 !== 0);
 
-    const payloads = sentPayloads();
+    const payloads = await sentPayloads();
     expect(payloads).toHaveLength(2);
     expect(payloads[0]).toMatchObject({ presign_ok: 20, presign_failed: 5 });
   });
 
-  it('flushes the partial batch when the app goes to the background', () => {
+  it('flushes the partial batch when the app goes to the background', async () => {
     recordPresignOutcome(false);
-    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(await sentPayloads()).toEqual([]);
 
     for (const listener of appStateListeners()) listener('background');
 
-    expect(sentPayloads()).toEqual([expect.objectContaining({ presign_failed: 1 })]);
+    expect(await sentPayloads()).toEqual([expect.objectContaining({ presign_failed: 1 })]);
   });
 
   it('sends nothing when there is nothing to report, and swallows a failed send', async () => {
     flushPlaybackHealth();
-    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(await sentPayloads()).toEqual([]);
 
-    recordEventMock.mockRejectedValueOnce(new Error('offline'));
+    __http.reset();
+    __http.fail(HEALTH_ROUTE);
     recordPresignOutcome(true);
     expect(() => flushPlaybackHealth()).not.toThrow();
-    await Promise.resolve();
+    await settleRequests();
+    expect(__http.countFor(HEALTH_ROUTE)).toBe(1);
     flushPlaybackHealth();
-    expect(recordEventMock).toHaveBeenCalledTimes(1);
+    await settleRequests();
+    expect(__http.countFor(HEALTH_ROUTE)).toBe(1);
   });
 });
 
@@ -230,7 +240,7 @@ describe('playback health metric — user-visible failures', () => {
     await firePlaybackError('android-io-bad-http-status', 'Response code: 403');
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([expect.objectContaining({ playback_failed_auth: 1 })]);
+    expect(await sentPayloads()).toEqual([expect.objectContaining({ playback_failed_auth: 1 })]);
   });
 
   it('records a playback error no track can be attributed to', async () => {
@@ -238,17 +248,17 @@ describe('playback health metric — user-visible failures', () => {
     flushPlaybackHealth();
 
     expect(useQueueStore.getState().currentTrack()).toBeNull();
-    expect(sentPayloads()).toEqual([expect.objectContaining({ playback_failed_decode: 1 })]);
+    expect(await sentPayloads()).toEqual([expect.objectContaining({ playback_failed_decode: 1 })]);
   });
 
-  it('records a failed native queue mutation by its permanent or transient classification', () => {
+  it('records a failed native queue mutation by its permanent or transient classification', async () => {
     const key = trackKey(previewTrack());
 
     reportQueueFailure(key, 'skipNext', nativeError('no_current_item'));
     reportQueueFailure(null, 'signOutReset', new Error('bridge is busy'));
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([
+    expect(await sentPayloads()).toEqual([
       expect.objectContaining({
         playback_failed_queue_out_of_sync: 1,
         playback_failed_queue_update_failed: 1,
@@ -264,30 +274,30 @@ describe('playback health metric — user-visible failures', () => {
     await firePlaybackError('android-io-bad-http-status', 'Response code: 403');
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([
+    expect(await sentPayloads()).toEqual([
       expect.objectContaining({ playback_failed_auth: 1, audio_recovery_failed: 1 }),
     ]);
   });
 });
 
 describe('queue save and restore counters', () => {
-  it('counts a save failure and a rejected state', () => {
+  it('counts a save failure and a rejected state', async () => {
     recordQueueSaveFailure();
     recordQueueStateRejected();
     flushPlaybackHealth();
 
-    expect(sentPayloads()).toEqual([
+    expect(await sentPayloads()).toEqual([
       expect.objectContaining({ queue_save_failed: 1, queue_state_rejected: 1 }),
     ]);
   });
 
   it.each<QueueRestoreStage>(['fetch', 'placeholder', 'tracks', 'rebuild', 'native'])(
     'counts a restore failure at the %s stage',
-    (stage) => {
+    async (stage) => {
       recordQueueRestoreFailure(stage);
       flushPlaybackHealth();
 
-      expect(sentPayloads()).toEqual([
+      expect(await sentPayloads()).toEqual([
         expect.objectContaining({ [`queue_restore_failed_${stage}`]: 1 }),
       ]);
     },

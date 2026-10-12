@@ -1,9 +1,3 @@
-src/features/playback/__tests__/nativeTrackSwap.test.ts @shared/auth/supabaseClient
-src/features/playback/__tests__/nativeTrackSwap.test.ts @shared/telemetry/recordEvent
-src/features/playback/__tests__/playback.test.ts @features/playback/native/playbackService
-src/features/playback/__tests__/playbackErrorStore.test.ts @shared/telemetry/recordEvent
-src/features/playback/__tests__/playbackHealth.test.ts @shared/auth/supabaseClient
-src/features/playback/__tests__/playbackHealth.test.ts @shared/telemetry/recordEvent
 src/features/playback/__tests__/playbackLogInvariants.test.ts @shared/auth/supabaseClient
 src/features/playback/__tests__/playbackLogInvariants.test.ts @shared/telemetry/recordEvent
 src/features/playback/__tests__/playbackPortContract.test.ts @shared/auth/supabaseClient

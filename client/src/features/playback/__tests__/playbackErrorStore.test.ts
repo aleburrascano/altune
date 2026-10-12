@@ -1,10 +1,10 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { NetworkError } from '@shared/failure/errors';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 import { asTrackId } from '@shared/apiClient/ids';
 import { trackKey } from '@shared/playback/playbackTrack';
 
+import { signInTestUser } from '@testing/signInTestUser';
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
 import {
@@ -21,7 +21,9 @@ import {
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+const { __http } = require('@testing/doubles/fetch.js');
+const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
 
 const FAILED_KEY = trackKey(libraryTrack());
 const OTHER_KEY = trackKey(
@@ -170,7 +172,7 @@ describe('reportLoadFailure — one log line and one health count per load failu
 
   beforeEach(() => {
     _resetPlaybackHealthForTest();
-    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
+    __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -191,14 +193,15 @@ describe('reportLoadFailure — one log line and one health count per load failu
     expect(usePlaybackErrorStore.getState().message).toBe('Custom');
   });
 
-  it('counts the classified kind once in the playback health tally', () => {
+  it('counts the classified kind once in the playback health tally', async () => {
+    await signInTestUser();
     reportLoadFailure(libraryTrack(), new NetworkError('timeout', 'timed out'));
     flushPlaybackHealth();
 
-    expect(recordEvent).toHaveBeenCalledTimes(1);
-    expect(recordEvent).toHaveBeenCalledWith({
+    await waitFor(() => expect(__http.countFor(HEALTH_ROUTE)).toBe(1));
+    expect(JSON.parse(__http.last().body)).toMatchObject({
       type: 'playback_health',
-      payload: expect.objectContaining({ playback_failed_network: 1 }),
+      payload: { playback_failed_network: 1 },
     });
   });
 });

@@ -1,10 +1,10 @@
+import { waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
 import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 import { asTrackId } from '@shared/apiClient/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey, type PlaybackTrack } from '@shared/playback/playbackTrack';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import {
   forgetAllSwaps,
@@ -38,23 +38,19 @@ import {
   type MemoryPlaybackSeed,
 } from '@features/playback/__tests__/memoryPlaybackPort';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
+import { signInTestUser } from '@testing/signInTestUser';
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
 
-jest.mock('@shared/telemetry/recordEvent', () => ({
-  recordEvent: jest.fn().mockResolvedValue(undefined),
-}));
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest
-        .fn()
-        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
-    },
-  },
-}));
+beforeEach(async () => {
+  await signInTestUser();
+});
+
+const { __http } = require('@testing/doubles/fetch.js');
+const HEALTH_ROUTE = 'POST /v1/discovery/events';
+const HTTP_ACCEPTED = 202;
 
 let restorePort: (() => void) | null = null;
 
@@ -396,7 +392,7 @@ describe('swap-path presign health tally', () => {
   beforeEach(() => {
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     _resetPlaybackHealthForTest();
-    (recordEvent as jest.Mock).mockClear();
+    __http.reply(HEALTH_ROUTE, { status: HTTP_ACCEPTED });
   });
 
   afterEach(() => {
@@ -407,9 +403,8 @@ describe('swap-path presign health tally', () => {
     installMemoryPort({}, { fetchAudioUrls: () => Promise.reject(new Error('presign 503')) });
     await repairActiveToStreaming(libraryTrackWithId('t1'));
     flushPlaybackHealth();
-    expect((recordEvent as jest.Mock).mock.calls[0]![0].payload).toMatchObject({
-      presign_failed: 1,
-    });
+    await waitFor(() => expect(__http.countFor(HEALTH_ROUTE)).toBe(1));
+    expect(JSON.parse(__http.last().body).payload).toMatchObject({ presign_failed: 1 });
   });
 });
 
