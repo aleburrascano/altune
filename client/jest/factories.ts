@@ -1,5 +1,4 @@
 import { faker } from '@faker-js/faker';
-import type { Session } from '@supabase/supabase-js';
 import { Factory } from 'fishery';
 
 import { asTrackId } from '@shared/apiClient/ids';
@@ -24,20 +23,3 @@ export const trackResponseFactory = Factory.define<TrackResponse>(() => ({
   isrc: faker.string.alphanumeric({ length: 12, casing: 'upper' }),
   audio_ref: null,
 }));
-
-export const sessionFactory = Factory.define<Session>(() => {
-  const userId = faker.string.uuid();
-  return {
-    access_token: faker.string.alphanumeric(32),
-    refresh_token: faker.string.alphanumeric(32),
-    expires_in: 3600,
-    token_type: 'bearer',
-    user: {
-      id: userId,
-      aud: 'authenticated',
-      app_metadata: {},
-      user_metadata: {},
-      created_at: faker.date.past({ refDate: REFERENCE_DATE }).toISOString(),
-    },
-  };
-});

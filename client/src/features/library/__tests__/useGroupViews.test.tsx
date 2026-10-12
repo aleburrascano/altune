@@ -14,25 +14,11 @@ import {
   type MemoryLibrarySeed,
 } from '@features/library/__tests__/memoryLibraryPort';
 import { LibraryPortProvider } from '@features/library/ports/LibraryPortProvider';
+import { GROUP_PAGE_SIZE } from '@features/library/domain/listPaging';
 import type { ActiveView } from '@features/library/domain/libraryView';
 import { useAlbumsView, useArtistsView } from '@features/library/hooks/useGroupViews';
 import { SortControl } from '@features/library/ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
-
-let mockGroupPageSize = 50;
-
-jest.mock('@features/library/domain/listPaging', () => {
-  const actual = jest.requireActual('@features/library/domain/listPaging');
-  return {
-    __esModule: true,
-    get GROUP_PAGE_SIZE() {
-      return mockGroupPageSize;
-    },
-    nextGroupPageOffset: (pageLength: number, pageOffset: number) =>
-      actual.nextGroupPageOffset(pageLength, pageOffset, mockGroupPageSize),
-    pagedListControls: actual.pagedListControls,
-  };
-});
 
 describe('useAlbumsView', () => {
   const noop = () => undefined;
@@ -134,7 +120,7 @@ describe('useAlbumsView', () => {
   });
 
   describe('a library list whose next page fails to load', () => {
-    const PAGE = 5;
+    const PAGE = GROUP_PAGE_SIZE;
     const RETRY = 'library-load-more-retry';
 
     const album = (i: number) => ({
@@ -174,13 +160,9 @@ describe('useAlbumsView', () => {
     beforeEach(() => {
       client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       port = spiedPort({ albums: libraryRows });
-      mockGroupPageSize = PAGE;
     });
 
-    afterEach(() => {
-      client.clear();
-      mockGroupPageSize = 50;
-    });
+    afterEach(() => client.clear());
 
     const failure = () => Promise.reject(new Error('page 2 down'));
 
@@ -311,7 +293,7 @@ describe('useArtistsView', () => {
   });
 
   describe('a library list whose next page fails to load', () => {
-    const PAGE = 5;
+    const PAGE = GROUP_PAGE_SIZE;
     const RETRY = 'library-load-more-retry';
 
     const artist = (i: number) => ({
@@ -349,13 +331,9 @@ describe('useArtistsView', () => {
     beforeEach(() => {
       client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       port = spiedPort({ artists: libraryRows });
-      mockGroupPageSize = PAGE;
     });
 
-    afterEach(() => {
-      client.clear();
-      mockGroupPageSize = 50;
-    });
+    afterEach(() => client.clear());
 
     const failure = () => Promise.reject(new Error('page 2 down'));
 

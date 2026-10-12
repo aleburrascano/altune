@@ -37,7 +37,7 @@ import {
 import type { ListTracksResponse } from '@shared/apiClient/trackResponse';
 import type { PlaylistDetailResponse } from '@shared/apiClient/playlistResponse';
 import { libraryKeys } from '@shared/query/queryKeys';
-import { recordUserAction } from '@shared/telemetry/userTelemetry';
+import { signInTestUser } from '@testing/signInTestUser';
 
 const realUnpin = usePinnedStore.getState().unpin;
 
@@ -57,10 +57,16 @@ function failCleanupOfB(trackId: TrackId): boolean {
   return trackId === 'b';
 }
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({
-  recordUserAction: jest.fn(),
-  recordFailureShown: jest.fn(),
-}));
+const EVENTS = 'POST /v1/discovery/events';
+
+const { __http } = require('@testing/doubles/fetch.js');
+
+function recordedUserActions(): Record<string, unknown>[] {
+  return (__http.requests as { body: string }[])
+    .map((r) => JSON.parse(r.body))
+    .filter((e) => e.type === 'user_action')
+    .map((e) => e.payload);
+}
 
 describe('useDeleteTracks', () => {
   const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
@@ -81,7 +87,9 @@ describe('useDeleteTracks', () => {
 
   let warnSpy: jest.SpyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await signInTestUser();
+    __http.reply(EVENTS, { status: 204 });
     mockDeleteTrack.mockReset();
     mockRetryAcquisition.mockReset();
     mockReacquireTrack.mockReset();
@@ -658,7 +666,9 @@ describe('useDeleteTrack', () => {
 
   let warnSpy: jest.SpyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await signInTestUser();
+    __http.reply(EVENTS, { status: 204 });
     mockDeleteTrack.mockReset();
     mockRetryAcquisition.mockReset();
     mockReacquireTrack.mockReset();
@@ -756,11 +766,15 @@ describe('useDeleteTrack', () => {
       act(() => result.current.mutate(asTrackId('t2')));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(recordUserAction).toHaveBeenCalledWith({
-        action: 'library.delete_track',
-        outcome: 'succeeded',
-        track_id: 't2',
-      });
+      await waitFor(() =>
+        expect(recordedUserActions()).toContainEqual(
+          expect.objectContaining({
+            action: 'library.delete_track',
+            outcome: 'succeeded',
+            track_id: 't2',
+          }),
+        ),
+      );
     });
 
     it('marks the membership-derived caches stale once the delete lands (#938)', async () => {

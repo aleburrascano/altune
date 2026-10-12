@@ -1,6 +1,7 @@
+import { waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 
-import { recordFailureShown } from '@shared/telemetry/userTelemetry';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import {
   reportPinBatch,
@@ -8,11 +9,15 @@ import {
   reportUnpinBatch,
 } from '@features/library/hooks/useLibraryOffline';
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({ recordFailureShown: jest.fn() }));
+const EVENTS = 'POST /v1/discovery/events';
+
+const { __http } = require('@testing/doubles/fetch.js');
 
 let alertSpy: jest.SpyInstance;
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 });
 
@@ -50,16 +55,16 @@ describe('pin batch summaries show the user an alert', () => {
 });
 
 describe('pin batch summaries record failure_shown', () => {
-  it('records one surface per summary', () => {
-    jest.mocked(recordFailureShown).mockClear();
+  it('records one surface per summary', async () => {
     reportPinBatch({ requested: 3, failed: 2, refused: null } as never);
     reportUnpinBatch({ requested: 4, failed: 1 } as never);
     reportStorageFull();
 
-    expect(jest.mocked(recordFailureShown).mock.calls.map(([f]) => f.surface)).toEqual([
-      'library.pin_batch',
-      'library.unpin_batch',
-      'library.storage_full',
-    ]);
+    const expected = ['library.pin_batch', 'library.unpin_batch', 'library.storage_full'];
+    await waitFor(() => expect(__http.countFor(EVENTS)).toBe(expected.length));
+    const surfaces = (__http.requests as { body: string }[]).map(
+      (r) => JSON.parse(r.body).payload.surface,
+    );
+    expect(surfaces).toEqual(expected);
   });
 });

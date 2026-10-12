@@ -1,18 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { supabase } from '@shared/auth/supabaseClient';
-import { sessionFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
 import { useLibraryAlbums, useLibraryArtists } from '@features/library/hooks/useLibraryGroups';
 import { useLibraryTracks } from '@features/library/hooks/useLibraryTracks';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 let client: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
@@ -23,11 +18,8 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: sessionFactory.build({ access_token: 'tok' }) },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 
