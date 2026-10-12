@@ -109,6 +109,8 @@ func (s *GetAlbumTracksService) featuredFromSpotify(ctx context.Context, known m
 		return spotify.GetAlbumTracks(ctx, domain.ProviderSpotify, albumID)
 	})
 	if err != nil {
+		slog.WarnContext(ctx, "album_tracks.spotify_featured_failed",
+			"album_id", albumID, "error", redact.Secrets(err.Error()))
 		return nil
 	}
 	return copyFeaturedByTitle(tracks, resp.Items)
