@@ -1,5 +1,5 @@
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError, ContractError } from '@shared/failure/errors';
 
 import { httpAcquisitionPort } from '@shared/acquisition/adapters/http/httpAcquisitionPort';
@@ -8,9 +8,7 @@ import type { AcquisitionPort } from '@shared/acquisition/ports/acquisitionPort'
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const RETRY_PATH_PATTERN = /^\/v1\/tracks\/([^/]+)\/retry$/;
 const NO_CONTENT_STATUS = 204;
@@ -49,12 +47,9 @@ function seedMemory(trackIds: readonly string[]): SeededPort {
   return { port: memory.port, retried: () => memory.retried };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   __http.reset();
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
 });
 
 afterEach(() => {

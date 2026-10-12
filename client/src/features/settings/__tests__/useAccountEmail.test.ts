@@ -2,8 +2,6 @@ import type { Session } from '@supabase/supabase-js';
 
 import { accountEmail } from '@features/settings/hooks/useAccountEmail';
 
-jest.mock('@shared/auth/useSession', () => ({}));
-
 describe('accountEmail', () => {
   const signedIn = (email: string | undefined) => ({
     status: 'signed-in' as const,

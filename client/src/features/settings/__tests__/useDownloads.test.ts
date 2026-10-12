@@ -10,15 +10,6 @@ import {
 } from '@features/settings/domain/dangerZoneActions';
 import { asTrackId } from '@shared/apiClient/ids';
 
-jest.mock('@shared/offline/pinnedStore', () => {
-  const actual = jest.requireActual('@shared/offline/pinnedStore');
-  return { ...actual, pinnedByteTotal: jest.fn(actual.pinnedByteTotal) };
-});
-
-jest.mock('@shared/apiClient/audio', () => ({
-  fetchAudioUrls: jest.fn().mockResolvedValue([]),
-}));
-
 const { __fs } = FileSystem as unknown as {
   __fs: {
     seedFile(uri: string, contents: string): void;
@@ -127,15 +118,15 @@ describe('download count and size stay in agreement when a file delete fails', (
 describe('useDownloadStats measures the pinned directory only when entries change', () => {
   it('a re-render with the same entries does not re-list the directory', () => {
     seedReady('t1');
-    const measure = jest.mocked(pinnedByteTotal);
-    measure.mockClear();
+    const listing = jest.spyOn(FileSystem.Directory.prototype, 'list');
     const { rerender } = renderHook(() => useDownloadStats());
-    const afterMount = measure.mock.calls.length;
+    const afterMount = listing.mock.calls.length;
 
     rerender({});
     rerender({});
 
-    expect(measure).toHaveBeenCalledTimes(afterMount);
+    expect(listing).toHaveBeenCalledTimes(afterMount);
+    listing.mockRestore();
   });
 });
 
