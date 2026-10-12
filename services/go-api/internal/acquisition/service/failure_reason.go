@@ -2,7 +2,7 @@ package service
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
@@ -30,24 +30,24 @@ func FailureCodeOf(err error) string {
 	return string(failureCode(err))
 }
 
-func failureCode(err error) domain.FailureCode {
+func failureCode(err error) shared.FailureCode {
 	if isCancellation(err) {
-		return domain.FailureAcquisitionCancelled
+		return shared.FailureAcquisitionCancelled
 	}
 	if acqdomain.IsSourceUnavailable(err) {
-		return domain.FailureSourceUnavailable
+		return shared.FailureSourceUnavailable
 	}
 	if errors.Is(err, ErrNoConfidentMatch) {
-		return domain.FailureNoConfidentMatch
+		return shared.FailureNoConfidentMatch
 	}
 	var stepErr *StepError
 	if errors.As(err, &stepErr) {
 		if code, ok := reasonForStep(stepErr.Step); ok {
 			return code
 		}
-		return domain.FailureAcquisitionFailed
+		return shared.FailureAcquisitionFailed
 	}
-	return domain.FailureAcquisitionFailed
+	return shared.FailureAcquisitionFailed
 }
 
 func isCancellation(err error) bool {
@@ -63,14 +63,14 @@ func withCancellation(ctx context.Context, err error) error {
 	return fmt.Errorf("%w (%w)", err, ctxErr)
 }
 
-func reasonForStep(step StepName) (domain.FailureCode, bool) {
+func reasonForStep(step StepName) (shared.FailureCode, bool) {
 	switch step {
 	case stepNameSearch, stepNameSelect:
-		return domain.FailureNoMatchFound, true
+		return shared.FailureNoMatchFound, true
 	case stepNameDownload:
-		return domain.FailureDownloadFailed, true
+		return shared.FailureDownloadFailed, true
 	case stepNameStore:
-		return domain.FailureStorageFailed, true
+		return shared.FailureStorageFailed, true
 	default:
 		return "", false
 	}

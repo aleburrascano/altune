@@ -3,7 +3,6 @@ G3 internal/acquisition/ports/writer.go:4 imports catalog outside adapters/catal
 G3 internal/acquisition/service/acquire.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/acquire.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/eval/case.go:5 imports catalog outside adapters/catalogbridge
-G3 internal/acquisition/service/failure_reason.go:5 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/mem_job_queue.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:4 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/service/orphan_queue.go:5 imports catalog outside adapters/catalogbridge
