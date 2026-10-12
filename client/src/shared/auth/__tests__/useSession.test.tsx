@@ -16,9 +16,16 @@ import {
 } from '@shared/auth/sessionExpired';
 import { asTrackId } from '@shared/apiClient/ids';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+type LooseAuth = {
+  getSession: () => Promise<unknown>;
+  onAuthStateChange: (cb: (event: AuthChangeEvent, session: Session | null) => void) => unknown;
+};
+
+function looseAuth(): LooseAuth {
+  return supabase.auth as LooseAuth;
+}
 
 const { __fs } = FileSystem as unknown as {
   __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
@@ -28,8 +35,8 @@ type Listener = (event: AuthChangeEvent, session: Session | null) => void;
 type Subscription = { listener: Listener; unsubscribe: jest.Mock; active: boolean };
 
 function installAuth() {
-  const getSession = supabase.auth.getSession as jest.Mock;
-  const onAuthStateChange = supabase.auth.onAuthStateChange as jest.Mock;
+  const getSession = jest.spyOn(looseAuth(), 'getSession');
+  const onAuthStateChange = jest.spyOn(looseAuth(), 'onAuthStateChange');
   const subscriptions: Subscription[] = [];
 
   onAuthStateChange.mockImplementation((cb: Listener) => {
@@ -643,11 +650,11 @@ describe('token refresh', () => {
 
   function installAuth(): (event: AuthChangeEvent, session: Session | null) => void {
     let listener: Listener | null = null;
-    (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb: Listener) => {
+    jest.spyOn(looseAuth(), 'onAuthStateChange').mockImplementation((cb: Listener) => {
       listener = cb;
       return { data: { subscription: { unsubscribe: jest.fn() } } };
     });
-    (supabase.auth.getSession as jest.Mock).mockReturnValue(new Promise<never>(() => {}));
+    jest.spyOn(looseAuth(), 'getSession').mockReturnValue(new Promise<never>(() => {}));
     return (event, session) => {
       if (!listener) throw new Error('onAuthStateChange was never subscribed to');
       listener(event, session);

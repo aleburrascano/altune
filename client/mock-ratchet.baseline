@@ -1,7 +1,3 @@
-src/shared/auth/__tests__/useSession.test.tsx @shared/auth/supabaseClient
-src/shared/events/__tests__/applyServerEvent.test.ts @shared/apiClient/audio
-src/shared/events/__tests__/sseClient.test.ts @shared/telemetry/recordEvent
-src/shared/events/__tests__/trackCachePatch.test.ts @shared/telemetry/outbox
 src/shared/events/__tests__/useServerEvents.test.tsx @shared/auth/supabaseClient
 src/shared/events/__tests__/useServerEvents.test.tsx @shared/telemetry/recordEvent
 src/shared/failure/__tests__/errors.test.ts @shared/auth/supabaseClient

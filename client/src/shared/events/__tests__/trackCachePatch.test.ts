@@ -607,8 +607,6 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
   });
 });
 
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-
 describe('forgetTrack', () => {
   it('clears the track from the query caches and the status store', () => {
     const client = new QueryClient();

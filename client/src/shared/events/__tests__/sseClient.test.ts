@@ -13,13 +13,19 @@ import {
   renewSessionCredentials,
 } from '@shared/auth/sessionExpired';
 
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({
-  recordEvent: jest.fn(() => Promise.resolve()),
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+const { __http } = require('@testing/doubles/fetch.js');
+
+const EVENTS_PATH = '/v1/discovery/events';
+
+type SentRequest = { path: string };
+
+function reconnectEventsSent(): number {
+  return __http.requests.filter((r: SentRequest) => r.path === EVENTS_PATH).length;
+}
 
 type Handler = () => void;
 
@@ -1058,11 +1064,12 @@ describe('HTTP status handling', () => {
 });
 
 describe('SSEClient reconnect telemetry', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     FakeXHR.instances = [];
     (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
     jest.useFakeTimers();
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    await signInTestUser();
+    __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
   });
 
   afterEach(() => {
@@ -1078,17 +1085,19 @@ describe('SSEClient reconnect telemetry', () => {
     await jest.advanceTimersByTimeAsync(30_000);
     xhrAt(1).triggerError();
     await jest.advanceTimersByTimeAsync(30_000);
-    expect(recordEventMock).toHaveBeenCalledTimes(1);
-    expect(recordEventMock).toHaveBeenCalledWith({ type: 'sse_reconnect', payload: {} });
+    const afterFirstEpisode = reconnectEventsSent();
+    expect(afterFirstEpisode).toBe(1);
+    expect(JSON.parse(__http.last().body)).toMatchObject({ type: 'sse_reconnect' });
 
     xhrAt(2).emit(block({ id: '1', type: 'x', data: {} }));
     xhrAt(2).triggerError();
+    await jest.advanceTimersByTimeAsync(0);
 
-    expect(recordEventMock).toHaveBeenCalledTimes(2);
+    expect(reconnectEventsSent()).toBe(afterFirstEpisode + 1);
   });
 
   it('swallows a failed telemetry send so the reconnect still happens', async () => {
-    recordEventMock.mockRejectedValue(new Error('offline'));
+    __http.fail(`POST ${EVENTS_PATH}`, __http.transportError());
     const { client } = makeClient();
     await client.connect();
 

@@ -20,8 +20,6 @@ import { applyServerEvent } from '@shared/events/applyServerEvent';
 import type { ServerEvent } from '@shared/events/sseFrames';
 import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 
-jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
-
 type TrackPages = InfiniteData<ListTracksResponse>;
 
 function makeClient(): QueryClient {
