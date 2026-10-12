@@ -6,7 +6,7 @@ import { usePlayback } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import type { PlaybackTrack } from '@shared/playback/playbackTrack';
 
-import { ExpoGoPlaybackProvider } from '@features/playback/native/expoGoPlaybackProvider';
+import { ExpoGoPlaybackProvider } from '@features/playback/native/ExpoGoPlaybackProvider';
 
 const devFlag = globalThis as unknown as { __DEV__: boolean };
 

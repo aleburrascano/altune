@@ -15,7 +15,7 @@ import { libraryTrack, previewTrack } from '@features/playback/__tests__/fixture
 import { createMemoryPlaybackPort } from '@features/playback/__tests__/memoryPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 import { recordPlaybackFailure } from '@features/playback/domain/playbackHealth';
-import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
+import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { resolveSource } from '@features/playback/web/webPresign';
 
 jest.mock('@features/playback/domain/playbackHealth', () => ({

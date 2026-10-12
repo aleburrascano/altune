@@ -5,7 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
-import { WebPlaybackProvider } from '@features/playback/web/webPlaybackProvider';
+import { WebPlaybackProvider } from '@features/playback/web/WebPlaybackProvider';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 

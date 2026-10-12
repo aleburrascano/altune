@@ -8,7 +8,7 @@ import { asTrackId } from '@shared/apiClient/ids';
 import { usePlayback } from '@shared/playback/usePlayback';
 
 import { libraryTrack } from '../../src/features/playback/__tests__/fixtures';
-import { WebPlaybackProvider } from '../../src/features/playback/web/webPlaybackProvider';
+import { WebPlaybackProvider } from '../../src/features/playback/web/WebPlaybackProvider';
 import { httpPlaybackPort } from '@features/playback/adapters/http/httpPlaybackPort';
 import { installPlaybackPort } from '@features/playback/ports/activePlaybackPort';
 

@@ -11,7 +11,7 @@ import { LibraryRowFailure } from '@features/library/ui/LibraryRowFailure';
 import {
   LibraryRowMoreButton,
   LibraryRowPinnedIcon,
-} from '@features/library/ui/libraryRowAccessories';
+} from '@features/library/ui/LibraryRowAccessories';
 import { LibraryRowPlayback } from '@features/library/ui/LibraryRowPlayback';
 import { LibraryRowSelection } from '@features/library/ui/LibraryRowSelection';
 import { libraryRowAccessibilityLabel } from '@features/library/ui/libraryRowLabels';

@@ -67,7 +67,7 @@ const mediaSessionEffectsSyncTheBrowserMediaSession = {
 };
 
 const rememberTrackSyncsNativeTrackPlayer = {
-  files: ['src/features/playback/native/trackPlayerPlaybackProvider.tsx'],
+  files: ['src/features/playback/native/TrackPlayerPlaybackProvider.tsx'],
   rules: ['react-doctor/no-event-handler'],
 };
 

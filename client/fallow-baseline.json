@@ -208,7 +208,7 @@
     "src/features/library/hooks/useRetryAcquisition.ts:useOneRunPerTrack",
     "src/features/library/hooks/useTrackMenu.ts:buildTrackMenuItems",
     "src/features/library/hooks/useTrackSelection.ts:buildSelectionActions",
-    "src/features/library/ui/libraryRowAccessories.tsx:PINNED_GLYPH",
+    "src/features/library/ui/LibraryRowAccessories.tsx:PINNED_GLYPH",
     "src/features/playback/adapters/PlaybackProvider.tsx:PlaybackProvider",
     "src/features/playback/domain/queueResume.ts:currentTrackId",
     "src/features/playback/domain/queueResume.ts:currentOccurrence",
