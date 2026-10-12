@@ -1,6 +1,6 @@
 import { asTrackId } from '@shared/apiClient/ids';
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError } from '@shared/failure/errors';
 
 import { httpPlaylistsPort } from '@shared/playlists/adapters/http/httpPlaylistsPort';
@@ -9,9 +9,7 @@ import { createMemoryPlaylistsPort } from '@shared/playlists/__tests__/memoryPla
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const NO_CONTENT_STATUS = 204;
 const NOT_FOUND_STATUS = 404;
@@ -136,12 +134,9 @@ function abortedSignal(): AbortSignal {
   return controller.signal;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   __http.reset();
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
 });
 
 afterEach(() => {

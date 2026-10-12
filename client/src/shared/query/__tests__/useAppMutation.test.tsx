@@ -5,8 +5,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { guardedMutationOptions } from '@shared/session/guardedMutation';
-import { reportClientError } from '@shared/telemetry/clientErrorReporting';
-import { recordUserAction } from '@shared/telemetry/userTelemetry';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import {
   appMutationCache,
@@ -15,17 +14,41 @@ import {
   useOptimisticMutation,
 } from '@shared/query/useAppMutation';
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
-jest.mock('@shared/telemetry/clientErrorReporting', () => ({ reportClientError: jest.fn() }));
-jest.mock('@shared/ui/dialog/dialog', () => ({ showAlert: jest.fn() }));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const recordMock = recordUserAction as jest.Mock;
-const reportMock = reportClientError as jest.Mock;
+const { __http } = require('@testing/doubles/fetch.js');
 
-beforeEach(() => {
-  recordMock.mockReset();
-  reportMock.mockReset();
+const EVENTS_PATH = '/v1/discovery/events';
+
+type SentRequest = { path: string; body: string };
+type SentEvent = { type: string; payload: Record<string, unknown> };
+
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
 });
+
+async function sentEvents(type: string): Promise<SentEvent[]> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  return (__http.requests as SentRequest[])
+    .filter((request) => request.path === EVENTS_PATH)
+    .map((request) => JSON.parse(request.body) as SentEvent)
+    .filter((event) => event.type === type);
+}
+
+async function userActions(): Promise<Record<string, unknown>[]> {
+  const events = await sentEvents('user_action');
+  return events.map(({ payload: { session_id: _session, ...rest } }) => rest);
+}
+
+type ClientErrorSummary = { source: unknown; message: unknown };
+
+async function clientErrors(): Promise<ClientErrorSummary[]> {
+  const events = await sentEvents('client_error');
+  return events.map(({ payload }) => ({ source: payload.source, message: payload.message }));
+}
 
 function newClient(): QueryClient {
   return new QueryClient({
@@ -60,12 +83,9 @@ describe('useAppMutation()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync('t1'));
-    expect(recordMock).toHaveBeenCalledTimes(1);
-    expect(recordMock).toHaveBeenCalledWith({
-      action: 'demo.save',
-      outcome: 'succeeded',
-      track_id: 't1',
-    });
+    expect(await userActions()).toEqual([
+      { action: 'demo.save', outcome: 'succeeded', track_id: 't1' },
+    ]);
     expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 
@@ -81,14 +101,15 @@ describe('useAppMutation()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(recordMock).toHaveBeenCalledTimes(1);
-    expect(recordMock).toHaveBeenCalledWith({
-      action: 'demo.save',
-      outcome: 'failed',
-      status: 503,
-      correlation_id: 'corr-1',
-      error: 'unavailable',
-    });
+    expect(await userActions()).toEqual([
+      {
+        action: 'demo.save',
+        outcome: 'failed',
+        status: 503,
+        correlation_id: 'corr-1',
+        error: 'unavailable',
+      },
+    ]);
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
@@ -102,12 +123,9 @@ describe('useAppMutation()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(recordMock).toHaveBeenCalledWith({
-      action: 'demo.save',
-      outcome: 'failed',
-      correlation_id: 'corr-2',
-      error: 'slow',
-    });
+    expect(await userActions()).toEqual([
+      { action: 'demo.save', outcome: 'failed', correlation_id: 'corr-2', error: 'slow' },
+    ]);
   });
 
   it('records nothing for a mutation fenced by sign-out', async () => {
@@ -124,7 +142,7 @@ describe('useAppMutation()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(recordMock).not.toHaveBeenCalled();
+    expect(await userActions()).toEqual([]);
   });
 });
 
@@ -140,7 +158,7 @@ describe('appMutationCache() and appQueryCache()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(reportMock).toHaveBeenCalledWith(boom, 'mutation');
+    expect(await clientErrors()).toEqual([{ source: 'mutation', message: 'boom' }]);
   });
 
   it('reports a failed query as source query', async () => {
@@ -154,7 +172,7 @@ describe('appMutationCache() and appQueryCache()', () => {
         },
       })
       .catch(() => undefined);
-    expect(reportMock).toHaveBeenCalledWith(boom, 'query');
+    expect(await clientErrors()).toEqual([{ source: 'query', message: 'nope' }]);
   });
 
   it('skips a cancelled query', async () => {
@@ -170,7 +188,7 @@ describe('appMutationCache() and appQueryCache()', () => {
       .catch((error) => error);
     await queryClient.cancelQueries({ queryKey: ['slow'] });
     expect(isCancelledError(await pending)).toBe(true);
-    expect(reportMock).not.toHaveBeenCalled();
+    expect(await clientErrors()).toEqual([]);
   });
 
   it('skips a telemetry-gated failure', async () => {
@@ -184,7 +202,7 @@ describe('appMutationCache() and appQueryCache()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(reportMock).not.toHaveBeenCalled();
+    expect(await clientErrors()).toEqual([]);
   });
 
   it('skips a SessionEndedError from guardedMutationOptions', async () => {
@@ -201,7 +219,7 @@ describe('appMutationCache() and appQueryCache()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(reportMock).not.toHaveBeenCalled();
+    expect(await clientErrors()).toEqual([]);
   });
 
   it('skips a SessionEndedError from useOptimisticMutation and records no user_action', async () => {
@@ -222,7 +240,7 @@ describe('appMutationCache() and appQueryCache()', () => {
       }),
     );
     await settle(() => result.current.mutateAsync());
-    expect(reportMock).not.toHaveBeenCalled();
-    expect(recordMock).not.toHaveBeenCalled();
+    expect(await clientErrors()).toEqual([]);
+    expect(await userActions()).toEqual([]);
   });
 });

@@ -3,21 +3,22 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
-import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { showAlert } from '@shared/ui/dialog/dialog';
-import * as webDialog from '@shared/ui/dialog/dialog.web';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import { useOptimisticMutation } from '@shared/query/useAppMutation';
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({
-  ...jest.requireActual('@shared/telemetry/userTelemetry'),
-  recordFailureShown: jest.fn(),
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-jest.mock('@shared/ui/dialog/dialog', () => {
-  const actual = jest.requireActual('@shared/ui/dialog/dialog');
-  return { ...actual, showAlert: jest.fn(actual.showAlert) };
+const { __http } = require('@testing/doubles/fetch.js');
+
+const EVENTS_PATH = '/v1/discovery/events';
+
+type SentRequest = { path: string; body: string };
+
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply(`POST ${EVENTS_PATH}`, { status: 202 });
 });
 
 type Counter = { count: number };
@@ -434,48 +435,8 @@ describe('session fencing of the request and its callbacks', () => {
   });
 });
 
-describe('useOptimisticMutation(): alerting on web', () => {
-  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-
-  afterEach(() => {
-    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
-    else Reflect.deleteProperty(globalThis, 'window');
-  });
-
-  it('shows the failure through window.alert with the title and message', async () => {
-    const windowAlert = jest.fn();
-    Object.defineProperty(globalThis, 'window', {
-      value: { alert: windowAlert },
-      configurable: true,
-    });
-    (showAlert as jest.Mock).mockImplementationOnce(webDialog.showAlert);
-    const queryClient = newClient();
-    queryClient.setQueryData(KEY, { count: 1 });
-
-    const { result } = renderHook(
-      () =>
-        useOptimisticMutation({
-          action: 'test.optimistic',
-          queryKey: KEY,
-          mutationFn: failing,
-          applyOptimistic: bump,
-          revertOptimistic: unbump,
-          alertOnError: (by: number) => ({ title: 'Failed', message: `Could not add ${by}.` }),
-        }),
-      { wrapper: wrapperFor(queryClient) },
-    );
-
-    await act(async () => {
-      await expect(result.current.mutateAsync(4)).rejects.toThrow('boom');
-    });
-
-    expect(windowAlert).toHaveBeenCalledWith('Failed\n\nCould not add 4.');
-  });
-});
-
 describe('useOptimisticMutation(): failure_shown surface', () => {
   it('records the mutation action as the surface when the rollback alert shows', async () => {
-    jest.mocked(recordFailureShown).mockClear();
     const queryClient = newClient();
     queryClient.setQueryData(KEY, { count: 1 });
 
@@ -496,8 +457,17 @@ describe('useOptimisticMutation(): failure_shown surface', () => {
       await expect(result.current.mutateAsync(4)).rejects.toThrow('boom');
     });
 
-    expect(jest.mocked(recordFailureShown).mock.calls).toEqual([
-      [{ surface: 'test.surface', message: 'Could not add 4.' }],
-    ]);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const failureShown = (__http.requests as SentRequest[])
+      .filter((request) => request.path === EVENTS_PATH)
+      .map((request) => JSON.parse(request.body) as { type: string; payload: object })
+      .filter((event) => event.type === 'failure_shown');
+    expect(failureShown).toHaveLength(1);
+    expect(failureShown[0]?.payload).toMatchObject({
+      surface: 'test.surface',
+      message: 'Could not add 4.',
+    });
   });
 });

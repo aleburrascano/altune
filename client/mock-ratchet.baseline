@@ -1,11 +1,3 @@
-src/shared/playlists/__tests__/mutations.test.tsx @shared/auth/supabaseClient
-src/shared/playlists/__tests__/mutations.test.tsx @shared/telemetry/userTelemetry
-src/shared/playlists/__tests__/playlistsPortContract.test.ts @shared/auth/supabaseClient
-src/shared/query/__tests__/useAppMutation.test.tsx @shared/telemetry/clientErrorReporting
-src/shared/query/__tests__/useAppMutation.test.tsx @shared/telemetry/userTelemetry
-src/shared/query/__tests__/useAppMutation.test.tsx @shared/ui/dialog/dialog
-src/shared/query/__tests__/useOptimisticMutation.test.tsx @shared/telemetry/userTelemetry
-src/shared/query/__tests__/useOptimisticMutation.test.tsx @shared/ui/dialog/dialog
 src/shared/session/__tests__/signOutCleanup.integration.test.tsx @shared/apiClient/audio
 src/shared/telemetry/__tests__/clientErrorReporting.test.ts @shared/auth/supabaseClient
 src/shared/telemetry/__tests__/clientErrorReporting.test.ts @shared/telemetry/outbox

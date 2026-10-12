@@ -24,29 +24,21 @@ import type {
 } from '@shared/apiClient/playlistResponse';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
 import { playlistKeys } from '@shared/query/queryKeys';
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import * as playlistsApi from '@shared/apiClient/playlists';
-import { recordFailureShown } from '@shared/telemetry/userTelemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 const REFUSED_STATUS = 422;
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({
-  ...jest.requireActual('@shared/telemetry/userTelemetry'),
-  recordFailureShown: jest.fn(),
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+const EVENTS_ROUTE = 'POST /v1/discovery/events';
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply(EVENTS_ROUTE, { status: 202 });
 });
 
 let alertSpy: jest.SpyInstance;
@@ -1258,10 +1250,6 @@ describe('create', () => {
   let alertSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -1894,8 +1882,14 @@ describe('after sign-out', () => {
 });
 
 describe('failure_shown surfaces recorded by the playlist mutations', () => {
-  const recorded = jest.mocked(recordFailureShown);
-  const surfacesOf = () => recorded.mock.calls.map(([payload]) => payload.surface);
+  type SentRequest = { path: string; body: string };
+  function surfacesOf(): string[] {
+    return (__http.requests as SentRequest[])
+      .filter((request) => request.path === '/v1/discovery/events')
+      .map((request) => JSON.parse(request.body) as { type: string; payload: { surface: string } })
+      .filter((event) => event.type === 'failure_shown')
+      .map((event) => event.payload.surface);
+  }
   const okCreated = (id: string, name: string) => ({
     id,
     name,
@@ -1904,8 +1898,6 @@ describe('failure_shown surfaces recorded by the playlist mutations', () => {
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   });
-
-  beforeEach(() => recorded.mockClear());
 
   it('records playlist.create when creating fails', async () => {
     __http.reply('POST /v1/playlists', { status: 500 });
