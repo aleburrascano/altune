@@ -4,16 +4,12 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/apiClient/ids';
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { supabase } from '@shared/auth/supabaseClient';
 import { playlistKeys } from '@shared/query/queryKeys';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import { usePlaylistRename } from '../hooks/usePlaylistRename';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const PLAYLIST_ID = asPlaylistId('pl1');
 const CURRENT_NAME = 'Old';
@@ -75,17 +71,14 @@ function cachedName(): string | undefined {
   return queryClient.getQueryData<CachedDetail>(playlistKeys.detail(PLAYLIST_ID))?.name;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   queryClient.setQueryData<CachedDetail>(playlistKeys.detail(PLAYLIST_ID), {
     name: CURRENT_NAME,
     tracks: [],
-  });
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
   });
   __http.reply(RENAME_ROUTE, { status: HTTP_OK, json: renamed('New') });
   __http.reply(TELEMETRY_ROUTE, { status: HTTP_ACCEPTED });

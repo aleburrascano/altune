@@ -12,9 +12,10 @@ import { usePlaylistsView } from '@features/library/hooks/usePlaylistsView';
 import { SortControl } from '@features/library/ui/SortControl';
 import { warmUpFirstRender } from '../../../../jest/warmUpFirstRender';
 
-const PLAYLIST_COUNT = 20;
+const FULL_PAGES = 2;
+const PARTIAL_PAGE = 20;
+const PLAYLIST_COUNT = GROUP_PAGE_SIZE * FULL_PAGES + PARTIAL_PAGE;
 const FITS_IN_ONE_PAGE = 2;
-let mockGroupPageSize = 3;
 
 const playlists: PlaylistDetailResponse[] = Array.from(
   { length: PLAYLIST_COUNT },
@@ -45,19 +46,6 @@ function recordingPort(seeded: PlaylistDetailResponse[]) {
 }
 
 let port = recordingPort(playlists);
-
-jest.mock('../domain/listPaging', () => {
-  const actual = jest.requireActual('../domain/listPaging');
-  return {
-    __esModule: true,
-    get GROUP_PAGE_SIZE() {
-      return mockGroupPageSize;
-    },
-    nextGroupPageOffset: (pageLength: number, pageOffset: number) =>
-      actual.nextGroupPageOffset(pageLength, pageOffset, mockGroupPageSize),
-    pagedListControls: actual.pagedListControls,
-  };
-});
 
 const noop = () => undefined;
 

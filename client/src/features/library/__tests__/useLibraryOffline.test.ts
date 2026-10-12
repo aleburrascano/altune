@@ -141,21 +141,34 @@ describe('offlineEligibility — the ready-and-all-pinned rule, in one place', (
   });
 });
 
-let mockOfflineDownloadsSupported = true;
-jest.mock('@shared/offline/offlineSupport', () => ({
-  get offlineDownloadsSupported() {
-    return mockOfflineDownloadsSupported;
-  },
-}));
+type OfflineHooks = {
+  renderHook: typeof renderHook;
+  useLibraryOffline: typeof useLibraryOffline;
+  usePinnedStatus: typeof usePinnedStatus;
+  usePinnedStore: typeof usePinnedStore;
+};
+
+function loadOnWeb(): OfflineHooks {
+  let loaded: OfflineHooks | undefined;
+  jest.isolateModules(() => {
+    const isWebPlatformModule = require('@shared/device/isWebPlatform');
+    jest.spyOn(isWebPlatformModule, 'isWebPlatform').mockReturnValue(true);
+    loaded = {
+      renderHook: require('@testing-library/react-native').renderHook,
+      useLibraryOffline: require('../hooks/useLibraryOffline').useLibraryOffline,
+      usePinnedStatus: require('../hooks/useLibraryOffline').usePinnedStatus,
+      usePinnedStore: require('@shared/offline/pinnedStore').usePinnedStore,
+    };
+  });
+  if (loaded === undefined) throw new Error('web modules failed to load');
+  return loaded;
+}
+
+const web = loadOnWeb();
 
 describe('useLibraryOffline — tells every library caller whether offline downloads exist here', () => {
-  afterEach(() => {
-    mockOfflineDownloadsSupported = true;
-  });
-
   it('reports offline downloads unsupported on web', () => {
-    mockOfflineDownloadsSupported = false;
-    const { result } = renderHook(() => useLibraryOffline());
+    const { result } = web.renderHook(() => web.useLibraryOffline());
     expect(result.current.supported).toBe(false);
   });
 
@@ -166,26 +179,21 @@ describe('useLibraryOffline — tells every library caller whether offline downl
 });
 
 describe('useLibraryOffline — statusOf and usePinnedStatus stay silent when offline downloads are unsupported', () => {
-  afterEach(() => {
-    mockOfflineDownloadsSupported = true;
-    usePinnedStore.setState({ entries: {} });
-  });
+  const readyEntries = {
+    'track-1': { trackId: asTrackId('track-1'), status: 'ready' as const, uri: 'file:///a' },
+  };
+
+  afterEach(() => web.usePinnedStore.setState({ entries: {} }));
 
   it('statusOf reports no status on web even with a ready pinned entry in the store', () => {
-    mockOfflineDownloadsSupported = false;
-    usePinnedStore.setState({
-      entries: { 'track-1': { trackId: asTrackId('track-1'), status: 'ready', uri: 'file:///a' } },
-    });
-    const { result } = renderHook(() => useLibraryOffline());
+    web.usePinnedStore.setState({ entries: readyEntries });
+    const { result } = web.renderHook(() => web.useLibraryOffline());
     expect(result.current.statusOf(asTrackId('track-1'))).toBeUndefined();
   });
 
   it('usePinnedStatus reports no status on web even with a ready pinned entry in the store', () => {
-    mockOfflineDownloadsSupported = false;
-    usePinnedStore.setState({
-      entries: { 'track-1': { trackId: asTrackId('track-1'), status: 'ready', uri: 'file:///a' } },
-    });
-    const { result } = renderHook(() => usePinnedStatus(asTrackId('track-1')));
+    web.usePinnedStore.setState({ entries: readyEntries });
+    const { result } = web.renderHook(() => web.usePinnedStatus(asTrackId('track-1')));
     expect(result.current).toBeUndefined();
   });
 });

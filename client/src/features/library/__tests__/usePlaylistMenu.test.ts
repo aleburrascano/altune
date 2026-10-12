@@ -10,16 +10,12 @@ import {
 } from '@features/library/hooks/usePlaylistMenu';
 import { Alert, type AlertButton } from 'react-native';
 import type { TrackResponse } from '@shared/apiClient/trackResponse';
-import { supabase } from '@shared/auth/supabaseClient';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { trackResponseFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const DELETE_ROUTE = 'DELETE /v1/playlists/pl1';
 const TELEMETRY_ROUTE = 'POST /v1/discovery/events';
@@ -33,11 +29,8 @@ interface WrapperProps {
   children: ReactNode;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
   __http.reply(TELEMETRY_ROUTE, { status: HTTP_ACCEPTED });
 });
 
