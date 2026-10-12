@@ -5,8 +5,8 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import * as discoveryApi from '@shared/apiClient/discovery';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { ApiError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
 
+import { signInTestUser } from '@testing/signInTestUser';
 import { httpDiscoverPort } from '@features/discovery/adapters/http/httpDiscoverPort';
 import { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
@@ -20,10 +20,6 @@ import {
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const SEARCH_PATH = '/v1/discovery/search';
 const SUGGEST_PATH = '/v1/discovery/suggest';
@@ -88,11 +84,8 @@ function abortedSignal(): AbortSignal {
   return controller.signal;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {

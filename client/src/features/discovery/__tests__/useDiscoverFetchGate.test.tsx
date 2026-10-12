@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { discoveryKeys } from '@shared/query/queryKeys';
@@ -16,17 +15,12 @@ import {
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
 import { setSearchState } from '@features/discovery/domain/searchState';
+import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-jest.mock('@shared/telemetry/useRecordEvent', () => ({
-  useRecordEvent: () => ({ mutate: jest.fn() }),
-}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useFocusEffect: jest.fn(),
@@ -84,16 +78,13 @@ async function settle(): Promise<void> {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false, retryDelay: 0 } },
   });
   setKillSwitchFileStore(createMemoryFileStore());
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
   __http.reply(SEARCH, { json: searchResponseFixture() });
   __http.reply(SUGGEST, { json: { suggestions: [] } });
   __http.reply(HISTORY_LIST, { json: HISTORY });

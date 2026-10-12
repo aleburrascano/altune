@@ -2,35 +2,26 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import {
-  listSearchHistory,
-  searchDiscovery,
-  suggestDiscovery,
-  type DiscoverySearchResponse,
-} from '@shared/apiClient/discovery';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-jest.mock('@shared/apiClient/discovery', () => ({
-  searchDiscovery: jest.fn(),
-  suggestDiscovery: jest.fn(),
-  listSearchHistory: jest.fn(),
-  clearSearchHistory: jest.fn(),
-}));
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useFocusEffect: jest.fn(),
 }));
 
-const mockSearch = searchDiscovery as jest.Mock;
-const mockSuggest = suggestDiscovery as jest.Mock;
-const mockHistory = listSearchHistory as jest.Mock;
-const mockRecordEvent = recordEvent as jest.Mock;
+const { __http } = require('@testing/doubles/fetch.js');
+
+const SEARCH = 'GET /v1/discovery/search';
+const SUGGEST = 'GET /v1/discovery/suggest';
+const HISTORY_LIST = 'GET /v1/discovery/search-history';
+const EVENTS = 'POST /v1/discovery/events';
+const EVENTS_PATH = '/v1/discovery/events';
 
 let queryClient: QueryClient;
 
@@ -61,31 +52,42 @@ function searchResponse(partial: boolean): DiscoverySearchResponse {
   };
 }
 
-function degradedEvents() {
-  return mockRecordEvent.mock.calls
-    .map((call) => call[0] as { type: string })
+interface RecordedRequest {
+  path: string;
+  body: string;
+}
+
+interface RecordedEvent {
+  type: string;
+}
+
+function degradedEvents(): RecordedEvent[] {
+  return (__http.requests as RecordedRequest[])
+    .filter((request) => request.path === EVENTS_PATH)
+    .map((request) => JSON.parse(request.body) as RecordedEvent)
     .filter((event) => event.type === 'search_degraded');
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  mockSearch.mockReset();
-  mockSuggest.mockReset().mockResolvedValue({ suggestions: [] });
-  mockHistory.mockReset().mockResolvedValue({ items: [] });
-  mockRecordEvent.mockReset().mockResolvedValue(undefined);
+  await signInTestUser();
+  __http.reply(SUGGEST, { json: { suggestions: [] } });
+  __http.reply(HISTORY_LIST, { json: { items: [] } });
+  __http.reply(EVENTS, { status: 204 });
   setSearchState('radiohead', 'radiohead');
 });
 
 afterEach(() => {
+  __http.reset();
   queryClient.clear();
   setSearchState('', '');
 });
 
 describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and telemetry', () => {
   it('marks a partial response incomplete and records one search_degraded event', async () => {
-    mockSearch.mockResolvedValue(searchResponse(true));
+    __http.reply(SEARCH, { json: searchResponse(true) });
 
     const { result, rerender } = renderHook(() => useDiscoverLogic(), { wrapper });
 
@@ -96,6 +98,7 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
       type: 'search_degraded',
       search_id: 'search-1',
       payload: {
+        session_id: expect.any(String),
         result_count: 1,
         degraded_providers: [{ provider: 'deezer', status: 'timeout' }],
       },
@@ -109,9 +112,8 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
   it('reports a provider that only degrades on the second page', async () => {
     const healthyFirstPage = { ...searchResponse(false), has_more: true };
     const degradedSecondPage = { ...searchResponse(true), offset: 1 };
-    mockSearch.mockImplementation(({ offset }: { offset: number }) =>
-      Promise.resolve(offset === 0 ? healthyFirstPage : degradedSecondPage),
-    );
+    __http.replyOnce(SEARCH, { json: healthyFirstPage });
+    __http.reply(SEARCH, { json: degradedSecondPage });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 
@@ -128,6 +130,7 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
       type: 'search_degraded',
       search_id: 'search-1',
       payload: {
+        session_id: expect.any(String),
         result_count: 2,
         degraded_providers: [{ provider: 'deezer', status: 'timeout' }],
       },
@@ -135,7 +138,7 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
   });
 
   it('leaves a healthy response complete and records no search_degraded event', async () => {
-    mockSearch.mockResolvedValue(searchResponse(false));
+    __http.reply(SEARCH, { json: searchResponse(false) });
 
     const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
 

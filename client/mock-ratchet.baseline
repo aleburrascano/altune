@@ -1,9 +1,3 @@
-src/features/discovery/__tests__/discoverPortContract.test.ts @shared/auth/supabaseClient
-src/features/discovery/__tests__/favoritesPortContract.test.ts @shared/auth/supabaseClient
-src/features/discovery/__tests__/useDegradedSearchTelemetry.test.tsx @shared/apiClient/discovery
-src/features/discovery/__tests__/useDegradedSearchTelemetry.test.tsx @shared/telemetry/recordEvent
-src/features/discovery/__tests__/useDiscoverFetchGate.test.tsx @shared/auth/supabaseClient
-src/features/discovery/__tests__/useDiscoverFetchGate.test.tsx @shared/telemetry/useRecordEvent
 src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/auth/supabaseClient
 src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/telemetry/recordEvent
 src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/telemetry/useRecordEvent

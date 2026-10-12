@@ -1,16 +1,12 @@
 import type { Favorite, FavoriteRef } from '@shared/apiClient/favorites';
 import { asFavoriteKey } from '@shared/apiClient/ids';
-import { supabase } from '@shared/auth/supabaseClient';
 
+import { signInTestUser } from '@testing/signInTestUser';
 import { httpFavoritesPort } from '@features/discovery/adapters/http/httpFavoritesPort';
 import { createMemoryFavoritesPort } from '@features/discovery/__tests__/memoryFavoritesPort';
 import type { FavoritesPort } from '@features/discovery/ports/favoritesPort';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const FAVORITES_PATH = '/v1/discovery/favorites';
 const NO_CONTENT_STATUS = 204;
@@ -55,11 +51,8 @@ function serveFavoritesOverHttp(): FavoritesPort {
   return httpFavoritesPort;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {
