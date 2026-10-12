@@ -2,7 +2,7 @@ import { act } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 import type { ResolvedAudioUrl } from '@shared/apiClient/audio';
 import { ApiError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import {
   createMemoryFileStore,
@@ -37,9 +37,7 @@ import {
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const AUDIO_URLS_PATH = '/v1/audio-urls';
 const AUDIO_URLS_ROUTE = `POST ${AUDIO_URLS_PATH}`;
@@ -88,15 +86,12 @@ async function audioUrlsServer(url: string, init?: RequestInit): Promise<Respons
   return fakeFetch(url, init);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   answerAudioUrls = noAudioUrls;
   onceAnswers.length = 0;
   audioUrlRequests.length = 0;
   global.fetch = audioUrlsServer as typeof fetch;
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
 });
 
 afterEach(() => {

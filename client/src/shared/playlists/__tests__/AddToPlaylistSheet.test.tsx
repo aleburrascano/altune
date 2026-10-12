@@ -7,13 +7,11 @@ import { AddToPlaylistSheet } from '@shared/playlists/ui/AddToPlaylistSheet';
 import { playlistKeys } from '@shared/query/queryKeys';
 import { asPlaylistId, asTrackId, type TrackId } from '@shared/apiClient/ids';
 import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 function playlist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
   return {
@@ -60,11 +58,8 @@ function renderSheet(options: RenderOptions = {}) {
 let alertSpy: jest.SpyInstance;
 let warnSpy: jest.SpyInstance;
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });

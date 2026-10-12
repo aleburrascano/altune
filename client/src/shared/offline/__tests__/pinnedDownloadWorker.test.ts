@@ -15,14 +15,14 @@ import {
 } from '@shared/offline/pinnedFiles';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import type { PinnedEntry } from '@shared/offline/pinnedIndex';
-import { recordEvent } from '@shared/telemetry/recordEvent';
+import { signInTestUser } from '@testing/signInTestUser';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({
-  recordEvent: jest.fn(() => Promise.resolve()),
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+const { __http } = require('@testing/doubles/fetch.js');
+const EVENTS_ROUTE = 'POST /v1/discovery/events';
+
 const seededUrls: Record<string, { url: string; version: string }> = {};
 const memoryPort = createMemoryOfflinePort({ urls: seededUrls });
 const fetchAudioUrlsMock = jest.fn(memoryPort.fetchAudioUrls);
@@ -254,12 +254,16 @@ describe('a failed byte transfer is retried like any other transient failure', (
   });
 });
 
+type SentEvent = { type: string; payload?: Record<string, unknown> };
+type SentRequest = { path: string; body: string };
+
 describe('download_failed telemetry', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await signInTestUser();
     setPinnedFileStore(createMemoryFileStore());
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.useFakeTimers();
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    __http.reply(EVENTS_ROUTE, { status: 202 });
   });
 
   afterEach(() => {
@@ -268,10 +272,19 @@ describe('download_failed telemetry', () => {
     jest.restoreAllMocks();
   });
 
+  function sentEvents(): SentEvent[] {
+    return __http.requests
+      .filter((request: SentRequest) => request.path === '/v1/discovery/events')
+      .map((request: SentRequest) => {
+        const { type, payload } = JSON.parse(request.body);
+        return { type, payload: { ...payload, session_id: undefined } };
+      });
+  }
+
   function eventsFor(trackId: string) {
-    return recordEventMock.mock.calls
-      .map(([e]) => e)
-      .filter((e) => e.type === 'download_failed' && e.payload?.['track_id'] === trackId);
+    return sentEvents().filter(
+      (e) => e.type === 'download_failed' && e.payload?.['track_id'] === trackId,
+    );
   }
 
   it('sends one download_failed per failed attempt, retrying until the last, with no signed URL', async () => {
@@ -290,15 +303,17 @@ describe('download_failed telemetry', () => {
       { type: 'download_failed', payload: { track_id: 'tel-1', will_retry: true } },
       { type: 'download_failed', payload: { track_id: 'tel-1', will_retry: false } },
     ]);
-    expect(JSON.stringify(recordEventMock.mock.calls)).not.toContain('sig=secret');
+    expect(JSON.stringify(__http.requests)).not.toContain('sig=secret');
   });
 
   it('swallows a failed telemetry send so the download still fails cleanly', async () => {
-    recordEventMock.mockRejectedValue(new Error('offline'));
+    __http.reset();
+    __http.fail(EVENTS_ROUTE);
     fetchAudioUrlsMock.mockRejectedValue(new ApiError(404, 'gone'));
     const track = queuedTrack(asTrackId('tel-2'));
 
     await runDownloadQueue(track.set, track.get, port);
+    await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS);
 
     expect(track.entry?.status).toBe('failed');
     expect(eventsFor('tel-2')).toHaveLength(1);

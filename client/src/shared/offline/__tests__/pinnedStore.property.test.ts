@@ -2,10 +2,16 @@ import fc from 'fast-check';
 
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { asTrackId } from '@shared/apiClient/ids';
+import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@shared/apiClient/audio', () => ({
-  fetchAudioUrls: jest.fn().mockResolvedValue([]),
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+const { __http } = require('@testing/doubles/fetch.js');
+
+beforeEach(async () => {
+  await signInTestUser();
+  __http.reply('POST /v1/audio-urls', { json: { urls: [] } });
+});
 
 const INITIAL_STATE = usePinnedStore.getState();
 

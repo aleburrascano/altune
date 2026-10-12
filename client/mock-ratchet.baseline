@@ -1,7 +1,3 @@
-src/shared/offline/__tests__/pinnedDownloadWorker.test.ts @shared/telemetry/recordEvent
-src/shared/offline/__tests__/pinnedStore.property.test.ts @shared/apiClient/audio
-src/shared/offline/__tests__/pinnedStore.test.ts @shared/auth/supabaseClient
-src/shared/playlists/__tests__/AddToPlaylistSheet.test.tsx @shared/auth/supabaseClient
 src/shared/playlists/__tests__/mutations.test.tsx @shared/auth/supabaseClient
 src/shared/playlists/__tests__/mutations.test.tsx @shared/telemetry/userTelemetry
 src/shared/playlists/__tests__/playlistsPortContract.test.ts @shared/auth/supabaseClient
