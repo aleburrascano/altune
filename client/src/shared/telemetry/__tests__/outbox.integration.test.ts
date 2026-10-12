@@ -5,9 +5,7 @@ type OutboxEntry = OutboxNamespace.OutboxEntry;
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 type AppStateChangeHandler = (state: string) => void;
 
@@ -27,7 +25,6 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
 });
 
 type OutboxModule = typeof OutboxNamespace;
-type SupabaseAuthMock = { auth: { getSession: jest.Mock } };
 type FailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
 interface FakeFsDouble {
@@ -46,11 +43,10 @@ function currentFs(): FakeFsDouble {
 }
 
 function configureSession(): void {
-  const mod = require('@shared/auth/supabaseClient') as { supabase: SupabaseAuthMock };
-  mod.supabase.auth.getSession.mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  const { signInTestUser } = require('@testing/signInTestUser') as {
+    signInTestUser: () => Promise<void>;
+  };
+  void signInTestUser();
 }
 
 const booted: OutboxModule[] = [];

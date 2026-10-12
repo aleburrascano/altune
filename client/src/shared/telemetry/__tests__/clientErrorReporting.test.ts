@@ -1,6 +1,5 @@
 import { apiFetch } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
-import { enqueueCritical } from '@shared/telemetry/outbox';
+import { signInTestUser } from '@testing/signInTestUser';
 import {
   _resetGlobalErrorReportingForTest,
   installGlobalErrorReporting,
@@ -9,11 +8,7 @@ import {
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const mockPreviousHandler = jest.fn();
 const mockSetGlobalHandler = jest.fn();
@@ -36,15 +31,41 @@ jest.mock('expo-constants', () => ({
   },
 }));
 
-const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueueCritical>;
+type DeliveredEvent = { type: string; payload: Record<string, unknown> };
 
-function lastPayload(): Record<string, unknown> {
-  const call = enqueueCriticalMock.mock.calls.at(-1);
-  return (call?.[0]?.payload ?? {}) as Record<string, unknown>;
+function delivered(): DeliveredEvent[] {
+  return (__http.requests as { method: string; path: string; body: string }[])
+    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .map((request) => JSON.parse(request.body) as DeliveredEvent)
+    .filter((event) => event.type === 'client_error');
 }
 
-beforeEach(() => {
-  enqueueCriticalMock.mockReset().mockResolvedValue(undefined);
+function lastPayload(): Record<string, unknown> {
+  const last = delivered().at(-1);
+  if (last === undefined) throw new Error('no client_error was delivered');
+  return last.payload;
+}
+
+const DISTINCT_ERRORS = 120;
+const TWO_REPORTS = 2;
+const THREE_REPORTS = 3;
+
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+async function forgetDelivered(): Promise<void> {
+  await settle();
+  __http.requests.length = 0;
+}
+
+const FAKE_TIMERS: { doNotFake: ('Date' | 'setImmediate' | 'nextTick')[] } = {
+  doNotFake: ['Date', 'setImmediate', 'nextTick'],
+};
+
+beforeEach(async () => {
+  __http.replyAll({ status: 202 });
+  await signInTestUser();
   mockSetGlobalHandler.mockReset();
   mockEnableRejectionTracking.mockReset();
   globalWithHermes.HermesInternal = { enablePromiseRejectionTracker: mockEnableRejectionTracking };
@@ -64,12 +85,11 @@ afterEach(() => {
 });
 
 describe('reportClientError', () => {
-  it('carries a trimmed message, stack and the app version', () => {
+  it('carries a trimmed message, stack and the app version', async () => {
     reportClientError(new Error('boom'), 'uncaught');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'client_error' }),
-    );
+    await settle();
+    expect(delivered()).toEqual([expect.objectContaining({ type: 'client_error' })]);
     const payload = lastPayload();
     expect(payload['source']).toBe('uncaught');
     expect(payload['message']).toBe('boom');
@@ -77,33 +97,37 @@ describe('reportClientError', () => {
     expect(payload['app_version']).toEqual(expect.any(String));
   });
 
-  it('trims a message past the size cap', () => {
+  it('trims a message past the size cap', async () => {
     reportClientError(new Error('x'.repeat(1000)), 'boundary');
 
+    await settle();
     const message = lastPayload()['message'] as string;
     expect(message.length).toBeLessThan(600);
     expect(message.endsWith('…')).toBe(true);
   });
 
-  it('stringifies a non-Error thrown value, with no stack', () => {
+  it('stringifies a non-Error thrown value, with no stack', async () => {
     reportClientError('a plain string throw', 'unhandled_rejection');
 
+    await settle();
     const payload = lastPayload();
     expect(payload['message']).toBe('a plain string throw');
     expect('stack' in payload).toBe(false);
   });
 
-  it('carries the configured app version', () => {
+  it('carries the configured app version', async () => {
     reportClientError(new Error('boom'), 'uncaught');
 
+    await settle();
     expect(lastPayload()['app_version']).toBe('1.2.3');
   });
 
-  it('falls back to "dev" when no app version is configured', () => {
+  it('falls back to "dev" when no app version is configured', async () => {
     mockExpoConfig = undefined;
 
     reportClientError(new Error('boom'), 'uncaught');
 
+    await settle();
     expect(lastPayload()['app_version']).toBe('dev');
   });
 });
@@ -121,137 +145,155 @@ describe('reportClientError dedupe', () => {
     jest.restoreAllMocks();
   });
 
-  it('enqueues one client_error for the same error repeated inside the window', () => {
+  it('enqueues one client_error for the same error repeated inside the window', async () => {
     const error = new Error('render loop');
     for (let i = 0; i < 5; i += 1) reportClientError(error, 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(delivered()).toHaveLength(1);
   });
 
-  it('enqueues distinct errors and the same message from another source', () => {
+  it('enqueues distinct errors and the same message from another source', async () => {
     reportClientError(new Error('first'), 'boundary');
     reportClientError(new Error('second'), 'boundary');
     reportClientError(new Error('first'), 'uncaught');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(3);
+    await settle();
+    expect(delivered()).toHaveLength(THREE_REPORTS);
   });
 
-  it('reports again after the window, carrying the count of suppressed repeats', () => {
+  it('reports again after the window, carrying the count of suppressed repeats', async () => {
     const error = new Error('render loop');
     for (let i = 0; i < 4; i += 1) reportClientError(error, 'boundary');
     now += WINDOW_MS;
     reportClientError(error, 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(delivered()).toHaveLength(TWO_REPORTS);
     expect(lastPayload()['suppressed_repeats']).toBe(3);
   });
 
-  it('omits the count when nothing was suppressed', () => {
+  it('omits the count when nothing was suppressed', async () => {
     reportClientError(new Error('once'), 'boundary');
 
+    await settle();
     expect('suppressed_repeats' in lastPayload()).toBe(false);
   });
 
-  it('keeps reporting every distinct error past the tracking cap', () => {
-    for (let i = 0; i < 120; i += 1) reportClientError(new Error(`distinct ${i}`), 'boundary');
+  it('keeps reporting every distinct error past the tracking cap', async () => {
+    for (let i = 0; i < DISTINCT_ERRORS; i += 1) {
+      reportClientError(new Error(`distinct ${i}`), 'boundary');
+      await settle();
+    }
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(120);
+    await settle();
+    expect(delivered()).toHaveLength(DISTINCT_ERRORS);
   });
 
-  it('reports again when the clock is moved backwards', () => {
+  it('reports again when the clock is moved backwards', async () => {
     const error = new Error('render loop');
     reportClientError(error, 'boundary');
     now -= 3_600_000;
     reportClientError(error, 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(delivered()).toHaveLength(TWO_REPORTS);
   });
 
-  it('delivers the count of a burst that stops inside the window when the window ends', () => {
-    jest.useFakeTimers({ doNotFake: ['Date'] });
+  it('delivers the count of a burst that stops inside the window when the window ends', async () => {
+    jest.useFakeTimers(FAKE_TIMERS);
     const error = new Error('render loop');
     for (let i = 0; i < 4; i += 1) reportClientError(error, 'boundary');
-    enqueueCriticalMock.mockClear();
+    await forgetDelivered();
 
     now += WINDOW_MS;
     jest.advanceTimersByTime(WINDOW_MS);
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(delivered()).toHaveLength(1);
     expect(lastPayload()['suppressed_repeats']).toBe(3);
     jest.useRealTimers();
   });
 
-  it('does not report a burst count twice', () => {
-    jest.useFakeTimers({ doNotFake: ['Date'] });
+  it('does not report a burst count twice', async () => {
+    jest.useFakeTimers(FAKE_TIMERS);
     const error = new Error('render loop');
     for (let i = 0; i < 4; i += 1) reportClientError(error, 'boundary');
     now += WINDOW_MS;
     reportClientError(error, 'boundary');
-    enqueueCriticalMock.mockClear();
+    await forgetDelivered();
 
     jest.advanceTimersByTime(WINDOW_MS);
 
-    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+    await settle();
+    expect(delivered()).toHaveLength(0);
     jest.useRealTimers();
   });
 
-  it('keeps the hot repeating error suppressed while distinct errors fill the cap', () => {
+  it('keeps the hot repeating error suppressed while distinct errors fill the cap', async () => {
     const hot = new Error('hot');
     reportClientError(hot, 'boundary');
     reportClientError(hot, 'boundary');
-    for (let i = 0; i < 120; i += 1) reportClientError(new Error(`distinct ${i}`), 'boundary');
-    enqueueCriticalMock.mockClear();
+    for (let i = 0; i < DISTINCT_ERRORS; i += 1) {
+      reportClientError(new Error(`distinct ${i}`), 'boundary');
+      await settle();
+    }
+    await forgetDelivered();
 
     reportClientError(hot, 'boundary');
 
-    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+    await settle();
+    expect(delivered()).toHaveLength(0);
   });
 
-  it('flushes the suppressed count of an expired error when a different error arrives', () => {
+  it('flushes the suppressed count of an expired error when a different error arrives', async () => {
     const stale = new Error('stale');
     reportClientError(stale, 'boundary');
     reportClientError(stale, 'boundary');
     reportClientError(stale, 'boundary');
-    enqueueCriticalMock.mockClear();
+    await forgetDelivered();
 
     now += WINDOW_MS;
     reportClientError(new Error('fresh'), 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
-    const [flushed, fresh] = enqueueCriticalMock.mock.calls.map(
-      (call) => call[0].payload as Record<string, unknown>,
-    );
+    await settle();
+    expect(delivered()).toHaveLength(TWO_REPORTS);
+    const [flushed, fresh] = delivered().map((event) => event.payload);
     expect(flushed).toMatchObject({ message: 'stale', suppressed_repeats: 2 });
     expect(fresh?.['message']).toBe('fresh');
     expect(fresh).not.toHaveProperty('suppressed_repeats');
   });
 
-  it('when the table is full of repeating errors, evicts the oldest and flushes its count', () => {
+  it('when the table is full of repeating errors, evicts the oldest and flushes its count', async () => {
     for (let i = 0; i < 50; i += 1) {
       const error = new Error(`hot ${i}`);
       reportClientError(error, 'boundary');
       reportClientError(error, 'boundary');
+      await settle();
     }
-    enqueueCriticalMock.mockClear();
+    await forgetDelivered();
 
     reportClientError(new Error('newcomer'), 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
-    expect(enqueueCriticalMock.mock.calls[0]?.[0].payload).toMatchObject({
+    await settle();
+    expect(delivered()).toHaveLength(TWO_REPORTS);
+    expect(delivered()[0]?.payload).toMatchObject({
       message: 'hot 0',
       suppressed_repeats: 1,
     });
+    await settle();
     expect(lastPayload()['message']).toBe('newcomer');
   });
 
-  it('treats messages that differ only past the size cap as the same error', () => {
+  it('treats messages that differ only past the size cap as the same error', async () => {
     reportClientError(new Error(`${'x'.repeat(600)}a`), 'boundary');
     reportClientError(new Error(`${'x'.repeat(600)}b`), 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(delivered()).toHaveLength(1);
   });
 
-  it('tells apart errors that differ only in their stack head', () => {
+  it('tells apart errors that differ only in their stack head', async () => {
     const first = new Error('same');
     first.stack = 'Error: same\n    at first (a.js:1:1)';
     const second = new Error('same');
@@ -259,7 +301,8 @@ describe('reportClientError dedupe', () => {
     reportClientError(first, 'boundary');
     reportClientError(second, 'boundary');
 
-    expect(enqueueCriticalMock).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(delivered()).toHaveLength(TWO_REPORTS);
   });
 });
 
@@ -272,7 +315,7 @@ describe('installGlobalErrorReporting', () => {
     expect(mockEnableRejectionTracking).toHaveBeenCalledTimes(1);
   });
 
-  it('reports an uncaught error and forwards it to the previous handler', () => {
+  it('reports an uncaught error and forwards it to the previous handler', async () => {
     installGlobalErrorReporting();
     const installedHandler = mockSetGlobalHandler.mock.calls[0]?.[0] as (
       error: unknown,
@@ -282,11 +325,12 @@ describe('installGlobalErrorReporting', () => {
     const error = new Error('native crash');
     installedHandler(error, true);
 
+    await settle();
     expect(lastPayload()['source']).toBe('uncaught');
     expect(mockPreviousHandler).toHaveBeenCalledWith(error, true);
   });
 
-  it('reports an unhandled rejection', () => {
+  it('reports an unhandled rejection', async () => {
     installGlobalErrorReporting();
     const onUnhandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onUnhandled as (
       id: number,
@@ -295,10 +339,11 @@ describe('installGlobalErrorReporting', () => {
 
     onUnhandled(1, new Error('dropped promise'));
 
+    await settle();
     expect(lastPayload()['source']).toBe('unhandled_rejection');
   });
 
-  it('reports nothing when a rejection is handled late', () => {
+  it('reports nothing when a rejection is handled late', async () => {
     installGlobalErrorReporting();
     const onHandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onHandled as (
       id: number,
@@ -306,7 +351,8 @@ describe('installGlobalErrorReporting', () => {
 
     onHandled(1);
 
-    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+    await settle();
+    expect(delivered()).toHaveLength(0);
   });
 
   it('leaves dev builds on the built-in rejection warnings', () => {
@@ -329,15 +375,13 @@ describe('installGlobalErrorReporting', () => {
 describe('reportClientError with a failed search request', () => {
   it('ships a payload that carries no search text', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-      data: { session: { access_token: 'tok' } },
-      error: null,
-    });
     __http.fail('GET /v1/discovery/search');
 
     const error = await apiFetch('/v1/discovery/search?q=secret').catch((e: unknown) => e);
     reportClientError(error, 'unhandled_rejection');
 
+    await settle();
+    expect(delivered()).toHaveLength(1);
     expect(JSON.stringify(lastPayload())).not.toContain('secret');
   });
 });

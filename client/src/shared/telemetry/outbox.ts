@@ -3,7 +3,6 @@ import { subscribeAppState } from '@shared/lifecycle/appState';
 
 import { ApiError, NetworkError } from '@shared/apiClient';
 import { clampedExponent, equalJitterMs } from '@shared/timing/backoff';
-import { isTelemetryGated } from '@shared/failure/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
@@ -200,10 +199,9 @@ function isPermanentlyRejected(error: unknown): boolean {
   return clientError && !RETRYABLE_CLIENT_STATUSES.has(error.status);
 }
 
-type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline' | 'gated';
+type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline';
 
 function classifyFailure(entry: OutboxEntry, error: unknown): SendOutcome {
-  if (isTelemetryGated(error)) return 'gated';
   const label = `${entry.type} ${entry.event_id}`;
   if (isPermanentlyRejected(error)) {
     console.warn(`[telemetry] outbox dropping ${label}, rejected by the server`, error);
@@ -254,10 +252,6 @@ export async function flushOutbox(): Promise<void> {
         if (outcome === 'sent' || outcome === 'dropped') {
           commit(_queue.filter((e) => e.event_id !== entry.event_id));
           continue;
-        }
-        if (outcome === 'gated') {
-          halted = true;
-          break;
         }
         retryable = true;
         if (outcome === 'offline') {

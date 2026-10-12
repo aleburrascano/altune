@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
-import { ApiError, NetworkError } from '@shared/apiClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import type { OutboxEntry } from '@shared/telemetry/outbox';
 import {
@@ -19,23 +19,20 @@ import {
   dedupeById,
   withEnvelope,
 } from '@shared/telemetry/outbox';
-import { loadPersistedOutbox, persistOutbox } from '@shared/telemetry/outboxStore';
 import {
-  recordEvent,
-  type DiscoveryEvent,
-  type TelemetryGatedError as TelemetryGatedErrorClass,
-} from '@shared/telemetry/recordEvent';
+  loadPersistedOutbox,
+  persistOutbox,
+  setOutboxFileStore,
+} from '@shared/telemetry/outboxStore';
+import type { DiscoveryEvent } from '@shared/telemetry/recordEvent';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
+const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
+
 type AppStateChangeHandler = (state: string) => void;
 
-jest.mock('@shared/telemetry/outboxStore', () => ({
-  loadPersistedOutbox: jest.fn(),
-  persistOutbox: jest.fn(),
-}));
-
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 jest.mock('react-native/Libraries/AppState/AppState', () => {
   const listeners: AppStateChangeHandler[] = [];
@@ -52,11 +49,70 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-const loadPersistedOutboxMock = loadPersistedOutbox as jest.MockedFunction<
-  typeof loadPersistedOutbox
->;
-const persistOutboxMock = persistOutbox as jest.MockedFunction<typeof persistOutbox>;
-const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
+type Reply = number | 'unreachable';
+type Responder = (entry: OutboxEntry) => Reply | Promise<Reply>;
+
+const EVENTS_PATH = '/v1/discovery/events';
+const HTTP_ACCEPTED = 202;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_SERVER_ERROR = 500;
+const HTTP_UNAVAILABLE = 503;
+const OVERFLOW = 2;
+const SECOND_ATTEMPT = 2;
+const FOURTH_ATTEMPT = 4;
+const SETTLE_TICKS = 500;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+function acceptAll(): Reply {
+  return HTTP_ACCEPTED;
+}
+
+let received: OutboxEntry[] = [];
+let alwaysReply: Responder = acceptAll;
+let onceReplies: Responder[] = [];
+
+function serverReplies(reply: Reply | Responder): void {
+  alwaysReply = typeof reply === 'function' ? reply : () => reply;
+}
+
+function serverRepliesOnce(reply: Reply | Responder): void {
+  onceReplies.push(typeof reply === 'function' ? reply : () => reply);
+}
+
+function holdNextRequest(): () => void {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  serverRepliesOnce(async () => {
+    await released;
+    return HTTP_ACCEPTED;
+  });
+  return release;
+}
+
+function resetServer(): void {
+  received = [];
+  alwaysReply = acceptAll;
+  onceReplies = [];
+}
+
+async function fakeServerFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (init?.method !== 'POST' || !String(input).endsWith(EVENTS_PATH)) {
+    return fakeFetch(input, init);
+  }
+  const entry = JSON.parse(String(init.body)) as OutboxEntry;
+  received.push(entry);
+  const scripted = entry.type === 'outbox_flush_failed' ? undefined : onceReplies.shift();
+  const reply = await (scripted ?? alwaysReply)(entry);
+  if (reply === 'unreachable') throw __http.transportError();
+  return new FakeResponse({ status: reply });
+}
+
+async function settle(): Promise<void> {
+  for (let i = 0; i < SETTLE_TICKS; i += 1) await Promise.resolve();
+}
 
 const MAX_ENTRIES = 50;
 
@@ -64,18 +120,17 @@ function event(overrides: Partial<DiscoveryEvent> = {}): DiscoveryEvent {
   return { type: 'library_add', ...overrides };
 }
 
-function deliveries(mock: jest.MockedFunction<typeof recordEvent>): OutboxEntry[] {
-  return mock.mock.calls
-    .map(([entry]) => entry as OutboxEntry)
-    .filter((entry) => entry.type !== 'outbox_flush_failed');
-}
-
 function sentEntries(): OutboxEntry[] {
-  return deliveries(recordEventMock);
+  return received.filter((entry) => entry.type !== 'outbox_flush_failed');
 }
 
-function lastPersisted(): readonly OutboxEntry[] | undefined {
-  return persistOutboxMock.mock.calls.at(-1)?.[0];
+function lastPersisted(): readonly OutboxEntry[] {
+  return loadPersistedOutbox();
+}
+
+function restoreFromDisk(entries: OutboxEntry[]): void {
+  persistOutbox(entries);
+  _resetOutboxForTest({ restored: false });
 }
 
 beforeEach(() => {
@@ -85,14 +140,17 @@ beforeEach(() => {
       __listeners: AppStateChangeHandler[];
     }
   ).__listeners.length = 0;
+  setOutboxFileStore(createMemoryFileStore());
   _resetOutboxForTest();
-  loadPersistedOutboxMock.mockReset().mockReturnValue([]);
-  persistOutboxMock.mockReset();
-  recordEventMock.mockReset().mockResolvedValue(undefined);
+  resetServer();
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  global.fetch = fakeServerFetch;
+  void signInTestUser();
 });
 
 afterEach(() => {
   jest.restoreAllMocks();
+  setOutboxFileStore();
   _resetOutboxForTest();
   jest.useRealTimers();
 });
@@ -105,7 +163,7 @@ describe('remote kill switch', () => {
   ) as { __listeners: AppStateChangeHandler[] };
 
   function queuedIds(): (string | undefined)[] {
-    return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
+    return lastPersisted().map((e) => e.search_id);
   }
 
   async function settle(): Promise<void> {
@@ -116,9 +174,7 @@ describe('remote kill switch', () => {
     jest.useFakeTimers();
     setKillSwitchFileStore(createMemoryFileStore());
     _resetOutboxForTest();
-    (loadPersistedOutbox as jest.Mock).mockReset().mockReturnValue([]);
-    persistOutboxMock.mockReset();
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    resetServer();
     jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
@@ -138,32 +194,25 @@ describe('remote kill switch', () => {
       appStateListeners.forEach((handler) => handler('active'));
       await settle();
 
-      expect(recordEventMock).not.toHaveBeenCalled();
+      expect(sentEntries()).toHaveLength(0);
       expect(queuedIds()).toEqual(['a']);
     });
 
     it('arms no retry timer while the switch is off', async () => {
-      recordEventMock.mockRejectedValue(new Error('server down'));
+      serverReplies(HTTP_UNAVAILABLE);
       await enqueueCritical({ type: 'library_add', search_id: 'a' });
-      expect(deliveries(recordEventMock)).toHaveLength(1);
+      expect(sentEntries()).toHaveLength(1);
 
       applyKillSwitches({ telemetry_enabled: false });
       await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
 
-      expect(deliveries(recordEventMock)).toHaveLength(1);
+      expect(sentEntries()).toHaveLength(1);
       expect(jest.getTimerCount()).toBe(0);
     });
 
     it('stops a running pass before its next entry when the switch is turned off', async () => {
-      let releaseFirst!: () => void;
-      recordEventMock.mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseFirst = resolve;
-          }),
-      );
-      _resetOutboxForTest({ restored: false });
-      (loadPersistedOutbox as jest.Mock).mockReturnValue(
+      const releaseFirst = holdNextRequest();
+      restoreFromDisk(
         ['a', 'b'].map((id) => ({
           type: 'library_add',
           search_id: id,
@@ -173,13 +222,13 @@ describe('remote kill switch', () => {
       );
       const pass = flushOutbox();
       await settle();
-      expect(recordEventMock).toHaveBeenCalledTimes(1);
+      expect(received).toHaveLength(1);
 
       applyKillSwitches({ telemetry_enabled: false });
       releaseFirst();
       await pass;
 
-      expect(recordEventMock.mock.calls.map(([e]) => e.search_id)).toEqual(['a']);
+      expect(sentEntries().map((e) => e.search_id)).toEqual(['a']);
       expect(queuedIds()).toEqual(['b']);
     });
 
@@ -190,7 +239,7 @@ describe('remote kill switch', () => {
       applyKillSwitches({ telemetry_enabled: true });
       await settle();
 
-      expect(recordEventMock.mock.calls.map(([e]) => e.search_id)).toEqual(['a']);
+      expect(sentEntries().map((e) => e.search_id)).toEqual(['a']);
       expect(queuedIds()).toEqual([]);
     });
   });
@@ -198,7 +247,7 @@ describe('remote kill switch', () => {
 
 describe('Reducer: enqueueCritical', () => {
   it('enqueuing onto an empty queue commits the new entry to disk before its send has resolved', () => {
-    recordEventMock.mockReturnValue(new Promise(() => {}));
+    serverReplies(() => new Promise<Reply>(() => undefined));
 
     enqueueCritical(event({ search_id: 'first' })).catch(() => undefined);
 
@@ -206,7 +255,7 @@ describe('Reducer: enqueueCritical', () => {
   });
 
   it('enqueuing past MAX_ENTRIES caps the queue at MAX_ENTRIES, dropping the oldest entry', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
 
     for (let i = 0; i <= MAX_ENTRIES; i += 1) {
       await enqueueCritical(event({ search_id: `q${i}` }));
@@ -222,7 +271,7 @@ describe('Reducer: enqueueCritical', () => {
     const mintSpy = jest
       .spyOn(Crypto, 'randomUUID')
       .mockReturnValue('11111111-1111-4111-8111-111111111111');
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
 
     await enqueueCritical(event({ search_id: 'first' }));
     await enqueueCritical(event({ search_id: 'second' }));
@@ -236,13 +285,7 @@ describe('Reducer: enqueueCritical', () => {
 
 describe('Concurrency: an entry enqueued during an in-flight flush', () => {
   it('is sent by the same flush cycle with no further trigger', async () => {
-    let releaseFirst: () => void = () => undefined;
-    recordEventMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          releaseFirst = resolve;
-        }),
-    );
+    const releaseFirst = holdNextRequest();
 
     const first = enqueueCritical(event({ search_id: 'first' }));
     const second = enqueueCritical(event({ search_id: 'second' }));
@@ -256,11 +299,12 @@ describe('Concurrency: an entry enqueued during an in-flight flush', () => {
   it('never runs two sends concurrently while draining the late entries', async () => {
     let inFlight = 0;
     let maxInFlight = 0;
-    recordEventMock.mockImplementation(async () => {
+    serverReplies(async () => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await Promise.resolve();
       inFlight -= 1;
+      return HTTP_ACCEPTED;
     });
 
     await Promise.all([
@@ -274,7 +318,7 @@ describe('Concurrency: an entry enqueued during an in-flight flush', () => {
   });
 
   it('does not re-send a retryable failure in a tight loop', async () => {
-    recordEventMock.mockRejectedValue(new Error('server down'));
+    serverReplies(HTTP_UNAVAILABLE);
 
     await enqueueCritical(event({ search_id: 'a' }));
 
@@ -282,7 +326,7 @@ describe('Concurrency: an entry enqueued during an in-flight flush', () => {
   });
 
   it('stops at an offline outcome without retrying the entry in the same pass', async () => {
-    recordEventMock.mockRejectedValue(new NetworkError('transport', 'offline'));
+    serverReplies('unreachable');
 
     await enqueueCritical(event({ search_id: 'a' }));
 
@@ -292,7 +336,7 @@ describe('Concurrency: an entry enqueued during an in-flight flush', () => {
 
 describe('Backpressure: shedding a label-critical entry at the cap is recorded, never silent', () => {
   it('records the drop when enqueuing past MAX_ENTRIES sheds the oldest label-critical entry', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     for (let i = 0; i <= MAX_ENTRIES; i += 1) {
@@ -307,7 +351,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
   });
 
   it('does not record a drop while the queue stays within the cap', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
 
     for (let i = 0; i < MAX_ENTRIES; i += 1) {
       await enqueueCritical(event({ search_id: `q${i}` }));
@@ -316,35 +360,20 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
     expect(droppedCriticalCount()).toBe(0);
   });
 
-  it('records a plural drop when a restored outbox exceeds the cap by more than one', () => {
+  it('records a plural drop when a restored outbox exceeds the cap by more than one', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    let dropped: number | undefined;
-
-    jest.isolateModules(() => {
-      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
-        loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
-        persistOutbox: jest.MockedFunction<typeof persistOutbox>;
-      };
-      const recordEventModule = require('@shared/telemetry/recordEvent') as {
-        recordEvent: jest.MockedFunction<typeof recordEvent>;
-      };
-      const overfull: OutboxEntry[] = Array.from({ length: MAX_ENTRIES + 2 }, (_, i) => ({
+    serverReplies(HTTP_UNAVAILABLE);
+    restoreFromDisk(
+      Array.from({ length: MAX_ENTRIES + OVERFLOW }, (_, i) => ({
         ...event({ search_id: `q${i}` }),
         event_id: `persisted-${i}`,
         client_occurred_at: '2026-01-01T00:00:00.000Z',
-      }));
-      outboxStoreModule.loadPersistedOutbox.mockReturnValue(overfull);
-      recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
+      })),
+    );
 
-      const outbox = require('@shared/telemetry/outbox') as {
-        flushOutbox: typeof flushOutbox;
-        droppedCriticalCount: typeof droppedCriticalCount;
-      };
-      void outbox.flushOutbox();
-      dropped = outbox.droppedCriticalCount();
-    });
+    await flushOutbox();
 
-    expect(dropped).toBe(2);
+    expect(droppedCriticalCount()).toBe(OVERFLOW);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('entries at cap'));
 
     warn.mockRestore();
@@ -353,7 +382,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
 
 describe('Security: clearOutbox drops queued telemetry on sign-out / account switch', () => {
   it('empties the in-memory queue and deletes the persisted outbox on disk', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a-report' }));
     expect(lastPersisted()).toHaveLength(1);
 
@@ -363,18 +392,18 @@ describe('Security: clearOutbox drops queued telemetry on sign-out / account swi
   });
 
   it("a flush after clear sends nothing, so user A's queued entry cannot be delivered under user B's session", async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a-report' }));
 
     clearOutbox();
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    resetServer();
     await flushOutbox();
 
-    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(sentEntries()).toHaveLength(0);
   });
 
   it('runs off the sign-out registry, so no caller in auth has to reach for it', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a-report' }));
 
     runSignOutCleanups();
@@ -387,15 +416,15 @@ describe('Reducer: flushOutbox', () => {
   it('flushing an empty queue sends nothing and writes nothing to disk', async () => {
     await flushOutbox();
 
-    expect(recordEventMock).not.toHaveBeenCalled();
-    expect(persistOutboxMock).not.toHaveBeenCalled();
+    expect(sentEntries()).toHaveLength(0);
+    expect(lastPersisted()).toEqual([]);
   });
 
   it('a full drain sends every queued entry once, in order, and ends with an empty queue on disk', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     await enqueueCritical(event({ search_id: 'b' }));
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    resetServer();
 
     await flushOutbox();
 
@@ -406,95 +435,57 @@ describe('Reducer: flushOutbox', () => {
 
 describe('Reducer: ensureRestored (cold start, driven through a fresh module instance)', () => {
   it('merges the persisted outbox into memory on first use and dedupes a corrupted duplicate event_id, keeping the later record', async () => {
-    let freshFlushOutbox!: typeof flushOutbox;
-    let freshRecordEvent!: jest.MockedFunction<typeof recordEvent>;
-    let freshPersistOutbox!: jest.MockedFunction<typeof persistOutbox>;
-
-    jest.isolateModules(() => {
-      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
-        loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
-        persistOutbox: jest.MockedFunction<typeof persistOutbox>;
-      };
-      const recordEventModule = require('@shared/telemetry/recordEvent') as {
-        recordEvent: jest.MockedFunction<typeof recordEvent>;
-      };
-      outboxStoreModule.loadPersistedOutbox.mockReturnValue([
-        { type: 'library_add', event_id: 'disk-1', client_occurred_at: 'stale' },
-        { type: 'library_add', event_id: 'disk-1', client_occurred_at: 'fresh' },
-        { type: 'wrong_album', event_id: 'disk-2', client_occurred_at: 't2' },
-      ]);
-      recordEventModule.recordEvent.mockResolvedValue(undefined);
-      freshPersistOutbox = outboxStoreModule.persistOutbox;
-      freshRecordEvent = recordEventModule.recordEvent;
-      freshFlushOutbox = (
-        require('@shared/telemetry/outbox') as { flushOutbox: typeof flushOutbox }
-      ).flushOutbox;
-    });
-
-    await freshFlushOutbox();
-
-    expect(freshRecordEvent.mock.calls.map(([entry]) => (entry as OutboxEntry).event_id)).toEqual([
-      'disk-1',
-      'disk-2',
+    restoreFromDisk([
+      { type: 'library_add', event_id: 'disk-1', client_occurred_at: 'stale' },
+      { type: 'library_add', event_id: 'disk-1', client_occurred_at: 'fresh' },
+      { type: 'wrong_album', event_id: 'disk-2', client_occurred_at: 't2' },
     ]);
-    expect((freshRecordEvent.mock.calls[0]?.[0] as OutboxEntry).client_occurred_at).toBe('fresh');
-    expect(freshPersistOutbox.mock.calls.at(-1)?.[0]).toEqual([]);
+
+    await flushOutbox();
+
+    expect(received.map((entry) => entry.event_id)).toEqual(['disk-1', 'disk-2']);
+    expect(received[0]?.client_occurred_at).toBe('fresh');
+    expect(lastPersisted()).toEqual([]);
   });
 });
 
 describe('Concurrency: the _flushing reentrancy guard', () => {
   it('a second flushOutbox call started while the first is still awaiting recordEvent does not send again', async () => {
-    recordEventMock.mockRejectedValueOnce(new Error('send unavailable'));
+    serverRepliesOnce(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'only' }));
 
-    let resolveSend!: () => void;
-    recordEventMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveSend = resolve;
-        }),
-    );
+    const resolveSend = holdNextRequest();
 
-    const callsBeforeConcurrentFlushes = recordEventMock.mock.calls.length;
+    const callsBeforeConcurrentFlushes = sentEntries().length;
     const first = flushOutbox();
     const second = flushOutbox();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
 
-    expect(recordEventMock.mock.calls.length).toBe(callsBeforeConcurrentFlushes + 1);
+    expect(sentEntries().length).toBe(callsBeforeConcurrentFlushes + 1);
 
     resolveSend();
     await first;
     await second;
 
-    expect(recordEventMock.mock.calls.length).toBe(callsBeforeConcurrentFlushes + 1);
+    expect(sentEntries().length).toBe(callsBeforeConcurrentFlushes + 1);
     expect(lastPersisted()).toEqual([]);
   });
 });
 
 describe('Concurrency: commit-after-send ordering', () => {
   it('the entry leaves the queue only after its send resolves, never while the send is still pending', async () => {
-    recordEventMock.mockRejectedValueOnce(new Error('send unavailable'));
+    serverRepliesOnce(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'only' }));
-    const persistCallsBeforeRetry = persistOutboxMock.mock.calls.length;
 
-    let resolveSend!: () => void;
-    recordEventMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveSend = resolve;
-        }),
-    );
+    const resolveSend = holdNextRequest();
     const pending = flushOutbox();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
 
-    expect(persistOutboxMock.mock.calls.length).toBe(persistCallsBeforeRetry);
+    expect(lastPersisted().map((e) => e.search_id)).toEqual(['only']);
 
     resolveSend();
     await pending;
 
-    expect(persistOutboxMock.mock.calls.length).toBe(persistCallsBeforeRetry + 1);
     expect(lastPersisted()).toEqual([]);
   });
 });
@@ -504,7 +495,7 @@ describe('Idempotence: replaying the same event_id', () => {
     const mintSpy = jest
       .spyOn(Crypto, 'randomUUID')
       .mockReturnValue('22222222-2222-4222-8222-222222222222');
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
 
     await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
     const afterOnce = lastPersisted();
@@ -522,144 +513,104 @@ describe('Idempotence: replaying the same event_id', () => {
 describe('Idempotence: flushing an already-drained queue', () => {
   it('is a no-op, identical to the drain that already happened', async () => {
     await enqueueCritical(event({ search_id: 'drains' }));
-    const recordCallsAfterDrain = recordEventMock.mock.calls.length;
-    const persistCallsAfterDrain = persistOutboxMock.mock.calls.length;
+    const recordCallsAfterDrain = sentEntries().length;
 
     await flushOutbox();
 
-    expect(recordEventMock.mock.calls.length).toBe(recordCallsAfterDrain);
-    expect(persistOutboxMock.mock.calls.length).toBe(persistCallsAfterDrain);
+    expect(sentEntries().length).toBe(recordCallsAfterDrain);
+    expect(lastPersisted()).toEqual([]);
   });
 });
 
+interface FreshApp {
+  enqueueCritical: typeof enqueueCritical;
+  loadPersistedOutbox: typeof loadPersistedOutbox;
+  listeners: AppStateChangeHandler[];
+}
+
+function bootFreshApp(): FreshApp {
+  let app!: FreshApp;
+  jest.isolateModules(() => {
+    const signIn = require('@testing/signInTestUser') as { signInTestUser: () => Promise<void> };
+    void signIn.signInTestUser();
+    const appState = require('react-native/Libraries/AppState/AppState') as {
+      __listeners: AppStateChangeHandler[];
+    };
+    app = {
+      enqueueCritical: (
+        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
+      ).enqueueCritical,
+      loadPersistedOutbox: (
+        require('@shared/telemetry/outboxStore') as {
+          loadPersistedOutbox: typeof loadPersistedOutbox;
+        }
+      ).loadPersistedOutbox,
+      listeners: appState.__listeners,
+    };
+  });
+  return app;
+}
+
 describe('Idempotence: a foreground transition arriving twice', () => {
   it('flushes on the first active transition and is a no-op on the second, back-to-back', async () => {
-    let listeners!: AppStateChangeHandler[];
-    let freshEnqueue!: typeof enqueueCritical;
-    let freshRecordEvent!: jest.MockedFunction<typeof recordEvent>;
-    let freshPersistOutbox!: jest.MockedFunction<typeof persistOutbox>;
+    const app = bootFreshApp();
+    serverReplies(HTTP_UNAVAILABLE);
 
-    jest.isolateModules(() => {
-      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
-        loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
-        persistOutbox: jest.MockedFunction<typeof persistOutbox>;
-      };
-      const recordEventModule = require('@shared/telemetry/recordEvent') as {
-        recordEvent: jest.MockedFunction<typeof recordEvent>;
-      };
-      const appStateModule = require('react-native/Libraries/AppState/AppState') as {
-        __listeners: AppStateChangeHandler[];
-      };
-      outboxStoreModule.loadPersistedOutbox.mockReturnValue([]);
-      recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
-      listeners = appStateModule.__listeners;
-      freshPersistOutbox = outboxStoreModule.persistOutbox;
-      freshRecordEvent = recordEventModule.recordEvent;
-      freshEnqueue = (
-        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
-      ).enqueueCritical;
-    });
-
-    await freshEnqueue(event({ search_id: 'q' }));
-    expect(deliveries(freshRecordEvent)).toHaveLength(1);
+    await app.enqueueCritical(event({ search_id: 'q' }));
+    expect(sentEntries()).toHaveLength(1);
 
     const realNow = Date.now();
     const clock = jest.spyOn(Date, 'now').mockReturnValue(realNow + FLUSH_BACKOFF_CAP_MS);
-    freshRecordEvent.mockResolvedValue(undefined);
-    listeners.forEach((handler) => handler('active'));
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    serverReplies(HTTP_ACCEPTED);
+    app.listeners.forEach((handler) => handler('active'));
+    await settle();
 
-    expect(deliveries(freshRecordEvent)).toHaveLength(2);
-    expect(freshPersistOutbox.mock.calls.at(-1)?.[0]).toEqual([]);
+    expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
+    expect(app.loadPersistedOutbox()).toEqual([]);
 
-    listeners.forEach((handler) => handler('active'));
-    await Promise.resolve();
-    await Promise.resolve();
+    app.listeners.forEach((handler) => handler('active'));
+    await settle();
 
-    expect(deliveries(freshRecordEvent)).toHaveLength(2);
+    expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
     clock.mockRestore();
   });
 
   it('does not flush on a transition to background, inactive, or any status other than active', async () => {
-    let listeners!: AppStateChangeHandler[];
-    let freshEnqueue!: typeof enqueueCritical;
-    let freshRecordEvent!: jest.MockedFunction<typeof recordEvent>;
+    const app = bootFreshApp();
+    serverReplies(HTTP_UNAVAILABLE);
 
-    jest.isolateModules(() => {
-      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
-        loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
-        persistOutbox: jest.MockedFunction<typeof persistOutbox>;
-      };
-      const recordEventModule = require('@shared/telemetry/recordEvent') as {
-        recordEvent: jest.MockedFunction<typeof recordEvent>;
-      };
-      const appStateModule = require('react-native/Libraries/AppState/AppState') as {
-        __listeners: AppStateChangeHandler[];
-      };
-      outboxStoreModule.loadPersistedOutbox.mockReturnValue([]);
-      recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
-      listeners = appStateModule.__listeners;
-      freshRecordEvent = recordEventModule.recordEvent;
-      freshEnqueue = (
-        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
-      ).enqueueCritical;
-    });
-
-    await freshEnqueue(event({ search_id: 'q' }));
-    const callsAfterEnqueue = freshRecordEvent.mock.calls.length;
+    await app.enqueueCritical(event({ search_id: 'q' }));
+    const callsAfterEnqueue = sentEntries().length;
 
     for (const status of ['background', 'inactive', 'extension', 'unknown']) {
-      listeners.forEach((handler) => handler(status));
-      await Promise.resolve();
-      await Promise.resolve();
+      app.listeners.forEach((handler) => handler(status));
+      await settle();
     }
 
-    expect(freshRecordEvent.mock.calls.length).toBe(callsAfterEnqueue);
+    expect(sentEntries().length).toBe(callsAfterEnqueue);
   });
 });
 
 describe('Regression: repeated enqueueCritical calls must not accumulate AppState listeners', () => {
   it('registers exactly one AppState listener no matter how many times enqueueCritical runs', async () => {
-    let listeners!: AppStateChangeHandler[];
-    let freshEnqueue!: typeof enqueueCritical;
+    const app = bootFreshApp();
+    serverReplies(HTTP_UNAVAILABLE);
 
-    jest.isolateModules(() => {
-      const outboxStoreModule = require('@shared/telemetry/outboxStore') as {
-        loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
-        persistOutbox: jest.MockedFunction<typeof persistOutbox>;
-      };
-      const recordEventModule = require('@shared/telemetry/recordEvent') as {
-        recordEvent: jest.MockedFunction<typeof recordEvent>;
-      };
-      const appStateModule = require('react-native/Libraries/AppState/AppState') as {
-        __listeners: AppStateChangeHandler[];
-      };
-      outboxStoreModule.loadPersistedOutbox.mockReturnValue([]);
-      recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
-      listeners = appStateModule.__listeners;
-      freshEnqueue = (
-        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
-      ).enqueueCritical;
-    });
+    await app.enqueueCritical(event({ search_id: 'first' }));
+    const listenerCountAfterFirst = app.listeners.length;
+    await app.enqueueCritical(event({ search_id: 'second' }));
+    await app.enqueueCritical(event({ search_id: 'third' }));
 
-    const listenerCountBefore = listeners.length;
-
-    await freshEnqueue(event({ search_id: 'first' }));
-    await freshEnqueue(event({ search_id: 'second' }));
-    await freshEnqueue(event({ search_id: 'third' }));
-
-    expect(listeners.length - listenerCountBefore).toBe(1);
+    expect(app.listeners.length).toBe(listenerCountAfterFirst);
   });
 });
 
 describe('Failure injection: recordEvent is the one I/O call site', () => {
   it('rejecting on every entry attempts each one once and leaves the whole queue, in order, on disk', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     await enqueueCritical(event({ search_id: 'b' }));
-    recordEventMock.mockClear();
+    received.length = 0;
 
     await flushOutbox();
 
@@ -668,12 +619,13 @@ describe('Failure injection: recordEvent is the one I/O call site', () => {
   });
 
   it('rejecting on a middle entry commits everything sent around it and leaves only the failure queued', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     await enqueueCritical(event({ search_id: 'b' }));
     await enqueueCritical(event({ search_id: 'c' }));
-    recordEventMock.mockReset().mockResolvedValue(undefined);
-    recordEventMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('still down'));
+    resetServer();
+    serverRepliesOnce(HTTP_ACCEPTED);
+    serverRepliesOnce(HTTP_UNAVAILABLE);
 
     await flushOutbox();
 
@@ -682,10 +634,10 @@ describe('Failure injection: recordEvent is the one I/O call site', () => {
   });
 
   it('rejecting on every entry across repeated flush calls never drains the queue and always retries from the front', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     await enqueueCritical(event({ search_id: 'b' }));
-    recordEventMock.mockClear();
+    received.length = 0;
 
     await flushOutbox();
     await flushOutbox();
@@ -698,17 +650,13 @@ describe('Failure injection: recordEvent is the one I/O call site', () => {
 
 describe('Regression: a permanently rejected entry must not block the queue behind it', () => {
   it('drops an entry the server rejects with 400 and keeps draining the rest', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'poisoned' }));
     await enqueueCritical(event({ search_id: 'b' }));
     await enqueueCritical(event({ search_id: 'c' }));
 
-    recordEventMock.mockReset();
-    recordEventMock.mockImplementation(async (entry: DiscoveryEvent) => {
-      if (entry.search_id === 'poisoned')
-        throw new ApiError(400, 'payload.result_signature must be a string');
-      return undefined;
-    });
+    resetServer();
+    serverReplies((entry) => (entry.search_id === 'poisoned' ? HTTP_BAD_REQUEST : HTTP_ACCEPTED));
 
     await flushOutbox();
 
@@ -717,25 +665,25 @@ describe('Regression: a permanently rejected entry must not block the queue behi
   });
 
   it('still stops at the first retryable failure, so a transient outage never discards an entry', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     await enqueueCritical(event({ search_id: 'b' }));
 
-    recordEventMock.mockReset();
-    recordEventMock.mockRejectedValue(new NetworkError('transport', 'unreachable'));
+    resetServer();
+    serverReplies('unreachable');
 
     await flushOutbox();
 
-    expect(deliveries(recordEventMock)).toHaveLength(1);
+    expect(sentEntries()).toHaveLength(1);
     expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a', 'b']);
   });
 
   it('retries a 401 rather than dropping it, so a briefly absent session never loses a label', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
 
-    recordEventMock.mockReset();
-    recordEventMock.mockRejectedValue(new ApiError(401, 'no active session'));
+    resetServer();
+    serverReplies(HTTP_UNAUTHORIZED);
 
     await flushOutbox();
 
@@ -745,11 +693,11 @@ describe('Regression: a permanently rejected entry must not block the queue behi
 
 describe('Regression: every non-transient 4xx is a permanent rejection', () => {
   it.each([403, 404, 413, 422])('drops an entry the server rejects with %i', async (status) => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
 
-    recordEventMock.mockReset();
-    recordEventMock.mockRejectedValue(new ApiError(status, 'rejected'));
+    resetServer();
+    serverReplies(status);
 
     await flushOutbox();
 
@@ -759,11 +707,11 @@ describe('Regression: every non-transient 4xx is a permanent rejection', () => {
   it.each([401, 408, 429, 500, 503])(
     'retries an entry whose send fails with %i',
     async (status) => {
-      recordEventMock.mockRejectedValue(new Error('send unavailable'));
+      serverReplies(HTTP_UNAVAILABLE);
       await enqueueCritical(event({ search_id: 'a' }));
 
-      recordEventMock.mockReset();
-      recordEventMock.mockRejectedValue(new ApiError(status, 'try later'));
+      resetServer();
+      serverReplies(status);
 
       await flushOutbox();
 
@@ -775,7 +723,7 @@ describe('Regression: every non-transient 4xx is a permanent rejection', () => {
 describe('Security: entries are owned by the user who queued them', () => {
   it('tags an entry with the current owner on disk but strips the tag from what is sent', async () => {
     setOutboxOwner('user-a');
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'mine' }));
 
     expect(lastPersisted()?.map((e) => e.owner_user_id)).toEqual(['user-a']);
@@ -783,12 +731,11 @@ describe('Security: entries are owned by the user who queued them', () => {
   });
 
   it("switching the owner drops the previous user's entries and keeps the new user's", async () => {
-    loadPersistedOutboxMock.mockReturnValue([
+    restoreFromDisk([
       { type: 'library_add', event_id: 'a', client_occurred_at: 't', owner_user_id: 'user-a' },
       { type: 'library_add', event_id: 'b', client_occurred_at: 't', owner_user_id: 'user-b' },
       { type: 'library_add', event_id: 'untagged', client_occurred_at: 't' },
     ]);
-    _resetOutboxForTest({ restored: false });
 
     setOutboxOwner('user-b');
     expect(lastPersisted()?.map((e) => e.event_id)).toEqual(['b']);
@@ -799,31 +746,24 @@ describe('Security: entries are owned by the user who queued them', () => {
   });
 
   it('with nobody signed in, a flush never sends an entry owned by a user', async () => {
-    loadPersistedOutboxMock.mockReturnValue([
+    restoreFromDisk([
       { type: 'library_add', event_id: 'a', client_occurred_at: 't', owner_user_id: 'user-a' },
     ]);
-    _resetOutboxForTest({ restored: false });
 
     await flushOutbox();
 
-    expect(recordEventMock).not.toHaveBeenCalled();
-    expect(lastPersisted()).toBeUndefined();
+    expect(sentEntries()).toHaveLength(0);
+    expect(lastPersisted().map((e) => e.event_id)).toEqual(['a']);
   });
 
   it('an in-flight flush stops sending once the queue is cleared for an account switch', async () => {
     setOutboxOwner('user-a');
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a1' }));
     await enqueueCritical(event({ search_id: 'a2' }));
 
-    let release!: () => void;
-    recordEventMock.mockReset().mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          release = resolve;
-        }),
-    );
-    recordEventMock.mockResolvedValue(undefined);
+    resetServer();
+    const release = holdNextRequest();
     const flushing = flushOutbox();
 
     clearOutbox();
@@ -840,30 +780,22 @@ function persisted(eventId: string, overrides: Partial<OutboxEntry> = {}): Outbo
   return { type: 'library_add', event_id: eventId, client_occurred_at: 't', ...overrides };
 }
 
-function restoreFromDisk(entries: OutboxEntry[]): void {
-  loadPersistedOutboxMock.mockReturnValue(entries);
-  _resetOutboxForTest({ restored: false });
-}
-
-function failFor(eventId: string, error: unknown): void {
-  recordEventMock.mockImplementation(async (entry: DiscoveryEvent) => {
-    if (entry.event_id === eventId) throw error;
-    return undefined;
-  });
+function failFor(eventId: string, reply: Reply): void {
+  serverReplies((entry) => (entry.event_id === eventId ? reply : HTTP_ACCEPTED));
 }
 
 describe('Regression: a persistently failing entry never starves the entries queued behind it', () => {
   it.each([
-    ['a 5xx', new ApiError(503, 'unavailable')],
-    ['an expired-token 401', new ApiError(401, 'jwt expired')],
-    ['a 429', new ApiError(429, 'rate limited')],
-    ['an unclassified error', new Error('boom')],
-  ])(
+    ['a 5xx', HTTP_UNAVAILABLE],
+    ['an expired-token HTTP_UNAUTHORIZED', HTTP_UNAUTHORIZED],
+    ['a 429', HTTP_TOO_MANY_REQUESTS],
+    ['a HTTP_SERVER_ERROR', HTTP_SERVER_ERROR],
+  ] as const)(
     'attempts and delivers every later entry while %s keeps the head entry queued',
-    async (_label, error) => {
+    async (_label, status) => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       restoreFromDisk([persisted('stuck'), persisted('b'), persisted('c')]);
-      failFor('stuck', error);
+      failFor('stuck', status);
 
       await flushOutbox();
 
@@ -875,9 +807,9 @@ describe('Regression: a persistently failing entry never starves the entries que
 
   it('logs the failing entry type, event_id and error before moving on', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const error = new ApiError(503, 'unavailable');
+    const error = expect.objectContaining({ status: 503 });
     restoreFromDisk([persisted('stuck', { type: 'wrong_album' }), persisted('b')]);
-    failFor('stuck', error);
+    failFor('stuck', HTTP_UNAVAILABLE);
 
     await flushOutbox();
 
@@ -887,9 +819,9 @@ describe('Regression: a persistently failing entry never starves the entries que
 
   it('logs an entry dropped as permanently rejected too, so a chronic 400 is not silent', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const error = new ApiError(400, 'bad payload');
+    const error = expect.objectContaining({ status: 400 });
     restoreFromDisk([persisted('poisoned')]);
-    failFor('poisoned', error);
+    failFor('poisoned', HTTP_BAD_REQUEST);
 
     await flushOutbox();
 
@@ -905,7 +837,7 @@ describe('Regression: a persistently failing entry never starves the entries que
       persisted('user-a-entry', { owner_user_id: 'user-a' }),
       persisted('ok'),
     ]);
-    failFor('stuck', new ApiError(503, 'unavailable'));
+    failFor('stuck', HTTP_UNAVAILABLE);
 
     await flushOutbox();
 
@@ -916,8 +848,8 @@ describe('Regression: a persistently failing entry never starves the entries que
 
   it('surfaces the running droppedCriticalCount in the failed-pass log so a sustained drop rate is visible', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    restoreFromDisk(Array.from({ length: MAX_ENTRIES + 2 }, (_, i) => persisted(`q${i}`)));
-    recordEventMock.mockRejectedValue(new NetworkError('transport', 'offline'));
+    restoreFromDisk(Array.from({ length: MAX_ENTRIES + OVERFLOW }, (_, i) => persisted(`q${i}`)));
+    serverReplies('unreachable');
 
     await flushOutbox();
 
@@ -946,24 +878,23 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
   }
 
   it('after a failed pass, neither a new enqueue nor a foreground transition retries before the backoff elapses', async () => {
-    recordEventMock.mockRejectedValue(new ApiError(503, 'unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
-    expect(deliveries(recordEventMock)).toHaveLength(1);
-    recordEventMock.mockClear();
+    expect(sentEntries()).toHaveLength(1);
+    received.length = 0;
 
     await enqueueCritical(event({ search_id: 'b' }));
     foreground();
-    await Promise.resolve();
-    await Promise.resolve();
+    await settle();
 
-    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(sentEntries()).toHaveLength(0);
     expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a', 'b']);
   });
 
   it('retries by itself once the backoff elapses, with no enqueue or foreground trigger', async () => {
-    recordEventMock.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+    serverRepliesOnce(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
-    recordEventMock.mockClear();
+    received.length = 0;
 
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_BASE_MS);
 
@@ -973,55 +904,56 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
 
   it('doubles the wait on each consecutive failed pass and resets it after a clean pass', async () => {
     const random = jest.spyOn(Math, 'random').mockReturnValue(0);
-    recordEventMock.mockRejectedValue(new ApiError(503, 'unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
-    expect(deliveries(recordEventMock)).toHaveLength(1);
+    expect(sentEntries()).toHaveLength(1);
 
     for (const [attempt, wait] of [
       [2, FLUSH_BACKOFF_BASE_MS / 2],
       [3, FLUSH_BACKOFF_BASE_MS],
     ] as const) {
       await jest.advanceTimersByTimeAsync(wait - 1);
-      expect(deliveries(recordEventMock)).toHaveLength(attempt - 1);
+      expect(sentEntries()).toHaveLength(attempt - 1);
       await jest.advanceTimersByTimeAsync(1);
-      expect(deliveries(recordEventMock)).toHaveLength(attempt);
+      expect(sentEntries()).toHaveLength(attempt);
     }
 
-    recordEventMock.mockResolvedValue(undefined);
+    serverReplies(HTTP_ACCEPTED);
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_BASE_MS * 2);
-    expect(deliveries(recordEventMock)).toHaveLength(4);
+    expect(sentEntries()).toHaveLength(FOURTH_ATTEMPT);
     expect(lastPersisted()).toEqual([]);
 
-    recordEventMock.mockClear().mockRejectedValue(new ApiError(503, 'unavailable'));
+    received.length = 0;
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'after-recovery' }));
-    expect(deliveries(recordEventMock)).toHaveLength(1);
+    expect(sentEntries()).toHaveLength(1);
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_BASE_MS / 2);
-    expect(deliveries(recordEventMock)).toHaveLength(2);
+    expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
     random.mockRestore();
   });
 
   it('clearOutbox cancels the pending retry, so the next account neither inherits the wait nor a stale timer', async () => {
-    recordEventMock.mockRejectedValue(new ApiError(503, 'unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'user-a' }));
 
     clearOutbox();
-    recordEventMock.mockReset().mockResolvedValue(undefined);
+    resetServer();
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_CAP_MS);
-    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(sentEntries()).toHaveLength(0);
 
     await enqueueCritical(event({ search_id: 'user-b' }));
     expect(sentEntries().map((e) => e.search_id)).toEqual(['user-b']);
   });
 
   it('a retry timer that fires into an already-drained queue sends nothing', async () => {
-    recordEventMock.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+    serverRepliesOnce(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     await flushOutbox();
-    recordEventMock.mockClear();
+    received.length = 0;
 
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_CAP_MS);
 
-    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(sentEntries()).toHaveLength(0);
   });
 });
 
@@ -1161,61 +1093,6 @@ describe('pure helpers', () => {
   });
 });
 
-describe('recordEvent gated after the switch check', () => {
-  const { TelemetryGatedError } = jest.requireActual<{
-    TelemetryGatedError: typeof TelemetryGatedErrorClass;
-  }>('@shared/telemetry/recordEvent');
-
-  function queuedIds(): (string | undefined)[] {
-    return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
-  }
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    _resetOutboxForTest();
-    (loadPersistedOutbox as jest.Mock).mockReset().mockReturnValue([]);
-    persistOutboxMock.mockReset();
-    recordEventMock.mockReset().mockRejectedValue(new TelemetryGatedError());
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    _resetOutboxForTest();
-    jest.useRealTimers();
-    jest.restoreAllMocks();
-  });
-
-  describe('outbox — recordEvent gated after the outbox already checked the switch', () => {
-    it('keeps the entry queued instead of evicting it as sent', async () => {
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-
-      expect(recordEventMock).toHaveBeenCalledTimes(1);
-      expect(queuedIds()).toEqual(['a']);
-    });
-
-    it('does not log the gated entry as a send failure', async () => {
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-
-      expect(console.warn).not.toHaveBeenCalled();
-    });
-
-    it('arms no backoff retry for a gated entry', async () => {
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-
-      expect(jest.getTimerCount()).toBe(0);
-    });
-
-    it('sends the entry once recordEvent stops gating it', async () => {
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-      recordEventMock.mockResolvedValue(undefined);
-
-      await flushOutbox();
-
-      expect(queuedIds()).toEqual([]);
-    });
-  });
-});
-
 describe('capOutbox keeps diagnostics from evicting label-critical entries', () => {
   const queued = (eventId: string, type: OutboxEntry['type']): OutboxEntry => ({
     type,
@@ -1254,23 +1131,25 @@ describe('outbox_flush_failed telemetry', () => {
   });
 
   function flushFailures(): DiscoveryEvent[] {
-    return recordEventMock.mock.calls
-      .map(([e]) => e)
-      .filter((e) => e.type === 'outbox_flush_failed');
+    return received.filter((e) => e.type === 'outbox_flush_failed');
   }
 
   it('sends outbox_flush_failed directly, once per failed pass, without queueing it', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical({ type: 'library_add', search_id: 'a' });
+    await settle();
 
     expect(flushFailures()).toEqual([
-      { type: 'outbox_flush_failed', payload: { failed_passes: 1, queued: 1, dropped_at_cap: 0 } },
+      {
+        type: 'outbox_flush_failed',
+        payload: expect.objectContaining({ failed_passes: 1, queued: 1, dropped_at_cap: 0 }),
+      },
     ]);
     expect(lastPersisted()?.map((e) => e.type)).toEqual(['library_add']);
   });
 
   it('counts each further failed pass and survives a rejected telemetry send', async () => {
-    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical({ type: 'library_add', search_id: 'a' });
 
     await jest.advanceTimersByTimeAsync(60_000);
