@@ -4,15 +4,12 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
 	"context"
-	"fmt"
-	"strings"
-	"testing"
-)
-
-import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 

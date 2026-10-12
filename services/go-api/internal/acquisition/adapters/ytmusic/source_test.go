@@ -11,9 +11,9 @@ type recordingFetcher struct {
 	gotDir string
 }
 
-func (f *recordingFetcher) Download(_ context.Context, url, outDir string) (string, error) {
+func (f *recordingFetcher) Download(_ context.Context, url, outDir string) (ports.FetchedAudio, error) {
 	f.gotURL, f.gotDir = url, outDir
-	return outDir + "/track.mp3", nil
+	return ports.FetchedAudio{Path: outDir + "/track.mp3"}, nil
 }
 
 func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
@@ -107,7 +107,7 @@ func TestFetch_DelegatesToTheDownloader(t *testing.T) {
 	fetcher := &recordingFetcher{}
 	src := NewSource(fetcher)
 
-	path, err := src.Fetch(context.Background(),
+	fetched, err := src.Fetch(context.Background(),
 		ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=xyz"}, "/tmp/out")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -115,8 +115,8 @@ func TestFetch_DelegatesToTheDownloader(t *testing.T) {
 	if fetcher.gotURL != "https://music.youtube.com/watch?v=xyz" {
 		t.Errorf("downloaded %q", fetcher.gotURL)
 	}
-	if path != "/tmp/out/track.mp3" {
-		t.Errorf("path = %q", path)
+	if fetched.Path != "/tmp/out/track.mp3" {
+		t.Errorf("path = %q", fetched.Path)
 	}
 }
 

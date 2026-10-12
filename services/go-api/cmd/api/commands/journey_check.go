@@ -2,6 +2,7 @@ package commands
 
 import (
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -32,7 +33,7 @@ type journeySearcher interface {
 }
 
 type journeyDownloader interface {
-	Download(ctx context.Context, url string, outDir string) (string, error)
+	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
 }
 
 func RunJourneyCheck(cfg *config.Config) {
@@ -109,11 +110,11 @@ func journeyDownload(ctx context.Context, downloader journeyDownloader) (int64, 
 	}
 	defer func() { _ = os.RemoveAll(outDir) }()
 
-	path, err := downloader.Download(ctx, ytdlp.YouTubeCanary.URL, outDir)
+	fetched, err := downloader.Download(ctx, ytdlp.YouTubeCanary.URL, outDir)
 	if err != nil {
 		return 0, err
 	}
-	info, err := os.Stat(path)
+	info, err := os.Stat(fetched.Path)
 	if err != nil {
 		return 0, err
 	}

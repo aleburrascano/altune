@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -25,6 +27,7 @@ type StoreStep struct {
 	keyPrefix   string
 	deleteTries int
 	sleep       func(time.Duration)
+	workspace   ports.TempWorkspace
 }
 
 func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *StoreStep {
@@ -81,11 +84,28 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 	}
 	ac.AudioRef = audioRef
 
+	file := s.storedFileAt(ac.TempPath)
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
 		return afterStore{}, withCancellation(ctx, fmt.Errorf("store audio: %w", err))
 	}
+	jobReporterFrom(ctx).stored(file)
 
 	return afterStore{}, nil
+}
+
+func (s *StoreStep) storedFileAt(path string) ports.StoredFile {
+	file := ports.StoredFile{Codec: strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")}
+	if s.workspace == nil {
+		return file
+	}
+	if size, err := s.workspace.Size(path); err == nil {
+		file.Bytes = size
+	}
+	return file
+}
+
+func WithStoreWorkspace(w ports.TempWorkspace) func(*StoreStep) {
+	return func(s *StoreStep) { s.workspace = w }
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {

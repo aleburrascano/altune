@@ -114,9 +114,9 @@ func (c *capturingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.
 	return out, nil
 }
 
-func (c *capturingSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ string) (string, error) {
+func (c *capturingSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
 	c.fetched = append(c.fetched, candidate.URL)
-	return "", errors.New("fetch disabled in this test")
+	return fetchedAt("", errors.New("fetch disabled in this test"))
 }
 
 func (c *capturingSource) tried(url string) bool {

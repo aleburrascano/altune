@@ -53,6 +53,9 @@ type JobRecord struct {
 	ElapsedMs      int64
 	Reason         string
 	Provenance     string
+	StageMs        map[string]int64
+	Source         SourceFormat
+	Stored         StoredFile
 }
 
 type AcquisitionStatus struct {
@@ -72,10 +75,19 @@ type AcquisitionStatus struct {
 }
 
 type AcquisitionOutcome struct {
-	TrackID   string
-	Outcome   JobState
-	Reason    string
-	ElapsedMs int64
+	TrackID    string
+	Outcome    JobState
+	Reason     string
+	ElapsedMs  int64
+	StageMs    map[string]int64
+	SourceHost string
+	Source     SourceFormat
+	Stored     StoredFile
+}
+
+type StoredFile struct {
+	Bytes int64
+	Codec string
 }
 
 type OutcomeRecorder interface {

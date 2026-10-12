@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"context"
+	"time"
 )
 
 type jobReporterKey struct{}
@@ -14,14 +15,24 @@ type jobReporter interface {
 	stage(name string)
 	source(url string)
 	provenance(value string)
+	timing(stage string, d time.Duration)
+	fetched(format ports.SourceFormat)
+	stored(file ports.StoredFile)
 }
 
 type noopJobReporter struct{}
 
-func (noopJobReporter) meta(_, _, _ string) {}
-func (noopJobReporter) stage(_ string)      {}
-func (noopJobReporter) source(_ string)     {}
-func (noopJobReporter) provenance(_ string) {}
+func (noopJobReporter) meta(_, _, _ string)              {}
+func (noopJobReporter) stage(_ string)                   {}
+func (noopJobReporter) source(_ string)                  {}
+func (noopJobReporter) provenance(_ string)              {}
+func (noopJobReporter) timing(_ string, _ time.Duration) {}
+func (noopJobReporter) fetched(_ ports.SourceFormat)     {}
+func (noopJobReporter) stored(_ ports.StoredFile)        {}
+
+func timeStage(ctx context.Context, stage string, start time.Time) {
+	jobReporterFrom(ctx).timing(stage, time.Since(start))
+}
 
 func withJobReporter(ctx context.Context, r jobReporter) context.Context {
 	return context.WithValue(ctx, jobReporterKey{}, r)
@@ -64,4 +75,21 @@ func (r schedulerJobReporter) source(url string) {
 			j.ResolvedSource = url
 		}
 	})
+}
+
+func (r schedulerJobReporter) timing(stage string, d time.Duration) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) {
+		if j.StageMs == nil {
+			j.StageMs = map[string]int64{}
+		}
+		j.StageMs[stage] += d.Milliseconds()
+	})
+}
+
+func (r schedulerJobReporter) fetched(format ports.SourceFormat) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Source = format })
+}
+
+func (r schedulerJobReporter) stored(file ports.StoredFile) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stored = file })
 }

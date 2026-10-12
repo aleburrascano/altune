@@ -297,3 +297,42 @@ func TestPgxOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewer(t *
 		t.Errorf("recent outcomes after Prune = %d, want 1", len(got))
 	}
 }
+
+func TestPgxOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	trackID := uuid.NewString()
+
+	err := store.Record(context.Background(), ports.AcquisitionOutcome{
+		TrackID: trackID, Outcome: "succeeded", ElapsedMs: 9000,
+		StageMs:    map[string]int64{"search": 800, "download.preview": 4100},
+		SourceHost: "music.youtube.com",
+		Source:     ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"},
+		Stored:     ports.StoredFile{Bytes: 7_340_032, Codec: "mp3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stageMs map[string]int64
+	var host, formatID, sourceCodec, storedCodec string
+	var kbps *int32
+	var bytes int64
+	err = pool.QueryRow(context.Background(), `
+		SELECT stage_ms, source_host, source_format_id, source_codec, source_kbps, stored_bytes, stored_codec
+		FROM acquisition_outcomes WHERE track_id = $1`, trackID).
+		Scan(&stageMs, &host, &formatID, &sourceCodec, &kbps, &bytes, &storedCodec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stageMs["search"] != 800 || stageMs["download.preview"] != 4100 || len(stageMs) != 2 {
+		t.Errorf("stage_ms = %v, want exactly the two recorded stages", stageMs)
+	}
+	if host != "music.youtube.com" || formatID != "18" || sourceCodec != "mp4a.40.2" || bytes != 7_340_032 || storedCodec != "mp3" {
+		t.Errorf("row = %s %s %s %d %s, want the recorded file facts", host, formatID, sourceCodec, bytes, storedCodec)
+	}
+	if kbps != nil {
+		t.Errorf("source_kbps = %d, want NULL when yt-dlp reported no audio bitrate", *kbps)
+	}
+}

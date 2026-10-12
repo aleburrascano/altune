@@ -133,7 +133,9 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 	}
 	slog.InfoContext(ctx, "pipeline step starting", "step", s.Name(), "track_id", ac.Track.ID)
 
+	start := time.Now()
 	out, execErr := s.Execute(ctx, ac, prev)
+	timeStage(ctx, string(s.Name()), start)
 	if execErr != nil {
 		slog.ErrorContext(ctx, "pipeline step failed",
 			"step", s.Name(), "track_id", ac.Track.ID, "error", redact.LogError(execErr))
@@ -196,6 +198,7 @@ type AcquisitionContext struct {
 	Confidence        float64
 	Evidence          Evidence
 	BestEffort        bool
+	SourceFormat      ports.SourceFormat
 
 	Rejections []CandidateRejection
 	Attempted  []AttemptedCandidate
@@ -301,6 +304,6 @@ func CoreSteps(
 		selectBest: NewSelectStep(),
 		download:   NewDownloadStep(sources, append([]func(*DownloadStep){WithDownloadProber(prober), WithDownloadIdentifier(identifier), WithVerifyWidth(2), WithStepTempWorkspace(workspace)}, downloadOpts...)...),
 		tag:        NewTagStep(tagger),
-		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober)}, storeOpts...)...),
+		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober), WithStoreWorkspace(workspace)}, storeOpts...)...),
 	}
 }

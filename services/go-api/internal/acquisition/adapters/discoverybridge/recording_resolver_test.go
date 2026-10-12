@@ -10,9 +10,6 @@ import (
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	discoveryports "altune/go-api/internal/discovery/ports"
 	discoveryservice "altune/go-api/internal/discovery/service"
-)
-
-import (
 	"bytes"
 	"log/slog"
 	"strings"

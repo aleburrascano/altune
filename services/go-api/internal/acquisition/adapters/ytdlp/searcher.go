@@ -10,8 +10,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -253,13 +256,35 @@ func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate
 	return candidates, skipped
 }
 
-func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir string) (string, error) {
+func (s *YtDlpAudioSearcher) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
 	return s.fetchAudio(ctx, url, outDir, nil, s.downloadTimeout)
 }
 
 func (s *YtDlpAudioSearcher) DownloadPreview(ctx context.Context, url string, outDir string, seconds int) (string, error) {
 	section := []string{"--download-sections", fmt.Sprintf("*0-%d", seconds)}
-	return s.fetchAudio(ctx, url, outDir, section, s.previewTimeout)
+	fetched, err := s.fetchAudio(ctx, url, outDir, section, s.previewTimeout)
+	return fetched.Path, err
+}
+
+const sourceFormatPrefix = "altune-source-format:"
+
+func parseSourceFormat(stdout string) ports.SourceFormat {
+	for line := range strings.Lines(stdout) {
+		fields, ok := strings.CutPrefix(strings.TrimSpace(line), sourceFormatPrefix)
+		if !ok {
+			continue
+		}
+		parts := strings.Split(fields, "|")
+		if len(parts) != 3 {
+			return ports.SourceFormat{}
+		}
+		format := ports.SourceFormat{ID: parts[0], Codec: parts[1]}
+		if kbps, err := strconv.ParseFloat(parts[2], 64); err == nil {
+			format.Kbps = int(math.Round(kbps))
+		}
+		return format
+	}
+	return ports.SourceFormat{}
 }
 
 func (s *YtDlpAudioSearcher) fetchAudio(
@@ -267,7 +292,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	url, outDir string,
 	sectionArgs []string,
 	timeout time.Duration,
-) (string, error) {
+) (ports.FetchedAudio, error) {
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
 		"-f", audioFormatSelector,
@@ -276,6 +301,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 		"--audio-quality", "0",
 		"--max-filesize", maxSourceFileSize,
 		"--no-progress",
+		"--print", "after_move:" + sourceFormatPrefix + "%(format_id)s|%(acodec)s|%(abr)s",
 		"-o", outTemplate,
 	}
 	args = append(args, sectionArgs...)
@@ -286,19 +312,23 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	}
 	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-download-cookies-*.txt")
 	if err != nil {
-		return "", fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
+		return ports.FetchedAudio{}, fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
 	}
 	defer cleanup()
 	args = s.authFlags(args, cookieFile)
 
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	_, stderr, err := execcmd.Run(runCtx, s.binary, args...)
+	stdout, stderr, err := execcmd.Run(runCtx, s.binary, args...)
 	if err != nil {
-		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
+		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
-	return largestMP3(outDir)
+	path, err := largestMP3(outDir)
+	if err != nil {
+		return ports.FetchedAudio{}, err
+	}
+	return ports.FetchedAudio{Path: path, Format: parseSourceFormat(stdout)}, nil
 }
 
 func largestMP3(outDir string) (string, error) {

@@ -595,4 +595,3 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	}
 	return runHarness("signal-b", once, human, opts)
 }
-

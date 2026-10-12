@@ -96,13 +96,13 @@ func stampSource(name acqdomain.SourceName, candidates []ports.AudioCandidate) [
 	return out
 }
 
-func (r *SourceRegistry) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
+func (r *SourceRegistry) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	for _, s := range r.sources {
 		if s.Name() == candidate.Source {
 			return s.Fetch(ctx, candidate, outDir)
 		}
 	}
-	return "", fmt.Errorf("no source named %q for candidate %q", candidate.Source, candidate.URL)
+	return ports.FetchedAudio{}, fmt.Errorf("no source named %q for candidate %q", candidate.Source, candidate.URL)
 }
 
 func (r *SourceRegistry) PreviewFetcherFor(candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {

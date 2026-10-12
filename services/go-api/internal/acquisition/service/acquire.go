@@ -247,11 +247,14 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
+	identityStart := time.Now()
 	s.resolveIdentity(ctx, ac)
+	timeStage(ctx, "identity", identityStart)
 	if err := RunPipeline(ctx, s.buildSteps(userId, trackId), ac); err != nil {
 		return err
 	}
 
+	jobReporterFrom(ctx).fetched(ac.SourceFormat)
 	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
 	return nil

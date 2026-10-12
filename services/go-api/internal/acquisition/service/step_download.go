@@ -18,7 +18,7 @@ const (
 )
 
 type candidateFetcher interface {
-	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
+	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error)
 }
 
 type previewSource interface {
@@ -285,6 +285,7 @@ type attempt struct {
 	fallback   bool
 	evidence   Evidence
 	confidence float64
+	format     ports.SourceFormat
 }
 
 func (a attempt) err() error {
@@ -304,6 +305,7 @@ func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
 	sel := a.candidate
 	ac.Selected = &sel
 	ac.TempPath = a.filePath
+	ac.SourceFormat = a.format
 	ac.TempDir = a.tmpDir
 	ac.DurationVerified = a.verified.duration
 	ac.IdentityVerified = a.verified.identity
@@ -340,16 +342,18 @@ func (s *DownloadStep) attemptAudio(
 		return attempt{rejection: rejection}
 	}
 
-	filePath, rejection := s.fetchFull(ctx, ac, candidate, tmpDir)
+	fetched, rejection := s.fetchFull(ctx, ac, candidate, tmpDir)
 	if rejection != nil {
 		return attempt{rejection: rejection}
 	}
 
-	verified, rejection := s.verify(ctx, ac, candidate, filePath, prior)
+	verified, rejection := s.verify(ctx, ac, candidate, fetched.Path, prior)
 	if rejection != nil {
-		return attempt{filePath: filePath, verified: verified, rejection: rejection}
+		return attempt{filePath: fetched.Path, verified: verified, rejection: rejection}
 	}
-	return judgeAttempt(ac, candidate, filePath, verified)
+	result := judgeAttempt(ac, candidate, fetched.Path, verified)
+	result.format = fetched.Format
+	return result
 }
 
 func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {
@@ -380,23 +384,27 @@ func (s *DownloadStep) fetchFull(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	tmpDir string,
-) (string, *downloadRejection) {
+) (ports.FetchedAudio, *downloadRejection) {
+	queued := time.Now()
 	if err := s.limiter.Acquire(ctx); err != nil {
-		return "", &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
+		return ports.FetchedAudio{}, &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
 	}
 	defer s.limiter.Release()
+	timeStage(ctx, "download.queue", queued)
 
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	filePath, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
+	fetchStart := time.Now()
+	fetched, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
+	timeStage(ctx, "download.full", fetchStart)
 	if err != nil {
 		err = candidateTimedOut(ctx, fetchCtx, candidate, err)
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", redact.LogError(err))
-		return "", &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
+		return ports.FetchedAudio{}, &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
 	}
-	return filePath, nil
+	return fetched, nil
 }
 
 func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCandidate, err error) error {

@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -293,10 +294,14 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 		recCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), outcomeRecordTimeout)
 		defer cancel()
 		err := s.outcomes.Record(recCtx, ports.AcquisitionOutcome{
-			TrackID:   record.TrackID,
-			Outcome:   record.State,
-			Reason:    record.Reason,
-			ElapsedMs: record.ElapsedMs,
+			TrackID:    record.TrackID,
+			Outcome:    record.State,
+			Reason:     record.Reason,
+			ElapsedMs:  record.ElapsedMs,
+			StageMs:    record.StageMs,
+			SourceHost: hostOf(record.ResolvedSource),
+			Source:     record.Source,
+			Stored:     record.Stored,
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition.outcome_record_failed",
@@ -366,4 +371,12 @@ func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key
 		"panic", r,
 		"stack", string(debug.Stack()),
 	)
+}
+
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }

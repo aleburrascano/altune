@@ -89,8 +89,8 @@ func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
 		t.Fatalf("Download error: %v", err)
 	}
 
-	if want := filepath.Join(outDir, "stub.mp3"); got != want {
-		t.Fatalf("Download = %q, want the file the configured binary produced (%q)", got, want)
+	if want := filepath.Join(outDir, "stub.mp3"); got.Path != want {
+		t.Fatalf("Download = %q, want the file the configured binary produced (%q)", got.Path, want)
 	}
 }
 
@@ -396,7 +396,7 @@ func TestYtDlpAudioSearcher_Download_RejectsAnOversizeOutput(t *testing.T) {
 	}
 }
 
-func downloadWithScript(t *testing.T, body string) (string, error) {
+func downloadWithScript(t *testing.T, body string) (ports.FetchedAudio, error) {
 	t.Helper()
 	outDir := t.TempDir()
 	binary := filepath.Join(t.TempDir(), "fake-yt-dlp")
@@ -426,8 +426,8 @@ func TestYtDlpAudioSearcher_Download_RejectsAnUndersizeOutput(t *testing.T) {
 
 func TestYtDlpAudioSearcher_Download_ReturnsTheLargestMP3(t *testing.T) {
 	got, err := downloadWithScript(t, "truncate -s 20K OUT/small.mp3; truncate -s 40K OUT/large.mp3")
-	if err != nil || filepath.Base(got) != "large.mp3" {
-		t.Fatalf("Download = %q, %v, want large.mp3", got, err)
+	if err != nil || filepath.Base(got.Path) != "large.mp3" {
+		t.Fatalf("Download = %q, %v, want large.mp3", got.Path, err)
 	}
 }
 
@@ -802,5 +802,55 @@ func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
 				t.Fatalf("argv = %q, want no runtime or component flags", argv)
 			}
 		})
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) {
+	cases := []struct {
+		name, line string
+		want       ports.SourceFormat
+	}{
+		{"audio-only opus", "251|opus|129.6", ports.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
+		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := downloadWithScript(t, "echo 'altune-source-format:"+tc.line+"'; truncate -s 20K OUT/a.mp3")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Format != tc.want {
+				t.Errorf("Format = %+v, want %+v", got.Format, tc.want)
+			}
+		})
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_WithoutAFormatLineStillReturnsTheFile(t *testing.T) {
+	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.mp3")
+	if err != nil || filepath.Base(got.Path) != "a.mp3" || got.Format != (ports.SourceFormat{}) {
+		t.Fatalf("Download = %+v, %v, want a.mp3 with an unknown format", got, err)
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_AsksForTheFormatOnlyOnceTheFileIsFinal(t *testing.T) {
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+
+	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	print, separator := slices.Index(argv, "--print"), slices.Index(argv, "--")
+	if print < 0 || print > separator || !strings.HasPrefix(argv[print+1], "after_move:altune-source-format:") {
+		t.Fatalf("argv = %q, want --print after_move:altune-source-format:... before --", argv)
 	}
 }

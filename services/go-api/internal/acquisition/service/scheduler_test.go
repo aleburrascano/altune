@@ -146,8 +146,8 @@ func (s *fakeAudioSearcher) Find(ctx context.Context, _ acqports.FindRequest) ([
 	return s.Search(ctx, "")
 }
 
-func (s *fakeAudioSearcher) Fetch(ctx context.Context, c acqports.AudioCandidate, outDir string) (string, error) {
-	return s.Download(ctx, c.URL, outDir)
+func (s *fakeAudioSearcher) Fetch(ctx context.Context, c acqports.AudioCandidate, outDir string) (acqports.FetchedAudio, error) {
+	return fetchedAt(s.Download(ctx, c.URL, outDir))
 }
 
 func fakeRegistry(s *fakeAudioSearcher) *SourceRegistry { return NewSourceRegistry(s) }
@@ -2669,5 +2669,30 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 	case <-queue.claimed:
 	case <-time.After(5 * time.Second):
 		t.Fatal("seeded job was not claimed after Resume")
+	}
+}
+
+func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	scheduler.recordOutcome(context.Background(), acqports.JobRecord{
+		TrackID:        "t1",
+		State:          acqports.JobSucceeded,
+		ResolvedSource: "https://music.youtube.com/watch?v=XDC3uH1FSgw",
+		StageMs:        map[string]int64{"search": 500},
+		Source:         acqports.SourceFormat{ID: "251", Codec: "opus", Kbps: 130},
+		Stored:         acqports.StoredFile{Bytes: 4096, Codec: "mp3"},
+	})
+
+	got := assertExactlyOneOutcome(t, recorder.calls)
+	if got.SourceHost != "music.youtube.com" {
+		t.Errorf("source host = %q, want music.youtube.com", got.SourceHost)
+	}
+	if got.StageMs["search"] != 500 || got.Source.ID != "251" || got.Stored.Bytes != 4096 {
+		t.Errorf("outcome = %+v, want the job's stage times and file facts", got)
 	}
 }

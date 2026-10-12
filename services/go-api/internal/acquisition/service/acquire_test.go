@@ -558,9 +558,9 @@ func (newAudioSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.Audi
 	}}, nil
 }
 
-func (newAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (string, error) {
+func (newAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	path := filepath.Join(outDir, "audio.mp3")
-	return path, os.WriteFile(path, []byte("new bytes"), 0o600)
+	return fetchedAt(path, os.WriteFile(path, []byte("new bytes"), 0o600))
 }
 
 func seedReadyTrack(t *testing.T) (*committingTrackRepo, *bytesAudioStore, shared.UserId, domain.TrackId, string) {
@@ -1074,11 +1074,18 @@ func (unknownTopicSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.
 	}}, nil
 }
 
-func (unknownTopicSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
-	return newAudioSource{}.Fetch(ctx, c, outDir)
+func (unknownTopicSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	fetched, err := newAudioSource{}.Fetch(ctx, c, outDir)
+	fetched.Format = ports.SourceFormat{ID: "140", Codec: "mp4a.40.2", Kbps: 128}
+	return fetched, err
 }
 
 func acquireUnknownTopicWithFloor(t *testing.T, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
+	t.Helper()
+	return acquireUnknownTopicIn(t, context.Background(), opts...)
+}
+
+func acquireUnknownTopicIn(t *testing.T, ctx context.Context, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
@@ -1095,8 +1102,31 @@ func acquireUnknownTopicWithFloor(t *testing.T, opts ...func(*AcquireTrackAudioS
 			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
 			WithAudioIdentifier(&stubIdentifier{}),
 		}, opts...)...)
-	err = svc.Execute(context.Background(), userId, track.ID)
+	err = svc.Execute(ctx, userId, track.ID)
 	return storedTrack(t, repo, track), err
+}
+
+func TestExecute_ReportsStageTimesSourceFormatAndStoredFile(t *testing.T) {
+	rep := &recordingReporter{}
+
+	if _, err := acquireUnknownTopicIn(t, withJobReporter(context.Background(), rep)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	for _, stage := range []string{"identity", "search", "select", "download", "download.full", "download.identify", "tag", "store", "update_track"} {
+		if _, ok := rep.timings[stage]; !ok {
+			t.Errorf("no timing for %q; got %v", stage, rep.timings)
+		}
+	}
+	if _, ok := rep.timings["download.preview"]; ok {
+		t.Errorf("download.preview timed, but this source has no preview")
+	}
+	if want := (ports.SourceFormat{ID: "140", Codec: "mp4a.40.2", Kbps: 128}); rep.format != want {
+		t.Errorf("source format = %+v, want %+v", rep.format, want)
+	}
+	if rep.file.Bytes != int64(len("new bytes")) || rep.file.Codec != "mp3" {
+		t.Errorf("stored file = %+v, want the uploaded mp3's size and codec", rep.file)
+	}
 }
 
 func TestExecute_FloorAboveTheCandidatesConfidenceFailsAsNoConfidentMatch(t *testing.T) {

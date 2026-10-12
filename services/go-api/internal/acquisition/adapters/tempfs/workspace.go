@@ -25,6 +25,14 @@ func (*Workspace) Remove(path string) error {
 	return os.RemoveAll(path)
 }
 
+func (*Workspace) Size(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 func (*Workspace) SweepAbandoned(abandonedBefore time.Time) int {
 	root := os.TempDir()
 	entries, err := os.ReadDir(root)

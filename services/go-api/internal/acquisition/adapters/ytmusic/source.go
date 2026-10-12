@@ -18,7 +18,7 @@ const (
 var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
 type audioFetcher interface {
-	Download(ctx context.Context, url string, outDir string) (string, error)
+	Download(ctx context.Context, url string, outDir string) (ports.FetchedAudio, error)
 }
 
 var _ ports.AudioSource = (*Source)(nil)
@@ -57,6 +57,6 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	}}, nil
 }
 
-func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
+func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	return s.fetcher.Download(ctx, candidate.URL, outDir)
 }

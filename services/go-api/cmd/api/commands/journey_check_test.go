@@ -2,6 +2,7 @@ package commands
 
 import (
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
@@ -44,16 +45,16 @@ type fakeJourneyDownloader struct {
 	gotOutDir string
 }
 
-func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir string) (string, error) {
+func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir string) (ports.FetchedAudio, error) {
 	f.called, f.gotURL, f.gotOutDir = true, url, outDir
 	if f.err != nil {
-		return "", f.err
+		return ports.FetchedAudio{}, f.err
 	}
 	path := filepath.Join(outDir, "canary.mp3")
 	if err := os.WriteFile(path, f.payload, 0o600); err != nil {
-		return "", err
+		return ports.FetchedAudio{}, err
 	}
-	return path, nil
+	return ports.FetchedAudio{Path: path}, nil
 }
 
 func TestRunJourneyCheck(t *testing.T) {
@@ -249,8 +250,8 @@ func TestRunJourneyCheckRedactsSecretsInASearchFailure(t *testing.T) {
 
 type missingFileDownloader struct{}
 
-func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (string, error) {
-	return filepath.Join(outDir, "never-written.mp3"), nil
+func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{Path: filepath.Join(outDir, "never-written.mp3")}, nil
 }
 
 func TestRunJourneyCheckFailsWhenTheDownloadReportsAFileThatIsNotThere(t *testing.T) {

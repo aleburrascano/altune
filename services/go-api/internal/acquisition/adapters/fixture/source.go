@@ -39,16 +39,16 @@ func (s *Source) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCa
 	}}, nil
 }
 
-func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
+func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return ports.FetchedAudio{}, err
 	}
 	path := filepath.Join(outDir, fetchedName)
 	audio := bytes.Repeat(clip, clipRepeats(candidate.Duration))
 	if err := os.WriteFile(path, audio, 0o600); err != nil {
-		return "", err
+		return ports.FetchedAudio{}, err
 	}
-	return path, nil
+	return ports.FetchedAudio{Path: path}, nil
 }
 
 func clipRepeats(seconds float64) int {

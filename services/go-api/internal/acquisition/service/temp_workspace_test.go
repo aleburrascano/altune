@@ -16,6 +16,7 @@ type recordingWorkspace struct {
 
 func (r *recordingWorkspace) Create(string) (string, error) { return "", nil }
 func (r *recordingWorkspace) Remove(string) error           { return nil }
+func (r *recordingWorkspace) Size(string) (int64, error)    { return 0, nil }
 func (r *recordingWorkspace) SweepAbandoned(abandonedBefore time.Time) int {
 	r.cutoffs = append(r.cutoffs, abandonedBefore)
 	return 0
@@ -72,6 +73,14 @@ func (osWorkspace) Create(pattern string) (string, error) {
 
 func (osWorkspace) Remove(path string) error { return os.RemoveAll(path) }
 
+func (osWorkspace) Size(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 func (osWorkspace) SweepAbandoned(time.Time) int { return 0 }
 
 func init() { defaultTempWorkspace = osWorkspace{} }
@@ -108,6 +117,8 @@ func (r *callRecordingWorkspace) Remove(path string) error {
 }
 
 func (r *callRecordingWorkspace) SweepAbandoned(t time.Time) int { return r.inner.SweepAbandoned(t) }
+
+func (r *callRecordingWorkspace) Size(path string) (int64, error) { return r.inner.Size(path) }
 
 func (r *callRecordingWorkspace) createdDirs() []string {
 	r.mu.Lock()

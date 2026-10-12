@@ -29,9 +29,9 @@ func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.Audio
 	return s.found, s.findErr
 }
 
-func (s *stubSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ string) (string, error) {
+func (s *stubSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
 	s.fetched = append(s.fetched, candidate)
-	return s.fetchPath, s.fetchErr
+	return fetchedAt(s.fetchPath, s.fetchErr)
 }
 
 func candidate(url string) ports.AudioCandidate {
@@ -219,12 +219,12 @@ func TestSourceRegistry_FetchRoutesToOwningSource(t *testing.T) {
 	b := &stubSource{name: "b", fetchPath: "/tmp/b.mp3"}
 	reg := NewSourceRegistry(a, b)
 
-	path, err := reg.Fetch(context.Background(), ports.AudioCandidate{URL: "u2", Source: "b"}, "/out")
+	fetched, err := reg.Fetch(context.Background(), ports.AudioCandidate{URL: "u2", Source: "b"}, "/out")
 	if err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
 	}
-	if path != "/tmp/b.mp3" {
-		t.Errorf("path = %q, want the owning source's result", path)
+	if fetched.Path != "/tmp/b.mp3" {
+		t.Errorf("path = %q, want the owning source's result", fetched.Path)
 	}
 	if len(a.fetched) != 0 {
 		t.Errorf("source a received %d fetches, want 0", len(a.fetched))
@@ -306,4 +306,8 @@ func mergeSlots(
 ) ([]ports.AudioCandidate, error) {
 	merged, _, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
 	return merged, err
+}
+
+func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{Path: path}, err
 }

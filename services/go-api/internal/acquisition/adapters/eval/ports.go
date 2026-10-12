@@ -100,8 +100,9 @@ func (s *evalSource) Find(_ context.Context, req ports.FindRequest) ([]ports.Aud
 	return out, nil
 }
 
-func (s *evalSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
-	return s.shared.Download(ctx, c.URL, outDir)
+func (s *evalSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	path, err := s.shared.Download(ctx, c.URL, outDir)
+	return ports.FetchedAudio{Path: path}, err
 }
 
 func (p *casePorts) Download(_ context.Context, url string, outDir string) (string, error) {

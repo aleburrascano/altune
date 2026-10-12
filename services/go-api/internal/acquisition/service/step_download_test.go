@@ -37,8 +37,8 @@ func (s *fileWritingSearcher) Find(_ context.Context, _ ports.FindRequest) ([]po
 	return nil, nil
 }
 
-func (s *fileWritingSearcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
-	return s.Download(ctx, c.URL, outDir)
+func (s *fileWritingSearcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	return fetchedAt(s.Download(ctx, c.URL, outDir))
 }
 
 func (s *fileWritingSearcher) Download(_ context.Context, url, outDir string) (string, error) {
@@ -125,12 +125,12 @@ type cancellingFetcher struct {
 	calls  int
 }
 
-func (f *cancellingFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (string, error) {
+func (f *cancellingFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
 	f.calls++
 	if f.cancel != nil {
 		f.cancel()
 	}
-	return "", f.err
+	return fetchedAt("", f.err)
 }
 
 func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T) {
@@ -374,10 +374,10 @@ type sequenceFetcher struct {
 	calls int
 }
 
-func (f *sequenceFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (string, error) {
+func (f *sequenceFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
 	err := f.errs[f.calls]
 	f.calls++
-	return "", err
+	return fetchedAt("", err)
 }
 
 func TestDownloadStep_EarlierUnavailableSurvivesADifferentLastFailure(t *testing.T) {
@@ -1181,7 +1181,7 @@ func newGatedFetcher(gates map[string]chan struct{}) *gatedFetcher {
 	return &gatedFetcher{dirs: map[string]string{}, gates: gates, started: make(chan string, 64)}
 }
 
-func (f *gatedFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+func (f *gatedFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	now := f.inFlight.Add(1)
 	defer f.inFlight.Add(-1)
 	for {
@@ -1198,7 +1198,7 @@ func (f *gatedFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir s
 		<-gate
 	}
 	path := filepath.Join(outDir, "track.mp3")
-	return path, os.WriteFile(path, []byte("audio"), 0o644)
+	return fetchedAt(path, os.WriteFile(path, []byte("audio"), 0o644))
 }
 
 func (f *gatedFetcher) dirOf(url string) string {
@@ -1354,13 +1354,13 @@ func TestDownloadStep_ThrottledPreviewLogsThrottledNotPreviewFallback(t *testing
 
 type nestedLayoutFetcher struct{}
 
-func (nestedLayoutFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (string, error) {
+func (nestedLayoutFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	dir := filepath.Join(outDir, "Artist", "Album")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+		return fetchedAt("", err)
 	}
 	path := filepath.Join(dir, "track.flac")
-	return path, os.WriteFile(path, []byte("audio-bytes"), 0o644)
+	return fetchedAt(path, os.WriteFile(path, []byte("audio-bytes"), 0o644))
 }
 
 func TestDownloadStep_Execute_NestedLayout_RollbackLeavesNoTempRoot(t *testing.T) {
@@ -1396,8 +1396,8 @@ func (s findOnlySource) Find(context.Context, ports.FindRequest) ([]ports.AudioC
 	return s.candidates, s.err
 }
 
-func (s findOnlySource) Fetch(context.Context, ports.AudioCandidate, string) (string, error) {
-	return "", s.fetchErr
+func (s findOnlySource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+	return fetchedAt("", s.fetchErr)
 }
 
 func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.Context, error) {
@@ -1572,7 +1572,7 @@ type panickingFetcher struct {
 	url   string
 }
 
-func (f *panickingFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+func (f *panickingFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	if c.URL == f.url {
 		f.inner.mu.Lock()
 		f.inner.dirs[c.URL] = outDir
@@ -1680,19 +1680,19 @@ type scriptedSourceFetcher struct {
 	calls       map[acqdomain.SourceName]int
 }
 
-func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+func (f *scriptedSourceFetcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	f.mu.Lock()
 	f.calls[c.Source]++
 	f.mu.Unlock()
 	if c.URL == f.hangURL {
 		<-ctx.Done()
-		return "", ctx.Err()
+		return fetchedAt("", ctx.Err())
 	}
 	if c.Source == f.unavailable {
-		return "", &acqdomain.SourceUnavailableError{Source: c.Source, Err: errors.New("HTTP Error 429")}
+		return fetchedAt("", &acqdomain.SourceUnavailableError{Source: c.Source, Err: errors.New("HTTP Error 429")})
 	}
 	path := filepath.Join(outDir, "track.mp3")
-	return path, os.WriteFile(path, []byte("audio-bytes"), 0o644)
+	return fetchedAt(path, os.WriteFile(path, []byte("audio-bytes"), 0o644))
 }
 
 func TestDownloadStep_HungFirstCandidateDoesNotStarveFallbackSource(t *testing.T) {

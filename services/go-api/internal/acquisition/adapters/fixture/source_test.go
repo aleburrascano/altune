@@ -31,7 +31,8 @@ func TestClipRepeats_CoversDurationWithinBounds(t *testing.T) {
 
 func TestSource_FetchWritesTiledClipDirectlyInOutDir(t *testing.T) {
 	outDir := t.TempDir()
-	path, err := NewSource().Fetch(context.Background(), ports.AudioCandidate{Duration: 212}, outDir)
+	fetched, err := NewSource().Fetch(context.Background(), ports.AudioCandidate{Duration: 212}, outDir)
+	path := fetched.Path
 	if err != nil {
 		t.Fatal(err)
 	}
