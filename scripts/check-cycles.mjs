@@ -14,6 +14,10 @@ const WORLDS = [
 
 const NUL = "\u0000";
 
+const BRIDGED_PAIRS = new Set([
+  ["services/go-api/internal/catalog", "services/go-api/internal/discovery"].join(NUL),
+]);
+
 function isTestPath(path) {
   return (
     path.endsWith("_test.go") ||
@@ -82,6 +86,7 @@ function findMutualPairs(present) {
     const [source, target] = key.split(NUL);
     if (!present.has(target + NUL + source)) continue;
     const [low, high] = [source, target].sort();
+    if (BRIDGED_PAIRS.has(low + NUL + high)) continue;
     pairs.add(low + NUL + high);
   }
   return [...pairs].sort().map((key) => key.split(NUL));

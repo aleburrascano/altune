@@ -1,29 +1,29 @@
 package discoverybridge
 
 import (
-	"altune/go-api/internal/shared"
+	discoverydomain "altune/go-api/internal/discovery/domain"
 	"context"
 	"strings"
 	"testing"
 )
 
 type stubFeaturedResolver struct {
-	feats []shared.FeaturedArtist
+	feats []discoverydomain.FeaturedArtist
 }
 
-func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]shared.FeaturedArtist, error) {
+func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]discoverydomain.FeaturedArtist, error) {
 	return s.feats, nil
 }
 
 func TestFeaturedResolver_SkipsOversizedCredits(t *testing.T) {
-	inner := stubFeaturedResolver{feats: []shared.FeaturedArtist{
+	inner := stubFeaturedResolver{feats: []discoverydomain.FeaturedArtist{
 		{Name: "Michael Jackson", MBID: "f27ec8db-af05-4f36-916e-3d57f91ecf5e"},
 		{Name: strings.Repeat("n", 301)},
 		{Name: "Bogus", MBID: strings.Repeat("a", 37)},
 		{Name: "Deezer Only", DeezerID: 259},
 	}}
 
-	got, err := NewFeaturedResolver(inner).Resolve(context.Background(), "Artist", "Title")
+	got, err := (&FeaturedResolver{inner: inner}).Resolve(context.Background(), "Artist", "Title")
 	if err != nil {
 		t.Fatalf("Resolve error = %v", err)
 	}
