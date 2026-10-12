@@ -3,9 +3,7 @@ import * as path from 'path';
 import * as config from '@shared/apiClient/config';
 import { apiBase } from '@shared/apiClient/index';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const SRC_ROOT = path.resolve(__dirname, '../../..');
 const API_CLIENT_DIR = path.resolve(SRC_ROOT, 'shared/apiClient');
