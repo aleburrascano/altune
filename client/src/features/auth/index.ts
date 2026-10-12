@@ -7,3 +7,5 @@ export { SignInScreen } from '@features/auth/ui/SignInScreen';
 export { SignUpScreen } from '@features/auth/ui/SignUpScreen';
 export { TestAuthBridge } from '@features/auth/ui/TestAuthBridge';
 export { useAuthDeepLink } from '@features/auth/hooks/useAuthDeepLink';
+export { AuthPortProvider } from '@features/auth/ports/AuthPortProvider';
+export { httpAuthPort } from '@features/auth/adapters/http/httpAuthPort';
