@@ -2,13 +2,22 @@ import { LOCKOUT_AFTER_FAILURES } from '@features/auth/domain/attemptLockout';
 import { useSignIn } from '@features/auth/hooks/useSignIn';
 
 import {
+  createAuthPortMock,
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/auth/__tests__/testUtils/authTestUtils';
 
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
-const signInAs = (email: string) => runAsyncAuthHook(useSignIn, (hook) => hook.signIn(email, 'pw'));
+const authPort = createAuthPortMock();
+
+beforeEach(() => {
+  authPort.reportSignInFailure.mockClear();
+});
+
+function signInAs(email: string) {
+  return runAsyncAuthHook(useSignIn, (hook) => hook.signIn(email, 'pw'), authPort);
+}
 
 const signIn = () => signInAs('a@b.co');
 
@@ -32,6 +41,7 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
     });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+    expect(authPort.reportSignInFailure).toHaveBeenCalledWith('network');
   });
 
   it('maps a 503 reachability failure to network', async () => {
@@ -55,6 +65,7 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
     });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'invalid_credentials' });
+    expect(authPort.reportSignInFailure).toHaveBeenCalledWith('invalid_credentials');
   });
 
   it('maps an unconfirmed email to its own reason, not invalid_credentials', async () => {
@@ -134,7 +145,9 @@ describe('useSignIn: a GoTrue code this app has not been taught', () => {
       },
     });
 
-    expect(await runAsyncAuthHook(useSignIn, (hook) => hook.signIn('a@b.co', 'pw'))).toEqual({
+    expect(
+      await runAsyncAuthHook(useSignIn, (hook) => hook.signIn('a@b.co', 'pw'), authPort),
+    ).toEqual({
       kind: 'error',
       reason: 'unknown',
     });
@@ -171,7 +184,7 @@ describe('a server rate limit', () => {
     [
       'sign-in',
       signInWithPassword,
-      () => runAsyncAuthHook(useSignIn, (hook) => hook.signIn('a@b.co', 'pw')),
+      () => runAsyncAuthHook(useSignIn, (hook) => hook.signIn('a@b.co', 'pw'), authPort),
     ],
   ] as const)('%s: a server rate limit is not a network error', (_name, mock, run) => {
     it('maps a resolved 429 to too_many_attempts', async () => {
@@ -200,20 +213,8 @@ describe('a server rate limit', () => {
   });
 });
 
-const reportFetch = jest.fn();
-const realFetch = global.fetch;
-
-beforeEach(() => {
-  reportFetch.mockReset().mockResolvedValue({ status: 204 });
-  global.fetch = reportFetch as unknown as typeof fetch;
-});
-
-afterEach(() => {
-  global.fetch = realFetch;
-});
-
 const reportedReasons = (): string[] =>
-  reportFetch.mock.calls.map(([, init]) => JSON.parse(init.body).reason);
+  authPort.reportSignInFailure.mock.calls.map(([reason]) => reason);
 
 describe('useSignIn: reporting the failure to the anonymous ingest', () => {
   it('reports a resolved error once, and reports nothing on success', async () => {
@@ -221,18 +222,10 @@ describe('useSignIn: reporting the failure to the anonymous ingest', () => {
     await signIn();
     expect(reportedReasons()).toEqual(['invalid_credentials']);
 
-    reportFetch.mockClear();
+    authPort.reportSignInFailure.mockClear();
     signInWithPassword.mockResolvedValue(SIGNED_IN);
     await signIn();
-    expect(reportFetch).not.toHaveBeenCalled();
-  });
-
-  it('returns the error result while the report request hangs', async () => {
-    reportFetch.mockReturnValue(new Promise(() => undefined));
-    signInWithPassword.mockResolvedValue(WRONG_PASSWORD);
-
-    expect(await signIn()).toEqual({ kind: 'error', reason: 'invalid_credentials' });
-    expect(reportedReasons()).toEqual(['invalid_credentials']);
+    expect(authPort.reportSignInFailure).not.toHaveBeenCalled();
   });
 });
 

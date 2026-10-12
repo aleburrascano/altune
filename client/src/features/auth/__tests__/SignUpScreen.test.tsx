@@ -5,7 +5,10 @@ import { CheckEmailNotice } from '@features/auth/ui/CheckEmailNotice';
 import { SignUpScreen } from '@features/auth/ui/SignUpScreen';
 import { PASSWORD_REQUIREMENTS_HINT } from '@features/auth/domain/validation';
 
-import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+import {
+  authPortWrapper,
+  createSupabaseAuthMock,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 jest.mock('expo-router', () => {
@@ -21,12 +24,12 @@ jest.mock('expo-router', () => {
 const { signUp } = createSupabaseAuthMock('signUp');
 
 warmUpFirstRender(async () => {
-  render(<SignUpScreen />);
+  render(<SignUpScreen />, { wrapper: authPortWrapper() });
   render(<CheckEmailNotice />);
 });
 
 function renderSignUp(): void {
-  render(<SignUpScreen />);
+  render(<SignUpScreen />, { wrapper: authPortWrapper() });
 }
 
 function rejectedWith(code: string) {

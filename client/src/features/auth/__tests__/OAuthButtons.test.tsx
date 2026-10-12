@@ -4,9 +4,11 @@ import * as WebBrowser from 'expo-web-browser';
 import { NETWORK_ERROR_COPY } from '@features/auth/domain/authError';
 import { OAuthButtons } from '@features/auth/ui/OAuthButtons';
 
-import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
-
-const { __http } = require('@testing/doubles/fetch.js');
+import {
+  authPortWrapper,
+  createAuthPortMock,
+  createSupabaseAuthMock,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-web-browser', () => ({
@@ -18,12 +20,14 @@ jest.mock('expo-web-browser', () => ({
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
 const openAuthSessionAsync = jest.mocked(WebBrowser.openAuthSessionAsync);
 
+const authPort = createAuthPortMock();
+
 beforeEach(() => {
-  __http.reply('POST /v1/public/auth-failures', { status: 204 });
+  authPort.reportSignInFailure.mockClear();
 });
 
 function pressGoogle(): void {
-  render(<OAuthButtons />);
+  render(<OAuthButtons />, { wrapper: authPortWrapper(authPort) });
   fireEvent.press(screen.getByTestId('oauth-google'));
 }
 

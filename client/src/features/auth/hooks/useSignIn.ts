@@ -8,7 +8,7 @@ import {
   type SignInFailureReason,
   type SupabaseAuthErrorLike,
 } from '@features/auth/domain/authError';
-import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
+import { useAuthPort } from '@features/auth/ports/AuthPortProvider';
 
 import { useAsyncAuthAction } from '@features/auth/hooks/useAsyncAuthAction';
 
@@ -26,6 +26,7 @@ function signInErrorReason(error: SupabaseAuthErrorLike): SignInFailureReason {
 }
 
 export function useSignIn() {
+  const authPort = useAuthPort();
   const { state, run } = useAsyncAuthAction<SignInResult, [string, string]>(
     lockoutOnRepeatedFailure(
       'sign-in',
@@ -33,7 +34,7 @@ export function useSignIn() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (!error) return { kind: 'ok' } as const;
         const reason = signInErrorReason(error);
-        reportSignInFailure(reason);
+        authPort.reportSignInFailure(reason);
         return { kind: 'error', reason } as const;
       },
       (outcome) => outcome.kind === 'error' && outcome.reason === 'invalid_credentials',

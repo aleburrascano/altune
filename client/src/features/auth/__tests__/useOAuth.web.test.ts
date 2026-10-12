@@ -7,7 +7,11 @@ import { useOAuth } from '@features/auth/hooks/useOAuth.web';
 import * as nativeWebOrigin from '@shared/device/webOrigin';
 import * as browserWebOrigin from '@shared/device/webOrigin.web';
 
-import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+import {
+  authPortWrapper,
+  createAuthPortMock,
+  createSupabaseAuthMock,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 const mockStateUpdates: unknown[] = [];
 
@@ -32,7 +36,12 @@ jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn(),
 }));
 
+const authPort = createAuthPortMock();
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
+
+beforeEach(() => {
+  authPort.reportSignInFailure.mockClear();
+});
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
 
 function neverSettles<T>(): Promise<T> {
@@ -40,7 +49,7 @@ function neverSettles<T>(): Promise<T> {
 }
 
 async function signIn(): Promise<{ kind: string }> {
-  const { result } = renderHook(() => useOAuth());
+  const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
   await act(async () => {
     await result.current.signInWith('google');
   });
@@ -81,6 +90,7 @@ describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
     signInWithOAuth.mockResolvedValue({ data: null, error: { message: 'nope' } });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+    expect(authPort.reportSignInFailure).toHaveBeenCalledWith('unknown');
   });
 });
 
@@ -97,7 +107,7 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
       data: { url: 'https://accounts.google.com/o' },
       error: null,
     });
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     await act(async () => {
       await result.current.signInWith('google');
@@ -116,7 +126,9 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
         resolveSignIn = settle;
       }),
     );
-    const { result, unmount } = renderHook(() => useOAuth());
+    const { result, unmount } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort),
+    });
 
     let call!: Promise<void>;
     act(() => {
@@ -144,6 +156,7 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
     signInWithOAuth.mockRejectedValue(new Error('failed to fetch'));
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+    expect(authPort.reportSignInFailure).toHaveBeenCalledWith('network');
   });
 
   it('reports an unknown error when signInWithOAuth rejects on web with something other than a network failure', async () => {
@@ -159,7 +172,7 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
     Platform.OS = 'web';
     Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
     signInWithOAuth.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     let call!: Promise<void>;
     act(() => {
@@ -177,20 +190,8 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
   });
 });
 
-const reportFetch = jest.fn();
-const realFetch = global.fetch;
-
-beforeEach(() => {
-  reportFetch.mockReset().mockResolvedValue({ status: 204 });
-  global.fetch = reportFetch as unknown as typeof fetch;
-});
-
-afterEach(() => {
-  global.fetch = realFetch;
-});
-
 const reportedReasons = (): string[] =>
-  reportFetch.mock.calls.map(([, init]) => JSON.parse(init.body).reason);
+  authPort.reportSignInFailure.mock.calls.map(([reason]) => reason);
 
 describe('useOAuth (web): reporting a failed redirect to the anonymous ingest', () => {
   afterEach(() => {
@@ -205,9 +206,9 @@ describe('useOAuth (web): reporting a failed redirect to the anonymous ingest', 
     await signIn();
     expect(reportedReasons()).toEqual(['unknown']);
 
-    reportFetch.mockClear();
+    authPort.reportSignInFailure.mockClear();
     signInWithOAuth.mockResolvedValue({ data: { url: 'https://x' }, error: null });
     await signIn();
-    expect(reportFetch).not.toHaveBeenCalled();
+    expect(authPort.reportSignInFailure).not.toHaveBeenCalled();
   });
 });

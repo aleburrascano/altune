@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { SetNewPasswordScreen } from '@features/auth/ui/SetNewPasswordScreen';
 import { SignUpScreen } from '@features/auth/ui/SignUpScreen';
 
+import { authPortWrapper } from '@features/auth/__tests__/testUtils/authTestUtils';
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
   Link: ({ children }: { children: ReactNode }) => children,
@@ -24,7 +26,7 @@ function inputProps(testID: string) {
 
 describe('the new-password fields share one autofill contract', () => {
   it('offers a generated password on the sign-up password field', () => {
-    render(<SignUpScreen />);
+    render(<SignUpScreen />, { wrapper: authPortWrapper() });
 
     expect(inputProps('password-input')).toEqual({
       ...offersAGeneratedPassword,
@@ -34,7 +36,7 @@ describe('the new-password fields share one autofill contract', () => {
   });
 
   it('offers a generated password on the sign-up confirm field', () => {
-    render(<SignUpScreen />);
+    render(<SignUpScreen />, { wrapper: authPortWrapper() });
 
     expect(inputProps('confirm-input')).toEqual({
       ...offersAGeneratedPassword,

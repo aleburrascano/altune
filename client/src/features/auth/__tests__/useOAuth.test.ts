@@ -11,7 +11,11 @@ import {
 import { parseAuthLink } from '@features/auth/domain/parseAuthLink';
 import { OAUTH_BROWSER_TIMEOUT_MS, useOAuth } from '@features/auth/hooks/useOAuth';
 
-import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
+import {
+  authPortWrapper,
+  createAuthPortMock,
+  createSupabaseAuthMock,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 const mockStateUpdates: unknown[] = [];
 
@@ -42,6 +46,7 @@ const { signInWithOAuth, exchangeCodeForSession } = createSupabaseAuthMock(
   'signInWithOAuth',
   'exchangeCodeForSession',
 );
+const authPort = createAuthPortMock();
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
 const dismissAuthSession = WebBrowser.dismissAuthSession as unknown as jest.Mock;
 
@@ -63,6 +68,7 @@ function listenerSpendsTheRedirect(): Promise<unknown> {
 }
 
 beforeEach(() => {
+  authPort.reportSignInFailure.mockClear();
   _resetConsumedCredentialForTest();
   exchangeSucceeds();
 });
@@ -75,7 +81,7 @@ function grantAuthorizationUrl(): void {
 }
 
 async function signIn(): Promise<{ kind: string }> {
-  const { result } = renderHook(() => useOAuth());
+  const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
   await act(async () => {
     await result.current.signInWith('google');
   });
@@ -90,6 +96,7 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
 
   it('reports ok when Supabase accepts the code exchange', async () => {
     expect(await signIn()).toEqual({ kind: 'ok' });
+    expect(authPort.reportSignInFailure).not.toHaveBeenCalled();
     expect(exchangeCodeForSession).toHaveBeenCalledWith(REDIRECT_CODE);
   });
 
@@ -97,6 +104,7 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
     openAuthSessionAsync.mockResolvedValue({ type: 'success', url: CODELESS_REDIRECT_URL });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+    expect(authPort.reportSignInFailure).toHaveBeenCalledWith('unknown');
   });
 
   it('reports a network error when the exchange fails with a 503', async () => {
@@ -177,7 +185,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
 
   it('abandons a signInWithOAuth call that never resolves at the auth budget', async () => {
     signInWithOAuth.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     let call!: Promise<void>;
     act(() => {
@@ -199,7 +207,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
 
   it('waits out a human at the provider but abandons a browser session left open', async () => {
     openAuthSessionAsync.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     let call!: Promise<void>;
     act(() => {
@@ -223,7 +231,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
   it('dismisses the auth session once when the browser wait times out', async () => {
     dismissAuthSession.mockReset();
     openAuthSessionAsync.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     let call!: Promise<void>;
     act(() => {
@@ -243,7 +251,9 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
   it('sets no state once the screen that started the sign-in has unmounted', async () => {
     const browserSession = deferredBrowserSession();
     openAuthSessionAsync.mockReturnValue(browserSession.promise);
-    const { result, unmount } = renderHook(() => useOAuth());
+    const { result, unmount } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort),
+    });
 
     let call!: Promise<void>;
     act(() => {
@@ -265,7 +275,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       data: null,
       error: { name: 'AuthRetryableFetchError', status: 0, message: 'failed to fetch' },
     });
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     await act(async () => {
       await result.current.signInWith('google');
@@ -283,7 +293,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
         rejectBrowser = reject;
       }),
     );
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     let call!: Promise<void>;
     act(() => {
@@ -313,7 +323,7 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
   it('opens one browser session when a second press lands before the first settles', async () => {
     const browserSession = deferredBrowserSession();
     openAuthSessionAsync.mockReturnValue(browserSession.promise);
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     let presses!: Promise<unknown>;
     act(() => {
@@ -336,7 +346,7 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
   });
 
   it('lets the next press through once the first sign-in has settled', async () => {
-    const { result } = renderHook(() => useOAuth());
+    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
 
     await act(async () => {
       await result.current.signInWith('google');
@@ -401,20 +411,8 @@ describe('useOAuth: the authorization request on native, precisely (#2837)', () 
   });
 });
 
-const reportFetch = jest.fn();
-const realFetch = global.fetch;
-
-beforeEach(() => {
-  reportFetch.mockReset().mockResolvedValue({ status: 204 });
-  global.fetch = reportFetch as unknown as typeof fetch;
-});
-
-afterEach(() => {
-  global.fetch = realFetch;
-});
-
 const reportedReasons = (): string[] =>
-  reportFetch.mock.calls.map(([, init]) => JSON.parse(init.body).reason);
+  authPort.reportSignInFailure.mock.calls.map(([reason]) => reason);
 
 describe('useOAuth: reporting a failed sign-in to the anonymous ingest', () => {
   beforeEach(() => {

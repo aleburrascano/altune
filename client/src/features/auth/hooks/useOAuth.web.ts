@@ -10,7 +10,8 @@ import {
   type OAuthProvider,
 } from '@features/auth/domain/oauthResult';
 import { authRedirectUrl } from '@features/auth/domain/authRedirect';
-import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
+import { useAuthPort } from '@features/auth/ports/AuthPortProvider';
+import type { AuthPort } from '@features/auth/ports/authPort';
 
 import { useOAuthFlow } from '@features/auth/hooks/useOAuthFlow';
 
@@ -36,12 +37,16 @@ async function attemptWebRedirect(provider: OAuthProvider): Promise<OAuthFailure
   }
 }
 
-async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
+async function beginWebRedirect(
+  authPort: AuthPort,
+  provider: OAuthProvider,
+): Promise<OAuthFailure | null> {
   const failure = await attemptWebRedirect(provider);
-  if (failure) reportSignInFailure(failure.reason);
+  if (failure) authPort.reportSignInFailure(failure.reason);
   return failure;
 }
 
 export function useOAuth() {
-  return useOAuthFlow(beginWebRedirect);
+  const authPort = useAuthPort();
+  return useOAuthFlow((provider) => beginWebRedirect(authPort, provider));
 }

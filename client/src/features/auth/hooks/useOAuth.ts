@@ -15,7 +15,8 @@ import {
   type OAuthProvider,
 } from '@features/auth/domain/oauthResult';
 import { parseAuthLink } from '@features/auth/domain/parseAuthLink';
-import { reportSignInFailure } from '@features/auth/adapters/http/reportSignInFailure';
+import { useAuthPort } from '@features/auth/ports/AuthPortProvider';
+import type { AuthPort } from '@features/auth/ports/authPort';
 
 import { useOAuthFlow } from '@features/auth/hooks/useOAuthFlow';
 
@@ -82,13 +83,18 @@ async function attemptSignIn(provider: OAuthProvider, router: AuthRouter): Promi
   }
 }
 
-async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promise<OAuthOutcome> {
+async function signInOutcome(
+  authPort: AuthPort,
+  provider: OAuthProvider,
+  router: AuthRouter,
+): Promise<OAuthOutcome> {
   const outcome = await attemptSignIn(provider, router);
-  if (outcome.kind === 'error') reportSignInFailure(outcome.reason);
+  if (outcome.kind === 'error') authPort.reportSignInFailure(outcome.reason);
   return outcome;
 }
 
 export function useOAuth() {
   const navigator = useNavigator();
-  return useOAuthFlow((provider) => signInOutcome(provider, navigator));
+  const authPort = useAuthPort();
+  return useOAuthFlow((provider) => signInOutcome(authPort, provider, navigator));
 }

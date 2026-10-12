@@ -3,9 +3,11 @@ import type { ReactNode } from 'react';
 
 import { SignInScreen } from '@features/auth/ui/SignInScreen';
 
-import { createSupabaseAuthMock } from '@features/auth/__tests__/testUtils/authTestUtils';
-
-const { __http } = require('@testing/doubles/fetch.js');
+import {
+  authPortWrapper,
+  createAuthPortMock,
+  createSupabaseAuthMock,
+} from '@features/auth/__tests__/testUtils/authTestUtils';
 
 jest.mock('expo-router', () => {
   const { View } = require('react-native');
@@ -19,12 +21,14 @@ jest.mock('expo-router', () => {
 
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
+const authPort = createAuthPortMock();
+
 beforeEach(() => {
-  __http.reply('POST /v1/public/auth-failures', { status: 204 });
+  authPort.reportSignInFailure.mockClear();
 });
 
 function renderSignIn(): void {
-  render(<SignInScreen />);
+  render(<SignInScreen />, { wrapper: authPortWrapper(authPort) });
 }
 
 function rejectedWith(code: string) {
