@@ -114,7 +114,9 @@ function recordDownloadFailed(trackId: TrackId, willRetry: boolean): void {
   recordEvent({
     type: 'download_failed',
     payload: { track_id: trackId, will_retry: willRetry },
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    console.warn('[offline] recording download_failed event failed', error);
+  });
 }
 
 function warnAttemptFailed(trackId: TrackId, attempt: FailedAttempt, retryIn: number | null): void {

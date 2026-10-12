@@ -179,7 +179,9 @@ function scheduleRetry(): void {
       queued: _queue.length,
       dropped_at_cap: _droppedCritical,
     },
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    console.warn('[telemetry] recording event failed', error);
+  });
   console.warn(
     `[telemetry] outbox flush left ${_queue.length} queued; retry ${_failedPasses} in ${delay}ms; ${_droppedCritical} dropped at cap since launch`,
   );

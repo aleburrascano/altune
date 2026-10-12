@@ -26,7 +26,9 @@ export function recordUserAction(payload: UserActionPayload): void {
   recordEvent({
     type: 'user_action',
     payload: { ...rest, ...(error === undefined ? {} : { error: trimmed(error) }) },
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    console.warn('[telemetry] recording event failed', error);
+  });
 }
 
 export type FailureShownPayload = {
@@ -39,5 +41,7 @@ export function recordFailureShown(payload: FailureShownPayload): void {
   recordEvent({
     type: 'failure_shown',
     payload: { ...payload, message: trimmed(payload.message) },
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    console.warn('[telemetry] recording event failed', error);
+  });
 }

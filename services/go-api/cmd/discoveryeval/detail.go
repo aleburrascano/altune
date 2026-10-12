@@ -95,13 +95,18 @@ func (a detailServiceAdapter) TopTracks(ctx context.Context, seedProvider, seedI
 func (a detailServiceAdapter) fetch(ctx context.Context, seedProvider, seedID, name string, albums bool) []discoveryEval.DetailItem {
 	pn, err := domain.ParseProviderName(seedProvider)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "detail-eval: skip %q: %v\n", name, err)
 		return nil
 	}
 	var resp *discoveryService.ContentFetchResponse
+	var fetchErr error
 	if albums {
-		resp, _ = a.svc.GetAlbums(ctx, pn, seedID, nil, 100)
+		resp, fetchErr = a.svc.GetAlbums(ctx, pn, seedID, nil, 100)
 	} else {
-		resp, _ = a.svc.GetTopTracks(ctx, pn, seedID, nil, 25)
+		resp, fetchErr = a.svc.GetTopTracks(ctx, pn, seedID, nil, 25)
+	}
+	if fetchErr != nil {
+		fmt.Fprintf(os.Stderr, "detail-eval: fetch for %q failed: %v\n", name, fetchErr)
 	}
 	if resp == nil {
 		return nil
