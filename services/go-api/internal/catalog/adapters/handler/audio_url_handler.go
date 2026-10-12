@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
@@ -67,7 +67,7 @@ type resolveAudioURLsResponse struct {
 
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	userId, ok := middleware.RequireUserID(w, r)
+	userId, ok := authbridge.RequireUserID(w, r)
 	if !ok {
 		return
 	}

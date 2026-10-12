@@ -1,7 +1,7 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/catalog/adapters/authbridge"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
@@ -58,6 +58,6 @@ func newUserRateLimiter(limit AudioRateLimit, now func() time.Time, refused erro
 }
 
 func requestUserKey(r *http.Request) (string, bool) {
-	userId, ok := authservice.UserIDFromContext(r.Context())
+	userId, ok := authbridge.UserIDFromContext(r.Context())
 	return userId.String(), ok
 }
