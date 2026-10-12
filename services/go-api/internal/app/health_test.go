@@ -1,7 +1,7 @@
 package app
 
 import (
-	observeHandler "altune/go-api/internal/observe/handler"
+	observeHandler "altune/go-api/internal/observe/adapters/handler"
 	"altune/go-api/internal/shared/database"
 	"context"
 	"encoding/json"

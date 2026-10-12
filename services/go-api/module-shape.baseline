@@ -1,4 +1,3 @@
-G1 internal/observe/handler unexpected root entry
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:5 imports auth outside adapters/authbridge
 G3 internal/acquisition/adapters/handler/acquisition_handler.go:6 imports catalog outside adapters/catalogbridge
 G3 internal/acquisition/adapters/persistence/cooldown_store.go:5 imports catalog outside adapters/catalogbridge
@@ -29,6 +28,6 @@ G3 internal/catalog/adapters/handler/library_handler.go:4 imports auth outside a
 G3 internal/catalog/adapters/handler/playlist_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/stream_handler.go:4 imports auth outside adapters/authbridge
 G3 internal/catalog/adapters/handler/track_handler.go:4 imports auth outside adapters/authbridge
-G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
-G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
-G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
+G3 internal/observe/adapters/handler/gate.go:4 imports auth outside adapters/authbridge
+G3 internal/observe/adapters/handler/sse.go:4 imports auth outside adapters/authbridge
+G3 internal/observe/adapters/handler/streams.go:4 imports auth outside adapters/authbridge

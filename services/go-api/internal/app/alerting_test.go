@@ -12,8 +12,8 @@ import (
 	"time"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
+	observeHandler "altune/go-api/internal/observe/adapters/handler"
 	observeDomain "altune/go-api/internal/observe/domain"
-	observeHandler "altune/go-api/internal/observe/handler"
 	playbackPorts "altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/config"
 )

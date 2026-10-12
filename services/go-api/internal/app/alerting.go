@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	observeHandler "altune/go-api/internal/observe/adapters/handler"
 	observeNotifier "altune/go-api/internal/observe/adapters/notifier"
 	observeDomain "altune/go-api/internal/observe/domain"
-	observeHandler "altune/go-api/internal/observe/handler"
 	observePorts "altune/go-api/internal/observe/ports"
 	observeAlert "altune/go-api/internal/observe/service/alert"
 

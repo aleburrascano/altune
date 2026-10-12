@@ -14,7 +14,7 @@ import (
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	observeHandler "altune/go-api/internal/observe/handler"
+	observeHandler "altune/go-api/internal/observe/adapters/handler"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 
 	"github.com/go-chi/chi/v5"
