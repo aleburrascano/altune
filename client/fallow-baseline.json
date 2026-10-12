@@ -14,6 +14,8 @@
     "src/features/playback/ports/playbackPort.ts"
   ],
   "unused_exports": [
+    "src/shared/auth/authActions.ts:startOAuth",
+    "src/shared/auth/authActions.ts:authIntentClient",
     "src/features/auth/domain/authError.ts:SIGNUP_DISABLED_COPY",
     "src/features/discovery/ports/DiscoverPortProvider.tsx:DiscoverPortProvider",
     "src/features/settings/ports/SettingsPortProvider.tsx:SettingsPortProvider",

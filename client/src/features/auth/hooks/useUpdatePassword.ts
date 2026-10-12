@@ -1,4 +1,4 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { signOutOtherSessions, updatePassword } from '@shared/auth/authActions';
 
 import { withAuthDeadline } from '@shared/auth/authDeadline';
 import {
@@ -29,10 +29,7 @@ function reportRevokeFailure(detail: ThrownErrorDetail | SupabaseErrorDetail): v
 }
 
 async function requestRevoke(): Promise<SupabaseErrorDetail | null> {
-  const { error } = await withAuthDeadline(
-    supabase.auth.signOut({ scope: 'others' }),
-    REVOKE_OTHERS_TIMEOUT_MS,
-  );
+  const { error } = await withAuthDeadline(signOutOtherSessions(), REVOKE_OTHERS_TIMEOUT_MS);
   return error ? supabaseErrorDetail(error) : null;
 }
 
@@ -53,7 +50,7 @@ async function revokeOtherSessions(): Promise<boolean> {
 
 export function useUpdatePassword() {
   const { state, run } = useAsyncAuthAction<UpdatePasswordResult, [string]>(async (password) => {
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await updatePassword({ password });
     if (!error) {
       return { kind: 'ok', othersRevoked: await revokeOtherSessions() };
     }

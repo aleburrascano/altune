@@ -1,4 +1,4 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { signUp } from '@shared/auth/authActions';
 
 import {
   classifyAuthError,
@@ -43,7 +43,7 @@ function signUpOutcome(data: SignUpResponseData): SettledSignUp {
 export function useSignUp() {
   const { state, run } = useAsyncAuthAction<SignUpResult, [string, string]>(
     async (email, password) => {
-      const { data, error } = await supabase.auth.signUp({
+      const { data: response, error } = await signUp({
         email,
         password,
         options: { emailRedirectTo: authRedirectUrl('confirm') },
@@ -59,7 +59,7 @@ export function useSignUp() {
           ]),
         };
       }
-      return signUpOutcome(data);
+      return signUpOutcome(response);
     },
   );
 

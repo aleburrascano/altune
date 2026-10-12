@@ -1,4 +1,4 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInWithPassword } from '@shared/auth/authActions';
 
 import { lockoutOnRepeatedFailure } from '@features/auth/domain/attemptLockout';
 import {
@@ -31,7 +31,7 @@ export function useSignIn() {
     lockoutOnRepeatedFailure(
       'sign-in',
       async (email: string, password: string) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await signInWithPassword({ email, password });
         if (!error) return { kind: 'ok' } as const;
         const reason = signInErrorReason(error);
         authPort.reportSignInFailure(reason);

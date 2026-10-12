@@ -1,4 +1,4 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { requestPasswordReset } from '@shared/auth/authActions';
 
 import { lockoutOnRepeatedFailure } from '@features/auth/domain/attemptLockout';
 import {
@@ -21,7 +21,7 @@ type ResetRequestResult =
     };
 
 async function requestReset(email: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+  const { error } = await requestPasswordReset(email.trim(), {
     redirectTo: authRedirectUrl('recovery'),
   });
   if (error) return failure(error);
