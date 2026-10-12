@@ -10,6 +10,7 @@ import {
 } from '@shared/failure/errors';
 import { apiFetch } from '@shared/apiClient';
 import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 import { describeError } from '@shared/failure/describeError';
 
 describe('isRetryable — consumed by the QueryClient predicate (retry: (n, error) => isRetryable(error) && n < 5)', () => {
@@ -114,9 +115,7 @@ describe('isTelemetryGated', () => {
   });
 });
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 describe('isNetworkError — each regex alternate, independently', () => {
   it.each([
@@ -170,11 +169,8 @@ describe('isNetworkError — adversarial catch-block payloads', () => {
 describe('the NetworkError the apiClient throws', () => {
   const { __http } = require('@testing/doubles/fetch.js');
 
-  const getSession = supabase.auth.getSession as jest.Mock;
-
-  beforeEach(() => {
-    getSession.mockReset();
-    getSession.mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null });
+  beforeEach(async () => {
+    await signInTestUser();
   });
 
   afterEach(() => {
@@ -221,7 +217,9 @@ describe('the NetworkError the apiClient throws', () => {
     it('recognizes a NetworkError(transport) when the session refresh cannot reach the auth server', async () => {
       const offline = new Error('Failed');
       offline.name = 'AuthRetryableFetchError';
-      getSession.mockResolvedValue({ data: { session: null }, error: offline });
+      jest
+        .spyOn(supabase.auth, 'getSession')
+        .mockResolvedValue({ data: { session: null }, error: offline } as never);
 
       const error = await settle(apiFetch('/v1/library'));
 

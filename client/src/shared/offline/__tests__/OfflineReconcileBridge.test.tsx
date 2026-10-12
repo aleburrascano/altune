@@ -4,8 +4,11 @@ import * as FileSystem from 'expo-file-system';
 import { OfflineReconcileBridge } from '@shared/offline/ui/OfflineReconcileBridge';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { asTrackId, type TrackId } from '@shared/apiClient/ids';
+import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+const { __http } = require('@testing/doubles/fetch.js');
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory';
 
@@ -36,8 +39,10 @@ function resetStore(
   usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, ...overrides });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   resetStore();
+  await signInTestUser();
+  __http.reply('POST /v1/audio-urls', { json: { urls: [] } });
 });
 
 describe('OfflineReconcileBridge', () => {

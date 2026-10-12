@@ -15,13 +15,7 @@ import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { playlistKeys } from '@shared/query/queryKeys';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({
-  recordEvent: jest.fn(() => Promise.resolve()),
-}));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 type AppStateChangeHandler = (state: string) => void;
 
@@ -244,23 +238,25 @@ describe('useServerEvents', () => {
 
   describe('token resolution passed to the transport', () => {
     it('resolves the session access token', async () => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
         data: { session: { access_token: 'token-abc' } },
-      });
+      } as never);
       mount(new QueryClient());
 
       await expect(instanceAt(0).getToken()).resolves.toBe('token-abc');
     });
 
     it('resolves null when there is no active session', async () => {
-      (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: null } });
+      jest
+        .spyOn(supabase.auth, 'getSession')
+        .mockResolvedValue({ data: { session: null } } as never);
       mount(new QueryClient());
 
       await expect(instanceAt(0).getToken()).resolves.toBeNull();
     });
 
     it('resolves null rather than rejecting when getSession throws', async () => {
-      (supabase.auth.getSession as jest.Mock).mockRejectedValue(new Error('network down'));
+      jest.spyOn(supabase.auth, 'getSession').mockRejectedValue(new Error('network down'));
       mount(new QueryClient());
 
       await expect(instanceAt(0).getToken()).resolves.toBeNull();
@@ -300,20 +296,22 @@ describe('useServerEvents', () => {
 });
 
 describe('token lookup deadline', () => {
-  const getSession = supabase.auth.getSession as jest.Mock;
-
   function Harness(): null {
     useServerEvents();
     return null;
   }
 
   let renderer: ReactTestRenderer | null = null;
+  let getSession: jest.SpiedFunction<typeof supabase.auth.getSession>;
 
   beforeEach(() => {
     jest.useFakeTimers();
     jest.spyOn(Math, 'random').mockReturnValue(0);
-    getSession.mockReset();
-    getSession.mockReturnValue(new Promise(() => undefined));
+    setKillSwitchFileStore(createMemoryFileStore());
+    applyKillSwitches({ telemetry_enabled: false });
+    getSession = jest
+      .spyOn(supabase.auth, 'getSession')
+      .mockReturnValue(new Promise(() => undefined));
   });
 
   afterEach(() => {
@@ -321,6 +319,7 @@ describe('token lookup deadline', () => {
       renderer?.unmount();
     });
     renderer = null;
+    setKillSwitchFileStore();
     jest.restoreAllMocks();
     jest.useRealTimers();
   });

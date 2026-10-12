@@ -1,4 +1,4 @@
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import { httpOfflinePort } from '@shared/offline/adapters/http/httpOfflinePort';
 import {
@@ -9,9 +9,7 @@ import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 
 const { __http, fakeFetch } = require('../../../../jest/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const AUDIO_URLS_PATH = '/v1/audio-urls';
 const T1_URL = 'https://cdn.example.com/t1.mp3?sig=a';
@@ -37,11 +35,8 @@ function serveAudioUrlsOverHttp(urls: SeededAudioUrls): OfflinePort {
   return httpOfflinePort;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {
