@@ -1,16 +1,22 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
 import { darkTheme } from '@shared/ui/theme';
 
 import { CorrectionBanner } from '@features/discovery/ui/CorrectionBanner';
 import { DiscoverRow } from '@features/discovery/ui/DiscoverRow';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { PlaybackContext } from '@shared/playback/usePlayback';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 
-jest.mock('@features/discovery/hooks/usePreviewPlayback', () => ({
-  usePreviewPlayback: () => ({ hasPreview: false }),
-}));
+function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
+  return renderBare(ui, {
+    wrapper: ({ children }) => (
+      <PlaybackContext.Provider value={idlePlayback}>{children}</PlaybackContext.Provider>
+    ),
+  });
+}
 
 function holdDown(element: Parameters<typeof fireEvent>[0]): void {
   fireEvent(element, 'responderGrant', {

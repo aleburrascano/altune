@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, type TextStyle } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { render as renderBare, screen } from '@testing-library/react-native';
 
 import { darkTheme, spacing } from '@shared/ui/theme';
 
@@ -10,10 +10,16 @@ import { TopResultCard } from '@features/discovery/ui/TopResultCard';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 
 import type { ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import { PlaybackContext } from '@shared/playback/usePlayback';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
 
-jest.mock('@features/discovery/hooks/usePreviewPlayback', () => ({
-  usePreviewPlayback: () => ({ hasPreview: false }),
-}));
+function render(ui: React.ReactElement): ReturnType<typeof renderBare> {
+  return renderBare(ui, {
+    wrapper: ({ children }) => (
+      <PlaybackContext.Provider value={idlePlayback}>{children}</PlaybackContext.Provider>
+    ),
+  });
+}
 
 function commonProps(): ResultsCommonProps {
   return {

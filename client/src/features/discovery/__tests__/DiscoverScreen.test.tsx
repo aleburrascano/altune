@@ -1,18 +1,20 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 import { createElement, type ReactElement, type ReactNode } from 'react';
-import { Keyboard, Platform } from 'react-native';
+import { Keyboard, Platform, TextInput } from 'react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { asTrackId } from '@shared/apiClient/ids';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
 import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
-import type { DiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
+import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
+import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 import { DiscoverScreen } from '@features/discovery/ui/DiscoverScreen';
 
 jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
 
 const mockPush = jest.fn();
-const focusEffects: Array<() => (() => void) | void> = [];
+const focusEffects: (() => (() => void) | void)[] = [];
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -21,71 +23,12 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-const mockFocus = jest.fn();
-jest.mock('@shared/ui/primitives/SearchBar', () => {
-  const { forwardRef: fr, useImperativeHandle: useImp } = jest.requireActual('react');
-  return {
-    SearchBar: fr((_props: unknown, ref: unknown) => {
-      useImp(ref, () => ({ focus: mockFocus }));
-      return null;
-    }),
-  };
-});
-
-jest.mock('@features/discovery/ui/DiscoverBody', () => ({ DiscoverBody: () => null }));
-jest.mock('@features/discovery/ui/SuggestionsList', () => ({ SuggestionsList: () => null }));
-
-function mockDiscoverLogic(): DiscoverLogic {
-  return {
-    inputValue: '',
-    pending: false,
-    onChangeText: jest.fn(),
-    onSubmit: jest.fn(),
-    onClear: jest.fn(),
-    isFocused: false,
-    setIsFocused: jest.fn(),
-    showSuggestions: false,
-    suggestionItems: [],
-    onSuggestionSelect: jest.fn(),
-    results: {
-      view: 'empty-no-query',
-      searchData: undefined,
-      resultsIncomplete: false,
-      filter: 'all',
-      setFilter: jest.fn(),
-      onResultTap: jest.fn(),
-      impression: {
-        onImpression: jest.fn(),
-        onImpressionEnd: jest.fn(),
-      } as unknown as DiscoverLogic['results']['impression'],
-      onRetry: jest.fn(),
-      searchError: null,
-      onRefresh: jest.fn(),
-      isRefreshing: false,
-      correction: null,
-      onSearchOriginal: jest.fn(),
-      refreshFailed: false,
-    },
-    pagination: {
-      onEndReached: jest.fn(),
-      isFetchingNextPage: false,
-      nextPageFailed: false,
-      onRetryNextPage: jest.fn(),
-    },
-    history: {
-      items: [],
-      failed: false,
-      clearFailed: false,
-      onTap: jest.fn(),
-      onRetry: jest.fn(),
-      onClear: jest.fn(),
-    },
-  };
-}
-
-jest.mock('@features/discovery/hooks/useDiscoverLogic', () => ({
-  useDiscoverLogic: () => mockDiscoverLogic(),
-}));
+const port: DiscoverPort = {
+  searchDiscovery: jest.fn(),
+  suggestDiscovery: jest.fn().mockResolvedValue({ suggestions: [] }),
+  listSearchHistory: jest.fn().mockResolvedValue({ items: [] }),
+  recordSearchHistory: jest.fn().mockResolvedValue(undefined),
+};
 
 interface FakeWindow {
   readonly addEventListener: jest.Mock;
@@ -155,29 +98,43 @@ function renderShortcuts(win: FakeWindow) {
   });
 }
 
+let focusSpy: jest.SpyInstance;
+
 beforeEach(() => {
+  focusSpy = jest.spyOn(TextInput.prototype, 'focus').mockImplementation(() => undefined);
   mockPush.mockClear();
-  mockFocus.mockClear();
   focusEffects.length = 0;
 });
 
+afterEach(() => {
+  focusSpy.mockRestore();
+});
+
 function renderDiscover(): ReactElement {
-  return <DiscoverScreen />;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <PlaybackContext.Provider value={playbackFixture()}>
+        <DiscoverPortProvider port={port}>
+          <DiscoverScreen />
+        </DiscoverPortProvider>
+      </PlaybackContext.Provider>
+    </QueryClientProvider>
+  );
 }
 
 describe('DiscoverScreen registers its search focus only while visible', () => {
   it('unregisters on blur (not only on unmount), so a "/" pressed elsewhere after a visit navigates again and focuses the freshly-focused Discover, not the stale hidden one', () => {
     render(renderDiscover());
-    expect(focusEffects).toHaveLength(1);
-    const focusEffect = focusEffects[0]!;
+    const visibleEffects = [...focusEffects];
 
-    let blur: (() => void) | void;
+    const blurs: ((() => void) | void)[] = [];
     act(() => {
-      blur = focusEffect();
+      for (const effect of visibleEffects) blurs.push(effect());
     });
 
     act(() => {
-      blur?.();
+      for (const blur of blurs) blur?.();
     });
 
     const win = createFakeWindow();
@@ -185,13 +142,13 @@ describe('DiscoverScreen registers its search focus only while visible', () => {
 
     win.dispatch('/');
 
-    expect(mockFocus).not.toHaveBeenCalled();
+    expect(focusSpy).not.toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith('/discover');
 
     act(() => {
-      focusEffect();
+      for (const effect of visibleEffects) effect();
     });
-    expect(mockFocus).toHaveBeenCalledTimes(1);
+    expect(focusSpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -210,7 +167,7 @@ describe('DiscoverScreen tap-to-dismiss-keyboard area', () => {
 
   it('dismisses the keyboard when the screen body is tapped on native', () => {
     Platform.OS = 'ios';
-    render(<DiscoverScreen />);
+    render(renderDiscover());
     fireEvent.press(screen.getByTestId('discover-screen-body'));
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
