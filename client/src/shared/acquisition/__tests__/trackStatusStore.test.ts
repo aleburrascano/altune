@@ -17,11 +17,29 @@ import { asTrackId, type TrackId } from '@shared/apiClient/ids';
 import { toFailed, toPending, toReady, toTrackStatus } from '@shared/apiClient/trackAcquisition';
 import type { AcquisitionStatus } from '@shared/apiClient/trackResponse';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { enqueueCritical } from '@shared/telemetry/outbox';
+import { flushOutbox } from '@shared/telemetry/outbox';
+import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+const { __http } = require('@testing/doubles/fetch.js');
 
-const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueueCritical>;
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+interface SentEvent {
+  payload: Record<string, unknown>;
+}
+
+interface HttpRequest {
+  path: string;
+  body: string;
+}
+
+async function delivered(): Promise<SentEvent[]> {
+  await flushOutbox();
+  await new Promise((resolve) => setImmediate(resolve));
+  return (__http.requests as HttpRequest[])
+    .filter((request) => request.path === '/v1/discovery/events')
+    .map((request) => JSON.parse(request.body) as SentEvent);
+}
 
 type StatusFields = { acquisitionStatus: AcquisitionStatus; failureMessage: string | null };
 
@@ -43,8 +61,10 @@ beforeEach(() => {
   useTrackStatusStore.getState().reset();
 });
 
-beforeEach(() => {
-  enqueueCriticalMock.mockReset().mockResolvedValue(undefined);
+beforeEach(async () => {
+  __http.reset();
+  await signInTestUser();
+  __http.replyAll({ status: 202 });
 });
 
 describe('sign-out', () => {
@@ -401,15 +421,16 @@ describe('track id branding', () => {
 });
 
 describe('patchTrackStatus — status_changed telemetry', () => {
-  function lastPayload(): Record<string, unknown> {
-    const call = enqueueCriticalMock.mock.calls.at(-1);
-    return (call?.[0]?.payload ?? {}) as Record<string, unknown>;
+  async function lastPayload(): Promise<Record<string, unknown>> {
+    const payload = { ...(await delivered()).at(-1)?.payload };
+    delete payload['session_id'];
+    return payload;
   }
 
-  it('records the transition with the given source, defaulting to response', () => {
+  it('records the transition with the given source, defaulting to response', async () => {
     patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
 
-    expect(lastPayload()).toEqual({
+    expect(await lastPayload()).toEqual({
       track_id: 't-1',
       action: 'status_changed',
       from: null,
@@ -418,18 +439,18 @@ describe('patchTrackStatus — status_changed telemetry', () => {
     });
   });
 
-  it('carries the source it is given', () => {
+  it('carries the source it is given', async () => {
     patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }), 'optimistic');
 
-    expect(lastPayload()['source']).toBe('optimistic');
+    expect((await lastPayload())['source']).toBe('optimistic');
   });
 
-  it('does not record when the acquisition status does not change', () => {
+  it('does not record when the acquisition status does not change', async () => {
     patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
-    enqueueCriticalMock.mockClear();
+    const before = (await delivered()).length;
 
     patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
 
-    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+    expect(await delivered()).toHaveLength(before);
   });
 });

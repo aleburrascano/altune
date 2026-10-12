@@ -8,8 +8,11 @@ import type { ApiError } from '@shared/failure/errors';
 import { createMemoryAcquisitionPort } from '@shared/acquisition/__tests__/memoryAcquisitionPort';
 import { AcquisitionPortProvider } from '@shared/acquisition/ports/AcquisitionPortProvider';
 import { useSharedRetryAcquisition } from '@shared/acquisition/useRetryAcquisition';
+import { signInTestUser } from '@testing/signInTestUser';
 
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const NOT_FOUND_STATUS = 404;
 
@@ -37,20 +40,20 @@ function renderRetry(trackIds: readonly string[]) {
   return { ...hook, memory, onError };
 }
 
-let fetchSpy: jest.Mock;
-const realFetch = global.fetch;
-
-beforeEach(() => {
-  fetchSpy = jest.fn();
-  global.fetch = fetchSpy as unknown as typeof fetch;
+beforeEach(async () => {
+  __http.reset();
+  await signInTestUser();
+  __http.replyAll({ status: 202 });
 });
 
-afterEach(() => {
-  global.fetch = realFetch;
-});
+function retryRequests(): unknown[] {
+  return (__http.requests as { path: string }[]).filter((request) =>
+    request.path.endsWith('/retry'),
+  );
+}
 
 describe('useSharedRetryAcquisition over the AcquisitionPort', () => {
-  it('records the retry on the fake without any fetch call', async () => {
+  it('records the retry on the fake without any retry request', async () => {
     const { result, memory } = renderRetry(['t1']);
 
     await act(async () => {
@@ -58,7 +61,7 @@ describe('useSharedRetryAcquisition over the AcquisitionPort', () => {
     });
 
     expect(memory.retried).toEqual(['t1']);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(retryRequests()).toEqual([]);
   });
 
   it('reaches onError with a 404 when the track is not seeded', async () => {

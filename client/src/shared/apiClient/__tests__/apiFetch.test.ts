@@ -11,11 +11,11 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const getSession = supabase.auth.getSession as jest.Mock;
+type LooseSession = { getSession: () => Promise<unknown> };
+
+let getSession: jest.SpyInstance<Promise<unknown>, []>;
 
 function withSession(accessToken: string | null | undefined = 'tok') {
   getSession.mockResolvedValue({
@@ -28,6 +28,7 @@ const originalOS = Platform.OS;
 
 beforeEach(() => {
   clearSessionExpired();
+  getSession = jest.spyOn(supabase.auth as LooseSession, 'getSession');
   getSession.mockReset();
 });
 

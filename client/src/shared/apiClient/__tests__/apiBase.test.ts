@@ -1,8 +1,6 @@
 import type * as ApiClient from '@shared/apiClient/index';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 type DevGlobal = { __DEV__: boolean };
 

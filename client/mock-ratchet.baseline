@@ -1,7 +1,3 @@
-src/shared/acquisition/__tests__/trackStatusStore.test.ts @shared/telemetry/outbox
-src/shared/acquisition/__tests__/useRetryAcquisition.test.tsx @shared/telemetry/outbox
-src/shared/apiClient/__tests__/apiBase.test.ts @shared/auth/supabaseClient
-src/shared/apiClient/__tests__/apiFetch.test.ts @shared/auth/supabaseClient
 src/shared/apiClient/__tests__/audio.test.ts @shared/auth/supabaseClient
 src/shared/apiClient/__tests__/config.test.ts @shared/auth/supabaseClient
 src/shared/apiClient/__tests__/discovery.test.ts @shared/auth/supabaseClient
