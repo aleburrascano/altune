@@ -2,12 +2,10 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/apiClient';
-import { clearSearchHistory } from '@shared/apiClient/discovery';
+import { NetworkError } from '@shared/apiClient';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
-import { backfillFeaturedArtists } from '@shared/apiClient/tracks';
 
-import { supabase } from '@shared/auth/supabaseClient';
+import { signInTestUser } from '@testing/signInTestUser';
 
 import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
@@ -15,38 +13,12 @@ import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-jest.mock('@shared/apiClient/tracks', () => ({
-  ...jest.requireActual('@shared/apiClient/tracks'),
-  backfillFeaturedArtists: jest.fn(),
-}));
-jest.mock('@shared/apiClient/discovery', () => ({
-  ...jest.requireActual('@shared/apiClient/discovery'),
-  clearSearchHistory: jest.fn(),
-}));
-jest.mock('@shared/auth/useSignOut', () => ({
-  useSignOut: () => ({ state: { status: 'idle' }, signOut: jest.fn() }),
-}));
-jest.mock('@features/settings/hooks/useAccountEmail', () => ({
-  useAccountEmail: () => 'me@example.com',
-}));
-jest.mock('@features/settings/hooks/useDownloads', () => ({
-  ...jest.requireActual('@features/settings/hooks/useDownloads'),
-  useDownloadStats: () => ({
-    downloadCount: 0,
-    downloadBytes: 0,
-    downloadSize: '0 B',
-    usageLabel: 'No downloads on this device',
-    usageDetail: undefined,
-  }),
-}));
-jest.mock('@shared/offline/pinnedStore', () => ({
-  usePinnedStore: (select: (s: { unpinAll: () => void }) => unknown) =>
-    select({ unpinAll: jest.fn() }),
-}));
+const BACKFILL_ROUTE = 'POST /v1/tracks/featured-backfill';
+const CLEAR_HISTORY_ROUTE = 'DELETE /v1/discovery/search-history';
+const HTTP_ACCEPTED = 202;
+const HTTP_UNAVAILABLE = 503;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -70,14 +42,10 @@ async function elapsePastTheRetries() {
 const backfillRow = () => within(screen.getByTestId('settings-backfill-featured'));
 const historyRow = () => within(screen.getByTestId('settings-clear-search-history'));
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.useFakeTimers();
-  jest.mocked(backfillFeaturedArtists).mockReset();
-  jest.mocked(clearSearchHistory).mockReset();
-  jest.mocked(supabase.auth.getSession).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as never);
+  await signInTestUser();
+  __http.replyAll({ status: HTTP_ACCEPTED });
 });
 
 afterEach(() => {
@@ -86,9 +54,7 @@ afterEach(() => {
 
 describe('settings mutation failures', () => {
   it('backfill: a rejected run shows a failure state, not the idle Run label', async () => {
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockRejectedValue(new NetworkError('timeout', 'request timed out'));
+    __http.fail(BACKFILL_ROUTE, new NetworkError('timeout', 'request timed out'));
     render(<SettingsScreen />, { wrapper });
     expect(backfillRow().getByText('Run')).toBeTruthy();
 
@@ -106,9 +72,9 @@ describe('settings mutation failures', () => {
   });
 
   it('backfill: a successful run still reports Done with the counts', async () => {
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockResolvedValue({ updated: 2, scanned: 9, truncated: false, nextOffset: 9 });
+    __http.reply(BACKFILL_ROUTE, {
+      json: { updated: 2, scanned: 9, truncated: false, next_offset: 9 },
+    });
     render(<SettingsScreen />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
@@ -121,9 +87,7 @@ describe('settings mutation failures', () => {
     ['updated exceeds scanned', { scanned: 3, updated: 12 }],
     ['missing fields', {}],
   ])('backfill: a malformed response (%s) shows a sane fallback', async (_label, json) => {
-    const actual = jest.requireActual('@shared/apiClient/tracks');
-    jest.mocked(backfillFeaturedArtists).mockImplementation(actual.backfillFeaturedArtists);
-    __http.reply('POST /v1/tracks/featured-backfill', { status: 200, json });
+    __http.reply(BACKFILL_ROUTE, { status: 200, json });
     render(<SettingsScreen />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
@@ -134,7 +98,10 @@ describe('settings mutation failures', () => {
   });
 
   it('clear history: a rejected clear shows a failure state, not Cleared or nothing', async () => {
-    jest.mocked(clearSearchHistory).mockRejectedValue(new ApiError(503, 'unavailable'));
+    __http.reply(CLEAR_HISTORY_ROUTE, {
+      status: HTTP_UNAVAILABLE,
+      json: { error: { code: 'unavailable', message: 'unavailable' } },
+    });
     render(<SettingsScreen />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-clear-search-history'));
@@ -149,7 +116,7 @@ describe('settings mutation failures', () => {
   });
 
   it('clear history: a successful clear still shows Cleared with no failure copy', async () => {
-    jest.mocked(clearSearchHistory).mockResolvedValue(undefined);
+    __http.reply(CLEAR_HISTORY_ROUTE, { status: 204 });
     render(<SettingsScreen />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-clear-search-history'));

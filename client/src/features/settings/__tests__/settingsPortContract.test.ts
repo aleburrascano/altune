@@ -3,9 +3,8 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { BackfillFeaturedResult } from '@shared/apiClient/tracks';
-import { supabase } from '@shared/auth/supabaseClient';
-
 import { makeWrapper } from '@testing/makeWrapper';
+import { signInTestUser } from '@testing/signInTestUser';
 import { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
 import { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
 import { useBackfillFeatured } from '@features/settings/hooks/useBackfillFeatured';
@@ -21,9 +20,7 @@ import {
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const BACKFILL_PATH = '/v1/tracks/featured-backfill';
 const SERVER_ERROR_STATUS = 500;
@@ -59,11 +56,8 @@ function serveOverHttp(pages: BackfillFeaturedResult[]): SettingsPort {
   return httpSettingsPort;
 }
 
-beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 afterEach(() => {

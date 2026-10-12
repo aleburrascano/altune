@@ -3,8 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { within } from '@testing-library/react-native';
 
+import { signInTestUser } from '@testing/signInTestUser';
+
 import { ApiError } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
 import { asTrackId } from '@shared/apiClient/ids';
@@ -15,16 +16,25 @@ import { downloadUsage } from '@features/settings/domain/downloadStatsModel';
 import type { ClearHistoryState } from '@features/settings/domain/dangerZoneActions';
 import { DangerZoneCard } from '@features/settings/ui/DangerZoneCard';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signOut: jest.fn() } },
-  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
-}));
+const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({
-  recordUserAction: jest.fn(),
-}));
+const mockSignOut = jest.fn();
 
-const mockSignOut = supabase.auth.signOut as jest.Mock;
+beforeEach(async () => {
+  await signInTestUser();
+  __http.replyAll({ status: 202 });
+});
+
+jest.mock('@supabase/supabase-js', () => {
+  const double = require('@testing/doubles/supabase-js.js');
+  return {
+    createClient(url: string, key: string, options: unknown) {
+      const client = double.createClient(url, key, options);
+      client.auth.signOut = (...args: unknown[]) => mockSignOut(...args);
+      return client;
+    },
+  };
+});
 
 function makeProps(
   over: {
@@ -242,7 +252,7 @@ describe('DangerZoneCard sign-out failure', () => {
 
   let warn: jest.SpyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockSignOut.mockReset();
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });

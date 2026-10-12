@@ -3,15 +3,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { backfillFeaturedArtists } from '@shared/apiClient/tracks';
+import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryCard } from '@features/settings/ui/LibraryCard';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
-jest.mock('@shared/apiClient/tracks', () => ({
-  ...jest.requireActual('@shared/apiClient/tracks'),
-  backfillFeaturedArtists: jest.fn(),
-}));
+const { __http } = require('@testing/doubles/fetch.js');
+
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+const BACKFILL_ROUTE = 'POST /v1/tracks/featured-backfill';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -26,8 +27,8 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const backfillRow = () => within(screen.getByTestId('settings-backfill-featured'));
 
-beforeEach(() => {
-  jest.mocked(backfillFeaturedArtists).mockReset();
+beforeEach(async () => {
+  await signInTestUser();
 });
 
 describe('LibraryCard', () => {
@@ -38,9 +39,9 @@ describe('LibraryCard', () => {
   });
 
   it('presses the row and reports Done with the counts on success', async () => {
-    jest
-      .mocked(backfillFeaturedArtists)
-      .mockResolvedValue({ updated: 2, scanned: 9, truncated: false, nextOffset: 9 });
+    __http.reply(BACKFILL_ROUTE, {
+      json: { updated: 2, scanned: 9, truncated: false, next_offset: 9 },
+    });
     render(<LibraryCard />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));

@@ -1,14 +1,3 @@
-src/features/settings/__tests__/DangerZoneCard.test.tsx @shared/auth/supabaseClient
-src/features/settings/__tests__/DangerZoneCard.test.tsx @shared/telemetry/userTelemetry
-src/features/settings/__tests__/LibraryCard.test.tsx @shared/apiClient/tracks
-src/features/settings/__tests__/SettingsScreen.test.tsx @features/settings/hooks/useAccountEmail
-src/features/settings/__tests__/SettingsScreen.test.tsx @features/settings/hooks/useDownloads
-src/features/settings/__tests__/SettingsScreen.test.tsx @shared/apiClient/discovery
-src/features/settings/__tests__/SettingsScreen.test.tsx @shared/apiClient/tracks
-src/features/settings/__tests__/SettingsScreen.test.tsx @shared/auth/supabaseClient
-src/features/settings/__tests__/SettingsScreen.test.tsx @shared/auth/useSignOut
-src/features/settings/__tests__/SettingsScreen.test.tsx @shared/offline/pinnedStore
-src/features/settings/__tests__/settingsPortContract.test.ts @shared/auth/supabaseClient
 src/features/settings/__tests__/useAccountEmail.test.ts @shared/auth/useSession
 src/features/settings/__tests__/useDownloads.test.ts @shared/apiClient/audio
 src/features/settings/__tests__/useDownloads.test.ts @shared/offline/pinnedStore
