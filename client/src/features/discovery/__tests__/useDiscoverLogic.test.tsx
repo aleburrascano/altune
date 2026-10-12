@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 
 import { ApiError, NetworkError } from '@shared/failure/errors';
-import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { useDiscoverLogic } from '@features/discovery/hooks/useDiscoverLogic';
 import {
@@ -14,19 +13,12 @@ import {
 import { setSearchState } from '@features/discovery/domain/searchState';
 import { DiscoverBody } from '@features/discovery/ui/DiscoverBody';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { signInTestUser } from '@testing/signInTestUser';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-jest.mock('@shared/telemetry/useRecordEvent', () => ({
-  useRecordEvent: () => ({ mutate: mockRecord }),
-}));
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-jest.mock('@shared/telemetry/userTelemetry', () => ({ recordUserAction: jest.fn() }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
   useFocusEffect: jest.fn(),
@@ -35,6 +27,8 @@ jest.mock('expo-router', () => ({
 const { __http } = require('@testing/doubles/fetch.js');
 
 const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
+const EVENTS = 'POST /v1/discovery/events';
+const EVENTS_PATH = '/v1/discovery/events';
 const BAD_REQUEST = 400;
 const SERVER_ERROR = 500;
 const TWO_SEARCHES = 2;
@@ -49,7 +43,6 @@ interface PageRequest {
   offset: number;
 }
 
-const mockRecord = jest.fn();
 const portSearch = jest.fn();
 const portSuggest = jest.fn();
 const portHistory = jest.fn();
@@ -94,21 +87,19 @@ function clearRequests(): number {
   return __http.countFor(CLEAR_HISTORY);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false, retryDelay: 0 },
     },
   });
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
   portSearch.mockReset();
   portSuggest.mockReset();
   portHistory.mockReset();
   portRecordHistory.mockReset().mockResolvedValue(undefined);
-  jest.mocked(supabase.auth.getSession).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as Awaited<ReturnType<typeof supabase.auth.getSession>>);
   setSearchState('', 'rad');
 });
 
@@ -273,8 +264,9 @@ describe('useDiscoverLogic recovers from failures', () => {
   }
 
   function clearFailureEvents() {
-    return mockRecord.mock.calls
-      .map((call) => call[0] as { payload?: { source?: string } })
+    return (__http.requests as { path: string; body: string }[])
+      .filter((request) => request.path === EVENTS_PATH)
+      .map((request) => JSON.parse(request.body) as { payload?: { source?: string } })
       .filter((event) => event.payload?.source === 'clear_history');
   }
 
@@ -285,7 +277,7 @@ describe('useDiscoverLogic recovers from failures', () => {
         mutations: { retry: false, retryDelay: 0 },
       },
     });
-    [portSearch, portSuggest, portHistory, mockRecord].forEach((mock) => mock.mockReset());
+    [portSearch, portSuggest, portHistory].forEach((mock) => mock.mockReset());
     portSuggest.mockResolvedValue({ suggestions: [] });
     setSearchState('', '');
   });

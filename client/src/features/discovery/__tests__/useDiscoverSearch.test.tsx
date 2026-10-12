@@ -4,10 +4,8 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { NetworkError } from '@shared/apiClient';
 import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
-import { supabase } from '@shared/auth/supabaseClient';
 import { transientRetryOptions } from '@shared/query/retryDelay';
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   MAX_SEARCH_OFFSET,
   MAX_SEARCH_PAGES,
@@ -17,19 +15,15 @@ import { setSearchState } from '@features/discovery/domain/searchState';
 import { useDebouncedSearch } from '@features/discovery/hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-const mockRecordEvent = recordEvent as jest.Mock;
-
 const SEARCH = 'GET /v1/discovery/search';
+const EVENTS = 'POST /v1/discovery/events';
+const EVENTS_PATH = '/v1/discovery/events';
 const TWO_REQUESTS = 2;
 const THIRD_PAGE_OFFSET = SEARCH_PAGE_SIZE + SEARCH_PAGE_SIZE;
 
@@ -124,15 +118,13 @@ async function renderWithFirstPage() {
   return rendered;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
   serveEndlessPages(MAX_SEARCH_PAGES + 1);
 });
 
@@ -368,15 +360,19 @@ describe('next page failure', () => {
 
 describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
   function failureEvents() {
-    return mockRecordEvent.mock.calls
-      .map((call) => call[0] as { type: string; payload?: Record<string, unknown> })
+    return (__http.requests as { path: string; body: string }[])
+      .filter((request) => request.path === EVENTS_PATH)
+      .map(
+        (request) =>
+          JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> },
+      )
       .filter((event) => event.type === 'search_failed');
   }
 
   beforeEach(() => {
     __http.reset();
     __http.reply(SEARCH, { status: 503, json: { detail: 'unavailable' } });
-    mockRecordEvent.mockReset().mockResolvedValue(undefined);
+    __http.reply(EVENTS, { status: 204 });
   });
 
   it('a failed search fires search_failed with source search and the HTTP status', async () => {
@@ -387,7 +383,12 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
 
     expect(failureEvents()[0]).toEqual({
       type: 'search_failed',
-      payload: { source: 'search', status: 503, correlationId: expect.any(String) },
+      payload: {
+        source: 'search',
+        status: 503,
+        correlationId: expect.any(String),
+        session_id: expect.any(String),
+      },
     });
   });
 
@@ -403,6 +404,7 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
       source: 'search',
       status: 503,
       correlationId: failedRequest?.headers[CORRELATION_HEADER],
+      session_id: expect.any(String),
     });
   });
 });

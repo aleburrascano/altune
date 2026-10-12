@@ -1,11 +1,3 @@
-src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/auth/supabaseClient
-src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/telemetry/recordEvent
-src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/telemetry/useRecordEvent
-src/features/discovery/__tests__/useDiscoverLogic.test.tsx @shared/telemetry/userTelemetry
-src/features/discovery/__tests__/useDiscoverSearch.test.tsx @shared/auth/supabaseClient
-src/features/discovery/__tests__/useDiscoverSearch.test.tsx @shared/telemetry/recordEvent
-src/features/discovery/__tests__/useImpressionLogger.test.ts @shared/telemetry/useRecordEvent
-src/features/discovery/__tests__/useResultTap.test.ts @shared/telemetry/useRecordEvent
 src/features/discovery/__tests__/useSearchHistory.test.tsx @shared/auth/supabaseClient
 src/features/discovery/__tests__/useSearchHistory.test.tsx @shared/telemetry/recordEvent
 src/features/discovery/__tests__/useSearchRefresh.test.tsx @shared/auth/supabaseClient
