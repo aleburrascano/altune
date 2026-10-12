@@ -596,3 +596,37 @@ describe('ArtistDetailBody: incomplete library track lookup', () => {
     expect(screen.queryByTestId('detail-library-tracks-incomplete')).toBeNull();
   });
 });
+
+type RecordedRequest = { path: string; query: string };
+
+describe('ArtistDetailBody: the artist content request', () => {
+  const CONTENT = 'GET /v1/discovery/artists/deezer/art-1/content';
+
+  it('asks for the artist by its ids, never by its name', async () => {
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    __http.reply(CONTENT, {
+      status: 200,
+      json: {
+        top_tracks: { items: [], provider_name: 'deezer', status: 'ok' },
+        albums: { items: [], provider_name: 'deezer', status: 'ok' },
+      },
+    });
+    render(
+      <ArtistDetailBody
+        chrome={{ title: 'Daft Punk', artworkUrl: null, onBack: jest.fn() }}
+        result={{
+          ...libraryArtist(),
+          title: 'Daft Punk',
+          sources: [{ provider: 'deezer', external_id: 'art-1', url: '' }],
+        }}
+        detailRoute="/discover/detail"
+      />,
+      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    );
+
+    await waitFor(() => expect(__http.countFor(CONTENT)).toBe(1));
+    const request = __http.requests.find((r: RecordedRequest) => r.path.endsWith('/art-1/content'));
+    expect(new URLSearchParams(request.query).has('name')).toBe(false);
+    expect(new URLSearchParams(request.query).get('ids')).toBe('deezer:art-1');
+  });
+});

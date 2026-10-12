@@ -52,8 +52,8 @@ export const detailKeys = {
     ['resolve-entity', kind, query, limit] as const,
   albumDiscoveryTracks: (provider: string | undefined, externalId: string | undefined) =>
     ['album-discovery-tracks', provider, externalId] as const,
-  artistContent: (provider: string, externalId: string, artistName: string, knownIds: string) =>
-    ['artist-content', provider, externalId, artistName, knownIds] as const,
+  artistContent: (provider: string, externalId: string, knownIds: string) =>
+    ['artist-content', provider, externalId, knownIds] as const,
   relatedTracks: (externalId: string) => ['related-tracks', externalId] as const,
 };
 

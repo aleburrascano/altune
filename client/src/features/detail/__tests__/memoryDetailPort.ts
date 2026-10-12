@@ -179,10 +179,10 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): DetailPort 
       resolveOnLaterTick(signal, () => albumTracks[albumTitle] ?? emptyContent()),
     getRelatedTracks: (_provider, externalId, _limit, signal) =>
       resolveOnLaterTick(signal, () => relatedTracks[externalId] ?? emptyContent()),
-    getArtistContent: (_provider, _externalId, { artistName = '' } = {}, signal) =>
+    getArtistContent: (_provider, externalId, _options, signal) =>
       resolveOnLaterTick(
         signal,
-        () => artistContent[artistName] ?? { top_tracks: emptyContent(), albums: emptyContent() },
+        () => artistContent[externalId] ?? { top_tracks: emptyContent(), albums: emptyContent() },
       ),
     createTrack: async (body, idempotencyKey) => {
       const replayed = idempotencyKey === undefined ? undefined : createdByKey.get(idempotencyKey);

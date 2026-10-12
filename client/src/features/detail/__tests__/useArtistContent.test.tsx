@@ -122,7 +122,7 @@ describe('logging degraded content', () => {
     it('logs which side/provider/artist failed when top_tracks status is not ok', async () => {
       const port = createMemoryDetailPort({
         artistContent: {
-          Radiohead: contentResponse({ topStatus: 'timeout' }) as ArtistContentResponse,
+          'artist-1': contentResponse({ topStatus: 'timeout' }) as ArtistContentResponse,
         },
       });
 
@@ -130,7 +130,6 @@ describe('logging degraded content', () => {
         () =>
           useArtistContent({
             sources: [{ provider: 'spotify', external_id: 'artist-1', url: 'https://x' }],
-            artistName: 'Radiohead',
           }),
         { wrapper: createPortWrapper(port) },
       );
@@ -143,7 +142,6 @@ describe('logging degraded content', () => {
           status: 'timeout',
           provider: 'spotify',
           externalId: 'artist-1',
-          artistName: 'Radiohead',
         }),
       );
     });
@@ -176,7 +174,7 @@ describe('logging degraded content', () => {
 
     it('does not log when both statuses are ok', async () => {
       const port = createMemoryDetailPort({
-        artistContent: { '': contentResponse({}) as ArtistContentResponse },
+        artistContent: { 'artist-3': contentResponse({}) as ArtistContentResponse },
       });
 
       const { result } = renderHook(
@@ -268,6 +266,8 @@ describe('useArtistContent reopened against the 30-minute content cache window',
   });
 });
 
+type ArtistContentProps = { sources: DiscoverySource[] };
+
 describe('useArtistContent through the detail port', () => {
   const track = (title: string) =>
     ({ title }) as unknown as ArtistContentResponse['top_tracks']['items'][number];
@@ -275,13 +275,15 @@ describe('useArtistContent through the detail port', () => {
     top_tracks: { items: [track(title)], provider_name: 'memory', status: 'ok' },
     albums: { items: [], provider_name: 'memory', status: 'ok' },
   });
-  const sources = [{ provider: 'spotify', external_id: 'artist-1', url: 'https://x' }];
+  const radiohead = [{ provider: 'spotify', external_id: 'radiohead', url: 'https://x' }];
+  const bjork = [{ provider: 'spotify', external_id: 'bjork', url: 'https://x' }];
+  const unknown = [{ provider: 'spotify', external_id: 'unknown', url: 'https://x' }];
   const port = createMemoryDetailPort({
-    artistContent: { Radiohead: served('Creep'), Bjork: served('Joga') },
+    artistContent: { radiohead: served('Creep'), bjork: served('Joga') },
   });
 
   it('returns content seeded for the artist', async () => {
-    const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Radiohead' }), {
+    const { result } = renderHook(() => useArtistContent({ sources: radiohead }), {
       wrapper: createPortWrapper(port),
     });
 
@@ -290,7 +292,7 @@ describe('useArtistContent through the detail port', () => {
   });
 
   it('returns no content for an unseeded artist', async () => {
-    const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Unknown' }), {
+    const { result } = renderHook(() => useArtistContent({ sources: unknown }), {
       wrapper: createPortWrapper(port),
     });
 
@@ -301,12 +303,12 @@ describe('useArtistContent through the detail port', () => {
 
   it('returns the new artist content, not the previous one, after a rerender', async () => {
     const { result, rerender } = renderHook(
-      ({ artistName }: { artistName: string }) => useArtistContent({ sources, artistName }),
-      { wrapper: createPortWrapper(port), initialProps: { artistName: 'Radiohead' } },
+      ({ sources }: ArtistContentProps) => useArtistContent({ sources }),
+      { wrapper: createPortWrapper(port), initialProps: { sources: radiohead } },
     );
     await waitFor(() => expect(result.current.topTracks[0]).toMatchObject({ title: 'Creep' }));
 
-    rerender({ artistName: 'Bjork' });
+    rerender({ sources: bjork });
 
     await waitFor(() => expect(result.current.topTracks[0]).toMatchObject({ title: 'Joga' }));
   });

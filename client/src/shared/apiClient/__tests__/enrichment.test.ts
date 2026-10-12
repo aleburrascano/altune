@@ -233,19 +233,18 @@ describe('getArtistContent', () => {
     expect(__http.last().query).toBe('');
   });
 
-  it('sends name, tracks_limit and albums_limit together in that order when all present', async () => {
+  it('sends tracks_limit and albums_limit together in that order when both present', async () => {
     __http.reply('GET /v1/discovery/artists/deezer/art-1/content', {
       status: 200,
       json: { top_tracks: emptyContent, albums: emptyContent },
     });
 
     await getArtistContent('deezer', 'art-1', {
-      artistName: 'Daft Punk',
       tracksLimit: 5,
       albumsLimit: 8,
     });
 
-    expect(__http.last().query).toBe('name=Daft+Punk&tracks_limit=5&albums_limit=8');
+    expect(__http.last().query).toBe('tracks_limit=5&albums_limit=8');
   });
 
   it('sends every id the search card knows as provider:id pairs', async () => {

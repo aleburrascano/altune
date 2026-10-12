@@ -79,7 +79,6 @@ export function useArtistDetailState(
     refetch: refetchContent,
   } = useArtistContent({
     sources: effectiveSources,
-    artistName: artist.title,
     enabled: shouldFetchContent,
   });
 

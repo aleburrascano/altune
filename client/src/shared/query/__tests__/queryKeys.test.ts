@@ -54,11 +54,10 @@ describe('detailKeys — literal shape', () => {
       'deezer',
       '9',
     ]);
-    expect(detailKeys.artistContent('deezer', '9', 'Name', 'ids')).toEqual([
+    expect(detailKeys.artistContent('deezer', '9', 'ids')).toEqual([
       'artist-content',
       'deezer',
       '9',
-      'Name',
       'ids',
     ]);
     expect(detailKeys.relatedTracks('42')).toEqual(['related-tracks', '42']);

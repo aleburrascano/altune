@@ -262,7 +262,6 @@ function parseArtistContentResponse(
 }
 
 export type ArtistContentOptions = {
-  artistName?: string;
   tracksLimit?: number;
   albumsLimit?: number;
   knownIds?: readonly DiscoverySource[];
@@ -275,7 +274,6 @@ export async function getArtistContent(
   signal?: AbortSignal,
 ): Promise<ArtistContentResponse> {
   const params = new URLSearchParams();
-  if (opts.artistName) params.set('name', opts.artistName);
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
   if (opts.knownIds?.length) params.set('ids', sourceIdList(opts.knownIds));

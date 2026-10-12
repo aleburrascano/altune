@@ -63,9 +63,8 @@ describe('useContentFetchRetry', () => {
     {
       name: 'useArtistContent',
       path: ARTIST_PATH,
-      use: () =>
-        useArtistContent({ sources: artistSources, artistName: 'A' }).tracksFailure !== null,
-      useFailure: () => useArtistContent({ sources: artistSources, artistName: 'A' }).tracksFailure,
+      use: () => useArtistContent({ sources: artistSources }).tracksFailure !== null,
+      useFailure: () => useArtistContent({ sources: artistSources }).tracksFailure,
     },
     {
       name: 'useRelatedTracks',
@@ -221,8 +220,7 @@ describe('detail fetch gate', () => {
     },
     {
       hook: 'useArtistContent',
-      useGatedHook: () =>
-        useArtistContent({ sources: [spotifyAlbum], artistName: 'Fleetwood Mac' }),
+      useGatedHook: () => useArtistContent({ sources: [spotifyAlbum] }),
       emptyResult: {
         topTracks: [],
         albums: [],
@@ -261,8 +259,7 @@ describe('detail fetch gate', () => {
     },
     {
       hook: 'useArtistContent',
-      useRetryAffordance: () =>
-        useArtistContent({ sources: [spotifyAlbum], artistName: 'Fleetwood Mac' }).refetch,
+      useRetryAffordance: () => useArtistContent({ sources: [spotifyAlbum] }).refetch,
     },
   ];
 

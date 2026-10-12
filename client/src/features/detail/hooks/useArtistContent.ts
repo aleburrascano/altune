@@ -25,7 +25,6 @@ import {
 type ContentFetchContext = {
   provider: string;
   externalId: string;
-  artistName: string | null;
   knownIds: readonly DiscoverySource[];
 };
 
@@ -45,8 +44,8 @@ function logContentStatuses(content: ArtistContentResponse, ctx: ContentFetchCon
   }
 }
 
-function logContext({ provider, externalId, artistName }: ContentFetchContext) {
-  return { provider, externalId, artistName };
+function logContext({ provider, externalId }: ContentFetchContext) {
+  return { provider, externalId };
 }
 
 function isFullyServed(content: ArtistContentResponse): boolean {
@@ -55,7 +54,6 @@ function isFullyServed(content: ArtistContentResponse): boolean {
 
 type UseArtistContentParams = {
   sources: DiscoverySource[];
-  artistName?: string;
   enabled?: boolean;
 };
 
@@ -81,13 +79,11 @@ function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
 }
 
 function contentParams(ctx: ContentFetchContext): ArtistContentOptions {
-  const params: ArtistContentOptions = {
+  return {
     tracksLimit: TOP_TRACKS_LIMIT,
     albumsLimit: DETAIL_LIST_CAP,
     knownIds: ctx.knownIds,
   };
-  if (ctx.artistName) params.artistName = ctx.artistName;
-  return params;
 }
 
 function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext): void {
@@ -105,12 +101,10 @@ async function fetchContent(port: DetailPort, ctx: ContentFetchContext, signal: 
 function contentContext(
   seed: DiscoverySource,
   sources: readonly DiscoverySource[],
-  artistName: string | undefined,
 ): ContentFetchContext {
   return {
     provider: seed.provider,
     externalId: seed.external_id,
-    artistName: artistName ?? null,
     knownIds: sources,
   };
 }
@@ -127,15 +121,13 @@ async function fetchReporting(port: DetailPort, ctx: ContentFetchContext, signal
 function loadArtistContent(
   port: DetailPort,
   sources: readonly [DiscoverySource, ...DiscoverySource[]],
-  artistName: string | undefined,
   signal: AbortSignal,
 ) {
-  return fetchReporting(port, contentContext(sources[0], sources, artistName), signal);
+  return fetchReporting(port, contentContext(sources[0], sources), signal);
 }
 
 export function useArtistContent({
   sources,
-  artistName,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
   const source = sources[0] ?? null;
@@ -147,11 +139,9 @@ export function useArtistContent({
     queryKey: detailKeys.artistContent(
       source?.provider ?? '',
       source?.external_id ?? '',
-      artistName ?? '',
       sourceIdList(sources),
     ),
-    queryFn: ({ signal }) =>
-      loadArtistContent(port, [source!, ...sources.slice(1)], artistName, signal),
+    queryFn: ({ signal }) => loadArtistContent(port, [source!, ...sources.slice(1)], signal),
     enabled: enabled && isFetchEnabled && source !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
