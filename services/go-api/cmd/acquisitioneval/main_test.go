@@ -26,6 +26,11 @@ func TestSubcommand_DispatchesCaptureOnlyOnCaptureFirstArg(t *testing.T) {
 			wantName: "capture",
 			wantRest: []string{"-tier", "staging"},
 		},
+		"live first arg": {
+			args:     []string{"acquisitioneval", "live", "-tracks", "t.jsonl"},
+			wantName: "live",
+			wantRest: []string{"-tracks", "t.jsonl"},
+		},
 		"capture appearing later is not a subcommand": {
 			args:     []string{"acquisitioneval", "-v", "capture"},
 			wantName: "",

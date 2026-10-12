@@ -12,6 +12,9 @@ Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
   capture <title|uuid>  replay a track's rejection log through cmd/acquisitioneval's evaluator
   audit-qualifiers [limit]  ready tracks whose stored source title carries a veto qualifier (Instrumental,
                         reaction...) the track did not ask for; fetches titles via oEmbed, default limit 500
+  export-tracks [days]  ready tracks added in the window as JSONL (id, title, artist, album, duration_seconds,
+                        audio_source_url, acquisition_provenance, acquisition_evidence), input for
+                        cmd/acquisitioneval live; default 14 days
   client [since] [track]  acquisition_ui/client_error events from discovery_events (default
                         since 24 hours ago; track filters on the event's track_id)
   probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
@@ -177,6 +180,21 @@ SQL
     printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$title" "$artist" "$url" "$(oembed_title "$url")"
     sleep 0.5
   done
+  ;;
+
+export-tracks)
+  days=${1:-14}
+  case $days in ''|*[!0-9]*) echo "usage: export-tracks [days]" >&2; exit 3 ;; esac
+  db -A -t -v days="$days" <<'SQL'
+SELECT json_build_object(
+         'id', id, 'title', title, 'artist', artist, 'album', album,
+         'duration_seconds', duration_seconds, 'audio_source_url', audio_source_url,
+         'acquisition_provenance', acquisition_provenance, 'acquisition_evidence', acquisition_evidence)
+  FROM tracks
+ WHERE acquisition_status = 'ready' AND audio_source_url <> ''
+   AND added_at > now() - (:'days' || ' days')::interval
+ ORDER BY added_at DESC;
+SQL
   ;;
 
 client)

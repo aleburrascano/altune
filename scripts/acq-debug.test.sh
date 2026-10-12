@@ -168,6 +168,30 @@ ROW_TITLE= ROW_ARTIST=A run_script audit-qualifiers
 expect_rc 0
 [ "$(cat "$WORK/out.log")" = "$(printf 'id1\t\tA\thttps://youtube.com/x\t')" ] || fail "columns shifted: $(cat "$WORK/out.log")"
 
+CASE="export-tracks with a non-numeric window exits 3 with the usage on stderr and nothing on stdout"
+new_stub_bin
+run_script export-tracks soon
+expect_rc 3
+expect_err "usage: export-tracks [days]"
+expect_no_out
+
+CASE="export-tracks prints the psql rows through the read-only session and passes the window"
+new_stub_bin
+printf 'DATABASE_URL=postgres://stub\n' >"$WORK/checkout/services/go-api/.env.production"
+cat >"$WORK/bin/psql" <<'STUBPSQL'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$WORK/psql.args"
+cat >"$WORK/psql.sql"
+printf '{"id":"t1"}\n'
+STUBPSQL
+chmod +x "$WORK/bin/psql"
+WORK=$WORK run_script export-tracks 30
+expect_rc 0
+[ "$(cat "$WORK/out.log")" = '{"id":"t1"}' ] || fail "rows not passed through: $(cat "$WORK/out.log")"
+grep -qF "days=30" "$WORK/psql.args" || fail "window not passed to psql: $(cat "$WORK/psql.args")"
+head -1 "$WORK/psql.sql" | grep -qF "default_transaction_read_only = on" || fail "session not forced read-only"
+grep -qiE '\b(insert|update|delete|drop)\b' "$WORK/psql.sql" && fail "export query must be read-only"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

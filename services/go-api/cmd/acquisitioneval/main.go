@@ -17,6 +17,8 @@ func main() {
 		os.Exit(runCapture(rest, os.Stdin, os.Stdout, time.Now()))
 	case "audit-qualifiers":
 		os.Exit(runAuditQualifiers(os.Stdin, os.Stdout))
+	case "live":
+		os.Exit(runLiveCommand(rest, os.Stdout, os.Getenv))
 	}
 
 	var (
@@ -81,7 +83,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 }
 
 func subcommand(args []string) (name string, rest []string) {
-	if len(args) > 1 && (args[1] == "capture" || args[1] == "audit-qualifiers") {
+	if len(args) > 1 && (args[1] == "capture" || args[1] == "audit-qualifiers" || args[1] == "live") {
 		return args[1], args[2:]
 	}
 	return "", args[1:]

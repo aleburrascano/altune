@@ -58,4 +58,13 @@ bash scripts/acq-debug.sh [--staging] audit-qualifiers [limit]
 
 It lists ready tracks, fetches each stored source's title from the public oEmbed endpoints (about 2 requests per second, default limit 500), and prints `track_id`, `title`, `artist`, `source_title`, `veto_words` for each flagged track, then `flagged N of M`. It only reads; re-acquiring what it finds is the operator's call, batch by batch.
 
+To score whether each stored YouTube track's audio came from the right upload (music video, user upload, fan channel, clean edit, video or edit qualifiers, duration drift):
+
+```bash
+bash scripts/acq-debug.sh [--staging] export-tracks [days] > tracks.jsonl
+cd services/go-api && go run ./cmd/acquisitioneval live -tracks ../../tracks.jsonl -out judged.jsonl
+```
+
+`export-tracks` is read-only. `live` queries YouTube Music and oEmbed from the machine it runs on (about 1 request per second per endpoint; `ACQEVAL_LIVE_INTERVAL` and `ACQEVAL_LIVE_TIMEOUT` tune it), writes one judged row per track and prints a count per flag, then `flagged N of M`. A lookup that fails shows as `lookup_failed:<step>`; SoundCloud and other hosts carry a `skipped:<host>` marker.
+
 Anything that writes to prod (retrying a track, failing a stuck row, replacing cookies) needs the user's yes first. Name the exact change and wait for approval.
