@@ -12,12 +12,12 @@ import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+type LooseSession = { getSession: () => Promise<unknown> };
 
 beforeEach(() => {
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+  jest.spyOn(supabase.auth as LooseSession, 'getSession').mockResolvedValue({
     data: { session: { access_token: 'tok' } },
     error: null,
   });

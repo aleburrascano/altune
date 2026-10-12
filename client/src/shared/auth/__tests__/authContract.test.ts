@@ -7,11 +7,11 @@ import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpi
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-const getSession = supabase.auth.getSession as jest.Mock;
+type LooseSession = { getSession: () => Promise<unknown> };
+
+let getSession: jest.SpyInstance<Promise<unknown>, []>;
 
 function withSession(accessToken = 'contract-fixture-token') {
   getSession.mockResolvedValue({
@@ -22,6 +22,7 @@ function withSession(accessToken = 'contract-fixture-token') {
 
 beforeEach(() => {
   clearSessionExpired();
+  getSession = jest.spyOn(supabase.auth as LooseSession, 'getSession');
   getSession.mockReset();
   __http.reset();
 });
