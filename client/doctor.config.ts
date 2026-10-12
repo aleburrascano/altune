@@ -141,6 +141,7 @@ export default {
           'src/shared/ui/announce.ts',
           'src/shared/ui/dialog/dialog.ts',
           'src/shared/ui/haptics.ts',
+          'src/shared/ui/keyboard/keyboard.ios.tsx',
           'src/shared/ui/keyboard/keyboard.tsx',
         ],
         rules: ['deslop/unused-export'],
@@ -159,7 +160,11 @@ export default {
         rules: ['deslop/unused-file'],
       },
       {
-        files: ['src/shared/ui/keyboard/keyboard.tsx', 'src/shared/ui/keyboard/keyboard.web.tsx'],
+        files: [
+          'src/shared/ui/keyboard/keyboard.ios.tsx',
+          'src/shared/ui/keyboard/keyboard.tsx',
+          'src/shared/ui/keyboard/keyboard.web.tsx',
+        ],
         rules: ['react-doctor/only-export-components'],
       },
       pagingLoopsAwaitInOrder,

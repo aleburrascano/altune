@@ -1,18 +1,15 @@
 import { Keyboard, Text } from 'react-native';
-import type * as ReactNative from 'react-native';
 import type * as KeyboardExports from '@shared/ui/keyboard/keyboard';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 type KeyboardModule = typeof KeyboardExports;
 
-function loadWithOS(os: 'ios' | 'android'): KeyboardModule {
-  let loaded!: KeyboardModule;
-  jest.isolateModules(() => {
-    const { Platform: isolatedPlatform } = jest.requireActual<typeof ReactNative>('react-native');
-    isolatedPlatform.OS = os;
-    loaded = jest.requireActual<KeyboardModule>('@shared/ui/keyboard/keyboard');
-  });
-  return loaded;
+function loadIos(): KeyboardModule {
+  return jest.requireActual<KeyboardModule>('@shared/ui/keyboard/keyboard.ios.tsx');
+}
+
+function loadDefault(): KeyboardModule {
+  return jest.requireActual<KeyboardModule>('@shared/ui/keyboard/keyboard.tsx');
 }
 
 describe('keyboard (native)', () => {
@@ -27,7 +24,7 @@ describe('keyboard (native)', () => {
   });
 
   it('DismissKeyboardArea dismisses the keyboard when pressed', () => {
-    const { DismissKeyboardArea } = loadWithOS('ios');
+    const { DismissKeyboardArea } = loadIos();
     render(
       <DismissKeyboardArea testID="area">
         <Text>child</Text>
@@ -38,7 +35,7 @@ describe('keyboard (native)', () => {
   });
 
   it('KeepInputFocusArea renders its children and does not dismiss the keyboard', () => {
-    const { KeepInputFocusArea } = loadWithOS('ios');
+    const { KeepInputFocusArea } = loadIos();
     render(
       <KeepInputFocusArea testID="area">
         <Text>child</Text>
@@ -50,17 +47,17 @@ describe('keyboard (native)', () => {
   });
 
   it('dismissKeyboard calls Keyboard.dismiss', () => {
-    loadWithOS('ios').dismissKeyboard();
+    loadIos().dismissKeyboard();
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
 
   it('avoids the keyboard with padding on ios', () => {
-    const m = loadWithOS('ios');
+    const m = loadIos();
     expect([m.keyboardAvoidingBehavior, m.adjustsKeyboardInsets]).toEqual(['padding', true]);
   });
 
   it('leaves keyboard avoidance to the system on android', () => {
-    const m = loadWithOS('android');
+    const m = loadDefault();
     expect([m.keyboardAvoidingBehavior, m.adjustsKeyboardInsets]).toEqual([undefined, false]);
   });
 });

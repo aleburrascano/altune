@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Keyboard, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Keyboard, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Tappable } from '@shared/ui/primitives/Tappable';
 
 export function dismissKeyboard(): void {
@@ -30,7 +30,6 @@ export function KeepInputFocusArea(props: DismissKeyboardAreaProps): ReactElemen
   );
 }
 
-export const keyboardAvoidingBehavior: 'padding' | undefined =
-  Platform.OS === 'ios' ? 'padding' : undefined;
+export const keyboardAvoidingBehavior: 'padding' | undefined = undefined;
 
-export const adjustsKeyboardInsets: boolean = Platform.OS === 'ios';
+export const adjustsKeyboardInsets: boolean = false;
