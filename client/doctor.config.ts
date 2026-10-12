@@ -135,6 +135,7 @@ export default {
           'src/features/playback/adapters/PlaybackProvider.tsx',
           'src/features/playback/domain/playsThroughTrackPlayer.ts',
           'src/shared/auth/authStorage.ts',
+          'src/shared/device/isWebPlatform.ts',
           'src/shared/device/webOrigin.ts',
           'src/shared/files/defaultFileStore.ts',
           'src/shared/ui/announce.ts',

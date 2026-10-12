@@ -94,21 +94,9 @@ describe('webOrigin', () => {
 });
 
 describe('isWebPlatform', () => {
-  it('returns true on web', () => {
+  it('returns false on native, whatever Platform.OS says', () => {
     setOS('web');
-    expect(isWebPlatform()).toBe(true);
-  });
-
-  it.each(['ios', 'android'] as const)('returns false on %s', (os) => {
-    setOS(os);
     expect(isWebPlatform()).toBe(false);
-  });
-
-  it('reads the platform at call time', () => {
-    setOS('ios');
-    expect(isWebPlatform()).toBe(false);
-    setOS('web');
-    expect(isWebPlatform()).toBe(true);
   });
 });
 

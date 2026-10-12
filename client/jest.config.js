@@ -71,7 +71,12 @@ const webProject = {
     ...(webPreset.setupFilesAfterEnv ?? []),
     '<rootDir>/jest/setup-after-env.js',
   ],
-  moduleNameMapper: { ...(webPreset.moduleNameMapper ?? {}), ...houseModuleNameMapper },
+  moduleNameMapper: {
+    ...(webPreset.moduleNameMapper ?? {}),
+    ...houseModuleNameMapper,
+    '^lucide-react-native$':
+      '<rootDir>/node_modules/lucide-react-native/dist/cjs/lucide-react-native.js',
+  },
 };
 
 module.exports = {

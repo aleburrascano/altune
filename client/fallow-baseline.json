@@ -101,6 +101,7 @@
     "src/shared/auth/sessionExpired.ts:_listenerCountForTest",
     "src/shared/auth/authStorage.web.ts:createLocalStorageWebStorage",
     "src/shared/device/device.ts:declaredAppScheme",
+    "src/shared/device/isWebPlatform.ts:isWebPlatform",
     "src/shared/device/webOrigin.ts:webOrigin",
     "src/shared/events/serverEventTypes.ts:SERVER_EVENT_TYPES",
     "src/shared/events/sseClient.ts:HEARTBEAT_WATCHDOG_MS",

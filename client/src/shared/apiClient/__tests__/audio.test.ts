@@ -87,13 +87,6 @@ describe('audioRequestHeaders', () => {
     expect(second[CORRELATION_HEADER]).not.toBe(first[CORRELATION_HEADER]);
   });
 
-  it('omits the correlation header on web, where the API CORS policy would reject the preflight', async () => {
-    Platform.OS = 'web';
-    withSession();
-
-    await expect(audioRequestHeaders()).resolves.toEqual({ Authorization: 'Bearer tok' });
-  });
-
   it('marks the session expired when there is no session, rather than handing the player unauthenticated headers in silence', async () => {
     withSession(null);
 

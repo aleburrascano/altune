@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import {
   SSEClient,
   HEARTBEAT_WATCHDOG_MS,
@@ -156,18 +155,6 @@ describe('SSEClient', () => {
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'SSEConnectionError', correlationId: sent }),
       );
-    });
-
-    it('omits the header on web, where the API CORS policy would reject the preflight', async () => {
-      const originalOS = Platform.OS;
-      Platform.OS = 'web';
-      try {
-        const { client } = makeClient();
-        await client.connect();
-        expect(xhrAt(0).requestHeaders['X-Correlation-ID']).toBeUndefined();
-      } finally {
-        Platform.OS = originalOS;
-      }
     });
   });
 

@@ -117,16 +117,6 @@ describe('apiFetch header merge', () => {
     expect(request.query).not.toContain('secret-token-value');
   });
 
-  it('omits ngrok-skip-browser-warning on web, where the CORS allowlist would reject the preflight', async () => {
-    Platform.OS = 'web';
-    withSession();
-    __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
-
-    await apiFetch('/v1/library/tracks');
-
-    expect(__http.last().headers['ngrok-skip-browser-warning']).toBeUndefined();
-  });
-
   it('lets caller headers override the computed defaults', async () => {
     withSession();
     __http.reply('POST /v1/feedback/reports', { status: 202 });
@@ -532,19 +522,6 @@ describe('correlation id', () => {
         expect.objectContaining({ correlationId: sentCorrelationId() }),
       );
     });
-
-    it('omits the header on web, where the API CORS policy would reject the preflight', async () => {
-      Platform.OS = 'web';
-      __http.reply('GET /v1/playlists', { status: 500, json: {} });
-
-      await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ status: 500 });
-
-      expect(sentCorrelationId()).toBeUndefined();
-      expect(warn).toHaveBeenCalledWith(
-        '[api] request failed',
-        expect.not.objectContaining({ correlationId: expect.anything() }),
-      );
-    });
   });
 
   describe('apiFetch hands the correlation id to the caller on the error it throws', () => {
@@ -581,16 +558,6 @@ describe('correlation id', () => {
         status: 401,
         correlationId: expect.stringMatching(SERVER_ACCEPTED_ID),
       });
-    });
-
-    it('carries no correlation id on web, where none was sent', async () => {
-      Platform.OS = 'web';
-      __http.reply('GET /v1/playlists', { status: 500, json: {} });
-
-      const thrown = await apiFetch('/v1/playlists').catch((error: unknown) => error);
-
-      expect(thrown).toMatchObject({ status: 500 });
-      expect((thrown as { correlationId?: string }).correlationId).toBeUndefined();
     });
   });
 });
@@ -1078,16 +1045,6 @@ describe('platform-dependent request headers', () => {
     __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
   });
 
-  it('sends neither ngrok-skip-browser-warning nor X-Correlation-ID on web', async () => {
-    Platform.OS = 'web';
-
-    await apiFetch('/v1/library/tracks');
-
-    const { headers } = __http.last();
-    expect(headers['ngrok-skip-browser-warning']).toBeUndefined();
-    expect(headers['X-Correlation-ID']).toBeUndefined();
-  });
-
   it.each(['ios', 'android'] as const)('sends both headers on %s', async (os) => {
     Platform.OS = os;
 
@@ -1096,19 +1053,6 @@ describe('platform-dependent request headers', () => {
     const { headers } = __http.last();
     expect(headers['ngrok-skip-browser-warning']).toBe('1');
     expect(headers['X-Correlation-ID']).toBeDefined();
-  });
-
-  it('drops the headers on the second request when Platform.OS flips from ios to web', async () => {
-    Platform.OS = 'ios';
-    await apiFetch('/v1/library/tracks');
-    expect(__http.last().headers['ngrok-skip-browser-warning']).toBe('1');
-
-    Platform.OS = 'web';
-    await apiFetch('/v1/library/tracks');
-
-    const { headers } = __http.last();
-    expect(headers['ngrok-skip-browser-warning']).toBeUndefined();
-    expect(headers['X-Correlation-ID']).toBeUndefined();
   });
 });
 

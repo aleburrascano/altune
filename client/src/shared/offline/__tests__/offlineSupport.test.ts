@@ -8,10 +8,6 @@ function offlineDownloadsSupportedOn(os: string): boolean {
 }
 
 describe('offlineDownloadsSupported', () => {
-  it('is false on web, where there is no filesystem to pin audio to', () => {
-    expect(offlineDownloadsSupportedOn('web')).toBe(false);
-  });
-
   it.each(['ios', 'android'])('is true on %s, where downloads are pinned to disk', (os) => {
     expect(offlineDownloadsSupportedOn(os)).toBe(true);
   });

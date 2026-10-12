@@ -25,12 +25,9 @@ export function declaredAppScheme(): string | string[] | undefined {
   return Constants.expoConfig?.scheme;
 }
 
-export function isWebPlatform(): boolean {
-  return Platform.OS === 'web';
-}
-
 export function isExpoGoRuntime(): boolean {
   return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
-export { webOrigin } from './webOrigin';
+export { isWebPlatform } from '@shared/device/isWebPlatform';
+export { webOrigin } from '@shared/device/webOrigin';
