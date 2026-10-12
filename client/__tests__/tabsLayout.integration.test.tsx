@@ -11,6 +11,7 @@ import TabsLayout from '../src/app/(tabs)/_layout';
 import DiscoverLayout from '../src/app/(tabs)/discover/_layout';
 import LibraryLayout from '../src/app/(tabs)/library/_layout';
 import SettingsLayout from '../src/app/(tabs)/settings/_layout';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 const { __http } = require('../jest/doubles/fetch.js');
 
@@ -55,7 +56,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  RN.Platform.OS = NATIVE_OS;
+  setPlatformOS(NATIVE_OS);
   mockWindowWidth = 390;
   client.clear();
 });
@@ -87,7 +88,7 @@ async function openTabs(
     status: 200,
     json: { items: playlists, total: playlists.length },
   });
-  RN.Platform.OS = os;
+  setPlatformOS(os);
   mockWindowWidth = width;
   const result = renderRouter(ROUTES, { initialUrl, wrapper });
   await act(async () => {});
@@ -195,7 +196,7 @@ async function openTabsPlaying(
   { os, width, playback }: { os: string; width: number; playback: PlaybackContextValue },
 ) {
   __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
-  RN.Platform.OS = os;
+  setPlatformOS(os);
   mockWindowWidth = width;
   const result = renderRouter(ROUTES, {
     initialUrl,

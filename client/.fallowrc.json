@@ -346,7 +346,7 @@
           "shared-timing"
         ]
       },
-      { "from": "shared-ui", "allow": ["shared-files", "shared-telemetry"] }
+      { "from": "shared-ui", "allow": ["shared-device", "shared-files", "shared-telemetry"] }
     ]
   },
   "health": {

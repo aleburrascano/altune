@@ -4,16 +4,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 )
+
+var exeSuffix string
 
 func Resolve(name, dir string) string {
 	if dir != "" {
-		candidate := name
-		if runtime.GOOS == "windows" {
-			candidate = name + ".exe"
-		}
-		full := filepath.Join(dir, candidate)
+		full := filepath.Join(dir, name+exeSuffix)
 		if _, err := os.Stat(full); err == nil {
 			return full
 		}

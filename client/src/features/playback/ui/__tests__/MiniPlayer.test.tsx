@@ -12,6 +12,7 @@ import type {
 
 import { libraryTrack } from '@features/playback/__tests__/fixtures';
 import { MiniPlayer } from '@features/playback/ui/MiniPlayer';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
@@ -91,12 +92,12 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
   const NATIVE_OS: string = RN.Platform.OS;
 
   afterEach(() => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 1440;
   });
 
   it('renders nothing on a wide web window even with a track playing', () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
 
     render(
@@ -109,7 +110,7 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
   });
 
   it('still renders on a narrow web window', () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 390;
     const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
 
@@ -123,7 +124,7 @@ describe('MiniPlayer — hidden behind the persistent bar in wide web layout', (
   });
 
   it('still renders on a wide native window', () => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
 
     render(
@@ -149,7 +150,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
   const NATIVE_OS: string = RN.Platform.OS;
 
   afterEach(() => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 1440;
   });
 
@@ -163,7 +164,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
   }
 
   it('renders nothing at exactly 1000px on web', () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1000;
 
     renderPlaying();
@@ -172,7 +173,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
   });
 
   it('still renders at 999px on web', () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 999;
 
     renderPlaying();
@@ -181,7 +182,7 @@ describe('MiniPlayer — at the wide breakpoint on web', () => {
   });
 
   it('still renders on a 390px phone', () => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 390;
 
     renderPlaying();

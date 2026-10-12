@@ -7,6 +7,7 @@ import type { PlaylistResponse } from '@shared/apiClient/playlistResponse';
 import type { ListRefresh } from '@features/library/domain/libraryView';
 import { AlbumsGrid, ArtistsGrid } from '@features/library/ui/GroupGrids';
 import { PlaylistsGrid } from '@features/library/ui/PlaylistsGrid';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 let mockWindowWidth = 390;
 
@@ -144,12 +145,12 @@ describe('a measured content width narrower than the window overrides the window
   const expected = { columnsBeforeLayout: 5, measured: { width: 800 }, columns: 3, coverSide: 258 };
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = originalWideOS;
+    setPlatformOS(originalWideOS);
   });
 
   it("sizes AlbumsGrid's columns from the grid's own measured width, not the window width", () => {
@@ -189,12 +190,12 @@ describe('narrow web keeps its pre-#2842 grid once the grid measures itself', ()
   const narrowWeb = { columns: 2, measured: { width: 328 }, coverSide: 158 };
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 360;
   });
 
   afterEach(() => {
-    Platform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockWindowWidth = 390;
   });
 
@@ -243,12 +244,12 @@ describe('web below the wide-web threshold behaves like main, uncapped and uncro
   const belowWide = { coverColumns: 3 };
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 900;
   });
 
   afterEach(() => {
-    Platform.OS = originalBelowWideOS;
+    setPlatformOS(originalBelowWideOS);
     mockWindowWidth = 390;
   });
 

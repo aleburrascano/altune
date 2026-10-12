@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { trackResponseFactory } from '@testing/factories';
 import type { ListRefresh } from '@features/library/domain/libraryView';
 import { TracksList } from '@features/library/ui/TracksList';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
@@ -95,12 +96,12 @@ describe('library list shells — wide web header', () => {
   const originalOS = Platform.OS;
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWideWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockWideWindowWidth = 390;
   });
 
@@ -124,7 +125,7 @@ describe('library list shells — wide web header', () => {
   });
 
   it('shows no column headers on native at a wide width', () => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
     renderTracksList(idleRefresh(), oneTrack);
 
     expect(screen.queryByTestId('library-wide-track-header')).toBeNull();
@@ -200,12 +201,12 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
   const originalOS = Platform.OS;
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWideWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockWideWindowWidth = 390;
   });
 
@@ -347,7 +348,7 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
   });
 
   it('keeps the compact row on native at 999pt', () => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
     mockWideWindowWidth = 999;
     renderProbeTracksList([probeTrack('a')]);
 
@@ -356,7 +357,7 @@ describe('TracksList — wide web table, from the outside (#2842)', () => {
   });
 
   it('keeps the compact row on native at 1440pt', () => {
-    Platform.OS = 'android';
+    setPlatformOS('android');
     renderProbeTracksList([probeTrack('a')]);
 
     expect(screen.getByText('Artist a · Album a')).toBeTruthy();

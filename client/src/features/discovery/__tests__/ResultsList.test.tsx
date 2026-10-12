@@ -3,6 +3,7 @@ import { Platform, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { ResultsList, type ResultsCommonProps } from '@features/discovery/ui/ResultsList';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 const NATIVE_OS = Platform.OS;
 
@@ -86,11 +87,11 @@ function pairedTree() {
 
 describe('pairing the header with the first item on a wide screen', () => {
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
   });
 
   afterEach(() => {
-    Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 390;
   });
 

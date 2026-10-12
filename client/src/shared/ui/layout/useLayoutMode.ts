@@ -1,4 +1,6 @@
-import { Platform, useWindowDimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
+
+import { isWebPlatform } from '@shared/device/isWebPlatform';
 
 export type LayoutMode = 'compact' | 'wide';
 
@@ -16,5 +18,5 @@ export function useLayoutMode(): LayoutMode {
 
 export function useWideWebLayout(): boolean {
   const layoutMode = useLayoutMode();
-  return Platform.OS === 'web' && layoutMode === 'wide';
+  return layoutMode === 'wide' && isWebPlatform();
 }

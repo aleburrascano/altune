@@ -7,6 +7,7 @@ import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { trackResponseFactory } from '@testing/factories';
 
 import { LibraryRow } from '../ui/LibraryRow';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 let mockWindowWidth = 390;
 
@@ -319,12 +320,12 @@ describe('LibraryRow — wide web layout', () => {
   const originalOS = Platform.OS;
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockWindowWidth = 390;
   });
 
@@ -372,12 +373,12 @@ describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)',
   const originalOS = Platform.OS;
 
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockWindowWidth = 390;
   });
 

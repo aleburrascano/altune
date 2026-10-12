@@ -9,16 +9,17 @@ import type { DiscoverView } from '@features/discovery/domain/discoverView';
 import type { ResultSection } from '@shared/apiClient/discovery';
 import { PlaybackContext } from '@shared/playback/usePlayback';
 import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 const NATIVE_OS = Platform.OS;
 
 function useWebPlatform() {
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
   });
 
   afterEach(() => {
-    Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
   });
 }
 

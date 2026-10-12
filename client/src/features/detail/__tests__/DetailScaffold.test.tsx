@@ -1,9 +1,10 @@
-import { Text, Platform } from 'react-native';
+import { Text } from 'react-native';
 
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 
 import { DetailScaffold, DetailBodyLayout } from '@/features/detail/ui/DetailScaffold';
 import { DiscographySections } from '@/features/detail/ui/DiscographySections';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 20, bottom: 0, left: 0, right: 0 }),
@@ -168,12 +169,12 @@ describe('DetailScaffold', () => {
 
   describe('DetailScaffold on the web at a wide width', () => {
     beforeEach(() => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
       mockWideScaffoldWindowWidth = 1440;
     });
 
     afterEach(() => {
-      Platform.OS = 'ios';
+      setPlatformOS('ios');
       mockWideScaffoldWindowWidth = 390;
     });
 
@@ -204,12 +205,12 @@ describe('DetailScaffold', () => {
 
   describe('DetailScaffold across the wide web breakpoint', () => {
     afterEach(() => {
-      Platform.OS = 'ios';
+      setPlatformOS('ios');
       mockWideScaffoldWindowWidth = 390;
     });
 
     it('puts the banner back above a single column when the web window narrows from 1440px to 800px', () => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
       mockWideScaffoldWindowWidth = 1440;
       const props = {
         title: 'Random Access Memories',
@@ -231,7 +232,7 @@ describe('DetailScaffold', () => {
     });
 
     it('stays a single column on Android at 1440px', () => {
-      Platform.OS = 'android';
+      setPlatformOS('android');
       mockWideScaffoldWindowWidth = 1440;
       renderScaffold();
 
@@ -242,12 +243,12 @@ describe('DetailScaffold', () => {
 
   describe('DetailScaffold on the web at 1440px: what lands in each column', () => {
     beforeEach(() => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
       mockWideScaffoldWindowWidth = 1440;
     });
 
     afterEach(() => {
-      Platform.OS = 'ios';
+      setPlatformOS('ios');
       mockWideScaffoldWindowWidth = 390;
     });
 
@@ -313,7 +314,7 @@ describe('DetailBodyLayout', () => {
   });
 
   afterEach(() => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
     mockWideScaffoldWindowWidth = 390;
   });
 
@@ -331,7 +332,7 @@ describe('DetailBodyLayout', () => {
 
   describe('DetailBodyLayout: compact', () => {
     it('renders actions, facts, then children in a single column off the web platform', () => {
-      Platform.OS = 'ios';
+      setPlatformOS('ios');
       mockWideScaffoldWindowWidth = 1440;
       renderLayout();
 
@@ -340,7 +341,7 @@ describe('DetailBodyLayout', () => {
     });
 
     it('stays a single column on the web at a narrow width', () => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
       mockWideScaffoldWindowWidth = NARROW_WIDTH;
       renderLayout();
 
@@ -349,7 +350,7 @@ describe('DetailBodyLayout', () => {
     });
 
     it('stays a single column on the web at a wide width when there is no hero to place', () => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
       mockWideScaffoldWindowWidth = 1440;
       renderLayout(null);
 
@@ -360,7 +361,7 @@ describe('DetailBodyLayout', () => {
 
   describe('DetailBodyLayout: wide web', () => {
     it('splits into a left column with the hero and actions, and a right column with facts and children', () => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
       mockWideScaffoldWindowWidth = 1440;
       renderLayout();
 
@@ -373,11 +374,11 @@ describe('DetailBodyLayout', () => {
 
   describe('DetailBodyLayout: the wide breakpoint on the web', () => {
     beforeEach(() => {
-      Platform.OS = 'web';
+      setPlatformOS('web');
     });
 
     afterEach(() => {
-      Platform.OS = 'ios';
+      setPlatformOS('ios');
     });
 
     it('stays a single column one pixel below the wide breakpoint', () => {

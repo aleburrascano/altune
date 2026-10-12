@@ -4,6 +4,9 @@ import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { DiscographySections } from '../ui/DiscographySections';
 
+import { StyleSheet } from 'react-native';
+import { setPlatformOS } from '@testing/setPlatformOS';
+
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {
     kind: 'album',
@@ -277,12 +280,12 @@ function renderedWidth(testID: string): unknown {
 
 describe('DiscographySections(): on native at 1440px nothing changes', () => {
   afterEach(() => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
     mockDiscographyWindowWidth = 390;
   });
 
   it('keeps the Android rail with 128px cards at a 1440px window', () => {
-    Platform.OS = 'android';
+    setPlatformOS('android');
     mockDiscographyWindowWidth = 1440;
     render(<DiscographySections albums={releases(2, 'album', 'A')} onAlbumPress={jest.fn()} />);
 
@@ -294,12 +297,12 @@ describe('DiscographySections(): on native at 1440px nothing changes', () => {
 
 describe('DiscographySections(): the grid on the web at 1440px', () => {
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockDiscographyWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
     mockDiscographyWindowWidth = 390;
   });
 
@@ -435,5 +438,3 @@ describe('DiscographySections(): the grid on the web at 1440px', () => {
     expect(empty.toJSON()).toBeNull();
   });
 });
-
-import { Platform, StyleSheet } from 'react-native';

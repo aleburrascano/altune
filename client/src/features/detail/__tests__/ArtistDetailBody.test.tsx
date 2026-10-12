@@ -12,6 +12,7 @@ import {
   createPlaybackWrapper,
   signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
+import { setPlatformOS } from '@testing/setPlatformOS';
 export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -468,7 +469,6 @@ describe('ArtistDetailBody probe: the facts row with each fact alone', () => {
 });
 
 describe('ArtistDetailBody probe: the wide web layout still composes the artist sections', () => {
-  const { Platform } = require('react-native');
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -480,12 +480,12 @@ describe('ArtistDetailBody probe: the wide web layout still composes the artist 
 
   afterEach(() => {
     warnSpy.mockRestore();
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
     mockProbeWindowWidth = null;
   });
 
   it('places top tracks, explore and about in the right column on a wide web window', async () => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockProbeWindowWidth = 1440;
     render(
       <ArtistDetailBody

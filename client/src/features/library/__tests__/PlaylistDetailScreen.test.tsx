@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { setPlatformOS } from '@testing/setPlatformOS';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { asTrackId } from '@shared/apiClient/ids';
@@ -277,12 +278,12 @@ describe('PlaylistDetailScreen — wide web layout', () => {
     mockParams = { id: 'p1' };
     await signInTestUser();
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
-    RNPlatform.OS = 'web';
+    setPlatformOS('web');
     mockDetailWindowWidth = 1440;
   });
 
   afterEach(() => {
-    RNPlatform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockDetailWindowWidth = 390;
   });
 
@@ -311,12 +312,12 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   beforeEach(async () => {
     mockParams = { id: 'p1' };
     await signInTestUser();
-    RNPlatform.OS = 'web';
+    setPlatformOS('web');
     mockDetailWindowWidth = 1440;
   });
 
   afterEach(() => {
-    RNPlatform.OS = originalOS;
+    setPlatformOS(originalOS);
     mockDetailWindowWidth = 390;
   });
 
@@ -356,7 +357,7 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('keeps the single-column layout on native at 1440pt', async () => {
     serveOneTrackPlaylist();
-    RNPlatform.OS = 'ios';
+    setPlatformOS('ios');
     const screen = render(<PlaylistDetailScreen />, { wrapper });
     await screen.findByText('Road Trip');
 
@@ -365,7 +366,7 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('keeps the single-column layout on native at 999pt', async () => {
     serveOneTrackPlaylist();
-    RNPlatform.OS = 'android';
+    setPlatformOS('android');
     mockDetailWindowWidth = 999;
     const screen = render(<PlaylistDetailScreen />, { wrapper });
     await screen.findByText('Road Trip');

@@ -18,6 +18,7 @@ import SettingsLayout from '../src/app/(tabs)/settings/_layout';
 import PlayerLayout from '../src/app/player/_layout';
 import { FeaturePorts } from '../src/chrome/FeaturePorts';
 import { httpFeaturePorts } from '../src/chrome/httpFeaturePorts';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 const { __http } = require('../jest/doubles/fetch.js');
 
@@ -94,7 +95,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  RN.Platform.OS = NATIVE_OS;
+  setPlatformOS(NATIVE_OS);
   mockWindowWidth = 1440;
   client.clear();
 });
@@ -171,7 +172,7 @@ const LATE_NIGHT = {
 
 describe('app chrome: the sidebar highlights the active route and navigates on press', () => {
   it('highlights Library in the sidebar on a playlist opened under Library', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
 
     renderRouter(ROUTES, { initialUrl: '/library/playlist/42', wrapper });
@@ -184,7 +185,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
   });
 
   it('opens Settings and moves the highlight when its sidebar item is pressed', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
 
     const router = renderRouter(ROUTES, { initialUrl: '/library', wrapper });
@@ -200,7 +201,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
   });
 
   it('returns to the Library screen from a playlist when Library is pressed in the sidebar', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
 
     const router = renderRouter(ROUTES, { initialUrl: '/library/playlist/42', wrapper });
@@ -215,7 +216,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
   });
 
   it('opens a playlist from the sidebar list and moves the highlight to Library', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
     __http.reset();
     __http.reply('GET /v1/playlists', { status: 200, json: { items: [LATE_NIGHT], total: 1 } });
@@ -235,7 +236,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
 
 describe('app chrome: one sidebar and one player bar across a tab-to-player navigation', () => {
   it('keeps a single sidebar and a single player bar across a tab, then the player, then the queue', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
 
     const router = renderRouter(ROUTES, { initialUrl: '/library', wrapper });
@@ -263,7 +264,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
   });
 
   it('shows no sidebar or player bar chrome around the tab on a native app', async () => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 1440;
 
     renderRouter(ROUTES, { initialUrl: '/library', wrapper });
@@ -274,7 +275,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
   });
 
   it('shows the sidebar and player bar beside the player, queue and lyrics pages on a 1440px web window', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
 
     const { router } = require('expo-router');
@@ -301,7 +302,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
   });
 
   it('shows neither sidebar nor player bar around the queue page on a 999px web window', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 999;
 
     renderRouter(ROUTES, { initialUrl: '/player/queue', wrapper });
@@ -313,7 +314,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
   });
 
   it('shows no sidebar or player bar chrome around the player on a native tablet 1440px wide', async () => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 1440;
 
     renderRouter(ROUTES, { initialUrl: '/player', wrapper });
@@ -327,7 +328,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
 
 describe('app chrome: the player bar reflects the live queue', () => {
   it('offers a next-track control once a second track is queued', async () => {
-    RN.Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
     const { useQueueStore } = require('@shared/playback/queueStore');
     useQueueStore.getState().loadQueue(
@@ -362,7 +363,7 @@ describe('app chrome: the idle player bar stays on every screen in wide web layo
   it.each(['/discover', '/settings', '/library/playlist/42'])(
     'shows the idle player bar on %s on a 1440px web window',
     async (url) => {
-      RN.Platform.OS = 'web';
+      setPlatformOS('web');
       mockWindowWidth = 1440;
 
       renderRouter(ROUTES, { initialUrl: url, wrapper: idleWrapper });
@@ -375,7 +376,7 @@ describe('app chrome: the idle player bar stays on every screen in wide web layo
   );
 
   it('shows neither player bar nor idle placeholder on a 390px phone', async () => {
-    RN.Platform.OS = NATIVE_OS;
+    setPlatformOS(NATIVE_OS);
     mockWindowWidth = 390;
 
     renderRouter(ROUTES, { initialUrl: '/library', wrapper: idleWrapper });
@@ -444,7 +445,7 @@ describe('app chrome: the web keyboard shortcuts bridge mounts once at the root'
 
   async function openApp(initialUrl: string, { os, width }: { os: string; width: number }) {
     const playback = playingControls();
-    RN.Platform.OS = os;
+    setPlatformOS(os);
     mockWindowWidth = width;
     const rendered = renderRouter(ROUTES, {
       initialUrl,

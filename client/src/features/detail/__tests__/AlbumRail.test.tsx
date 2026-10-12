@@ -1,10 +1,11 @@
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 import { darkTheme } from '@shared/ui/theme';
 
 import { AlbumRail } from '../ui/AlbumRail';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
 let mockWindowWidth = 390;
 
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  Platform.OS = 'ios';
+  setPlatformOS('ios');
   mockWindowWidth = 390;
 });
 
@@ -69,7 +70,7 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
   });
 
   it('renders the horizontal rail on the web at a narrow width', () => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 360;
     renderRail();
 
@@ -80,7 +81,7 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
 
 describe('AlbumRail: grid on the web at a wide width', () => {
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
   });
 
@@ -146,11 +147,11 @@ describe('AlbumRail: grid on the web at a wide width', () => {
 
 describe('AlbumRail: crossing the wide breakpoint on the web', () => {
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
   });
 
   afterEach(() => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
   });
 
   it('is a rail at 999px and becomes a grid at 1000px', () => {
@@ -177,12 +178,12 @@ describe('AlbumRail: crossing the wide breakpoint on the web', () => {
 
 describe('AlbumRail: grid edges on the web at a wide width', () => {
   beforeEach(() => {
-    Platform.OS = 'web';
+    setPlatformOS('web');
     mockWindowWidth = 1440;
   });
 
   afterEach(() => {
-    Platform.OS = 'ios';
+    setPlatformOS('ios');
   });
 
   it('renders no card and no "See all" when it has no items', () => {
