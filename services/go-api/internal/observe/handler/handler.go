@@ -34,7 +34,7 @@ type Handler struct {
 	probeTimeout time.Duration
 }
 
-func New(d Deps) *Handler {
+func NewObserveHandler(d Deps) *Handler {
 	return &Handler{deps: d, probeTimeout: defaultProbeTimeout}
 }
 

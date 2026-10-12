@@ -88,7 +88,7 @@ func observeTestDeps() observeHandler.Deps {
 
 func mountedObserveTree(subjects observeSubjects, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
-	mountObserve(r, subjects.verifier(), cfg.OverseerPrincipalID, observeHandler.New(observeTestDeps()))
+	mountObserve(r, subjects.verifier(), cfg.OverseerPrincipalID, observeHandler.NewObserveHandler(observeTestDeps()))
 	return r
 }
 
@@ -228,7 +228,7 @@ func callObserveAs(t *testing.T, srv http.Handler, method, path, token string) (
 }
 
 func mountObserveLiveMetrics(r chi.Router, verifier authports.TokenVerifier, principal shared.UserId, source observeHandler.LiveMetricsSource) {
-	mountObserve(r, verifier, principal.String(), observeHandler.New(observeHandler.Deps{LiveMetrics: source}))
+	mountObserve(r, verifier, principal.String(), observeHandler.NewObserveHandler(observeHandler.Deps{LiveMetrics: source}))
 }
 
 func readObservedLiveMetrics(t *testing.T, source observeHandler.LiveMetricsSource) []byte {

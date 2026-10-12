@@ -56,7 +56,7 @@ func newStreamFixture(t *testing.T) streamFixture {
 func streamRouter(deps Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middlewares...)
-	New(deps).Register(r)
+	NewObserveHandler(deps).Register(r)
 	return r
 }
 

@@ -28,7 +28,7 @@ func everyDependencyDown(context.Context) DependencyHealth {
 func serveObserveHealth(t *testing.T, probe HealthProbe) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	New(Deps{Health: probe}).Register(r)
+	NewObserveHandler(Deps{Health: probe}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	return rec

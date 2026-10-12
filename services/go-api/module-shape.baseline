@@ -32,4 +32,3 @@ G3 internal/catalog/adapters/handler/track_handler.go:4 imports auth outside ada
 G3 internal/observe/handler/gate.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/sse.go:4 imports auth outside adapters/authbridge
 G3 internal/observe/handler/streams.go:4 imports auth outside adapters/authbridge
-G5 internal/observe/handler/handler.go:New constructor is not New<Resource>Handler

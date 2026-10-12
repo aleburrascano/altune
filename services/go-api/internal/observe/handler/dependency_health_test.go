@@ -49,7 +49,7 @@ func TestHealth_ProbeRunsUnderADeadline(t *testing.T) {
 }
 
 func TestHealth_StalledProbeSeesItsDeadline(t *testing.T) {
-	h := New(Deps{Health: func(ctx context.Context) DependencyHealth {
+	h := NewObserveHandler(Deps{Health: func(ctx context.Context) DependencyHealth {
 		<-ctx.Done()
 		return DependencyHealth{DB: DepDown}
 	}})

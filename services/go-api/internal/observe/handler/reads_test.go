@@ -47,7 +47,7 @@ func (f *fakeDiscographyReader) SuspectRate(_ context.Context, _ time.Time) (por
 func serveRead(t *testing.T, deps Deps, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	New(deps).Register(r)
+	NewObserveHandler(deps).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	return rec
@@ -317,7 +317,7 @@ func TestReadsQuality_HostileWindowDaysIsClamped(t *testing.T) {
 
 func TestReadsRoutes_NoPostRoute(t *testing.T) {
 	r := chi.NewRouter()
-	New(Deps{}).Register(r)
+	NewObserveHandler(Deps{}).Register(r)
 
 	for _, path := range []string{"/metrics/live", "/eval", "/acquisition", "/quality/discography"} {
 		rec := httptest.NewRecorder()

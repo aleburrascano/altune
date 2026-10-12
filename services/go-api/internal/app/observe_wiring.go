@@ -32,7 +32,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier authports.To
 		Discography: discoveryPersistence.NewPgxEventStore(a.pool),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observeHandler.New(deps))
+	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observeHandler.NewObserveHandler(deps))
 }
 
 func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
