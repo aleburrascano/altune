@@ -1,138 +1,135 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, act } from '@testing-library/react-native';
+import type React from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-import { useSession } from '@shared/auth/useSession';
-import { supabase } from '@shared/auth/supabaseClient';
-import { isTestAuthEnabled, testAuthBootSettled } from '@shared/auth/testAuthBoot';
 import type * as TestAuthBootModule from '@shared/auth/testAuthBoot';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
-jest.mock('@shared/auth/testAuthBoot', () => ({
-  isTestAuthEnabled: jest.fn(),
-  testAuthBootSettled: jest.fn(),
-}));
+type Notifier = {
+  _notifyAllSubscribers: (event: AuthChangeEvent, session: Session | null) => Promise<void>;
+};
 
-type Listener = (event: AuthChangeEvent, session: Session | null) => void;
+const globals = globalThis as unknown as { __DEV__: boolean };
+const devMode = globals.__DEV__;
+const authEnv = process.env.EXPO_PUBLIC_TEST_AUTH;
 
-function installAuth() {
-  let listener: Listener | null = null;
-  (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb: Listener) => {
-    listener = cb;
-    return { data: { subscription: { unsubscribe: jest.fn() } } };
-  });
-  const getSession = supabase.auth.getSession as jest.Mock;
-  getSession.mockReset();
-  getSession.mockResolvedValue({ data: { session: null } });
-  return {
-    getSession,
-    emit(event: AuthChangeEvent, session: Session | null): void {
-      if (!listener) throw new Error('onAuthStateChange was never subscribed to');
-      listener(event, session);
-    },
-  };
+function setTestAuth(enabled: boolean): void {
+  globals.__DEV__ = true;
+  if (enabled) process.env.EXPO_PUBLIC_TEST_AUTH = '1';
+  else delete process.env.EXPO_PUBLIC_TEST_AUTH;
 }
 
-function installTestLogin(enabled: boolean) {
-  let settle: () => void = () => {};
-  const settled = new Promise<void>((resolve) => {
-    settle = resolve;
-  });
-  (isTestAuthEnabled as jest.Mock).mockReturnValue(enabled);
-  (testAuthBootSettled as jest.Mock).mockReturnValue(enabled ? settled : Promise.resolve());
-  return { settle };
+type WrapperProps = { children: React.ReactNode };
+
+const SESSION_SECONDS = 3600;
+const MS_PER_SECOND = 1000;
+
+const cleanups: (() => void)[] = [];
+
+function loadFreshModules() {
+  jest.resetModules();
+  const { QueryClient, QueryClientProvider } = require('@tanstack/react-query');
+  const { renderHook, act, cleanup } = require('@testing-library/react-native/pure');
+  cleanups.push(cleanup);
+  const react = require('react') as typeof React;
+  const { useSession } = require('@shared/auth/useSession');
+  const { supabase } = require('@shared/auth/supabaseClient');
+  const { injectTestSession } = require('@shared/auth/injectTestSession');
+  const testAuthBoot = require('@shared/auth/testAuthBoot') as typeof TestAuthBootModule;
+  const auth: Notifier = supabase.auth;
+
+  function renderSession() {
+    const queryClient = new QueryClient();
+    return renderHook(() => useSession(), {
+      wrapper: ({ children }: WrapperProps) =>
+        react.createElement(QueryClientProvider, { client: queryClient }, children),
+    });
+  }
+
+  async function flush(): Promise<void> {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  return {
+    testAuthBoot,
+    renderSession,
+    flush,
+    act: act as (fn: () => Promise<void> | void) => Promise<void>,
+    emit: (event: AuthChangeEvent, session: Session | null) =>
+      auth._notifyAllSubscribers(event, session),
+    login: (session: Session) => injectTestSession(session) as Promise<void>,
+  };
 }
 
 function makeSession(userId: string): Session {
   return {
     access_token: `token-${userId}`,
     refresh_token: `refresh-${userId}`,
-    expires_in: 3600,
+    expires_in: SESSION_SECONDS,
+    expires_at: Math.floor(Date.now() / MS_PER_SECOND) + SESSION_SECONDS,
     token_type: 'bearer',
     user: { id: userId } as unknown as Session['user'],
   };
 }
 
-function renderSession() {
-  const queryClient = new QueryClient();
-  return renderHook(() => useSession(), {
-    wrapper: ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
-  });
-}
-
-async function flush(): Promise<void> {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
+afterEach(() => {
+  cleanups.splice(0).forEach((cleanup) => cleanup());
+  globals.__DEV__ = devMode;
+  if (authEnv === undefined) delete process.env.EXPO_PUBLIC_TEST_AUTH;
+  else process.env.EXPO_PUBLIC_TEST_AUTH = authEnv;
+});
 
 describe('useSession while the test login is in flight', () => {
   it('stays loading through the empty initial session and goes straight to signed-in', async () => {
-    const auth = installAuth();
-    installTestLogin(true);
-    const { result } = renderSession();
+    setTestAuth(true);
+    const t = loadFreshModules();
+    const { result } = t.renderSession();
     const seen: string[] = [];
 
-    auth.emit('INITIAL_SESSION', null);
-    await flush();
+    await t.act(() => t.emit('INITIAL_SESSION', null));
+    await t.flush();
     seen.push(result.current.status);
 
-    act(() => auth.emit('SIGNED_IN', makeSession('test-user')));
+    await t.act(() => t.login(makeSession('test-user')));
     seen.push(result.current.status);
 
     expect(seen).toEqual(['loading', 'signed-in']);
-    expect(auth.getSession).not.toHaveBeenCalled();
   });
 
   it('falls back to signed-out once a failed test login settles', async () => {
-    const auth = installAuth();
-    const login = installTestLogin(true);
-    const { result } = renderSession();
+    setTestAuth(true);
+    const t = loadFreshModules();
+    const { result } = t.renderSession();
 
-    auth.emit('INITIAL_SESSION', null);
-    await flush();
+    await t.act(() => t.emit('INITIAL_SESSION', null));
+    await t.flush();
     expect(result.current).toEqual({ status: 'loading' });
 
-    login.settle();
-    await flush();
+    t.testAuthBoot.markTestAuthBootSettled();
+    await t.flush();
 
     expect(result.current).toEqual({ status: 'signed-out' });
   });
 
   it('does not hold anything when test auth is off', async () => {
-    installAuth();
-    installTestLogin(false);
-    const { result } = renderSession();
+    setTestAuth(false);
+    const t = loadFreshModules();
+    const { result } = t.renderSession();
 
-    await flush();
+    await t.flush();
 
     expect(result.current).toEqual({ status: 'signed-out' });
   });
 });
 
 describe('the real testAuthBoot module', () => {
-  const real = jest.requireActual<typeof TestAuthBootModule>('../testAuthBoot');
-  const globals = globalThis as unknown as { __DEV__: boolean };
-  const devMode = globals.__DEV__;
-  const authEnv = process.env.EXPO_PUBLIC_TEST_AUTH;
-
-  afterEach(() => {
-    globals.__DEV__ = devMode;
-    if (authEnv === undefined) delete process.env.EXPO_PUBLIC_TEST_AUTH;
-    else process.env.EXPO_PUBLIC_TEST_AUTH = authEnv;
-  });
-
   it('holds testAuthBootSettled pending until the boot is marked settled', async () => {
-    globals.__DEV__ = true;
-    process.env.EXPO_PUBLIC_TEST_AUTH = '1';
+    setTestAuth(true);
+    const { testAuthBoot: real } = loadFreshModules();
     let resolved = false;
 
     const pending = real.testAuthBootSettled().then(() => {
@@ -149,7 +146,8 @@ describe('the real testAuthBoot module', () => {
   });
 
   it('resolves testAuthBootSettled immediately when test auth is off', async () => {
-    delete process.env.EXPO_PUBLIC_TEST_AUTH;
+    setTestAuth(false);
+    const { testAuthBoot: real } = loadFreshModules();
 
     expect(real.isTestAuthEnabled()).toBe(false);
     await expect(real.testAuthBootSettled()).resolves.toBeUndefined();

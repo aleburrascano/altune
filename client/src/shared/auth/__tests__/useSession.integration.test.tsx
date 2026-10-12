@@ -47,8 +47,6 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
   },
 }));
 
-jest.mock('@shared/apiClient/audio', () => ({ fetchAudioUrls: jest.fn() }));
-
 const { __http } = require('@testing/doubles/fetch.js');
 const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
 
@@ -772,7 +770,6 @@ describe('pinned downloads across a killed sign-out', () => {
     session: typeof UseSessionModule;
     supabase: (typeof SupabaseClientModule)['supabase'];
     pinned: typeof PinnedStoreModule;
-    audio: { fetchAudioUrls: jest.Mock };
   };
 
   const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -801,7 +798,6 @@ describe('pinned downloads across a killed sign-out', () => {
       session: require('@shared/auth/useSession'),
       supabase: (require('@shared/auth/supabaseClient') as typeof SupabaseClientModule).supabase,
       pinned: require('@shared/offline/pinnedStore'),
-      audio: require('@shared/apiClient/audio'),
     };
   }
 
@@ -829,9 +825,12 @@ describe('pinned downloads across a killed sign-out', () => {
   }
 
   async function pinAsReady(app: App, trackId: string): Promise<void> {
-    app.audio.fetchAudioUrls.mockResolvedValue([
-      { trackId, url: `https://cdn.example.com/${trackId}.mp3`, version: 'v1' },
-    ]);
+    __http.reply('POST /v1/audio-urls', {
+      status: 200,
+      json: {
+        urls: [{ track_id: trackId, url: `https://cdn.example.com/${trackId}.mp3`, version: 'v1' }],
+      },
+    });
     app.pinned.usePinnedStore.getState().pin(asTrackId(trackId));
     await waitFor(() =>
       expect(app.pinned.usePinnedStore.getState().entries[trackId]?.status).toBe('ready'),

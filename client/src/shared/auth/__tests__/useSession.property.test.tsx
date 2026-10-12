@@ -9,15 +9,19 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { useSession } from '@shared/auth/useSession';
 import { supabase } from '@shared/auth/supabaseClient';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
-}));
+jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+
+type LooseAuth = {
+  getSession: () => Promise<unknown>;
+  onAuthStateChange: (cb: Listener) => unknown;
+};
 
 type Listener = (event: AuthChangeEvent, session: Session | null) => void;
 
 function installAuth() {
-  const getSession = supabase.auth.getSession as jest.Mock;
-  const onAuthStateChange = supabase.auth.onAuthStateChange as jest.Mock;
+  const auth = supabase.auth as LooseAuth;
+  const getSession = jest.spyOn(auth, 'getSession');
+  const onAuthStateChange = jest.spyOn(auth, 'onAuthStateChange');
   let listener: Listener | null = null;
 
   onAuthStateChange.mockImplementation((cb: Listener) => {
