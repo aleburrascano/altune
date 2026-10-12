@@ -1,12 +1,3 @@
-src/features/discovery/__tests__/useSearchHistory.test.tsx @shared/auth/supabaseClient
-src/features/discovery/__tests__/useSearchHistory.test.tsx @shared/telemetry/recordEvent
-src/features/discovery/__tests__/useSearchRefresh.test.tsx @shared/auth/supabaseClient
-src/features/discovery/__tests__/useSearchRefresh.test.tsx @shared/telemetry/recordEvent
-src/features/discovery/__tests__/useSuggestions.test.tsx @shared/auth/supabaseClient
-src/features/discovery/__tests__/useSuggestions.test.tsx @shared/telemetry/recordEvent
-src/features/library/__tests__/FeaturingScreen.test.tsx @shared/playback/usePlayback
-src/features/library/__tests__/FeaturingScreen.test.tsx @shared/playback/useQueuePlayback
-src/features/library/__tests__/FeaturingScreen.test.tsx @shared/telemetry/userTelemetry
 src/features/library/__tests__/LibraryScreen.test.tsx @shared/playback/usePlayback
 src/features/library/__tests__/LibraryScreen.test.tsx @shared/playback/useQueuePlayback
 src/features/library/__tests__/PlaylistDetailScreen.test.tsx @shared/auth/supabaseClient

@@ -3,29 +3,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { NetworkError } from '@shared/apiClient';
-import { supabase } from '@shared/auth/supabaseClient';
 import { CORRELATION_HEADER } from '@shared/apiClient/correlationId';
 import { transientRetryOptions } from '@shared/query/retryDelay';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 import { MIN_QUERY_LENGTH } from '@features/discovery/domain/searchPaging';
 import {
   SUGGEST_DEBOUNCE_MS,
   useAutocompleteSuggestions,
   useSuggestionVisibility,
 } from '@features/discovery/hooks/useSuggestions';
+import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-const mockRecordEvent = recordEvent as jest.Mock;
-
 const SUGGEST = 'GET /v1/discovery/suggest';
+const EVENTS = 'POST /v1/discovery/events';
+const EVENTS_PATH = '/v1/discovery/events';
 
 type SentRequest = {
   path: string;
@@ -84,16 +78,14 @@ function signalOfRequest(index: number): AbortSignal | undefined {
   return suggestRequests()[index]?.signal;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.useFakeTimers();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
   serveSuggestions(['radiohead']);
 });
 
@@ -171,8 +163,12 @@ describe('useAutocompleteSuggestions cancels a suggest request its successor sup
 
 describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
   function failureEvents() {
-    return mockRecordEvent.mock.calls
-      .map((call) => call[0] as { type: string; payload?: Record<string, unknown> })
+    return (__http.requests as { path: string; body: string }[])
+      .filter((request) => request.path === EVENTS_PATH)
+      .map(
+        (request) =>
+          JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> },
+      )
       .filter((event) => event.type === 'search_failed');
   }
 
@@ -185,7 +181,7 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     __http.reset();
-    mockRecordEvent.mockReset().mockResolvedValue(undefined);
+    __http.reply(EVENTS, { status: 204 });
   });
 
   afterEach(() => {
@@ -206,7 +202,11 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     const [sent] = suggestRequests();
     expect(failureEvents()[0]).toEqual({
       type: 'search_failed',
-      payload: { source: 'suggest', correlationId: sent?.headers[CORRELATION_HEADER] },
+      payload: {
+        source: 'suggest',
+        correlationId: sent?.headers[CORRELATION_HEADER],
+        session_id: expect.any(String),
+      },
     });
   });
 });

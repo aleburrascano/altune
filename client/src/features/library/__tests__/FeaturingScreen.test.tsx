@@ -12,6 +12,13 @@ import type { LibraryPort } from '../ports/libraryPort';
 import { FeaturingScreen } from '../ui/FeaturingScreen';
 import * as detailHandoff from '@shared/navigation/detailHandoff';
 import { trackResponseFactory } from '@testing/factories';
+import { signInTestUser } from '@testing/signInTestUser';
+import { PlaybackContext } from '@shared/playback/usePlayback';
+import { idlePlayback } from '@/features/detail/__tests__/support/queryHarness';
+
+const { __http } = require('@testing/doubles/fetch.js');
+
+const EVENTS = 'POST /v1/discovery/events';
 
 const mockSearchDiscovery = jest.fn();
 const mockListTracksFeaturing = jest.fn();
@@ -28,18 +35,6 @@ jest.mock('expo-router', () => ({
   useSegments: () => ['(tabs)', 'library', 'featuring'],
 }));
 
-jest.mock('@shared/telemetry/userTelemetry', () => ({
-  recordUserAction: jest.fn(),
-  recordFailureShown: jest.fn(),
-}));
-
-jest.mock('@shared/playback/usePlayback', () => ({
-  usePlayback: () => ({ status: 'idle', source: null }),
-}));
-jest.mock('@shared/playback/useQueuePlayback', () => ({
-  useQueuePlayback: () => ({ playFromList: jest.fn() }),
-}));
-
 const SECRET = 'guest star unreleased bootleg';
 
 let client: QueryClient;
@@ -49,7 +44,9 @@ let alertSpy: jest.SpyInstance;
 function wrapper({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      <PlaybackContext.Provider value={idlePlayback}>
+        <LibraryPortProvider port={port}>{children}</LibraryPortProvider>
+      </PlaybackContext.Provider>
     </QueryClientProvider>
   );
 }
@@ -60,10 +57,12 @@ function loggedText(): string {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
   mockSearchDiscovery.mockReset();
   mockListTracksFeaturing.mockReset();
   mockListTracksFeaturing.mockResolvedValue({ items: [] });

@@ -3,21 +3,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoverySearchResponse } from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
 import { useDiscoverSearch } from '@features/discovery/hooks/useDiscoverSearch';
 import { useRefreshFromFirstPage } from '@features/discovery/hooks/useSearchRefresh';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts } from '@/chrome/FeaturePorts';
 import { httpFeaturePorts } from '@/chrome/httpFeaturePorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
 const SEARCH = 'GET /v1/discovery/search';
+const EVENTS = 'POST /v1/discovery/events';
 
 type SentRequest = { path: string; query: string };
 
@@ -60,13 +56,11 @@ function pageOf(offset: number, searchId: string, titles: string[]): DiscoverySe
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
 });
 
 afterEach(() => {

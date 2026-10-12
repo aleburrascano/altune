@@ -5,32 +5,26 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchHistoryResponse } from '@shared/apiClient/discovery';
 import { ApiError, NetworkError } from '@shared/failure/errors';
 import { discoveryKeys } from '@shared/query/queryKeys';
-import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   useDiscoverClearSearchHistory,
   useSearchHistory,
 } from '@features/discovery/hooks/useSearchHistory';
 import { DiscoverPortProvider } from '@features/discovery/ports/DiscoverPortProvider';
 import type { DiscoverPort } from '@features/discovery/ports/discoverPort';
+import { signInTestUser } from '@testing/signInTestUser';
 import { createMemoryDiscoverPort } from '@features/discovery/__tests__/memoryDiscoverPort';
-
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 const { __http } = require('@testing/doubles/fetch.js');
 
+const EVENTS = 'POST /v1/discovery/events';
+const EVENTS_PATH = '/v1/discovery/events';
 const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
 const NO_CONTENT = 204;
 const BAD_REQUEST = 400;
 const SERVER_ERROR = 500;
 const TWO_CALLS = 2;
 const BAD_GATEWAY = 502;
-
-const mockRecordEvent = recordEvent as jest.Mock;
 
 let queryClient: QueryClient;
 let port: DiscoverPort;
@@ -68,21 +62,21 @@ function holdClearRequestsUntil(gate: Promise<void>): void {
 }
 
 function failureEvents() {
-  return mockRecordEvent.mock.calls
-    .map((call) => call[0] as { type: string; payload?: Record<string, unknown> })
+  return (__http.requests as { path: string; body: string }[])
+    .filter((request) => request.path === EVENTS_PATH)
+    .map(
+      (request) => JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> },
+    )
     .filter((event) => event.type === 'search_failed');
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   port = createMemoryDiscoverPort();
-  jest.mocked(supabase.auth.getSession).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as Awaited<ReturnType<typeof supabase.auth.getSession>>);
-  mockRecordEvent.mockReset().mockResolvedValue(undefined);
+  await signInTestUser();
+  __http.reply(EVENTS, { status: 204 });
 });
 
 afterEach(() => {
@@ -102,6 +96,7 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     expect(failureEvents()[0]?.payload).toEqual({
       source: 'history',
       correlationId: 'f0e1d2c3b4a59687',
+      session_id: expect.any(String),
     });
   });
 
@@ -112,7 +107,11 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     await waitFor(() => expect(result.current.error).not.toBeNull());
     await waitFor(() => expect(failureEvents()).toHaveLength(1));
 
-    expect(failureEvents()[0]?.payload).toEqual({ source: 'history', status: SERVER_ERROR });
+    expect(failureEvents()[0]?.payload).toEqual({
+      source: 'history',
+      status: SERVER_ERROR,
+      session_id: expect.any(String),
+    });
   });
 
   it('a successful query emits no failure event', async () => {
@@ -148,7 +147,11 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     await queryClient.refetchQueries({ queryKey: discoveryKeys.history });
 
     await waitFor(() => expect(failureEvents()).toHaveLength(2));
-    expect(failureEvents()[1]?.payload).toEqual({ source: 'history', status: BAD_GATEWAY });
+    expect(failureEvents()[1]?.payload).toEqual({
+      source: 'history',
+      status: BAD_GATEWAY,
+      session_id: expect.any(String),
+    });
   });
 });
 
@@ -178,7 +181,7 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
     await waitFor(() => expect(clearRequests()).toBe(1));
     await waitFor(() => expect(queryClient.isMutating()).toBe(0));
-    expect(__http.last().path).toBe('/v1/discovery/search-history');
+    expect(clearRequests()).toBe(1);
     expect(invalidate).not.toHaveBeenCalled();
   });
 
