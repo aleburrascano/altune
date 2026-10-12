@@ -6,13 +6,26 @@ import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useRetryTrack } from '../hooks/useRetryTrack';
 import { createMemoryDetailPort } from './memoryDetailPort';
-import { createPortWrapper, createTestQueryClient } from './support/queryHarness';
+import {
+  createPortWrapper,
+  createTestQueryClient,
+  signInTestUser,
+} from '@/features/detail/__tests__/support/queryHarness';
+
+const { __http } = require('../../../../jest/doubles/fetch.js');
+
+interface PostedEvent {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+function postedEvents(): PostedEvent[] {
+  return (__http.requests as { method: string; path: string; body: string }[])
+    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .map((request) => JSON.parse(request.body) as PostedEvent);
+}
 
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
-const mockEnqueueCritical = jest.fn();
-jest.mock('@shared/telemetry/outbox', () => ({
-  enqueueCritical: (event: unknown) => mockEnqueueCritical(event),
-}));
 
 let wrapper: ReturnType<typeof createPortWrapper>;
 
@@ -23,11 +36,13 @@ beforeEach(() => {
   });
 });
 
+const RETRY_EVENT_COUNT = 3;
 const TRACK_ID = asTrackId('server-1');
 
-beforeEach(() => {
+beforeEach(async () => {
+  await signInTestUser();
+  __http.replyAll({ status: 204 });
   mockRetryAcquisition.mockReset();
-  mockEnqueueCritical.mockReset();
   useTrackStatusStore.getState().reset();
 });
 
@@ -106,9 +121,12 @@ describe('useRetryTrack', () => {
     });
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
-    const retryEvents = mockEnqueueCritical.mock.calls
-      .map(([event]) => event.payload)
-      .filter((payload) => payload.action !== 'status_changed');
+    await waitFor(() => expect(postedEvents().length).toBeGreaterThanOrEqual(RETRY_EVENT_COUNT));
+    const retryEvents = postedEvents()
+      .map(({ payload: { session_id: _sessionId, ...payload } }) => payload)
+      .filter(
+        (payload) => payload.action !== 'status_changed' && payload.entry_point !== undefined,
+      );
     expect(retryEvents).toEqual([
       { track_id: TRACK_ID, action: 'retry_tapped', entry_point: 'detail' },
       { track_id: TRACK_ID, action: 'retry_request', entry_point: 'detail', outcome: 'sent' },
@@ -126,15 +144,20 @@ describe('useRetryTrack', () => {
     });
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
-    expect(mockEnqueueCritical).toHaveBeenCalledWith({
-      type: 'acquisition_ui',
-      payload: {
-        track_id: TRACK_ID,
-        action: 'retry_request',
-        entry_point: 'album_row',
-        outcome: 'failed',
-      },
-    });
+    await waitFor(() =>
+      expect(postedEvents()).toContainEqual({
+        type: 'acquisition_ui',
+        event_id: expect.any(String),
+        client_occurred_at: expect.any(String),
+        payload: {
+          track_id: TRACK_ID,
+          action: 'retry_request',
+          entry_point: 'album_row',
+          outcome: 'failed',
+          session_id: expect.any(String),
+        },
+      }),
+    );
     warnSpy.mockRestore();
   });
 });

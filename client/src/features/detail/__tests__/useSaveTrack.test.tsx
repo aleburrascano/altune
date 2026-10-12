@@ -6,7 +6,6 @@ import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { libraryKeys } from '@shared/query/queryKeys';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { enqueueCritical } from '@shared/telemetry/outbox';
 import type { DiscoveryResult } from '@shared/apiClient/discovery';
 
 import { useSaveTrack, useTrackSave } from '@/features/detail/hooks/useSaveTrack';
@@ -15,22 +14,28 @@ import { createMemoryDetailPort } from '@/features/detail/__tests__/memoryDetail
 import {
   createPortWrapper,
   createTestQueryClient,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
-import { toCreateTrackRequest } from '@/features/detail/domain/saveTrack';
 import { ownedTrack } from '@/features/detail/domain/ownedTrack';
 
 const mockCreateTrack = jest.fn<Promise<TrackResponse>, [unknown]>();
 
-jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
-
 const mockRetryAcquisition = jest.fn<Promise<void>, [unknown]>();
 
-jest.mock('@/features/detail/domain/saveTrack', () => ({
-  ...jest.requireActual('@/features/detail/domain/saveTrack'),
-  toCreateTrackRequest: jest.fn(
-    jest.requireActual('@/features/detail/domain/saveTrack').toCreateTrackRequest,
-  ),
-}));
+const { __http } = require('../../../../jest/doubles/fetch.js');
+
+const EVENTS = 'POST /v1/discovery/events';
+
+function postedEventTypes(): string[] {
+  return (__http.requests as { method: string; path: string; body: string }[])
+    .filter((request) => request.method === 'POST' && request.path === '/v1/discovery/events')
+    .map((request) => (JSON.parse(request.body) as { type: string }).type);
+}
+
+beforeEach(async () => {
+  await signInTestUser();
+  __http.replyAll({ status: 204 });
+});
 
 describe('useSaveTrack', () => {
   function createWrapper(queryClient: ReturnType<typeof createTestQueryClient>) {
@@ -236,7 +241,6 @@ describe('useSaveTrack', () => {
         }),
       );
       useTrackStatusStore.getState().reset();
-      (enqueueCritical as jest.Mock).mockClear();
 
       const { result } = renderHook(() => useSaveTrack(), {
         wrapper: createWrapper(queryClient),
@@ -259,12 +263,11 @@ describe('useSaveTrack', () => {
           acquisition_status: 'pending',
         } as TrackResponse);
         await pendingSave;
+        await new Promise((resolve) => setImmediate(resolve));
       });
 
       expect(useTrackStatusStore.getState().statuses).toBe(statusesAfterSignOut);
-      expect(enqueueCritical).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'library_add' }),
-      );
+      expect(postedEventTypes()).not.toContain('library_add');
     });
   });
 
@@ -749,10 +752,15 @@ describe('useTrackSave', () => {
 
     it('dispatches a create again after building the create request throws', async () => {
       mockCreateTrack.mockReturnValue(new Promise(() => undefined));
-      jest.mocked(toCreateTrackRequest).mockImplementationOnce(() => {
-        throw new Error('bad request build');
-      });
-      const { result } = renderHook(() => useTrackSave(track(), null), { wrapper });
+      let reads = 0;
+      const unreadable = track();
+      unreadable.extras = {
+        get duration(): number {
+          if (reads++ === 0) throw new Error('bad request build');
+          return 0;
+        },
+      };
+      const { result } = renderHook(() => useTrackSave(unreadable, null), { wrapper });
 
       expect(() => result.current.onSave()).toThrow('bad request build');
       act(() => {
@@ -762,20 +770,19 @@ describe('useTrackSave', () => {
       await waitFor(() => expect(mockCreateTrack).toHaveBeenCalledTimes(1));
     });
 
-    it('retries again after the retry telemetry throws', async () => {
+    it('still retries when the server refuses the retry telemetry', async () => {
       mockRetryAcquisition.mockReturnValue(new Promise(() => undefined));
-      jest.mocked(enqueueCritical).mockImplementationOnce(() => {
-        throw new Error('outbox down');
-      });
+      __http.reply(EVENTS, { status: 500 });
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       const owned = ownedTrack(asTrackId('server-1'), 'failed', 'network error');
       const { result } = renderHook(() => useTrackSave(track(), owned), { wrapper });
 
-      expect(() => result.current.onSave()).toThrow('outbox down');
       act(() => {
         result.current.onSave();
       });
 
       await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalledTimes(1));
+      warnSpy.mockRestore();
     });
   });
 

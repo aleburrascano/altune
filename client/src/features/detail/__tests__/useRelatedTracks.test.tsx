@@ -2,34 +2,26 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import type { DiscoverySource } from '@shared/apiClient/discovery';
-import { supabase } from '@shared/auth/supabaseClient';
-import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { _resetDetailHealthForTest } from '@/features/detail/domain/detailHealth';
 import { useRelatedTracks } from '@/features/detail/hooks/useRelatedTracks';
 import {
   createTestQueryClient,
   createWrapper,
-  mockSupabaseSession,
+  signInTestUser,
 } from '@/features/detail/__tests__/support/queryHarness';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
-
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
-
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { getSession: jest.fn() } },
-}));
 
 describe('aborting on unmount', () => {
   let client: QueryClient;
 
   let wrapper: ReturnType<typeof createWrapper>;
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
+    __http.replyAll({ status: 204 });
     _resetDetailHealthForTest();
-    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
     client = createTestQueryClient();
     wrapper = createWrapper(client);
   });
@@ -65,10 +57,10 @@ describe('reopening related tracks against the 30-minute content cache window', 
   const sources = [{ provider: 'soundcloud', external_id: 'sc-cache' } as DiscoverySource];
   const { act } = require('@testing-library/react-native');
 
-  beforeEach(() => {
-    (supabase.auth.getSession as jest.Mock).mockResolvedValue(mockSupabaseSession());
+  beforeEach(async () => {
+    await signInTestUser();
+    __http.replyAll({ status: 204 });
     _resetDetailHealthForTest();
-    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
   });
 
   it.each([
