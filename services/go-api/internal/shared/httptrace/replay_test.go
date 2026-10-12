@@ -1,8 +1,10 @@
 package httptrace
 
 import (
+	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -101,5 +103,41 @@ func TestReplayer_RecordedTransportErrorReplaysAsError(t *testing.T) {
 	}
 	if err == nil {
 		t.Fatal("expected the recorded transport error to replay as an error")
+	}
+}
+
+type failingReader struct{ err error }
+
+func (f failingReader) Read([]byte) (int, error) { return 0, f.err }
+
+func TestReplayer_RejectsOversizedRequestBody(t *testing.T) {
+	r := NewReplayer(nil)
+	body := strings.Repeat("a", maxCaptureBytes+1)
+	req, err := http.NewRequest(http.MethodPost, "https://api.example.com/x", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := r.RoundTrip(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("err = %v, want body-exceeds error", err)
+	}
+}
+
+func TestReplayer_SurfacesRequestBodyReadError(t *testing.T) {
+	r := NewReplayer(nil)
+	boom := errors.New("boom")
+	req, err := http.NewRequest(http.MethodPost, "https://api.example.com/x", io.NopCloser(failingReader{err: boom}))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := r.RoundTrip(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want wrapped %v", err, boom)
 	}
 }

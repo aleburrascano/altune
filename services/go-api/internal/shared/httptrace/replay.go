@@ -33,8 +33,14 @@ func NewReplayer(exchanges []Exchange) *Replayer {
 func (r *Replayer) RoundTrip(req *http.Request) (*http.Response, error) {
 	reqBody := ""
 	if req.Body != nil {
-		b, _ := io.ReadAll(req.Body)
+		b, err := io.ReadAll(io.LimitReader(req.Body, maxCaptureBytes+1))
 		_ = req.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("httptrace: read request body: %w", err)
+		}
+		if len(b) > maxCaptureBytes {
+			return nil, fmt.Errorf("httptrace: request body exceeds %d bytes", maxCaptureBytes)
+		}
 		reqBody = string(b)
 	}
 	k := matchKey(req.Method, req.URL.String(), reqBody)
