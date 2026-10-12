@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth/adapters/middleware"
+	"altune/go-api/internal/observe/adapters/authbridge"
 	"altune/go-api/internal/observe/domain"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
@@ -11,7 +11,7 @@ import (
 func Gate(principalID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID, ok := middleware.RequireUserID(w, r)
+			userID, ok := authbridge.RequireUserID(w, r)
 			if !ok {
 				return
 			}

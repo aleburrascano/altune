@@ -1,7 +1,7 @@
 package handler
 
 import (
-	authservice "altune/go-api/internal/auth/service"
+	"altune/go-api/internal/observe/adapters/authbridge"
 	"altune/go-api/internal/observe/domain"
 	"altune/go-api/internal/observe/service/eventtap"
 	"altune/go-api/internal/shared/httputil"
@@ -45,7 +45,7 @@ func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), streamMaxLifetime)
 	defer cancel()
-	ctx, untilExpiry := authservice.UntilTokenExpiry(ctx)
+	ctx, untilExpiry := authbridge.UntilTokenExpiry(ctx)
 	defer untilExpiry()
 	streamFrames(r.WithContext(ctx), w, rc, ch)
 }
