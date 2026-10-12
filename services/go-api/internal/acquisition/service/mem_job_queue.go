@@ -3,7 +3,6 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
@@ -13,8 +12,8 @@ import (
 
 type memJobQueue struct {
 	mu           sync.Mutex
-	jobs         map[domain.TrackId]*memJob
-	pendingUsers map[domain.TrackId]shared.UserId
+	jobs         map[shared.TrackId]*memJob
+	pendingUsers map[shared.TrackId]shared.UserId
 	wake         chan<- struct{}
 	now          func() time.Time
 }
@@ -40,14 +39,14 @@ func newMemJobQueue(wake chan<- struct{}) *memJobQueue {
 
 func newMemJobQueueWithClock(wake chan<- struct{}, now func() time.Time) *memJobQueue {
 	return &memJobQueue{
-		jobs:         make(map[domain.TrackId]*memJob),
-		pendingUsers: make(map[domain.TrackId]shared.UserId),
+		jobs:         make(map[shared.TrackId]*memJob),
+		pendingUsers: make(map[shared.TrackId]shared.UserId),
 		wake:         wake,
 		now:          now,
 	}
 }
 
-func (q *memJobQueue) rememberUser(trackID domain.TrackId, userID shared.UserId) {
+func (q *memJobQueue) rememberUser(trackID shared.TrackId, userID shared.UserId) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if j, ok := q.jobs[trackID]; ok {
@@ -57,7 +56,7 @@ func (q *memJobQueue) rememberUser(trackID domain.TrackId, userID shared.UserId)
 	q.pendingUsers[trackID] = userID
 }
 
-func (q *memJobQueue) Enqueue(_ context.Context, trackID domain.TrackId, kind ports.JobKind, delay time.Duration) error {
+func (q *memJobQueue) Enqueue(_ context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
 	q.mu.Lock()
 	j := q.jobOrNew(trackID)
 	availableAt := q.now().Add(delay)
@@ -77,7 +76,7 @@ func (q *memJobQueue) Enqueue(_ context.Context, trackID domain.TrackId, kind po
 	return nil
 }
 
-func (q *memJobQueue) jobOrNew(trackID domain.TrackId) *memJob {
+func (q *memJobQueue) jobOrNew(trackID shared.TrackId) *memJob {
 	j, ok := q.jobs[trackID]
 	if ok {
 		return j
@@ -147,8 +146,8 @@ func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error
 	return pending, now.Sub(oldest), nil
 }
 
-func (q *memJobQueue) findClaimable(now time.Time) (domain.TrackId, *memJob) {
-	var bestID domain.TrackId
+func (q *memJobQueue) findClaimable(now time.Time) (shared.TrackId, *memJob) {
+	var bestID shared.TrackId
 	var best *memJob
 	for id, j := range q.jobs {
 		if j.leased && now.Before(j.leaseUntil) {
@@ -164,7 +163,7 @@ func (q *memJobQueue) findClaimable(now time.Time) (domain.TrackId, *memJob) {
 	return bestID, best
 }
 
-func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence ports.Fence, lease time.Duration) error {
+func (q *memJobQueue) Heartbeat(_ context.Context, trackID shared.TrackId, fence ports.Fence, lease time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -178,7 +177,7 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID domain.TrackId, fence
 	return nil
 }
 
-func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence ports.Fence, delay time.Duration) error {
+func (q *memJobQueue) Release(_ context.Context, trackID shared.TrackId, fence ports.Fence, delay time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -194,7 +193,7 @@ func (q *memJobQueue) Release(_ context.Context, trackID domain.TrackId, fence p
 	return nil
 }
 
-func (q *memJobQueue) Settle(_ context.Context, trackID domain.TrackId, fence ports.Fence) error {
+func (q *memJobQueue) Settle(_ context.Context, trackID shared.TrackId, fence ports.Fence) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]

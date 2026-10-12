@@ -3,7 +3,6 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -28,9 +27,9 @@ const (
 const outcomeRecordTimeout = 2 * time.Second
 
 type acquirer interface {
-	Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
-	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
-	RefuseQueued(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
+	Execute(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error
+	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error
+	RefuseQueued(ctx context.Context, userId shared.UserId, trackId shared.TrackId)
 }
 
 type BackgroundAcquisitionScheduler struct {
@@ -312,7 +311,7 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 
 var errJobPanicked = errors.New("acquisition job panicked")
 
-type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error
 
 func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) {
 	defer s.pending.untrack(job.TrackID.String())
@@ -352,7 +351,7 @@ func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
 	s.svc.RefuseQueued(context.Background(), job.UserID, job.TrackID)
 }
 
-func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID domain.TrackId, err error) {
+func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID shared.TrackId, err error) {
 	if err == nil {
 		return
 	}

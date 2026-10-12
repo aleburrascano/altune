@@ -3,7 +3,6 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/domain"
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -11,15 +10,15 @@ import (
 	"log/slog"
 )
 
-func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	return s.enqueue(ctx, userId, trackId, ports.JobKindReplace)
 }
 
-func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, _ string) error {
+func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId shared.TrackId, _ string) error {
 	return s.enqueue(ctx, userId, trackId, ports.JobKindAcquire)
 }
 
-func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind ports.JobKind) error {
+func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId shared.UserId, trackId shared.TrackId, kind ports.JobKind) error {
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
@@ -42,10 +41,10 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId sha
 }
 
 type userRememberer interface {
-	rememberUser(trackId domain.TrackId, userId shared.UserId)
+	rememberUser(trackId shared.TrackId, userId shared.UserId)
 }
 
-func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, key string, alreadyTracked bool) {
+func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId shared.TrackId, userId shared.UserId, key string, alreadyTracked bool) {
 	if r, ok := s.queue.(userRememberer); ok {
 		r.rememberUser(trackId, userId)
 	}
@@ -54,7 +53,7 @@ func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, track
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId domain.TrackId, userId shared.UserId, kind ports.JobKind) error {
+func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trackId shared.TrackId, userId shared.UserId, kind ports.JobKind) error {
 	if s.closed.Load() {
 		s.pending.untrack(trackId.String())
 	}
@@ -62,7 +61,7 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 	return nil
 }
 
-func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId domain.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
+func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId shared.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
 	if !alreadyTracked {
 		s.pending.untrack(key)
 		s.corrIDs.Delete(key)
