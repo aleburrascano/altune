@@ -1,6 +1,6 @@
 # Web app
 
-`deploy-web.yml`, started by hand (`workflow_dispatch`), exports `client` for web, releases it to staging with `deploy/web-release.sh`, smoke-tests it, and after a `production` approval does the same for prod. Caddy serves a file from `$WEB_ROOT/<tier>/current` when the path matches one, and go-api otherwise. `<tier>` is `staging` or `prod`. Caddy mounts `~/altune-web` read-only, the default `WEB_ROOT`.
+`deploy-web.yml`, started by hand (`workflow_dispatch`), builds `client` for web, releases it to staging with `deploy/web-release.sh` (through `scripts/ci/web-ship.sh`), smoke-tests it, then does the same for prod straight after, and rolls prod back to the previous release if the prod smoke fails. Caddy serves a file from `$WEB_ROOT/<tier>/current` when the path matches one, and go-api otherwise. `<tier>` is `staging` or `prod`. Caddy mounts `~/altune-web` read-only, the default `WEB_ROOT`.
 
 ```bash
 ls -t "$WEB_ROOT/<tier>/releases"

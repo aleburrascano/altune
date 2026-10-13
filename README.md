@@ -24,13 +24,15 @@ cd client && npm start
 
 ```
 .
-├── client/         # Expo app; vertical slices under src/features/
+├── client/              # Expo app; vertical slices under src/features/
 ├── services/go-api/     # Go API; hexagonal, deploy/ holds everything Docker
-├── docs/                # decisions and history (see docs/README.md)
-├── scripts/             # the pre-commit staleness checks + AltStore source update
+├── services/overseer/   # read-only ops dashboard over go-api's /observe/*, shipped with go-api
+├── services/supabase/   # Supabase auth config per tier and the script that checks it for drift
+├── docs/                # durable docs: conventions, features, providers, diagrams, glossary (see docs/README.md)
+├── scripts/             # repo tooling: precheck, violation and cycle checks, e2e stack, AltStore source update
 ├── scripts/ci/          # every script the CI workflows run
-├── .gitea/workflows/    # all CI, on the self-hosted Gitea
-└── .github/workflows/   # the iOS release only (needs a macOS runner)
+├── .gitea/workflows/    # all CI and deploys, on the self-hosted Gitea
+└── .github/workflows/   # the iOS release only (needs a macOS runner); GitHub is otherwise a read mirror of main
 ```
 
 **`client/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in `docs/`.
@@ -40,4 +42,4 @@ cd client && npm start
 - PR titles: `type(scope): subject`, checked by `scripts/ci/pr-shape.sh`
 - Go formatting: `bash services/go-api/scripts/guardrails.sh fmt` is the formatter of record — golangci-lint's bundled gofumpt, the exact formatter the CI gate enforces, across both Go modules. **Never run standalone `gofumpt -w`:** it splits stdlib from local imports while the gate wants a single alphabetical group (local `altune/...` first), so its output is rejected by CI.
 - Domain vocabulary is fixed by [`docs/ubiquitous-language.md`](docs/ubiquitous-language.md) — "Song" is banned; the noun is `Track`
-- Features are planned and tracked as GitHub issues — one ticket per unit of work, closed by its PR
+- Features are planned and tracked as Gitea issues — one ticket per unit of work, closed by its PR

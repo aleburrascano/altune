@@ -1,11 +1,11 @@
 ---
 name: deploy
-description: Operate altune's backend and web deploys on the shared VM - approve or unstick a prod promotion, release or roll back a commit by hand, clear a failed migration, and keep staging, overseer and the web app wired right. Use for a deploy that is red, pending or wrong, a rollback, a staging env change, overseer showing source_down or token errors, or a web release. Not for why a track failed to download (acquisition-debug) or for OCI resources outside the cost grant (oci).
+description: Operate altune's backend and web deploys on the shared VM - unstick a deploy, check that prod follows a green staging, release or roll back a commit by hand, clear a failed migration, and keep staging, overseer and the web app wired right. Use for a deploy that is red, pending or wrong, a rollback, a staging env change, overseer showing source_down or token errors, or a web release. Not for why a track failed to download (acquisition-debug) or for OCI resources outside the cost grant (oci).
 ---
 
 # Deploy
 
-Prod and staging share one VM, reached as `DEPLOY_USER@DEPLOY_HOST` (they were GitHub Actions secrets; on Gitea they would be the repo's Actions secrets, none set yet). The checkout is `~/altune`; every command below runs from `~/altune/services/go-api` unless it says otherwise. Env files live only on the VM: `.env.production` and `.env.staging`, templated by `../.env.example` and `deploy/.env.staging.example`.
+Prod and staging share one VM. The deploy workflows run on the self-hosted `host` runner and ssh in as `ubuntu@altune.duckdns.org` with a key file on the runner, so they need no SSH or `DEPLOY_*` Actions secrets; by hand, reach it with the same login. The checkout is `~/altune`; every command below runs from `~/altune/services/go-api` unless it says otherwise. Env files live only on the VM: `.env.production` and `.env.staging`, templated by `../.env.example` and `deploy/.env.staging.example`.
 
 | Tier | URL | Containers |
 |---|---|---|
@@ -21,23 +21,23 @@ Read the sibling for its branch:
 
 ## 1. Read where the release stands
 
-The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds `precheck.yml`, `deploy.yml`, `deploy-web.yml` and `staging-sync.yml`, among others. `.github/workflows/` holds only the iOS release, which needs GitHub's macOS runner. Every script a workflow runs lives in `scripts/ci/`. `deploy.yml` releases staging, smokes it, then releases prod. It runs only when started by hand (`workflow_dispatch`), so a merge to `main` never releases. The by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM, stays for reruns and rollbacks.
+The repo is on the self-hosted Gitea now (remote `gitea`, CLI `forge`, the gh-shaped wrapper). Gitea Actions reads `.gitea/workflows/` and ignores `.github/workflows/` once that folder exists, and it holds `precheck.yml`, `deploy.yml`, `deploy-web.yml` and `staging-sync.yml`, among others. `.github/workflows/` holds only the iOS release, which needs GitHub's macOS runner. GitHub is otherwise a read mirror of `main`, pushed by `github-mirror.yml`; Gitea holds the source and the issues. Every script a workflow runs lives in `scripts/ci/`. `deploy.yml` releases staging, smokes it, then releases prod. It runs only when started by hand (`workflow_dispatch`), so a merge to `main` never releases. The by-hand path in section 2, `deploy/release.sh <tier> <sha>` on the VM, stays for reruns and rollbacks.
 
 Where `main` stands, and what the VM runs:
 
 ```bash
 git fetch gitea main && git log -1 --format='%h %s' gitea/main
-forge run list --branch main -L 5          # the precheck runs; no deploy workflow on Gitea yet
-ssh "$DEPLOY_USER@$DEPLOY_HOST" 'cd ~/altune && git log -1 --format=%h'
+forge run list --branch main -L 5          # precheck and deploy runs
+ssh ubuntu@altune.duckdns.org 'cd ~/altune && git log -1 --format=%h'
 ```
 
 Done when: you can name the sha on `main` and the sha each tier runs.
 
 ## 2. Move it forward
 
-- **The staging proof** replaces GitHub's `production` approval: run the prod line below only once staging passed its smoke for the same sha.
+- **The staging proof**, with nothing after it, is the only gate: `deploy.yml` and `deploy-web.yml` go on to prod only after the staging smoke passes, and by hand run the prod line below only once staging passed its smoke for the same sha.
 - **Red staging smoke**: prod is untouched; fix forward.
-- **Every release (no CI deploy on Gitea), or a re-check**, on the VM:
+- **A rerun or a re-check**, by hand on the VM:
 
   ```bash
   bash deploy/release.sh staging <sha>
