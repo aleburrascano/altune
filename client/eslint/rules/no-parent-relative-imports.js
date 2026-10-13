@@ -3,26 +3,32 @@ const JEST_MODULE_CALLS = new Set(['mock', 'doMock', 'requireActual', 'requireMo
 
 const isRequireCall = (node) => node.callee.type === 'Identifier' && node.callee.name === 'require';
 
-const isJestModuleCall = (node) =>
-  node.callee.type === 'MemberExpression' &&
-  node.callee.object.type === 'Identifier' &&
-  node.callee.object.name === 'jest' &&
-  node.callee.property.type === 'Identifier' &&
-  JEST_MODULE_CALLS.has(node.callee.property.name);
+const isNamedIdentifier = (node, name) => node.type === 'Identifier' && node.name === name;
+
+const isJestModuleCall = ({ callee }) =>
+  callee.type === 'MemberExpression' &&
+  isNamedIdentifier(callee.object, 'jest') &&
+  callee.property.type === 'Identifier' &&
+  JEST_MODULE_CALLS.has(callee.property.name);
+
+const stringLiteralValue = (node) =>
+  node?.type === 'Literal' && typeof node.value === 'string' ? node.value : '';
 
 module.exports = {
   meta: {
     type: 'problem',
     messages: {
-      useAlias: "Import '{{path}}' through @features/, @shared/ or @/, never a relative parent path.",
+      useAlias:
+        "Import '{{path}}' through @features/, @shared/ or @/, never a relative parent path.",
     },
     schema: [],
   },
   create(context) {
     const check = (specifier) => {
-      if (!specifier || specifier.type !== 'Literal') return;
-      if (typeof specifier.value !== 'string' || !PARENT_RELATIVE_PATH.test(specifier.value)) return;
-      context.report({ node: specifier, messageId: 'useAlias', data: { path: specifier.value } });
+      const path = stringLiteralValue(specifier);
+      if (PARENT_RELATIVE_PATH.test(path)) {
+        context.report({ node: specifier, messageId: 'useAlias', data: { path } });
+      }
     };
     return {
       ImportDeclaration: (node) => check(node.source),
