@@ -12,6 +12,8 @@ export PATH="$PATH:$GOBIN"
 target="${1:-all}"
 rc=0
 
+default_base_ref() { git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 do_lint() {
@@ -27,11 +29,12 @@ do_strict() {
 }
 
 do_fmt() {
-  echo "== gofumpt via bundled formatter (only .go files changed vs origin/main) =="
+  echo "== gofumpt via bundled formatter (only .go files changed vs the base branch) =="
   have golangci-lint || go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}"
-  local root base f goapi=() overseer=()
+  local root base_ref base f goapi=() overseer=()
   root="$(git rev-parse --show-toplevel)"
-  base="$(git merge-base origin/main HEAD)"
+  base_ref="$(default_base_ref)"
+  base="$(git merge-base "${base_ref}" HEAD)"
   while IFS= read -r f; do
     [ -f "${root}/${f}" ] || continue
     case "${f}" in
@@ -40,7 +43,7 @@ do_fmt() {
     esac
   done < <(git -C "${root}" diff --name-only "${base}" -- '*.go')
   if [ "${#goapi[@]}" -eq 0 ] && [ "${#overseer[@]}" -eq 0 ]; then
-    echo "no changed .go files vs origin/main; nothing to format"
+    echo "no changed .go files vs ${base_ref}; nothing to format"
     return
   fi
   [ "${#goapi[@]}" -eq 0 ] || golangci-lint fmt --config .golangci.strict.yml "${goapi[@]}" || rc=1
