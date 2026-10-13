@@ -10,13 +10,36 @@ A module is every folder under `internal/` except `app/` (the composition root, 
 
 | ID | Rule |
 |---|---|
-| G1 | The module root holds `domain/`, `ports/`, `service/`, `adapters/` and `ARCHITECTURE.md`, and nothing else. No `.go` file sits at the root. |
+| G1 | The module root holds `domain/`, `ports/`, `service/`, `adapters/`, `ARCHITECTURE.md` and, when G6 needs it, `<module>test/`, and nothing else. No `.go` file sits at the root. |
 | G2 | Imports point inward. `domain/` imports the standard library and `shared/` only. `ports/` adds `domain/`. `service/` adds `ports/`. Only `adapters/` imports drivers, HTTP, pgx or another module. The rule is derived from the folder name, so a new module is covered with no config edit. |
 | G3 | A module reaches another module only from `adapters/<other>bridge/`, and that package imports the other module's `ports/` or `service/`. A package named `*bridge` that imports nothing from its module is misnamed. |
 | G4 | An error a caller branches on is declared in `domain/`, in a file named for the error type. A handler writes every error through `httputil.HandleServiceError`. `http.Error` and a bare error `WriteHeader` appear only in `shared/httputil/`. |
 | G5 | One handler per resource in `adapters/handler/`, named `<resource>_handler.go`, built by `New<Resource>Handler`. |
 | G6 | Fakes used by more than one test file live in the module's test package, `<module>/<module>test/`, as `catalog/catalogtest/` does. |
 | G7 | Logs use the `slog.*Context` calls only. |
+| G8 | `service/` and `adapters/` hold packages, never files. Every non-test `.go` file under them sits in a package below: `service/<capability>/` named for a use case, `adapters/<adapter>/` named for the outside system or technology it talks to. A folder under them holds `.go` files or packages, never both. No package under them holds more than 16 non-test `.go` files. A package name is `^[a-z][a-z0-9]*$` and is not the module name or a layer name. `domain/` and `ports/` stay flat. `_test.go` files stay beside their source. |
+
+## Capability packages (G8)
+
+One shape in every module, even where a capability package is small: a reader finds a use case at `service/<capability>/` in each of them. `observe/service` (`alert/`, `evalmeter/`, `eventtap/`) already has it.
+
+Judged by change scenarios (quality attribute scenarios, Bass, Clements and Kazman, *Software Architecture in Practice*), counted as files read to find your way:
+
+| Change | Before | After |
+|---|---|---|
+| Fix a ranking bug in discovery | 43 files in `service/` | 6 in `service/rank/` |
+| Add a music provider | 87 | 51 |
+| Remove artist-content v1 | 84 | 63 |
+| Add a playback queue rule, or change catalog dedup | unchanged | unchanged: these live in `domain/`, which stays flat |
+
+Decisions:
+
+- **Cap 16.** The largest cohesive package today is `discovery/service/eval` at 16 files. The cap stops a capability from growing back into a 43-file folder.
+- **One module per PR, discovery in two.** `service/` first, then `adapters/providers/`, since each half is near the 200KB diff cap. The same PR updates any CI path filter on a moved file (`discovery-eval-gate.yml` filters `service/rank*`, `merge*`, `diversity*`).
+- **Code every capability needs goes to `shared/`,** not to a `service/` package that names no use case: discovery's background-task tracker becomes `shared/runloop`.
+- **Move first, rename after.** A move PR changes the package clause and imports only. Stutter renames (`deezer.DeezerAdapter` to `deezer.Adapter`) follow in their own PR, so review can tell a moved line from a changed one.
+- **`domain/` and `ports/` stay flat.** They are the vocabulary and contracts every capability shares. Splitting them makes each capability import several vocabulary packages for no gain.
+- **Tests stay beside their source.** Go ignores folders starting with `_`, and 374 of 378 go-api tests are white-box, so a test moves with its file.
 
 ## Reaching auth
 
@@ -160,6 +183,6 @@ After 6, `grep -rn 'internal/catalog' internal/acquisition --include='*.go' --ex
 
 ## Where the checks live
 
-- go-api: one Go test walks `internal/` with `go/parser` for G1 to G7, N1 and N2. Baseline: `services/go-api/module-shape.baseline`.
+- go-api: one Go test walks `internal/` with `go/parser` for G1 to G7, N1 and N2. G8's check lands in #2265. Baseline: `services/go-api/module-shape.baseline`.
 - mobile: one jest test walks `src/features/` and `src/shared/` for M1, M2, M4 and N1 to N3. ESLint zones carry M3 and M5. Baseline: `client/module-shape.baseline`.
 - Both run in `scripts/precheck.sh`, so a PR that adds drift fails before review.
